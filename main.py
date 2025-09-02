@@ -6,9 +6,13 @@ import math
 from pathlib import Path
 from io import StringIO
 import requests
+import lxml
+import html5lib
 
 st.set_page_config(page_title="AI Stock Scanner", layout="wide")
 st.title("AI Stock Scanner — Breakout Scanner")
+
+st.info("Note: This app requires 'lxml' and 'html5lib' libraries for HTML parsing. Please ensure they are installed.")
 
 # ---------------------- Load Universe ---------------------- #
 @st.cache_data(ttl=3600)
@@ -23,7 +27,8 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, t
     response_sp500 = requests.get(url_sp500, headers=headers)
     tables_sp500 = pd.read_html(StringIO(response_sp500.text))
     sp500_df = tables_sp500[0]
-    sp500_tickers = sp500_df['Symbol'].str.upper().str.replace('.', '-').tolist()[:top_n_sp500]
+    ticker_col_sp500 = next((col for col in sp500_df.columns if "Symbol" in col or "Ticker" in col), 'Symbol')
+    sp500_tickers = sp500_df[ticker_col_sp500].str.upper().str.replace('.', '-').tolist()[:top_n_sp500]
     st.info(f"Loaded {len(sp500_tickers)} tickers from S&P 500")
 
     # Fetch NASDAQ-100 tickers
@@ -32,8 +37,8 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, t
     tables_nasdaq = pd.read_html(StringIO(response_nasdaq.text))
     # The table with tickers is the 4th table (index 3)
     nasdaq_df = tables_nasdaq[3]
-    ticker_col = next((col for col in nasdaq_df.columns if "Symbol" in col or "Ticker" in col), None)
-    nasdaq_tickers = nasdaq_df[ticker_col].str.upper().str.replace('.', '-').tolist()[:top_n_nasdaq]
+    ticker_col_nasdaq = next((col for col in nasdaq_df.columns if "Symbol" in col or "Ticker" in col), None)
+    nasdaq_tickers = nasdaq_df[ticker_col_nasdaq].str.upper().str.replace('.', '-').tolist()[:top_n_nasdaq] if ticker_col_nasdaq else []
     st.info(f"Loaded {len(nasdaq_tickers)} tickers from NASDAQ-100")
 
     # Fetch Russell 2000 tickers
@@ -42,9 +47,9 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, t
     tables_russell = pd.read_html(StringIO(response_russell.text))
     russell_tickers = []
     for table in tables_russell:
-        ticker_col = next((col for col in table.columns if "Ticker" in col or "Symbol" in col), None)
-        if ticker_col:
-            russell_tickers = table[ticker_col].str.upper().str.replace('.', '-').tolist()
+        ticker_col_russell = next((col for col in table.columns if "Ticker" in col or "Symbol" in col), None)
+        if ticker_col_russell:
+            russell_tickers = table[ticker_col_russell].str.upper().str.replace('.', '-').tolist()
             break
     russell_tickers = russell_tickers[:top_n_russell]
     st.info(f"Loaded {len(russell_tickers)} tickers from Russell 2000")
@@ -71,7 +76,10 @@ def filter_tickers_by_index(tickers, index_name):
             response = requests.get(url, headers=headers)
             tables = pd.read_html(StringIO(response.text))
             df = tables[0]
-            index_tickers = set(df['Symbol'].str.upper().str.replace('.', '-').tolist())
+            ticker_col = next((col for col in df.columns if "Symbol" in col or "Ticker" in col), None)
+            if not ticker_col:
+                return []
+            index_tickers = set(df[ticker_col].str.upper().str.replace('.', '-').tolist())
         elif index_name == "nasdaq 100":
             url = "https://en.wikipedia.org/wiki/NASDAQ-100"
             response = requests.get(url, headers=headers)
