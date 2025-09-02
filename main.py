@@ -8,7 +8,7 @@ from io import StringIO
 import requests
 
 st.set_page_config(page_title="AI Stock Scanner", layout="wide")
-st.title("AI Stock Scanner — Penny & Breakout Scanner")
+st.title("AI Stock Scanner — Breakout Scanner")
 
 # ---------------------- Load Universe ---------------------- #
 @st.cache_data(ttl=3600)
