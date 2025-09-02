@@ -34,7 +34,15 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500):
         response = requests.get(url_nasdaq, headers=headers)
         tables = pd.read_html(response.text)
         nasdaq_df = tables[3]  # usually the 4th table
-        nasdaq_tickers = nasdaq_df['Ticker'].tolist()[:top_n_nasdaq]
+        # Find the first column containing "Symbol" or "Ticker"
+        ticker_col = None
+        for col in nasdaq_df.columns:
+            if "Symbol" in col or "Ticker" in col:
+                ticker_col = col
+                break
+        if ticker_col is None:
+            raise ValueError("Ticker column not found in NASDAQ-100 table")
+        nasdaq_tickers = nasdaq_df[ticker_col].tolist()[:top_n_nasdaq]
 
         # Combine and remove duplicates
         tickers = list(dict.fromkeys([t.upper().replace('.', '-') for t in nasdaq_tickers + sp500_tickers]))
