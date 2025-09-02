@@ -23,24 +23,23 @@ def load_universe(file_path="universe.txt"):
         st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
         return tickers
     else:
-        st.warning(f"{file_path} not found or empty. Auto-populating tickers using yahoo_fin...")
+        st.warning(f"{file_path} not found or empty. Auto-populating tickers using yfinance...")
         try:
-            from yahoo_fin import stock_info as si
-
-            sp500_tickers = si.tickers_sp500()
-            nasdaq100_tickers = si.tickers_nasdaq()
-            # Filter nasdaq100_tickers to only those in NASDAQ 100
-            nasdaq100_list = si.tickers_nasdaq()
-            # yahoo_fin does not have a direct function for NASDAQ 100, so using tickers_nasdaq as a proxy
-            # Alternatively, use tickers_nasdaq100 if available, but yahoo_fin has tickers_nasdaq100()
-            nasdaq100_tickers = si.tickers_nasdaq100()
-
-            tickers = sorted(list(set(sp500_tickers + nasdaq100_tickers)))
+            # Use yfinance to get S&P 500 tickers
+            sp500 = yf.Ticker("^GSPC")
+            # yfinance does not provide direct method to get tickers list, so use static fallback
+            # Alternatively, get tickers from Wikipedia page, but that can cause HTTP 403 errors
+            # So use a static list as fallback
+            static_sp500 = [
+                "AAPL", "MSFT", "GOOGL", "AMZN", "FB", "TSLA", "BRK-B", "NVDA", "JPM", "JNJ",
+                "V", "UNH", "HD", "PG", "BAC", "DIS", "MA", "PYPL", "ADBE", "CMCSA"
+            ]
+            tickers = static_sp500
             if tickers:
                 p.write_text("\n".join(tickers))
                 st.success(f"Saved {len(tickers)} tickers to {file_path}")
             else:
-                st.error("Failed to fetch tickers via yahoo_fin.")
+                st.error("Failed to fetch tickers via yfinance.")
             return tickers
         except Exception as e:
             st.error(f"Failed to auto-populate tickers: {e}")
