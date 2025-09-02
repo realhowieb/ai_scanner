@@ -15,7 +15,7 @@ min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.
 max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1500.0, step=1.0)
 market_option = st.sidebar.selectbox("Select Market", ["S&P 500", "NASDAQ 100", "AMEX"])
 
-TICKER_FILE = "ticker.txt"
+TICKER_FILE = "universal.txt"
 
 def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
     """
@@ -46,8 +46,8 @@ def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
         return []
 
     if tickers:
-        Path("ticker.txt").write_text("\n".join(tickers))
-        st.info(f"Auto-populated ticker.txt with {len(tickers)} tickers from {market}")
+        Path("universal.txt").write_text("\n".join(tickers))
+        st.info(f"Auto-populated universal.txt with {len(tickers)} tickers from {market}")
 
     return tickers
 
