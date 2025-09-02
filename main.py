@@ -15,13 +15,31 @@ universe_file = "universe.txt"
 
 def load_universe(file_path=universe_file):
     p = Path(file_path)
+    tickers = []
+    # Try reading existing file
     if p.exists() and p.stat().st_size > 0:
         tickers = p.read_text().splitlines()
         st.sidebar.info(f"Loaded {len(tickers)} tickers from {file_path}")
         return tickers
     else:
-        st.sidebar.error(f"Universe file '{file_path}' not found or empty.")
-        return []
+        st.sidebar.warning(f"Universe file '{file_path}' missing or empty. Auto-populating with S&P 500 and NASDAQ 100 tickers...")
+        try:
+            import pandas as pd
+            # S&P 500
+            sp500_table = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]
+            sp500_tickers = sp500_table['Symbol'].str.replace('.', '-', regex=False).tolist()
+            # NASDAQ 100
+            nasdaq100_table = pd.read_html("https://en.wikipedia.org/wiki/NASDAQ-100")[3]  # 4th table has tickers
+            nasdaq100_tickers = nasdaq100_table['Ticker'].str.replace('.', '-', regex=False).tolist()
+            # Merge and dedupe
+            tickers = sorted(list(set(sp500_tickers + nasdaq100_tickers)))
+            # Save to file
+            p.write_text("\n".join(tickers))
+            st.sidebar.success(f"Saved {len(tickers)} tickers to {file_path}")
+            return tickers
+        except Exception as e:
+            st.sidebar.error(f"Failed to auto-populate tickers: {e}")
+            return []
 
 tickers = load_universe()
 if not tickers:
