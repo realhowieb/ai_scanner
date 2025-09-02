@@ -2,160 +2,136 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from pathlib import Path
 import io
 import matplotlib.pyplot as plt
+from pathlib import Path
+from bs4 import BeautifulSoup
 import requests
 
-st.title("Breakout Scanner")
+st.title("AI Scanner - Breakout Scanner (Finviz Top Stocks)")
 
-# Parameters
-min_price = st.sidebar.number_input("Minimum Price", value=1.0, step=0.1)
-max_price = st.sidebar.number_input("Maximum Price", value=1500.0, step=0.1)
-universe_file = "ticker.txt"
+# Sidebar filters
+min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.0, step=0.1)
+max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1500.0, step=1.0)
+market_option = st.sidebar.selectbox("Select Market", ["S&P 500", "NASDAQ 100", "AMEX"])
+fetch_button = st.sidebar.button("Fetch & Scan")
+
+TICKER_FILE = "ticker.txt"
 
 @st.cache_data(ttl=3600)
-def load_universe(file_path="ticker.txt"):
-    p = Path(file_path)
-    tickers = []
-    if p.exists() and p.stat().st_size > 0:
-        raw_lines = p.read_text().splitlines()
-        # Keep only the first part before any whitespace or tab and replace '.' with '-'
-        tickers = [line.split()[0].replace('.', '-') for line in raw_lines if line.strip()]
-        st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
-        return tickers
+def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
+    base_url = "https://finviz.com/screener.ashx?v=111&f="
+    if market == "S&P 500":
+        url = base_url + "idx_sp500"
+    elif market == "NASDAQ 100":
+        url = base_url + "idx_nasdaq100"
+    elif market == "AMEX":
+        url = base_url + "exch_amex"
     else:
-        st.warning(f"{file_path} not found or empty.")
+        url = base_url
+
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    r = requests.get(url, headers=headers)
+    if r.status_code != 200:
+        st.error(f"Failed to fetch tickers from Finviz: HTTP {r.status_code}")
         return []
 
+    soup = BeautifulSoup(r.content, "html.parser")
+    tickers = []
+    for link in soup.find_all('a', class_='screener-link-primary'):
+        tickers.append(link.text.strip())
+        if len(tickers) >= top_n:
+            break
+
+    # Save tickers to ticker.txt automatically
+    Path(TICKER_FILE).write_text("\n".join(tickers))
+    st.info(f"Auto-populated {TICKER_FILE} with {len(tickers)} tickers from {market}")
+
+    return tickers
+
 @st.cache_data(ttl=3600)
-def fetch_price_data(tickers, period="5d", interval="1d"):
-    """
-    Fetch historical price data for each ticker individually.
-    Skips tickers that fail or return empty data.
-    Returns a dict of DataFrames keyed by ticker.
-    """
+def fetch_price_data(tickers, period="60d", interval="1d"):
     price_data = {}
     skipped_tickers = []
-
     for ticker in tickers:
         try:
             df = yf.download(ticker, period=period, interval=interval, progress=False, threads=False)
             if df.empty:
                 skipped_tickers.append(ticker)
-                st.warning(f"No data found for {ticker}")
             else:
                 price_data[ticker] = df
-        except Exception as e:
+        except Exception:
             skipped_tickers.append(ticker)
-            st.warning(f"Failed to fetch {ticker}: {e}")
-
     return price_data, skipped_tickers
 
-tickers = load_universe()
-if not tickers:
-    st.error("No tickers found in ticker.txt.")
-    st.stop()
-
-with st.spinner(f"Fetching historical price data for {len(tickers)} tickers..."):
-    price_data, skipped_tickers = fetch_price_data(tickers)
-
-if skipped_tickers:
-    st.sidebar.warning(f"Skipped {len(skipped_tickers)} tickers due to missing data or delisted: {', '.join(skipped_tickers)}")
-
-# Filter tickers by price using last close price
-valid_tickers = []
-for ticker, data in price_data.items():
-    try:
-        price = data["Close"].iloc[-1]
+def filter_by_price(price_data, min_price, max_price):
+    filtered = []
+    for t, df in price_data.items():
+        if df.empty or 'Close' not in df.columns:
+            continue
+        price = df['Close'].iloc[-1]
         if min_price <= price <= max_price:
-            valid_tickers.append(ticker)
-    except Exception:
-        continue
+            filtered.append(t)
+    return filtered
 
-if not valid_tickers:
-    st.warning("No tickers found within the specified price range.")
-    st.stop()
-
-# Download historical data for valid tickers for breakout scan
-# Need at least 21 days to check breakout (latest close > previous 20-day max)
-hist_days = 30
-try:
-    data = yf.download(valid_tickers, period=f"{hist_days}d", interval="1d", progress=False, threads=True, auto_adjust=False)
-except Exception as e:
-    st.error(f"Failed to download historical data: {e}")
-    st.stop()
-
-breakouts = []
-if isinstance(data.columns, pd.MultiIndex):
-    closes = data["Close"]
-    for ticker in valid_tickers:
-        if ticker not in closes.columns:
+def breakout_scan(price_data, min_price, max_price):
+    results = []
+    for ticker, df in price_data.items():
+        if df.empty or len(df) < 21 or 'Close' not in df.columns:
             continue
-        series = closes[ticker].dropna()
-        if len(series) < 21:
+        latest_close = df['Close'].iloc[-1]
+        if latest_close < min_price or latest_close > max_price:
             continue
-        latest_close = series.iloc[-1]
-        prev_20_max = series.iloc[:-1].max()
-        if latest_close > prev_20_max:
-            breakout_pct = (latest_close - prev_20_max) / prev_20_max * 100
-            breakouts.append({
+        prev_max = df['Close'].iloc[-21:-1].max()
+        if latest_close > prev_max:
+            results.append({
                 "Ticker": ticker,
                 "Latest Close": latest_close,
-                "Prev 20-day Max": prev_20_max,
-                "Breakout %": breakout_pct
+                "Prev 20-day Max": prev_max,
+                "Breakout %": round((latest_close - prev_max) / prev_max * 100, 2)
             })
-else:
-    # Single ticker case
-    series = data["Close"].dropna()
-    if len(series) >= 21:
-        latest_close = series.iloc[-1]
-        prev_20_max = series.iloc[:-1].max()
-        if latest_close > prev_20_max:
-            breakout_pct = (latest_close - prev_20_max) / prev_20_max * 100
-            breakouts.append({
-                "Ticker": valid_tickers[0],
-                "Latest Close": latest_close,
-                "Prev 20-day Max": prev_20_max,
-                "Breakout %": breakout_pct
-            })
+    return pd.DataFrame(results).sort_values("Breakout %", ascending=False)
 
-if not breakouts:
-    st.info("No breakout candidates found.")
-    st.stop()
+if fetch_button:
+    tickers = fetch_top_finviz_tickers(top_n=100, market=market_option)
+    if not tickers:
+        st.error("No tickers fetched from Finviz.")
+        st.stop()
 
-df_breakouts = pd.DataFrame(breakouts)
-df_breakouts = df_breakouts.sort_values(by="Breakout %", ascending=False)
-st.subheader(f"Breakout Candidates ({len(df_breakouts)})")
-st.dataframe(df_breakouts.style.format({"Latest Close": "${:,.2f}", "Prev 20-day Max": "${:,.2f}", "Breakout %": "{:.2f}%"}))
+    price_data, skipped = fetch_price_data(tickers)
+    if skipped:
+        st.warning(f"Skipped {len(skipped)} tickers (no data or delisted): {', '.join(skipped)}")
 
-# CSV download
-csv_buffer = io.StringIO()
-df_breakouts.to_csv(csv_buffer, index=False)
-csv_bytes = csv_buffer.getvalue().encode()
+    filtered = filter_by_price(price_data, min_price, max_price)
+    if not filtered:
+        st.error("No tickers within the price range.")
+        st.stop()
 
-st.download_button(
-    label="Download Breakouts as CSV",
-    data=csv_bytes,
-    file_name="breakouts.csv",
-    mime="text/csv"
-)
+    filtered_data = {t: price_data[t] for t in filtered}
+    breakout_df = breakout_scan(filtered_data, min_price, max_price)
 
-# Plot top 5 breakout charts
-top5 = df_breakouts.head(5)["Ticker"].tolist()
-st.subheader("Top 5 Breakout Price Charts")
+    if breakout_df.empty:
+        st.info("No breakout candidates found.")
+    else:
+        st.success(f"Found {len(breakout_df)} breakout candidates.")
+        st.dataframe(breakout_df)
 
-for ticker in top5:
-    st.markdown(f"### {ticker}")
-    hist = yf.download(ticker, period="3mo", interval="1d", progress=False, auto_adjust=False)
-    if hist.empty:
-        st.write("No data available.")
-        continue
-    fig, ax = plt.subplots()
-    ax.plot(hist.index, hist["Close"], label="Close")
-    ax.set_title(f"{ticker} Close Price (last 3 months)")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Price")
-    ax.grid(True)
-    plt.xticks(rotation=45)
-    st.pyplot(fig)
+        csv_buffer = io.StringIO()
+        breakout_df.to_csv(csv_buffer, index=False)
+        st.download_button(
+            "Download CSV",
+            data=csv_buffer.getvalue(),
+            file_name="breakouts.csv",
+            mime="text/csv"
+        )
+
+        st.subheader("Top 5 Breakout Charts")
+        for ticker in breakout_df['Ticker'].head(5):
+            df = filtered_data[ticker]
+            fig, ax = plt.subplots(figsize=(8, 3))
+            ax.plot(df.index, df['Close'], label='Close Price')
+            ax.set_title(f"{ticker} Close Price - Last 60 Days")
+            ax.set_ylabel("Price ($)")
+            ax.legend()
+            ax.grid(True)
+            st.pyplot(fig)
