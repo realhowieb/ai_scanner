@@ -20,18 +20,8 @@ fetch_button = st.sidebar.button("Fetch & Scan")
 
 TICKER_FILE = "ticker.txt"
 
-@st.cache_data(ttl=3600)
 def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
-    async def fetch():
-        if market == "S&P 500":
-            url = "https://finviz.com/screener.ashx?v=111&f=idx_sp500"
-        elif market == "NASDAQ 100":
-            url = "https://finviz.com/screener.ashx?v=111&f=idx_nasdaq100"
-        elif market == "AMEX":
-            url = "https://finviz.com/screener.ashx?v=111&f=exch_amex"
-        else:
-            url = "https://finviz.com/screener.ashx?v=111"
-
+    async def fetch_async(url):
         browser = await launch(headless=True)
         page = await browser.newPage()
         await page.goto(url)
@@ -42,15 +32,24 @@ def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
         tickers = [a.text.strip() for a in soup.find_all('a', class_='screener-link-primary')]
         return tickers[:top_n]
 
+    if market == "S&P 500":
+        url = "https://finviz.com/screener.ashx?v=111&f=idx_sp500"
+    elif market == "NASDAQ 100":
+        url = "https://finviz.com/screener.ashx?v=111&f=idx_nasdaq100"
+    elif market == "AMEX":
+        url = "https://finviz.com/screener.ashx?v=111&f=exch_amex"
+    else:
+        url = "https://finviz.com/screener.ashx?v=111"
+
     try:
-        tickers = asyncio.run(fetch())
+        tickers = asyncio.run(fetch_async(url))
     except Exception as e:
         st.error(f"Failed to fetch tickers from Finviz: {e}")
         return []
 
     if tickers:
-        Path(TICKER_FILE).write_text("\n".join(tickers))
-        st.info(f"Auto-populated {TICKER_FILE} with {len(tickers)} tickers from {market}")
+        Path("ticker.txt").write_text("\n".join(tickers))
+        st.info(f"Auto-populated ticker.txt with {len(tickers)} tickers from {market}")
 
     return tickers
 
