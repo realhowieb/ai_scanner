@@ -73,9 +73,13 @@ def filter_by_price(tickers, min_price=1.0, max_price=1500.0):
     return filtered
 
 # Main function to load universe
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def load_universe(file_path="universe.txt", min_price=1.0, max_price=1500.0, exchange="all"):
     p = Path(file_path)
+    if p.exists() and p.stat().st_size > 0:
+        tickers = p.read_text().splitlines()
+        st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
+        return tickers
     tickers = []
     # Determine which exchanges to fetch
     exchanges = []
@@ -124,6 +128,9 @@ def rsi(series, period=14):
 def sma(series, window):
     return series.rolling(window).mean()
 
+def ema(series, window):
+    return series.ewm(span=window, adjust=False).mean()
+
 def atr14(high, low, close):
     tr = pd.concat([high - low, abs(high - close.shift(1)), abs(low - close.shift(1))], axis=1)
     tr_max = tr.max(axis=1)
@@ -164,21 +171,50 @@ def fetch_history_safe(tickers, period_days=60):
     return hist
 
 # ---------------------- Scanners ---------------------- #
-def scan_breakout(hist, min_price=1.0, max_price=1500.0, rsi_min=55, rsi_max=70):
+def scan_breakout(hist, min_price=1.0, max_price=1500.0, rsi_min=55, rsi_max=70,
+                  min_pct_chg=None, max_pct_chg=None, min_avg_vol=None):
     rows = []
     for t, df in hist.items():
         if len(df) < 25: continue
         price = df["Close"].iloc[-1]
         if pd.isna(price) or price < min_price or price > max_price: continue
+
+        # Calculate RSI
         rsi_val = rsi(df["Close"]).iloc[-1]
         if pd.isna(rsi_val) or rsi_val < rsi_min or rsi_val > rsi_max: continue
+
+        # Calculate SMA for 9 and 21 periods
         ma9 = sma(df["Close"],9).iloc[-1]
         ma21 = sma(df["Close"],21).iloc[-1]
         if pd.isna(ma9) or pd.isna(ma21): continue
+
+        # Calculate EMA for 9 and 21 periods for new filter
+        ema9 = ema(df["Close"],9).iloc[-1]
+        ema21 = ema(df["Close"],21).iloc[-1]
+        if pd.isna(ema9) or pd.isna(ema21): continue
+
+        # Price must be above EMA9 and EMA21
+        if price <= ema9 or price <= ema21: continue
+
+        # % Change today filter
+        pct_chg = (df["Close"].iloc[-1] - df["Open"].iloc[-1]) / df["Open"].iloc[-1] * 100
+        if min_pct_chg is not None and pct_chg < min_pct_chg:
+            continue
+        if max_pct_chg is not None and pct_chg > max_pct_chg:
+            continue
+
+        # Average volume over last 10 days filter
+        avg_vol = df["Volume"].tail(10).mean()
+        if min_avg_vol is not None and avg_vol < min_avg_vol:
+            continue
+
+        # Price must be above SMA9 and SMA21
         if (price <= ma9) or (price <= ma21): continue
+
         atr = atr14(df["High"], df["Low"], df["Close"])
         trend = "Strong Up" if rsi_val >= 67 else "Up" if rsi_val >= 60 else "Neutral"
-        rows.append({"Ticker": t, "Price": round(price,2), "RSI14": round(rsi_val,2), "ATR14": round(atr,2), "Trend": trend})
+        rows.append({"Ticker": t, "Price": round(price,2), "RSI14": round(rsi_val,2), "ATR14": round(atr,2),
+                     "Trend": trend, "%Chg_d": round(pct_chg,2), "AvgVol10d": int(avg_vol)})
     return pd.DataFrame(rows)
 
 # ---------------------- Streamlit UI ---------------------- #
@@ -188,12 +224,18 @@ min_price = st.sidebar.number_input("Scanner Min Price", 0.1, 100.0, 1.0, key="s
 max_price = st.sidebar.number_input("Scanner Max Price", 0.5, 5000.0, 1500.0, key="scanner_max_price")
 days_history = st.sidebar.slider("History Days", 20, 120, 60)
 
+# New filters for breakout momentum
+min_pct_chg = st.sidebar.number_input("Min % Change Today", -100.0, 100.0, 0.0, key="min_pct_chg")
+max_pct_chg = st.sidebar.number_input("Max % Change Today", -100.0, 100.0, 100.0, key="max_pct_chg")
+min_avg_vol = st.sidebar.number_input("Min Avg Volume (10-day)", 0, 100000000, 0, step=1000, key="min_avg_vol")
+
 if st.button("Run Scanner"):
     st.info(f"Fetching {days_history}d historical data for {len(tickers)} tickers...")
     hist = fetch_history_safe(tickers, days_history)
     st.success("Data fetched!")
 
-    df = scan_breakout(hist, min_price, max_price)
+    df = scan_breakout(hist, min_price, max_price, rsi_min=55, rsi_max=70,
+                       min_pct_chg=min_pct_chg, max_pct_chg=max_pct_chg, min_avg_vol=min_avg_vol)
 
     st.dataframe(df)
     if not df.empty:
