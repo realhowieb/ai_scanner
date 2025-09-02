@@ -28,45 +28,50 @@ def load_universe(file_path="ticker.txt"):
         st.warning(f"{file_path} not found or empty.")
         return []
 
+@st.cache_data(ttl=3600)
+def fetch_price_data(tickers, period="5d", interval="1d"):
+    """
+    Fetch historical price data for each ticker individually.
+    Skips tickers that fail or return empty data.
+    Returns a dict of DataFrames keyed by ticker.
+    """
+    price_data = {}
+    skipped_tickers = []
+
+    for ticker in tickers:
+        try:
+            df = yf.download(ticker, period=period, interval=interval, progress=False, threads=False)
+            if df.empty:
+                skipped_tickers.append(ticker)
+                st.warning(f"No data found for {ticker}")
+            else:
+                price_data[ticker] = df
+        except Exception as e:
+            skipped_tickers.append(ticker)
+            st.warning(f"Failed to fetch {ticker}: {e}")
+
+    return price_data, skipped_tickers
+
 tickers = load_universe()
 if not tickers:
+    st.error("No tickers found in ticker.txt.")
     st.stop()
+
+with st.spinner(f"Fetching historical price data for {len(tickers)} tickers..."):
+    price_data, skipped_tickers = fetch_price_data(tickers)
+
+if skipped_tickers:
+    st.sidebar.warning(f"Skipped {len(skipped_tickers)} tickers due to missing data or delisted: {', '.join(skipped_tickers)}")
 
 # Filter tickers by price using last close price
 valid_tickers = []
-skipped_tickers = []
-
-batch_size = 100
-for i in range(0, len(tickers), batch_size):
-    batch = tickers[i:i+batch_size]
+for ticker, data in price_data.items():
     try:
-        data = yf.download(batch, period="5d", interval="1d", progress=False, threads=True, auto_adjust=False)
+        price = data["Close"].iloc[-1]
+        if min_price <= price <= max_price:
+            valid_tickers.append(ticker)
     except Exception:
-        skipped_tickers.extend(batch)
         continue
-
-    if isinstance(data.columns, pd.MultiIndex):
-        closes = data["Close"].iloc[-1]
-        for t in batch:
-            try:
-                price = closes[t] if t in closes else np.nan
-                if pd.isna(price):
-                    skipped_tickers.append(t)
-                elif min_price <= price <= max_price:
-                    valid_tickers.append(t)
-            except Exception:
-                skipped_tickers.append(t)
-    else:
-        # Single ticker case
-        try:
-            price = data["Close"].iloc[-1]
-            if min_price <= price <= max_price:
-                valid_tickers.append(batch[0])
-        except Exception:
-            skipped_tickers.append(batch[0])
-
-if skipped_tickers:
-    st.sidebar.warning(f"Skipped {len(skipped_tickers)} tickers due to missing data or delisted.")
 
 if not valid_tickers:
     st.warning("No tickers found within the specified price range.")
