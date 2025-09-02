@@ -5,6 +5,7 @@ import numpy as np
 from pathlib import Path
 import io
 import matplotlib.pyplot as plt
+import requests
 
 st.title("Breakout Scanner")
 
@@ -23,23 +24,23 @@ def load_universe(file_path="universe.txt"):
         st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
         return tickers
     else:
-        st.warning(f"{file_path} not found or empty. Auto-populating tickers using yfinance...")
+        st.warning(f"{file_path} not found or empty. Auto-populating tickers using SEC data...")
         try:
-            # Use yfinance to get S&P 500 tickers
-            sp500 = yf.Ticker("^GSPC")
-            # yfinance does not provide direct method to get tickers list, so use static fallback
-            # Alternatively, get tickers from Wikipedia page, but that can cause HTTP 403 errors
-            # So use a static list as fallback
-            static_sp500 = [
-                "AAPL", "MSFT", "GOOGL", "AMZN", "FB", "TSLA", "BRK-B", "NVDA", "JPM", "JNJ",
-                "V", "UNH", "HD", "PG", "BAC", "DIS", "MA", "PYPL", "ADBE", "CMCSA"
-            ]
-            tickers = static_sp500
+            url = "https://www.sec.gov/files/company_tickers.json"
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+            # Filter tickers by exchange
+            allowed_exchanges = {"NYSE", "NASDAQ", "AMEX"}
+            tickers = []
+            for item in data.values():
+                if item.get("exchange") in allowed_exchanges:
+                    tickers.append(item.get("ticker"))
             if tickers:
                 p.write_text("\n".join(tickers))
                 st.success(f"Saved {len(tickers)} tickers to {file_path}")
             else:
-                st.error("Failed to fetch tickers via yfinance.")
+                st.error("No tickers found from SEC data.")
             return tickers
         except Exception as e:
             st.error(f"Failed to auto-populate tickers: {e}")
