@@ -16,48 +16,54 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, t
     p = Path(file_path)
     tickers = []
 
-    try:
+    def get_tickers_from_wikipedia(url, top_n):
         headers = {"User-Agent": "Mozilla/5.0"}
+        try:
+            response = requests.get(url, headers=headers)
+            tables = pd.read_html(response.text)
+            for table in tables:
+                # Find a column with 'Symbol' or 'Ticker'
+                ticker_col = None
+                for col in table.columns:
+                    if "Symbol" in col or "Ticker" in col:
+                        ticker_col = col
+                        break
+                if ticker_col is not None:
+                    tickers_list = table[ticker_col].dropna().astype(str).str.upper().str.replace('.', '-').tolist()
+                    return tickers_list[:top_n]
+            raise ValueError("Ticker column not found in tables")
+        except Exception as e:
+            return None
 
+    def get_tickers_from_file(file_name, top_n):
+        f = Path(file_name)
+        if f.exists():
+            lines = f.read_text().splitlines()
+            tickers_list = [line.strip().upper().replace('.', '-') for line in lines if line.strip()]
+            return tickers_list[:top_n]
+        return []
+
+    try:
         # --- S&P 500 ---
         url_sp500 = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        response = requests.get(url_sp500, headers=headers)
-        tables = pd.read_html(response.text)
-        sp500_df = tables[0]
-        sp500_tickers = sp500_df['Symbol'].tolist()[:top_n_sp500]
+        sp500_tickers = get_tickers_from_wikipedia(url_sp500, top_n_sp500)
+        if sp500_tickers is None:
+            sp500_tickers = get_tickers_from_file("sp500.txt", top_n_sp500)
 
         # --- NASDAQ 100 ---
         url_nasdaq = "https://en.wikipedia.org/wiki/NASDAQ-100"
-        response = requests.get(url_nasdaq, headers=headers)
-        tables = pd.read_html(response.text)
-        nasdaq_df = tables[3]  # usually the 4th table
-        # Find the first column containing "Symbol" or "Ticker"
-        ticker_col = None
-        for col in nasdaq_df.columns:
-            if "Symbol" in col or "Ticker" in col:
-                ticker_col = col
-                break
-        if ticker_col is None:
-            raise ValueError("Ticker column not found in NASDAQ-100 table")
-        nasdaq_tickers = nasdaq_df[ticker_col].tolist()[:top_n_nasdaq]
+        nasdaq_tickers = get_tickers_from_wikipedia(url_nasdaq, top_n_nasdaq)
+        if nasdaq_tickers is None:
+            nasdaq_tickers = get_tickers_from_file("nasdaq100.txt", top_n_nasdaq)
 
         # --- Russell 2000 ---
         url_russell = "https://en.wikipedia.org/wiki/Russell_2000_Index"
-        response = requests.get(url_russell, headers=headers)
-        tables = pd.read_html(response.text)
-        # The Russell 2000 tickers are usually in the first or second table with a 'Ticker' or 'Symbol' column
-        russell_tickers = []
-        for table in tables:
-            for col in table.columns:
-                if "Ticker" in col or "Symbol" in col:
-                    russell_tickers = table[col].tolist()
-                    break
-            if russell_tickers:
-                break
-        russell_tickers = russell_tickers[:top_n_russell]
+        russell_tickers = get_tickers_from_wikipedia(url_russell, top_n_russell)
+        if russell_tickers is None:
+            russell_tickers = get_tickers_from_file("russell2000.txt", top_n_russell)
 
         # Combine tickers from all indices
-        combined_tickers = list(dict.fromkeys([t.upper().replace('.', '-') for t in nasdaq_tickers + sp500_tickers + russell_tickers]))
+        combined_tickers = list(dict.fromkeys(nasdaq_tickers + sp500_tickers + russell_tickers))
 
         # Filter tickers by price using yfinance
         filtered_tickers = []
@@ -84,7 +90,7 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, t
     except Exception as e:
         st.warning(f"Failed to auto-populate tickers: {e}")
         if p.exists():
-            return [line.strip().upper() for line in p.read_text().splitlines() if line.strip()]
+            return [line.strip().upper().replace('.', '-') for line in p.read_text().splitlines() if line.strip()]
         return []
 
 # Add sidebar selection for index
