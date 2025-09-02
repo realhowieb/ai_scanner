@@ -18,7 +18,6 @@ universe_file = "universe.txt"
 def load_universe(file_path="universe.txt"):
     p = Path(file_path)
     tickers = []
-    # Try reading existing file
     if p.exists() and p.stat().st_size > 0:
         tickers = p.read_text().splitlines()
         st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
@@ -27,15 +26,15 @@ def load_universe(file_path="universe.txt"):
         st.warning(f"{file_path} not found or empty. Auto-populating tickers using SEC data...")
         try:
             url = "https://www.sec.gov/files/company_tickers.json"
-            response = requests.get(url)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+            }
+            response = requests.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
-            # Filter tickers by exchange
             allowed_exchanges = {"NYSE", "NASDAQ", "AMEX"}
-            tickers = []
-            for item in data.values():
-                if item.get("exchange") in allowed_exchanges:
-                    tickers.append(item.get("ticker"))
+            tickers = [item.get("ticker") for item in data.values() if item.get("exchange") in allowed_exchanges]
             if tickers:
                 p.write_text("\n".join(tickers))
                 st.success(f"Saved {len(tickers)} tickers to {file_path}")
