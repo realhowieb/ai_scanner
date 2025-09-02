@@ -4,20 +4,52 @@ import yfinance as yf
 import numpy as np
 import math
 from pathlib import Path
+from io import StringIO
+import requests
 
 st.set_page_config(page_title="AI Stock Scanner", layout="wide")
 st.title("AI Stock Scanner — Penny & Breakout Scanner")
 
 # ---------------------- Load Universe ---------------------- #
 @st.cache_data(ttl=3600)
-def load_universe(file_path="universe.txt"):
+def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500):
+    from pathlib import Path
+    import pandas as pd
+    import requests
+
     p = Path(file_path)
-    if not p.exists():
-        st.error(f"Missing {file_path}. Please create it with tickers.")
+    tickers = []
+
+    try:
+        # --- S&P 500 ---
+        url_sp500 = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url_sp500, headers=headers)
+        tables = pd.read_html(response.text)
+        sp500_df = tables[0]
+        sp500_tickers = sp500_df['Symbol'].tolist()[:top_n_sp500]
+
+        # --- NASDAQ 100 ---
+        url_nasdaq = "https://en.wikipedia.org/wiki/NASDAQ-100"
+        response = requests.get(url_nasdaq, headers=headers)
+        tables = pd.read_html(response.text)
+        nasdaq_df = tables[3]  # usually the 4th table
+        nasdaq_tickers = nasdaq_df['Ticker'].tolist()[:top_n_nasdaq]
+
+        # Combine and remove duplicates
+        tickers = list(dict.fromkeys([t.upper().replace('.', '-') for t in nasdaq_tickers + sp500_tickers]))
+        p.write_text("\n".join(tickers))
+        st.info(f"Auto-populated universe.txt with {len(tickers)} tickers (NASDAQ 100 + S&P 500)")
+        return tickers
+
+    except Exception as e:
+        st.warning(f"Failed to auto-populate tickers: {e}")
+        if p.exists():
+            return [line.strip().upper() for line in p.read_text().splitlines() if line.strip()]
         return []
-    return [line.strip().upper() for line in p.read_text().splitlines() if line.strip()]
 
 tickers = load_universe()
+tickers = [t.replace('.', '-') for t in tickers]  # Yahoo Finance format
 st.sidebar.write(f"Loaded {len(tickers)} tickers from universe.txt")
 
 # ---------------------- Helper Functions ---------------------- #
@@ -43,22 +75,40 @@ def atr14(high, low, close):
     return tr_max.rolling(14).mean().iloc[-1]
 
 @st.cache_data(ttl=3600)
-def fetch_history(tickers, period_days=60):
+def fetch_history_safe(tickers, period_days=60):
+    """
+    Fetch historical data safely, skipping tickers with missing/delisted data.
+    """
     hist = {}
     batch_size = 50
     for i in range(0, len(tickers), batch_size):
         batch = tickers[i:i+batch_size]
         try:
-            data = yf.download(" ".join(batch), period=f"{period_days}d", interval="1d", auto_adjust=False, threads=True, progress=False)
+            data = yf.download(batch, period=f"{period_days}d", interval="1d",
+                               auto_adjust=False, threads=True, progress=False)
             if isinstance(data.columns, pd.MultiIndex):
                 for t in batch:
-                    sub = data.xs(t, axis=1, level=1, drop_level=False).droplevel(1, axis=1)
-                    if not sub.empty: hist[t] = sub.dropna()
+                    if t not in data['Close']:
+                        st.warning(f"Skipped {t}: no data")
+                        continue
+                    sub = pd.DataFrame({
+                        'Open': data['Open'][t],
+                        'High': data['High'][t],
+                        'Low': data['Low'][t],
+                        'Close': data['Close'][t],
+                        'Volume': data['Volume'][t]
+                    }).dropna()
+                    if not sub.empty:
+                        hist[t] = sub
             else:
-                t = batch[0]
-                if not data.empty: hist[t] = data.dropna()
-        except Exception:
+                for t in batch:
+                    sub = data.dropna()
+                    if not sub.empty:
+                        hist[t] = sub
+        except Exception as e:
+            st.warning(f"Error fetching batch {batch}: {e}")
             continue
+    st.info(f"Fetched data for {len(hist)} / {len(tickers)} tickers")
     return hist
 
 def latest_close_pct_change(df):
@@ -69,26 +119,11 @@ def latest_close_pct_change(df):
     return (last_close / prev_close - 1.0) * 100.0
 
 # ---------------------- Scanners ---------------------- #
-def scan_penny_runners(hist, min_price=0.5, max_price=5.0, min_change_pct=5.0):
-    rows = []
-    for t, df in hist.items():
-        try:
-            price = df["Close"].iloc[-1]
-            if not (min_price <= price <= max_price): continue
-            chg = latest_close_pct_change(df)
-            if pd.isna(chg) or chg < min_change_pct: continue
-            rvol = df["Volume"].iloc[-1]/df["Volume"].iloc[-10:].mean()
-            rows.append({"Ticker": t, "Price": round(price,2), "%Chg_d": round(chg,2), "RVOL10": round(rvol,2)})
-        except Exception:
-            continue
-    out = pd.DataFrame(rows)
-    return out.sort_values(by=["%Chg_d","RVOL10"], ascending=[False,False]).reset_index(drop=True) if not out.empty else out
-
-def scan_breakout(hist, min_price=5.0, max_price=50.0, rsi_min=55, rsi_max=70):
+def scan_breakout(hist, min_price=5.0, max_price=1500.0, rsi_min=55, rsi_max=70):
     rows = []
     for t, df in hist.items():
         if len(df) < 25: continue
-        price = df["Close"].iloc[-1]
+        price = float(df["Close"].iloc[-1])
         if not (min_price <= price <= max_price): continue
         rsi_val = rsi(df["Close"]).iloc[-1]
         if not (rsi_min <= rsi_val <= rsi_max): continue
@@ -98,35 +133,29 @@ def scan_breakout(hist, min_price=5.0, max_price=50.0, rsi_min=55, rsi_max=70):
         cond_ma21 = price > ma21
         if not cond_ma9 or not cond_ma21: continue
         atr = atr14(df["High"], df["Low"], df["Close"])
-        # Trend label
-        trend = "Strong Up" if rsi_val>=67 else "Up" if rsi_val>=60 else "Neutral" if rsi_val>=50 else "Down"
+        trend = "Strong Up" if rsi_val>=67 else "Up" if rsi_val>=60 else "Neutral"
         rows.append({"Ticker": t, "Price": round(price,2), "RSI14": round(rsi_val,2), "ATR14": round(atr,2), "Trend": trend})
-    out = pd.DataFrame(rows)
-    return out
+    return pd.DataFrame(rows)
 
 # ---------------------- Streamlit UI ---------------------- #
 st.sidebar.header("Scanner Settings")
-scanner_type = st.sidebar.radio("Select scanner type:", ["Penny Runners","Breakout Momentum"])
+scanner_type = st.sidebar.radio("Select scanner type:", ["Breakout Momentum"])
 min_price = st.sidebar.number_input("Min Price", 0.1, 100.0, 0.5)
-max_price = st.sidebar.number_input("Max Price", 0.5, 100.0, 50.0)
+max_price = st.sidebar.number_input("Max Price", 0.5, 5000.0, 1500.0)
 days_history = st.sidebar.slider("History Days", 20, 120, 60)
 
 if st.button("Run Scanner"):
     st.info(f"Fetching {days_history}d historical data for {len(tickers)} tickers...")
-    hist = fetch_history(tickers, days_history)
+    hist = fetch_history_safe(tickers, days_history)
     st.success("Data fetched!")
 
-    if scanner_type == "Penny Runners":
-        df = scan_penny_runners(hist, min_price, max_price)
-    else:
-        df = scan_breakout(hist, min_price, max_price)
+    df = scan_breakout(hist, min_price, max_price)
 
     st.dataframe(df)
     if not df.empty:
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button("Download CSV", csv, "scanner_results.csv", "text/csv")
 
-        # Display line charts for top 5 tickers
         st.subheader("Top 5 ticker charts")
         for t in df["Ticker"].head(5):
             st.write(t)
