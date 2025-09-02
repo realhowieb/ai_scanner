@@ -21,6 +21,15 @@ fetch_button = st.sidebar.button("Fetch & Scan")
 TICKER_FILE = "ticker.txt"
 
 def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
+    """
+    Fetch top tickers from Finviz using Pyppeteer.
+    Must be run in the main thread due to asyncio signal handling.
+    """
+    import asyncio
+    from pyppeteer import launch
+    from bs4 import BeautifulSoup
+    from pathlib import Path
+
     async def fetch_async(url):
         browser = await launch(headless=True)
         page = await browser.newPage()
