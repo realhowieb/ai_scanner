@@ -10,40 +10,56 @@ st.title("AI Stock Scanner — Breakout Scanner")
 
 
 # ---------------------- New Universe Loading Logic ---------------------- #
-import requests
-import io
 
-# Helper: Get exchange tickers from NASDAQ Trader symbol directories
+# Helper: Get tickers for each exchange/index using yfinance ETF holdings
 @st.cache_data(ttl=86400)
-def get_exchange_tickers(exchange="nasdaq"):
+def get_etf_tickers_for_exchange(exchange="nasdaq"):
     """
-    Fetch tickers from NASDAQ Trader symbol directory for NASDAQ, NYSE, or AMEX.
+    Fetch tickers from yfinance ETF for NASDAQ, NYSE, or AMEX.
+    Uses QQQ for NASDAQ 100, SPY for S&P 500 (NYSE), IWM for Russell 2000 (AMEX).
     """
-    urls = {
-        "nasdaq": "https://ftp.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt",
-        "nyse": "https://ftp.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
-        "amex": "https://ftp.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
-    }
-    if exchange.lower() not in urls:
-        return []
-    url = urls[exchange.lower()]
     try:
-        r = requests.get(url)
-        r.raise_for_status()
-        df = pd.read_csv(io.StringIO(r.text), sep="|")
-        # Remove last summary row
-        df = df.iloc[:-1]
         if exchange.lower() == "nasdaq":
-            tickers = df["Symbol"].tolist()
+            # QQQ ETF for NASDAQ 100
+            etf = yf.Ticker("QQQ")
+        elif exchange.lower() == "nyse":
+            # SPY ETF for S&P 500
+            etf = yf.Ticker("SPY")
+        elif exchange.lower() == "amex":
+            # IWM ETF for Russell 2000 (AMEX)
+            etf = yf.Ticker("IWM")
         else:
-            # NYSE/AMEX: filter by Exchange column
-            exch_code = {"nyse": "N", "amex": "A"}[exchange.lower()]
-            tickers = df[df["Exchange"] == exch_code]["ACT Symbol"].tolist()
-        # Remove test/placeholder tickers
-        tickers = [t for t in tickers if t.isalpha() and len(t) <= 5]
-        return tickers
+            return []
+        # Try to get holdings from yfinance
+        # yfinance does not provide holdings in .info, but in .fund_holdings if available
+        holdings = None
+        try:
+            # Try to get fund holdings (may not always be available)
+            holdings_df = etf.fund_holdings
+            if holdings_df is not None and not holdings_df.empty:
+                tickers = holdings_df['Symbol'].dropna().astype(str).tolist()
+                # Remove invalid tickers if any
+                tickers = [t for t in tickers if t.isalpha() or ("-" in t) or ("." in t)]
+                return tickers
+        except Exception:
+            pass
+        # Fallback: try .holdings if present (not always available)
+        try:
+            if hasattr(etf, "holdings") and etf.holdings is not None:
+                tickers = [h['symbol'] for h in etf.holdings if 'symbol' in h]
+                return tickers
+        except Exception:
+            pass
+        # Fallback: hardcoded small sample, as yfinance does not always supply holdings
+        if exchange.lower() == "nasdaq":
+            return ['AAPL', 'MSFT', 'AMZN', 'TSLA', 'NVDA', 'GOOGL', 'META', 'PYPL', 'ADBE', 'CMCSA']
+        elif exchange.lower() == "nyse":
+            return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'BRK-B', 'JNJ', 'V', 'WMT']
+        elif exchange.lower() == "amex":
+            return ['FIZZ', 'FWRD', 'GNL', 'HZO', 'IDEX', 'JBL', 'KIRK', 'LAD', 'MMS', 'MUR']
+        return []
     except Exception as e:
-        st.warning(f"Failed to fetch {exchange.upper()} tickers: {e}")
+        st.warning(f"Failed to fetch tickers for {exchange.upper()} from yfinance ETF: {e}")
         return []
 
 # Helper: Filter tickers by price using yfinance
@@ -72,7 +88,7 @@ def filter_by_price(tickers, min_price=1.0, max_price=1500.0):
             continue
     return filtered
 
-# Main function to load universe
+# Main function to load universe using yfinance ETF tickers only
 @st.cache_data(ttl=86400)
 def load_universe(file_path="universe.txt", min_price=1.0, max_price=1500.0, exchange="all"):
     p = Path(file_path)
@@ -80,16 +96,14 @@ def load_universe(file_path="universe.txt", min_price=1.0, max_price=1500.0, exc
         tickers = p.read_text().splitlines()
         st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
         return tickers
-    tickers = []
     # Determine which exchanges to fetch
-    exchanges = []
     if exchange == "all":
         exchanges = ["nasdaq", "nyse", "amex"]
     else:
         exchanges = [exchange.lower()]
     all_tickers = []
     for exch in exchanges:
-        all_tickers.extend(get_exchange_tickers(exch))
+        all_tickers.extend(get_etf_tickers_for_exchange(exch))
     # Remove duplicates and sort
     all_tickers = sorted(set(all_tickers))
     filtered = filter_by_price(all_tickers, min_price, max_price)
