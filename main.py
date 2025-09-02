@@ -13,32 +13,36 @@ min_price = st.sidebar.number_input("Minimum Price", value=1.0, step=0.1)
 max_price = st.sidebar.number_input("Maximum Price", value=1500.0, step=0.1)
 universe_file = "universe.txt"
 
-def load_universe(file_path=universe_file):
+@st.cache_data(ttl=3600)
+def load_universe(file_path="universe.txt"):
     p = Path(file_path)
     tickers = []
     # Try reading existing file
     if p.exists() and p.stat().st_size > 0:
         tickers = p.read_text().splitlines()
-        st.sidebar.info(f"Loaded {len(tickers)} tickers from {file_path}")
+        st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
         return tickers
     else:
-        st.sidebar.warning(f"Universe file '{file_path}' missing or empty. Auto-populating with S&P 500 and NASDAQ 100 tickers...")
+        st.warning(f"{file_path} not found or empty. Auto-populating tickers using yfinance...")
         try:
-            import pandas as pd
+            import yfinance as yf
             # S&P 500
-            sp500_table = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]
-            sp500_tickers = sp500_table['Symbol'].str.replace('.', '-', regex=False).tolist()
+            sp500 = yf.Ticker("^GSPC")
+            sp500_tickers = sp500.constituents.index.tolist() if hasattr(sp500, "constituents") else []
+
             # NASDAQ 100
-            nasdaq100_table = pd.read_html("https://en.wikipedia.org/wiki/NASDAQ-100")[3]  # 4th table has tickers
-            nasdaq100_tickers = nasdaq100_table['Ticker'].str.replace('.', '-', regex=False).tolist()
-            # Merge and dedupe
+            nasdaq100 = yf.Ticker("^NDX")
+            nasdaq100_tickers = nasdaq100.constituents.index.tolist() if hasattr(nasdaq100, "constituents") else []
+
             tickers = sorted(list(set(sp500_tickers + nasdaq100_tickers)))
-            # Save to file
-            p.write_text("\n".join(tickers))
-            st.sidebar.success(f"Saved {len(tickers)} tickers to {file_path}")
+            if tickers:
+                p.write_text("\n".join(tickers))
+                st.success(f"Saved {len(tickers)} tickers to {file_path}")
+            else:
+                st.error("Failed to fetch tickers via yfinance.")
             return tickers
         except Exception as e:
-            st.sidebar.error(f"Failed to auto-populate tickers: {e}")
+            st.error(f"Failed to auto-populate tickers: {e}")
             return []
 
 tickers = load_universe()
