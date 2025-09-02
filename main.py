@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from bs4 import BeautifulSoup
 import requests
+import asyncio
+from pyppeteer import launch
 
 st.title("AI Scanner - Breakout Scanner (Finviz Top Stocks)")
 
@@ -20,32 +22,35 @@ TICKER_FILE = "ticker.txt"
 
 @st.cache_data(ttl=3600)
 def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
-    base_url = "https://finviz.com/screener.ashx?v=111&f="
-    if market == "S&P 500":
-        url = base_url + "idx_sp500"
-    elif market == "NASDAQ 100":
-        url = base_url + "idx_nasdaq100"
-    elif market == "AMEX":
-        url = base_url + "exch_amex"
-    else:
-        url = base_url
+    async def fetch():
+        if market == "S&P 500":
+            url = "https://finviz.com/screener.ashx?v=111&f=idx_sp500"
+        elif market == "NASDAQ 100":
+            url = "https://finviz.com/screener.ashx?v=111&f=idx_nasdaq100"
+        elif market == "AMEX":
+            url = "https://finviz.com/screener.ashx?v=111&f=exch_amex"
+        else:
+            url = "https://finviz.com/screener.ashx?v=111"
 
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    r = requests.get(url, headers=headers)
-    if r.status_code != 200:
-        st.error(f"Failed to fetch tickers from Finviz: HTTP {r.status_code}")
+        browser = await launch(headless=True)
+        page = await browser.newPage()
+        await page.goto(url)
+        content = await page.content()
+        await browser.close()
+
+        soup = BeautifulSoup(content, "html.parser")
+        tickers = [a.text.strip() for a in soup.find_all('a', class_='screener-link-primary')]
+        return tickers[:top_n]
+
+    try:
+        tickers = asyncio.run(fetch())
+    except Exception as e:
+        st.error(f"Failed to fetch tickers from Finviz: {e}")
         return []
 
-    soup = BeautifulSoup(r.content, "html.parser")
-    tickers = []
-    for link in soup.find_all('a', class_='screener-link-primary'):
-        tickers.append(link.text.strip())
-        if len(tickers) >= top_n:
-            break
-
-    # Save tickers to ticker.txt automatically
-    Path(TICKER_FILE).write_text("\n".join(tickers))
-    st.info(f"Auto-populated {TICKER_FILE} with {len(tickers)} tickers from {market}")
+    if tickers:
+        Path(TICKER_FILE).write_text("\n".join(tickers))
+        st.info(f"Auto-populated {TICKER_FILE} with {len(tickers)} tickers from {market}")
 
     return tickers
 
