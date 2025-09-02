@@ -12,14 +12,15 @@ st.title("AI Stock Scanner — Breakout Scanner")
 
 # ---------------------- Load Universe ---------------------- #
 @st.cache_data(ttl=3600)
-def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, min_price=1.0, max_price=15.0):
+def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, top_n_russell=2000, min_price=1.0, max_price=15.0):
     p = Path(file_path)
     tickers = []
 
     try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+
         # --- S&P 500 ---
         url_sp500 = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url_sp500, headers=headers)
         tables = pd.read_html(response.text)
         sp500_df = tables[0]
@@ -40,8 +41,23 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, m
             raise ValueError("Ticker column not found in NASDAQ-100 table")
         nasdaq_tickers = nasdaq_df[ticker_col].tolist()[:top_n_nasdaq]
 
-        # Combine and remove duplicates
-        combined_tickers = list(dict.fromkeys([t.upper().replace('.', '-') for t in nasdaq_tickers + sp500_tickers]))
+        # --- Russell 2000 ---
+        url_russell = "https://en.wikipedia.org/wiki/Russell_2000_Index"
+        response = requests.get(url_russell, headers=headers)
+        tables = pd.read_html(response.text)
+        # The Russell 2000 tickers are usually in the first or second table with a 'Ticker' or 'Symbol' column
+        russell_tickers = []
+        for table in tables:
+            for col in table.columns:
+                if "Ticker" in col or "Symbol" in col:
+                    russell_tickers = table[col].tolist()
+                    break
+            if russell_tickers:
+                break
+        russell_tickers = russell_tickers[:top_n_russell]
+
+        # Combine tickers from all indices
+        combined_tickers = list(dict.fromkeys([t.upper().replace('.', '-') for t in nasdaq_tickers + sp500_tickers + russell_tickers]))
 
         # Filter tickers by price using yfinance
         filtered_tickers = []
@@ -71,9 +87,59 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, m
             return [line.strip().upper() for line in p.read_text().splitlines() if line.strip()]
         return []
 
-tickers = load_universe()
+# Add sidebar selection for index
+scanner_index = st.sidebar.selectbox("Select Index to Scan:", ["NASDAQ 100", "S&P 500", "Russell 2000"])
+
+# Load all tickers from universe.txt or fetch new
+all_tickers = load_universe()
+
+# Filter tickers by selected index
+def filter_tickers_by_index(tickers, index_name):
+    index_name = index_name.lower()
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        if index_name == "s&p 500":
+            url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+            response = requests.get(url, headers=headers)
+            tables = pd.read_html(response.text)
+            df = tables[0]
+            index_tickers = set(df['Symbol'].str.upper().str.replace('.', '-').tolist())
+        elif index_name == "nasdaq 100":
+            url = "https://en.wikipedia.org/wiki/NASDAQ-100"
+            response = requests.get(url, headers=headers)
+            tables = pd.read_html(response.text)
+            nasdaq_df = tables[3]
+            ticker_col = None
+            for col in nasdaq_df.columns:
+                if "Symbol" in col or "Ticker" in col:
+                    ticker_col = col
+                    break
+            if ticker_col is None:
+                return []
+            index_tickers = set(nasdaq_df[ticker_col].str.upper().str.replace('.', '-').tolist())
+        elif index_name == "russell 2000":
+            url = "https://en.wikipedia.org/wiki/Russell_2000_Index"
+            response = requests.get(url, headers=headers)
+            tables = pd.read_html(response.text)
+            index_tickers = set()
+            for table in tables:
+                for col in table.columns:
+                    if "Ticker" in col or "Symbol" in col:
+                        index_tickers = set(table[col].str.upper().str.replace('.', '-').tolist())
+                        break
+                if index_tickers:
+                    break
+        else:
+            return tickers
+        filtered = [t for t in tickers if t in index_tickers]
+        return filtered
+    except Exception as e:
+        st.warning(f"Failed to filter tickers by index {index_name}: {e}")
+        return tickers
+
+tickers = filter_tickers_by_index(all_tickers, scanner_index)
 tickers = [t.replace('.', '-') for t in tickers]  # Yahoo Finance format
-st.sidebar.write(f"Loaded {len(tickers)} tickers from universe.txt")
+st.sidebar.write(f"Loaded {len(tickers)} tickers from universe.txt for {scanner_index}")
 
 # ---------------------- Helper Functions ---------------------- #
 def rsi(series, period=14):
