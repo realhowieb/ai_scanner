@@ -12,10 +12,10 @@ st.title("Breakout Scanner")
 # Parameters
 min_price = st.sidebar.number_input("Minimum Price", value=1.0, step=0.1)
 max_price = st.sidebar.number_input("Maximum Price", value=1500.0, step=0.1)
-universe_file = "universe.txt"
+universe_file = "ticker.txt"
 
 @st.cache_data(ttl=3600)
-def load_universe(file_path="universe.txt"):
+def load_universe(file_path="ticker.txt"):
     p = Path(file_path)
     tickers = []
     if p.exists() and p.stat().st_size > 0:
