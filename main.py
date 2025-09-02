@@ -87,7 +87,7 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, t
             tickers = filtered_tickers
 
         p.write_text("\n".join(tickers))
-        st.info(f"Auto-populated universe.txt with {len(tickers)} tickers (price between ${min_price} and ${max_price})")
+        st.info(f"Auto-populated universe.txt with {len(tickers)} tickers")
         return tickers
 
     except Exception as e:
