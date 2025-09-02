@@ -16,7 +16,6 @@ st.title("AI Scanner - Breakout Scanner (Finviz Top Stocks)")
 min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.0, step=0.1)
 max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1500.0, step=1.0)
 market_option = st.sidebar.selectbox("Select Market", ["S&P 500", "NASDAQ 100", "AMEX"])
-fetch_button = st.sidebar.button("Fetch & Scan")
 
 TICKER_FILE = "ticker.txt"
 
@@ -105,46 +104,50 @@ def breakout_scan(price_data, min_price, max_price):
             })
     return pd.DataFrame(results).sort_values("Breakout %", ascending=False)
 
-if fetch_button:
+if "tickers" not in st.session_state:
+    st.session_state.tickers = []
+
+if st.sidebar.button("Fetch & Scan"):
     tickers = fetch_top_finviz_tickers(top_n=100, market=market_option)
     if not tickers:
         st.error("No tickers fetched from Finviz.")
-        st.stop()
+    else:
+        st.session_state.tickers = tickers
 
-    price_data, skipped = fetch_price_data(tickers)
+if st.session_state.tickers:
+    price_data, skipped = fetch_price_data(st.session_state.tickers)
     if skipped:
         st.warning(f"Skipped {len(skipped)} tickers (no data or delisted): {', '.join(skipped)}")
 
     filtered = filter_by_price(price_data, min_price, max_price)
     if not filtered:
         st.error("No tickers within the price range.")
-        st.stop()
-
-    filtered_data = {t: price_data[t] for t in filtered}
-    breakout_df = breakout_scan(filtered_data, min_price, max_price)
-
-    if breakout_df.empty:
-        st.info("No breakout candidates found.")
     else:
-        st.success(f"Found {len(breakout_df)} breakout candidates.")
-        st.dataframe(breakout_df)
+        filtered_data = {t: price_data[t] for t in filtered}
+        breakout_df = breakout_scan(filtered_data, min_price, max_price)
 
-        csv_buffer = io.StringIO()
-        breakout_df.to_csv(csv_buffer, index=False)
-        st.download_button(
-            "Download CSV",
-            data=csv_buffer.getvalue(),
-            file_name="breakouts.csv",
-            mime="text/csv"
-        )
+        if breakout_df.empty:
+            st.info("No breakout candidates found.")
+        else:
+            st.success(f"Found {len(breakout_df)} breakout candidates.")
+            st.dataframe(breakout_df)
 
-        st.subheader("Top 5 Breakout Charts")
-        for ticker in breakout_df['Ticker'].head(5):
-            df = filtered_data[ticker]
-            fig, ax = plt.subplots(figsize=(8, 3))
-            ax.plot(df.index, df['Close'], label='Close Price')
-            ax.set_title(f"{ticker} Close Price - Last 60 Days")
-            ax.set_ylabel("Price ($)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
+            csv_buffer = io.StringIO()
+            breakout_df.to_csv(csv_buffer, index=False)
+            st.download_button(
+                "Download CSV",
+                data=csv_buffer.getvalue(),
+                file_name="breakouts.csv",
+                mime="text/csv"
+            )
+
+            st.subheader("Top 5 Breakout Charts")
+            for ticker in breakout_df['Ticker'].head(5):
+                df = filtered_data[ticker]
+                fig, ax = plt.subplots(figsize=(8, 3))
+                ax.plot(df.index, df['Close'], label='Close Price')
+                ax.set_title(f"{ticker} Close Price - Last 60 Days")
+                ax.set_ylabel("Price ($)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
