@@ -1,94 +1,151 @@
-def load_universe(file_path="universe.txt", min_price=1.0, max_price=1500.0, exchange="all"):
-    from pathlib import Path
-    import yfinance as yf
-    import pandas as pd
-    import numpy as np
-    import streamlit as st
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import io
+import matplotlib.pyplot as plt
 
+st.title("Breakout Scanner")
+
+# Parameters
+min_price = st.sidebar.number_input("Minimum Price", value=1.0, step=0.1)
+max_price = st.sidebar.number_input("Maximum Price", value=1500.0, step=0.1)
+universe_file = "universe.txt"
+
+def load_universe(file_path=universe_file):
     p = Path(file_path)
     if p.exists() and p.stat().st_size > 0:
         tickers = p.read_text().splitlines()
-        st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
+        st.sidebar.info(f"Loaded {len(tickers)} tickers from {file_path}")
         return tickers
+    else:
+        st.sidebar.error(f"Universe file '{file_path}' not found or empty.")
+        return []
 
-    exchanges = ["nasdaq", "nyse", "amex"] if exchange == "all" else [exchange.lower()]
-    all_tickers = []
+tickers = load_universe()
+if not tickers:
+    st.stop()
 
-    # Use yfinance predefined lists for tickers
-    for exch in exchanges:
-        try:
-            if exch == "nasdaq":
-                tickers = yf.Tickers(' '.join(yf.download('^IXIC', period='1d').columns)).tickers
-                # Instead of above, use yfinance's tickers_nasdaq list from yfinance module if available
-                # But since instructions say to avoid si.tickers_nasdaq, we use yfinance's predefined lists
-                # yfinance does not have direct tickers_nasdaq property, so use the public list:
-                tickers = yf.download('^IXIC', period='1d')  # placeholder to avoid si usage
-                # Instead, use yfinance's tickers_nasdaq.txt from its repo or a static list
-                # But since no external files, we can get tickers from yfinance's Tickers object
-                # So, we will use yf.Tickers to get tickers from exchanges by fetching from yfinance's ticker lists
-                # This is a limitation; we will use the yfinance's tickers_nasdaq.txt file URL to fetch tickers
-                # But since no internet fetch allowed, we will simulate with empty list
-                tickers = []
-            elif exch == "nyse":
-                tickers = []
-            elif exch == "amex":
-                tickers = []
-            else:
-                tickers = []
-            all_tickers.extend(tickers)
-        except Exception as e:
-            st.warning(f"Failed to fetch tickers for {exch.upper()}: {e}")
-            continue
+# Filter tickers by price using last close price
+valid_tickers = []
+skipped_tickers = []
 
-    # Since yfinance does not provide direct ticker lists for exchanges without using si,
-    # and instructions say to use yfinance only, we will get all tickers from yfinance's Tickers class
-    # But yfinance.Tickers requires a list of tickers, so we have a problem here.
-    # We must assume we have a combined list of tickers from yfinance's predefined lists:
-    # For this rewrite, we will hardcode empty list to comply with instructions.
+batch_size = 100
+for i in range(0, len(tickers), batch_size):
+    batch = tickers[i:i+batch_size]
+    try:
+        data = yf.download(batch, period="5d", interval="1d", progress=False, threads=True, auto_adjust=False)
+    except Exception:
+        skipped_tickers.extend(batch)
+        continue
 
-    all_tickers = sorted(set(all_tickers))
-    valid_tickers = []
-    skipped_tickers = []
-
-    batch_size = 100
-    for i in range(0, len(all_tickers), batch_size):
-        batch = all_tickers[i:i+batch_size]
-        try:
-            data = yf.download(batch, period="2d", interval="1d", progress=False, threads=True, auto_adjust=False)
-        except Exception:
-            skipped_tickers.extend(batch)
-            continue
-
-        if isinstance(data.columns, pd.MultiIndex):
-            closes = data["Close"].iloc[-1]
-            for t in batch:
-                try:
-                    price = closes[t] if t in closes else np.nan
-                    if pd.isna(price):
-                        skipped_tickers.append(t)
-                    elif min_price <= price <= max_price:
-                        valid_tickers.append(t)
-                    else:
-                        skipped_tickers.append(t)
-                except Exception:
-                    skipped_tickers.append(t)
-        else:
-            # Single ticker case
+    if isinstance(data.columns, pd.MultiIndex):
+        closes = data["Close"].iloc[-1]
+        for t in batch:
             try:
-                price = data["Close"].iloc[-1]
-                if min_price <= price <= max_price:
-                    valid_tickers.append(batch[0])
-                else:
-                    skipped_tickers.append(batch[0])
+                price = closes[t] if t in closes else np.nan
+                if pd.isna(price):
+                    skipped_tickers.append(t)
+                elif min_price <= price <= max_price:
+                    valid_tickers.append(t)
             except Exception:
-                skipped_tickers.append(batch[0])
+                skipped_tickers.append(t)
+    else:
+        # Single ticker case
+        try:
+            price = data["Close"].iloc[-1]
+            if min_price <= price <= max_price:
+                valid_tickers.append(batch[0])
+        except Exception:
+            skipped_tickers.append(batch[0])
 
-    if skipped_tickers:
-        st.warning(f"Skipped {len(skipped_tickers)} tickers due to missing data or delisted: "
-                   f"{', '.join(skipped_tickers[:20])}{'...' if len(skipped_tickers) > 20 else ''}")
+if skipped_tickers:
+    st.sidebar.warning(f"Skipped {len(skipped_tickers)} tickers due to missing data or delisted.")
 
-    valid_tickers = [t.replace(".", "-") for t in valid_tickers]
-    p.write_text("\n".join(valid_tickers))
-    st.info(f"Universe loaded: {len(valid_tickers)} tickers from {', '.join(exchanges).upper()} "
-            f"between ${min_price} and ${max_price}")
-    return valid_tickers
+if not valid_tickers:
+    st.warning("No tickers found within the specified price range.")
+    st.stop()
+
+# Download historical data for valid tickers for breakout scan
+# Need at least 21 days to check breakout (latest close > previous 20-day max)
+hist_days = 30
+try:
+    data = yf.download(valid_tickers, period=f"{hist_days}d", interval="1d", progress=False, threads=True, auto_adjust=False)
+except Exception as e:
+    st.error(f"Failed to download historical data: {e}")
+    st.stop()
+
+breakouts = []
+if isinstance(data.columns, pd.MultiIndex):
+    closes = data["Close"]
+    for ticker in valid_tickers:
+        if ticker not in closes.columns:
+            continue
+        series = closes[ticker].dropna()
+        if len(series) < 21:
+            continue
+        latest_close = series.iloc[-1]
+        prev_20_max = series.iloc[:-1].max()
+        if latest_close > prev_20_max:
+            breakout_pct = (latest_close - prev_20_max) / prev_20_max * 100
+            breakouts.append({
+                "Ticker": ticker,
+                "Latest Close": latest_close,
+                "Prev 20-day Max": prev_20_max,
+                "Breakout %": breakout_pct
+            })
+else:
+    # Single ticker case
+    series = data["Close"].dropna()
+    if len(series) >= 21:
+        latest_close = series.iloc[-1]
+        prev_20_max = series.iloc[:-1].max()
+        if latest_close > prev_20_max:
+            breakout_pct = (latest_close - prev_20_max) / prev_20_max * 100
+            breakouts.append({
+                "Ticker": valid_tickers[0],
+                "Latest Close": latest_close,
+                "Prev 20-day Max": prev_20_max,
+                "Breakout %": breakout_pct
+            })
+
+if not breakouts:
+    st.info("No breakout candidates found.")
+    st.stop()
+
+df_breakouts = pd.DataFrame(breakouts)
+df_breakouts = df_breakouts.sort_values(by="Breakout %", ascending=False)
+st.subheader(f"Breakout Candidates ({len(df_breakouts)})")
+st.dataframe(df_breakouts.style.format({"Latest Close": "${:,.2f}", "Prev 20-day Max": "${:,.2f}", "Breakout %": "{:.2f}%"}))
+
+# CSV download
+csv_buffer = io.StringIO()
+df_breakouts.to_csv(csv_buffer, index=False)
+csv_bytes = csv_buffer.getvalue().encode()
+
+st.download_button(
+    label="Download Breakouts as CSV",
+    data=csv_bytes,
+    file_name="breakouts.csv",
+    mime="text/csv"
+)
+
+# Plot top 5 breakout charts
+top5 = df_breakouts.head(5)["Ticker"].tolist()
+st.subheader("Top 5 Breakout Price Charts")
+
+for ticker in top5:
+    st.markdown(f"### {ticker}")
+    hist = yf.download(ticker, period="3mo", interval="1d", progress=False, auto_adjust=False)
+    if hist.empty:
+        st.write("No data available.")
+        continue
+    fig, ax = plt.subplots()
+    ax.plot(hist.index, hist["Close"], label="Close")
+    ax.set_title(f"{ticker} Close Price (last 3 months)")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Price")
+    ax.grid(True)
+    plt.xticks(rotation=45)
+    st.pyplot(fig)
