@@ -3,3 +3,6 @@ pandas>=2.0
 numpy>=1.23
 yfinance>=0.2.27
 pytz>=2025.2
+lxml
+html5lib
+beautifulsoup4
