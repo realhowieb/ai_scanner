@@ -4,63 +4,13 @@ import yfinance as yf
 import numpy as np
 import math
 from pathlib import Path
+from yahoo_fin import stock_info as si
 
 st.set_page_config(page_title="AI Stock Scanner", layout="wide")
 st.title("AI Stock Scanner — Breakout Scanner")
 
 
 # ---------------------- New Universe Loading Logic ---------------------- #
-
-# Helper: Get tickers for each exchange/index using yfinance ETF holdings
-@st.cache_data(ttl=86400)
-def get_etf_tickers_for_exchange(exchange="nasdaq"):
-    """
-    Fetch tickers from yfinance ETF for NASDAQ, NYSE, or AMEX.
-    Uses QQQ for NASDAQ 100, SPY for S&P 500 (NYSE), IWM for Russell 2000 (AMEX).
-    """
-    try:
-        if exchange.lower() == "nasdaq":
-            # QQQ ETF for NASDAQ 100
-            etf = yf.Ticker("QQQ")
-        elif exchange.lower() == "nyse":
-            # SPY ETF for S&P 500
-            etf = yf.Ticker("SPY")
-        elif exchange.lower() == "amex":
-            # IWM ETF for Russell 2000 (AMEX)
-            etf = yf.Ticker("IWM")
-        else:
-            return []
-        # Try to get holdings from yfinance
-        # yfinance does not provide holdings in .info, but in .fund_holdings if available
-        holdings = None
-        try:
-            # Try to get fund holdings (may not always be available)
-            holdings_df = etf.fund_holdings
-            if holdings_df is not None and not holdings_df.empty:
-                tickers = holdings_df['Symbol'].dropna().astype(str).tolist()
-                # Remove invalid tickers if any
-                tickers = [t for t in tickers if t.isalpha() or ("-" in t) or ("." in t)]
-                return tickers
-        except Exception:
-            pass
-        # Fallback: try .holdings if present (not always available)
-        try:
-            if hasattr(etf, "holdings") and etf.holdings is not None:
-                tickers = [h['symbol'] for h in etf.holdings if 'symbol' in h]
-                return tickers
-        except Exception:
-            pass
-        # Fallback: hardcoded small sample, as yfinance does not always supply holdings
-        if exchange.lower() == "nasdaq":
-            return ['AAPL', 'MSFT', 'AMZN', 'TSLA', 'NVDA', 'GOOGL', 'META', 'PYPL', 'ADBE', 'CMCSA']
-        elif exchange.lower() == "nyse":
-            return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'BRK-B', 'JNJ', 'V', 'WMT']
-        elif exchange.lower() == "amex":
-            return ['FIZZ', 'FWRD', 'GNL', 'HZO', 'IDEX', 'JBL', 'KIRK', 'LAD', 'MMS', 'MUR']
-        return []
-    except Exception as e:
-        st.warning(f"Failed to fetch tickers for {exchange.upper()} from yfinance ETF: {e}")
-        return []
 
 # Helper: Filter tickers by price using yfinance
 @st.cache_data(ttl=3600)
@@ -88,7 +38,7 @@ def filter_by_price(tickers, min_price=1.0, max_price=1500.0):
             continue
     return filtered
 
-# Main function to load universe using yfinance ETF tickers only
+# Main function to load universe using yahoo_fin stock_info tickers
 @st.cache_data(ttl=86400)
 def load_universe(file_path="universe.txt", min_price=1.0, max_price=1500.0, exchange="all"):
     p = Path(file_path)
@@ -97,13 +47,26 @@ def load_universe(file_path="universe.txt", min_price=1.0, max_price=1500.0, exc
         st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
         return tickers
     # Determine which exchanges to fetch
+    exchanges = []
     if exchange == "all":
         exchanges = ["nasdaq", "nyse", "amex"]
     else:
         exchanges = [exchange.lower()]
     all_tickers = []
     for exch in exchanges:
-        all_tickers.extend(get_etf_tickers_for_exchange(exch))
+        try:
+            if exch == "nasdaq":
+                tickers = si.tickers_nasdaq()
+            elif exch == "nyse":
+                tickers = si.tickers_nyse()
+            elif exch == "amex":
+                tickers = si.tickers_amex()
+            else:
+                tickers = []
+            all_tickers.extend(tickers)
+        except Exception as e:
+            st.warning(f"Failed to fetch tickers for {exch.upper()} from yahoo_fin: {e}")
+            continue
     # Remove duplicates and sort
     all_tickers = sorted(set(all_tickers))
     filtered = filter_by_price(all_tickers, min_price, max_price)
