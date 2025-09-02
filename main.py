@@ -1,9 +1,5 @@
-@st.cache_data(ttl=86400)
 def load_universe(file_path="universe.txt", min_price=1.0, max_price=1500.0, exchange="all"):
-    import requests
-    from io import StringIO
     from pathlib import Path
-
     p = Path(file_path)
     if p.exists() and p.stat().st_size > 0:
         tickers = p.read_text().splitlines()
@@ -13,32 +9,14 @@ def load_universe(file_path="universe.txt", min_price=1.0, max_price=1500.0, exc
     exchanges = ["nasdaq", "nyse", "amex"] if exchange == "all" else [exchange.lower()]
     all_tickers = []
 
-    url_map = {
-        "nasdaq": "https://ftp.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt",
-        "nyse": "https://ftp.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
-        "amex": "https://ftp.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
-    }
-
     for exch in exchanges:
         try:
-            url = url_map.get(exch)
-            if not url:
-                continue
-            response = requests.get(url)
-            response.raise_for_status()
-            data = response.text
-            df = pd.read_csv(StringIO(data), sep="|")
             if exch == "nasdaq":
-                tickers = df['Symbol'].tolist()
-            elif exch in ["nyse", "amex"]:
-                # Filter for exchange column: 'N' for NYSE, 'A' for AMEX
-                if 'Exchange' in df.columns:
-                    if exch == "nyse":
-                        tickers = df[df['Exchange'] == 'N']['ACT Symbol'].tolist()
-                    else:
-                        tickers = df[df['Exchange'] == 'A']['ACT Symbol'].tolist()
-                else:
-                    tickers = []
+                tickers = si.tickers_nasdaq()
+            elif exch == "nyse":
+                tickers = si.tickers_nyse()
+            elif exch == "amex":
+                tickers = si.tickers_amex()
             else:
                 tickers = []
             all_tickers.extend(tickers)
