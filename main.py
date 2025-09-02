@@ -19,31 +19,14 @@ def load_universe(file_path="ticker.txt"):
     p = Path(file_path)
     tickers = []
     if p.exists() and p.stat().st_size > 0:
-        tickers = p.read_text().splitlines()
+        raw_lines = p.read_text().splitlines()
+        # Keep only the first part before any whitespace or tab and replace '.' with '-'
+        tickers = [line.split()[0].replace('.', '-') for line in raw_lines if line.strip()]
         st.info(f"Loaded universe from {file_path} with {len(tickers)} tickers")
         return tickers
     else:
-        st.warning(f"{file_path} not found or empty. Auto-populating tickers using SEC data...")
-        try:
-            url = "https://www.sec.gov/files/company_tickers.json"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                              "(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-            }
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            allowed_exchanges = {"NYSE", "NASDAQ", "AMEX"}
-            tickers = [item.get("ticker") for item in data.values() if item.get("exchange") in allowed_exchanges]
-            if tickers:
-                p.write_text("\n".join(tickers))
-                st.success(f"Saved {len(tickers)} tickers to {file_path}")
-            else:
-                st.error("No tickers found from SEC data.")
-            return tickers
-        except Exception as e:
-            st.error(f"Failed to auto-populate tickers: {e}")
-            return []
+        st.warning(f"{file_path} not found or empty.")
+        return []
 
 tickers = load_universe()
 if not tickers:
