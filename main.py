@@ -12,11 +12,7 @@ st.title("AI Stock Scanner — Breakout Scanner")
 
 # ---------------------- Load Universe ---------------------- #
 @st.cache_data(ttl=3600)
-def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500):
-    from pathlib import Path
-    import pandas as pd
-    import requests
-
+def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500, min_price=1.0, max_price=15.0):
     p = Path(file_path)
     tickers = []
 
@@ -45,9 +41,28 @@ def load_universe(file_path="universe.txt", top_n_nasdaq=100, top_n_sp500=500):
         nasdaq_tickers = nasdaq_df[ticker_col].tolist()[:top_n_nasdaq]
 
         # Combine and remove duplicates
-        tickers = list(dict.fromkeys([t.upper().replace('.', '-') for t in nasdaq_tickers + sp500_tickers]))
+        combined_tickers = list(dict.fromkeys([t.upper().replace('.', '-') for t in nasdaq_tickers + sp500_tickers]))
+
+        # Filter tickers by price using yfinance
+        filtered_tickers = []
+        batch_size = 50
+        for i in range(0, len(combined_tickers), batch_size):
+            batch = combined_tickers[i:i+batch_size]
+            data = yf.download(batch, period="1d", interval="1d", progress=False, threads=True)
+            if isinstance(data.columns, pd.MultiIndex):
+                close_prices = data['Close'].iloc[-1]
+            else:
+                close_prices = data['Close'].iloc[-1:]
+                close_prices = close_prices.squeeze()
+            for ticker in batch:
+                price = close_prices.get(ticker, None)
+                if price is not None and not pd.isna(price):
+                    if min_price <= price <= max_price:
+                        filtered_tickers.append(ticker)
+
+        tickers = filtered_tickers
         p.write_text("\n".join(tickers))
-        st.info(f"Auto-populated universe.txt with {len(tickers)} tickers (NASDAQ 100 + S&P 500)")
+        st.info(f"Auto-populated universe.txt with {len(tickers)} tickers (price between ${min_price} and ${max_price})")
         return tickers
 
     except Exception as e:
