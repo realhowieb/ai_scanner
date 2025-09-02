@@ -7,8 +7,6 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from bs4 import BeautifulSoup
 import requests
-import asyncio
-from pyppeteer import launch
 
 st.title("AI Scanner - Breakout Scanner (Finviz Top Stocks)")
 
@@ -21,25 +19,8 @@ TICKER_FILE = "ticker.txt"
 
 def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
     """
-    Fetch top tickers from Finviz using Pyppeteer.
-    Must be run in the main thread due to asyncio signal handling.
+    Fetch top tickers from Finviz using requests and BeautifulSoup.
     """
-    import asyncio
-    from pyppeteer import launch
-    from bs4 import BeautifulSoup
-    from pathlib import Path
-
-    async def fetch_async(url):
-        browser = await launch(headless=True)
-        page = await browser.newPage()
-        await page.goto(url)
-        content = await page.content()
-        await browser.close()
-
-        soup = BeautifulSoup(content, "html.parser")
-        tickers = [a.text.strip() for a in soup.find_all('a', class_='screener-link-primary')]
-        return tickers[:top_n]
-
     if market == "S&P 500":
         url = "https://finviz.com/screener.ashx?v=111&f=idx_sp500"
     elif market == "NASDAQ 100":
@@ -49,8 +30,17 @@ def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
     else:
         url = "https://finviz.com/screener.ashx?v=111"
 
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
+                      " Chrome/58.0.3029.110 Safari/537.3"
+    }
+
     try:
-        tickers = asyncio.run(fetch_async(url))
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        tickers = [a.text.strip() for a in soup.find_all('a', class_='screener-link-primary')]
+        tickers = tickers[:top_n]
     except Exception as e:
         st.error(f"Failed to fetch tickers from Finviz: {e}")
         return []
