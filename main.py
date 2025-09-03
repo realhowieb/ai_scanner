@@ -6,92 +6,91 @@ import io
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-st.title("AI Scanner - Breakout Scanner (S&P 600 Stocks)")
+# Load tickers
+@st.cache_data(ttl=3600)
+def load_sp600_tickers(file_path="sp600.txt"):
+    p = Path(file_path)
+    tickers = []
+    if p.exists() and p.stat().st_size > 0:
+        raw_lines = p.read_text().splitlines()
+        tickers = [line.split()[0].replace('.', '-') for line in raw_lines if line.strip()]
+    return tickers
 
-# Sidebar filters
-min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.0, step=0.1)
-max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1500.0, step=1.0)
-
-SP600_FILE = "sp600.txt"
-
-def load_sp600_tickers():
-    """
-    Load tickers from the sp600.txt file.
-    """
-    if not Path(SP600_FILE).exists():
-        st.error(f"{SP600_FILE} not found. Please provide the file with S&P 600 tickers.")
-        return []
-    tickers = Path(SP600_FILE).read_text().strip().splitlines()
-    return [t.strip().upper() for t in tickers if t.strip()]
-
+# Fetch price data
 @st.cache_data(ttl=3600)
 def fetch_price_data(tickers, period="60d", interval="1d"):
     price_data = {}
-    skipped_tickers = []
+    skipped = []
     for ticker in tickers:
         try:
             df = yf.download(ticker, period=period, interval=interval, progress=False, threads=False)
             if df.empty:
-                skipped_tickers.append(ticker)
+                skipped.append(ticker)
             else:
                 price_data[ticker] = df
-        except Exception:
-            skipped_tickers.append(ticker)
-    return price_data, skipped_tickers
+        except:
+            skipped.append(ticker)
+    return price_data, skipped
 
-def filter_by_price(price_data, min_price, max_price):
+# Filter tickers by price
+def filter_tickers_by_price(price_data, min_price, max_price):
     filtered = []
     for t, df in price_data.items():
         if df.empty or 'Close' not in df.columns:
             continue
         try:
             price = float(df['Close'].iloc[-1])
-        except Exception:
+        except:
             continue
         if min_price <= price <= max_price:
             filtered.append(t)
     return filtered
 
-def breakout_scan(price_data, min_price, max_price):
+# Breakout scanner
+def breakout_scanner(price_data, min_price=5, max_price=1000):
     results = []
     for ticker, df in price_data.items():
         if df.empty or len(df) < 21 or 'Close' not in df.columns:
             continue
         try:
             latest_close = float(df['Close'].iloc[-1])
-        except Exception:
-            continue
-        if latest_close < min_price or latest_close > max_price:
-            continue
-        try:
             prev_max = float(df['Close'].iloc[-21:-1].max())
-        except Exception:
+        except:
             continue
-        if latest_close > prev_max:
-            results.append({
-                "Ticker": ticker,
-                "Latest Close": latest_close,
-                "Prev 20-day Max": prev_max,
-                "Breakout %": round((latest_close - prev_max) / prev_max * 100, 2)
-            })
-    return pd.DataFrame(results).sort_values("Breakout %", ascending=False)
+        if min_price <= latest_close <= max_price and latest_close > prev_max:
+            pct_breakout = (latest_close - prev_max) / prev_max * 100 if prev_max > 0 else np.nan
+            results.append({'Ticker': ticker, 'Latest Close': latest_close,
+                            'Previous 20d Max': prev_max, 'Breakout %': round(pct_breakout, 2)})
+    if results:
+        df_results = pd.DataFrame(results).sort_values('Breakout %', ascending=False).reset_index(drop=True)
+    else:
+        df_results = pd.DataFrame(columns=['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %'])
+    return df_results
 
-if "tickers" not in st.session_state:
-    st.session_state.tickers = load_sp600_tickers()
+# Automatic scanner function
+def auto_scan(min_price=5, max_price=1000):
+    tickers = load_sp600_tickers()
+    price_data, skipped = fetch_price_data(tickers)
+    filtered = filter_tickers_by_price(price_data, min_price, max_price)
+    filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+    breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+    # Save CSV automatically
+    if not breakout_df.empty:
+        breakout_df.to_csv("breakout_results.csv", index=False)
+    return breakout_df, skipped, filtered_data
 
-if not st.session_state.tickers:
-    st.stop()
+# Streamlit UI
+st.title("Automatic S&P 600 Breakout Scanner")
 
-price_data, skipped = fetch_price_data(st.session_state.tickers)
-if skipped:
-    st.warning(f"Skipped {len(skipped)} tickers (no data or delisted): {', '.join(skipped)}")
+min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.0, step=0.1)
+max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1000.0, step=1.0)
 
-filtered = filter_by_price(price_data, min_price, max_price)
-if not filtered:
-    st.error("No tickers within the price range.")
-else:
-    filtered_data = {t: price_data[t] for t in filtered}
-    breakout_df = breakout_scan(filtered_data, min_price, max_price)
+if st.sidebar.button("Run Automatic Scan"):
+    with st.spinner("Scanning S&P 600 tickers..."):
+        breakout_df, skipped, filtered_data = auto_scan(min_price, max_price)
+
+    if skipped:
+        st.warning(f"Skipped {len(skipped)} tickers due to missing data or delisted: {', '.join(skipped[:10])}...")
 
     if breakout_df.empty:
         st.info("No breakout candidates found.")
@@ -99,18 +98,18 @@ else:
         st.success(f"Found {len(breakout_df)} breakout candidates.")
         st.dataframe(breakout_df)
 
-        csv_buffer = io.StringIO()
-        breakout_df.to_csv(csv_buffer, index=False)
         st.download_button(
-            "Download CSV",
-            data=csv_buffer.getvalue(),
-            file_name="breakouts.csv",
+            "Download Breakout Results",
+            data=breakout_df.to_csv(index=False),
+            file_name="breakout_results.csv",
             mime="text/csv"
         )
 
         st.subheader("Top 5 Breakout Charts")
         for ticker in breakout_df['Ticker'].head(5):
-            df = filtered_data[ticker]
+            df = filtered_data.get(ticker)
+            if df is None or df.empty or 'Close' not in df.columns:
+                continue
             fig, ax = plt.subplots(figsize=(8, 3))
             ax.plot(df.index, df['Close'], label='Close Price')
             ax.set_title(f"{ticker} Close Price - Last 60 Days")
