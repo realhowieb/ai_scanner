@@ -21,15 +21,34 @@ def load_sp600_tickers(file_path="sp600.txt"):
 def fetch_price_data(tickers, period="60d", interval="1d"):
     price_data = {}
     skipped = []
-    for ticker in tickers:
+    chunk_size = 100
+    for i in range(0, len(tickers), chunk_size):
+        chunk = tickers[i:i+chunk_size]
         try:
-            df = yf.download(ticker, period=period, interval=interval, progress=False, threads=False)
+            df = yf.download(chunk, period=period, interval=interval, progress=False, threads=True)
             if df.empty:
-                skipped.append(ticker)
+                skipped.extend(chunk)
+                continue
+            # If multiple tickers, columns are multi-indexed
+            if isinstance(df.columns, pd.MultiIndex):
+                for ticker in chunk:
+                    if ticker in df.columns.levels[1]:
+                        ticker_df = df.xs(ticker, axis=1, level=1)
+                        if not ticker_df.empty:
+                            price_data[ticker] = ticker_df
+                        else:
+                            skipped.append(ticker)
+                    else:
+                        skipped.append(ticker)
             else:
-                price_data[ticker] = df
+                # Single ticker case
+                ticker = chunk[0]
+                if not df.empty:
+                    price_data[ticker] = df
+                else:
+                    skipped.append(ticker)
         except:
-            skipped.append(ticker)
+            skipped.extend(chunk)
     return price_data, skipped
 
 # Filter tickers by price
