@@ -63,7 +63,10 @@ def breakout_scan(price_data, min_price, max_price):
             continue
         if latest_close < min_price or latest_close > max_price:
             continue
-        prev_max = df['Close'].iloc[-21:-1].max()
+        try:
+            prev_max = float(df['Close'].iloc[-21:-1].max())
+        except Exception:
+            continue
         if latest_close > prev_max:
             results.append({
                 "Ticker": ticker,
