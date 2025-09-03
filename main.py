@@ -44,7 +44,10 @@ def filter_by_price(price_data, min_price, max_price):
     for t, df in price_data.items():
         if df.empty or 'Close' not in df.columns:
             continue
-        price = df['Close'].iloc[-1]
+        try:
+            price = float(df['Close'].iloc[-1])
+        except Exception:
+            continue
         if min_price <= price <= max_price:
             filtered.append(t)
     return filtered
