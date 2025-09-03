@@ -57,7 +57,10 @@ def breakout_scan(price_data, min_price, max_price):
     for ticker, df in price_data.items():
         if df.empty or len(df) < 21 or 'Close' not in df.columns:
             continue
-        latest_close = df['Close'].iloc[-1]
+        try:
+            latest_close = float(df['Close'].iloc[-1])
+        except Exception:
+            continue
         if latest_close < min_price or latest_close > max_price:
             continue
         prev_max = df['Close'].iloc[-21:-1].max()
