@@ -146,7 +146,6 @@ cp
 idexy
 cci
 pnc
-fisv
 cme
 googl
 usb
@@ -170,14 +169,11 @@ cl
 vale
 bmo
 aon
-dmlry
 itw
 oxy
 snow
 bsx
-atvi
 cta-pa
-pxd
 f
 ew
 mpc
@@ -202,7 +198,6 @@ psa
 sre
 tri
 fdx
-amov
 mar
 kdp
 rbgly
@@ -222,7 +217,6 @@ prndy
 snps
 cmg
 emr
-vmw
 adm
 dvn
 trp
@@ -317,7 +311,7 @@ vod
 se
 nem
 yum
-twtr
+x
 peg
 mplx
 bcs
@@ -336,7 +330,6 @@ ttd
 imo
 ifnny
 cpng
-sq
 wec
 dlr
 well
@@ -358,7 +351,6 @@ ddog
 pcar
 idxx
 vrsk
-dfs
 wba
 bax
 tlk
