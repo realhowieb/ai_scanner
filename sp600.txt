@@ -1,8 +1,3 @@
-To remove the numbers from your file, I've processed the content and extracted only the stock ticker symbols.
-
-Here is the list without the numbers:
-
-```
 aapl
 msft
 brk-b
