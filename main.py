@@ -16,39 +16,38 @@ def load_sp600_tickers(file_path="sp600.txt"):
         tickers = [line.split()[0].replace('.', '-') for line in raw_lines if line.strip()]
     return tickers
 
+# Remove delisted tickers
+def remove_delisted_tickers(file_path="sp600.txt"):
+    tickers = load_sp600_tickers(file_path)
+    valid_tickers = []
+    removed_count = 0
+    for ticker in tickers:
+        try:
+            info = yf.Ticker(ticker).info
+            if 'regularMarketPrice' in info and info['regularMarketPrice'] is not None:
+                valid_tickers.append(ticker)
+            else:
+                removed_count += 1
+        except:
+            removed_count += 1
+    p = Path(file_path)
+    p.write_text('\n'.join(valid_tickers))
+    return removed_count, valid_tickers
+
 # Fetch price data
 @st.cache_data(ttl=3600)
 def fetch_price_data(tickers, period="60d", interval="1d"):
     price_data = {}
     skipped = []
-    chunk_size = 100
-    for i in range(0, len(tickers), chunk_size):
-        chunk = tickers[i:i+chunk_size]
+    for ticker in tickers:
         try:
-            df = yf.download(chunk, period=period, interval=interval, progress=False, threads=True)
+            df = yf.download(ticker, period=period, interval=interval, progress=False, threads=False)
             if df.empty:
-                skipped.extend(chunk)
-                continue
-            # If multiple tickers, columns are multi-indexed
-            if isinstance(df.columns, pd.MultiIndex):
-                for ticker in chunk:
-                    if ticker in df.columns.levels[1]:
-                        ticker_df = df.xs(ticker, axis=1, level=1)
-                        if not ticker_df.empty:
-                            price_data[ticker] = ticker_df
-                        else:
-                            skipped.append(ticker)
-                    else:
-                        skipped.append(ticker)
+                skipped.append(ticker)
             else:
-                # Single ticker case
-                ticker = chunk[0]
-                if not df.empty:
-                    price_data[ticker] = df
-                else:
-                    skipped.append(ticker)
+                price_data[ticker] = df
         except:
-            skipped.extend(chunk)
+            skipped.append(ticker)
     return price_data, skipped
 
 # Filter tickers by price
@@ -103,6 +102,15 @@ st.title("Automatic S&P 600 Breakout Scanner")
 
 min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.0, step=0.1)
 max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1000.0, step=1.0)
+
+if "tickers" not in st.session_state:
+    st.session_state.tickers = load_sp600_tickers()
+
+if st.sidebar.button("Clean delisted tickers"):
+    with st.spinner("Cleaning delisted tickers..."):
+        removed_count, valid_tickers = remove_delisted_tickers()
+        st.session_state.tickers = valid_tickers
+    st.success(f"Removed {removed_count} delisted tickers from sp600.txt.")
 
 if st.sidebar.button("Run Automatic Scan"):
     with st.spinner("Scanning S&P 600 tickers..."):
