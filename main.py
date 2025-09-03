@@ -5,51 +5,24 @@ import numpy as np
 import io
 import matplotlib.pyplot as plt
 from pathlib import Path
-from bs4 import BeautifulSoup
-import requests
 
-st.title("AI Scanner - Breakout Scanner (Finviz Top Stocks)")
+st.title("AI Scanner - Breakout Scanner (S&P 600 Stocks)")
 
 # Sidebar filters
 min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.0, step=0.1)
 max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1500.0, step=1.0)
-market_option = st.sidebar.selectbox("Select Market", ["S&P 500", "NASDAQ 100", "AMEX"])
 
-TICKER_FILE = "universal.txt"
+SP600_FILE = "sp600.txt"
 
-def fetch_top_finviz_tickers(top_n=100, market="S&P 500"):
+def load_sp600_tickers():
     """
-    Fetch top tickers from Finviz using requests and BeautifulSoup.
+    Load tickers from the sp600.txt file.
     """
-    if market == "S&P 500":
-        url = "https://finviz.com/screener.ashx?v=111&f=idx_sp500"
-    elif market == "NASDAQ 100":
-        url = "https://finviz.com/screener.ashx?v=111&f=idx_nasdaq100"
-    elif market == "AMEX":
-        url = "https://finviz.com/screener.ashx?v=111&f=exch_amex"
-    else:
-        url = "https://finviz.com/screener.ashx?v=111"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
-                      " Chrome/58.0.3029.110 Safari/537.3"
-    }
-
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        tickers = [a.text.strip() for a in soup.find_all('a', class_='screener-link-primary')]
-        tickers = tickers[:top_n]
-    except Exception as e:
-        st.error(f"Failed to fetch tickers from Finviz: {e}")
+    if not Path(SP600_FILE).exists():
+        st.error(f"{SP600_FILE} not found. Please provide the file with S&P 600 tickers.")
         return []
-
-    if tickers:
-        Path("universal.txt").write_text("\n".join(tickers))
-        st.info(f"Auto-populated universal.txt with {len(tickers)} tickers from {market}")
-
-    return tickers
+    tickers = Path(SP600_FILE).read_text().strip().splitlines()
+    return [t.strip().upper() for t in tickers if t.strip()]
 
 @st.cache_data(ttl=3600)
 def fetch_price_data(tickers, period="60d", interval="1d"):
@@ -95,49 +68,44 @@ def breakout_scan(price_data, min_price, max_price):
     return pd.DataFrame(results).sort_values("Breakout %", ascending=False)
 
 if "tickers" not in st.session_state:
-    st.session_state.tickers = []
+    st.session_state.tickers = load_sp600_tickers()
 
-if st.sidebar.button("Fetch & Scan"):
-    tickers = fetch_top_finviz_tickers(top_n=100, market=market_option)
-    if not tickers:
-        st.error("No tickers fetched from Finviz.")
+if not st.session_state.tickers:
+    st.stop()
+
+price_data, skipped = fetch_price_data(st.session_state.tickers)
+if skipped:
+    st.warning(f"Skipped {len(skipped)} tickers (no data or delisted): {', '.join(skipped)}")
+
+filtered = filter_by_price(price_data, min_price, max_price)
+if not filtered:
+    st.error("No tickers within the price range.")
+else:
+    filtered_data = {t: price_data[t] for t in filtered}
+    breakout_df = breakout_scan(filtered_data, min_price, max_price)
+
+    if breakout_df.empty:
+        st.info("No breakout candidates found.")
     else:
-        st.session_state.tickers = tickers
+        st.success(f"Found {len(breakout_df)} breakout candidates.")
+        st.dataframe(breakout_df)
 
-if st.session_state.tickers:
-    price_data, skipped = fetch_price_data(st.session_state.tickers)
-    if skipped:
-        st.warning(f"Skipped {len(skipped)} tickers (no data or delisted): {', '.join(skipped)}")
+        csv_buffer = io.StringIO()
+        breakout_df.to_csv(csv_buffer, index=False)
+        st.download_button(
+            "Download CSV",
+            data=csv_buffer.getvalue(),
+            file_name="breakouts.csv",
+            mime="text/csv"
+        )
 
-    filtered = filter_by_price(price_data, min_price, max_price)
-    if not filtered:
-        st.error("No tickers within the price range.")
-    else:
-        filtered_data = {t: price_data[t] for t in filtered}
-        breakout_df = breakout_scan(filtered_data, min_price, max_price)
-
-        if breakout_df.empty:
-            st.info("No breakout candidates found.")
-        else:
-            st.success(f"Found {len(breakout_df)} breakout candidates.")
-            st.dataframe(breakout_df)
-
-            csv_buffer = io.StringIO()
-            breakout_df.to_csv(csv_buffer, index=False)
-            st.download_button(
-                "Download CSV",
-                data=csv_buffer.getvalue(),
-                file_name="breakouts.csv",
-                mime="text/csv"
-            )
-
-            st.subheader("Top 5 Breakout Charts")
-            for ticker in breakout_df['Ticker'].head(5):
-                df = filtered_data[ticker]
-                fig, ax = plt.subplots(figsize=(8, 3))
-                ax.plot(df.index, df['Close'], label='Close Price')
-                ax.set_title(f"{ticker} Close Price - Last 60 Days")
-                ax.set_ylabel("Price ($)")
-                ax.legend()
-                ax.grid(True)
-                st.pyplot(fig)
+        st.subheader("Top 5 Breakout Charts")
+        for ticker in breakout_df['Ticker'].head(5):
+            df = filtered_data[ticker]
+            fig, ax = plt.subplots(figsize=(8, 3))
+            ax.plot(df.index, df['Close'], label='Close Price')
+            ax.set_title(f"{ticker} Close Price - Last 60 Days")
+            ax.set_ylabel("Price ($)")
+            ax.legend()
+            ax.grid(True)
+            st.pyplot(fig)
