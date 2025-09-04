@@ -216,7 +216,7 @@ def auto_scan_sp500(min_price=5, max_price=1000):
     return breakout_df, skipped, filtered_data
 
 # Streamlit UI
-st.title("Automatic S&P 600 Breakout Scanner")
+st.title("Money Moves Breakout Scanner")
 
 min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.0, step=0.1)
 max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1000.0, step=1.0)
