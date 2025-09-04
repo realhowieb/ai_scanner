@@ -32,6 +32,29 @@ def fetch_hot_stocks():
     except Exception as e:
         return []
 
+# Fetch most active stocks from Yahoo Finance
+@st.cache_data(ttl=1800)
+def fetch_most_active_stocks():
+    url = "https://finance.yahoo.com/most-active"
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        table = soup.find('table')
+        tickers = []
+        if table:
+            rows = table.find_all('tr')[1:]  # skip header
+            for row in rows:
+                cols = row.find_all('td')
+                if cols:
+                    ticker = cols[0].text.strip().replace('.', '-')
+                    tickers.append(ticker)
+        return tickers
+    except Exception as e:
+        st.error(f"Failed to fetch most active stocks: {e}")
+        return []
+
 # Load tickers
 @st.cache_data(ttl=3600)
 def load_sp600_tickers(file_path="sp600.txt"):
@@ -117,7 +140,16 @@ def filter_tickers_by_price(price_data, min_price, max_price):
             filtered.append(t)
     return filtered
 
-# Breakout scanner
+# Helper function to format large numbers
+def format_volume(v):
+    if v >= 1_000_000:
+        return f"{v/1_000_000:.3f}M"
+    elif v >= 1_000:
+        return f"{v/1_000:.1f}K"
+    else:
+        return str(v)
+
+# Breakout scanner with formatted Volume
 def breakout_scanner(price_data, min_price=5, max_price=1000):
     results = []
     for ticker, df in price_data.items():
@@ -126,16 +158,23 @@ def breakout_scanner(price_data, min_price=5, max_price=1000):
         try:
             latest_close = float(df['Close'].iloc[-1])
             prev_max = float(df['Close'].iloc[-21:-1].max())
+            latest_volume = int(df['Volume'].iloc[-1]) if 'Volume' in df.columns else np.nan
+            latest_volume_fmt = format_volume(latest_volume)
         except:
             continue
         if min_price <= latest_close <= max_price and latest_close > prev_max:
             pct_breakout = (latest_close - prev_max) / prev_max * 100 if prev_max > 0 else np.nan
-            results.append({'Ticker': ticker, 'Latest Close': latest_close,
-                            'Previous 20d Max': prev_max, 'Breakout %': round(pct_breakout, 2)})
+            results.append({
+                'Ticker': ticker,
+                'Latest Close': latest_close,
+                'Previous 20d Max': prev_max,
+                'Breakout %': round(pct_breakout, 2),
+                'Volume': latest_volume_fmt
+            })
     if results:
         df_results = pd.DataFrame(results).sort_values('Breakout %', ascending=False).reset_index(drop=True)
     else:
-        df_results = pd.DataFrame(columns=['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %'])
+        df_results = pd.DataFrame(columns=['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume'])
     return df_results
 
 # Automatic scanner function for full S&P 600 tickers or uploaded tickers
@@ -265,11 +304,7 @@ if search_ticker:
     except Exception as e:
         st.error(f"Error fetching data for ticker '{search_ticker}': {e}")
 
-if st.sidebar.button("Clean delisted tickers"):
-    with st.spinner("Cleaning delisted tickers..."):
-        removed_count, valid_tickers = remove_delisted_tickers()
-        st.session_state.tickers = valid_tickers
-    st.success(f"Removed {removed_count} delisted tickers from sp600.txt.")
+
 
 if st.sidebar.button("Run Hot Stocks Scan"):
     with st.spinner("Fetching and scanning hot stocks..."):
@@ -303,6 +338,47 @@ if st.sidebar.button("Run Hot Stocks Scan"):
             ax.legend()
             ax.grid(True)
             st.pyplot(fig)
+
+# Most Active Stocks Scan Button
+if st.sidebar.button("Run Most Active Stocks Scan"):
+    with st.spinner("Fetching and scanning most active stocks..."):
+        most_active_tickers = fetch_most_active_stocks()
+        if most_active_tickers:
+            price_data, skipped = fetch_price_data(most_active_tickers)
+            filtered = filter_tickers_by_price(price_data, min_price, max_price)
+            filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+
+            if skipped:
+                st.warning(f"Skipped {len(skipped)} most active tickers due to missing data or delisted: {', '.join(skipped[:10])}...")
+
+            if breakout_df.empty:
+                st.info("No breakout candidates found among most active stocks.")
+            else:
+                st.success(f"Found {len(breakout_df)} breakout candidates among most active stocks.")
+                st.dataframe(breakout_df)
+
+                st.download_button(
+                    "Download Most Active Stocks Breakout Results",
+                    data=breakout_df.to_csv(index=False),
+                    file_name="breakout_results_most_active.csv",
+                    mime="text/csv"
+                )
+
+                st.subheader("Top 5 Most Active Breakout Charts")
+                for ticker in breakout_df['Ticker'].head(5):
+                    df = filtered_data.get(ticker)
+                    if df is None or df.empty or 'Close' not in df.columns:
+                        continue
+                    fig, ax = plt.subplots(figsize=(8, 3))
+                    ax.plot(df.index, df['Close'], label='Close Price')
+                    ax.set_title(f"{ticker} Close Price - Last 60 Days")
+                    ax.set_ylabel("Price ($)")
+                    ax.legend()
+                    ax.grid(True)
+                    st.pyplot(fig)
+        else:
+            st.error("Failed to fetch most active stocks.")
 
 if st.sidebar.button("Run Automatic Scan"):
     with st.spinner("Scanning S&P 500 tickers..."):
@@ -379,3 +455,9 @@ if st.sidebar.button("Fetch Latest S&P 500 Tickers"):
             st.success(f"Fetched and saved {len(new_tickers)} S&P 500 tickers to sp500.txt.")
         else:
             st.error("Failed to fetch S&P 500 tickers from Wikipedia.")
+
+if st.sidebar.button("Clean delisted tickers"):
+    with st.spinner("Cleaning delisted tickers..."):
+        removed_count, valid_tickers = remove_delisted_tickers()
+        st.session_state.tickers = valid_tickers
+    st.success(f"Removed {removed_count} delisted tickers from sp600.txt.")
