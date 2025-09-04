@@ -55,6 +55,21 @@ def fetch_most_active_stocks():
         st.error(f"Failed to fetch most active stocks: {e}")
         return []
 
+def fetch_and_save_nasdaq(file_path="nasdaq.txt"):
+    try:
+        url = "ftp://ftp.nasdaqtrader.com/SymbolDirectory/nasdaqlisted.txt"
+        df = pd.read_csv(url, sep='|')
+
+        # Clean up tickers to avoid floats/NaN
+        tickers = df['Symbol'].dropna().astype(str).tolist()
+        tickers = [t.strip() for t in tickers if t.strip()]
+
+        Path(file_path).write_text('\n'.join(tickers))
+        return tickers
+    except Exception as e:
+        st.error(f"Failed to fetch Nasdaq tickers: {e}")
+        return []
+
 # Load tickers
 @st.cache_data(ttl=3600)
 def load_sp600_tickers(file_path="sp600.txt"):
@@ -380,73 +395,82 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
         else:
             st.error("Failed to fetch most active stocks.")
 
-if st.sidebar.button("Run Automatic Scan"):
-    with st.spinner("Scanning S&P 500 tickers..."):
-        breakout_df_sp500, skipped_sp500, filtered_data_sp500 = auto_scan_sp500(min_price, max_price)
+if st.sidebar.button("Run S&P 500 Scan"):
+    with st.spinner("Fetching S&P 500 tickers..."):
+        tickers = load_sp500_tickers()
 
-    if skipped_sp500:
-        st.warning(f"Skipped {len(skipped_sp500)} S&P 500 tickers due to missing data or delisted: {', '.join(skipped_sp500[:10])}...")
-
-    st.subheader("S&P 500 Breakout Scan Results")
-    if breakout_df_sp500.empty:
-        st.info("No breakout candidates found in S&P 500.")
+    if not tickers:
+        st.error("No S&P 500 tickers available to scan.")
     else:
-        st.success(f"Found {len(breakout_df_sp500)} breakout candidates in S&P 500.")
-        st.dataframe(breakout_df_sp500)
+        st.subheader("S&P 500 Breakout Scan Results (updating live...)")
 
-        st.download_button(
-            "Download S&P 500 Breakout Results",
-            data=breakout_df_sp500.to_csv(index=False),
-            file_name="breakout_results_sp500.csv",
-            mime="text/csv"
-        )
+        results_placeholder = st.empty()
+        progress = st.progress(0)
+        skipped = []
+        breakout_rows = []
 
-        st.subheader("Top 5 S&P 500 Breakout Charts")
-        for ticker in breakout_df_sp500['Ticker'].head(5):
-            df = filtered_data_sp500.get(ticker)
-            if df is None or df.empty or 'Close' not in df.columns:
-                continue
-            fig, ax = plt.subplots(figsize=(8, 3))
-            ax.plot(df.index, df['Close'], label='Close Price')
-            ax.set_title(f"{ticker} Close Price - Last 60 Days")
-            ax.set_ylabel("Price ($)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
+        total = len(tickers)
+        for i, ticker in enumerate(tickers):
+            try:
+                df = yf.download(ticker, period="60d", interval="1d", progress=False, threads=False)
+                if df.empty or 'Close' not in df.columns:
+                    skipped.append(ticker)
+                    continue
 
-    with st.spinner("Scanning S&P 600 tickers..."):
-        breakout_df_sp600, skipped_sp600, filtered_data_sp600 = auto_scan(min_price, max_price)
+                breakout_df = breakout_scanner({ticker: df})
+                if not breakout_df.empty:
+                    breakout_rows.append(breakout_df.iloc[0])
+                    results_placeholder.dataframe(pd.DataFrame(breakout_rows))
 
-    if skipped_sp600:
-        st.warning(f"Skipped {len(skipped_sp600)} S&P 600 tickers due to missing data or delisted: {', '.join(skipped_sp600[:10])}...")
+            except Exception:
+                skipped.append(ticker)
 
-    st.subheader("S&P 600 Breakout Scan Results")
-    if breakout_df_sp600.empty:
-        st.info("No breakout candidates found in S&P 600.")
+            progress.progress((i + 1) / total)
+
+        st.success(f"Scan complete ✅ Found {len(breakout_rows)} breakout candidates in S&P 500.")
+        if skipped:
+            st.warning(f"Skipped {len(skipped)} tickers due to missing data or delisted.")
+
+#Run Nasdaq Button
+if st.sidebar.button("Run Nasdaq Scan"):
+    with st.spinner("Fetching Nasdaq tickers..."):
+        tickers = fetch_and_save_nasdaq()
+
+    if not tickers:
+        st.error("No Nasdaq tickers available to scan.")
     else:
-        st.success(f"Found {len(breakout_df_sp600)} breakout candidates in S&P 600.")
-        st.dataframe(breakout_df_sp600)
+        st.subheader("Nasdaq Breakout Scan Results (updating live...)")
 
-        st.download_button(
-            "Download S&P 600 Breakout Results",
-            data=breakout_df_sp600.to_csv(index=False),
-            file_name="breakout_results.csv",
-            mime="text/csv"
-        )
+        results_placeholder = st.empty()  # For live table updates
+        progress = st.progress(0)         # Progress bar
+        skipped = []
+        breakout_rows = []
 
-        st.subheader("Top 5 S&P 600 Breakout Charts")
-        for ticker in breakout_df_sp600['Ticker'].head(5):
-            df = filtered_data_sp600.get(ticker)
-            if df is None or df.empty or 'Close' not in df.columns:
-                continue
-            fig, ax = plt.subplots(figsize=(8, 3))
-            ax.plot(df.index, df['Close'], label='Close Price')
-            ax.set_title(f"{ticker} Close Price - Last 60 Days")
-            ax.set_ylabel("Price ($)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
+        total = len(tickers)
+        for i, ticker in enumerate(tickers):
+            try:
+                df = yf.download(ticker, period="60d", interval="1d", progress=False, threads=False)
+                if df.empty or 'Close' not in df.columns:
+                    skipped.append(ticker)
+                    continue
 
+                breakout_df = breakout_scanner({ticker: df})
+                if not breakout_df.empty:
+                    breakout_rows.append(breakout_df.iloc[0])  # add first row
+                    # Show partial results as a DataFrame
+                    results_placeholder.dataframe(pd.DataFrame(breakout_rows))
+
+            except Exception:
+                skipped.append(ticker)
+
+            # Update progress
+            progress.progress((i + 1) / total)
+
+        st.success(f"Scan complete ✅ Found {len(breakout_rows)} breakout candidates.")
+        if skipped:
+            st.warning(f"Skipped {len(skipped)} tickers due to missing data or delisted.")
+
+# Fetch S&P 500 Tickers Button
 if st.sidebar.button("Fetch Latest S&P 500 Tickers"):
     with st.spinner("Fetching latest S&P 500 tickers from Wikipedia..."):
         new_tickers = fetch_and_save_sp500()
