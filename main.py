@@ -55,6 +55,29 @@ def fetch_most_active_stocks():
         st.error(f"Failed to fetch most active stocks: {e}")
         return []
 
+# Fetch trending stocks from Yahoo Finance
+@st.cache_data(ttl=1800)
+def fetch_trending_stocks():
+    url = "https://finance.yahoo.com/markets/stocks/trending/"
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        table = soup.find('table')
+        tickers = []
+        if table:
+            rows = table.find_all('tr')[1:]  # skip header
+            for row in rows:
+                cols = row.find_all('td')
+                if cols:
+                    ticker = cols[0].text.strip().replace('.', '-')
+                    tickers.append(ticker)
+        return tickers
+    except Exception as e:
+        st.error(f"Failed to fetch trending stocks: {e}")
+        return []
+#Fetch and Save Nasdaq Tickers
 def fetch_and_save_nasdaq(file_path="nasdaq.txt"):
     try:
         url = "ftp://ftp.nasdaqtrader.com/SymbolDirectory/nasdaqlisted.txt"
@@ -394,6 +417,48 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
                     st.pyplot(fig)
         else:
             st.error("Failed to fetch most active stocks.")
+
+# Trending Stocks Scan Button
+if st.sidebar.button("Run Trending Scan"):
+    with st.spinner("Fetching and scanning trending stocks..."):
+        trending_tickers = fetch_trending_stocks()
+        if trending_tickers:
+            price_data, skipped = fetch_price_data(trending_tickers)
+            filtered = filter_tickers_by_price(price_data, min_price, max_price)
+            filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+
+            if skipped:
+                st.warning(f"Skipped {len(skipped)} trending tickers due to missing data or delisted: {', '.join(skipped[:10])}...")
+
+            st.subheader("Trending Stocks Breakout Scan Results")
+            if breakout_df.empty:
+                st.info("No breakout candidates found among trending stocks.")
+            else:
+                st.success(f"Found {len(breakout_df)} breakout candidates among trending stocks.")
+                st.dataframe(breakout_df)
+
+                st.download_button(
+                    "Download Trending Stocks Breakout Results",
+                    data=breakout_df.to_csv(index=False),
+                    file_name="breakout_results_trending.csv",
+                    mime="text/csv"
+                )
+
+                st.subheader("Top 5 Trending Breakout Charts")
+                for ticker in breakout_df['Ticker'].head(5):
+                    df = filtered_data.get(ticker)
+                    if df is None or df.empty or 'Close' not in df.columns:
+                        continue
+                    fig, ax = plt.subplots(figsize=(8, 3))
+                    ax.plot(df.index, df['Close'], label='Close Price')
+                    ax.set_title(f"{ticker} Close Price - Last 60 Days")
+                    ax.set_ylabel("Price ($)")
+                    ax.legend()
+                    ax.grid(True)
+                    st.pyplot(fig)
+        else:
+            st.error("Failed to fetch trending stocks.")
 
 if st.sidebar.button("Run S&P 500 Scan"):
     with st.spinner("Fetching S&P 500 tickers..."):
