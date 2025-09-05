@@ -1,3 +1,80 @@
+def premarket_scan(tickers):
+    """
+    Perform a pre-market scan for a list of tickers.
+    Returns a DataFrame with columns: Ticker, Premarket First Price, Premarket Last Price, Premarket % Change.
+    """
+    import pandas as pd
+    import yfinance as yf
+    results = []
+    for ticker in tickers:
+        try:
+            stock = yf.Ticker(ticker)
+            df = stock.history(period="1d", interval="5m", prepost=True)
+            if df.empty or "Close" not in df.columns:
+                continue
+            # Pre-market session is before 09:30:00 in NY time
+            # yfinance returns index in UTC, so convert to US/Eastern and filter
+            df_local = df.copy()
+            if not df_local.index.tz:
+                df_local.index = df_local.index.tz_localize("UTC")
+            df_local.index = df_local.index.tz_convert("America/New_York")
+            premarket_df = df_local[df_local.index.time < pd.to_datetime("09:30:00").time()]
+            if premarket_df.empty:
+                continue
+            first_price = float(premarket_df["Close"].iloc[0])
+            last_price = float(premarket_df["Close"].iloc[-1])
+            pct_change = ((last_price - first_price) / first_price) * 100 if first_price != 0 else 0.0
+            results.append({
+                "Ticker": ticker,
+                "Premarket First Price": round(first_price, 4),
+                "Premarket Last Price": round(last_price, 4),
+                "Premarket % Change": round(pct_change, 2)
+            })
+        except Exception:
+            continue
+    if results:
+        return pd.DataFrame(results)
+    else:
+        return pd.DataFrame(columns=["Ticker", "Premarket First Price", "Premarket Last Price", "Premarket % Change"])
+
+# Post-market scan function
+def postmarket_scan(tickers):
+    """
+    Perform a post-market scan for a list of tickers.
+    Returns a DataFrame with columns: Ticker, Postmarket First Price, Postmarket Last Price, Postmarket % Change.
+    """
+    import pandas as pd
+    import yfinance as yf
+    results = []
+    for ticker in tickers:
+        try:
+            stock = yf.Ticker(ticker)
+            df = stock.history(period="1d", interval="5m", prepost=True)
+            if df.empty or "Close" not in df.columns:
+                continue
+            df_local = df.copy()
+            if not df_local.index.tz:
+                df_local.index = df_local.index.tz_localize("UTC")
+            df_local.index = df_local.index.tz_convert("America/New_York")
+            # Post-market session is >= 16:00:00
+            post_df = df_local[df_local.index.time >= pd.to_datetime("16:00:00").time()]
+            if post_df.empty:
+                continue
+            first_price = float(post_df["Close"].iloc[0])
+            last_price = float(post_df["Close"].iloc[-1])
+            pct_change = ((last_price - first_price) / first_price) * 100 if first_price != 0 else 0.0
+            results.append({
+                "Ticker": ticker,
+                "Postmarket First Price": round(first_price, 4),
+                "Postmarket Last Price": round(last_price, 4),
+                "Postmarket % Change": round(pct_change, 2)
+            })
+        except Exception:
+            continue
+    if results:
+        return pd.DataFrame(results)
+    else:
+        return pd.DataFrame(columns=["Ticker", "Postmarket First Price", "Postmarket Last Price", "Postmarket % Change"])
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -148,20 +225,42 @@ def remove_delisted_tickers(file_path="sp600.txt"):
     p.write_text('\n'.join(valid_tickers))
     return removed_count, valid_tickers
 
-# Fetch price data
+
+# Batch price data fetcher
 @st.cache_data(ttl=3600)
-def fetch_price_data(tickers, period="60d", interval="1d"):
+def fetch_price_data_batch(tickers, period="60d", interval="1d", batch_size=50):
+    """
+    Fetch price data for tickers in batches to avoid throttling.
+    Returns dict of DataFrames keyed by ticker, and a list of tickers skipped (no data).
+    """
+    import yfinance as yf
+    import pandas as pd
     price_data = {}
     skipped = []
-    for ticker in tickers:
+    total = len(tickers)
+    for i in range(0, total, batch_size):
+        batch = tickers[i:i+batch_size]
         try:
-            df = yf.download(ticker, period=period, interval=interval, progress=False, threads=False)
-            if df.empty:
-                skipped.append(ticker)
+            df = yf.download(batch, period=period, interval=interval, group_by="ticker", progress=False, threads=False)
+            # If only one ticker, df is not multi-indexed
+            if isinstance(df.columns, pd.MultiIndex):
+                for ticker in batch:
+                    if ticker in df.columns.get_level_values(0):
+                        subdf = df[ticker]
+                        if not subdf.empty and 'Close' in subdf.columns:
+                            price_data[ticker] = subdf
+                        else:
+                            skipped.append(ticker)
+                    else:
+                        skipped.append(ticker)
             else:
-                price_data[ticker] = df
-        except:
-            skipped.append(ticker)
+                # Only one ticker
+                if not df.empty and 'Close' in df.columns:
+                    price_data[batch[0]] = df
+                else:
+                    skipped.append(batch[0])
+        except Exception:
+            skipped.extend(batch)
     return price_data, skipped
 
 # Filter tickers by price
@@ -227,31 +326,6 @@ def auto_scan(min_price=5, max_price=1000):
         breakout_df.to_csv("breakout_results.csv", index=False)
     return breakout_df, skipped, filtered_data
 
-# Automatic scanner function for hot stocks
-def auto_scan_hot_stocks(min_price=5, max_price=1000):
-    hot_tickers = fetch_hot_stocks()
-    if not hot_tickers:
-        return pd.DataFrame(columns=['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %']), [], {}
-    price_data, skipped = fetch_price_data(hot_tickers)
-    filtered = filter_tickers_by_price(price_data, min_price, max_price)
-    filtered_data = {t: price_data[t] for t in filtered if t in price_data}
-    breakout_df = breakout_scanner(filtered_data, min_price, max_price)
-    # Save CSV automatically
-    if not breakout_df.empty:
-        breakout_df.to_csv("breakout_results_hot.csv", index=False)
-    return breakout_df, skipped, filtered_data
-
-# Automatic scanner function for S&P 500 tickers
-def auto_scan_sp500(min_price=5, max_price=1000):
-    tickers = load_sp500_tickers()
-    price_data, skipped = fetch_price_data(tickers)
-    filtered = filter_tickers_by_price(price_data, min_price, max_price)
-    filtered_data = {t: price_data[t] for t in filtered if t in price_data}
-    breakout_df = breakout_scanner(filtered_data, min_price, max_price)
-    # Save CSV automatically
-    if not breakout_df.empty:
-        breakout_df.to_csv("breakout_results_sp500.csv", index=False)
-    return breakout_df, skipped, filtered_data
 
 # Streamlit UI
 st.title("Money Moves Breakout Scanner")
@@ -346,7 +420,16 @@ if search_ticker:
 
 if st.sidebar.button("Run Hot Stocks Scan"):
     with st.spinner("Fetching and scanning hot stocks..."):
-        breakout_df, skipped, filtered_data = auto_scan_hot_stocks(min_price, max_price)
+        hot_tickers = fetch_hot_stocks()
+        if not hot_tickers:
+            breakout_df, skipped, filtered_data = pd.DataFrame(columns=['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %']), [], {}
+        else:
+            price_data, skipped = fetch_price_data_batch(hot_tickers, period="60d", interval="1d", batch_size=50)
+            filtered = filter_tickers_by_price(price_data, min_price, max_price)
+            filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+            if not breakout_df.empty:
+                breakout_df.to_csv("breakout_results_hot.csv", index=False)
 
     if skipped:
         st.warning(f"Skipped {len(skipped)} hot tickers due to missing data or delisted: {', '.join(skipped[:10])}...")
@@ -382,7 +465,7 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
     with st.spinner("Fetching and scanning most active stocks..."):
         most_active_tickers = fetch_most_active_stocks()
         if most_active_tickers:
-            price_data, skipped = fetch_price_data(most_active_tickers)
+            price_data, skipped = fetch_price_data_batch(most_active_tickers, period="60d", interval="1d", batch_size=50)
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
             breakout_df = breakout_scanner(filtered_data, min_price, max_price)
@@ -423,7 +506,7 @@ if st.sidebar.button("Run Trending Scan"):
     with st.spinner("Fetching and scanning trending stocks..."):
         trending_tickers = fetch_trending_stocks()
         if trending_tickers:
-            price_data, skipped = fetch_price_data(trending_tickers)
+            price_data, skipped = fetch_price_data_batch(trending_tickers, period="60d", interval="1d", batch_size=50)
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
             breakout_df = breakout_scanner(filtered_data, min_price, max_price)
@@ -468,29 +551,25 @@ if st.sidebar.button("Run S&P 500 Scan"):
         st.error("No S&P 500 tickers available to scan.")
     else:
         st.subheader("S&P 500 Breakout Scan Results (updating live...)")
-
         results_placeholder = st.empty()
         progress = st.progress(0)
         skipped = []
         breakout_rows = []
-
+        batch_size = 50
         total = len(tickers)
-        for i, ticker in enumerate(tickers):
-            try:
-                df = yf.download(ticker, period="60d", interval="1d", progress=False, threads=False)
-                if df.empty or 'Close' not in df.columns:
-                    skipped.append(ticker)
-                    continue
-
-                breakout_df = breakout_scanner({ticker: df})
-                if not breakout_df.empty:
-                    breakout_rows.append(breakout_df.iloc[0])
-                    results_placeholder.dataframe(pd.DataFrame(breakout_rows))
-
-            except Exception:
-                skipped.append(ticker)
-
-            progress.progress((i + 1) / total)
+        for i in range(0, total, batch_size):
+            batch = tickers[i:i+batch_size]
+            price_data, skipped_batch = fetch_price_data_batch(batch, period="60d", interval="1d", batch_size=batch_size)
+            skipped.extend(skipped_batch)
+            filtered = filter_tickers_by_price(price_data, min_price, max_price)
+            filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+            if not breakout_df.empty:
+                for row in breakout_df.itertuples(index=False):
+                    breakout_rows.append(list(row))
+                df_partial = pd.DataFrame(breakout_rows, columns=breakout_df.columns)
+                results_placeholder.dataframe(df_partial)
+            progress.progress(min((i + batch_size) / total, 1.0))
 
         st.success(f"Scan complete ✅ Found {len(breakout_rows)} breakout candidates in S&P 500.")
         if skipped:
@@ -505,31 +584,26 @@ if st.sidebar.button("Run Nasdaq Scan"):
         st.error("No Nasdaq tickers available to scan.")
     else:
         st.subheader("Nasdaq Breakout Scan Results (updating live...)")
-
         results_placeholder = st.empty()  # For live table updates
         progress = st.progress(0)         # Progress bar
         skipped = []
         breakout_rows = []
-
+        batch_size = 50
         total = len(tickers)
-        for i, ticker in enumerate(tickers):
-            try:
-                df = yf.download(ticker, period="60d", interval="1d", progress=False, threads=False)
-                if df.empty or 'Close' not in df.columns:
-                    skipped.append(ticker)
-                    continue
-
-                breakout_df = breakout_scanner({ticker: df})
-                if not breakout_df.empty:
-                    breakout_rows.append(breakout_df.iloc[0])  # add first row
-                    # Show partial results as a DataFrame
-                    results_placeholder.dataframe(pd.DataFrame(breakout_rows))
-
-            except Exception:
-                skipped.append(ticker)
-
-            # Update progress
-            progress.progress((i + 1) / total)
+        for i in range(0, total, batch_size):
+            batch = tickers[i:i+batch_size]
+            price_data, skipped_batch = fetch_price_data_batch(batch, period="60d", interval="1d", batch_size=batch_size)
+            skipped.extend(skipped_batch)
+            filtered = filter_tickers_by_price(price_data, min_price, max_price)
+            filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+            if not breakout_df.empty:
+                for row in breakout_df.itertuples(index=False):
+                    breakout_rows.append(list(row))
+                if breakout_rows:
+                    df_partial = pd.DataFrame(breakout_rows, columns=breakout_df.columns)
+                    results_placeholder.dataframe(df_partial)
+            progress.progress(min((i + batch_size) / total, 1.0))
 
         st.success(f"Scan complete ✅ Found {len(breakout_rows)} breakout candidates.")
         if skipped:
@@ -550,3 +624,44 @@ if st.sidebar.button("Clean delisted tickers"):
         removed_count, valid_tickers = remove_delisted_tickers()
         st.session_state.tickers = valid_tickers
     st.success(f"Removed {removed_count} delisted tickers from sp600.txt.")
+# Add Pre-market Scan Button
+if st.sidebar.button("Run Pre-market Scan"):
+    tickers = st.session_state.get("tickers", [])
+    if not tickers:
+        st.error("No tickers available for pre-market scan.")
+    else:
+        with st.spinner(f"Running pre-market scan on {len(tickers)} tickers..."):
+            pm_df = premarket_scan(tickers)
+        st.subheader("Pre-market Scan Results")
+        if pm_df.empty:
+            st.info("No pre-market candidates found or no pre-market data available.")
+        else:
+            st.success(f"Found {len(pm_df)} tickers with pre-market data.")
+            st.dataframe(pm_df)
+            st.download_button(
+                label="Download Pre-market Results as CSV",
+                data=pm_df.to_csv(index=False),
+                file_name="premarket_results.csv",
+                mime="text/csv"
+            )
+
+# Add Post-market Scan Button
+if st.sidebar.button("Run Post-market Scan"):
+    tickers = st.session_state.get("tickers", [])
+    if not tickers:
+        st.error("No tickers available for post-market scan.")
+    else:
+        with st.spinner(f"Running post-market scan on {len(tickers)} tickers..."):
+            post_df = postmarket_scan(tickers)
+        st.subheader("Post-market Scan Results")
+        if post_df.empty:
+            st.info("No post-market candidates found or no post-market data available.")
+        else:
+            st.success(f"Found {len(post_df)} tickers with post-market data.")
+            st.dataframe(post_df)
+            st.download_button(
+                label="Download Post-market Results as CSV",
+                data=post_df.to_csv(index=False),
+                file_name="postmarket_results.csv",
+                mime="text/csv"
+            )
