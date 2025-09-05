@@ -10,3 +10,4 @@ yahoo_fin
 matplotlib
 websockets
 pyppeteer
+mplfinance

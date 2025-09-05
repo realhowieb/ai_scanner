@@ -4,9 +4,46 @@ import pandas as pd
 import numpy as np
 import io
 import matplotlib.pyplot as plt
+import mplfinance as mpf
 from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
+
+# --- Gap / Unusual Volume Scanner ---
+def gap_unusual_volume_scanner(price_data):
+    """
+    Scan for tickers with an opening gap > 4% or unusual volume (>2x 20d avg volume).
+    Returns a DataFrame.
+    """
+    results = []
+    for ticker, df in price_data.items():
+        if df.empty or len(df) < 21 or 'Close' not in df.columns or 'Open' not in df.columns or 'Volume' not in df.columns:
+            continue
+        try:
+            prev_close = float(df['Close'].iloc[-2])
+            today_open = float(df['Open'].iloc[-1])
+            today_close = float(df['Close'].iloc[-1])
+            today_volume = float(df['Volume'].iloc[-1])
+            avg_20d_vol = float(df['Volume'].iloc[-21:-1].mean())
+            gap_pct = ((today_open - prev_close) / prev_close) * 100 if prev_close else np.nan
+            unusual_vol = today_volume > 2 * avg_20d_vol if avg_20d_vol else False
+            if abs(gap_pct) >= 4 or unusual_vol:
+                results.append({
+                    'Ticker': ticker,
+                    'Prev Close': round(prev_close, 3),
+                    'Today Open': round(today_open, 3),
+                    'Today Close': round(today_close, 3),
+                    'Gap %': round(gap_pct, 2),
+                    'Today Vol': int(today_volume),
+                    'Avg 20d Vol': int(avg_20d_vol),
+                    'Unusual Vol (>2x avg)': unusual_vol
+                })
+        except Exception:
+            continue
+    if results:
+        return pd.DataFrame(results).sort_values('Gap %', key=abs, ascending=False).reset_index(drop=True)
+    else:
+        return pd.DataFrame(columns=['Ticker', 'Prev Close', 'Today Open', 'Today Close', 'Gap %', 'Today Vol', 'Avg 20d Vol', 'Unusual Vol (>2x avg)'])
 
 def premarket_scan(tickers):
     """
@@ -332,6 +369,9 @@ def auto_scan(min_price=5, max_price=1000):
 # Streamlit UI
 st.title("Money Moves Breakout Scanner")
 
+# Sidebar checkbox for gap/unusual volume filter
+apply_gap_filter = st.sidebar.checkbox("Apply Gap / Unusual Volume Filter", value=True)
+
 min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.0, step=0.1)
 max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1000.0, step=1.0)
 
@@ -372,14 +412,25 @@ if uploaded_file is not None:
             st.subheader("Top 5 Breakout Charts")
             for ticker in breakout_df['Ticker'].head(5):
                 df = filtered_data.get(ticker)
-                if df is None or df.empty or 'Close' not in df.columns:
+                if (
+                    df is None
+                    or df.empty
+                    or not all(col in df.columns for col in ['Open', 'High', 'Low', 'Close', 'Volume'])
+                ):
                     continue
-                fig, ax = plt.subplots(figsize=(8, 3))
-                ax.plot(df.index, df['Close'], label='Close Price')
-                ax.set_title(f"{ticker} Close Price - Last 60 Days")
-                ax.set_ylabel("Price ($)")
-                ax.legend()
-                ax.grid(True)
+                # mplfinance expects columns: Open, High, Low, Close, Volume
+                fig, axlist = mpf.plot(
+                    df,
+                    type='candle',
+                    style='yahoo',
+                    mav=(20,50),
+                    volume=True,
+                    figratio=(12,4),
+                    figscale=1.2,
+                    title=f"{ticker} Candlestick Chart",
+                    returnfig=True,
+                    tight_layout=True
+                )
                 st.pyplot(fig)
 
     except Exception as e:
@@ -399,14 +450,22 @@ if search_ticker:
         if hist.empty:
             st.error(f"No historical data found for ticker '{search_ticker}'. It may be invalid or delisted.")
         else:
-            st.success(f"Showing closing price chart for {search_ticker} (last 60 days)")
-            fig, ax = plt.subplots(figsize=(8, 3))
-            ax.plot(hist.index, hist['Close'], label='Close Price')
-            ax.set_title(f"{search_ticker} Close Price - Last 60 Days")
-            ax.set_ylabel("Price ($)")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
+            st.success(f"Showing candlestick chart for {search_ticker} (last 60 days)")
+            # Ensure columns for mplfinance
+            if all(col in hist.columns for col in ['Open', 'High', 'Low', 'Close', 'Volume']):
+                fig, axlist = mpf.plot(
+                    hist,
+                    type='candle',
+                    style='yahoo',
+                    mav=(20,50),
+                    volume=True,
+                    figratio=(12,4),
+                    figscale=1.2,
+                    title=f"{search_ticker} Candlestick Chart",
+                    returnfig=True,
+                    tight_layout=True
+                )
+                st.pyplot(fig)
 
             # Run breakout scan on this single ticker
             breakout_df = breakout_scanner({search_ticker: hist}, min_price, max_price)
@@ -429,6 +488,18 @@ if st.sidebar.button("Run Hot Stocks Scan"):
             price_data, skipped = fetch_price_data_batch(hot_tickers, period="60d", interval="1d", batch_size=50)
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            # Gap / Unusual Volume Filter
+            if apply_gap_filter:
+                gap_df = gap_unusual_volume_scanner(filtered_data)
+                if not gap_df.empty:
+                    st.subheader("Gap / Unusual Volume Candidates")
+                    st.dataframe(gap_df)
+                    st.download_button(
+                        "Download Gap / Unusual Volume Results",
+                        data=gap_df.to_csv(index=False),
+                        file_name="gap_unusual_volume_results.csv",
+                        mime="text/csv"
+                    )
             breakout_df = breakout_scanner(filtered_data, min_price, max_price)
             if not breakout_df.empty:
                 breakout_df.to_csv("breakout_results_hot.csv", index=False)
@@ -452,14 +523,24 @@ if st.sidebar.button("Run Hot Stocks Scan"):
         st.subheader("Top 5 Hot Stocks Breakout Charts")
         for ticker in breakout_df['Ticker'].head(5):
             df = filtered_data.get(ticker)
-            if df is None or df.empty or 'Close' not in df.columns:
+            if (
+                df is None
+                or df.empty
+                or not all(col in df.columns for col in ['Open', 'High', 'Low', 'Close', 'Volume'])
+            ):
                 continue
-            fig, ax = plt.subplots(figsize=(8, 3))
-            ax.plot(df.index, df['Close'], label='Close Price')
-            ax.set_title(f"{ticker} Close Price - Last 60 Days")
-            ax.set_ylabel("Price ($)")
-            ax.legend()
-            ax.grid(True)
+            fig, axlist = mpf.plot(
+                df,
+                type='candle',
+                style='yahoo',
+                mav=(20,50),
+                volume=True,
+                figratio=(12,4),
+                figscale=1.2,
+                title=f"{ticker} Candlestick Chart",
+                returnfig=True,
+                tight_layout=True
+            )
             st.pyplot(fig)
 
 # Most Active Stocks Scan Button
@@ -470,6 +551,18 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
             price_data, skipped = fetch_price_data_batch(most_active_tickers, period="60d", interval="1d", batch_size=50)
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            # Gap / Unusual Volume Filter
+            if apply_gap_filter:
+                gap_df = gap_unusual_volume_scanner(filtered_data)
+                if not gap_df.empty:
+                    st.subheader("Gap / Unusual Volume Candidates")
+                    st.dataframe(gap_df)
+                    st.download_button(
+                        "Download Gap / Unusual Volume Results",
+                        data=gap_df.to_csv(index=False),
+                        file_name="gap_unusual_volume_results.csv",
+                        mime="text/csv"
+                    )
             breakout_df = breakout_scanner(filtered_data, min_price, max_price)
 
             if skipped:
@@ -491,14 +584,24 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
                 st.subheader("Top 5 Most Active Breakout Charts")
                 for ticker in breakout_df['Ticker'].head(5):
                     df = filtered_data.get(ticker)
-                    if df is None or df.empty or 'Close' not in df.columns:
+                    if (
+                        df is None
+                        or df.empty
+                        or not all(col in df.columns for col in ['Open', 'High', 'Low', 'Close', 'Volume'])
+                    ):
                         continue
-                    fig, ax = plt.subplots(figsize=(8, 3))
-                    ax.plot(df.index, df['Close'], label='Close Price')
-                    ax.set_title(f"{ticker} Close Price - Last 60 Days")
-                    ax.set_ylabel("Price ($)")
-                    ax.legend()
-                    ax.grid(True)
+                    fig, axlist = mpf.plot(
+                        df,
+                        type='candle',
+                        style='yahoo',
+                        mav=(20,50),
+                        volume=True,
+                        figratio=(12,4),
+                        figscale=1.2,
+                        title=f"{ticker} Candlestick Chart",
+                        returnfig=True,
+                        tight_layout=True
+                    )
                     st.pyplot(fig)
         else:
             st.error("Failed to fetch most active stocks.")
@@ -511,6 +614,18 @@ if st.sidebar.button("Run Trending Scan"):
             price_data, skipped = fetch_price_data_batch(trending_tickers, period="60d", interval="1d", batch_size=50)
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            # Gap / Unusual Volume Filter
+            if apply_gap_filter:
+                gap_df = gap_unusual_volume_scanner(filtered_data)
+                if not gap_df.empty:
+                    st.subheader("Gap / Unusual Volume Candidates")
+                    st.dataframe(gap_df)
+                    st.download_button(
+                        "Download Gap / Unusual Volume Results",
+                        data=gap_df.to_csv(index=False),
+                        file_name="gap_unusual_volume_results.csv",
+                        mime="text/csv"
+                    )
             breakout_df = breakout_scanner(filtered_data, min_price, max_price)
 
             if skipped:
@@ -533,14 +648,24 @@ if st.sidebar.button("Run Trending Scan"):
                 st.subheader("Top 5 Trending Breakout Charts")
                 for ticker in breakout_df['Ticker'].head(5):
                     df = filtered_data.get(ticker)
-                    if df is None or df.empty or 'Close' not in df.columns:
+                    if (
+                        df is None
+                        or df.empty
+                        or not all(col in df.columns for col in ['Open', 'High', 'Low', 'Close', 'Volume'])
+                    ):
                         continue
-                    fig, ax = plt.subplots(figsize=(8, 3))
-                    ax.plot(df.index, df['Close'], label='Close Price')
-                    ax.set_title(f"{ticker} Close Price - Last 60 Days")
-                    ax.set_ylabel("Price ($)")
-                    ax.legend()
-                    ax.grid(True)
+                    fig, axlist = mpf.plot(
+                        df,
+                        type='candle',
+                        style='yahoo',
+                        mav=(20,50),
+                        volume=True,
+                        figratio=(12,4),
+                        figscale=1.2,
+                        title=f"{ticker} Candlestick Chart",
+                        returnfig=True,
+                        tight_layout=True
+                    )
                     st.pyplot(fig)
         else:
             st.error("Failed to fetch trending stocks.")
@@ -557,6 +682,7 @@ if st.sidebar.button("Run S&P 500 Scan"):
         progress = st.progress(0)
         skipped = []
         breakout_rows = []
+        gap_rows = []
         batch_size = 50
         total = len(tickers)
         for i in range(0, total, batch_size):
@@ -565,6 +691,12 @@ if st.sidebar.button("Run S&P 500 Scan"):
             skipped.extend(skipped_batch)
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            # Gap / Unusual Volume Filter
+            if apply_gap_filter:
+                gap_df = gap_unusual_volume_scanner(filtered_data)
+                if not gap_df.empty:
+                    for row in gap_df.itertuples(index=False):
+                        gap_rows.append(list(row))
             breakout_df = breakout_scanner(filtered_data, min_price, max_price)
             if not breakout_df.empty:
                 for row in breakout_df.itertuples(index=False):
@@ -576,6 +708,17 @@ if st.sidebar.button("Run S&P 500 Scan"):
         st.success(f"Scan complete ✅ Found {len(breakout_rows)} breakout candidates in S&P 500.")
         if skipped:
             st.warning(f"Skipped {len(skipped)} tickers due to missing data or delisted.")
+        # Show gap/unusual volume after full scan
+        if apply_gap_filter and gap_rows:
+            gap_df_full = pd.DataFrame(gap_rows, columns=['Ticker', 'Prev Close', 'Today Open', 'Today Close', 'Gap %', 'Today Vol', 'Avg 20d Vol', 'Unusual Vol (>2x avg)'])
+            st.subheader("Gap / Unusual Volume Candidates")
+            st.dataframe(gap_df_full)
+            st.download_button(
+                "Download Gap / Unusual Volume Results",
+                data=gap_df_full.to_csv(index=False),
+                file_name="gap_unusual_volume_results.csv",
+                mime="text/csv"
+            )
 
 #Run Nasdaq Button
 if st.sidebar.button("Run Nasdaq Scan"):
@@ -590,6 +733,7 @@ if st.sidebar.button("Run Nasdaq Scan"):
         progress = st.progress(0)         # Progress bar
         skipped = []
         breakout_rows = []
+        gap_rows = []
         batch_size = 50
         total = len(tickers)
         for i in range(0, total, batch_size):
@@ -598,6 +742,12 @@ if st.sidebar.button("Run Nasdaq Scan"):
             skipped.extend(skipped_batch)
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+            # Gap / Unusual Volume Filter
+            if apply_gap_filter:
+                gap_df = gap_unusual_volume_scanner(filtered_data)
+                if not gap_df.empty:
+                    for row in gap_df.itertuples(index=False):
+                        gap_rows.append(list(row))
             breakout_df = breakout_scanner(filtered_data, min_price, max_price)
             if not breakout_df.empty:
                 for row in breakout_df.itertuples(index=False):
@@ -610,6 +760,17 @@ if st.sidebar.button("Run Nasdaq Scan"):
         st.success(f"Scan complete ✅ Found {len(breakout_rows)} breakout candidates.")
         if skipped:
             st.warning(f"Skipped {len(skipped)} tickers due to missing data or delisted.")
+        # Show gap/unusual volume after full scan
+        if apply_gap_filter and gap_rows:
+            gap_df_full = pd.DataFrame(gap_rows, columns=['Ticker', 'Prev Close', 'Today Open', 'Today Close', 'Gap %', 'Today Vol', 'Avg 20d Vol', 'Unusual Vol (>2x avg)'])
+            st.subheader("Gap / Unusual Volume Candidates")
+            st.dataframe(gap_df_full)
+            st.download_button(
+                "Download Gap / Unusual Volume Results",
+                data=gap_df_full.to_csv(index=False),
+                file_name="gap_unusual_volume_results.csv",
+                mime="text/csv"
+            )
 
 # Fetch S&P 500 Tickers Button
 if st.sidebar.button("Fetch Latest S&P 500 Tickers"):
@@ -626,6 +787,7 @@ if st.sidebar.button("Clean delisted tickers"):
         removed_count, valid_tickers = remove_delisted_tickers()
         st.session_state.tickers = valid_tickers
     st.success(f"Removed {removed_count} delisted tickers from sp600.txt.")
+
 # Add Pre-market Scan Button
 if st.sidebar.button("Run Pre-market Scan"):
     tickers = st.session_state.get("tickers", [])
