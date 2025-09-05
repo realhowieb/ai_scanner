@@ -1,3 +1,13 @@
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import io
+import matplotlib.pyplot as plt
+from pathlib import Path
+import requests
+from bs4 import BeautifulSoup
+
 def premarket_scan(tickers):
     """
     Perform a pre-market scan for a list of tickers.
@@ -75,15 +85,7 @@ def postmarket_scan(tickers):
         return pd.DataFrame(results)
     else:
         return pd.DataFrame(columns=["Ticker", "Postmarket First Price", "Postmarket Last Price", "Postmarket % Change"])
-import streamlit as st
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import io
-import matplotlib.pyplot as plt
-from pathlib import Path
-import requests
-from bs4 import BeautifulSoup
+
 
 # Fetch hot stocks from Yahoo Finance top gainers
 @st.cache_data(ttl=1800)
@@ -317,7 +319,7 @@ def breakout_scanner(price_data, min_price=5, max_price=1000):
 # Automatic scanner function for full S&P 600 tickers or uploaded tickers
 def auto_scan(min_price=5, max_price=1000):
     tickers = st.session_state.get("tickers", [])
-    price_data, skipped = fetch_price_data(tickers)
+    price_data, skipped = fetch_price_data_batch(tickers, period="60d", interval="1d", batch_size=50)
     filtered = filter_tickers_by_price(price_data, min_price, max_price)
     filtered_data = {t: price_data[t] for t in filtered if t in price_data}
     breakout_df = breakout_scanner(filtered_data, min_price, max_price)
