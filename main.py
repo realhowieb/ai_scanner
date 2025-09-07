@@ -149,11 +149,11 @@ def gap_unusual_volume_scanner(price_data):
         if df.empty or len(df) < 21 or 'Close' not in df.columns or 'Open' not in df.columns or 'Volume' not in df.columns:
             continue
         try:
-            prev_close = float(df['Close'].iloc[-2])
-            today_open = float(df['Open'].iloc[-1])
-            today_close = float(df['Close'].iloc[-1])
-            today_volume = float(df['Volume'].iloc[-1])
-            avg_20d_vol = float(df['Volume'].iloc[-21:-1].mean())
+            prev_close = df['Close'].iloc[-2].item()
+            today_open = df['Open'].iloc[-1].item()
+            today_close = df['Close'].iloc[-1].item()
+            today_volume = df['Volume'].iloc[-1].item()
+            avg_20d_vol = df['Volume'].iloc[-21:-1].mean().item()
             gap_pct = ((today_open - prev_close) / prev_close) * 100 if prev_close else np.nan
             unusual_vol = today_volume > 2 * avg_20d_vol if avg_20d_vol else False
             if abs(gap_pct) >= 4 or unusual_vol:
@@ -197,8 +197,8 @@ def premarket_scan(tickers):
             premarket_df = df_local[df_local.index.time < pd.to_datetime("09:30:00").time()]
             if premarket_df.empty:
                 continue
-            first_price = float(premarket_df["Close"].iloc[0])
-            last_price = float(premarket_df["Close"].iloc[-1])
+            first_price = premarket_df["Close"].iloc[0].item()
+            last_price = premarket_df["Close"].iloc[-1].item()
             pct_change = ((last_price - first_price) / first_price) * 100 if first_price != 0 else 0.0
             results.append({
                 "Ticker": ticker,
@@ -236,8 +236,8 @@ def postmarket_scan(tickers):
             post_df = df_local[df_local.index.time >= pd.to_datetime("16:00:00").time()]
             if post_df.empty:
                 continue
-            first_price = float(post_df["Close"].iloc[0])
-            last_price = float(post_df["Close"].iloc[-1])
+            first_price = post_df["Close"].iloc[0].item()
+            last_price = post_df["Close"].iloc[-1].item()
             pct_change = ((last_price - first_price) / first_price) * 100 if first_price != 0 else 0.0
             results.append({
                 "Ticker": ticker,
@@ -798,7 +798,7 @@ def filter_tickers_by_price(price_data, min_price, max_price):
         if df.empty or 'Close' not in df.columns:
             continue
         try:
-            price = float(df['Close'].iloc[-1])
+            price = df['Close'].iloc[-1].item()
         except:
             continue
         if min_price <= price <= max_price:
@@ -821,9 +821,9 @@ def breakout_scanner(price_data, min_price=5, max_price=1000):
         if df.empty or len(df) < 21 or 'Close' not in df.columns:
             continue
         try:
-            latest_close = float(df['Close'].iloc[-1])
-            prev_max = float(df['Close'].iloc[-21:-1].max())
-            latest_volume = int(df['Volume'].iloc[-1]) if 'Volume' in df.columns else np.nan
+            latest_close = df['Close'].iloc[-1].item()
+            prev_max = df['Close'].iloc[-21:-1].max().item()
+            latest_volume = df['Volume'].iloc[-1].item() if 'Volume' in df.columns else np.nan
             latest_volume_fmt = format_volume(latest_volume)
         except:
             continue
@@ -1434,22 +1434,80 @@ if st.sidebar.button("Run Nasdaq Scan"):
     if not tickers:
         st.error("No Nasdaq tickers available to scan.")
     else:
-        st.subheader("Nasdaq Breakout Scan Results")
+        st.subheader("Nasdaq Breakout Scan Results (Live)")
         if show_diagnostics_ui:
             ndq_log, ndq_render = new_log_panel("Nasdaq — Diagnostics Log", expanded=False)
         else:
             ndq_log, ndq_render = None, _noop
+
+        # Live UI placeholders
+        progress = st.progress(0)
+        live_table = st.empty()
+        status = st.empty()
+
+        # Use a smaller chunk for better streaming granularity on large universe
+        ndq_chunk = max(100, min(parallel_chunk, 200))
         t0 = time.perf_counter()
+
+        def progress_cb(done, total):
+            if total:
+                progress.progress(done / total)
+            status.markdown(f"Processed **{done}/{total}** chunks…")
+
+        running_rows = []
+        seen_tickers = set()
+
+        def per_chunk_cb(added_price_data):
+            # Filter by price and run breakout on just-arrived data
+            filtered = filter_tickers_by_price(added_price_data, min_price, max_price)
+            filtered_chunk = {t: added_price_data[t] for t in filtered}
+            if not filtered_chunk:
+                return
+            chunk_df = breakout_scanner(filtered_chunk, min_price, max_price)
+            if chunk_df.empty:
+                return
+            # Append only new tickers to the running result to avoid duplicates
+            for _, row in chunk_df.iterrows():
+                tkr = row['Ticker']
+                if tkr in seen_tickers:
+                    continue
+                seen_tickers.add(tkr)
+                running_rows.append([
+                    row['Ticker'], row['Latest Close'], row['Previous 20d Max'], row['Breakout %'], row['Volume']
+                ])
+            if running_rows:
+                live_df = pd.DataFrame(
+                    running_rows,
+                    columns=['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume']
+                ).sort_values('Breakout %', ascending=False).reset_index(drop=True)
+                live_table.dataframe(live_df)
+
+        # Choose streaming or batch path based on use_parallel flag
         if use_parallel:
-            price_data, skipped = fetch_price_data_parallel(
-                tickers, period="60d", interval="1d",
-                chunk_size=parallel_chunk, max_workers=parallel_workers,
-                logger=ndq_log
+            price_data, skipped = fetch_price_data_streaming(
+                tickers,
+                period="60d",
+                interval="1d",
+                chunk_size=ndq_chunk,
+                max_workers=parallel_workers,
+                logger=ndq_log,
+                progress_cb=progress_cb,
+                per_chunk_cb=per_chunk_cb,
             )
         else:
-            price_data, skipped = fetch_price_data_batch(
-                tickers, period="60d", interval="1d", batch_size=50
-            )
+            # Batch path: still show progress per batch
+            total_batches = max(1, (len(tickers) + 49) // 50)
+            done_batches = 0
+            price_data, skipped = {}, []
+            for i in range(0, len(tickers), 50):
+                batch = tickers[i:i+50]
+                pdict, skipped_batch = fetch_price_data_batch(batch, period="60d", interval="1d", batch_size=50)
+                price_data.update(pdict)
+                skipped.extend(skipped_batch)
+                done_batches += 1
+                progress_cb(done_batches, total_batches)
+                per_chunk_cb(pdict)
+
         t1 = time.perf_counter()
         downloaded_count = len({t for t in price_data if t in tickers})
         if show_diagnostics_ui:
@@ -1457,42 +1515,41 @@ if st.sidebar.button("Run Nasdaq Scan"):
                 "Nasdaq",
                 universe_before=uni_before,
                 universe_after=uni_after,
-                chunk_size=parallel_chunk,
-                workers=parallel_workers,
+                chunk_size=ndq_chunk if use_parallel else 50,
+                workers=parallel_workers if use_parallel else 1,
                 downloaded_count=downloaded_count,
                 skipped_count=len(skipped),
                 elapsed_s=t1 - t0,
             )
             ndq_render()
-        filtered = filter_tickers_by_price(price_data, min_price, max_price)
-        filtered_data = {t: price_data[t] for t in filtered if t in price_data}
-        gap_rows = []
-        breakout_rows = []
-        # Gap / Unusual Volume Filter
+
+        # Final consolidated view
+        filtered_all = filter_tickers_by_price(price_data, min_price, max_price)
+        filtered_data = {t: price_data[t] for t in filtered_all if t in price_data}
+
+        # Gap / Unusual Volume (final table)
         if apply_gap_filter:
             gap_df = gap_unusual_volume_scanner(filtered_data)
             if not gap_df.empty:
-                gap_rows = [list(row) for row in gap_df.itertuples(index=False)]
+                st.subheader("Gap / Unusual Volume Candidates")
+                st.dataframe(gap_df)
+                st.download_button(
+                    "Download Gap / Unusual Volume Results",
+                    data=gap_df.to_csv(index=False),
+                    file_name="gap_unusual_volume_results.csv",
+                    mime="text/csv"
+                )
+
         breakout_df = breakout_scanner(filtered_data, min_price, max_price)
         if not breakout_df.empty:
-            breakout_rows = [list(row) for row in breakout_df.itertuples(index=False)]
-            st.success(f"Scan complete ✅ Found {len(breakout_rows)} breakout candidates.")
-            st.dataframe(breakout_df)
+            st.success(f"Scan complete ✅ Found {len(breakout_df)} breakout candidates in Nasdaq.")
+            final_df = breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True)
+            live_table.dataframe(final_df)  # update the same live table
         else:
             st.info("No breakout candidates found in Nasdaq.")
+
         if skipped:
             st.warning(f"Skipped {len(skipped)} tickers due to missing data or delisted.")
-        # Show gap/unusual volume after full scan
-        if apply_gap_filter and gap_rows:
-            gap_df_full = pd.DataFrame(gap_rows, columns=['Ticker', 'Prev Close', 'Today Open', 'Today Close', 'Gap %', 'Today Vol', 'Avg 20d Vol', 'Unusual Vol (>2x avg)'])
-            st.subheader("Gap / Unusual Volume Candidates")
-            st.dataframe(gap_df_full)
-            st.download_button(
-                "Download Gap / Unusual Volume Results",
-                data=gap_df_full.to_csv(index=False),
-                file_name="gap_unusual_volume_results.csv",
-                mime="text/csv"
-            )
 
 # Add Pre-market Scan Button
 st.sidebar.markdown("### During Pre-Market Hour")
