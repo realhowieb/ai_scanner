@@ -759,8 +759,8 @@ def fetch_price_data_parallel(
     if logger:
         logger(f"Prepared {len(tickers)} symbols (chunk_size={chunk_size}, max_workers={max_workers})")
 
-    def fetch_chunk(chunk):
-# --- Helpers to rescue missing tickers in small mini-batches to reduce mass skips ---
+
+        # --- Helpers to rescue missing tickers in small mini-batches to reduce mass skips ---
     def _download_batch_yf(batch):
         """Robust yfinance batch download with normalized columns."""
         import yfinance as yf
@@ -844,6 +844,49 @@ def fetch_price_data_parallel(
                 return []
             missing_list = remaining
         return missing_list
+
+    def fetch_chunk(chunk):
+        import warnings
+        if logger:
+            logger(f"Downloading chunk of {len(chunk)} symbols…")
+        for attempt in range(max_retries):
+            try:
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"YF\.download\(\) has changed argument auto_adjust default to True",
+                    category=FutureWarning,
+                )
+                df = yf.download(
+                    chunk,
+                    period=period,
+                    interval=interval,
+                    group_by="ticker",
+                    progress=False,
+                    threads=False,        # we already parallelize chunks
+                    auto_adjust=False     # keep raw OHLC for candlesticks
+                )
+                # Normalize column names once to avoid case/spacing surprises
+                try:
+                    if isinstance(df.columns, pd.MultiIndex):
+                        new_levels = []
+                        for level in range(df.columns.nlevels):
+                            vals = list(df.columns.get_level_values(level))
+                            vals_norm = [str(v).strip() if isinstance(v, str) else v for v in vals]
+                            new_levels.append(pd.Index(vals_norm))
+                        df.columns = pd.MultiIndex.from_arrays(new_levels)
+                    else:
+                        df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
+                except Exception:
+                    pass
+                return chunk, df
+            except Exception:
+                if attempt < max_retries - 1:
+                    if logger:
+                        logger(f"Chunk retry {attempt+1}/{max_retries} after backoff {retry_sleep * (2 ** attempt):.1f}s")
+                    sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                    time.sleep(sleep_s)
+                    continue
+                return chunk, None
         if logger:
             logger(f"Downloading chunk of {len(chunk)} symbols…")
         # Retry the whole chunk a few times
@@ -1089,6 +1132,7 @@ def fetch_price_data_streaming(
         return missing_list
 
     def fetch_chunk(chunk):
+        import warnings
         if logger:
             logger(f"Downloading chunk of {len(chunk)} symbols…")
         for attempt in range(max_retries):
