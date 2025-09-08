@@ -760,6 +760,90 @@ def fetch_price_data_parallel(
         logger(f"Prepared {len(tickers)} symbols (chunk_size={chunk_size}, max_workers={max_workers})")
 
     def fetch_chunk(chunk):
+# --- Helpers to rescue missing tickers in small mini-batches to reduce mass skips ---
+    def _download_batch_yf(batch):
+        """Robust yfinance batch download with normalized columns."""
+        import yfinance as yf
+        import pandas as pd
+        df = yf.download(
+            batch,
+            period=period,
+            interval=interval,
+            group_by="ticker",
+            progress=False,
+            threads=False,
+            auto_adjust=False,
+        )
+        try:
+            if isinstance(df.columns, pd.MultiIndex):
+                new_levels = []
+                for level in range(df.columns.nlevels):
+                    vals = list(df.columns.get_level_values(level))
+                    vals_norm = [str(v).strip() if isinstance(v, str) else v for v in vals]
+                    new_levels.append(pd.Index(vals_norm))
+                df.columns = pd.MultiIndex.from_arrays(new_levels)
+            else:
+                df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
+        except Exception:
+            pass
+        return df
+
+    def _split_multi_ticker_df_simple(df, want=None):
+        """Split a MultiIndex df returned by yfinance into {ticker: subdf} quickly."""
+        if not isinstance(df.columns, pd.MultiIndex):
+            return {}
+        # Try both orientations; keep whichever yields 'Close' column frames
+        out = {}
+        levels = [0, 1] if df.columns.nlevels == 2 else list(range(df.columns.nlevels))
+        for lvl in levels:
+            tickers_here = [x for x in df.columns.get_level_values(lvl) if isinstance(x, str)]
+            seen = set()
+            ordered = []
+            for t in tickers_here:
+                if t not in seen:
+                    seen.add(t)
+                    ordered.append(t)
+            for t in ordered:
+                try:
+                    sub = df.xs(t, axis=1, level=lvl)
+                    if 'Close' in sub.columns:
+                        out[str(t)] = sub
+                except Exception:
+                    continue
+        if want:
+            want_set = set(want)
+            out = {k: v for k, v in out.items() if k in want_set}
+        return out
+
+    def _rescue_missing_in_minibatches(missing_list, add_to_dict, tries=3, mini_size=8, sleep_base=1.0):
+        """Attempt to refetch missing tickers in small batches to avoid throttling."""
+        import time, random
+        if not missing_list:
+            return []
+        still_missing = []
+        for attempt in range(tries):
+            # split into mini-batches
+            for i in range(0, len(missing_list), mini_size):
+                mb = missing_list[i:i+mini_size]
+                try:
+                    df_mb = _download_batch_yf(mb)
+                    if isinstance(df_mb, pd.DataFrame) and not df_mb.empty and isinstance(df_mb.columns, pd.MultiIndex):
+                        split = _split_multi_ticker_df_simple(df_mb, want=mb)
+                        for t, sub in split.items():
+                            try:
+                                add_to_dict[t] = _downcast_ohlcv(sub)
+                            except Exception:
+                                continue
+                except Exception:
+                    pass
+                # short jitter between mini-batches to ease rate limits
+                time.sleep(sleep_base * (0.5 + random.random()))
+            # build remaining set
+            remaining = [t for t in missing_list if t not in add_to_dict]
+            if not remaining:
+                return []
+            missing_list = remaining
+        return missing_list
         if logger:
             logger(f"Downloading chunk of {len(chunk)} symbols…")
         # Retry the whole chunk a few times
@@ -846,32 +930,35 @@ def fetch_price_data_parallel(
         if isinstance(df.columns, pd.MultiIndex):
             split = _split_multi_ticker_df(df, chunk)
             present = set(split.keys())
-            for t in chunk:
-                if t in present:
-                    price_data[t] = _downcast_ohlcv(split[t])
-                else:
-                    # Fallback per-ticker download with retries
-                    got = False
-                    for attempt in range(max_retries):
-                        try:
-                            df_t = yf.download(
-                                t, period=period, interval=interval,
-                                progress=False, threads=False, auto_adjust=False
-                            )
-                            if not df_t.empty and 'Close' in df_t.columns:
-                                price_data[t] = _downcast_ohlcv(df_t)
-                                got = True
-                                if logger:
-                                    logger(f"Recovered {t} via fallback")
-                                break
-                        except Exception:
-                            sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
-                            time.sleep(sleep_s)
-                            continue
-                    if not got:
-                        if logger:
-                            logger(f"Skipped {t}: no data after retries")
-                        skipped.append(t)
+            # First add what we got
+            for t in present:
+                price_data[t] = _downcast_ohlcv(split[t])
+            # Try a light-weight mini-batch rescue for the missing ones before per-ticker
+            missing = [t for t in chunk if t not in present]
+            missing = _rescue_missing_in_minibatches(missing, price_data, tries=3, mini_size=8, sleep_base=0.8)
+            # Any still missing -> per-ticker fallback with retries (last resort)
+            for t in list(missing):
+                got = False
+                for attempt in range(max_retries):
+                    try:
+                        df_t = yf.download(
+                            t, period=period, interval=interval,
+                            progress=False, threads=False, auto_adjust=False
+                        )
+                        if not df_t.empty and 'Close' in df_t.columns:
+                            price_data[t] = _downcast_ohlcv(df_t)
+                            got = True
+                            if logger:
+                                logger(f"Recovered {t} via fallback")
+                            break
+                    except Exception:
+                        sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                        time.sleep(sleep_s)
+                        continue
+                if not got:
+                    if logger:
+                        logger(f"Skipped {t}: no data after retries")
+                    skipped.append(t)
         else:
             # Single ticker returned (or completely empty)
             if not df.empty and 'Close' in df.columns:
@@ -924,6 +1011,83 @@ def fetch_price_data_streaming(
     if logger:
         logger(f"Prepared {len(tickers)} symbols (chunk_size={chunk_size}, max_workers={max_workers})")
 
+    # --- Helpers (streaming) to rescue missing tickers in small mini-batches ---
+    def _download_batch_yf_stream(batch):
+        import yfinance as yf
+        import pandas as pd
+        df = yf.download(
+            batch,
+            period=period,
+            interval=interval,
+            group_by="ticker",
+            progress=False,
+            threads=False,
+            auto_adjust=False,
+        )
+        try:
+            if isinstance(df.columns, pd.MultiIndex):
+                new_levels = []
+                for level in range(df.columns.nlevels):
+                    vals = list(df.columns.get_level_values(level))
+                    vals_norm = [str(v).strip() if isinstance(v, str) else v for v in vals]
+                    new_levels.append(pd.Index(vals_norm))
+                df.columns = pd.MultiIndex.from_arrays(new_levels)
+            else:
+                df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
+        except Exception:
+            pass
+        return df
+
+    def _split_multi_ticker_df_simple_stream(df, want=None):
+        if not isinstance(df.columns, pd.MultiIndex):
+            return {}
+        out = {}
+        levels = [0, 1] if df.columns.nlevels == 2 else list(range(df.columns.nlevels))
+        for lvl in levels:
+            tickers_here = [x for x in df.columns.get_level_values(lvl) if isinstance(x, str)]
+            seen = set()
+            ordered = []
+            for t in tickers_here:
+                if t not in seen:
+                    seen.add(t)
+                    ordered.append(t)
+            for t in ordered:
+                try:
+                    sub = df.xs(t, axis=1, level=lvl)
+                    if 'Close' in sub.columns:
+                        out[str(t)] = sub
+                except Exception:
+                    continue
+        if want:
+            want_set = set(want)
+            out = {k: v for k, v in out.items() if k in want_set}
+        return out
+
+    def _rescue_missing_in_minibatches_stream(missing_list, add_to_dict, tries=3, mini_size=8, sleep_base=0.8):
+        import time, random
+        if not missing_list:
+            return []
+        for attempt in range(tries):
+            for i in range(0, len(missing_list), mini_size):
+                mb = missing_list[i:i+mini_size]
+                try:
+                    df_mb = _download_batch_yf_stream(mb)
+                    if isinstance(df_mb, pd.DataFrame) and not df_mb.empty and isinstance(df_mb.columns, pd.MultiIndex):
+                        split = _split_multi_ticker_df_simple_stream(df_mb, want=mb)
+                        for t, sub in split.items():
+                            try:
+                                add_to_dict[t] = _downcast_ohlcv(sub)
+                            except Exception:
+                                continue
+                except Exception:
+                    pass
+                time.sleep(sleep_base * (0.5 + random.random()))
+            remaining = [t for t in missing_list if t not in add_to_dict]
+            if not remaining:
+                return []
+            missing_list = remaining
+        return missing_list
+
     def fetch_chunk(chunk):
         if logger:
             logger(f"Downloading chunk of {len(chunk)} symbols…")
@@ -969,7 +1133,7 @@ def fetch_price_data_streaming(
     def process_chunk(chunk, df):
         # Scale fallback budget with chunk length so big chunks don't exhaust too fast
         fallback_budget_s = max(60.0, 1.0 * len(chunk))
-        per_ticker_attempts = 3
+        per_ticker_attempts = 4
         deadline = time.time() + fallback_budget_s
         added, skipped_local = {}, []
         if df is None:
@@ -1009,18 +1173,19 @@ def fetch_price_data_streaming(
         import pandas as pd
         if isinstance(df.columns, pd.MultiIndex):
             split = _split_multi_ticker_df(df, chunk)
-            # Add everything we actually got back from Yahoo first
+            # Add what we already received
             for t, sub in split.items():
                 try:
                     added[t] = _downcast_ohlcv(sub)
                 except Exception:
                     continue
-
-            # Now, only attempt fallback for symbols from our chunk that weren't present
+            # Try a mini-batch rescue for the missing ones first
             present = set(split.keys())
-            for t in chunk:
-                if t in present:
-                    continue
+            missing = [t for t in chunk if t not in present]
+            if time.time() <= deadline:
+                missing = _rescue_missing_in_minibatches_stream(missing, added, tries=3, mini_size=8, sleep_base=0.8)
+            # Any still missing -> per-ticker last resort within remaining budget
+            for t in list(missing):
                 got = False
                 if time.time() <= deadline:
                     for attempt in range(per_ticker_attempts):
@@ -1079,7 +1244,7 @@ def fetch_price_data_streaming(
 
     from concurrent.futures import wait, FIRST_COMPLETED
 
-    chunk_timeout = 180  # seconds watchdog per chunk (raised to reduce mass skips)
+    chunk_timeout = 240  # seconds watchdog per chunk (raised further to allow mini-batch rescues)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         attempts = {tuple(ch): 0 for ch in chunks}
@@ -2160,6 +2325,8 @@ def run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_pri
             interval="1d",
             chunk_size=sp_chunk,
             max_workers=parallel_workers,
+            max_retries=max_retries if 'max_retries' in locals() else 3,
+            retry_sleep=1.2,
             logger=sp_log,
             progress_cb=progress_cb,
             per_chunk_cb=per_chunk_cb,
@@ -2281,7 +2448,7 @@ if st.sidebar.button("Run Nasdaq Scan"):
 
         # Use smaller chunks and more workers for better throughput on large universes
         ndq_chunk = 60 if use_parallel else 50
-        ndq_workers = max(6, parallel_workers) if use_parallel else 1
+        ndq_workers = max(4, min(parallel_workers, 6)) if use_parallel else 1
 
         def progress_cb(done, total):
             if total:
