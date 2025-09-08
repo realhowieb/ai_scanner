@@ -968,8 +968,8 @@ def fetch_price_data_streaming(
 
     def process_chunk(chunk, df):
         # Scale fallback budget with chunk length so big chunks don't exhaust too fast
-        fallback_budget_s = max(30.0, 0.5 * len(chunk))
-        per_ticker_attempts = 2
+        fallback_budget_s = max(60.0, 1.0 * len(chunk))
+        per_ticker_attempts = 3
         deadline = time.time() + fallback_budget_s
         added, skipped_local = {}, []
         if df is None:
@@ -1079,7 +1079,7 @@ def fetch_price_data_streaming(
 
     from concurrent.futures import wait, FIRST_COMPLETED
 
-    chunk_timeout = 120  # seconds watchdog per chunk
+    chunk_timeout = 180  # seconds watchdog per chunk (raised to reduce mass skips)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         attempts = {tuple(ch): 0 for ch in chunks}
@@ -1156,6 +1156,12 @@ def fetch_price_data_streaming(
                         progress_cb(processed, total)
                     except Exception:
                         pass
+
+                # Add a small throttle after each completed chunk to ease rate limits
+                try:
+                    time.sleep(0.2)  # small inter-chunk throttle to avoid rate-limits
+                except Exception:
+                    pass
 
     return price_data, skipped
 
@@ -1244,30 +1250,33 @@ def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return tr.ewm(alpha=1/period, adjust=False).mean()
 
 def _rs_20d_vs_spy(df_ticker: pd.DataFrame, df_spy: pd.DataFrame) -> float:
-    """20-trading-day relative strength vs SPY in percent.
-    Robust to index misalignment and missing days; uses pct_change(20) on aligned closes.
+    """Relative strength vs SPY in percent over up to the last 20 trading days.
+    If fewer than 21 points are available for either series, fall back to 10 or 5 days.
+    Robust to index misalignment and missing days.
     """
     try:
         ct = pd.Series(df_ticker['Close']).astype(float)
         cs = pd.Series(df_spy['Close']).astype(float)
-        # Align on the union of dates and forward-fill to handle holidays/missing prints
+        # Align on union of dates and ffill to handle gaps/holidays
         idx = ct.index.union(cs.index)
         ct = ct.reindex(idx).ffill()
         cs = cs.reindex(idx).ffill()
-        # Require at least 21 observations to compute a 20-day change
-        if ct.notna().sum() < 21 or cs.notna().sum() < 21:
+        if ct.dropna().empty or cs.dropna().empty:
             return np.nan
-        rt = ct.pct_change(20)
-        rs = cs.pct_change(20)
-        # Evaluate up to the last date available for the ticker, drop NaNs
-        last_date = df_ticker.index[-1]
-        rel = (rt - rs).loc[:last_date].dropna()
-        if rel.empty:
-            return np.nan
-        return round(float(rel.iloc[-1] * 100), 2)
+        # Choose the largest feasible lookback from [20, 10, 5]
+        for lb in (20, 10, 5):
+            # need lb+1 observations to compute pct_change(lb)
+            if ct.notna().sum() >= lb + 1 and cs.notna().sum() >= lb + 1:
+                rt = ct.pct_change(lb)
+                rs = cs.pct_change(lb)
+                # evaluate at the last available date of the ticker
+                last_date = df_ticker.index[-1]
+                rel = (rt - rs).loc[:last_date].dropna()
+                if not rel.empty:
+                    return round(float(rel.iloc[-1] * 100), 2)
+        return np.nan
     except Exception:
         return np.nan
-
 
 
 # --- Database (Postgres first; fallback to SQLite) ---
@@ -1286,6 +1295,11 @@ st.session_state["show_diagnostics_ui"] = show_diagnostics_ui
 from pathlib import Path
 from sqlalchemy import create_engine, text
 
+try:
+    from streamlit.runtime.secrets import StreamlitSecretNotFoundError
+except Exception:
+    class StreamlitSecretNotFoundError(Exception):
+        pass
 # Prefer hosted Postgres/Neon/Supabase via DB_URL secret/env; fallback to local SQLite file
 
 def _normalize_postgres_url(url: str) -> str:
@@ -1304,7 +1318,15 @@ def _normalize_postgres_url(url: str) -> str:
 
 def _build_engine():
     # 1) Try DB_URL from env or secrets; also accept DATABASE_URL
-    raw_url = os.getenv("DB_URL") or os.getenv("DATABASE_URL") or st.secrets.get("DB_URL", None)
+    raw_url = os.getenv("DB_URL") or os.getenv("DATABASE_URL")
+    if not raw_url:
+        try:
+            # Accessing st.secrets can raise if secrets.toml doesn't exist
+            raw_url = st.secrets.get("DB_URL", None)  # type: ignore[attr-defined]
+        except StreamlitSecretNotFoundError:
+            raw_url = None
+        except Exception:
+            raw_url = None
     if raw_url:
         db_url = _normalize_postgres_url(raw_url)
         try:
@@ -1317,10 +1339,16 @@ def _build_engine():
                 return create_engine(alt, pool_pre_ping=True)
             raise
         except Exception as e:
-            # Any other engine error -> warn and fall back to SQLite
             st.warning(f"Postgres engine failed: {e}. Falling back to SQLite.")
     # 2) Fallback to SQLite (local file)
-    db_path = os.getenv("DB_PATH") or st.secrets.get("DB_PATH", "scanner.sqlite")
+    db_path = os.getenv("DB_PATH")
+    if not db_path:
+        try:
+            db_path = st.secrets.get("DB_PATH", "scanner.sqlite")  # type: ignore[attr-defined]
+        except StreamlitSecretNotFoundError:
+            db_path = "scanner.sqlite"
+        except Exception:
+            db_path = "scanner.sqlite"
     try:
         p = Path(db_path)
         if p.parent and str(p.parent) not in (".", ""):
@@ -2157,7 +2185,7 @@ def run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_pri
             "S&P 500",
             universe_before=uni_before,
             universe_after=uni_after,
-            chunk_size=parallel_chunk,
+            chunk_size=sp_chunk,
             workers=parallel_workers,
             downloaded_count=downloaded_count,
             skipped_count=len(skipped),
@@ -2249,10 +2277,11 @@ if st.sidebar.button("Run Nasdaq Scan"):
         progress = st.progress(0)
         live_table = st.empty()
         status = st.empty()
-
-        # Use a smaller chunk for better streaming granularity on large universe
-        ndq_chunk = max(100, min(parallel_chunk, 200))
         t0 = time.perf_counter()
+
+        # Use smaller chunks and more workers for better throughput on large universes
+        ndq_chunk = 60 if use_parallel else 50
+        ndq_workers = max(6, parallel_workers) if use_parallel else 1
 
         def progress_cb(done, total):
             if total:
@@ -2296,7 +2325,7 @@ if st.sidebar.button("Run Nasdaq Scan"):
                 period="60d",
                 interval="1d",
                 chunk_size=ndq_chunk,
-                max_workers=parallel_workers,
+                max_workers=ndq_workers,
                 logger=ndq_log,
                 progress_cb=progress_cb,
                 per_chunk_cb=per_chunk_cb,
@@ -2323,10 +2352,10 @@ if st.sidebar.button("Run Nasdaq Scan"):
                 universe_before=uni_before,
                 universe_after=uni_after,
                 chunk_size=ndq_chunk if use_parallel else 50,
-                workers=parallel_workers if use_parallel else 1,
+                workers=ndq_workers if use_parallel else 1,
                 downloaded_count=downloaded_count,
                 skipped_count=len(skipped),
-                elapsed_s=t1 - t0,
+                elapsed_s=(t1 - t0),
             )
             ndq_render()
 
