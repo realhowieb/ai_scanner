@@ -11,3 +11,5 @@ matplotlib
 websockets
 pyppeteer
 mplfinance
+SQLAlchemy>=2.0
+psycopg[binary]

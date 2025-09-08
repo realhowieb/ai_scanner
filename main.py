@@ -8,10 +8,10 @@ import mplfinance as mpf
 from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
-
+from zipfile import ZipFile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
-
+import random
 import time
 import warnings
 
@@ -20,6 +20,112 @@ use_parallel = True        # set False to force batch mode
 parallel_chunk = 800       # tickers per worker in parallel mode
 parallel_workers = 4       # number of worker threads for chunked downloads
 
+# -- DB Helpers --
+# === Persistence (SQLite) ===
+import os, json, sqlite3
+
+DB_PATH = st.secrets.get("DB_PATH", "scanner.sqlite")
+
+def _db_conn():
+    # check_same_thread=False to allow Streamlit callbacks/threads to write
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
+
+def init_db():
+    with _db_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_type TEXT NOT NULL,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            universe_before INTEGER,
+            universe_after INTEGER,
+            downloaded_count INTEGER,
+            skipped_count INTEGER,
+            elapsed_s REAL,
+            params_json TEXT
+        )""")
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            ticker TEXT,
+            latest_close REAL,
+            prev_20d_max REAL,
+            breakout_pct REAL,
+            volume TEXT,
+            rsi REAL,
+            macd REAL,
+            macd_signal REAL,
+            atr REAL,
+            rs20 REAL,
+            FOREIGN KEY(run_id) REFERENCES runs(id)
+        )""")
+        conn.commit()
+
+def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
+    """Persist one scan (header in 'runs' + rows in 'results'). Returns run_id."""
+    init_db()
+    with _db_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO runs
+               (run_type, universe_before, universe_after, downloaded_count, skipped_count, elapsed_s, params_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                run_type,
+                int(meta.get("universe_before", 0)),
+                int(meta.get("universe_after", 0)),
+                int(meta.get("downloaded_count", 0)),
+                int(meta.get("skipped_count", 0)),
+                float(meta.get("elapsed_s", 0.0)),
+                json.dumps(meta.get("params", {})),
+            ),
+        )
+        run_id = cur.lastrowid
+
+        if results_df is not None and not results_df.empty:
+            df = results_df.copy()
+            df["run_id"] = run_id
+            def _col(df, name): return df[name] if name in df.columns else np.nan
+            out = pd.DataFrame({
+                "run_id": df["run_id"],
+                "ticker": _col(df, "Ticker"),
+                "latest_close": _col(df, "Latest Close"),
+                "prev_20d_max": _col(df, "Previous 20d Max"),
+                "breakout_pct": _col(df, "Breakout %"),
+                "volume": _col(df, "Volume"),
+                "rsi": _col(df, "RSI(14)"),
+                "macd": _col(df, "MACD"),
+                "macd_signal": _col(df, "MACD Signal"),
+                "atr": _col(df, "ATR(14)"),
+                "rs20": _col(df, "RS 20d vs SPY (%)"),
+            })
+            out.to_sql("results", conn, if_exists="append", index=False)
+        conn.commit()
+        return run_id
+
+def list_runs(limit: int = 200) -> pd.DataFrame:
+    init_db()
+    with _db_conn() as conn:
+        return pd.read_sql_query(
+            "SELECT id, run_type, started_at, universe_before, universe_after, "
+            "downloaded_count, skipped_count, elapsed_s FROM runs "
+            "ORDER BY id DESC LIMIT ?",
+            conn, params=(limit,)
+        )
+
+def load_run_results(run_id: int) -> pd.DataFrame:
+    init_db()
+    with _db_conn() as conn:
+        return pd.read_sql_query(
+            "SELECT ticker AS 'Ticker', latest_close AS 'Latest Close', "
+            "prev_20d_max AS 'Previous 20d Max', breakout_pct AS 'Breakout %', "
+            "volume AS 'Volume', rsi AS 'RSI(14)', macd AS 'MACD', "
+            "macd_signal AS 'MACD Signal', atr AS 'ATR(14)', rs20 AS 'RS 20d vs SPY (%)' "
+            "FROM results WHERE run_id=? ORDER BY CAST([Breakout %] AS REAL) DESC",
+            conn, params=(run_id,)
+        )
 
 # --- Ticker normalization helpers ---
 import re
@@ -41,6 +147,7 @@ def normalize_ticker(sym: str) -> str:
     s = s.replace(" ", "")
     return s
 
+
 def sanitize_ticker_list(tickers):
     seen = set()
     cleaned = []
@@ -55,6 +162,48 @@ def sanitize_ticker_list(tickers):
             seen.add(s)
             cleaned.append(s)
     return cleaned
+
+# --- Derivative/Problem instrument filters (Units / Warrants / Rights) ---
+# Many raw universes contain SPAC Units (U), Warrants (W/WS/WT), or Rights (R)
+# which frequently cause Yahoo 404/no-data. We filter those out by symbol pattern.
+
+def _looks_like_unit_warrant_right(sym: str) -> bool:
+    s = normalize_ticker(sym)
+    if not s:
+        return False
+    # Do not block genuine one-letter tickers like 'W'
+    if len(s) == 1:
+        return False
+    # Dash-separated suffix token, e.g., ABC-WS, ABC-WT, ABC-U, ABC-R
+    parts = s.split('-')
+    last = parts[-1]
+    if last in {"U", "W", "WS", "WT", "R"}:
+        # Allow exception: the entire symbol 'W' is legit, but handled above by len==1
+        return True
+    # SPAC-style without dash, e.g., ABCU, ABCW, ABCR
+    if s.endswith(('U', 'W', 'R')) and len(s) > 1:
+        # Avoid false positive for genuine single-letter 'W' already excluded
+        return True
+    return False
+
+# --- Filter Ticker Helper ---
+def filter_problem_tickers(tickers):
+    out = []
+    for t in tickers:
+        s = normalize_ticker(t)
+        if not s:
+            continue
+        # Units/Warrants/ Rights
+        if _looks_like_unit_warrant_right(s):
+            continue
+        # Preferreds like ABC-PA, ABC-PB
+        if re.search(r"-P[A-Z]$", s):
+            continue
+        # When-issued like ABC.WI
+        if s.endswith(".WI"):
+            continue
+        out.append(s)
+    return out
 
 # --- US-only filter ---
 def filter_us_tickers(tickers):
@@ -138,6 +287,15 @@ def new_log_panel(title: str = "Diagnostics Log", key: str = None, expanded: boo
 def _noop(*args, **kwargs):
     return None
 
+# --- Download Zip Button ---
+def download_zip_button(label: str, files: dict, filename: str = "scan_bundle.zip"):
+    """files: dict[name] = CSV string"""
+    buf = io.BytesIO()
+    with ZipFile(buf, 'w') as zf:
+        for name, csv_data in files.items():
+            zf.writestr(name, csv_data)
+    st.download_button(label, data=buf.getvalue(), file_name=filename, mime='application/zip')
+
 # --- Gap / Unusual Volume Scanner ---
 def gap_unusual_volume_scanner(price_data):
     """
@@ -174,59 +332,96 @@ def gap_unusual_volume_scanner(price_data):
     else:
         return pd.DataFrame(columns=['Ticker', 'Prev Close', 'Today Open', 'Today Close', 'Gap %', 'Today Vol', 'Avg 20d Vol', 'Unusual Vol (>2x avg)'])
 
-def premarket_scan(tickers):
+def premarket_scan(tickers, progress_cb=None, per_row_cb=None):
     """
     Perform a pre-market scan for a list of tickers.
+    Streams results via per_row_cb as each qualifying ticker is found, and progress via progress_cb.
     Returns a DataFrame with columns: Ticker, Premarket First Price, Premarket Last Price, Premarket % Change.
     """
     import pandas as pd
     import yfinance as yf
     results = []
+    total = len(tickers)
+    done = 0
     for ticker in tickers:
         try:
             stock = yf.Ticker(ticker)
             df = stock.history(period="1d", interval="5m", prepost=True)
             if df.empty or "Close" not in df.columns:
+                done += 1
+                if progress_cb:
+                    try:
+                        progress_cb(done, total)
+                    except Exception:
+                        pass
                 continue
-            # Pre-market session is before 09:30:00 in NY time
-            # yfinance returns index in UTC, so convert to US/Eastern and filter
+            # Pre-market session is before 09:30:00 in NY time (df index is UTC)
             df_local = df.copy()
             if not df_local.index.tz:
                 df_local.index = df_local.index.tz_localize("UTC")
             df_local.index = df_local.index.tz_convert("America/New_York")
             premarket_df = df_local[df_local.index.time < pd.to_datetime("09:30:00").time()]
             if premarket_df.empty:
+                done += 1
+                if progress_cb:
+                    try:
+                        progress_cb(done, total)
+                    except Exception:
+                        pass
                 continue
             first_price = premarket_df["Close"].iloc[0].item()
             last_price = premarket_df["Close"].iloc[-1].item()
             pct_change = ((last_price - first_price) / first_price) * 100 if first_price != 0 else 0.0
-            results.append({
+            row = {
                 "Ticker": ticker,
                 "Premarket First Price": round(first_price, 4),
                 "Premarket Last Price": round(last_price, 4),
-                "Premarket % Change": round(pct_change, 2)
-            })
+                "Premarket % Change": round(pct_change, 2),
+            }
+            results.append(row)
+            if per_row_cb:
+                try:
+                    per_row_cb(row)
+                except Exception:
+                    pass
         except Exception:
-            continue
+            pass
+        finally:
+            done += 1
+            if progress_cb:
+                try:
+                    progress_cb(done, total)
+                except Exception:
+                    pass
     if results:
         return pd.DataFrame(results)
     else:
         return pd.DataFrame(columns=["Ticker", "Premarket First Price", "Premarket Last Price", "Premarket % Change"])
 
-# Post-market scan function
-def postmarket_scan(tickers):
+# Post-market scan function (streaming)
+
+def postmarket_scan(tickers, progress_cb=None, per_row_cb=None):
     """
     Perform a post-market scan for a list of tickers.
+    Streams results via per_row_cb as each qualifying ticker is found, and progress via progress_cb.
     Returns a DataFrame with columns: Ticker, Postmarket First Price, Postmarket Last Price, Postmarket % Change.
     """
     import pandas as pd
     import yfinance as yf
     results = []
+    total = len(tickers)
+    done = 0
     for ticker in tickers:
         try:
             stock = yf.Ticker(ticker)
             df = stock.history(period="1d", interval="5m", prepost=True)
             if df.empty or "Close" not in df.columns:
+                done += 1
+                if progress_cb:
+                    try:
+                        progress_cb(done, total)
+                    except Exception:
+                        pass
                 continue
             df_local = df.copy()
             if not df_local.index.tz:
@@ -235,18 +430,37 @@ def postmarket_scan(tickers):
             # Post-market session is >= 16:00:00
             post_df = df_local[df_local.index.time >= pd.to_datetime("16:00:00").time()]
             if post_df.empty:
+                done += 1
+                if progress_cb:
+                    try:
+                        progress_cb(done, total)
+                    except Exception:
+                        pass
                 continue
             first_price = post_df["Close"].iloc[0].item()
             last_price = post_df["Close"].iloc[-1].item()
             pct_change = ((last_price - first_price) / first_price) * 100 if first_price != 0 else 0.0
-            results.append({
+            row = {
                 "Ticker": ticker,
                 "Postmarket First Price": round(first_price, 4),
                 "Postmarket Last Price": round(last_price, 4),
                 "Postmarket % Change": round(pct_change, 2)
-            })
+            }
+            results.append(row)
+            if per_row_cb:
+                try:
+                    per_row_cb(row)
+                except Exception:
+                    pass
         except Exception:
-            continue
+            pass
+        finally:
+            done += 1
+            if progress_cb:
+                try:
+                    progress_cb(done, total)
+                except Exception:
+                    pass
     if results:
         return pd.DataFrame(results)
     else:
@@ -328,17 +542,41 @@ def fetch_trending_stocks():
 #Fetch and Save Nasdaq Tickers
 def fetch_and_save_nasdaq(file_path="nasdaq.txt"):
     try:
-        url = "ftp://ftp.nasdaqtrader.com/SymbolDirectory/nasdaqlisted.txt"
+        # Use HTTPS (FTP is often blocked/slow). Schema documented by Nasdaq Trader.
+        url = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
         df = pd.read_csv(url, sep='|')
 
-        # Clean up tickers to avoid floats/NaN
-        tickers = df['Symbol'].dropna().astype(str).tolist()
-        tickers = sanitize_ticker_list(tickers)
+        # 1) Drop the trailer row and rows without a proper Symbol
+        df = df[df['Symbol'].notna() & (df['Symbol'] != 'Symbol')]
 
+        # 2) Remove Nasdaq test issues and problematic instruments
+        #    - 'Test Issue' == 'Y' are synthetic symbols like ZAZZT, ZBZZT, ZCZZT, ZJZZT, ZWZZT, ZZZ, etc.
+        #    - Security Name containing Unit / Warrant / Right often maps to tickers Yahoo doesn't serve (e.g., YHNAU).
+        #    - Also filter out explicit Z*ZZT patterns as an extra guard.
+        df = df[df.get('Test Issue', 'N') != 'Y']
+        df = df[~df.get('Security Name', '').str.contains(r"\b(Unit|Warrant|Right)\b", case=False, na=False)]
+        df = df[~df['Symbol'].astype(str).str.match(r"^[A-Z]+Z{2,}T$", na=False)]
+
+        # 3) Optional: drop symbols flagged as deficient (Financial Status == 'D')
+        if 'Financial Status' in df.columns:
+            df = df[df['Financial Status'].fillna('N') != 'D']
+
+        # Normalize & dedupe
+        tickers = [normalize_ticker(t) for t in df['Symbol'].astype(str).tolist()]
+        tickers = sanitize_ticker_list(tickers)
+        tickers = filter_problem_tickers(tickers)
+
+        # Persist
         Path(file_path).write_text('\n'.join(tickers))
         return tickers
     except Exception as e:
-        st.error(f"Failed to fetch Nasdaq tickers: {e}")
+        st.warning(f"Failed to fetch Nasdaq tickers cleanly; falling back to any existing file. Error: {e}")
+        try:
+            p = Path(file_path)
+            if p.exists() and p.stat().st_size > 0:
+                return [normalize_ticker(line.split()[0]) for line in p.read_text().splitlines() if line.strip()]
+        except Exception:
+            pass
         return []
 
 # Load tickers
@@ -417,9 +655,9 @@ def fetch_price_data_batch(tickers, period="60d", interval="1d", batch_size=50):
             if isinstance(df.columns, pd.MultiIndex):
                 for ticker in batch:
                     if ticker in df.columns.get_level_values(0):
-                        subdf = df[ticker]
+                        subdf = df[ticker].copy()
                         if not subdf.empty and 'Close' in subdf.columns:
-                            price_data[ticker] = subdf
+                            price_data[ticker] = _downcast_ohlcv(subdf)
                         else:
                             skipped.append(ticker)
                     else:
@@ -427,7 +665,7 @@ def fetch_price_data_batch(tickers, period="60d", interval="1d", batch_size=50):
             else:
                 # Only one ticker
                 if not df.empty and 'Close' in df.columns:
-                    price_data[batch[0]] = df
+                    price_data[batch[0]] = _downcast_ohlcv(df)
                 else:
                     skipped.append(batch[0])
         except Exception:
@@ -435,46 +673,70 @@ def fetch_price_data_batch(tickers, period="60d", interval="1d", batch_size=50):
     return price_data, skipped
 
 # --- Robust splitter for multi-ticker DataFrames from yfinance ---
-def _split_multi_ticker_df(df, chunk):
-    """Return dict[ticker] -> DataFrame regardless of MultiIndex orientation.
-    yfinance sometimes returns MultiIndex with either level-0=ticker or level-0=field.
-    This helper tries both and returns only non-empty frames containing a 'Close' column.
-    """
+def _split_multi_ticker_df(df, chunk=None):
     import pandas as pd
     out = {}
+    if df is None or df.empty:
+        return out
+
+    # If not a MultiIndex, nothing to split
     if not isinstance(df.columns, pd.MultiIndex):
-        # Single ticker case already handled upstream; do nothing here.
         return out
 
-    lv0 = list(df.columns.levels[0])
-    lv1 = list(df.columns.levels[1]) if df.columns.nlevels > 1 else []
+    FIELDS = {"Open", "High", "Low", "Close", "Adj Close", "Volume"}
 
-    # Try orientation A: level-0 == ticker
-    tickers_lv0 = set(df.columns.get_level_values(0))
-    found_any = False
-    for t in chunk:
-        if t in tickers_lv0:
-            sub = df[t]
-            if not sub.empty and 'Close' in sub.columns:
-                out[t] = sub
-                found_any = True
-    if found_any:
-        return out
+    lvl0_vals = list(df.columns.get_level_values(0))
+    lvl1_vals = list(df.columns.get_level_values(1)) if df.columns.nlevels > 1 else []
 
-    # Try orientation B: level-1 == ticker (level-0=field: Open/High/...)
-    if df.columns.nlevels >= 2:
-        tickers_lv1 = set(df.columns.get_level_values(1))
-        for t in chunk:
-            if t in tickers_lv1:
+    def _harvest(level_as_ticker: int) -> dict:
+        got = {}
+        lvl = level_as_ticker
+        try:
+            tickers_here = [x for x in df.columns.get_level_values(lvl) if isinstance(x, str)]
+            # Preserve order & dedupe
+            seen = set()
+            ordered = []
+            for t in tickers_here:
+                if t not in seen:
+                    seen.add(t)
+                    ordered.append(t)
+            for t in ordered:
                 try:
-                    sub = df.xs(t, axis=1, level=1)
+                    sub = df.xs(t, axis=1, level=lvl).copy()
+                    if not sub.empty and any(col in sub.columns for col in ("Close", "close", "Adj Close")):
+                        # Normalize column names in case Yahoo lowercases or uses spaces
+                        cols = {c: c.title().replace("Adj close", "Adj Close") for c in sub.columns}
+                        sub.rename(columns=cols, inplace=True)
+                        got[str(t)] = sub
                 except Exception:
                     continue
-                if not sub.empty and 'Close' in sub.columns:
-                    out[t] = sub
+        except Exception:
+            pass
+        return got
+
+    # Heuristic A: level-1 looks like fields -> level-0 are tickers
+    if set(x for x in set(lvl1_vals) if isinstance(x, str)) & FIELDS:
+        out = _harvest(0)
         if out:
             return out
 
+    # Heuristic B: level-0 looks like fields -> level-1 are tickers
+    if set(x for x in set(lvl0_vals) if isinstance(x, str)) & FIELDS:
+        out = _harvest(1)
+        if out:
+            return out
+
+    # Last resort: try both orientations and intersect with requested chunk if provided
+    cand = {}
+    cand.update(_harvest(0))
+    cand.update(_harvest(1))
+    if cand:
+        if chunk:
+            subset = {t: cand[t] for t in cand.keys() if t in set(chunk)}
+            return subset if subset else cand
+        return cand
+
+    # Nothing matched cleanly
     return out
 
 # Parallel price data fetcher (ThreadPoolExecutor)
@@ -517,12 +779,26 @@ def fetch_price_data_parallel(
                     threads=False,        # we already parallelize chunks
                     auto_adjust=False     # keep raw OHLC for candlesticks
                 )
+                # Normalize column names once to avoid case/spacing surprises
+                try:
+                    if isinstance(df.columns, pd.MultiIndex):
+                        new_levels = []
+                        for level in range(df.columns.nlevels):
+                            vals = list(df.columns.get_level_values(level))
+                            vals_norm = [str(v).strip() if isinstance(v, str) else v for v in vals]
+                            new_levels.append(pd.Index(vals_norm))
+                        df.columns = pd.MultiIndex.from_arrays(new_levels)
+                    else:
+                        df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
+                except Exception:
+                    pass
                 return chunk, df
             except Exception:
                 if attempt < max_retries - 1:
                     if logger:
                         logger(f"Chunk retry {attempt+1}/{max_retries} after backoff {retry_sleep * (2 ** attempt):.1f}s")
-                    time.sleep(retry_sleep * (2 ** attempt))
+                    sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                    time.sleep(sleep_s)
                     continue
                 return chunk, None
 
@@ -550,13 +826,14 @@ def fetch_price_data_parallel(
                             progress=False, threads=False, auto_adjust=False
                         )
                         if not df_t.empty and 'Close' in df_t.columns:
-                            price_data[t] = df_t
+                            price_data[t] = _downcast_ohlcv(df_t)
                             got = True
                             if logger:
                                 logger(f"Recovered {t} via fallback")
                             break
                     except Exception:
-                        time.sleep(retry_sleep * (2 ** attempt))
+                        sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                        time.sleep(sleep_s)
                         continue
                 if not got:
                     if logger:
@@ -571,7 +848,7 @@ def fetch_price_data_parallel(
             present = set(split.keys())
             for t in chunk:
                 if t in present:
-                    price_data[t] = split[t]
+                    price_data[t] = _downcast_ohlcv(split[t])
                 else:
                     # Fallback per-ticker download with retries
                     got = False
@@ -582,13 +859,14 @@ def fetch_price_data_parallel(
                                 progress=False, threads=False, auto_adjust=False
                             )
                             if not df_t.empty and 'Close' in df_t.columns:
-                                price_data[t] = df_t
+                                price_data[t] = _downcast_ohlcv(df_t)
                                 got = True
                                 if logger:
                                     logger(f"Recovered {t} via fallback")
                                 break
                         except Exception:
-                            time.sleep(retry_sleep * (2 ** attempt))
+                            sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                            time.sleep(sleep_s)
                             continue
                     if not got:
                         if logger:
@@ -597,7 +875,7 @@ def fetch_price_data_parallel(
         else:
             # Single ticker returned (or completely empty)
             if not df.empty and 'Close' in df.columns:
-                price_data[chunk[0]] = df
+                price_data[chunk[0]] = _downcast_ohlcv(df)
             else:
                 t = chunk[0]
                 got = False
@@ -608,13 +886,14 @@ def fetch_price_data_parallel(
                             progress=False, threads=False, auto_adjust=False
                         )
                         if not df_t.empty and 'Close' in df_t.columns:
-                            price_data[t] = df_t
+                            price_data[t] = _downcast_ohlcv(df_t)
                             got = True
                             if logger:
                                 logger(f"Recovered {t} via fallback")
                             break
                     except Exception:
-                        time.sleep(retry_sleep * (2 ** attempt))
+                        sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                        time.sleep(sleep_s)
                         continue
                 if not got:
                     if logger:
@@ -664,129 +943,219 @@ def fetch_price_data_streaming(
                     threads=False,
                     auto_adjust=False,
                 )
+                # Normalize column names once to avoid case/spacing surprises
+                try:
+                    if isinstance(df.columns, pd.MultiIndex):
+                        new_levels = []
+                        for level in range(df.columns.nlevels):
+                            vals = list(df.columns.get_level_values(level))
+                            vals_norm = [str(v).strip() if isinstance(v, str) else v for v in vals]
+                            new_levels.append(pd.Index(vals_norm))
+                        df.columns = pd.MultiIndex.from_arrays(new_levels)
+                    else:
+                        df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
+                except Exception:
+                    pass
                 return chunk, df
             except Exception:
                 if attempt < max_retries - 1:
                     if logger:
                         logger(f"Chunk retry {attempt+1}/{max_retries} after backoff {retry_sleep * (2 ** attempt):.1f}s")
-                    time.sleep(retry_sleep * (2 ** attempt))
+                    sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                    time.sleep(sleep_s)
                     continue
                 return chunk, None
 
     def process_chunk(chunk, df):
+        # Scale fallback budget with chunk length so big chunks don't exhaust too fast
+        fallback_budget_s = max(30.0, 0.5 * len(chunk))
+        per_ticker_attempts = 2
+        deadline = time.time() + fallback_budget_s
         added, skipped_local = {}, []
         if df is None:
             if logger:
                 logger(f"Chunk failed; attempting per-ticker fallback for {len(chunk)} symbols…")
             for t in chunk:
+                if time.time() > deadline:
+                    # Out of time budget; skip the rest to keep UI moving
+                    remaining = [x for x in chunk if x not in added and x not in skipped_local]
+                    skipped_local.extend(remaining)
+                    if logger:
+                        logger(f"Fallback budget exceeded; skipped {len(remaining)} remaining symbols in chunk")
+                    break
                 got = False
-                for attempt in range(max_retries):
+                for attempt in range(per_ticker_attempts):
                     try:
                         df_t = yf.download(
                             t, period=period, interval=interval,
                             progress=False, threads=False, auto_adjust=False
                         )
                         if not df_t.empty and 'Close' in df_t.columns:
-                            added[t] = df_t
+                            added[t] = _downcast_ohlcv(df_t)
                             got = True
                             if logger:
                                 logger(f"Recovered {t} via fallback")
                             break
                     except Exception:
-                        time.sleep(retry_sleep * (2 ** attempt))
+                        sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                        time.sleep(sleep_s)
                         continue
                 if not got:
                     skipped_local.append(t)
                     if logger:
-                        logger(f"Skipped {t}: no data after retries")
+                        logger(f"Skipped {t}: no data after limited fallback")
             return added, skipped_local
 
         import pandas as pd
         if isinstance(df.columns, pd.MultiIndex):
             split = _split_multi_ticker_df(df, chunk)
+            # Add everything we actually got back from Yahoo first
+            for t, sub in split.items():
+                try:
+                    added[t] = _downcast_ohlcv(sub)
+                except Exception:
+                    continue
+
+            # Now, only attempt fallback for symbols from our chunk that weren't present
             present = set(split.keys())
             for t in chunk:
                 if t in present:
-                    added[t] = split[t]
-                else:
-                    # try single fallback
-                    got = False
-                    for attempt in range(max_retries):
+                    continue
+                got = False
+                if time.time() <= deadline:
+                    for attempt in range(per_ticker_attempts):
                         try:
                             df_t = yf.download(
                                 t, period=period, interval=interval,
                                 progress=False, threads=False, auto_adjust=False
                             )
                             if not df_t.empty and 'Close' in df_t.columns:
-                                added[t] = df_t
+                                added[t] = _downcast_ohlcv(df_t)
                                 got = True
                                 if logger:
                                     logger(f"Recovered {t} via fallback")
                                 break
                         except Exception:
-                            time.sleep(retry_sleep * (2 ** attempt))
+                            sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                            time.sleep(sleep_s)
                             continue
-                    if not got:
-                        skipped_local.append(t)
-                        if logger:
-                            logger(f"Skipped {t}: no data after retries")
-        else:
-            # Single ticker returned (or empty)
-            if not df.empty and 'Close' in df.columns:
-                added[chunk[0]] = df
-            else:
-                t = chunk[0]
-                got = False
-                for attempt in range(max_retries):
-                    try:
-                        df_t = yf.download(
-                            t, period=period, interval=interval,
-                            progress=False, threads=False, auto_adjust=False
-                        )
-                        if not df_t.empty and 'Close' in df_t.columns:
-                            added[t] = df_t
-                            got = True
-                            if logger:
-                                logger(f"Recovered {t} via fallback")
-                            break
-                    except Exception:
-                        time.sleep(retry_sleep * (2 ** attempt))
-                        continue
                 if not got:
                     skipped_local.append(t)
                     if logger:
-                        logger(f"Skipped {t}: no data after retries")
+                        logger(f"Skipped {t}: no data after limited fallback or budget")
+        else:
+            # Single ticker returned (or empty)
+            if not df.empty and 'Close' in df.columns:
+                added[chunk[0]] = _downcast_ohlcv(df)
+            else:
+                t = chunk[0]
+                got = False
+                if time.time() <= deadline:
+                    for attempt in range(per_ticker_attempts):
+                        try:
+                            df_t = yf.download(
+                                t, period=period, interval=interval,
+                                progress=False, threads=False, auto_adjust=False
+                            )
+                            if not df_t.empty and 'Close' in df_t.columns:
+                                added[t] = _downcast_ohlcv(df_t)
+                                got = True
+                                if logger:
+                                    logger(f"Recovered {t} via fallback")
+                                break
+                        except Exception:
+                            sleep_s = retry_sleep * (2 ** attempt) * (1 + random.random() * 0.25)
+                            time.sleep(sleep_s)
+                            continue
+                if not got:
+                    skipped_local.append(t)
+                    if logger:
+                        logger(f"Skipped {t}: no data after limited fallback or budget")
         return added, skipped_local
 
     chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     total = len(chunks)
     price_data, skipped = {}, []
 
+    from concurrent.futures import wait, FIRST_COMPLETED
+
+    chunk_timeout = 120  # seconds watchdog per chunk
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        fut_map = {executor.submit(fetch_chunk, ch): ch for ch in chunks}
+        attempts = {tuple(ch): 0 for ch in chunks}
+        fut_map = {}
+        start_time = {}
+
+        def submit_chunk(ch):
+            fut = executor.submit(fetch_chunk, ch)
+            fut_map[fut] = tuple(ch)
+            start_time[fut] = time.time()
+            return fut
+
+        for ch in chunks:
+            submit_chunk(ch)
+
         processed = 0
-        for fut in as_completed(fut_map):
-            ch = fut_map[fut]
-            try:
-                chunk, df = fut.result()
-            except Exception:
-                chunk, df = ch, None
-            added, skipped_local = process_chunk(chunk, df)
-            price_data.update(added)
-            skipped.extend(skipped_local)
-            processed += 1
+        while fut_map:
+            done, not_done = wait(list(fut_map.keys()), timeout=chunk_timeout, return_when=FIRST_COMPLETED)
 
-            if per_chunk_cb is not None:
-                try:
-                    per_chunk_cb(added)
-                except Exception:
-                    pass
+            if not done:
+                now = time.time()
+                for fut in list(not_done):
+                    ch_key = fut_map[fut]
+                    if now - start_time[fut] >= chunk_timeout:
+                        try:
+                            fut.cancel()
+                        except Exception:
+                            pass
+                        del start_time[fut]
+                        del fut_map[fut]
+                        attempts[ch_key] += 1
+                        if logger:
+                            logger(f"Watchdog: chunk {len(ch_key)} symbols timed out; attempt {attempts[ch_key]}/{max_retries}")
+                        if attempts[ch_key] <= max_retries:
+                            submit_chunk(list(ch_key))
+                        else:
+                            added, skipped_local = process_chunk(list(ch_key), None)
+                            price_data.update(added)
+                            skipped.extend(skipped_local)
+                            processed += 1
+                            if per_chunk_cb is not None:
+                                try:
+                                    per_chunk_cb(added)
+                                except Exception:
+                                    pass
+                            if progress_cb is not None:
+                                try:
+                                    progress_cb(processed, total)
+                                except Exception:
+                                    pass
+                continue
 
-            if progress_cb is not None:
+            for fut in done:
+                ch_key = fut_map.pop(fut)
+                start_time.pop(fut, None)
                 try:
-                    progress_cb(processed, total)
+                    chunk, df = fut.result()
                 except Exception:
-                    pass
+                    chunk, df = list(ch_key), None
+
+                added, skipped_local = process_chunk(chunk, df)
+                price_data.update(added)
+                skipped.extend(skipped_local)
+                processed += 1
+
+                if per_chunk_cb is not None:
+                    try:
+                        per_chunk_cb(added)
+                    except Exception:
+                        pass
+
+                if progress_cb is not None:
+                    try:
+                        progress_cb(processed, total)
+                    except Exception:
+                        pass
 
     return price_data, skipped
 
@@ -804,7 +1173,36 @@ def filter_tickers_by_price(price_data, min_price, max_price):
         if min_price <= price <= max_price:
             filtered.append(t)
     return filtered
+# --- Filter by Dollar Volume ---
+def filter_by_dollar_volume(price_data, min_dollar_vol=2_000_000):
+    """Return tickers whose latest dollar volume (Close * Volume) meets the threshold."""
+    keep = []
+    for t, df in price_data.items():
+        if df is None or df.empty:
+            continue
+        if {'Close', 'Volume'}.issubset(df.columns):
+            try:
+                c = float(df['Close'].iloc[-1])
+                v = float(df['Volume'].iloc[-1])
+                if c * v >= float(min_dollar_vol):
+                    keep.append(t)
+            except Exception:
+                continue
+    return keep
 
+def _downcast_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
+    """Reduce memory footprint for OHLCV frames."""
+    if df is None or df.empty:
+        return df
+    for c in ('Open','High','Low','Close'):
+        if c in df.columns:
+            df.loc[:, c] = pd.to_numeric(df[c], errors='coerce').astype('float32')
+    if 'Volume' in df.columns:
+        try:
+            df.loc[:, 'Volume'] = pd.to_numeric(df['Volume'], errors='coerce').astype('int32')
+        except Exception:
+            df.loc[:, 'Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
+    return df
 # Helper function to format large numbers
 def format_volume(v):
     if v >= 1_000_000:
@@ -814,8 +1212,270 @@ def format_volume(v):
     else:
         return str(v)
 
+# --- TA & SPY  Helpers
+@st.cache_data(ttl=3600)
+def get_spy_history(period="60d"):
+    return yf.download("SPY", period=period, interval="1d",
+                       progress=False, threads=False, auto_adjust=False)
+
+# --- Technical indicator helpers ---
+def _ema(series: pd.Series, span: int) -> pd.Series:
+    return series.ewm(span=span, adjust=False).mean()
+
+def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
+    delta = series.diff()
+    gain = (delta.clip(lower=0)).ewm(alpha=1/period, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1/period, adjust=False).mean()
+    rs = gain / loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+def _macd(series: pd.Series):
+    macd = _ema(series, 12) - _ema(series, 26)
+    signal = macd.ewm(span=9, adjust=False).mean()
+    hist = macd - signal
+    return macd, signal, hist
+
+def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    high, low, close = df['High'], df['Low'], df['Close']
+    prev_close = close.shift(1)
+    tr = pd.concat([(high - low).abs(),
+                    (high - prev_close).abs(),
+                    (low - prev_close).abs()], axis=1).max(axis=1)
+    return tr.ewm(alpha=1/period, adjust=False).mean()
+
+def _rs_20d_vs_spy(df_ticker: pd.DataFrame, df_spy: pd.DataFrame) -> float:
+    """20-trading-day relative strength vs SPY in percent.
+    Robust to index misalignment and missing days; uses pct_change(20) on aligned closes.
+    """
+    try:
+        ct = pd.Series(df_ticker['Close']).astype(float)
+        cs = pd.Series(df_spy['Close']).astype(float)
+        # Align on the union of dates and forward-fill to handle holidays/missing prints
+        idx = ct.index.union(cs.index)
+        ct = ct.reindex(idx).ffill()
+        cs = cs.reindex(idx).ffill()
+        # Require at least 21 observations to compute a 20-day change
+        if ct.notna().sum() < 21 or cs.notna().sum() < 21:
+            return np.nan
+        rt = ct.pct_change(20)
+        rs = cs.pct_change(20)
+        # Evaluate up to the last date available for the ticker, drop NaNs
+        last_date = df_ticker.index[-1]
+        rel = (rt - rs).loc[:last_date].dropna()
+        if rel.empty:
+            return np.nan
+        return round(float(rel.iloc[-1] * 100), 2)
+    except Exception:
+        return np.nan
+
+
+
+# --- Database (Postgres first; fallback to SQLite) ---
+import os, json, sqlite3
+import streamlit as st
+# --- Diagnostics toggle (define early so it's available everywhere) ---
+if "show_diagnostics_ui" not in st.session_state:
+    st.session_state["show_diagnostics_ui"] = False
+
+show_diagnostics_ui = st.sidebar.checkbox(
+    "Show Diagnostics",
+    value=st.session_state["show_diagnostics_ui"],
+    key="show_diagnostics_top",
+)
+st.session_state["show_diagnostics_ui"] = show_diagnostics_ui
+from pathlib import Path
+from sqlalchemy import create_engine, text
+
+# Prefer hosted Postgres/Neon/Supabase via DB_URL secret/env; fallback to local SQLite file
+
+def _normalize_postgres_url(url: str) -> str:
+    """Normalize postgres URL and ensure sslmode=require for Neon/Supabase."""
+    if not isinstance(url, str) or not url:
+        return url
+    # Accept old scheme postgres:// and rewrite to postgresql://
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    # Ensure sslmode=require if not present (case-insensitive)
+    if "postgresql://" in url or "postgresql+" in url:
+        if "sslmode=" not in url.lower():
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}sslmode=require"
+    return url
+
+def _build_engine():
+    # 1) Try DB_URL from env or secrets; also accept DATABASE_URL
+    raw_url = os.getenv("DB_URL") or os.getenv("DATABASE_URL") or st.secrets.get("DB_URL", None)
+    if raw_url:
+        db_url = _normalize_postgres_url(raw_url)
+        try:
+            # First try default driver (psycopg2 if installed)
+            return create_engine(db_url, pool_pre_ping=True)
+        except ModuleNotFoundError as e:
+            # psycopg2 not installed; retry with psycopg3 driver
+            if "psycopg2" in str(e):
+                alt = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+                return create_engine(alt, pool_pre_ping=True)
+            raise
+        except Exception as e:
+            # Any other engine error -> warn and fall back to SQLite
+            st.warning(f"Postgres engine failed: {e}. Falling back to SQLite.")
+    # 2) Fallback to SQLite (local file)
+    db_path = os.getenv("DB_PATH") or st.secrets.get("DB_PATH", "scanner.sqlite")
+    try:
+        p = Path(db_path)
+        if p.parent and str(p.parent) not in (".", ""):
+            p.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    return create_engine(f"sqlite:///{db_path}")
+
+engine = _build_engine()
+
+
+def _init_db():
+    """Create tables if they don't exist. Uses portable DDL across Postgres/SQLite."""
+    try:
+        with engine.begin() as conn:
+            dialect = engine.dialect.name
+            if dialect == "postgresql":
+                conn.execute(text(
+                    """
+                    CREATE TABLE IF NOT EXISTS runs (
+                        id BIGSERIAL PRIMARY KEY,
+                        run_type TEXT NOT NULL,
+                        started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        downloaded_count INTEGER,
+                        skipped_count INTEGER,
+                        elapsed_s DOUBLE PRECISION,
+                        params_json TEXT
+                    );
+                    """
+                ))
+                conn.execute(text(
+                    """
+                    CREATE TABLE IF NOT EXISTS results_json (
+                        run_id BIGINT REFERENCES runs(id) ON DELETE CASCADE,
+                        row_json TEXT
+                    );
+                    """
+                ))
+            else:  # sqlite
+                conn.execute(text(
+                    """
+                    CREATE TABLE IF NOT EXISTS runs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        run_type TEXT NOT NULL,
+                        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        downloaded_count INTEGER,
+                        skipped_count INTEGER,
+                        elapsed_s REAL,
+                        params_json TEXT
+                    );
+                    """
+                ))
+                conn.execute(text(
+                    """
+                    CREATE TABLE IF NOT EXISTS results_json (
+                        run_id INTEGER,
+                        row_json TEXT,
+                        FOREIGN KEY(run_id) REFERENCES runs(id)
+                    );
+                    """
+                ))
+    except Exception as e:
+        st.warning(f"Database init issue: {e}")
+
+
+_init_db()
+
+
+def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
+    """Persist a scan run and its rows; returns run id."""
+    params_json = json.dumps(meta.get("params", {}), ensure_ascii=False)
+    downloaded_count = int(meta.get("downloaded_count", 0))
+    skipped_count = int(meta.get("skipped_count", 0))
+    elapsed_s = float(meta.get("elapsed_s", 0.0))
+
+    with engine.begin() as conn:
+        dialect = engine.dialect.name
+        if dialect == "postgresql":
+            run_id = conn.execute(
+                text(
+                    """
+                    INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json)
+                    VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json)
+                    RETURNING id
+                    """
+                ),
+                {
+                    "run_type": run_type,
+                    "downloaded_count": downloaded_count,
+                    "skipped_count": skipped_count,
+                    "elapsed_s": elapsed_s,
+                    "params_json": params_json,
+                },
+            ).scalar_one()
+        else:
+            res = conn.execute(
+                text(
+                    """
+                    INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json)
+                    VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json)
+                    """
+                ),
+                {
+                    "run_type": run_type,
+                    "downloaded_count": downloaded_count,
+                    "skipped_count": skipped_count,
+                    "elapsed_s": elapsed_s,
+                    "params_json": params_json,
+                },
+            )
+            # sqlite lastrowid
+            run_id = res.lastrowid  # type: ignore[attr-defined]
+
+        # Store results as JSON rows for flexible schema
+        if results_df is not None and not results_df.empty:
+            records = [json.dumps(r, default=str) for r in results_df.to_dict(orient="records")]
+            conn.execute(
+                text("INSERT INTO results_json (run_id, row_json) VALUES (:run_id, :row_json)"),
+                [{"run_id": int(run_id), "row_json": r} for r in records],
+            )
+    return int(run_id)
+
+
+def list_runs(limit: int = 300) -> pd.DataFrame:
+    try:
+        with engine.begin() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT id, run_type, started_at, downloaded_count, skipped_count, elapsed_s FROM runs ORDER BY id DESC LIMIT :lim"
+                ),
+                {"lim": int(limit)},
+            ).mappings().all()
+        return pd.DataFrame(rows)
+    except Exception as e:
+        st.warning(f"Could not list runs: {e}")
+        return pd.DataFrame(columns=["id","run_type","started_at","downloaded_count","skipped_count","elapsed_s"])
+
+
+def load_run_results(run_id: int) -> pd.DataFrame:
+    try:
+        with engine.begin() as conn:
+            rows = conn.execute(
+                text("SELECT row_json FROM results_json WHERE run_id = :rid"),
+                {"rid": int(run_id)},
+            ).scalars().all()
+        if not rows:
+            return pd.DataFrame()
+        dicts = [json.loads(r) for r in rows]
+        return pd.DataFrame(dicts)
+    except Exception as e:
+        st.warning(f"Could not load run #{run_id}: {e}")
+        return pd.DataFrame()
+
 # Breakout scanner with formatted Volume
-def breakout_scanner(price_data, min_price=5, max_price=1000):
+def breakout_scanner(price_data, min_price=5, max_price=1000, include_ta: bool = False, spy_df: pd.DataFrame = None):
     results = []
     for ticker, df in price_data.items():
         if df.empty or len(df) < 21 or 'Close' not in df.columns:
@@ -825,30 +1485,50 @@ def breakout_scanner(price_data, min_price=5, max_price=1000):
             prev_max = df['Close'].iloc[-21:-1].max().item()
             latest_volume = df['Volume'].iloc[-1].item() if 'Volume' in df.columns else np.nan
             latest_volume_fmt = format_volume(latest_volume)
-        except:
+        except Exception:
             continue
         if min_price <= latest_close <= max_price and latest_close > prev_max:
             pct_breakout = (latest_close - prev_max) / prev_max * 100 if prev_max > 0 else np.nan
-            results.append({
+            row = {
                 'Ticker': ticker,
                 'Latest Close': latest_close,
                 'Previous 20d Max': prev_max,
                 'Breakout %': round(pct_breakout, 2),
                 'Volume': latest_volume_fmt
-            })
+            }
+            if include_ta:
+                try:
+                    rsi = _rsi(df['Close']).iloc[-1]
+                    macd, signal, hist = _macd(df['Close'])
+                    atr14 = _atr(df).iloc[-1]
+                    rs20 = _rs_20d_vs_spy(df, spy_df) if (spy_df is not None and 'Close' in spy_df.columns) else np.nan
+                    row.update({
+                        'RSI(14)': round(float(rsi), 2) if pd.notna(rsi) else np.nan,
+                        'MACD': round(float(macd.iloc[-1]), 4) if pd.notna(macd.iloc[-1]) else np.nan,
+                        'MACD Signal': round(float(signal.iloc[-1]), 4) if pd.notna(signal.iloc[-1]) else np.nan,
+                        'ATR(14)': round(float(atr14), 4) if pd.notna(atr14) else np.nan,
+                        'RS 20d vs SPY (%)': rs20,
+                    })
+                except Exception:
+                    pass
+            results.append(row)
     if results:
-        df_results = pd.DataFrame(results).sort_values('Breakout %', ascending=False).reset_index(drop=True)
+        return pd.DataFrame(results).sort_values('Breakout %', ascending=False).reset_index(drop=True)
     else:
-        df_results = pd.DataFrame(columns=['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume'])
-    return df_results
+        cols = ['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume']
+        if include_ta:
+            cols += ['RSI(14)', 'MACD', 'MACD Signal', 'ATR(14)', 'RS 20d vs SPY (%)']
+        return pd.DataFrame(columns=cols)
 
 # Automatic scanner function for full S&P 600 tickers or uploaded tickers
 def auto_scan(min_price=5, max_price=1000):
     tickers = st.session_state.get("tickers", [])
     price_data, skipped = fetch_price_data_batch(tickers, period="60d", interval="1d", batch_size=50)
     filtered = filter_tickers_by_price(price_data, min_price, max_price)
+    liquid = filter_by_dollar_volume(price_data, min_dollar_vol)
+    filtered = [t for t in filtered if t in liquid]
     filtered_data = {t: price_data[t] for t in filtered if t in price_data}
-    breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+    breakout_df = breakout_scanner(filtered_data, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
     # Save CSV automatically
     if not breakout_df.empty:
         breakout_df.to_csv("breakout_results.csv", index=False)
@@ -858,22 +1538,35 @@ def auto_scan(min_price=5, max_price=1000):
 # Streamlit UI
 st.title("Money Moves Breakout Scanner")
 
-
+# --- Filter by Price ---
 st.sidebar.markdown("### Filter by Price")
 min_price = st.sidebar.number_input("Minimum Price ($)", min_value=0.0, value=5.0, step=0.1)
 max_price = st.sidebar.number_input("Maximum Price ($)", min_value=0.0, value=1000.0, step=1.0)
 
+# --- Liquidity ---
+st.sidebar.markdown("### Liquidity Filter")
+min_dollar_vol = st.sidebar.slider(
+    "Minimum Dollar Volume (USD)",
+    min_value=0, max_value=50_000_000, value=2_000_000, step=250_000,
+    help="Filters tickers whose latest Close*Volume is below this threshold."
+)
 
-# Upload Ticker Files
+# --- Analytics ---
+st.sidebar.markdown("### Analytics")
+include_ta = st.sidebar.checkbox("Include TA columns (RSI/MACD/ATR/RS vs SPY)", value=False)
+spy_df = get_spy_history("60d") if include_ta else None
+if include_ta and (spy_df is None or spy_df.empty or 'Close' not in spy_df.columns):
+    st.warning("TA enabled, but SPY data unavailable — RS 20d vs SPY will be blank.")
+
+# --- Upload Ticker Files ---
 st.sidebar.markdown("### Upload Tickers")
 uploaded_file = st.sidebar.file_uploader("Upload tickers file (.txt or .csv)", type=['txt', 'csv'])
 
-# Sidebar checkbox for gap/unusual volume filter
+# --- Sidebar checkbox for gap/unusual volume filter ---
 st.sidebar.markdown("### Sort Modifier")
 apply_gap_filter = st.sidebar.checkbox("Apply Gap / Unusual Volume Filter", value=True)
 us_only = st.sidebar.checkbox("US-only filter", value=True)
 # --- Diagnostics toggle ---
-show_diagnostics_ui = st.sidebar.checkbox("Show Diagnostics", value=False)
 
 
 
@@ -883,12 +1576,14 @@ if uploaded_file is not None:
             content = uploaded_file.getvalue().decode("utf-8")
             lines = content.splitlines()
             tickers = sanitize_ticker_list(lines)
+            tickers = filter_problem_tickers(tickers)
         else:
             df_uploaded = pd.read_csv(uploaded_file, header=None)
             raw = []
             for col in df_uploaded.columns:
                 raw.extend([str(t) for t in df_uploaded[col] if str(t).strip()])
             tickers = sanitize_ticker_list(raw)
+            tickers = filter_problem_tickers(tickers)
         st.session_state.tickers = tickers
 
         uni_before = len(st.session_state.tickers)
@@ -958,6 +1653,7 @@ else:
         st.session_state.tickers = load_sp600_tickers()
         if us_only:
             st.session_state.tickers = filter_us_tickers(st.session_state.tickers)
+        st.session_state.tickers = filter_problem_tickers(st.session_state.tickers)
 
 # New: Stock ticker search input and display
 st.subheader("Search Stock by Ticker")
@@ -988,7 +1684,7 @@ if search_ticker:
                 st.pyplot(fig)
 
             # Run breakout scan on this single ticker
-            breakout_df = breakout_scanner({search_ticker: hist}, min_price, max_price)
+            breakout_df = breakout_scanner({search_ticker: hist}, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
             if breakout_df.empty:
                 st.info(f"No breakout detected for {search_ticker} based on the last 60 days data.")
             else:
@@ -1039,6 +1735,8 @@ if st.sidebar.button("Run Hot Stocks Scan"):
                 )
                 hot_render()
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
+            liquid = filter_by_dollar_volume(price_data, min_dollar_vol)
+            filtered = [t for t in filtered if t in liquid]
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
             # Gap / Unusual Volume Filter
             if apply_gap_filter:
@@ -1052,7 +1750,7 @@ if st.sidebar.button("Run Hot Stocks Scan"):
                         file_name="gap_unusual_volume_results.csv",
                         mime="text/csv"
                     )
-            breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+            breakout_df = breakout_scanner(filtered_data, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
             if not breakout_df.empty:
                 breakout_df.to_csv("breakout_results_hot.csv", index=False)
 
@@ -1064,6 +1762,28 @@ if st.sidebar.button("Run Hot Stocks Scan"):
     else:
         st.success(f"Found {len(breakout_df)} breakout candidates among hot stocks.")
         st.dataframe(breakout_df)
+        # --- DB Helper ---
+        # Persist run to DB
+        meta = {
+            "universe_before": uni_before,
+            "universe_after": uni_after,
+            "downloaded_count": downloaded_count,
+            "skipped_count": len(skipped),
+            "elapsed_s": (t1 - t0),
+            "params": {
+                "min_price": float(min_price),
+                "max_price": float(max_price),
+                "include_ta": bool(include_ta),
+                "min_dollar_vol": int(min_dollar_vol),
+                "use_parallel": bool(use_parallel),
+                "parallel_workers": int(parallel_workers),
+                "parallel_chunk": int(parallel_chunk if use_parallel else 50),
+                "us_only": bool(us_only),
+                "apply_gap_filter": bool(apply_gap_filter),
+            },
+        }
+        run_id = save_run("hot", meta, breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True))
+        st.caption(f"Saved to history as run #{run_id}")
 
         st.download_button(
             "Download Hot Stocks Breakout Results",
@@ -1134,6 +1854,8 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
                 )
                 ma_render()
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
+            liquid = filter_by_dollar_volume(price_data, min_dollar_vol)
+            filtered = [t for t in filtered if t in liquid]
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
             # Gap / Unusual Volume Filter
             if apply_gap_filter:
@@ -1147,7 +1869,7 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
                         file_name="gap_unusual_volume_results.csv",
                         mime="text/csv"
                     )
-            breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+            breakout_df = breakout_scanner(filtered_data, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
 
             if skipped:
                 st.warning(f"Skipped {len(skipped)} most active tickers due to missing data or delisted: {', '.join(skipped[:10])}...")
@@ -1157,7 +1879,31 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
             else:
                 st.success(f"Found {len(breakout_df)} breakout candidates among most active stocks.")
                 st.dataframe(breakout_df)
+                # --- DB Most Active ---
+                # Persist run to DB
+                meta = {
+                    "universe_before": uni_before,
+                    "universe_after": uni_after,
+                    "downloaded_count": downloaded_count,
+                    "skipped_count": len(skipped),
+                    "elapsed_s": (t1 - t0),
+                    "params": {
+                        "min_price": float(min_price),
+                        "max_price": float(max_price),
+                        "include_ta": bool(include_ta),
+                        "min_dollar_vol": int(min_dollar_vol),
+                        "use_parallel": bool(use_parallel),
+                        "parallel_workers": int(parallel_workers),
+                        "parallel_chunk": int(parallel_chunk if use_parallel else 50),
+                        "us_only": bool(us_only),
+                        "apply_gap_filter": bool(apply_gap_filter),
+                    },
+                }
+                run_id = save_run("most_active", meta,
+                                  breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True))
+                st.caption(f"Saved to history as run #{run_id}")
 
+                # --- Download Button ---
                 st.download_button(
                     "Download Most Active Stocks Breakout Results",
                     data=breakout_df.to_csv(index=False),
@@ -1229,6 +1975,8 @@ if st.sidebar.button("Run Trending Scan"):
                 )
                 tr_render()
             filtered = filter_tickers_by_price(price_data, min_price, max_price)
+            liquid = filter_by_dollar_volume(price_data, min_dollar_vol)
+            filtered = [t for t in filtered if t in liquid]
             filtered_data = {t: price_data[t] for t in filtered if t in price_data}
             # Gap / Unusual Volume Filter
             if apply_gap_filter:
@@ -1242,7 +1990,7 @@ if st.sidebar.button("Run Trending Scan"):
                         file_name="gap_unusual_volume_results.csv",
                         mime="text/csv"
                     )
-            breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+            breakout_df = breakout_scanner(filtered_data, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
 
             if skipped:
                 st.warning(f"Skipped {len(skipped)} trending tickers due to missing data or delisted: {', '.join(skipped[:10])}...")
@@ -1254,6 +2002,31 @@ if st.sidebar.button("Run Trending Scan"):
                 st.success(f"Found {len(breakout_df)} breakout candidates among trending stocks.")
                 st.dataframe(breakout_df)
 
+                # -- DB Helper Trending ---
+                # Persist run to DB
+                meta = {
+                    "universe_before": uni_before,
+                    "universe_after": uni_after,
+                    "downloaded_count": downloaded_count,
+                    "skipped_count": len(skipped),
+                    "elapsed_s": (t1 - t0),
+                    "params": {
+                        "min_price": float(min_price),
+                        "max_price": float(max_price),
+                        "include_ta": bool(include_ta),
+                        "min_dollar_vol": int(min_dollar_vol),
+                        "use_parallel": bool(use_parallel),
+                        "parallel_workers": int(parallel_workers),
+                        "parallel_chunk": int(parallel_chunk if use_parallel else 50),
+                        "us_only": bool(us_only),
+                        "apply_gap_filter": bool(apply_gap_filter),
+                    },
+                }
+                run_id = save_run("trending", meta,
+                                  breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True))
+                st.caption(f"Saved to history as run #{run_id}")
+
+                # --- Download Trending Stocks Breakout ---
                 st.download_button(
                     "Download Trending Stocks Breakout Results",
                     data=breakout_df.to_csv(index=False),
@@ -1312,8 +2085,8 @@ def run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_pri
     live_table = st.empty()
     status = st.empty()
 
-    # Use smaller chunk size for better streaming granularity on ~500 symbols
-    sp_chunk = max(50, min(parallel_chunk, 100))
+    # Use a conservative fixed chunk for stable MultiIndex returns & smoother streaming
+    sp_chunk = 50
     t0 = time.perf_counter()
 
     def progress_cb(done, total):
@@ -1325,12 +2098,14 @@ def run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_pri
     seen_tickers = set()
 
     def per_chunk_cb(added_price_data):
-        # Filter by price and run breakout on just-arrived data
+        # Filter by price + liquidity and run breakout on just-arrived data
         filtered = filter_tickers_by_price(added_price_data, min_price, max_price)
+        liquid = filter_by_dollar_volume(added_price_data, min_dollar_vol)
+        filtered = [t for t in filtered if t in liquid]
         filtered_chunk = {t: added_price_data[t] for t in filtered}
         if not filtered_chunk:
             return
-        chunk_df = breakout_scanner(filtered_chunk, min_price, max_price)
+        chunk_df = breakout_scanner(filtered_chunk, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
         if chunk_df.empty:
             return
         # Append only new tickers to the running result to avoid duplicates
@@ -1407,11 +2182,41 @@ def run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_pri
                 mime="text/csv"
             )
 
-    breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+    breakout_df = breakout_scanner(filtered_data, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
     if not breakout_df.empty:
         st.success(f"Scan complete ✅ Found {len(breakout_df)} breakout candidates in S&P 500.")
         final_df = breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True)
+        final_df = final_df.drop_duplicates(subset=["Ticker"], keep="first")
         live_table.dataframe(final_df)  # update the same live table
+        files = {"breakout_sp500.csv": final_df.to_csv(index=False)}
+        try:
+            if apply_gap_filter and 'gap_df' in locals() and not gap_df.empty:
+                files["gap_unusual_volume_sp500.csv"] = gap_df.to_csv(index=False)
+        except Exception:
+            pass
+        # Persist run to DB
+        meta = {
+            "universe_before": uni_before,
+            "universe_after": uni_after,
+            "downloaded_count": downloaded_count,
+            "skipped_count": len(skipped),
+            "elapsed_s": (t1 - t0),
+            "params": {
+                "min_price": float(min_price),
+                "max_price": float(max_price),
+                "include_ta": bool(include_ta),
+                "min_dollar_vol": int(min_dollar_vol),
+                "use_parallel": bool(use_parallel),
+                "parallel_workers": int(parallel_workers),
+                "parallel_chunk": int(parallel_chunk),
+                "us_only": bool(us_only),
+                "apply_gap_filter": bool(apply_gap_filter),
+            },
+        }
+        run_id = save_run("sp500", meta, final_df)
+        st.caption(f"Saved to history as run #{run_id}")
+        if files:
+            download_zip_button("Download S&P 500 Bundle (ZIP)", files, filename="sp500_scan_bundle.zip")
     else:
         st.info("No breakout candidates found in S&P 500.")
 
@@ -1458,12 +2263,14 @@ if st.sidebar.button("Run Nasdaq Scan"):
         seen_tickers = set()
 
         def per_chunk_cb(added_price_data):
-            # Filter by price and run breakout on just-arrived data
+            # Filter by price + liquidity and run breakout on just-arrived data
             filtered = filter_tickers_by_price(added_price_data, min_price, max_price)
+            liquid = filter_by_dollar_volume(added_price_data, min_dollar_vol)
+            filtered = [t for t in filtered if t in liquid]
             filtered_chunk = {t: added_price_data[t] for t in filtered}
             if not filtered_chunk:
                 return
-            chunk_df = breakout_scanner(filtered_chunk, min_price, max_price)
+            chunk_df = breakout_scanner(filtered_chunk, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
             if chunk_df.empty:
                 return
             # Append only new tickers to the running result to avoid duplicates
@@ -1540,11 +2347,32 @@ if st.sidebar.button("Run Nasdaq Scan"):
                     mime="text/csv"
                 )
 
-        breakout_df = breakout_scanner(filtered_data, min_price, max_price)
+        breakout_df = breakout_scanner(filtered_data, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
         if not breakout_df.empty:
             st.success(f"Scan complete ✅ Found {len(breakout_df)} breakout candidates in Nasdaq.")
             final_df = breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True)
-            live_table.dataframe(final_df)  # update the same live table
+            live_table.dataframe(final_df) # update the same live table
+            # Persist run to DB
+            meta = {
+                "universe_before": uni_before,
+                "universe_after": uni_after,
+                "downloaded_count": downloaded_count,
+                "skipped_count": len(skipped),
+                "elapsed_s": (t1 - t0),
+                "params": {
+                    "min_price": float(min_price),
+                    "max_price": float(max_price),
+                    "include_ta": bool(include_ta),
+                    "min_dollar_vol": int(min_dollar_vol),
+                    "use_parallel": bool(use_parallel),
+                    "parallel_workers": int(parallel_workers),
+                    "parallel_chunk": int(ndq_chunk if use_parallel else 50),
+                    "us_only": bool(us_only),
+                    "apply_gap_filter": bool(apply_gap_filter),
+                },
+            }
+            run_id = save_run("nasdaq", meta, final_df)
+            st.caption(f"Saved to history as run #{run_id}")
         else:
             st.info("No breakout candidates found in Nasdaq.")
 
@@ -1558,17 +2386,53 @@ if st.sidebar.button("Run Pre-market Scan"):
     if not tickers:
         st.error("No tickers available for pre-market scan.")
     else:
-        with st.spinner(f"Running pre-market scan on {len(tickers)} tickers..."):
-            pm_df = premarket_scan(tickers)
-        st.subheader("Pre-market Scan Results")
+        st.subheader("Pre-market Scan Results (Live)")
+        progress = st.progress(0)
+        live_table = st.empty()
+        status = st.empty()
+
+        running_rows = []
+
+        def progress_cb(done, total):
+            if total:
+                progress.progress(done / total)
+                status.markdown(f"Processed **{done}/{total}** tickers…")
+
+        def per_row_cb(row):
+            running_rows.append([row["Ticker"], row["Premarket First Price"], row["Premarket Last Price"], row["Premarket % Change"]])
+            live_df = pd.DataFrame(
+                running_rows,
+                columns=["Ticker", "Premarket First Price", "Premarket Last Price", "Premarket % Change"]
+            ).sort_values("Premarket % Change", ascending=False).reset_index(drop=True)
+            live_table.dataframe(live_df)
+
+        with st.spinner(f"Running pre-market scan on {len(tickers)} tickers…"):
+            pm_df = premarket_scan(tickers, progress_cb=progress_cb, per_row_cb=per_row_cb)
+
+        # Final consolidated view
         if pm_df.empty:
             st.info("No pre-market candidates found or no pre-market data available.")
         else:
-            st.success(f"Found {len(pm_df)} tickers with pre-market data.")
-            st.dataframe(pm_df)
+            st.success(f"Scan complete ✅ Found {len(pm_df)} tickers with pre-market data.")
+            final_df = pm_df.sort_values("Premarket % Change", ascending=False).reset_index(drop=True)
+            live_table.dataframe(final_df)  # update the same live table
+
+            # --- Pre-Market DB Helper
+            meta = {
+                "universe_before": len(tickers),
+                "universe_after": len(tickers),
+                "downloaded_count": int(len(final_df)),
+                "skipped_count": 0,
+                "elapsed_s": 0.0,
+                "params": {"session": "premarket"}
+            }
+            run_id = save_run("premarket", meta, final_df)
+            st.caption(f"Saved to history as run #{run_id}")
+
+            # --- Download Pre-Market Result as CSV
             st.download_button(
                 label="Download Pre-market Results as CSV",
-                data=pm_df.to_csv(index=False),
+                data=final_df.to_csv(index=False),
                 file_name="premarket_results.csv",
                 mime="text/csv"
             )
@@ -1580,20 +2444,97 @@ if st.sidebar.button("Run Post-market Scan"):
     if not tickers:
         st.error("No tickers available for post-market scan.")
     else:
-        with st.spinner(f"Running post-market scan on {len(tickers)} tickers..."):
-            post_df = postmarket_scan(tickers)
-        st.subheader("Post-market Scan Results")
+        st.subheader("Post-market Scan Results (Live)")
+        progress = st.progress(0)
+        live_table = st.empty()
+        status = st.empty()
+
+        running_rows = []
+
+        def progress_cb(done, total):
+            if total:
+                progress.progress(done / total)
+                status.markdown(f"Processed **{done}/{total}** tickers…")
+
+        def per_row_cb(row):
+            running_rows.append([row["Ticker"], row["Postmarket First Price"], row["Postmarket Last Price"], row["Postmarket % Change"]])
+            live_df = pd.DataFrame(
+                running_rows,
+                columns=["Ticker", "Postmarket First Price", "Postmarket Last Price", "Postmarket % Change"]
+            ).sort_values("Postmarket % Change", ascending=False).reset_index(drop=True)
+            live_table.dataframe(live_df)
+
+        with st.spinner(f"Running post-market scan on {len(tickers)} tickers…"):
+            post_df = postmarket_scan(tickers, progress_cb=progress_cb, per_row_cb=per_row_cb)
+
+        # Final consolidated view
         if post_df.empty:
             st.info("No post-market candidates found or no post-market data available.")
         else:
-            st.success(f"Found {len(post_df)} tickers with post-market data.")
-            st.dataframe(post_df)
+            st.success(f"Scan complete ✅ Found {len(post_df)} tickers with post-market data.")
+            final_df = post_df.sort_values("Postmarket % Change", ascending=False).reset_index(drop=True)
+            live_table.dataframe(final_df)  # update the same live table
+
+            # --- Post-Market Results ---
+            meta = {
+                "universe_before": len(tickers),
+                "universe_after": len(tickers),
+                "downloaded_count": int(len(final_df)),
+                "skipped_count": 0,
+                "elapsed_s": 0.0,
+                "params": {"session": "postmarket"}
+            }
+            run_id = save_run("postmarket", meta, final_df)
+            st.caption(f"Saved to history as run #{run_id}")
+
+            # --- Download Post-Market Results ---
             st.download_button(
                 label="Download Post-market Results as CSV",
-                data=post_df.to_csv(index=False),
+                data=final_df.to_csv(index=False),
                 file_name="postmarket_results.csv",
                 mime="text/csv"
             )
+# --- History Viewer ---
+st.markdown("---")
+st.header("History (DB)")
+
+try:
+    runs_df = list_runs(limit=300)
+except Exception as e:
+    runs_df = pd.DataFrame()
+    st.warning(f"History unavailable: {e}")
+
+if runs_df.empty:
+    st.info("No saved runs yet.")
+else:
+    st.dataframe(runs_df)
+    run_choices = runs_df.apply(
+        lambda r: f"#{int(r['id'])} • {r['run_type']} • {r['started_at']} • "
+                  f"{int(r['downloaded_count'])} dl / {int(r['skipped_count'])} sk • {float(r['elapsed_s']):.1f}s",
+        axis=1
+    ).tolist()
+    run_ids = runs_df["id"].tolist()
+    sel = st.selectbox(
+        "Load a past run:",
+        options=list(range(len(run_choices))),
+        format_func=lambda i: run_choices[i]
+    )
+    selected_run_id = int(run_ids[sel])
+
+    prev_df = load_run_results(selected_run_id)
+    st.subheader(f"Saved Results for Run #{selected_run_id}")
+    if prev_df.empty:
+        st.info("This run has no saved rows.")
+    else:
+        with st.expander(f"Expand to view saved run #{selected_run_id} results", expanded=False):
+            st.dataframe(prev_df, width="stretch")
+        st.download_button(
+            "Download This Run (CSV)",
+            data=prev_df.to_csv(index=False),
+            file_name=f"scan_run_{selected_run_id}.csv",
+            mime="text/csv"
+        )
+
 
 # Fetch S&P 500 Tickers Button
 st.sidebar.markdown("### Maintenance Only")
