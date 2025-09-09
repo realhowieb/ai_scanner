@@ -2073,7 +2073,7 @@ if uploaded_file is not None:
             st.info("No breakout candidates found.")
         else:
             st.success(f"Found {len(breakout_df)} breakout candidates.")
-            st.dataframe(breakout_df, column_config=COMMON_COLCFG, use_container_width=True)
+            st.dataframe(breakout_df, column_config=COMMON_COLCFG, width="stretch")
 
             st.download_button(
                 "Download Breakout Results",
@@ -2149,7 +2149,7 @@ if search_ticker:
                 st.info(f"No breakout detected for {search_ticker} based on the last 60 days data.")
             else:
                 st.success(f"Breakout detected for {search_ticker}:")
-                st.dataframe(breakout_df, column_config=COMMON_COLCFG, use_container_width=True)
+                st.dataframe(breakout_df, column_config=COMMON_COLCFG, width="stretch")
     except Exception as e:
         st.error(f"Error fetching data for ticker '{search_ticker}': {e}")
 
@@ -3107,7 +3107,7 @@ with tab_history:
             st.info("This run has no saved rows.")
         else:
             with st.expander(f"Expand to view saved run #{selected_run_id} results", expanded=False):
-                st.dataframe(prev_df, use_container_width=True)
+                st.dataframe(prev_df, width="stretch")
             st.download_button(
                 "Download This Run (CSV)",
                 data=prev_df.to_csv(index=False),
@@ -3141,10 +3141,10 @@ with tab_history:
                     c1, c2 = st.columns(2)
                     with c1:
                         st.markdown(f"**Added vs run #{prev_id}** ({len(added)})")
-                        st.dataframe(pd.DataFrame({"Ticker": added}))
+                        st.dataframe(pd.DataFrame({"Ticker": added}), width="stretch")
                     with c2:
                         st.markdown(f"**Removed vs run #{prev_id}** ({len(removed)})")
-                        st.dataframe(pd.DataFrame({"Ticker": removed}))
+                        st.dataframe(pd.DataFrame({"Ticker": removed}), width="stretch")
             except Exception as _e:
                 st.warning(f"Delta view error: {_e}")
 
@@ -3160,7 +3160,7 @@ with tab_history:
                     st.caption("No deltas persisted for this run.")
                 else:
                     df_d = pd.DataFrame([{"change": r["change"], **json.loads(r["row_json"])} for r in rows])
-                    st.dataframe(df_d)
+                    st.dataframe(df_d, width="stretch")
             except Exception as _e:
                 st.caption(f"No deltas available: {_e}")
 
