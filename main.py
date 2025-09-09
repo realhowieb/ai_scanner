@@ -847,7 +847,7 @@ def fetch_price_data_parallel(
         return missing_list
 
     def fetch_chunk(chunk):
-        import warnings
+        import warnings, time, random
         if logger:
             logger(f"Downloading chunk of {len(chunk)} symbols…")
         for attempt in range(max_retries):
@@ -1048,6 +1048,7 @@ def fetch_price_data_streaming(
 ):
     import yfinance as yf
     import pandas as pd
+    import time, random
 
     # Clean & dedupe
     tickers = [t for t in tickers if isinstance(t, str) and t.strip()]
@@ -1503,7 +1504,67 @@ show_diagnostics_ui = st.sidebar.checkbox(
 )
 st.session_state["show_diagnostics_ui"] = show_diagnostics_ui
 
-#
+def _classify_breakout(pct):
+    try:
+        if pct is None or pd.isna(pct):
+            return ""
+        if pct >= 5:
+            return "A"
+        if pct >= 2:
+            return "B"
+        return "C"
+    except Exception:
+        return ""
+
+def breakout_scanner(price_data, min_price=5, max_price=1000, include_ta: bool = False, spy_df: pd.DataFrame = None):
+    results = []
+    for ticker, df in price_data.items():
+        if df is None or df.empty or len(df) < 21 or 'Close' not in df.columns:
+            continue
+        try:
+            latest_close = float(df['Close'].iloc[-1])
+            prev_max = float(pd.Series(df['Close'].iloc[-21:-1]).max())
+            latest_volume = float(df['Volume'].iloc[-1]) if 'Volume' in df.columns else float('nan')
+            latest_volume_fmt = format_volume(latest_volume) if pd.notna(latest_volume) else ""
+        except Exception:
+            continue
+
+        if min_price <= latest_close <= max_price and prev_max > 0 and latest_close > prev_max:
+            pct_breakout = (latest_close - prev_max) / prev_max * 100.0
+            row = {
+                'Ticker': ticker,
+                'Latest Close': round(latest_close, 4),
+                'Previous 20d Max': round(prev_max, 4),
+                'Breakout %': round(pct_breakout, 2),
+                'Volume': latest_volume_fmt
+            }
+            # classify after row exists
+            row['Class'] = _classify_breakout(row['Breakout %'])
+
+            if include_ta:
+                try:
+                    rsi = _rsi(df['Close']).iloc[-1]
+                    macd, signal, hist = _macd(df['Close'])
+                    atr14 = _atr(df).iloc[-1]
+                    rs20 = _rs_20d_vs_spy(df, spy_df) if (spy_df is not None and 'Close' in spy_df.columns) else np.nan
+                    row.update({
+                        'RSI(14)': round(float(rsi), 2) if pd.notna(rsi) else np.nan,
+                        'MACD': round(float(macd.iloc[-1]), 4) if pd.notna(macd.iloc[-1]) else np.nan,
+                        'MACD Signal': round(float(signal.iloc[-1]), 4) if pd.notna(signal.iloc[-1]) else np.nan,
+                        'ATR(14)': round(float(atr14), 4) if pd.notna(atr14) else np.nan,
+                        'RS 20d vs SPY (%)': rs20 if pd.notna(rs20) else np.nan,
+                    })
+                except Exception:
+                    pass
+            results.append(row)
+
+    if results:
+        return pd.DataFrame(results).sort_values('Breakout %', ascending=False).reset_index(drop=True)
+    else:
+        cols = ['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume', 'Class']
+        if include_ta:
+            cols += ['RSI(14)', 'MACD', 'MACD Signal', 'ATR(14)', 'RS 20d vs SPY (%)']
+        return pd.DataFrame(columns=cols)
 # --- Headless runners for scheduler triggers (no UI required) ---
 def _headless_scan_run(run_type: str, universe: list = None, session_label: str = None) -> int:
     """
@@ -1582,11 +1643,31 @@ def _headless_scan_run(run_type: str, universe: list = None, session_label: str 
             "session": session_label,
         },
     }
+
+    run_id = -1
     try:
-        run_id = save_run(run_type, meta, breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True) if breakout_df is not None else pd.DataFrame())
+        # Save even if breakout_df is empty so the run still appears in History
+        to_save = (
+            breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True)
+            if breakout_df is not None else pd.DataFrame()
+        )
+        run_id = save_run(run_type, meta, to_save)
+    except Exception as e:
+        try:
+            st.warning(f"Failed to save {run_type} run: {e}")
+        except Exception:
+            pass
+
+    # Surface confirmation in the UI when scheduler triggers in-process
+    try:
+        st.session_state.setdefault("last_headless_runs", []).insert(0, {"run_type": run_type, "run_id": run_id})
+        if run_id != -1:
+            st.toast(f"Saved {run_type} run as #{run_id}", icon="💾")
+        else:
+            st.toast(f"{run_type} run completed but was not saved", icon="⚠️")
     except Exception:
-        # Even if save fails, avoid crashing scheduler
-        run_id = -1
+        pass
+
     return int(run_id)
 
 def run_premarket_headless() -> int:
@@ -1621,7 +1702,6 @@ def run_sp500_headless(session_label: str = "regular") -> int:
 try:
     import scheduler as sched
 
-    # Wire up headless runners if present; otherwise fall back to harmless st.toast
     def _dummy_run(name: str):
         def _f():
             try:
@@ -1631,33 +1711,42 @@ try:
             return -1
         return _f
 
-    _run_pre = globals().get("run_premarket_headless") or _dummy_run("Pre-market")
+    _run_pre  = globals().get("run_premarket_headless")  or _dummy_run("Pre-market")
     _run_post = globals().get("run_postmarket_headless") or _dummy_run("Post-market")
-    _run_sp500_fn = globals().get("run_sp500_headless")
+    _run_sp500_fn = globals().get("run_sp500_headless")  or _dummy_run("S&amp;P 500")
 
-    # Support either run_sp500_headless(session_label="regular") or a simple callable
-    def _run_sp500_wrapper():
-        fn = _run_sp500_fn or _dummy_run("S&P 500")
-        try:
-            # Prefer a function that accepts session_label, else just call it
-            return fn(session_label="regular") if fn.__code__.co_argcount else fn()
-        except Exception:
-            return fn()
+    def _wrap_with_confirmation(fn, label):
+        def _runner():
+            try:
+                rid = fn() if fn.__code__.co_argcount == 0 else fn(session_label="regular")
+            except Exception as e:
+                rid = -1
+                try:
+                    st.toast(f"{label} error: {e}", icon="❌")
+                except Exception:
+                    pass
+            try:
+                if rid != -1:
+                    st.toast(f"{label} saved to History as run #{rid}", icon="✅")
+                else:
+                    st.toast(f"{label} finished but did not save", icon="⚠️")
+            except Exception:
+                pass
+            return rid
+        return _runner
 
-    # Render scheduler controls in the sidebar
     sched.render_sidebar_controls(
         sched.RunFns(
-            run_premarket=_run_pre,
-            run_postmarket=_run_post,
-            run_sp500=_run_sp500_wrapper,
+            run_premarket=_wrap_with_confirmation(_run_pre, "Pre-market"),
+            run_postmarket=_wrap_with_confirmation(_run_post, "Post-market"),
+            run_sp500=_wrap_with_confirmation(_run_sp500_fn, "S&amp;P 500"),
         ),
         tz_str="America/New_York",
-        pre_time=(8, 30),      # 08:30 ET
-        intraday_time=(9, 45), # 09:45 ET
-        post_time=(16, 10),    # 16:10 ET
+        pre_time=(8, 30),
+        intraday_time=(9, 45),
+        post_time=(16, 10),
     )
 except ModuleNotFoundError as _e:
-    # Graceful if scheduler.py or APScheduler isn't available
     st.sidebar.markdown("### Scheduler")
     st.sidebar.caption(f"Scheduler unavailable: {_e}. Add scheduler.py and install apscheduler to enable.")
 except Exception as _e:
@@ -1893,11 +1982,11 @@ def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
             # sqlite lastrowid
             run_id = res.lastrowid  # type: ignore[attr-defined]
 
-        # Store results as JSON rows for flexible schema
+        # Store results as JSON rows (even if empty, write a placeholder so the run is visible in History drill-down)
+        session_label = (meta.get("params", {}) or {}).get("session")
         if results_df is not None and not results_df.empty:
             rows = results_df.to_dict(orient="records")
             payload = []
-            session_label = (meta.get("params", {}) or {}).get("session")
             for r in rows:
                 rj = json.dumps(r, default=str)
                 ticker = r.get("Ticker")
@@ -1928,6 +2017,16 @@ def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
                     text("INSERT INTO results_json (run_id, row_json) VALUES (:run_id, :row_json)"),
                     [{"run_id": int(run_id), "row_json": p['row_json']} for p in payload],
                 )
+        else:
+            # Write a placeholder row to signal "no results" for this run_id
+            placeholder = {"_note": "no results", "_rows": 0}
+            try:
+                conn.execute(
+                    text("INSERT INTO results_json (run_id, row_json) VALUES (:run_id, :row_json)"),
+                    [{"run_id": int(run_id), "row_json": json.dumps(placeholder)}],
+                )
+            except Exception:
+                pass
 
         # --- Persist added/removed deltas vs previous run of the same type ---
         try:
@@ -2027,57 +2126,8 @@ def load_run_results(run_id: int) -> pd.DataFrame:
         return pd.DataFrame()
 
 # Breakout scanner with formatted Volume
-def breakout_scanner(price_data, min_price=5, max_price=1000, include_ta: bool = False, spy_df: pd.DataFrame = None):
-    results = []
-    for ticker, df in price_data.items():
-        if df is None or df.empty or len(df) < 21 or 'Close' not in df.columns:
-            continue
-        try:
-            latest_close = float(df['Close'].iloc[-1])
-            prev_max = float(pd.Series(df['Close'].iloc[-21:-1]).max())
-            latest_volume = float(df['Volume'].iloc[-1]) if 'Volume' in df.columns else float('nan')
-            latest_volume_fmt = format_volume(latest_volume) if pd.notna(latest_volume) else ""
-        except Exception:
-            continue
 
-        if min_price <= latest_close <= max_price and prev_max > 0 and latest_close > prev_max:
-            pct_breakout = (latest_close - prev_max) / prev_max * 100.0
-            row = {
-                'Ticker': ticker,
-                'Latest Close': round(latest_close, 4),
-                'Previous 20d Max': round(prev_max, 4),
-                'Breakout %': round(pct_breakout, 2),
-                'Volume': latest_volume_fmt
-            }
-            # classify after row exists
-            row['Class'] = _classify_breakout(row['Breakout %'])
-
-            if include_ta:
-                try:
-                    rsi = _rsi(df['Close']).iloc[-1]
-                    macd, signal, hist = _macd(df['Close'])
-                    atr14 = _atr(df).iloc[-1]
-                    rs20 = _rs_20d_vs_spy(df, spy_df) if (spy_df is not None and 'Close' in spy_df.columns) else np.nan
-                    row.update({
-                        'RSI(14)': round(float(rsi), 2) if pd.notna(rsi) else np.nan,
-                        'MACD': round(float(macd.iloc[-1]), 4) if pd.notna(macd.iloc[-1]) else np.nan,
-                        'MACD Signal': round(float(signal.iloc[-1]), 4) if pd.notna(signal.iloc[-1]) else np.nan,
-                        'ATR(14)': round(float(atr14), 4) if pd.notna(atr14) else np.nan,
-                        'RS 20d vs SPY (%)': rs20 if pd.notna(rs20) else np.nan,
-                    })
-                except Exception:
-                    pass
-            results.append(row)
-
-    if results:
-        return pd.DataFrame(results).sort_values('Breakout %', ascending=False).reset_index(drop=True)
-    else:
-        cols = ['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume', 'Class']
-        if include_ta:
-            cols += ['RSI(14)', 'MACD', 'MACD Signal', 'ATR(14)', 'RS 20d vs SPY (%)']
-        return pd.DataFrame(columns=cols)
-
-# Automatic scanner function for full S&P 600 tickers or uploaded tickers
+# --- Headless runners for scheduler triggers (no UI required) ---
 def auto_scan(min_price=5, max_price=1000):
     tickers = st.session_state.get("tickers", [])
     price_data, skipped = fetch_price_data_batch(tickers, period="60d", interval="1d", batch_size=50)
@@ -2124,17 +2174,6 @@ def _chip(label, tone="info"):
     color = {"info":"#2f7ed8","success":"#22863a","warn":"#b08800","error":"#d73a49"}.get(tone,"#2f7ed8")
     return f"<span style='display:inline-block;padding:3px 8px;border-radius:999px;background:{color};color:white;font-size:12px;'>{label}</span>"
 
-def _classify_breakout(pct):
-    try:
-        if pct is None or pd.isna(pct):
-            return ""
-        if pct >= 5:
-            return "A"
-        if pct >= 2:
-            return "B"
-        return "C"
-    except Exception:
-        return ""
 
 import streamlit as st
 
@@ -2157,8 +2196,40 @@ st.title("Money Moves Breakout Scanner")
 _sess_label, _is_open = _us_market_session()
 st.markdown(_chip(f"Market: {_sess_label}", "success" if _is_open else "warn"), unsafe_allow_html=True)
 
+
 # Tabs for app sections
 tab_scan, tab_history = st.tabs(["🔎 Scans", "📜 History"])
+
+# --- Manual "Run Now" controls that persist to History ---
+with tab_scan:
+    st.markdown("### ⚡ Run Now (saves to History)")
+    c1, c2, c3 = st.columns(3)
+
+    def _show_saved_results(run_id: int, label: str):
+        if run_id and run_id != -1:
+            st.success(f"{label} saved as run #{run_id}")
+            try:
+                df_saved = load_run_results(run_id)
+                if df_saved is None or df_saved.empty:
+                    st.info("Run saved, but no symbols matched (0 rows).")
+                else:
+                    st.dataframe(df_saved, column_config=COMMON_COLCFG, width="stretch")
+            except Exception as _e:
+                st.warning(f"Saved, but couldn't load results for display: {_e}")
+        else:
+            st.error(f"{label} failed to save.")
+
+    if c1.button("Run Pre‑Market Now (save)"):
+        run_id = run_premarket_headless()
+        _show_saved_results(run_id, "Pre‑market run")
+
+    if c2.button("Run Post‑Market Now (save)"):
+        run_id = run_postmarket_headless()
+        _show_saved_results(run_id, "Post‑market run")
+
+    if c3.button("Run S&amp;P 500 Now (save)"):
+        run_id = run_sp500_headless(session_label="regular")
+        _show_saved_results(run_id, "S&amp;P 500 run")
 
 # --- Filter by Price ---
 st.sidebar.markdown("### Filter by Price")
