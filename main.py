@@ -1715,24 +1715,28 @@ def load_run_results(run_id: int) -> pd.DataFrame:
 def breakout_scanner(price_data, min_price=5, max_price=1000, include_ta: bool = False, spy_df: pd.DataFrame = None):
     results = []
     for ticker, df in price_data.items():
-        if df.empty or len(df) < 21 or 'Close' not in df.columns:
+        if df is None or df.empty or len(df) < 21 or 'Close' not in df.columns:
             continue
         try:
-            latest_close = df['Close'].iloc[-1].item()
-            prev_max = df['Close'].iloc[-21:-1].max().item()
-            latest_volume = df['Volume'].iloc[-1].item() if 'Volume' in df.columns else np.nan
-            latest_volume_fmt = format_volume(latest_volume)
+            latest_close = float(df['Close'].iloc[-1])
+            prev_max = float(pd.Series(df['Close'].iloc[-21:-1]).max())
+            latest_volume = float(df['Volume'].iloc[-1]) if 'Volume' in df.columns else float('nan')
+            latest_volume_fmt = format_volume(latest_volume) if pd.notna(latest_volume) else ""
         except Exception:
             continue
-        if min_price <= latest_close <= max_price and latest_close > prev_max:
-            pct_breakout = (latest_close - prev_max) / prev_max * 100 if prev_max > 0 else np.nan
+
+        if min_price <= latest_close <= max_price and prev_max > 0 and latest_close > prev_max:
+            pct_breakout = (latest_close - prev_max) / prev_max * 100.0
             row = {
                 'Ticker': ticker,
-                'Latest Close': latest_close,
-                'Previous 20d Max': prev_max,
+                'Latest Close': round(latest_close, 4),
+                'Previous 20d Max': round(prev_max, 4),
                 'Breakout %': round(pct_breakout, 2),
                 'Volume': latest_volume_fmt
             }
+            # classify after row exists
+            row['Class'] = _classify_breakout(row['Breakout %'])
+
             if include_ta:
                 try:
                     rsi = _rsi(df['Close']).iloc[-1]
@@ -1744,15 +1748,16 @@ def breakout_scanner(price_data, min_price=5, max_price=1000, include_ta: bool =
                         'MACD': round(float(macd.iloc[-1]), 4) if pd.notna(macd.iloc[-1]) else np.nan,
                         'MACD Signal': round(float(signal.iloc[-1]), 4) if pd.notna(signal.iloc[-1]) else np.nan,
                         'ATR(14)': round(float(atr14), 4) if pd.notna(atr14) else np.nan,
-                        'RS 20d vs SPY (%)': rs20,
+                        'RS 20d vs SPY (%)': rs20 if pd.notna(rs20) else np.nan,
                     })
                 except Exception:
                     pass
             results.append(row)
+
     if results:
         return pd.DataFrame(results).sort_values('Breakout %', ascending=False).reset_index(drop=True)
     else:
-        cols = ['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume']
+        cols = ['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume', 'Class']
         if include_ta:
             cols += ['RSI(14)', 'MACD', 'MACD Signal', 'ATR(14)', 'RS 20d vs SPY (%)']
         return pd.DataFrame(columns=cols)
@@ -1771,9 +1776,61 @@ def auto_scan(min_price=5, max_price=1000):
         breakout_df.to_csv("breakout_results.csv", index=False)
     return breakout_df, skipped, filtered_data
 
+# --- UI helpers: market session chip & breakout class mapping ---
+import datetime as _dt
+import pytz as _pytz
+
+def _us_market_session(now_utc=None):
+    """Return ('Pre-Market'|'Regular'|'Post-Market'|'Closed', is_open_bool)."""
+    try:
+        if now_utc is None:
+            now_utc = _dt.datetime.utcnow().replace(tzinfo=_pytz.UTC)
+        et = now_utc.astimezone(_pytz.timezone("America/New_York"))
+        wd = et.weekday()  # 0=Mon
+        if wd >= 5:
+            return "Closed", False
+        t = et.time()
+        pre_start = _dt.time(4, 0)
+        reg_start = _dt.time(9, 30)
+        reg_end   = _dt.time(16, 0)
+        post_end  = _dt.time(20, 0)
+        if pre_start <= t < reg_start:
+            return "Pre-Market", True
+        if reg_start <= t < reg_end:
+            return "Regular", True
+        if reg_end <= t < post_end:
+            return "Post-Market", True
+        return "Closed", False
+    except Exception:
+        return "Unknown", False
+
+def _chip(label, tone="info"):
+    """Render a small pill badge."""
+    color = {"info":"#2f7ed8","success":"#22863a","warn":"#b08800","error":"#d73a49"}.get(tone,"#2f7ed8")
+    return f"<span style='display:inline-block;padding:3px 8px;border-radius:999px;background:{color};color:white;font-size:12px;'>{label}</span>"
+
+def _classify_breakout(pct):
+    try:
+        if pct is None or pd.isna(pct):
+            return ""
+        if pct >= 5:
+            return "A"
+        if pct >= 2:
+            return "B"
+        return "C"
+    except Exception:
+        return ""
 
 # Streamlit UI
 st.title("Money Moves Breakout Scanner")
+
+# --- Chip and Tabs ---
+# Session chip
+_sess_label, _is_open = _us_market_session()
+st.markdown(_chip(f"Market: {_sess_label}", "success" if _is_open else "warn"), unsafe_allow_html=True)
+
+# Tabs for app sections
+tab_scan, tab_history = st.tabs(["🔎 Scans", "📜 History"])
 
 # --- Filter by Price ---
 st.sidebar.markdown("### Filter by Price")
@@ -2734,47 +2791,95 @@ if st.sidebar.button("Run Post-market Scan"):
                 file_name="postmarket_results.csv",
                 mime="text/csv"
             )
+
 # --- History Viewer ---
-st.markdown("---")
-st.header("History (DB)")
+with tab_history:
+    st.header("History (DB)")
+    try:
+        runs_df = list_runs(limit=300)
+    except Exception as e:
+        runs_df = pd.DataFrame()
+        st.warning(f"History unavailable: {e}")
 
-try:
-    runs_df = list_runs(limit=300)
-except Exception as e:
-    runs_df = pd.DataFrame()
-    st.warning(f"History unavailable: {e}")
-
-if runs_df.empty:
-    st.info("No saved runs yet.")
-else:
-    st.dataframe(runs_df)
-    run_choices = runs_df.apply(
-        lambda r: f"#{int(r['id'])} • {r['run_type']} • {r['started_at']} • "
-                  f"{int(r['downloaded_count'])} dl / {int(r['skipped_count'])} sk • {float(r['elapsed_s']):.1f}s",
-        axis=1
-    ).tolist()
-    run_ids = runs_df["id"].tolist()
-    sel = st.selectbox(
-        "Load a past run:",
-        options=list(range(len(run_choices))),
-        format_func=lambda i: run_choices[i]
-    )
-    selected_run_id = int(run_ids[sel])
-
-    prev_df = load_run_results(selected_run_id)
-    st.subheader(f"Saved Results for Run #{selected_run_id}")
-    if prev_df.empty:
-        st.info("This run has no saved rows.")
+    if runs_df.empty:
+        st.info("No saved runs yet.")
     else:
-        with st.expander(f"Expand to view saved run #{selected_run_id} results", expanded=False):
-            st.dataframe(prev_df, width="stretch")
-        st.download_button(
-            "Download This Run (CSV)",
-            data=prev_df.to_csv(index=False),
-            file_name=f"scan_run_{selected_run_id}.csv",
-            mime="text/csv"
+        st.dataframe(runs_df)
+        run_choices = runs_df.apply(
+            lambda r: f"#{int(r['id'])} • {r['run_type']} • {r['started_at']} • "
+                      f"{int(r['downloaded_count'])} dl / {int(r['skipped_count'])} sk • {float(r['elapsed_s']):.1f}s",
+            axis=1
+        ).tolist()
+        run_ids = runs_df["id"].tolist()
+        sel = st.selectbox(
+            "Load a past run:",
+            options=list(range(len(run_choices))),
+            format_func=lambda i: run_choices[i]
         )
+        selected_run_id = int(run_ids[sel])
 
+        prev_df = load_run_results(selected_run_id)
+        st.subheader(f"Saved Results for Run #{selected_run_id}")
+        if prev_df.empty:
+            st.info("This run has no saved rows.")
+        else:
+            with st.expander(f"Expand to view saved run #{selected_run_id} results", expanded=False):
+                st.dataframe(prev_df, width="stretch")
+            st.download_button(
+                "Download This Run (CSV)",
+                data=prev_df.to_csv(index=False),
+                file_name=f"scan_run_{selected_run_id}.csv",
+                mime="text/csv"
+            )
+
+        # --- Delta view: compare to previous run of the same type ---
+        st.markdown("#### Compare to previous run of the same type")
+        do_delta = st.checkbox("Show delta (added / removed tickers)")
+
+        if do_delta:
+            try:
+                this_row = runs_df[runs_df["id"] == selected_run_id].iloc[0]
+                same_type = runs_df[(runs_df["run_type"] == this_row["run_type"]) & (runs_df["id"] < selected_run_id)].sort_values("id", ascending=False)
+                if same_type.empty:
+                    st.info("No previous run of the same type to compare.")
+                else:
+                    prev_id = int(same_type.iloc[0]["id"])
+                    older_df = load_run_results(prev_id)
+
+                    def _tickers(df):
+                        col = "Ticker" if "Ticker" in df.columns else df.columns[0]
+                        return set(map(str, df[col].astype(str))) if not df.empty else set()
+
+                    cur_t = _tickers(prev_df)
+                    old_t = _tickers(older_df)
+                    added = sorted(cur_t - old_t)
+                    removed = sorted(old_t - cur_t)
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown(f"**Added vs run #{prev_id}** ({len(added)})")
+                        st.dataframe(pd.DataFrame({"Ticker": added}))
+                    with c2:
+                        st.markdown(f"**Removed vs run #{prev_id}** ({len(removed)})")
+                        st.dataframe(pd.DataFrame({"Ticker": removed}))
+            except Exception as _e:
+                st.warning(f"Delta view error: {_e}")
+
+        # Persisted deltas (if available)
+        with st.expander("Show saved deltas for this run (if any)", expanded=False):
+            try:
+                with engine.begin() as conn:
+                    rows = conn.execute(
+                        text("SELECT change, row_json FROM run_deltas WHERE run_id = :rid"),
+                        {"rid": int(selected_run_id)},
+                    ).mappings().all()
+                if not rows:
+                    st.caption("No deltas persisted for this run.")
+                else:
+                    df_d = pd.DataFrame([{"change": r["change"], **json.loads(r["row_json"])} for r in rows])
+                    st.dataframe(df_d)
+            except Exception as _e:
+                st.caption(f"No deltas available: {_e}")
 
 # Fetch S&P 500 Tickers Button
 st.sidebar.markdown("### Maintenance Only")
