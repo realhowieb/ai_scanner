@@ -1596,6 +1596,28 @@ def _init_db():
                     );
                     """
                 ))
+                conn.execute(text(
+                    """
+                    CREATE TABLE IF NOT EXISTS run_deltas (
+                        run_id BIGINT REFERENCES runs(id) ON DELETE CASCADE,
+                        change TEXT NOT NULL,  -- 'added' or 'removed'
+                        row_json TEXT
+                    );
+                    """
+                ))
+                # --- Migrations: add hot columns if missing ---
+                try:
+                    conn.execute(text("ALTER TABLE results_json ADD COLUMN IF NOT EXISTS ticker TEXT"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("ALTER TABLE results_json ADD COLUMN IF NOT EXISTS breakout_pct REAL"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("ALTER TABLE results_json ADD COLUMN IF NOT EXISTS session TEXT"))
+                except Exception:
+                    pass
             else:  # sqlite
                 conn.execute(text(
                     """
@@ -1619,11 +1641,49 @@ def _init_db():
                     );
                     """
                 ))
+                conn.execute(text(
+                    """
+                    CREATE TABLE IF NOT EXISTS run_deltas (
+                        run_id INTEGER,
+                        change TEXT NOT NULL,  -- 'added' or 'removed'
+                        row_json TEXT,
+                        FOREIGN KEY(run_id) REFERENCES runs(id)
+                    );
+                    """
+                ))
+                # --- Migrations: add hot columns if missing (SQLite lacks IF NOT EXISTS on ADD COLUMN in older versions) ---
+                try:
+                    conn.execute(text("ALTER TABLE results_json ADD COLUMN ticker TEXT"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("ALTER TABLE results_json ADD COLUMN breakout_pct REAL"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("ALTER TABLE results_json ADD COLUMN session TEXT"))
+                except Exception:
+                    pass
     except Exception as e:
         st.warning(f"Database init issue: {e}")
 
 
+# --- Index helper ---
+def _ensure_indexes():
+    """Create helpful indexes (safe to call each start)."""
+    try:
+        with engine.begin() as conn:
+            if engine.dialect.name == "postgresql":
+                conn.execute(text("CREATE INDEX IF NOT EXISTS runs_type_time_idx ON runs (run_type, started_at DESC);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS results_json_run_idx ON results_json (run_id);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS run_deltas_run_idx ON run_deltas (run_id, change);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS results_json_ticker_idx ON results_json (ticker);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS results_json_breakout_idx ON results_json (breakout_pct DESC);"))
+    except Exception as e:
+        st.warning(f"Index setup issue: {e}")
+
 _init_db()
+_ensure_indexes()
 
 
 def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
@@ -1673,11 +1733,103 @@ def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
 
         # Store results as JSON rows for flexible schema
         if results_df is not None and not results_df.empty:
-            records = [json.dumps(r, default=str) for r in results_df.to_dict(orient="records")]
-            conn.execute(
-                text("INSERT INTO results_json (run_id, row_json) VALUES (:run_id, :row_json)"),
-                [{"run_id": int(run_id), "row_json": r} for r in records],
-            )
+            rows = results_df.to_dict(orient="records")
+            payload = []
+            session_label = (meta.get("params", {}) or {}).get("session")
+            for r in rows:
+                rj = json.dumps(r, default=str)
+                ticker = r.get("Ticker")
+                breakout_pct = None
+                for key in ("Breakout %", "Premarket % Change", "Postmarket % Change"):
+                    if key in r and r.get(key) is not None:
+                        try:
+                            breakout_pct = float(r.get(key))
+                            break
+                        except Exception:
+                            continue
+                payload.append({
+                    "run_id": int(run_id),
+                    "row_json": rj,
+                    "ticker": ticker,
+                    "breakout_pct": breakout_pct,
+                    "session": session_label,
+                })
+            try:
+                conn.execute(
+                    text("INSERT INTO results_json (run_id, row_json, ticker, breakout_pct, session) "
+                         "VALUES (:run_id, :row_json, :ticker, :breakout_pct, :session)"),
+                    payload,
+                )
+            except Exception:
+                # Fallback to legacy schema if hot columns are unavailable
+                conn.execute(
+                    text("INSERT INTO results_json (run_id, row_json) VALUES (:run_id, :row_json)"),
+                    [{"run_id": int(run_id), "row_json": p['row_json']} for p in payload],
+                )
+
+        # --- Persist added/removed deltas vs previous run of the same type ---
+        try:
+            # Find previous run of the same type
+            prev_id = conn.execute(
+                text(
+                    "SELECT id FROM runs WHERE run_type = :rt AND id < :rid ORDER BY id DESC LIMIT 1"
+                ),
+                {"rt": run_type, "rid": int(run_id)},
+            ).scalar()
+
+            if prev_id is not None:
+                # Load previous run results
+                prev_rows = conn.execute(
+                    text("SELECT row_json FROM results_json WHERE run_id = :rid"),
+                    {"rid": int(prev_id)},
+                ).scalars().all()
+                older_df = pd.DataFrame([json.loads(r) for r in prev_rows]) if prev_rows else pd.DataFrame()
+
+                # Helper to get ticker set and row map
+                def _ticker_set_and_map(df: pd.DataFrame):
+                    if df is None or df.empty:
+                        return set(), {}
+                    col = "Ticker" if "Ticker" in df.columns else (df.columns[0] if len(df.columns) else None)
+                    if col is None:
+                        return set(), {}
+                    tickers = list(map(str, df[col].astype(str)))
+                    row_map = {str(t): df.iloc[i].to_dict() for i, t in enumerate(tickers)}
+                    return set(tickers), row_map
+
+                cur_set, cur_map = _ticker_set_and_map(results_df)
+                old_set, old_map = _ticker_set_and_map(older_df)
+
+                added = sorted(cur_set - old_set)
+                removed = sorted(old_set - cur_set)
+
+                payload = []
+                for t in added:
+                    try:
+                        payload.append({
+                            "run_id": int(run_id),
+                            "change": "added",
+                            "row_json": json.dumps(cur_map.get(t, {"Ticker": t}), default=str),
+                        })
+                    except Exception:
+                        continue
+                for t in removed:
+                    try:
+                        payload.append({
+                            "run_id": int(run_id),
+                            "change": "removed",
+                            "row_json": json.dumps(old_map.get(t, {"Ticker": t}), default=str),
+                        })
+                    except Exception:
+                        continue
+
+                if payload:
+                    conn.execute(
+                        text("INSERT INTO run_deltas (run_id, change, row_json) VALUES (:run_id, :change, :row_json)"),
+                        payload,
+                    )
+        except Exception as _e:
+            # Non-fatal: continue even if delta persistence fails
+            pass
     return int(run_id)
 
 
@@ -1686,14 +1838,15 @@ def list_runs(limit: int = 300) -> pd.DataFrame:
         with engine.begin() as conn:
             rows = conn.execute(
                 text(
-                    "SELECT id, run_type, started_at, downloaded_count, skipped_count, elapsed_s FROM runs ORDER BY id DESC LIMIT :lim"
+                    "SELECT id, run_type, started_at, downloaded_count, skipped_count, elapsed_s, params_json "
+                    "FROM runs ORDER BY id DESC LIMIT :lim"
                 ),
                 {"lim": int(limit)},
             ).mappings().all()
         return pd.DataFrame(rows)
     except Exception as e:
         st.warning(f"Could not list runs: {e}")
-        return pd.DataFrame(columns=["id","run_type","started_at","downloaded_count","skipped_count","elapsed_s"])
+        return pd.DataFrame(columns=["id","run_type","started_at","downloaded_count","skipped_count","elapsed_s","params_json"])
 
 
 def load_run_results(run_id: int) -> pd.DataFrame:
@@ -1821,6 +1974,19 @@ def _classify_breakout(pct):
     except Exception:
         return ""
 
+import streamlit as st
+
+# --- Shared column config for scan result tables ---
+COMMON_COLCFG = {
+    "Latest Close": st.column_config.NumberColumn(format="$%.2f"),
+    "Previous 20d Max": st.column_config.NumberColumn(format="$%.2f"),
+    "Breakout %": st.column_config.NumberColumn(format="%.2f"),
+    "Premarket % Change": st.column_config.NumberColumn(format="%.2f"),
+    "Postmarket % Change": st.column_config.NumberColumn(format="%.2f"),
+    "Premarket $ Change": st.column_config.NumberColumn(format="$%.2f"),
+    "Postmarket $ Change": st.column_config.NumberColumn(format="$%.2f"),
+}
+
 # Streamlit UI
 st.title("Money Moves Breakout Scanner")
 
@@ -1907,7 +2073,7 @@ if uploaded_file is not None:
             st.info("No breakout candidates found.")
         else:
             st.success(f"Found {len(breakout_df)} breakout candidates.")
-            st.dataframe(breakout_df)
+            st.dataframe(breakout_df, column_config=COMMON_COLCFG, use_container_width=True)
 
             st.download_button(
                 "Download Breakout Results",
@@ -1983,7 +2149,7 @@ if search_ticker:
                 st.info(f"No breakout detected for {search_ticker} based on the last 60 days data.")
             else:
                 st.success(f"Breakout detected for {search_ticker}:")
-                st.dataframe(breakout_df)
+                st.dataframe(breakout_df, column_config=COMMON_COLCFG, use_container_width=True)
     except Exception as e:
         st.error(f"Error fetching data for ticker '{search_ticker}': {e}")
 
@@ -2055,7 +2221,7 @@ if st.sidebar.button("Run Hot Stocks Scan"):
         st.info("No breakout candidates found among hot stocks.")
     else:
         st.success(f"Found {len(breakout_df)} breakout candidates among hot stocks.")
-        st.dataframe(breakout_df)
+        st.dataframe(breakout_df, column_config=COMMON_COLCFG, use_container_width=True)
         # --- DB Helper ---
         # Persist run to DB
         meta = {
@@ -2172,7 +2338,7 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
                 st.info("No breakout candidates found among most active stocks.")
             else:
                 st.success(f"Found {len(breakout_df)} breakout candidates among most active stocks.")
-                st.dataframe(breakout_df)
+                st.dataframe(breakout_df, column_config=COMMON_COLCFG, use_container_width=True)
                 # --- DB Most Active ---
                 # Persist run to DB
                 meta = {
@@ -2294,7 +2460,7 @@ if st.sidebar.button("Run Trending Scan"):
                 st.info("No breakout candidates found among trending stocks.")
             else:
                 st.success(f"Found {len(breakout_df)} breakout candidates among trending stocks.")
-                st.dataframe(breakout_df)
+                st.dataframe(breakout_df, column_config=COMMON_COLCFG, use_container_width=True)
 
                 # -- DB Helper Trending ---
                 # Persist run to DB
@@ -2356,6 +2522,11 @@ if st.sidebar.button("Run Trending Scan"):
 
 # --- Helper for S&P 500 scan (for both button and live update) ---
 st.sidebar.markdown("### S&P and Nasdaq Stocks")
+# Network / retry settings
+net_max_retries = st.sidebar.slider(
+    "Max retries per chunk", min_value=1, max_value=6, value=3,
+    help="How many times to retry a failing data chunk before falling back per-ticker."
+)
 def run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_price, apply_gap_filter):
     with st.spinner("Fetching S&P 500 tickers..."):
         tickers = load_sp500_tickers()
@@ -2416,7 +2587,7 @@ def run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_pri
                 running_rows,
                 columns=['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume']
             ).sort_values('Breakout %', ascending=False).reset_index(drop=True)
-            live_table.dataframe(live_df)
+            live_table.dataframe(live_df, column_config=COMMON_COLCFG, use_container_width=True)
 
     # Choose streaming or batch path based on use_parallel flag
     if use_parallel:
@@ -2426,7 +2597,7 @@ def run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_pri
             interval="1d",
             chunk_size=sp_chunk,
             max_workers=parallel_workers,
-            max_retries=max_retries if 'max_retries' in locals() else 3,
+            max_retries=net_max_retries,
             retry_sleep=1.2,
             logger=sp_log,
             progress_cb=progress_cb,
@@ -2483,7 +2654,7 @@ def run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_pri
         st.success(f"Scan complete ✅ Found {len(breakout_df)} breakout candidates in S&P 500.")
         final_df = breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True)
         final_df = final_df.drop_duplicates(subset=["Ticker"], keep="first")
-        live_table.dataframe(final_df)  # update the same live table
+        live_table.dataframe(final_df, column_config=COMMON_COLCFG, use_container_width=True)  # update the same live table
         files = {"breakout_sp500.csv": final_df.to_csv(index=False)}
         try:
             if apply_gap_filter and 'gap_df' in locals() and not gap_df.empty:
@@ -2584,7 +2755,7 @@ if st.sidebar.button("Run Nasdaq Scan"):
                     running_rows,
                     columns=['Ticker', 'Latest Close', 'Previous 20d Max', 'Breakout %', 'Volume']
                 ).sort_values('Breakout %', ascending=False).reset_index(drop=True)
-                live_table.dataframe(live_df)
+                live_table.dataframe(live_df, column_config=COMMON_COLCFG, use_container_width=True)
 
         # Choose streaming or batch path based on use_parallel flag
         if use_parallel:
@@ -2594,6 +2765,7 @@ if st.sidebar.button("Run Nasdaq Scan"):
                 interval="1d",
                 chunk_size=ndq_chunk,
                 max_workers=ndq_workers,
+                max_retries=net_max_retries,
                 logger=ndq_log,
                 progress_cb=progress_cb,
                 per_chunk_cb=per_chunk_cb,
@@ -2648,7 +2820,7 @@ if st.sidebar.button("Run Nasdaq Scan"):
         if not breakout_df.empty:
             st.success(f"Scan complete ✅ Found {len(breakout_df)} breakout candidates in Nasdaq.")
             final_df = breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True)
-            live_table.dataframe(final_df) # update the same live table
+            live_table.dataframe(final_df, column_config=COMMON_COLCFG, use_container_width=True) # update the same live table
             # Persist run to DB
             meta = {
                 "universe_before": uni_before,
@@ -2696,15 +2868,53 @@ if st.sidebar.button("Run Pre-market Scan"):
                 status.markdown(f"Processed **{done}/{total}** tickers…")
 
         def per_row_cb(row):
-            running_rows.append([row["Ticker"], row["Premarket First Price"], row["Premarket Last Price"], row["Premarket % Change"]])
+            try:
+                first = float(row.get("Premarket First Price", float("nan")))
+                last = float(row.get("Premarket Last Price", float("nan")))
+                dollar_chg = (last - first) if np.isfinite(first) and np.isfinite(last) else np.nan
+            except Exception:
+                dollar_chg = np.nan
+                first = row.get("Premarket First Price", np.nan)
+                last = row.get("Premarket Last Price", np.nan)
+
+            running_rows.append([
+                row.get("Ticker", ""),
+                first,
+                last,
+                dollar_chg,
+                row.get("Premarket % Change", np.nan),
+            ])
+
             live_df = pd.DataFrame(
                 running_rows,
-                columns=["Ticker", "Premarket First Price", "Premarket Last Price", "Premarket % Change"]
-            ).sort_values("Premarket % Change", ascending=False).reset_index(drop=True)
-            live_table.dataframe(live_df)
+                columns=["Ticker", "Premarket First Price", "Premarket Last Price",
+                         "Premarket $ Change", "Premarket % Change"]
+            )
+
+            for c in ["Premarket First Price", "Premarket Last Price", "Premarket $ Change"]:
+                live_df[c] = pd.to_numeric(live_df[c], errors="coerce").round(2)
+
+            live_df = live_df.sort_values("Premarket % Change", ascending=False).reset_index(drop=True)
+            live_table.dataframe(live_df, column_config=COMMON_COLCFG, use_container_width=True)
 
         with st.spinner(f"Running pre-market scan on {len(tickers)} tickers…"):
             pm_df = premarket_scan(tickers, progress_cb=progress_cb, per_row_cb=per_row_cb)
+            # Compute absolute pre-market dollar change and order columns
+            if pm_df is not None and not pm_df.empty:
+                pm_df["Premarket $ Change"] = (
+                    pd.to_numeric(pm_df["Premarket Last Price"], errors="coerce") -
+                    pd.to_numeric(pm_df["Premarket First Price"], errors="coerce")
+                ).round(2)
+
+                wanted_cols = [
+                    "Ticker",
+                    "Premarket First Price",
+                    "Premarket Last Price",
+                    "Premarket $ Change",
+                    "Premarket % Change",
+                ]
+                existing_cols = [c for c in wanted_cols if c in pm_df.columns]
+                pm_df = pm_df[existing_cols + [c for c in pm_df.columns if c not in existing_cols]]
 
         # Final consolidated view
         if pm_df.empty:
@@ -2712,7 +2922,7 @@ if st.sidebar.button("Run Pre-market Scan"):
         else:
             st.success(f"Scan complete ✅ Found {len(pm_df)} tickers with pre-market data.")
             final_df = pm_df.sort_values("Premarket % Change", ascending=False).reset_index(drop=True)
-            live_table.dataframe(final_df)  # update the same live table
+            live_table.dataframe(final_df, column_config=COMMON_COLCFG, use_container_width=True)  # update the same live table
 
             # --- Pre-Market DB Helper
             meta = {
@@ -2755,12 +2965,34 @@ def render_postmarket_section():
                 status.markdown(f"Processed **{done}/{total}** tickers…")
 
         def per_row_cb(row):
-            running_rows.append([row["Ticker"], row["Postmarket First Price"], row["Postmarket Last Price"], row["Postmarket % Change"]])
+            try:
+                first = float(row.get("Postmarket First Price", float("nan")))
+                last = float(row.get("Postmarket Last Price", float("nan")))
+                dollar_chg = (last - first) if np.isfinite(first) and np.isfinite(last) else np.nan
+            except Exception:
+                dollar_chg = np.nan
+                first = row.get("Postmarket First Price", np.nan)
+                last = row.get("Postmarket Last Price", np.nan)
+
+            running_rows.append([
+                row.get("Ticker", ""),
+                first,
+                last,
+                dollar_chg,
+                row.get("Postmarket % Change", np.nan),
+            ])
+
             live_df = pd.DataFrame(
                 running_rows,
-                columns=["Ticker", "Postmarket First Price", "Postmarket Last Price", "Postmarket % Change"]
-            ).sort_values("Postmarket % Change", ascending=False).reset_index(drop=True)
-            live_table.dataframe(live_df)
+                columns=["Ticker", "Postmarket First Price", "Postmarket Last Price",
+                         "Postmarket $ Change", "Postmarket % Change"]
+            )
+
+            for c in ["Postmarket First Price", "Postmarket Last Price", "Postmarket $ Change"]:
+                live_df[c] = pd.to_numeric(live_df[c], errors="coerce").round(2)
+
+            live_df = live_df.sort_values("Postmarket % Change", ascending=False).reset_index(drop=True)
+            live_table.dataframe(live_df, column_config=COMMON_COLCFG, use_container_width=True)
 
         with st.spinner(f"Running post-market scan on {len(tickers)} tickers…"):
             t0 = time.perf_counter()
@@ -2768,13 +3000,30 @@ def render_postmarket_section():
             t1 = time.perf_counter()
             elapsed_s = t1 - t0
 
+        # Compute absolute post-market dollar change and order columns
+        if post_df is not None and not post_df.empty:
+            post_df["Postmarket $ Change"] = (
+                pd.to_numeric(post_df["Postmarket Last Price"], errors="coerce") -
+                pd.to_numeric(post_df["Postmarket First Price"], errors="coerce")
+            ).round(2)
+
+            wanted_cols = [
+                "Ticker",
+                "Postmarket First Price",
+                "Postmarket Last Price",
+                "Postmarket $ Change",
+                "Postmarket % Change",
+            ]
+            existing_cols = [c for c in wanted_cols if c in post_df.columns]
+            post_df = post_df[existing_cols + [c for c in post_df.columns if c not in existing_cols]]
+
         # Final consolidated view
         if post_df.empty:
             st.info("No post-market candidates found or no post-market data available.")
         else:
             st.success(f"Scan complete ✅ Found {len(post_df)} tickers with post-market data.")
             final_df = post_df.sort_values("Postmarket % Change", ascending=False).reset_index(drop=True)
-            live_table.dataframe(final_df)  # update the same live table
+            live_table.dataframe(final_df, column_config=COMMON_COLCFG, use_container_width=True)  # update the same live table
 
             # --- Post-Market Results ---
             meta = {
@@ -2826,13 +3075,39 @@ with tab_history:
         )
         selected_run_id = int(run_ids[sel])
 
+        # Re-run with same settings
+        if st.button("Re-run with these settings", key="rerun_same_settings"):
+            try:
+                row = runs_df[runs_df["id"] == selected_run_id].iloc[0]
+                params = {}
+                try:
+                    params = json.loads(row.get("params_json") or "{}")
+                except Exception:
+                    params = {}
+                # Restore a few common settings if present
+                st.session_state["include_ta"] = bool(params.get("include_ta", st.session_state.get("include_ta", False)))
+                st.session_state["apply_gap_filter"] = bool(params.get("apply_gap_filter", st.session_state.get("apply_gap_filter", True)))
+                # Dispatch by run_type
+                rt = str(row.get("run_type"))
+                if rt == "sp500":
+                    run_sp500_scan(us_only, parallel_chunk, parallel_workers, min_price, max_price, apply_gap_filter)
+                elif rt == "nasdaq":
+                    # Trigger Nasdaq path by programmatically pressing the sidebar action
+                    # (For now, reuse the button handler code by calling the underlying scanning routine if you factor it.)
+                    st.info("To re-run Nasdaq, click 'Run Nasdaq Scan' in the sidebar (direct programmatic dispatch can be factored similarly to S&P).")
+                elif rt in ("hot", "most_active", "trending", "premarket", "postmarket"):
+                    st.info(f"Re-run for '{rt}' is not yet wired programmatically. Use the sidebar action for now.")
+            except Exception as e:
+                st.warning(f"Could not re-run: {e}")
+
+        # Load run results but don't render live tables here
         prev_df = load_run_results(selected_run_id)
         st.subheader(f"Saved Results for Run #{selected_run_id}")
         if prev_df.empty:
             st.info("This run has no saved rows.")
         else:
             with st.expander(f"Expand to view saved run #{selected_run_id} results", expanded=False):
-                st.dataframe(prev_df, width="stretch")
+                st.dataframe(prev_df, use_container_width=True)
             st.download_button(
                 "Download This Run (CSV)",
                 data=prev_df.to_csv(index=False),
@@ -2842,7 +3117,7 @@ with tab_history:
 
         # --- Delta view: compare to previous run of the same type ---
         st.markdown("#### Compare to previous run of the same type")
-        do_delta = st.checkbox("Show delta (added / removed tickers)")
+        do_delta = st.checkbox("Show delta (added / removed tickers)", key="history_delta_checkbox")
 
         if do_delta:
             try:
