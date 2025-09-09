@@ -2734,13 +2734,14 @@ if st.sidebar.button("Run Pre-market Scan"):
                 mime="text/csv"
             )
 
-# Add Post-market Scan Button
-st.sidebar.markdown("### During Post-Market Hour")
-if st.sidebar.button("Run Post-market Scan"):
+# Helper to render the entire Post-market UI (scoped to Scans tab)
+def render_postmarket_section():
+    # Add Post-market Scan Button (scoped rendering via tab container)
     tickers = st.session_state.get("tickers", [])
-    if not tickers:
-        st.error("No tickers available for post-market scan.")
-    else:
+    if st.sidebar.button("Run Post-market Scan"):
+        if not tickers:
+            st.error("No tickers available for post-market scan.")
+            return
         st.subheader("Post-market Scan Results (Live)")
         progress = st.progress(0)
         live_table = st.empty()
@@ -2762,7 +2763,10 @@ if st.sidebar.button("Run Post-market Scan"):
             live_table.dataframe(live_df)
 
         with st.spinner(f"Running post-market scan on {len(tickers)} tickers…"):
+            t0 = time.perf_counter()
             post_df = postmarket_scan(tickers, progress_cb=progress_cb, per_row_cb=per_row_cb)
+            t1 = time.perf_counter()
+            elapsed_s = t1 - t0
 
         # Final consolidated view
         if post_df.empty:
@@ -2778,7 +2782,7 @@ if st.sidebar.button("Run Post-market Scan"):
                 "universe_after": len(tickers),
                 "downloaded_count": int(len(final_df)),
                 "skipped_count": 0,
-                "elapsed_s": 0.0,
+                "elapsed_s": elapsed_s,
                 "params": {"session": "postmarket"}
             }
             run_id = save_run("postmarket", meta, final_df)
@@ -2791,6 +2795,10 @@ if st.sidebar.button("Run Post-market Scan"):
                 file_name="postmarket_results.csv",
                 mime="text/csv"
             )
+
+with tab_scan:
+    st.sidebar.markdown("### During Post-Market Hour")
+    render_postmarket_section()
 
 # --- History Viewer ---
 with tab_history:
