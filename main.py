@@ -1503,6 +1503,120 @@ show_diagnostics_ui = st.sidebar.checkbox(
 )
 st.session_state["show_diagnostics_ui"] = show_diagnostics_ui
 
+#
+# --- Headless runners for scheduler triggers (no UI required) ---
+def _headless_scan_run(run_type: str, universe: list = None, session_label: str = None) -> int:
+    """
+    Perform a scan without rendering UI and persist results to DB.
+    Returns the created run_id (or -1 if nothing saved).
+    """
+    import time as _time
+
+    # Defaults / fallbacks
+    _min_price = float(st.session_state.get("min_price", 5.0))
+    _max_price = float(st.session_state.get("max_price", 1000.0))
+    _include_ta = bool(st.session_state.get("include_ta", False))
+    _min_dollar_vol = int(st.session_state.get("min_dollar_vol", 2_000_000))
+    _use_parallel = bool(st.session_state.get("use_parallel", True))
+    _parallel_workers = int(st.session_state.get("parallel_workers", 4))
+    _parallel_chunk = int(st.session_state.get("parallel_chunk", 800))
+    _us_only = bool(st.session_state.get("us_only", True))
+    _apply_gap_filter = bool(st.session_state.get("apply_gap_filter", True))
+
+    # Universe
+    if universe is None:
+        # Prefer currently loaded universe; else try SP600; else empty
+        universe = st.session_state.get("tickers") or load_sp600_tickers()
+        if _us_only:
+            universe = filter_us_tickers(universe)
+        universe = filter_problem_tickers(universe)
+
+    if not universe:
+        return -1
+
+    # TA (SPY) optional
+    _spy_df = get_spy_history("60d") if _include_ta else None
+
+    t0 = _time.perf_counter()
+    if _use_parallel:
+        price_data, skipped = fetch_price_data_parallel(
+            universe, period="60d", interval="1d",
+            chunk_size=_parallel_chunk, max_workers=_parallel_workers,
+            logger=None,
+        )
+    else:
+        price_data, skipped = fetch_price_data_batch(
+            universe, period="60d", interval="1d", batch_size=50
+        )
+    t1 = _time.perf_counter()
+
+    # Filters
+    filtered = filter_tickers_by_price(price_data, _min_price, _max_price)
+    liquid = filter_by_dollar_volume(price_data, _min_dollar_vol)
+    filtered = [t for t in filtered if t in liquid]
+    filtered_data = {t: price_data[t] for t in filtered if t in price_data}
+
+    # Optional gap/unusual filter (note: we still run breakout on filtered_data)
+    if _apply_gap_filter:
+        try:
+            _ = gap_unusual_volume_scanner(filtered_data)
+        except Exception:
+            pass
+
+    breakout_df = breakout_scanner(filtered_data, _min_price, _max_price, include_ta=_include_ta, spy_df=_spy_df)
+
+    meta = {
+        "downloaded_count": len({t for t in price_data if t in universe}),
+        "skipped_count": len(skipped),
+        "elapsed_s": (t1 - t0),
+        "params": {
+            "min_price": float(_min_price),
+            "max_price": float(_max_price),
+            "include_ta": bool(_include_ta),
+            "min_dollar_vol": int(_min_dollar_vol),
+            "use_parallel": bool(_use_parallel),
+            "parallel_workers": int(_parallel_workers),
+            "parallel_chunk": int(_parallel_chunk if _use_parallel else 50),
+            "us_only": bool(_us_only),
+            "apply_gap_filter": bool(_apply_gap_filter),
+            "session": session_label,
+        },
+    }
+    try:
+        run_id = save_run(run_type, meta, breakout_df.sort_values('Breakout %', ascending=False).reset_index(drop=True) if breakout_df is not None else pd.DataFrame())
+    except Exception:
+        # Even if save fails, avoid crashing scheduler
+        run_id = -1
+    return int(run_id)
+
+def run_premarket_headless() -> int:
+    """Headless pre-market scan (for scheduler)."""
+    # Use a broad US universe; if you have a dedicated premarket universe loader, swap it here.
+    universe = st.session_state.get("tickers") or load_sp600_tickers()
+    if st.session_state.get("us_only", True):
+        universe = filter_us_tickers(universe)
+    universe = filter_problem_tickers(universe)
+    return _headless_scan_run(run_type="premarket", universe=universe, session_label="premarket")
+
+def run_postmarket_headless() -> int:
+    """Headless post-market scan (for scheduler)."""
+    universe = st.session_state.get("tickers") or load_sp600_tickers()
+    if st.session_state.get("us_only", True):
+        universe = filter_us_tickers(universe)
+    universe = filter_problem_tickers(universe)
+    return _headless_scan_run(run_type="postmarket", universe=universe, session_label="postmarket")
+
+def run_sp500_headless(session_label: str = "regular") -> int:
+    """Headless S&P 500 scan (for scheduler)."""
+    try:
+        uni = load_sp500_tickers()
+        if not uni:
+            uni = fetch_and_save_sp500()
+    except Exception:
+        uni = load_sp500_tickers()
+    uni = filter_problem_tickers(uni)
+    return _headless_scan_run(run_type="sp500", universe=uni, session_label=session_label)
+
 # --- Scheduler (optional; uses scheduler.py module) ---
 try:
     import scheduler as sched
@@ -2269,7 +2383,7 @@ if st.sidebar.button("Run Hot Stocks Scan"):
         st.info("No breakout candidates found among hot stocks.")
     else:
         st.success(f"Found {len(breakout_df)} breakout candidates among hot stocks.")
-        st.dataframe(breakout_df, column_config=COMMON_COLCFG, use_container_width=True)
+        st.dataframe(breakout_df, column_config=COMMON_COLCFG, width="stretch")
         # --- DB Helper ---
         # Persist run to DB
         meta = {
@@ -2386,7 +2500,7 @@ if st.sidebar.button("Run Most Active Stocks Scan"):
                 st.info("No breakout candidates found among most active stocks.")
             else:
                 st.success(f"Found {len(breakout_df)} breakout candidates among most active stocks.")
-                st.dataframe(breakout_df, column_config=COMMON_COLCFG, use_container_width=True)
+                st.dataframe(breakout_df, column_config=COMMON_COLCFG, width="stretch")
                 # --- DB Most Active ---
                 # Persist run to DB
                 meta = {
