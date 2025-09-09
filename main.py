@@ -15,6 +15,7 @@ import random
 import time
 import warnings
 
+
 # --- Parallel download defaults (UI removed) ---
 use_parallel = True        # set False to force batch mode
 parallel_chunk = 800       # tickers per worker in parallel mode
@@ -1501,6 +1502,53 @@ show_diagnostics_ui = st.sidebar.checkbox(
     key="show_diagnostics_top",
 )
 st.session_state["show_diagnostics_ui"] = show_diagnostics_ui
+
+# --- Scheduler (optional; uses scheduler.py module) ---
+try:
+    import scheduler as sched
+
+    # Wire up headless runners if present; otherwise fall back to harmless st.toast
+    def _dummy_run(name: str):
+        def _f():
+            try:
+                st.toast(f"{name} run triggered (no headless runner wired)", icon="⏱️")
+            except Exception:
+                pass
+            return -1
+        return _f
+
+    _run_pre = globals().get("run_premarket_headless") or _dummy_run("Pre-market")
+    _run_post = globals().get("run_postmarket_headless") or _dummy_run("Post-market")
+    _run_sp500_fn = globals().get("run_sp500_headless")
+
+    # Support either run_sp500_headless(session_label="regular") or a simple callable
+    def _run_sp500_wrapper():
+        fn = _run_sp500_fn or _dummy_run("S&P 500")
+        try:
+            # Prefer a function that accepts session_label, else just call it
+            return fn(session_label="regular") if fn.__code__.co_argcount else fn()
+        except Exception:
+            return fn()
+
+    # Render scheduler controls in the sidebar
+    sched.render_sidebar_controls(
+        sched.RunFns(
+            run_premarket=_run_pre,
+            run_postmarket=_run_post,
+            run_sp500=_run_sp500_wrapper,
+        ),
+        tz_str="America/New_York",
+        pre_time=(8, 30),      # 08:30 ET
+        intraday_time=(9, 45), # 09:45 ET
+        post_time=(16, 10),    # 16:10 ET
+    )
+except ModuleNotFoundError as _e:
+    # Graceful if scheduler.py or APScheduler isn't available
+    st.sidebar.markdown("### Scheduler")
+    st.sidebar.caption(f"Scheduler unavailable: {_e}. Add scheduler.py and install apscheduler to enable.")
+except Exception as _e:
+    st.sidebar.markdown("### Scheduler")
+    st.sidebar.caption(f"Scheduler error: {_e}")
 from pathlib import Path
 from sqlalchemy import create_engine, text
 
