@@ -14,6 +14,7 @@ from threading import Lock
 import random
 import time
 import warnings
+from logger import thread_safe_logger
 
 
 # --- Parallel download defaults (UI removed) ---
@@ -21,112 +22,7 @@ use_parallel = True        # set False to force batch mode
 parallel_chunk = 800       # tickers per worker in parallel mode
 parallel_workers = 4       # number of worker threads for chunked downloads
 
-# -- DB Helpers --
-# === Persistence (SQLite) ===
-import os, json, sqlite3
-
-DB_PATH = st.secrets.get("DB_PATH", "scanner.sqlite")
-
-def _db_conn():
-    # check_same_thread=False to allow Streamlit callbacks/threads to write
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
-
-def init_db():
-    with _db_conn() as conn:
-        cur = conn.cursor()
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_type TEXT NOT NULL,
-            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            universe_before INTEGER,
-            universe_after INTEGER,
-            downloaded_count INTEGER,
-            skipped_count INTEGER,
-            elapsed_s REAL,
-            params_json TEXT
-        )""")
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            ticker TEXT,
-            latest_close REAL,
-            prev_20d_max REAL,
-            breakout_pct REAL,
-            volume TEXT,
-            rsi REAL,
-            macd REAL,
-            macd_signal REAL,
-            atr REAL,
-            rs20 REAL,
-            FOREIGN KEY(run_id) REFERENCES runs(id)
-        )""")
-        conn.commit()
-
-def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
-    """Persist one scan (header in 'runs' + rows in 'results'). Returns run_id."""
-    init_db()
-    with _db_conn() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            """INSERT INTO runs
-               (run_type, universe_before, universe_after, downloaded_count, skipped_count, elapsed_s, params_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                run_type,
-                int(meta.get("universe_before", 0)),
-                int(meta.get("universe_after", 0)),
-                int(meta.get("downloaded_count", 0)),
-                int(meta.get("skipped_count", 0)),
-                float(meta.get("elapsed_s", 0.0)),
-                json.dumps(meta.get("params", {})),
-            ),
-        )
-        run_id = cur.lastrowid
-
-        if results_df is not None and not results_df.empty:
-            df = results_df.copy()
-            df["run_id"] = run_id
-            def _col(df, name): return df[name] if name in df.columns else np.nan
-            out = pd.DataFrame({
-                "run_id": df["run_id"],
-                "ticker": _col(df, "Ticker"),
-                "latest_close": _col(df, "Latest Close"),
-                "prev_20d_max": _col(df, "Previous 20d Max"),
-                "breakout_pct": _col(df, "Breakout %"),
-                "volume": _col(df, "Volume"),
-                "rsi": _col(df, "RSI(14)"),
-                "macd": _col(df, "MACD"),
-                "macd_signal": _col(df, "MACD Signal"),
-                "atr": _col(df, "ATR(14)"),
-                "rs20": _col(df, "RS 20d vs SPY (%)"),
-            })
-            out.to_sql("results", conn, if_exists="append", index=False)
-        conn.commit()
-        return run_id
-
-def list_runs(limit: int = 200) -> pd.DataFrame:
-    init_db()
-    with _db_conn() as conn:
-        return pd.read_sql_query(
-            "SELECT id, run_type, started_at, universe_before, universe_after, "
-            "downloaded_count, skipped_count, elapsed_s FROM runs "
-            "ORDER BY id DESC LIMIT ?",
-            conn, params=(limit,)
-        )
-
-def load_run_results(run_id: int) -> pd.DataFrame:
-    init_db()
-    with _db_conn() as conn:
-        return pd.read_sql_query(
-            "SELECT ticker AS 'Ticker', latest_close AS 'Latest Close', "
-            "prev_20d_max AS 'Previous 20d Max', breakout_pct AS 'Breakout %', "
-            "volume AS 'Volume', rsi AS 'RSI(14)', macd AS 'MACD', "
-            "macd_signal AS 'MACD Signal', atr AS 'ATR(14)', rs20 AS 'RS 20d vs SPY (%)' "
-            "FROM results WHERE run_id=? ORDER BY CAST([Breakout %] AS REAL) DESC",
-            conn, params=(run_id,)
-        )
+# (Removed legacy SQLite helpers; consolidated below into the SQLAlchemy-backed persistence)
 
 # --- Ticker normalization helpers ---
 import re
@@ -1492,7 +1388,6 @@ def _rs_20d_vs_spy(df_ticker: pd.DataFrame, df_spy: pd.DataFrame) -> float:
 
 # --- Database (Postgres first; fallback to SQLite) ---
 import os, json, sqlite3
-import streamlit as st
 # --- Diagnostics toggle (define early so it's available everywhere) ---
 if "show_diagnostics_ui" not in st.session_state:
     st.session_state["show_diagnostics_ui"] = False
@@ -1967,6 +1862,193 @@ def _ensure_indexes():
 
 _init_db()
 _ensure_indexes()
+
+
+# --- Portable table/column helpers & JSON-backed persistence ---
+from typing import Iterable
+
+def _table_exists(name: str) -> bool:
+    try:
+        with engine.begin() as conn:
+            if engine.dialect.name == "postgresql":
+                q = text("SELECT to_regclass(:t)")
+                return conn.execute(q, {"t": name}).scalar() is not None
+            else:
+                rows = conn.execute(text("PRAGMA table_info(%s)" % name)).fetchall()
+                return len(rows) > 0
+    except Exception:
+        return False
+
+def _runs_columns() -> set:
+    try:
+        with engine.begin() as conn:
+            if engine.dialect.name == "postgresql":
+                rows = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='runs'"))
+                return {str(r[0]).lower() for r in rows}
+            else:
+                rows = conn.execute(text("PRAGMA table_info(runs)")).fetchall()
+                return {str(r[1]).lower() for r in rows}
+    except Exception:
+        return set()
+
+def list_runs(limit: int = 200) -> pd.DataFrame:
+    cols = _runs_columns()
+    sel_cols = ["id", "run_type", "started_at", "downloaded_count", "skipped_count", "elapsed_s"]
+    if "universe_before" in cols: sel_cols.append("universe_before")
+    if "universe_after" in cols: sel_cols.append("universe_after")
+    select_sql = "SELECT " + ", ".join(sel_cols) + " FROM runs ORDER BY id DESC LIMIT :lim"
+    with engine.begin() as conn:
+        rows = conn.execute(text(select_sql), {"lim": int(limit)}).mappings().all()
+    return pd.DataFrame(rows)
+
+def load_run_results(run_id: int) -> pd.DataFrame:
+    # Prefer JSON store if present; otherwise fall back to legacy results table
+    if _table_exists("results_json"):
+        with engine.begin() as conn:
+            rows = conn.execute(text("SELECT row_json FROM results_json WHERE run_id=:rid"), {"rid": int(run_id)}).scalars().all()
+        if rows:
+            try:
+                data = [json.loads(r) for r in rows]
+                df = pd.DataFrame(data)
+                # Standardize expected column names if present
+                rename_map = {
+                    "latest_close": "Latest Close",
+                    "prev_20d_max": "Previous 20d Max",
+                    "breakout_pct": "Breakout %",
+                    "volume": "Volume",
+                    "rsi": "RSI(14)",
+                    "macd": "MACD",
+                    "macd_signal": "MACD Signal",
+                    "atr": "ATR(14)",
+                    "rs20": "RS 20d vs SPY (%)",
+                    "ticker": "Ticker",
+                }
+                for k, v in rename_map.items():
+                    if k in df.columns and v not in df.columns:
+                        df[v] = df[k]
+                keep_order = [
+                    "Ticker",
+                    "Latest Close",
+                    "Previous 20d Max",
+                    "Breakout %",
+                    "Volume",
+                    "RSI(14)",
+                    "MACD",
+                    "MACD Signal",
+                    "ATR(14)",
+                    "RS 20d vs SPY (%)",
+                    "Class",
+                ]
+                # Retain only present columns, in the preferred order
+                cols = [c for c in keep_order if c in df.columns]
+                if cols:
+                    df = df[cols]
+                return df.sort_values(by=[c for c in ["Breakout %"] if c in df.columns], ascending=False)
+            except Exception:
+                pass
+    if _table_exists("results"):
+        with engine.begin() as conn:
+            q = text(
+                """
+                SELECT ticker AS "Ticker",
+                       latest_close AS "Latest Close",
+                       prev_20d_max AS "Previous 20d Max",
+                       breakout_pct AS "Breakout %",
+                       volume AS "Volume",
+                       rsi AS "RSI(14)",
+                       macd AS "MACD",
+                       macd_signal AS "MACD Signal",
+                       atr AS "ATR(14)",
+                       rs20 AS "RS 20d vs SPY (%)"
+                FROM results
+                WHERE run_id=:rid
+                ORDER BY CAST(breakout_pct AS REAL) DESC
+                """
+            )
+            rows = conn.execute(q, {"rid": int(run_id)}).mappings().all()
+        return pd.DataFrame(rows)
+    return pd.DataFrame()
+
+def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
+    """Persist a scan run header + rows (JSON), return run id."""
+    cols = _runs_columns()
+    params_json = json.dumps(meta.get("params", {}), ensure_ascii=False)
+    fields = {
+        "run_type": run_type,
+        "downloaded_count": int(meta.get("downloaded_count", 0)),
+        "skipped_count": int(meta.get("skipped_count", 0)),
+        "elapsed_s": float(meta.get("elapsed_s", 0.0)),
+        "params_json": params_json,
+    }
+    if "universe_before" in cols:
+        fields["universe_before"] = int(meta.get("universe_before", 0))
+    if "universe_after" in cols:
+        fields["universe_after"] = int(meta.get("universe_after", 0))
+
+    # Insert run header
+    with engine.begin() as conn:
+        # Build INSERT with only available columns
+        col_names = ", ".join(fields.keys())
+        placeholders = ", ".join(":" + k for k in fields.keys())
+        run_id = conn.execute(text(f"INSERT INTO runs ({col_names}) VALUES ({placeholders}) RETURNING id"), fields).scalar()
+        if run_id is None and engine.dialect.name != "postgresql":
+            # SQLite fallback: last_insert_rowid()
+            conn.execute(text(f"INSERT INTO runs ({col_names}) VALUES ({placeholders})"), fields)
+            run_id = conn.execute(text("SELECT last_insert_rowid()")).scalar()
+
+        # Insert rows (JSON) if provided
+        if results_df is not None and not results_df.empty:
+            # Build per-row JSON plus handy hot columns for filtering
+            session_label = meta.get("params", {}).get("session")
+            payload: list[dict] = []
+            for _, r in results_df.reset_index(drop=True).iterrows():
+                row_dict = {
+                    "Ticker": r.get("Ticker"),
+                    "Latest Close": r.get("Latest Close"),
+                    "Previous 20d Max": r.get("Previous 20d Max"),
+                    "Breakout %": r.get("Breakout %"),
+                    "Volume": r.get("Volume"),
+                    "RSI(14)": r.get("RSI(14)"),
+                    "MACD": r.get("MACD"),
+                    "MACD Signal": r.get("MACD Signal"),
+                    "ATR(14)": r.get("ATR(14)"),
+                    "RS 20d vs SPY (%)": r.get("RS 20d vs SPY (%)"),
+                    "Class": r.get("Class"),
+                }
+                row_json = json.dumps(row_dict, ensure_ascii=False)
+                payload.append({
+                    "run_id": int(run_id),
+                    "row_json": row_json,
+                    "ticker": r.get("Ticker"),
+                    "breakout_pct": float(r.get("Breakout %")) if pd.notna(r.get("Breakout %")) else None,
+                    "session": session_label,
+                })
+
+            # Create INSERT for results_json with hot columns if table has them
+            has_ticker_col = False
+            has_breakout_col = False
+            has_session_col = False
+            if _table_exists("results_json"):
+                with engine.begin() as _c:
+                    if engine.dialect.name == "postgresql":
+                        cols_info = _c.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='results_json'"))
+                        cols_set = {str(x[0]).lower() for x in cols_info}
+                    else:
+                        cols_info = _c.execute(text("PRAGMA table_info(results_json)")).fetchall()
+                        cols_set = {str(x[1]).lower() for x in cols_info}
+                    has_ticker_col = "ticker" in cols_set
+                    has_breakout_col = "breakout_pct" in cols_set
+                    has_session_col = "session" in cols_set
+
+            base_cols = ["run_id", "row_json"]
+            if has_ticker_col: base_cols.append("ticker")
+            if has_breakout_col: base_cols.append("breakout_pct")
+            if has_session_col: base_cols.append("session")
+            col_sql = ", ".join(base_cols)
+            val_sql = ", ".join(":" + c for c in base_cols)
+            conn.execute(text(f"INSERT INTO results_json ({col_sql}) VALUES ({val_sql})"), payload)
+
+    return int(run_id)
 
 
 def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
