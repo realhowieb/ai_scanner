@@ -1839,6 +1839,15 @@ def _init_db():
                     );
                     """
                 ))
+                # Add optional universe_before and universe_after columns if missing
+                try:
+                    conn.execute(text("ALTER TABLE runs ADD COLUMN IF NOT EXISTS universe_before INTEGER;"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("ALTER TABLE runs ADD COLUMN IF NOT EXISTS universe_after INTEGER;"))
+                except Exception:
+                    pass
                 conn.execute(text(
                     """
                     CREATE TABLE IF NOT EXISTS results_json (
@@ -1883,6 +1892,15 @@ def _init_db():
                     );
                     """
                 ))
+                # Add optional universe_before and universe_after columns if missing (guarded by try/except)
+                try:
+                    conn.execute(text("ALTER TABLE runs ADD COLUMN universe_before INTEGER;"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("ALTER TABLE runs ADD COLUMN universe_after INTEGER;"))
+                except Exception:
+                    pass
                 conn.execute(text(
                     """
                     CREATE TABLE IF NOT EXISTS results_json (
@@ -1919,6 +1937,20 @@ def _init_db():
         st.warning(f"Database init issue: {e}")
 
 
+# --- Helper to check which columns exist in runs table ---
+def _runs_columns():
+    try:
+        with engine.begin() as conn:
+            if engine.dialect.name == "postgresql":
+                rows = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='runs'")).scalars().all()
+                return set(map(str.lower, rows))
+            else:
+                rows = conn.execute(text("PRAGMA table_info(runs)")).fetchall()
+                return set([str(r[1]).lower() for r in rows])
+    except Exception:
+        return set()
+
+
 # --- Index helper ---
 def _ensure_indexes():
     """Create helpful indexes (safe to call each start)."""
@@ -1944,41 +1976,86 @@ def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
     skipped_count = int(meta.get("skipped_count", 0))
     elapsed_s = float(meta.get("elapsed_s", 0.0))
 
+    _cols = _runs_columns()
+    _has_universe_before = "universe_before" in _cols
+    _has_universe_after = "universe_after" in _cols
+    u_before = int(meta.get("universe_before", 0)) if _has_universe_before else None
+    u_after  = int(meta.get("universe_after", 0)) if _has_universe_after else None
+
     with engine.begin() as conn:
         dialect = engine.dialect.name
         if dialect == "postgresql":
-            run_id = conn.execute(
-                text(
-                    """
-                    INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json)
-                    VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json)
-                    RETURNING id
-                    """
-                ),
-                {
-                    "run_type": run_type,
-                    "downloaded_count": downloaded_count,
-                    "skipped_count": skipped_count,
-                    "elapsed_s": elapsed_s,
-                    "params_json": params_json,
-                },
-            ).scalar_one()
+            if _has_universe_before and _has_universe_after:
+                run_id = conn.execute(
+                    text(
+                        """
+                        INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json, universe_before, universe_after)
+                        VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json, :universe_before, :universe_after)
+                        RETURNING id
+                        """
+                    ),
+                    {
+                        "run_type": run_type,
+                        "downloaded_count": downloaded_count,
+                        "skipped_count": skipped_count,
+                        "elapsed_s": elapsed_s,
+                        "params_json": params_json,
+                        "universe_before": u_before,
+                        "universe_after": u_after,
+                    },
+                ).scalar_one()
+            else:
+                run_id = conn.execute(
+                    text(
+                        """
+                        INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json)
+                        VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json)
+                        RETURNING id
+                        """
+                    ),
+                    {
+                        "run_type": run_type,
+                        "downloaded_count": downloaded_count,
+                        "skipped_count": skipped_count,
+                        "elapsed_s": elapsed_s,
+                        "params_json": params_json,
+                    },
+                ).scalar_one()
         else:
-            res = conn.execute(
-                text(
-                    """
-                    INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json)
-                    VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json)
-                    """
-                ),
-                {
-                    "run_type": run_type,
-                    "downloaded_count": downloaded_count,
-                    "skipped_count": skipped_count,
-                    "elapsed_s": elapsed_s,
-                    "params_json": params_json,
-                },
-            )
+            if _has_universe_before and _has_universe_after:
+                res = conn.execute(
+                    text(
+                        """
+                        INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json, universe_before, universe_after)
+                        VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json, :universe_before, :universe_after)
+                        """
+                    ),
+                    {
+                        "run_type": run_type,
+                        "downloaded_count": downloaded_count,
+                        "skipped_count": skipped_count,
+                        "elapsed_s": elapsed_s,
+                        "params_json": params_json,
+                        "universe_before": u_before,
+                        "universe_after": u_after,
+                    },
+                )
+            else:
+                res = conn.execute(
+                    text(
+                        """
+                        INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json)
+                        VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json)
+                        """
+                    ),
+                    {
+                        "run_type": run_type,
+                        "downloaded_count": downloaded_count,
+                        "skipped_count": skipped_count,
+                        "elapsed_s": elapsed_s,
+                        "params_json": params_json,
+                    },
+                )
             # sqlite lastrowid
             run_id = res.lastrowid  # type: ignore[attr-defined]
 
