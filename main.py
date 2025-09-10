@@ -15,6 +15,7 @@ import random
 import time
 import warnings
 from logger import thread_safe_logger
+from datetime import datetime, timezone
 
 
 # --- Parallel download defaults (UI removed) ---
@@ -2052,7 +2053,10 @@ def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
 
 
 def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
-    """Persist a scan run and its rows; returns run id."""
+    """
+    Persist a scan run header first (commit), then rows in a separate transaction.
+    Ensures the History entry exists even if results insertion fails.
+    """
     params_json = json.dumps(meta.get("params", {}), ensure_ascii=False)
     downloaded_count = int(meta.get("downloaded_count", 0))
     skipped_count = int(meta.get("skipped_count", 0))
@@ -2060,30 +2064,23 @@ def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
 
     _cols = _runs_columns()
     _has_universe_before = "universe_before" in _cols
-    _has_universe_after = "universe_after" in _cols
-    u_before = int(meta.get("universe_before", 0)) if _has_universe_before else None
-    u_after  = int(meta.get("universe_after", 0)) if _has_universe_after else None
+    _has_universe_after  = "universe_after"  in _cols
 
-    with engine.begin() as conn:
-        dialect = engine.dialect.name
-        if dialect == "postgresql":
+    # ---- 1) Insert header and COMMIT ----
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
             if _has_universe_before and _has_universe_after:
                 run_id = conn.execute(
                     text(
                         """
                         INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json, universe_before, universe_after)
-                        VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json, :universe_before, :universe_after)
-                        RETURNING id
+                        VALUES (:rt, :dl, :sk, :el, :pj, :ub, :ua) RETURNING id
                         """
                     ),
                     {
-                        "run_type": run_type,
-                        "downloaded_count": downloaded_count,
-                        "skipped_count": skipped_count,
-                        "elapsed_s": elapsed_s,
-                        "params_json": params_json,
-                        "universe_before": u_before,
-                        "universe_after": u_after,
+                        "rt": run_type, "dl": downloaded_count, "sk": skipped_count, "el": elapsed_s,
+                        "pj": params_json,
+                        "ub": int(meta.get("universe_before", 0)), "ua": int(meta.get("universe_after", 0)),
                     },
                 ).scalar_one()
             else:
@@ -2091,35 +2088,25 @@ def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
                     text(
                         """
                         INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json)
-                        VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json)
-                        RETURNING id
+                        VALUES (:rt, :dl, :sk, :el, :pj) RETURNING id
                         """
                     ),
-                    {
-                        "run_type": run_type,
-                        "downloaded_count": downloaded_count,
-                        "skipped_count": skipped_count,
-                        "elapsed_s": elapsed_s,
-                        "params_json": params_json,
-                    },
+                    {"rt": run_type, "dl": downloaded_count, "sk": skipped_count, "el": elapsed_s, "pj": params_json},
                 ).scalar_one()
-        else:
+    else:
+        with engine.begin() as conn:
             if _has_universe_before and _has_universe_after:
                 res = conn.execute(
                     text(
                         """
                         INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json, universe_before, universe_after)
-                        VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json, :universe_before, :universe_after)
+                        VALUES (:rt, :dl, :sk, :el, :pj, :ub, :ua)
                         """
                     ),
                     {
-                        "run_type": run_type,
-                        "downloaded_count": downloaded_count,
-                        "skipped_count": skipped_count,
-                        "elapsed_s": elapsed_s,
-                        "params_json": params_json,
-                        "universe_before": u_before,
-                        "universe_after": u_after,
+                        "rt": run_type, "dl": downloaded_count, "sk": skipped_count, "el": elapsed_s,
+                        "pj": params_json,
+                        "ub": int(meta.get("universe_before", 0)), "ua": int(meta.get("universe_after", 0)),
                     },
                 )
             else:
@@ -2127,22 +2114,18 @@ def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
                     text(
                         """
                         INSERT INTO runs (run_type, downloaded_count, skipped_count, elapsed_s, params_json)
-                        VALUES (:run_type, :downloaded_count, :skipped_count, :elapsed_s, :params_json)
+                        VALUES (:rt, :dl, :sk, :el, :pj)
                         """
                     ),
-                    {
-                        "run_type": run_type,
-                        "downloaded_count": downloaded_count,
-                        "skipped_count": skipped_count,
-                        "elapsed_s": elapsed_s,
-                        "params_json": params_json,
-                    },
+                    {"rt": run_type, "dl": downloaded_count, "sk": skipped_count, "el": elapsed_s, "pj": params_json},
                 )
-            # sqlite lastrowid
-            run_id = res.lastrowid  # type: ignore[attr-defined]
+            run_id = res.lastrowid  # sqlite
 
-        # Store results as JSON rows (even if empty, write a placeholder so the run is visible in History drill-down)
-        session_label = (meta.get("params", {}) or {}).get("session")
+    run_id = int(run_id)
+    session_label = (meta.get("params", {}) or {}).get("session")
+
+    # ---- 2) Insert rows in a separate transaction (don’t jeopardize header) ----
+    try:
         if results_df is not None and not results_df.empty:
             rows = results_df.to_dict(orient="records")
             payload = []
@@ -2156,102 +2139,82 @@ def save_run(run_type: str, meta: dict, results_df: pd.DataFrame) -> int:
                             breakout_pct = float(r.get(key))
                             break
                         except Exception:
-                            continue
+                            pass
                 payload.append({
-                    "run_id": int(run_id),
+                    "run_id": run_id,
                     "row_json": rj,
                     "ticker": ticker,
                     "breakout_pct": breakout_pct,
                     "session": session_label,
                 })
-            try:
-                conn.execute(
-                    text("INSERT INTO results_json (run_id, row_json, ticker, breakout_pct, session) "
-                         "VALUES (:run_id, :row_json, :ticker, :breakout_pct, :session)"),
-                    payload,
-                )
-            except Exception:
-                # Fallback to legacy schema if hot columns are unavailable
-                conn.execute(
-                    text("INSERT INTO results_json (run_id, row_json) VALUES (:run_id, :row_json)"),
-                    [{"run_id": int(run_id), "row_json": p['row_json']} for p in payload],
-                )
-        else:
-            # Write a placeholder row to signal "no results" for this run_id
-            placeholder = {"_note": "no results", "_rows": 0}
-            try:
-                conn.execute(
-                    text("INSERT INTO results_json (run_id, row_json) VALUES (:run_id, :row_json)"),
-                    [{"run_id": int(run_id), "row_json": json.dumps(placeholder)}],
-                )
-            except Exception:
-                pass
 
-        # --- Persist added/removed deltas vs previous run of the same type ---
+            with engine.begin() as conn:
+                try:
+                    conn.execute(
+                        text("INSERT INTO results_json (run_id, row_json, ticker, breakout_pct, session) "
+                             "VALUES (:run_id, :row_json, :ticker, :breakout_pct, :session)"),
+                        payload,
+                    )
+                except Exception:
+                    conn.execute(
+                        text("INSERT INTO results_json (run_id, row_json) VALUES (:run_id, :row_json)"),
+                        [{"run_id": run_id, "row_json": p["row_json"]} for p in payload],
+                    )
+        else:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("INSERT INTO results_json (run_id, row_json) VALUES (:rid, :row_json)"),
+                    {"rid": run_id, "row_json": json.dumps({"_note": "no results", "_rows": 0})},
+                )
+    except Exception as e:
         try:
-            # Find previous run of the same type
+            st.warning(f"Saved run #{run_id}, but failed to save result rows: {e}")
+        except Exception:
+            pass
+
+    # ---- 3) Persist deltas best-effort ----
+    try:
+        with engine.begin() as conn:
             prev_id = conn.execute(
-                text(
-                    "SELECT id FROM runs WHERE run_type = :rt AND id < :rid ORDER BY id DESC LIMIT 1"
-                ),
-                {"rt": run_type, "rid": int(run_id)},
+                text("SELECT id FROM runs WHERE run_type=:rt AND id<:rid ORDER BY id DESC LIMIT 1"),
+                {"rt": run_type, "rid": run_id},
             ).scalar()
 
-            if prev_id is not None:
-                # Load previous run results
+            if prev_id:
                 prev_rows = conn.execute(
-                    text("SELECT row_json FROM results_json WHERE run_id = :rid"),
+                    text("SELECT row_json FROM results_json WHERE run_id=:rid"),
                     {"rid": int(prev_id)},
                 ).scalars().all()
                 older_df = pd.DataFrame([json.loads(r) for r in prev_rows]) if prev_rows else pd.DataFrame()
+                cur_df   = results_df if results_df is not None else pd.DataFrame()
 
-                # Helper to get ticker set and row map
-                def _ticker_set_and_map(df: pd.DataFrame):
+                def _tset(df):
                     if df is None or df.empty:
                         return set(), {}
                     col = "Ticker" if "Ticker" in df.columns else (df.columns[0] if len(df.columns) else None)
-                    if col is None:
+                    if not col:
                         return set(), {}
                     tickers = list(map(str, df[col].astype(str)))
-                    row_map = {str(t): df.iloc[i].to_dict() for i, t in enumerate(tickers)}
-                    return set(tickers), row_map
+                    return set(tickers), {t: df.iloc[i].to_dict() for i, t in enumerate(tickers)}
 
-                cur_set, cur_map = _ticker_set_and_map(results_df)
-                old_set, old_map = _ticker_set_and_map(older_df)
-
-                added = sorted(cur_set - old_set)
-                removed = sorted(old_set - cur_set)
+                cur_set, cur_map = _tset(cur_df)
+                old_set, old_map = _tset(older_df)
 
                 payload = []
-                for t in added:
-                    try:
-                        payload.append({
-                            "run_id": int(run_id),
-                            "change": "added",
-                            "row_json": json.dumps(cur_map.get(t, {"Ticker": t}), default=str),
-                        })
-                    except Exception:
-                        continue
-                for t in removed:
-                    try:
-                        payload.append({
-                            "run_id": int(run_id),
-                            "change": "removed",
-                            "row_json": json.dumps(old_map.get(t, {"Ticker": t}), default=str),
-                        })
-                    except Exception:
-                        continue
+                for t in sorted(cur_set - old_set):
+                    payload.append({"run_id": run_id, "change": "added",   "row_json": json.dumps(cur_map.get(t, {"Ticker": t}), default=str)})
+                for t in sorted(old_set - cur_set):
+                    payload.append({"run_id": run_id, "change": "removed", "row_json": json.dumps(old_map.get(t, {"Ticker": t}), default=str)})
 
                 if payload:
                     conn.execute(
                         text("INSERT INTO run_deltas (run_id, change, row_json) VALUES (:run_id, :change, :row_json)"),
                         payload,
                     )
-        except Exception as _e:
-            # Non-fatal: continue even if delta persistence fails
-            pass
-    return int(run_id)
+    except Exception:
+        pass
 
+    return run_id
 
 def list_runs(limit: int = 300) -> pd.DataFrame:
     try:
@@ -2308,7 +2271,7 @@ def _us_market_session(now_utc=None):
     """Return ('Pre-Market'|'Regular'|'Post-Market'|'Closed', is_open_bool)."""
     try:
         if now_utc is None:
-            now_utc = _dt.datetime.utcnow().replace(tzinfo=_pytz.UTC)
+            now_utc = _dt.datetime.now(_pytz.UTC)
         et = now_utc.astimezone(_pytz.timezone("America/New_York"))
         wd = et.weekday()  # 0=Mon
         if wd >= 5:
