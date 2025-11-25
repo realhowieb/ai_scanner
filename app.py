@@ -7,12 +7,89 @@ import re
 import time
 import traceback
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Dict, Optional, Tuple
+
+import json
+import sqlite3
 
 import numpy as np
 import pandas as pd
 import streamlit as st
-from ai_scanner.runs import save_run, list_runs, load_run_results
+
+# --- Simple local DB for scan history (SQLite). ---
+DB_PATH = Path(__file__).with_name("scanner.sqlite")
+
+def _get_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def _ensure_tables() -> None:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            results_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+_ensure_tables()
+
+def save_run(name: str, results_json: str) -> None:
+    """Save a scan run to the local SQLite file."""
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO runs (name, results_json) VALUES (?, ?)",
+            (name, results_json),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        # Fail silently; history is a convenience feature.
+        pass
+
+def list_runs(limit: int = 50):
+    """Return a list of recent runs (id, name, created_at)."""
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, name, created_at FROM runs ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        rows = cur.fetchall()
+        conn.close()
+        out = []
+        for r in rows:
+            out.append({
+                "id": r["id"],
+                "name": r["name"],
+                "timestamp": r["created_at"],
+            })
+        return out
+    except Exception:
+        return []
+
+def load_run_results(run_id: int) -> str:
+    """Return the JSON payload for a given run id."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT results_json FROM runs WHERE id = ?", (run_id,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        raise ValueError(f"No run found with id {run_id}")
+    return row["results_json"]
 
 # Optional for Yahoo Finance universe fallback
 try:
@@ -1209,7 +1286,7 @@ def main():
                             st.error(f"Failed to load scan #{selected_id}: {e}")
                 with col_hist2:
                     st.caption(
-                        "History is stored in your configured DB_URL (Neon/Postgres) or local scanner.sqlite if unset."
+                        "History is stored in a local scanner.sqlite file next to app.py."
                     )
             else:
                 st.caption("No past scans saved yet.")
