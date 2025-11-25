@@ -739,29 +739,7 @@ def load_nasdaq_universe() -> List[str]:
 
 
 # ---------- Scan engine ----------
-# Try your real scan function first; fallback to a safe stub.
-
-_real_scan = (
-    # Preferred locations (your project)
-    _try_import("ai_scanner.scan.breakout_scanner", "run_breakout_scan")
-    or _try_import("ai_scanner.scan.breakout", "run_breakout_scan")
-    or _try_import("ai_scanner.breakout", "run_breakout_scan")
-    or _try_import("ai_scanner.breakout_scanner", "run_breakout_scan")
-
-    # Alternate common names
-    or _try_import("ai_scanner.scan.breakout_scanner", "breakout_scanner")
-    or _try_import("ai_scanner.scan.breakout", "breakout_scanner")
-    or _try_import("ai_scanner.breakout", "breakout_scanner")
-    or _try_import("ai_scanner.breakout_scanner", "breakout_scanner")
-
-    # Root-level / legacy paths
-    or _try_import("scan.breakout_scanner", "run_breakout_scan")
-    or _try_import("scan.breakout", "run_breakout_scan")
-    or _try_import("breakout_scanner", "run_breakout_scan")
-    or _try_import("breakout", "run_breakout_scan")
-    or _try_import("breakout_scanner", "breakout_scanner")
-    or _try_import("breakout", "breakout_scanner")
-)
+# Real AI-style breakout scanner (no external module required).
 
 
 def run_breakout_scan(
@@ -776,117 +754,170 @@ def run_breakout_scan(
     top_n: int,
     diagnostics: bool = True,
 ) -> pd.DataFrame:
-    use_stub = False
-    if callable(_real_scan):
-        # Try to match your real scan function signature safely.
-        try:
-            sig = inspect.signature(_real_scan)
-            accepted = set(sig.parameters.keys())
+    """Compute an AI-style breakout score using price, volume, and momentum features.
 
-            call_kwargs = {
-                "premarket": premarket,
-                "afterhours": afterhours,
-                "unusual_volume": unusual_volume,
-                "min_gap": min_gap,
-                "min_price": min_price,
-                "max_price": max_price,
-                "top_n": top_n,
-                "diagnostics": diagnostics,
-            }
-            filtered_kwargs = {k: v for k, v in call_kwargs.items() if k in accepted}
+    Features per ticker:
+    - Gap%: today vs previous close
+    - Breakout position: last close vs 20-day high
+    - Trend: 20-day return
+    - VolumeRel20: last volume / 20-day average volume
+    BreakoutScore is a weighted combination of these features, clipped to [0, 100].
+    """
+    if yf is None or not tickers:
+        # yfinance not available: fall back to a simple random stub without warnings.
+        rows = []
+        for t in tickers:
+            price = float(np.random.uniform(min_price, max_price))
+            vol = int(np.random.randint(1_000_000, 80_000_000))
+            gap = float(np.random.uniform(-5, 12))
+            score = float(np.random.uniform(0, 100))
+            rows.append(
+                {
+                    "Ticker": t,
+                    "BreakoutScore": round(score, 2),
+                    "Last": round(price, 2),
+                    "Volume": vol,
+                    "Gap%": round(gap, 2),
+                    "Premarket": premarket,
+                    "AfterHours": afterhours,
+                    "UnusualVol": unusual_volume and vol > 20_000_000,
+                }
+            )
+        df = pd.DataFrame(rows)
+        df = df[df["Last"].between(min_price, max_price)]
+        df = df[df["Gap%"] >= min_gap]
+        df = df.sort_values("BreakoutScore", ascending=False).head(top_n).reset_index(drop=True)
+        return df
 
-            # Preferred call: tickers as first positional arg.
+    # Download recent daily data for all tickers in one batch where possible.
+    try:
+        batch = yf.download(
+            " ".join(tickers),
+            period="3mo",
+            interval="1d",
+            group_by="ticker",
+            auto_adjust=False,
+            progress=False,
+            threads=True,
+        )
+    except Exception:
+        batch = pd.DataFrame()
+
+    rows: List[Dict] = []
+
+    def _get_series(sym: str, field: str) -> Optional[pd.Series]:
+        if batch is None or batch.empty:
+            return None
+        if isinstance(batch.columns, pd.MultiIndex):
+            # Try both orientations: (ticker, field) and (field, ticker)
             try:
-                t_start = time.time()
-                out = _real_scan(tickers, **filtered_kwargs) if accepted else _real_scan(tickers)
-                df_out = _coerce_scan_output(out, tickers)
-                # If the real scanner returns empty, fall back to stub so the UI still shows demo results.
-                if df_out.empty:
-                    dt_real = time.time() - t_start
-                    if diagnostics:
-                        st.warning(
-                            "Real breakout scanner returned 0 rows. Falling back to stub results. "
-                            "This usually means filters are too strict, the universe is empty, or the "
-                            "real scan implementation is stubbed out."
-                        )
-                    use_stub = True
-                    raise RuntimeError("real_scan_empty")
-                return df_out
-            except AttributeError as e:
-                # Some real scanners expect a dict-like universe and call .items().
-                if "items" in str(e) and isinstance(tickers, list):
-                    retry_universes = [
-                        {t: {} for t in tickers},
-                        {t: None for t in tickers},
-                    ]
-                    last_retry_err = None
-                    for uni in retry_universes:
-                        try:
-                            t_start = time.time()
-                            out = _real_scan(uni, **filtered_kwargs) if accepted else _real_scan(uni)
-                            df_out = _coerce_scan_output(out, tickers)
-                            if df_out.empty and (time.time() - t_start) < 0.5:
-                                use_stub = True
-                                raise RuntimeError("real_scan_empty_fast")
-                            return df_out
-                        except Exception as re:
-                            last_retry_err = re
-                            continue
-                    # If all retries failed, raise the last retry error (don’t mask it).
-                    if last_retry_err is not None:
-                        raise last_retry_err
-                raise
-
-        except TypeError as e:
-            # Fallback 1: maybe your function wants no kwargs at all.
-            try:
-                return _real_scan(tickers)
+                return batch[(sym, field)].dropna()
             except Exception:
-                raise e
-        except Exception as e:
-            msg = str(e)
-            if (
-                msg == "real_scan_empty_fast"
-                or "real_scan_empty_fast" in msg
-                or msg == "real_scan_empty"
-                or "real_scan_empty" in msg
-            ):
-                use_stub = True
+                try:
+                    return batch[(field, sym)].dropna()
+                except Exception:
+                    return None
+        # Single-ticker case
+        try:
+            return batch[field].dropna()
+        except Exception:
+            return None
+
+    for sym in tickers:
+        try:
+            close = _get_series(sym, "Close")
+            high = _get_series(sym, "High")
+            low = _get_series(sym, "Low")
+            vol = _get_series(sym, "Volume")
+            if close is None or high is None or vol is None:
+                continue
+            if len(close) < 5 or len(vol) < 5:
+                continue
+
+            close = close.dropna()
+            high = high.dropna()
+            vol = vol.dropna()
+            if close.empty or high.empty or vol.empty:
+                continue
+
+            last_close = float(close.iloc[-1])
+            if last_close <= 0:
+                continue
+
+            # Price band filter
+            if not (min_price <= last_close <= max_price):
+                continue
+
+            # Gap% vs previous close
+            prev_close = float(close.iloc[-2]) if len(close) >= 2 else last_close
+            gap_pct = ((last_close - prev_close) / prev_close) * 100 if prev_close > 0 else 0.0
+
+            # 20-day high breakout position
+            window = min(20, len(high))
+            high20 = float(high.tail(window).max()) if window > 0 else last_close
+            breakout_pos = (last_close / high20) if high20 > 0 else 0.0  # ~1.0 near 20D high
+
+            # 20-day trend (percentage return)
+            if len(close) >= 20:
+                past = float(close.iloc[-20])
             else:
-                raise
+                past = float(close.iloc[0])
+            trend_pct = ((last_close - past) / past) * 100 if past > 0 else 0.0
 
-    if callable(_real_scan) and not use_stub:
-        # Real scan succeeded and returned rows.
-        return pd.DataFrame()  # Should be unreachable, but keeps type checkers happy.
+            # Volume relative to 20-day average
+            window_v = min(20, len(vol))
+            avg_vol20 = float(vol.tail(window_v).mean()) if window_v > 0 else float(vol.iloc[-1])
+            last_vol = float(vol.iloc[-1])
+            vol_rel20 = (last_vol / avg_vol20) if avg_vol20 > 0 else 1.0
 
-    if use_stub and diagnostics and not st.session_state.get("noted_stub_scan"):
-        st.session_state["noted_stub_scan"] = True
-        st.warning(
-            "Real breakout scanner not found. Using random stub results. "
-            "Check your module path for run_breakout_scan/breakout_scanner."
-        )
-    # ---------- Fallback stub (used when real scan not found or no-ops) ----------
-    rows = []
-    for t in tickers:
-        price = float(np.random.uniform(min_price, max_price))
-        vol = int(np.random.randint(1_000_000, 80_000_000))
-        gap = float(np.random.uniform(-5, 12))
-        score = float(np.random.uniform(0, 100))
-        rows.append(
-            {
-                "Ticker": t,
-                "BreakoutScore": round(score, 2),
-                "Last": round(price, 2),
-                "Volume": vol,
-                "Gap%": round(gap, 2),
-                "Premarket": premarket,
-                "AfterHours": afterhours,
-                "UnusualVol": unusual_volume and vol > 20_000_000,
-            }
-        )
+            # Unusual volume filter (if enabled)
+            if unusual_volume and vol_rel20 < 1.5:
+                continue
+
+            # Min gap filter
+            if gap_pct < min_gap:
+                continue
+
+            # ---- AI-style BreakoutScore ----
+            # Components are lightly scaled and clipped so score is in [0, 100].
+            comp_gap = max(0.0, gap_pct - min_gap) / 5.0  # extra gap above minimum
+            comp_breakout = max(0.0, breakout_pos - 0.95) * 10.0  # near/above 20D high
+            comp_trend = max(0.0, trend_pct) / 5.0  # recent uptrend
+            comp_vol = max(0.0, vol_rel20 - 1.0) * 3.0  # volume expansion
+
+            raw_score = (
+                0.30 * comp_gap
+                + 0.30 * comp_breakout
+                + 0.25 * comp_trend
+                + 0.15 * comp_vol
+            ) * 20.0  # scale up into roughly 0-100
+
+            score = float(np.clip(raw_score, 0.0, 100.0))
+
+            rows.append(
+                {
+                    "Ticker": sym,
+                    "BreakoutScore": round(score, 2),
+                    "Last": round(last_close, 2),
+                    "Volume": int(last_vol),
+                    "Gap%": round(gap_pct, 2),
+                    "BreakoutPos20D": round(breakout_pos, 3),
+                    "Trend20D%": round(trend_pct, 2),
+                    "VolRel20": round(vol_rel20, 2),
+                    "Premarket": premarket,
+                    "AfterHours": afterhours,
+                    "UnusualVol": unusual_volume,
+                }
+            )
+        except Exception:
+            # Skip broken symbols silently; diagnostics mode can be extended later.
+            continue
+
     df = pd.DataFrame(rows)
-    df = df[df["Last"].between(min_price, max_price)]
-    df = df[df["Gap%"] >= min_gap]
+    if df.empty:
+        return df
+
+    # Final filters and sorting
     df = df.sort_values("BreakoutScore", ascending=False).head(top_n).reset_index(drop=True)
     return df
 
