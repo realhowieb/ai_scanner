@@ -90,7 +90,7 @@ def remove_delisted_tickers(tickers: Sequence[str]) -> List[str]:
         return _remove_delisted_tickers(tickers)
 
     out: List[str] = []
-    allowed = re.compile(r"^[A-Z][A-Z0-9.\-]*$")
+    allowed = re.compile("^[A-Z][A-Z0-9.\\-]*$")
     for t in tickers:
         if not t:
             continue
