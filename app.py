@@ -553,6 +553,7 @@ def run_breakout_scan(
     top_n: int,
     diagnostics: bool = True,
 ) -> pd.DataFrame:
+    use_stub = False
     if callable(_real_scan):
         # Try to match your real scan function signature safely.
         try:
@@ -582,6 +583,7 @@ def run_breakout_scan(
                         "Real breakout scanner returned 0 rows instantly. Falling back to stub. "
                         "This usually means a signature/universe mismatch or an internal early-exit."
                     )
+                    use_stub = True
                     raise RuntimeError("real_scan_empty_fast")
                 return df_out
             except AttributeError as e:
@@ -598,6 +600,7 @@ def run_breakout_scan(
                             out = _real_scan(uni, **filtered_kwargs) if accepted else _real_scan(uni)
                             df_out = _coerce_scan_output(out, tickers)
                             if df_out.empty and (time.time() - t_start) < 0.5:
+                                use_stub = True
                                 raise RuntimeError("real_scan_empty_fast")
                             return df_out
                         except Exception as re:
@@ -614,16 +617,23 @@ def run_breakout_scan(
                 return _real_scan(tickers)
             except Exception:
                 raise e
-        except Exception:
-            raise
+        except Exception as e:
+            if str(e) == "real_scan_empty_fast" or "real_scan_empty_fast" in str(e):
+                use_stub = True
+            else:
+                raise
 
-    if diagnostics and not st.session_state.get("noted_stub_scan"):
+    if callable(_real_scan) and not use_stub:
+        # Real scan succeeded and returned rows.
+        return pd.DataFrame()  # Should be unreachable, but keeps type checkers happy.
+
+    if use_stub and diagnostics and not st.session_state.get("noted_stub_scan"):
         st.session_state["noted_stub_scan"] = True
         st.warning(
             "Real breakout scanner not found. Using random stub results. "
             "Check your module path for run_breakout_scan/breakout_scanner."
         )
-    # ---------- Fallback stub so app still runs ----------
+    # ---------- Fallback stub (used when real scan not found or no-ops) ----------
     rows = []
     for t in tickers:
         price = float(np.random.uniform(min_price, max_price))
