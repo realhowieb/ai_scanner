@@ -486,10 +486,25 @@ def load_nasdaq_universe() -> List[str]:
 # Try your real scan function first; fallback to a safe stub.
 
 _real_scan = (
+    # Preferred locations (your project)
     _try_import("ai_scanner.scan.breakout_scanner", "run_breakout_scan")
     or _try_import("ai_scanner.scan.breakout", "run_breakout_scan")
+    or _try_import("ai_scanner.breakout", "run_breakout_scan")
+    or _try_import("ai_scanner.breakout_scanner", "run_breakout_scan")
+
+    # Alternate common names
+    or _try_import("ai_scanner.scan.breakout_scanner", "breakout_scanner")
+    or _try_import("ai_scanner.scan.breakout", "breakout_scanner")
+    or _try_import("ai_scanner.breakout", "breakout_scanner")
+    or _try_import("ai_scanner.breakout_scanner", "breakout_scanner")
+
+    # Root-level / legacy paths
     or _try_import("scan.breakout_scanner", "run_breakout_scan")
     or _try_import("scan.breakout", "run_breakout_scan")
+    or _try_import("breakout_scanner", "run_breakout_scan")
+    or _try_import("breakout", "run_breakout_scan")
+    or _try_import("breakout_scanner", "breakout_scanner")
+    or _try_import("breakout", "breakout_scanner")
 )
 
 
@@ -538,6 +553,12 @@ def run_breakout_scan(
             # Surface real scan errors clearly.
             raise
 
+    if diagnostics and not st.session_state.get("noted_stub_scan"):
+        st.session_state["noted_stub_scan"] = True
+        st.warning(
+            "Real breakout scanner not found. Using random stub results. "
+            "Check your module path for run_breakout_scan/breakout_scanner."
+        )
     # ---------- Fallback stub so app still runs ----------
     rows = []
     for t in tickers:
