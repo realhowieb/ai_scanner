@@ -288,6 +288,53 @@ def _fetch_wikipedia_table(url: str, col: str) -> List[str]:
     return []
 
 
+# Official NASDAQ Trader listings fallback
+def _fetch_nasdaq_official_listings() -> List[str]:
+    """Fetch NASDAQ-listed tickers from NASDAQ Trader official symbol directory.
+
+    These files are pipe-delimited and maintained by NASDAQ. This is a stable way to
+    get the NASDAQ Composite universe without Yahoo 429s.
+    """
+    if requests is None:
+        raise RuntimeError("requests not available")
+
+    urls = [
+        "https://nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt",
+        "https://nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
+    ]
+
+    tickers: List[str] = []
+    for url in urls:
+        r = requests.get(url, timeout=12, headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+        lines = r.text.splitlines()
+        if not lines:
+            continue
+
+        header = lines[0].split("|")
+        for line in lines[1:]:
+            if line.startswith("File Creation Time"):
+                break
+            parts = line.split("|")
+            if len(parts) != len(header):
+                continue
+            row = dict(zip(header, parts))
+            sym = row.get("Symbol") or row.get("ACT Symbol")
+            if sym:
+                sym = sym.strip().replace(".", "-")
+                if sym and sym[0].isalnum():
+                    tickers.append(sym)
+
+    # De-dupe while preserving order
+    seen = set()
+    out = []
+    for t in tickers:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
+
+
 @st.cache_data(show_spinner=False, ttl=24 * 3600)
 def load_sp500_universe() -> List[str]:
     if callable(_load_sp500):
@@ -316,6 +363,14 @@ def load_sp500_universe() -> List[str]:
 def load_nasdaq_universe() -> List[str]:
     if callable(_load_nasdaq):
         return list(_load_nasdaq())
+
+    # ✅ Official NASDAQ Trader listings (NASDAQ Composite universe)
+    try:
+        tickers = _fetch_nasdaq_official_listings()
+        if tickers:
+            return tickers
+    except Exception as e:
+        st.caption(f"Official NASDAQ listings fallback failed: {e}")
 
     # Yahoo Finance predefined screener fallback (Nasdaq 100)
     try:
