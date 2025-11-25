@@ -340,21 +340,21 @@ def load_sp500_universe() -> List[str]:
     if callable(_load_sp500):
         return list(_load_sp500())
 
-    # Yahoo Finance predefined screener fallback
-    try:
-        tickers = _fetch_yahoo_universe("sp500", count=520)
-        if tickers:
-            return tickers
-    except Exception as e:
-        _note_yahoo_fail("SP500", e)
-
-    # Wikipedia fallback (stable)
+    # ✅ Stable primary fallback: Wikipedia S&P 500 list
     wiki = _fetch_wikipedia_table(
         "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
         col="Symbol",
     )
     if wiki:
         return wiki
+
+    # Optional Yahoo fallback (may rate-limit)
+    try:
+        tickers = _fetch_yahoo_universe("sp500", count=520)
+        if tickers:
+            return tickers
+    except Exception as e:
+        _note_yahoo_fail("SP500", e)
 
     return ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"]
 
