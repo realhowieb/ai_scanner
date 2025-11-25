@@ -291,33 +291,48 @@ def pricing_sidebar():
 # ---------- Universe filtering helper ----------
 
 def filter_universe(tickers: List[str]) -> List[str]:
-    """Drop symbols Yahoo commonly can't serve (preferreds, warrants, units, rights)."""
+    """Drop symbols Yahoo commonly can't serve (preferreds, warrants, units, rights, weird junk)."""
     if not tickers:
         return []
+
     bad_suffixes = ("-W", "-WS", "-U", "-R")
+    allowed = re.compile(r"^[A-Z][A-Z0-9.\-]*$")
+
     out: List[str] = []
     for t in tickers:
         if not t:
             continue
         ts = str(t).strip().upper()
+
+        # Super-short symbols are usually junk/noise
+        if len(ts) < 2:
+            continue
+
         # Preferred/share classes like BRK$A or BAC$E
         if "$" in ts:
             continue
+
         # Warrants/units/rights
         if ts.endswith(bad_suffixes):
             continue
+
         # Extra pattern skip
         if re.search(r"\bWARRANT\b|\bRIGHT\b", ts):
             continue
+
+        # Only keep clean ticker character set
+        if not allowed.match(ts):
+            continue
+
         out.append(ts)
 
     # De-dupe preserving order
     seen = set()
     deduped: List[str] = []
-    for t in out:
-        if t not in seen:
-            seen.add(t)
-            deduped.append(t)
+    for ts in out:
+        if ts not in seen:
+            seen.add(ts)
+            deduped.append(ts)
     return deduped
 
 # ---------- Universe loaders ----------
@@ -692,6 +707,38 @@ def run_breakout_scan(
     return df
 
 
+# ---------- Cached scan wrapper ----------
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_real_scan(
+    tickers: Tuple[str, ...],
+    *,
+    premarket: bool,
+    afterhours: bool,
+    unusual_volume: bool,
+    min_gap: float,
+    min_price: float,
+    max_price: float,
+    top_n: int,
+    diagnostics: bool,
+) -> pd.DataFrame:
+    """Cached wrapper around run_breakout_scan.
+
+    Uses a tuple of tickers so Streamlit can hash the arguments. This makes
+    re-running the same scan (same universe + filters) much faster.
+    """
+    return run_breakout_scan(
+        list(tickers),
+        premarket=premarket,
+        afterhours=afterhours,
+        unusual_volume=unusual_volume,
+        min_gap=min_gap,
+        min_price=min_price,
+        max_price=max_price,
+        top_n=top_n,
+        diagnostics=diagnostics,
+    )
+
+
 # ---------- Chart renderer ----------
 # Custom chart renderer disabled; always use built‑in charts.
 _real_chart = None
@@ -956,8 +1003,8 @@ def main():
                     )
 
                 df = safe_call(
-                    run_breakout_scan,
-                    tickers,
+                    cached_real_scan,
+                    tuple(tickers),
                     premarket=premarket,
                     afterhours=afterhours,
                     unusual_volume=unusual_vol,
@@ -966,7 +1013,7 @@ def main():
                     max_price=max_price,
                     top_n=top_n,
                     diagnostics=diagnostics,
-                    label="run_breakout_scan",
+                    label="cached_real_scan",
                 )
                 df = _override_last_prices(df)
                 st.caption(f"✅ {label}: {len(df)} results returned from scan.")

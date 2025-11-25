@@ -272,7 +272,7 @@ def run_breakout_scan(
     if yf is not None:
         try:
             # Chunk to avoid Yahoo throttling
-            chunk_size = int(kwargs.get("chunk_size", 200))
+            chunk_size = int(kwargs.get("chunk_size", 150))
             period = str(kwargs.get("period", "1mo"))
             interval = str(kwargs.get("interval", "1d"))
 
@@ -284,8 +284,8 @@ def run_breakout_scan(
                 b = _yf_batch_download_cached(chunk, period=period, interval=interval)
                 if b is not None and not b.empty:
                     batches.append(b)
-                # small jitter between chunks to reduce rate-limits
-                time.sleep(random.uniform(0.4, 1.2))
+                # small jitter between chunks to reduce rate-limits without killing speed
+                time.sleep(random.uniform(0.3, 0.8))
 
             if batches:
                 batch = pd.concat(batches, axis=1)
