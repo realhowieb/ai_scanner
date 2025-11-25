@@ -1170,7 +1170,7 @@ def main():
         st.session_state.results_df = pd.DataFrame()
 
     def do_scan(tickers: List[str], label: str):
-        with st.spinner(f"Scanning {label}..."):
+        def _run_scan_body():
             t0 = time.time()
             try:
                 st.caption(f"🔎 Scanning {len(tickers)} tickers for {label}...")
@@ -1203,7 +1203,7 @@ def main():
                 dt = time.time() - t0
                 st.session_state.results_df = df
                 banner(f"✅ {label} scan complete in {dt:.1f}s. Returned {len(df)} rows.", "success")
-                # Persist this scan to the runs DB (Neon / SQL backend via ai_scanner.runs)
+                # Persist this scan to the runs DB (local SQLite history)
                 try:
                     results_json = df.to_json(orient="records") if df is not None else "[]"
                     run_name = f"{label} | {len(df)} results | {dt:.1f}s"
@@ -1215,6 +1215,15 @@ def main():
                 banner(f"❌ Scan failed: {e}", "error")
                 if diagnostics:
                     st.code(traceback.format_exc())
+
+        # Some environments (e.g., restricted sandboxes, Python 3.13 runtimes) may not
+        # allow starting new threads, which Streamlit's spinner uses internally.
+        # Wrap the spinner in a try/except and fall back to running without it.
+        try:
+            with st.spinner(f"Scanning {label}..."):
+                _run_scan_body()
+        except Exception:
+            _run_scan_body()
 
     if run_sp500_btn:
         do_scan(sp500, "SP500")
