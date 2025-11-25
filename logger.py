@@ -1,4 +1,4 @@
-# logger.py
+# symbols.py
 import threading
 
 def thread_safe_logger(log_fn):

@@ -1,0 +1,28 @@
+[project]
+name = "ai-scanner"
+version = "0.2.0"
+description = "AI-powered stock market scanner with Streamlit, PostgreSQL, and scheduling"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "streamlit>=1.20.0",
+    "pandas>=1.5.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "apscheduler>=3.9.0",
+    "yfinance>=0.2.20",
+    "numpy>=1.24.0",
+    "pytz>=2023.3",
+    "requests>=2.31.0",
+    "python-dateutil>=2.8.2",
+    "plotly>=5.15.0",
+    "matplotlib>=3.7.0"
+]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ai_scanner*"]
