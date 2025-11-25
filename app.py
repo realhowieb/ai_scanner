@@ -570,29 +570,58 @@ _real_chart = None
 
 
 def _fetch_unadjusted_ohlc(ticker: str, period: str = "6mo", interval: str = "1d") -> Optional[pd.DataFrame]:
-    """Fetch unadjusted OHLCV for charting."""
+    """Fetch unadjusted OHLCV for charting with multiple retries and normalization."""
     if yf is None:
         return None
-    try:
-        df = yf.download(
-            ticker,
-            period=period,
-            interval=interval,
-            auto_adjust=False,
-            progress=False,
-            threads=False,
-        )
+
+    def _norm(df: pd.DataFrame) -> Optional[pd.DataFrame]:
         if df is None or df.empty:
             return None
         df = df.reset_index()
-        # Normalize column names if needed
-        cols = {c.lower(): c for c in df.columns}
-        # Ensure expected columns exist
-        if "date" not in cols and "datetime" in cols:
-            df.rename(columns={cols["datetime"]: "Date"}, inplace=True)
+        cols_lower = {c.lower() for c in df.columns}
+        if "date" not in cols_lower and "datetime" in cols_lower:
+            for c in df.columns:
+                if c.lower() == "datetime":
+                    df.rename(columns={c: "Date"}, inplace=True)
+                    break
+        if "date" not in {c.lower() for c in df.columns} and "Date" not in df.columns:
+            return None
         return df
+
+    attempts = []
+    attempts.append((ticker, period, interval))
+    attempts.append((ticker, "3mo", interval))
+    attempts.append((ticker, "1mo", interval))
+    if "." in ticker:
+        attempts.append((ticker.replace(".", "-"), period, interval))
+    if ticker.endswith((".NS", ".TO", ".L", ".AX", ".SA", ".HK", ".F")):
+        attempts.append((ticker.split(".")[0], period, interval))
+
+    for sym, per, inter in attempts:
+        try:
+            df = yf.download(
+                sym,
+                period=per,
+                interval=inter,
+                auto_adjust=False,
+                progress=False,
+                threads=False,
+            )
+            out = _norm(df)
+            if out is not None:
+                return out
+        except Exception:
+            continue
+
+    try:
+        hist = yf.Ticker(ticker).history(period="6mo", interval=interval, auto_adjust=False)
+        out = _norm(hist)
+        if out is not None:
+            return out
     except Exception:
-        return None
+        pass
+
+    return None
 
 
 def _render_builtin_candlestick(ticker: str):
@@ -603,7 +632,10 @@ def _render_builtin_candlestick(ticker: str):
     """
     df = _fetch_unadjusted_ohlc(ticker)
     if df is None or df.empty:
-        st.write(f"No OHLC data available for {ticker}.")
+        st.warning(
+            f"No OHLC data available for {ticker}. This may occur if the symbol is OTC, delisted, newly listed, "
+            "or not supported by Yahoo Finance. Try another ticker."
+        )
         return
 
     # Indicators
