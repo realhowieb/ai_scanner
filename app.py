@@ -28,6 +28,22 @@ def _get_conn() -> sqlite3.Connection:
 def _ensure_tables() -> None:
     conn = _get_conn()
     cur = conn.cursor()
+
+    # Check if the runs table exists
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='runs'")
+    exists = cur.fetchone() is not None
+
+    if exists:
+        # Inspect the existing schema to ensure it has the expected columns
+        cur.execute("PRAGMA table_info(runs)")
+        cols = [row[1] for row in cur.fetchall()]  # row[1] is the column name
+        required_cols = {"id", "name", "results_json", "created_at"}
+        if not required_cols.issubset(set(cols)):
+            # Old or incompatible schema: drop and recreate
+            cur.execute("DROP TABLE IF EXISTS runs")
+            conn.commit()
+
+    # Create the expected schema if it doesn't exist (or after dropping old one)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS runs (
@@ -1237,7 +1253,7 @@ def main():
     else:
         st.caption("Run a scan to see results.")
 
-    # --- Scan History (DB-backed via ai_scanner.runs) ---
+    # --- Scan History (DB-backed via local SQLite) ---
     with st.expander("📜 Scan History", expanded=False):
         runs_list = []
         try:
