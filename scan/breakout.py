@@ -217,7 +217,7 @@ def run_sp500_scan(
 @lru_cache(maxsize=64)
 def _yf_batch_download_cached(
     tickers_key: Tuple[str, ...],
-    period: str = "3mo",
+    period: str = "1mo",
     interval: str = "1d",
 ) -> pd.DataFrame:
     """Cached yfinance batch download for a tuple of tickers."""
@@ -273,7 +273,7 @@ def run_breakout_scan(
         try:
             # Chunk to avoid Yahoo throttling
             chunk_size = int(kwargs.get("chunk_size", 200))
-            period = str(kwargs.get("period", "3mo"))
+            period = str(kwargs.get("period", "1mo"))
             interval = str(kwargs.get("interval", "1d"))
 
             batches: List[pd.DataFrame] = []
