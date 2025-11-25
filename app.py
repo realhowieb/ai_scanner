@@ -558,12 +558,8 @@ def run_breakout_scan(
 
 
 # ---------- Chart renderer ----------
-_real_chart = (
-    _try_import("ai_scanner.ui.components", "render_candlestick")
-    or _try_import("ai_scanner.ui.components", "render_chart")
-    or _try_import("ui.components", "render_candlestick")
-    or _try_import("ui.components", "render_chart")
-)
+# Custom chart renderer disabled; always use built‑in charts.
+_real_chart = None
 
 
 def _fetch_unadjusted_ohlc(ticker: str, period: str = "6mo", interval: str = "1d") -> Optional[pd.DataFrame]:
@@ -603,21 +599,36 @@ def _render_builtin_candlestick(ticker: str):
         st.write(f"No OHLC data available for {ticker}.")
         return
 
+    # Indicators
+    try:
+        df["EMA9"] = df["Close"].ewm(span=9, adjust=False).mean()
+        df["EMA21"] = df["Close"].ewm(span=21, adjust=False).mean()
+        df["Res20"] = df["High"].rolling(20, min_periods=1).max()
+        if "Volume" in df.columns:
+            df["VolSMA20"] = df["Volume"].rolling(20, min_periods=1).mean()
+    except Exception:
+        pass
+
     # Expected columns from yfinance: Date, Open, High, Low, Close, Volume
-    fig = go.Figure(
-        data=[
-            go.Candlestick(
-                x=df["Date"],
-                open=df.get("Open"),
-                high=df.get("High"),
-                low=df.get("Low"),
-                close=df.get("Close"),
-                name=ticker,
-            )
-        ]
+    fig = go.Figure()
+    fig.add_trace(
+        go.Candlestick(
+            x=df["Date"],
+            open=df.get("Open"),
+            high=df.get("High"),
+            low=df.get("Low"),
+            close=df.get("Close"),
+            name=ticker,
+        )
     )
+    if "EMA9" in df.columns:
+        fig.add_trace(go.Scatter(x=df["Date"], y=df["EMA9"], name="EMA9", mode="lines"))
+    if "EMA21" in df.columns:
+        fig.add_trace(go.Scatter(x=df["Date"], y=df["EMA21"], name="EMA21", mode="lines"))
+    if "Res20" in df.columns:
+        fig.add_trace(go.Scatter(x=df["Date"], y=df["Res20"], name="Resistance(20D High)", mode="lines"))
     fig.update_layout(
-        title=f"{ticker} Candlestick (unadjusted)",
+        title=f"{ticker} Candlestick (unadjusted) • EMA9/EMA21 • 20D Resistance",
         xaxis_title="Date",
         yaxis_title="Price",
         height=520,
@@ -629,21 +640,16 @@ def _render_builtin_candlestick(ticker: str):
     # Optional volume bar
     if "Volume" in df.columns:
         st.caption("Volume")
-        vol_fig = go.Figure(
-            data=[go.Bar(x=df["Date"], y=df["Volume"], name="Volume")]
-        )
+        vol_fig = go.Figure()
+        vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume"))
+        if "VolSMA20" in df.columns:
+            vol_fig.add_trace(go.Scatter(x=df["Date"], y=df["VolSMA20"], name="Vol SMA20", mode="lines"))
         vol_fig.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(vol_fig, use_container_width=True)
 
 
-def render_chart_for_ticker(ticker: str):
-    """Prefer your custom chart renderer; fall back to built-in unadjusted candlestick."""
-    if callable(_real_chart):
-        try:
-            return _real_chart(ticker)
-        except Exception as e:
-            st.caption(f"Custom chart renderer failed for {ticker}: {e}. Using built-in chart.")
-
+def render_chart_for_ticker(ticker: str, force_builtin: bool = False):
+    """Always render built‑in unadjusted candlestick charts."""
     _render_builtin_candlestick(ticker)
 
 
