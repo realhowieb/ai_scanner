@@ -526,7 +526,6 @@ def run_breakout_scan(
             sig = inspect.signature(_real_scan)
             accepted = set(sig.parameters.keys())
 
-            # Build kwargs, then drop anything the real function doesn't accept.
             call_kwargs = {
                 "premarket": premarket,
                 "afterhours": afterhours,
@@ -539,10 +538,19 @@ def run_breakout_scan(
             }
             filtered_kwargs = {k: v for k, v in call_kwargs.items() if k in accepted}
 
-            # Preferred: pass tickers as first arg if accepted or if function takes *args.
-            if accepted:
-                return _real_scan(tickers, **filtered_kwargs)
-            return _real_scan(tickers)
+            # Preferred call: tickers as first positional arg.
+            try:
+                return _real_scan(tickers, **filtered_kwargs) if accepted else _real_scan(tickers)
+            except AttributeError as e:
+                # Some real scanners expect a dict-like universe and call .items().
+                if "items" in str(e) and isinstance(tickers, list):
+                    ticker_dict = {t: {} for t in tickers}
+                    try:
+                        return _real_scan(ticker_dict, **filtered_kwargs) if accepted else _real_scan(ticker_dict)
+                    except Exception:
+                        raise e
+                raise
+
         except TypeError as e:
             # Fallback 1: maybe your function wants no kwargs at all.
             try:
@@ -550,7 +558,6 @@ def run_breakout_scan(
             except Exception:
                 raise e
         except Exception:
-            # Surface real scan errors clearly.
             raise
 
     if diagnostics and not st.session_state.get("noted_stub_scan"):
