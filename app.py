@@ -343,10 +343,10 @@ def main():
         c1, c2 = st.columns(2)
         with c1:
             st.markdown(f"**SP500 size:** {len(sp500)}")
-            st.caption(f"Sample: {', '.join(sp500[:8])}")
+            st.caption(f"Sample: {', '.join(sp500[:20])}")
         with c2:
             st.markdown(f"**NASDAQ size:** {len(nasdaq)}")
-            st.caption(f"Sample: {', '.join(nasdaq[:8])}")
+            st.caption(f"Sample: {', '.join(nasdaq[:20])}")
 
     # Buttons (hard-wired universes)
     b1, b2, b3 = st.columns([1, 1, 2])
