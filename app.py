@@ -197,6 +197,37 @@ def _override_last_prices(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# ---------- Safe yfinance batch download helper ----------
+def safe_yf_download(
+    tickers: List[str],
+    *,
+    period: str = "1mo",
+    interval: str = "1d",
+    group_by: str = "ticker",
+) -> pd.DataFrame:
+    """Batch yfinance.download with retries and minimal overhead."""
+    if yf is None or not tickers:
+        return pd.DataFrame()
+
+    tickers_str = " ".join(ticker for ticker in tickers if isinstance(ticker, str) and ticker)
+
+    def _download():
+        return yf.download(
+            tickers=tickers_str,
+            period=period,
+            interval=interval,
+            group_by=group_by,
+            auto_adjust=False,
+            progress=False,
+            threads=True,
+        )
+
+    try:
+        return safe_call(_download, label=f"yfinance batch ({len(tickers)} symbols)")
+    except Exception:
+        return pd.DataFrame()
+
+
 # ---------- Scan output coercion helper ----------
 def _coerce_scan_output(out, tickers: List[str]) -> pd.DataFrame:
     """Coerce various real-scan return types into a DataFrame."""
@@ -450,19 +481,7 @@ def apply_liquidity_filter_batch(
     if yf is None or not tickers:
         return tickers
 
-    try:
-        batch = yf.download(
-            " ".join(tickers),
-            period="5d",
-            interval="1d",
-            group_by="ticker",
-            auto_adjust=False,
-            progress=False,
-            threads=True,
-        )
-    except Exception:
-        return tickers
-
+    batch = safe_yf_download(tickers, period="5d", interval="1d", group_by="ticker")
     if batch is None or batch.empty:
         return tickers
 
@@ -790,17 +809,8 @@ def run_breakout_scan(
         return df
 
     # Download recent daily data for all tickers in one batch where possible.
-    try:
-        batch = yf.download(
-            " ".join(tickers),
-            period="3mo",
-            interval="1d",
-            group_by="ticker",
-            auto_adjust=False,
-            progress=False,
-            threads=True,
-        )
-    except Exception:
+    batch = safe_yf_download(tickers, period="1mo", interval="1d", group_by="ticker")
+    if batch is None or batch.empty:
         batch = pd.DataFrame()
 
     rows: List[Dict] = []
@@ -1155,7 +1165,7 @@ def main():
 
     premarket = st.sidebar.checkbox("Include Premarket Scan", value=False, disabled=not tier.can_premarket)
     afterhours = st.sidebar.checkbox("Include After-hours Scan", value=False, disabled=not tier.can_afterhours)
-    unusual_vol = st.sidebar.checkbox("Unusual Volume Filter", value=True, disabled=not tier.can_unusual_volume)
+    unusual_vol = st.sidebar.checkbox("Unusual Volume Filter", value=False, disabled=not tier.can_unusual_volume)
 
     st.sidebar.divider()
     diagnostics = st.sidebar.checkbox("Show diagnostics", value=True)
@@ -1218,6 +1228,7 @@ def main():
 
     def do_scan(tickers: List[str], label: str):
         def _run_scan_body():
+            n_input = len(tickers)
             t0 = time.time()
             try:
                 st.caption(f"🔎 Scanning {len(tickers)} tickers for {label}...")
@@ -1244,7 +1255,13 @@ def main():
                 # Apply Top N cap here to avoid doing last-price overrides on hundreds of rows.
                 if df is not None and not df.empty:
                     df = df.head(top_n).reset_index(drop=True)
-                    df = _override_last_prices(df)
+
+                    if premarket or afterhours:
+                        df = _override_last_prices(df)
+
+                filtered_count = len(df) if df is not None else 0
+                if diagnostics:
+                    st.caption(f"📊 Filtered down from {n_input} tickers to {filtered_count} results after filters.")
 
                 st.caption(f"✅ {label}: {len(df)} results returned from scan.")
                 dt = time.time() - t0
@@ -1309,7 +1326,8 @@ def main():
         st.subheader("Results")
         st.caption(
             f"Showing {len(df)} results. Increase 'Top N Results' in the sidebar to see more, "
-            "or relax filters (Min Gap %, price range, Unusual Volume)."
+            "or relax filters (Min Gap %, price range, Unusual Volume Filter). "
+            "If you see 0 results, try lowering Min Gap or turning off the Unusual Volume Filter."
         )
         st.dataframe(df, use_container_width=True, height=420)
 
