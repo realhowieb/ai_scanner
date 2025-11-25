@@ -544,11 +544,20 @@ def run_breakout_scan(
             except AttributeError as e:
                 # Some real scanners expect a dict-like universe and call .items().
                 if "items" in str(e) and isinstance(tickers, list):
-                    ticker_dict = {t: {} for t in tickers}
-                    try:
-                        return _real_scan(ticker_dict, **filtered_kwargs) if accepted else _real_scan(ticker_dict)
-                    except Exception:
-                        raise e
+                    retry_universes = [
+                        {t: {} for t in tickers},
+                        {t: None for t in tickers},
+                    ]
+                    last_retry_err = None
+                    for uni in retry_universes:
+                        try:
+                            return _real_scan(uni, **filtered_kwargs) if accepted else _real_scan(uni)
+                        except Exception as re:
+                            last_retry_err = re
+                            continue
+                    # If all retries failed, raise the last retry error (don’t mask it).
+                    if last_retry_err is not None:
+                        raise last_retry_err
                 raise
 
         except TypeError as e:
