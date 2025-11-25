@@ -1,28 +1,22 @@
-
 import sys
 from pathlib import Path
 
-# Ensure project root is on sys.path so package imports work
-_THIS_DIR = Path(__file__).resolve().parent
-if str(_THIS_DIR) not in sys.path:
-    sys.path.insert(0, str(_THIS_DIR))
-if str(_THIS_DIR.parent) not in sys.path:
-    sys.path.insert(0, str(_THIS_DIR.parent))
+# Ensure project root is on sys.path
+THIS_DIR = Path(__file__).resolve().parent
+PARENT = THIS_DIR.parent
 
-# Prefer app.main(); fall back to UI renderer if needed
+if str(THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(THIS_DIR))
+if str(PARENT) not in sys.path:
+    sys.path.insert(0, str(PARENT))
+
+# Clean entrypoint for Streamlit / Python
 try:
-    from app import main as _run
-except Exception:
-    try:
-        from ui.pages import render_app as _render_app
-        def _run():
-            _render_app()
-    except Exception as e:
-        # Last-resort: raise a helpful error so the developer knows what's missing
-        raise RuntimeError(
-            "Unable to load application entrypoint. Ensure `app.py` defines `main()` "
-            "or `ui/pages.py` defines `render_app()`."
-        ) from e
+    from app import main as run_app
+except Exception as e:
+    raise RuntimeError(
+        "Unable to load app.main(). Ensure app.py defines main()."
+    ) from e
 
-# Streamlit executes the script top-to-bottom; just call the entry function.
-_run()
+if __name__ == "__main__":
+    run_app()
