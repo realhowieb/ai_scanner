@@ -1,58 +1,85 @@
-import os
-from datetime import datetime, timezone
+import streamlit as st
+import pandas as pd
+import time
 
-from sqlalchemy import Table, Column, Integer, String, DateTime, select
-from sqlalchemy.exc import NoResultFound
+from ai_scanner.runs import save_run, list_runs, load_run_results
 
-from .engine import build_engine, metadata
+def main():
+    # ... existing main function code ...
 
-# Lazily build an engine from env or fallback to local SQLite
-#   DB_URL    -> full SQLAlchemy URL (e.g., postgres+psycopg2://...)
-#   DB_PATH   -> used only when DB_URL is missing; defaults to scanner.sqlite
-_engine = build_engine(os.getenv("DB_URL"), os.getenv("DB_PATH", "scanner.sqlite"))
+    def do_scan():
+        # ... existing do_scan code ...
+        df = safe_call(
+            cached_real_scan,
+            tuple(tickers),
+            premarket=premarket,
+            afterhours=afterhours,
+            unusual_volume=unusual_vol,
+            min_gap=min_gap,
+            min_price=min_price,
+            max_price=max_price,
+            top_n=top_n,
+            diagnostics=diagnostics,
+            label="cached_real_scan",
+        )
 
-# --- Schema ---------------------------------------------------------------
-# Keep this table minimal for now; expand as needed
-runs = Table(
-    "runs",
-    metadata,
-    Column("id", Integer, primary_key=True),
-    Column("name", String, nullable=False),
-    Column("timestamp", DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)),
-    Column("results", String, nullable=False),
-)
+        # Apply Top N cap here to avoid doing last-price overrides on hundreds of rows.
+        if df is not None and not df.empty:
+            df = df.head(top_n).reset_index(drop=True)
+            df = _override_last_prices(df)
 
-# Ensure tables exist
-metadata.create_all(_engine)
+        st.caption(f"✅ {label}: {len(df)} results returned from scan.")
+        dt = time.time() - t0
+        st.session_state.results_df = df
+        banner(f"✅ {label} scan complete in {dt:.1f}s. Returned {len(df)} rows.", "success")
 
+        # Persist this scan to the runs DB (Neon / SQLAlchemy backend)
+        try:
+            results_json = df.to_json(orient="records") if df is not None else "[]"
+            run_name = f"{label} | {len(df)} results | {dt:.1f}s"
+            save_run(run_name, results_json)
+        except Exception:
+            # Never fail the UI just because DB logging failed
+            pass
 
-# --- API -----------------------------------------------------------------
+    # ... rest of main function code ...
 
-def save_run(name: str, results: str) -> int:
-    """Save a scan run and return the inserted id."""
-    ts = datetime.now(timezone.utc)
-    with _engine.begin() as conn:
-        ins = runs.insert().values(name=name, timestamp=ts, results=results)
-        res = conn.execute(ins)
-        # SQLAlchemy 1.4+: inserted_primary_key returns a sequence
-        return int(res.inserted_primary_key[0])
+    # --- Scan History (DB-backed via ai_scanner.runs) ---
+    with st.expander("📜 Scan History", expanded=False):
+        runs_list = []
+        try:
+            runs_list = list_runs()
+        except Exception as e:
+            st.caption("History unavailable (DB error).")
 
+        if runs_list:
+            # Build nice labels like "#12 — SP500 scan | 45 results | 23.1s — 2025-11-25 08:03"
+            options = []
+            for r in runs_list:
+                ts = r.get("timestamp")
+                ts_str = ts.strftime("%Y-%m-%d %H:%M") if hasattr(ts, "strftime") else str(ts)
+                label_str = f"#{r['id']} — {r['name']} — {ts_str}"
+                options.append((label_str, r["id"]))
 
-def list_runs():
-    """Return list of {id, name, timestamp} mappings, newest first."""
-    stmt = select(runs.c.id, runs.c.name, runs.c.timestamp).order_by(runs.c.timestamp.desc())
-    with _engine.connect() as conn:
-        result = conn.execute(stmt)
-        # Return as list of dicts for Streamlit ease
-        return [dict(row) for row in result.mappings().all()]
+            labels = [lbl for (lbl, _rid) in options]
+            selected_label = st.selectbox("Select a past scan to load:", labels, index=0)
+            selected_id = None
+            for lbl, _rid in options:
+                if lbl == selected_label:
+                    selected_id = _rid
+                    break
 
-
-def load_run_results(run_id: int) -> str:
-    """Fetch the results payload for a given run id."""
-    stmt = select(runs.c.results).where(runs.c.id == run_id)
-    with _engine.connect() as conn:
-        row = conn.execute(stmt).fetchone()
-        if row is None:
-            raise NoResultFound(f"No run found with id {run_id}")
-        mapping = row._mapping if hasattr(row, "_mapping") else {"results": row[0]}
-        return mapping["results"]
+            col_hist1, col_hist2 = st.columns([1, 1])
+            with col_hist1:
+                if st.button("Load Selected Scan") and selected_id is not None:
+                    try:
+                        payload = load_run_results(int(selected_id))
+                        hist_df = pd.read_json(payload)
+                        st.session_state.results_df = hist_df
+                        st.success(f"Loaded scan #{selected_id} from history with {len(hist_df)} rows.")
+                    except Exception as e:
+                        st.error(f"Failed to load scan #{selected_id}: {e}")
+            with col_hist2:
+                st.caption("History is stored in your configured DB_URL (Neon/Postgres) or local scanner.sqlite if unset.")
+        else:
+            st.caption("No past scans saved yet.")
