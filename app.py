@@ -1015,7 +1015,12 @@ def main():
                     diagnostics=diagnostics,
                     label="cached_real_scan",
                 )
-                df = _override_last_prices(df)
+
+                # Apply Top N cap here to avoid doing last-price overrides on hundreds of rows.
+                if df is not None and not df.empty:
+                    df = df.head(top_n).reset_index(drop=True)
+                    df = _override_last_prices(df)
+
                 st.caption(f"✅ {label}: {len(df)} results returned from scan.")
                 dt = time.time() - t0
                 st.session_state.results_df = df
