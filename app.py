@@ -198,11 +198,18 @@ try:
 except Exception:
     yf = None
 
+
 # Built-in candlestick fallback (no extra deps beyond plotly)
 try:
     import plotly.graph_objects as go
 except Exception:
     go = None
+
+# Matplotlib fallback if Plotly isn't available
+try:
+    import matplotlib.pyplot as plt
+except Exception:
+    plt = None
 
 
 def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
@@ -589,11 +596,11 @@ def _fetch_unadjusted_ohlc(ticker: str, period: str = "6mo", interval: str = "1d
 
 
 def _render_builtin_candlestick(ticker: str):
-    """Render a candlestick chart using unadjusted OHLC and optional volume."""
-    if go is None:
-        st.write("Plotly not installed; cannot render built-in chart.")
-        return
+    """Render a candlestick chart using unadjusted OHLC.
 
+    Uses Plotly if available; otherwise falls back to a simple matplotlib line chart
+    with EMA overlays and resistance.
+    """
     df = _fetch_unadjusted_ohlc(ticker)
     if df is None or df.empty:
         st.write(f"No OHLC data available for {ticker}.")
@@ -608,6 +615,35 @@ def _render_builtin_candlestick(ticker: str):
             df["VolSMA20"] = df["Volume"].rolling(20, min_periods=1).mean()
     except Exception:
         pass
+
+    # --- Matplotlib fallback if Plotly is missing ---
+    if go is None or plt is None:
+        if plt is None:
+            st.write("No chart backend available (Plotly and Matplotlib missing).")
+            return
+        fig, ax = plt.subplots()
+        ax.plot(df["Date"], df["Close"], label="Close")
+        if "EMA9" in df.columns:
+            ax.plot(df["Date"], df["EMA9"], label="EMA9")
+        if "EMA21" in df.columns:
+            ax.plot(df["Date"], df["EMA21"], label="EMA21")
+        if "Res20" in df.columns:
+            ax.plot(df["Date"], df["Res20"], label="Resistance 20D High")
+        ax.set_title(f"{ticker} Price (unadjusted) with EMAs")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Price")
+        ax.legend(loc="upper left")
+        st.pyplot(fig, use_container_width=True)
+
+        if "Volume" in df.columns:
+            vfig, vax = plt.subplots()
+            vax.bar(df["Date"], df["Volume"], label="Volume")
+            if "VolSMA20" in df.columns:
+                vax.plot(df["Date"], df["VolSMA20"], label="Vol SMA20")
+            vax.set_title(f"{ticker} Volume")
+            vax.legend(loc="upper left")
+            st.pyplot(vfig, use_container_width=True)
+        return
 
     # Expected columns from yfinance: Date, Open, High, Low, Close, Volume
     fig = go.Figure()
