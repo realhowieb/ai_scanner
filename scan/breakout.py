@@ -1,7 +1,14 @@
 import math
 from typing import Dict, Iterable, Optional
 
+
 import pandas as pd
+
+# Optional yfinance for ultra-fast batch downloads (single call)
+try:
+    import yfinance as yf  # type: ignore
+except Exception:  # pragma: no cover
+    yf = None  # type: ignore
 
 # Optional TA helpers. If not present, TA columns will be skipped even when include_ta=True
 try:
@@ -221,43 +228,81 @@ def run_breakout_scan(
     """App-friendly breakout scan.
 
     The Streamlit app passes a list of tickers plus filter kwargs. This wrapper
-    fetches price data for those tickers (parallel if available) and then calls
-    `breakout_scanner`.
+    fetches price data for those tickers and then calls `breakout_scanner`.
 
-    Parameters
-    ----------
-    tickers : Iterable[str]
-        Symbols to scan.
-    min_price, max_price : float
-        Filters applied to the latest close.
-    include_ta : bool
-        If True, append RSI14 and EMA20 when TA helpers are available.
-    spy_df : DataFrame, optional
-        Optional SPY OHLCV to compute RS vs market. If not provided, we will
-        attempt to fetch SPY alongside the tickers.
-
-    Returns
-    -------
-    DataFrame
-        Breakout results sorted by Breakout %.
+    Speed optimization: if yfinance is available, we download all tickers in a
+    single batched request, which is much faster than per-ticker calls.
     """
-    tickers = list(tickers)
+    tickers = [t for t in list(tickers) if t]
     if not tickers:
         return pd.DataFrame()
 
+    # Ensure SPY is present for RS calculation
+    tickers_plus_spy = tickers + (["SPY"] if "SPY" not in tickers else [])
+
     price_data: Dict[str, pd.DataFrame] = {}
 
-    # Prefer parallel fetcher if available
-    try:
-        from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
-        price_data, _skipped = fetch_price_data_parallel(tickers + ["SPY"])
-    except Exception:
-        # Fallback: try batch fetcher
+    # 1) Fastest path: single yfinance batch download
+    if yf is not None:
         try:
-            from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
-            price_data, _skipped = fetch_price_data_batch(tickers + ["SPY"])
+            batch = yf.download(
+                " ".join(tickers_plus_spy),
+                period="6mo",
+                interval="1d",
+                group_by="ticker",
+                auto_adjust=False,
+                progress=False,
+                threads=True,
+            )
+            if batch is not None and not batch.empty:
+                # When multiple tickers, columns are MultiIndex: (Field, Ticker) or (Ticker, Field)
+                if isinstance(batch.columns, pd.MultiIndex):
+                    # Normalize to dict[ticker] -> OHLCV df
+                    # Try both orientations
+                    lvl0 = batch.columns.levels[0]
+                    lvl1 = batch.columns.levels[1]
+                    # If lvl0 looks like fields (Open/High/Low/Close/Adj Close/Volume)
+                    field_names = {str(x).lower() for x in lvl0}
+                    fields_like = {"open", "high", "low", "close", "adj close", "volume"}
+                    if field_names & fields_like:
+                        for t in tickers_plus_spy:
+                            try:
+                                sub = batch.xs(t, level=1, axis=1, drop_level=True)
+                                if sub is not None and not sub.empty:
+                                    price_data[t] = sub.dropna(how="all")
+                            except Exception:
+                                continue
+                    else:
+                        # Otherwise assume lvl0 is ticker
+                        for t in tickers_plus_spy:
+                            try:
+                                sub = batch.xs(t, level=0, axis=1, drop_level=True)
+                                if sub is not None and not sub.empty:
+                                    price_data[t] = sub.dropna(how="all")
+                            except Exception:
+                                continue
+                else:
+                    # Single ticker download returns flat columns
+                    # If only one ticker requested, assign it
+                    if len(tickers_plus_spy) == 1:
+                        price_data[tickers_plus_spy[0]] = batch.dropna(how="all")
         except Exception:
             price_data = {}
+
+    # 2) Fallbacks if batch download failed
+    if not price_data:
+        try:
+            from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
+            price_data, _skipped = fetch_price_data_parallel(tickers_plus_spy)
+        except Exception:
+            try:
+                from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
+                price_data, _skipped = fetch_price_data_batch(tickers_plus_spy)
+            except Exception:
+                price_data = {}
+
+    if not price_data:
+        return pd.DataFrame()
 
     # Choose SPY df for RS calc
     if spy_df is None:
