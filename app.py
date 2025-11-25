@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import os
+import re
 import time
 import traceback
 from dataclasses import dataclass
@@ -286,6 +287,38 @@ def pricing_sidebar():
             st.markdown(f"- Export: {'✅' if t.can_export_csv else '❌'}")
             st.link_button(f"Subscribe {t.name}", STRIPE_LINKS[key])
 
+
+# ---------- Universe filtering helper ----------
+
+def filter_universe(tickers: List[str]) -> List[str]:
+    """Drop symbols Yahoo commonly can't serve (preferreds, warrants, units, rights)."""
+    if not tickers:
+        return []
+    bad_suffixes = ("-W", "-WS", "-U", "-R")
+    out: List[str] = []
+    for t in tickers:
+        if not t:
+            continue
+        ts = str(t).strip().upper()
+        # Preferred/share classes like BRK$A or BAC$E
+        if "$" in ts:
+            continue
+        # Warrants/units/rights
+        if ts.endswith(bad_suffixes):
+            continue
+        # Extra pattern skip
+        if re.search(r"\bWARRANT\b|\bRIGHT\b", ts):
+            continue
+        out.append(ts)
+
+    # De-dupe preserving order
+    seen = set()
+    deduped: List[str] = []
+    for t in out:
+        if t not in seen:
+            seen.add(t)
+            deduped.append(t)
+    return deduped
 
 # ---------- Universe loaders ----------
 # Try your real loaders first, fallback to tiny defaults.
@@ -859,6 +892,11 @@ def main():
     # Load universes
     sp500 = safe_call(load_sp500_universe, label="SP500 universe")
     nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
+
+    # Filter out Yahoo-incompatible symbols (preferreds/warrants/units/rights)
+    sp500 = filter_universe(sp500)
+    nasdaq = filter_universe(nasdaq)
+
     nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
 
     # Universe diagnostics (your preference)

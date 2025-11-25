@@ -1,5 +1,8 @@
 import math
-from typing import Dict, Iterable, Optional
+import time
+import random
+from functools import lru_cache
+from typing import Dict, Iterable, Optional, Tuple, List
 
 
 import pandas as pd
@@ -211,6 +214,29 @@ def run_sp500_scan(
     )
 
 
+@lru_cache(maxsize=64)
+def _yf_batch_download_cached(
+    tickers_key: Tuple[str, ...],
+    period: str = "3mo",
+    interval: str = "1d",
+) -> pd.DataFrame:
+    """Cached yfinance batch download for a tuple of tickers."""
+    if yf is None:
+        return pd.DataFrame()
+    try:
+        return yf.download(
+            " ".join(tickers_key),
+            period=period,
+            interval=interval,
+            group_by="ticker",
+            auto_adjust=False,
+            progress=False,
+            threads=True,
+        )
+    except Exception:
+        return pd.DataFrame()
+
+
 # Backwards-compat alias (in case older code imports the misspelled name)
 # NOTE: do not advertise this; keep for smooth migration only.
 _breakout_scanner_typo_alias = breakout_scanner
@@ -242,26 +268,33 @@ def run_breakout_scan(
 
     price_data: Dict[str, pd.DataFrame] = {}
 
-    # 1) Fastest path: single yfinance batch download
+    # 1) Fastest path: chunked yfinance batch download (reduces 429s)
     if yf is not None:
         try:
-            batch = yf.download(
-                " ".join(tickers_plus_spy),
-                period="3mo",
-                interval="1d",
-                group_by="ticker",
-                auto_adjust=False,
-                progress=False,
-                threads=True,
-            )
+            # Chunk to avoid Yahoo throttling
+            chunk_size = int(kwargs.get("chunk_size", 200))
+            period = str(kwargs.get("period", "3mo"))
+            interval = str(kwargs.get("interval", "1d"))
+
+            batches: List[pd.DataFrame] = []
+            for i in range(0, len(tickers_plus_spy), chunk_size):
+                chunk = tuple(tickers_plus_spy[i:i + chunk_size])
+                if not chunk:
+                    continue
+                b = _yf_batch_download_cached(chunk, period=period, interval=interval)
+                if b is not None and not b.empty:
+                    batches.append(b)
+                # small jitter between chunks to reduce rate-limits
+                time.sleep(random.uniform(0.4, 1.2))
+
+            if batches:
+                batch = pd.concat(batches, axis=1)
+            else:
+                batch = pd.DataFrame()
+
             if batch is not None and not batch.empty:
-                # When multiple tickers, columns are MultiIndex: (Field, Ticker) or (Ticker, Field)
                 if isinstance(batch.columns, pd.MultiIndex):
-                    # Normalize to dict[ticker] -> OHLCV df
-                    # Try both orientations
                     lvl0 = batch.columns.levels[0]
-                    lvl1 = batch.columns.levels[1]
-                    # If lvl0 looks like fields (Open/High/Low/Close/Adj Close/Volume)
                     field_names = {str(x).lower() for x in lvl0}
                     fields_like = {"open", "high", "low", "close", "adj close", "volume"}
                     if field_names & fields_like:
@@ -273,7 +306,6 @@ def run_breakout_scan(
                             except Exception:
                                 continue
                     else:
-                        # Otherwise assume lvl0 is ticker
                         for t in tickers_plus_spy:
                             try:
                                 sub = batch.xs(t, level=0, axis=1, drop_level=True)
@@ -282,8 +314,6 @@ def run_breakout_scan(
                             except Exception:
                                 continue
                 else:
-                    # Single ticker download returns flat columns
-                    # If only one ticker requested, assign it
                     if len(tickers_plus_spy) == 1:
                         price_data[tickers_plus_spy[0]] = batch.dropna(how="all")
         except Exception:
