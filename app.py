@@ -553,6 +553,13 @@ def main():
         with st.spinner(f"Scanning {label}..."):
             t0 = time.time()
             try:
+                st.caption(f"🔎 Scanning {len(tickers)} tickers for {label}...")
+                if len(tickers) < 50:
+                    st.warning(
+                        f"{label} universe is very small ({len(tickers)} tickers). "
+                        "This usually means a fallback/stub universe is still being used."
+                    )
+
                 df = safe_call(
                     run_breakout_scan,
                     tickers,
@@ -566,6 +573,7 @@ def main():
                     diagnostics=diagnostics,
                     label="run_breakout_scan",
                 )
+                st.caption(f"✅ {label}: {len(df)} results returned from scan.")
                 dt = time.time() - t0
                 st.session_state.results_df = df
                 banner(f"✅ {label} scan complete in {dt:.1f}s. Returned {len(df)} rows.", "success")
@@ -585,6 +593,10 @@ def main():
 
     if df is not None and not df.empty:
         st.subheader("Results")
+        st.caption(
+            f"Showing {len(df)} results. Increase 'Top N Results' in the sidebar to see more, "
+            "or relax filters (Min Gap %, price range, Unusual Volume)."
+        )
         st.dataframe(df, use_container_width=True, height=420)
 
         # Export (tier-gated)
