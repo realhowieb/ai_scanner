@@ -1140,9 +1140,9 @@ def main():
 
     # Sidebar filters
     st.sidebar.markdown("## Filters")
-    min_gap = st.sidebar.slider("Min Gap %", -10.0, 20.0, 2.0, 0.5)
-    min_price = st.sidebar.number_input("Min Price", 0.5, 500.0, 3.0, 0.5)
-    max_price = st.sidebar.number_input("Max Price", 1.0, 5000.0, 50.0, 1.0)
+    min_gap = st.sidebar.slider("Min Gap %", -10.0, 20.0, 1.0, 0.5)
+    min_price = st.sidebar.number_input("Min Price", 0.5, 500.0, 1.0, 0.5)
+    max_price = st.sidebar.number_input("Max Price", 1.0, 5000.0, 1000.0, 1.0)
     top_n = st.sidebar.slider("Top N Results", 5, tier.max_results, min(25, tier.max_results), 5)
 
     max_nasdaq_scan = st.sidebar.number_input(
