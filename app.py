@@ -882,6 +882,15 @@ def main():
         help="Caps NASDAQ universe to speed up scans. Applied to NASDAQ + Combo scans.",
     )
 
+    max_combo_scan = st.sidebar.number_input(
+        "Max Combo tickers to scan",
+        min_value=100,
+        max_value=6000,
+        value=1000,
+        step=100,
+        help="Caps SP500+NASDAQ universe for Combo scans.",
+    )
+
     premarket = st.sidebar.checkbox("Include Premarket Scan", value=False, disabled=not tier.can_premarket)
     afterhours = st.sidebar.checkbox("Include After-hours Scan", value=False, disabled=not tier.can_afterhours)
     unusual_vol = st.sidebar.checkbox("Unusual Volume Filter", value=True, disabled=not tier.can_unusual_volume)
@@ -898,6 +907,9 @@ def main():
     nasdaq = filter_universe(nasdaq)
 
     nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
+
+    combo_universe = sp500 + nasdaq_capped
+    combo_capped = combo_universe[: int(max_combo_scan)]
 
     # Universe diagnostics (your preference)
     with st.expander("Universe Info", expanded=True):
@@ -971,7 +983,7 @@ def main():
     if run_nasdaq_btn:
         do_scan(nasdaq_capped, "NASDAQ")
     if run_combo_btn:
-        do_scan(sp500 + nasdaq_capped, "Combo")
+        do_scan(combo_capped, "Combo")
 
     df = st.session_state.results_df
 
