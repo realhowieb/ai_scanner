@@ -247,7 +247,7 @@ def run_breakout_scan(
         try:
             batch = yf.download(
                 " ".join(tickers_plus_spy),
-                period="6mo",
+                period="3mo",
                 interval="1d",
                 group_by="ticker",
                 auto_adjust=False,
