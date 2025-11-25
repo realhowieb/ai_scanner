@@ -12,7 +12,6 @@ import streamlit as st
 
 @dataclass
 class RunFns:
-    """Callables supplied by main.py so we avoid circular imports."""
     run_premarket: Callable[[], int]
     run_postmarket: Callable[[], int]
     run_sp500: Callable[[], int]
