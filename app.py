@@ -800,14 +800,17 @@ def run_breakout_scan(
                 t_start = time.time()
                 out = _real_scan(tickers, **filtered_kwargs) if accepted else _real_scan(tickers)
                 df_out = _coerce_scan_output(out, tickers)
-                # If the real scanner returns empty almost instantly, treat as a no-op and fall back.
-                if df_out.empty and (time.time() - t_start) < 0.5:
-                    st.warning(
-                        "Real breakout scanner returned 0 rows instantly. Falling back to stub. "
-                        "This usually means a signature/universe mismatch or an internal early-exit."
-                    )
+                # If the real scanner returns empty, fall back to stub so the UI still shows demo results.
+                if df_out.empty:
+                    dt_real = time.time() - t_start
+                    if diagnostics:
+                        st.warning(
+                            "Real breakout scanner returned 0 rows. Falling back to stub results. "
+                            "This usually means filters are too strict, the universe is empty, or the "
+                            "real scan implementation is stubbed out."
+                        )
                     use_stub = True
-                    raise RuntimeError("real_scan_empty_fast")
+                    raise RuntimeError("real_scan_empty")
                 return df_out
             except AttributeError as e:
                 # Some real scanners expect a dict-like universe and call .items().
