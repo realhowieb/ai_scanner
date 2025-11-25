@@ -773,22 +773,20 @@ def run_breakout_scan(
     top_n: int,
     diagnostics: bool = True,
 ) -> pd.DataFrame:
-    """Compute an AI-style breakout score using price, volume, and momentum features.
+    """Premium Breakout v2 Engine.
 
-    Features per ticker:
-    - Gap%: today vs previous close
-    - Breakout position: last close vs 20-day high
-    - Trend: 20-day return
-    - VolumeRel20: last volume / 20-day average volume
-    BreakoutScore is a weighted combination of these features, clipped to [0, 100].
+    Uses price, gap, breakout position vs 20D high, 20D trend, relative volume,
+    dollar-volume and volatility-normalized signals to compute a BreakoutScore
+    in [0, 100]. Designed to de‑emphasize illiquid penny stocks and reward
+    liquid names with strong, sustainable momentum.
     """
+    # Stub path if yfinance is unavailable or no tickers provided.
     if yf is None or not tickers:
-        # yfinance not available: fall back to a simple random stub without warnings.
         rows = []
         for t in tickers:
             price = float(np.random.uniform(min_price, max_price))
-            vol = int(np.random.randint(1_000_000, 80_000_000))
-            gap = float(np.random.uniform(-5, 12))
+            vol = int(np.random.randint(300_000, 20_000_000))
+            gap = float(np.random.uniform(min_gap, min_gap + 10))
             score = float(np.random.uniform(0, 100))
             rows.append(
                 {
@@ -797,12 +795,19 @@ def run_breakout_scan(
                     "Last": round(price, 2),
                     "Volume": vol,
                     "Gap%": round(gap, 2),
+                    "BreakoutPos20D": np.nan,
+                    "Trend20D%": np.nan,
+                    "VolRel20": np.nan,
+                    "DollarVol20": np.nan,
+                    "Volatility20D%": np.nan,
                     "Premarket": premarket,
                     "AfterHours": afterhours,
-                    "UnusualVol": unusual_volume and vol > 20_000_000,
+                    "UnusualVol": False,
                 }
             )
         df = pd.DataFrame(rows)
+        if df.empty:
+            return df
         df = df[df["Last"].between(min_price, max_price)]
         df = df[df["Gap%"] >= min_gap]
         df = df.sort_values("BreakoutScore", ascending=False).head(top_n).reset_index(drop=True)
@@ -811,7 +816,7 @@ def run_breakout_scan(
     # Download recent daily data for all tickers in one batch where possible.
     batch = safe_yf_download(tickers, period="1mo", interval="1d", group_by="ticker")
     if batch is None or batch.empty:
-        batch = pd.DataFrame()
+        return pd.DataFrame()
 
     rows: List[Dict] = []
 
@@ -854,7 +859,7 @@ def run_breakout_scan(
             if last_close <= 0:
                 continue
 
-            # Price band filter
+            # Basic price band filter
             if not (min_price <= last_close <= max_price):
                 continue
 
@@ -874,11 +879,26 @@ def run_breakout_scan(
                 past = float(close.iloc[0])
             trend_pct = ((last_close - past) / past) * 100 if past > 0 else 0.0
 
-            # Volume relative to 20-day average
+            # Volume relative to 20-day average + dollar volume
             window_v = min(20, len(vol))
             avg_vol20 = float(vol.tail(window_v).mean()) if window_v > 0 else float(vol.iloc[-1])
             last_vol = float(vol.iloc[-1])
             vol_rel20 = (last_vol / avg_vol20) if avg_vol20 > 0 else 1.0
+            dollar_vol20 = avg_vol20 * last_close
+
+            # Volatility: std of daily returns over last 20 bars (in %)
+            returns = close.pct_change().dropna()
+            if not returns.empty:
+                tail = returns.tail(min(20, len(returns)))
+                vol20_pct = float(tail.std() * 100.0)
+            else:
+                vol20_pct = 0.0
+
+            # Hard liquidity filters to avoid garbage microcaps
+            if avg_vol20 < 150_000:
+                continue
+            if dollar_vol20 < 2_000_000:  # ~$2M+ dollar volume
+                continue
 
             # Unusual volume filter (if enabled)
             if unusual_volume and vol_rel20 < 1.5:
@@ -888,21 +908,30 @@ def run_breakout_scan(
             if gap_pct < min_gap:
                 continue
 
-            # ---- AI-style BreakoutScore ----
-            # Components are lightly scaled and clipped so score is in [0, 100].
-            comp_gap = max(0.0, gap_pct - min_gap) / 5.0  # extra gap above minimum
-            comp_breakout = max(0.0, breakout_pos - 0.95) * 10.0  # near/above 20D high
-            comp_trend = max(0.0, trend_pct) / 5.0  # recent uptrend
-            comp_vol = max(0.0, vol_rel20 - 1.0) * 3.0  # volume expansion
+            # ---- Premium BreakoutScore v2 ----
+            # Normalize key components. These are heuristic scalings so that each
+            # term lives in a moderate range before weighting.
+            comp_gap = max(0.0, gap_pct) / 4.0            # strong gaps rewarded
+            comp_breakout = max(0.0, breakout_pos - 0.9) * 15.0   # near 20D high
+            comp_trend = max(0.0, trend_pct) / 6.0        # sustained trend
+            comp_vol_rel = max(0.0, vol_rel20 - 1.0) * 3.0
+            price_factor = np.clip(last_close / 20.0, 0.2, 1.5)   # de‑weight sub‑$5, reward $20+
+            dv_component = np.clip((np.log10(dollar_vol20 + 1) - 5.5), 0.0, 4.0)
+
+            # Volatility penalty: extremely wild names get discounted
+            vol_penalty = np.clip((vol20_pct - 6.0) / 4.0, 0.0, 4.0)
 
             raw_score = (
-                0.30 * comp_gap
-                + 0.30 * comp_breakout
-                + 0.25 * comp_trend
-                + 0.15 * comp_vol
-            ) * 20.0  # scale up into roughly 0-100
+                0.24 * comp_gap
+                + 0.22 * comp_breakout
+                + 0.18 * comp_trend
+                + 0.16 * comp_vol_rel
+                + 0.12 * dv_component
+            )
 
-            score = float(np.clip(raw_score, 0.0, 100.0))
+            # Apply price factor and volatility penalty, then scale into [0, 100]
+            raw_score = raw_score * float(price_factor) - 0.10 * vol_penalty
+            score = float(np.clip(raw_score * 10.0, 0.0, 100.0))
 
             rows.append(
                 {
@@ -914,9 +943,11 @@ def run_breakout_scan(
                     "BreakoutPos20D": round(breakout_pos, 3),
                     "Trend20D%": round(trend_pct, 2),
                     "VolRel20": round(vol_rel20, 2),
+                    "DollarVol20": round(dollar_vol20, 2),
+                    "Volatility20D%": round(vol20_pct, 2),
                     "Premarket": premarket,
                     "AfterHours": afterhours,
-                    "UnusualVol": unusual_volume,
+                    "UnusualVol": unusual_volume and vol_rel20 >= 1.5,
                 }
             )
         except Exception:
@@ -927,10 +958,9 @@ def run_breakout_scan(
     if df.empty:
         return df
 
-    # Final filters and sorting
+    # Final sorting and Top N cap.
     df = df.sort_values("BreakoutScore", ascending=False).head(top_n).reset_index(drop=True)
     return df
-
 
 # ---------- Cached scan wrapper ----------
 @st.cache_data(ttl=600, show_spinner=False)
