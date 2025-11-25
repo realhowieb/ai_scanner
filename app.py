@@ -60,6 +60,40 @@ def safe_call(fn, *args, retries: int = 2, sleep_s: float = 0.8, label: str = ""
     raise last_err
 
 
+# ---------- Helper to override last prices from yfinance ----------
+def _override_last_prices(df: pd.DataFrame) -> pd.DataFrame:
+    """Override df['Last'] with live-ish last trade prices."""
+    if yf is None or df is None or df.empty or "Ticker" not in df.columns:
+        return df
+    last_map = {}
+    for t in df["Ticker"].astype(str).tolist():
+        try:
+            tk = yf.Ticker(t)
+            price = None
+            try:
+                fi = getattr(tk, "fast_info", {}) or {}
+                price = fi.get("last_price")
+            except Exception:
+                price = None
+            if price is None:
+                try:
+                    info = tk.info or {}
+                    price = info.get("regularMarketPrice") or info.get("currentPrice")
+                except Exception:
+                    price = None
+            if price is not None and np.isfinite(price):
+                last_map[t] = float(price)
+        except Exception:
+            continue
+    if last_map:
+        out = df.copy()
+        if "Last" not in out.columns:
+            out["Last"] = np.nan
+        out["Last"] = out["Ticker"].map(last_map).fillna(out["Last"])
+        return out
+    return df
+
+
 # ---------- Page config ----------
 
 st.set_page_config(
@@ -156,6 +190,13 @@ try:
     import streamlit_authenticator as stauth
 except Exception:
     stauth = None
+import streamlit as st
+
+# Optional live price override for the 'Last' column
+try:
+    import yfinance as yf
+except Exception:
+    yf = None
 
 
 def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
@@ -617,6 +658,7 @@ def main():
                     diagnostics=diagnostics,
                     label="run_breakout_scan",
                 )
+                df = _override_last_prices(df)
                 st.caption(f"✅ {label}: {len(df)} results returned from scan.")
                 dt = time.time() - t0
                 st.session_state.results_df = df
