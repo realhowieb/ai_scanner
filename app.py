@@ -11,6 +11,12 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+# Optional for Yahoo Finance universe fallback
+try:
+    import requests
+except Exception:  # requests may not be installed in some runtimes
+    requests = None
+
 # ============================================
 # Breakout Stock Scanner — Subscription Ready
 # Single-file entrypoint (replaces bootstrapper)
@@ -211,10 +217,67 @@ _load_nasdaq = (
 )
 
 
+def _fetch_yahoo_universe(scr_id: str, count: int = 1000) -> List[str]:
+    """Fetch predefined Yahoo Finance screener tickers (unofficial but commonly used)."""
+    if requests is None:
+        raise RuntimeError("requests not available")
+
+    url = "https://query2.finance.yahoo.com/v1/finance/screener/predefined/saved"
+    params = {"scrIds": scr_id, "count": count, "start": 0}
+    r = requests.get(url, params=params, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+
+    quotes = (
+        data.get("finance", {})
+            .get("result", [{}])[0]
+            .get("quotes", [])
+    )
+    tickers = [q.get("symbol") for q in quotes if q.get("symbol")]
+    # De-dupe while preserving order
+    seen = set()
+    out = []
+    for t in tickers:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
+
+
+def _fetch_wikipedia_table(url: str, col: str) -> List[str]:
+    """Fallback if Yahoo endpoint changes; pulls ticker lists from Wikipedia."""
+    try:
+        tables = pd.read_html(url)
+        for t in tables:
+            if col in t.columns:
+                tickers = t[col].astype(str).str.replace(".", "-", regex=False).tolist()
+                return tickers
+    except Exception:
+        return []
+    return []
+
+
 @st.cache_data(show_spinner=False, ttl=24 * 3600)
 def load_sp500_universe() -> List[str]:
     if callable(_load_sp500):
         return list(_load_sp500())
+
+    # Yahoo Finance predefined screener fallback
+    try:
+        tickers = _fetch_yahoo_universe("sp500", count=700)
+        if tickers:
+            return tickers
+    except Exception as e:
+        st.caption(f"Yahoo SP500 universe fallback failed: {e}")
+
+    # Wikipedia fallback (stable)
+    wiki = _fetch_wikipedia_table(
+        "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+        col="Symbol",
+    )
+    if wiki:
+        return wiki
+
     return ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"]
 
 
@@ -222,6 +285,23 @@ def load_sp500_universe() -> List[str]:
 def load_nasdaq_universe() -> List[str]:
     if callable(_load_nasdaq):
         return list(_load_nasdaq())
+
+    # Yahoo Finance predefined screener fallback (Nasdaq 100)
+    try:
+        tickers = _fetch_yahoo_universe("nasdaq100", count=200)
+        if tickers:
+            return tickers
+    except Exception as e:
+        st.caption(f"Yahoo NASDAQ universe fallback failed: {e}")
+
+    # Wikipedia fallback (Nasdaq-100)
+    wiki = _fetch_wikipedia_table(
+        "https://en.wikipedia.org/wiki/Nasdaq-100",
+        col="Ticker",
+    )
+    if wiki:
+        return wiki
+
     return ["TSLA", "PLTR", "AMD", "SOFI", "SNOW", "CRWD"]
 
 
