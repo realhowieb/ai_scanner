@@ -140,7 +140,14 @@ def banner(msg: str, level: str = "info"):
         st.info(msg)
 
 
-def safe_call(fn, *args, retries: int = 2, sleep_s: float = 0.8, label: str = "", **kwargs):
+def safe_call(
+    fn,
+    *args,
+    retries: int = 2,
+    sleep_s: float = 0.8,
+    label: str = "",
+    **kwargs,
+):
     """Retry wrapper to harden flaky providers (yfinance, etc.). Supports kwargs."""
     last_err = None
     for i in range(retries + 1):
