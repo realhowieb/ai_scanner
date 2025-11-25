@@ -337,18 +337,29 @@ def _fetch_nasdaq_official_listings() -> List[str]:
 
 @st.cache_data(show_spinner=False, ttl=24 * 3600)
 def load_sp500_universe() -> List[str]:
+    # 1) Prefer your local/custom loader if it exists
     if callable(_load_sp500):
-        return list(_load_sp500())
+        try:
+            local = list(_load_sp500())
+            # If your local loader is still stubbed or fails, fall back.
+            if local and len(local) >= 100:
+                return local
+            else:
+                st.caption(
+                    f"Local SP500 universe returned {len(local) if local else 0} tickers; using Wikipedia instead."
+                )
+        except Exception as e:
+            st.caption(f"Local SP500 universe loader failed: {e}. Using Wikipedia instead.")
 
-    # ✅ Stable primary fallback: Wikipedia S&P 500 list
+    # 2) Stable primary fallback: Wikipedia S&P 500 list
     wiki = _fetch_wikipedia_table(
         "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
         col="Symbol",
     )
-    if wiki:
+    if wiki and len(wiki) >= 450:
         return wiki
 
-    # Optional Yahoo fallback (may rate-limit)
+    # 3) Optional Yahoo fallback (may rate-limit)
     try:
         tickers = _fetch_yahoo_universe("sp500", count=520)
         if tickers:
@@ -356,6 +367,7 @@ def load_sp500_universe() -> List[str]:
     except Exception as e:
         _note_yahoo_fail("SP500", e)
 
+    # 4) Tiny last-resort default
     return ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"]
 
 
