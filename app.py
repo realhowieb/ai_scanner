@@ -335,6 +335,80 @@ def filter_universe(tickers: List[str]) -> List[str]:
             deduped.append(ts)
     return deduped
 
+
+def apply_liquidity_filter_batch(
+    tickers: List[str],
+    min_price: float = 2.0,
+    min_volume: int = 300_000,
+) -> List[str]:
+    """Filter tickers by basic liquidity using a single yfinance batch call.
+
+    Keeps only symbols with last close >= min_price and last daily volume >= min_volume.
+    If anything goes wrong, returns the original list so scans still work.
+    """
+    if yf is None or not tickers:
+        return tickers
+
+    try:
+        batch = yf.download(
+            " ".join(tickers),
+            period="5d",
+            interval="1d",
+            group_by="ticker",
+            auto_adjust=False,
+            progress=False,
+            threads=True,
+        )
+    except Exception:
+        return tickers
+
+    if batch is None or batch.empty:
+        return tickers
+
+    liquid: List[str] = []
+
+    if isinstance(batch.columns, pd.MultiIndex):
+        # Multi-ticker case: columns like (ticker, field) or (field, ticker)
+        for t in tickers:
+            price_series = None
+            vol_series = None
+            try:
+                # Orientation 1: (ticker, field)
+                price_series = batch[(t, "Close")]
+                vol_series = batch[(t, "Volume")]
+            except Exception:
+                try:
+                    # Orientation 2: (field, ticker)
+                    price_series = batch[("Close", t)]
+                    vol_series = batch[("Volume", t)]
+                except Exception:
+                    continue
+
+            price_series = price_series.dropna()
+            vol_series = vol_series.dropna()
+            if price_series.empty or vol_series.empty:
+                continue
+
+            last_price = float(price_series.iloc[-1])
+            last_vol = float(vol_series.iloc[-1])
+            if last_price >= min_price and last_vol >= min_volume:
+                liquid.append(t)
+    else:
+        # Single-ticker case
+        price_series = batch.get("Close")
+        vol_series = batch.get("Volume")
+        if price_series is not None and vol_series is not None:
+            price_series = price_series.dropna()
+            vol_series = vol_series.dropna()
+            if not price_series.empty and not vol_series.empty:
+                last_price = float(price_series.iloc[-1])
+                last_vol = float(vol_series.iloc[-1])
+                if last_price >= min_price and last_vol >= min_volume:
+                    # Only one ticker here, keep it
+                    return tickers
+
+    return liquid or tickers
+
 # ---------- Universe loaders ----------
 # Try your real loaders first, fallback to tiny defaults.
 
@@ -956,7 +1030,10 @@ def main():
     nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
 
     combo_universe = sp500 + nasdaq_capped
-    combo_capped = combo_universe[: int(max_combo_scan)]
+
+    # Batch liquidity filter for Combo: drop thin/penny names before scanning
+    combo_liquid = apply_liquidity_filter_batch(combo_universe)
+    combo_capped = combo_liquid[: int(max_combo_scan)]
 
     # Universe diagnostics (your preference)
     with st.expander("Universe Info", expanded=True):
