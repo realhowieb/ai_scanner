@@ -338,11 +338,35 @@ def _fetch_nasdaq_official_listings() -> List[str]:
 
 @st.cache_data(show_spinner=False, ttl=24 * 3600)
 def load_sp500_universe() -> List[str]:
+    # 0) Preferred: local sp500.txt (same folder as app.py or in ./data)
+    local_paths = [
+        os.path.join(os.path.dirname(__file__), "sp500.txt"),
+        os.path.join(os.path.dirname(__file__), "data", "sp500.txt"),
+        os.path.join(os.getcwd(), "sp500.txt"),
+        os.path.join(os.getcwd(), "data", "sp500.txt"),
+    ]
+    for path in local_paths:
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    tickers = [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
+                # de-dupe while preserving order
+                seen = set(); out = []
+                for t in tickers:
+                    if t not in seen:
+                        seen.add(t); out.append(t)
+                if out and len(out) >= 400:
+                    st.caption(f"Loaded SP500 universe from {os.path.basename(path)} ({len(out)} tickers).")
+                    return out
+                else:
+                    st.caption(f"Local {os.path.basename(path)} returned {len(out)} tickers; expecting full list.")
+        except Exception as e:
+            st.caption(f"Failed loading local SP500 file at {path}: {e}")
+
     # 1) Prefer your local/custom loader if it exists
     if callable(_load_sp500):
         try:
             local = list(_load_sp500())
-            # If your local loader is still stubbed or fails, fall back.
             if local and len(local) >= 100:
                 return local
             else:
