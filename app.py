@@ -844,7 +844,13 @@ def run_breakout_scan(
             except Exception:
                 raise e
         except Exception as e:
-            if str(e) == "real_scan_empty_fast" or "real_scan_empty_fast" in str(e):
+            msg = str(e)
+            if (
+                msg == "real_scan_empty_fast"
+                or "real_scan_empty_fast" in msg
+                or msg == "real_scan_empty"
+                or "real_scan_empty" in msg
+            ):
                 use_stub = True
             else:
                 raise
