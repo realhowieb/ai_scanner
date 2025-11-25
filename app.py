@@ -1160,31 +1160,38 @@ def main():
     st.sidebar.divider()
     diagnostics = st.sidebar.checkbox("Show diagnostics", value=True)
 
-    # Load universes
-    sp500 = safe_call(load_sp500_universe, label="SP500 universe")
-    nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
+    # Universe state (lazy-loaded on first scan to keep startup fast)
+    if "sp500_universe" not in st.session_state:
+        st.session_state["sp500_universe"] = []
+    if "nasdaq_universe" not in st.session_state:
+        st.session_state["nasdaq_universe"] = []
+    if "nasdaq_capped" not in st.session_state:
+        st.session_state["nasdaq_capped"] = []
+    if "combo_capped" not in st.session_state:
+        st.session_state["combo_capped"] = []
 
-    # Filter out Yahoo-incompatible symbols (preferreds/warrants/units/rights)
-    sp500 = filter_universe(sp500)
-    nasdaq = filter_universe(nasdaq)
-
-    nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
-
-    combo_universe = sp500 + nasdaq_capped
-
-    # Batch liquidity filter for Combo: drop thin/penny names before scanning
-    combo_liquid = apply_liquidity_filter_batch(combo_universe)
-    combo_capped = combo_liquid[: int(max_combo_scan)]
-
-    # Universe diagnostics (your preference)
+    # Universe diagnostics (lazy; based on last scan)
     with st.expander("Universe Info", expanded=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown(f"**SP500 size:** {len(sp500)}")
-            st.caption(f"Sample: {', '.join(sp500[:20])}")
-        with c2:
-            st.markdown(f"**NASDAQ size:** {len(nasdaq_capped)} (capped from {len(nasdaq)})")
-            st.caption(f"Sample: {', '.join(nasdaq_capped[:20])}")
+        sp500 = st.session_state.get("sp500_universe", [])
+        nasdaq_full = st.session_state.get("nasdaq_universe", [])
+        nasdaq_capped = st.session_state.get("nasdaq_capped", [])
+
+        if sp500 or nasdaq_full:
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown(f"**SP500 size:** {len(sp500)}" if sp500 else "**SP500 size:** (not loaded yet)")
+                if sp500:
+                    st.caption(f"Sample: {', '.join(sp500[:20])}")
+            with c2:
+                if nasdaq_full:
+                    st.markdown(f"**NASDAQ size:** {len(nasdaq_capped) or len(nasdaq_full)}"
+                                f"{' (capped)' if nasdaq_capped else ''}")
+                    st.caption(f"Sample: {', '.join((nasdaq_capped or nasdaq_full)[:20])}")
+                else:
+                    st.markdown("**NASDAQ size:** (not loaded yet)")
+                    st.caption("Run a NASDAQ or Combo scan to populate NASDAQ universe.")
+        else:
+            st.caption("Universes will appear here after you run your first scan (SP500, NASDAQ, or Combo).")
 
     # Buttons (hard-wired universes)
     b1, b2, b3 = st.columns([1, 1, 2])
@@ -1266,10 +1273,34 @@ def main():
             _run_scan_body()
 
     if run_sp500_btn:
+        sp500 = safe_call(load_sp500_universe, label="SP500 universe")
+        sp500 = filter_universe(sp500)
+        st.session_state["sp500_universe"] = sp500
         do_scan(sp500, "SP500")
+
     if run_nasdaq_btn:
+        nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
+        nasdaq = filter_universe(nasdaq)
+        nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
+        st.session_state["nasdaq_universe"] = nasdaq
+        st.session_state["nasdaq_capped"] = nasdaq_capped
         do_scan(nasdaq_capped, "NASDAQ")
+
     if run_combo_btn:
+        sp500 = safe_call(load_sp500_universe, label="SP500 universe")
+        nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
+        sp500 = filter_universe(sp500)
+        nasdaq = filter_universe(nasdaq)
+        nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
+        combo_universe = sp500 + nasdaq_capped
+        combo_liquid = apply_liquidity_filter_batch(combo_universe)
+        combo_capped = combo_liquid[: int(max_combo_scan)]
+
+        st.session_state["sp500_universe"] = sp500
+        st.session_state["nasdaq_universe"] = nasdaq
+        st.session_state["nasdaq_capped"] = nasdaq_capped
+        st.session_state["combo_capped"] = combo_capped
+
         do_scan(combo_capped, "Combo")
 
     df = st.session_state.results_df
