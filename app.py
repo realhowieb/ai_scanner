@@ -61,6 +61,7 @@ def safe_call(fn, *args, retries: int = 2, sleep_s: float = 0.8, label: str = ""
 
 
 # ---------- Helper to override last prices from yfinance ----------
+
 def _override_last_prices(df: pd.DataFrame) -> pd.DataFrame:
     """Override df['Last'] with live-ish last trade prices."""
     if yf is None or df is None or df.empty or "Ticker" not in df.columns:
@@ -92,6 +93,38 @@ def _override_last_prices(df: pd.DataFrame) -> pd.DataFrame:
         out["Last"] = out["Ticker"].map(last_map).fillna(out["Last"])
         return out
     return df
+
+
+# ---------- Scan output coercion helper ----------
+def _coerce_scan_output(out, tickers: List[str]) -> pd.DataFrame:
+    """Coerce various real-scan return types into a DataFrame."""
+    if out is None:
+        return pd.DataFrame()
+    if isinstance(out, pd.DataFrame):
+        return out
+    # Common patterns: list of dict rows, dict of rows, or list of tickers
+    try:
+        if isinstance(out, list):
+            if len(out) == 0:
+                return pd.DataFrame()
+            if isinstance(out[0], dict):
+                return pd.DataFrame(out)
+            if isinstance(out[0], str):
+                return pd.DataFrame({"Ticker": out})
+        if isinstance(out, dict):
+            # dict of ticker->score or ticker->row
+            if all(isinstance(v, (int, float)) for v in out.values()):
+                return pd.DataFrame({"Ticker": list(out.keys()), "BreakoutScore": list(out.values())})
+            if all(isinstance(v, dict) for v in out.values()):
+                rows = []
+                for k, v in out.items():
+                    r = {"Ticker": k}
+                    r.update(v)
+                    rows.append(r)
+                return pd.DataFrame(rows)
+    except Exception:
+        pass
+    return pd.DataFrame()
 
 
 # ---------- Page config ----------
@@ -540,7 +573,17 @@ def run_breakout_scan(
 
             # Preferred call: tickers as first positional arg.
             try:
-                return _real_scan(tickers, **filtered_kwargs) if accepted else _real_scan(tickers)
+                t_start = time.time()
+                out = _real_scan(tickers, **filtered_kwargs) if accepted else _real_scan(tickers)
+                df_out = _coerce_scan_output(out, tickers)
+                # If the real scanner returns empty almost instantly, treat as a no-op and fall back.
+                if df_out.empty and (time.time() - t_start) < 0.5:
+                    st.warning(
+                        "Real breakout scanner returned 0 rows instantly. Falling back to stub. "
+                        "This usually means a signature/universe mismatch or an internal early-exit."
+                    )
+                    raise RuntimeError("real_scan_empty_fast")
+                return df_out
             except AttributeError as e:
                 # Some real scanners expect a dict-like universe and call .items().
                 if "items" in str(e) and isinstance(tickers, list):
@@ -551,7 +594,12 @@ def run_breakout_scan(
                     last_retry_err = None
                     for uni in retry_universes:
                         try:
-                            return _real_scan(uni, **filtered_kwargs) if accepted else _real_scan(uni)
+                            t_start = time.time()
+                            out = _real_scan(uni, **filtered_kwargs) if accepted else _real_scan(uni)
+                            df_out = _coerce_scan_output(out, tickers)
+                            if df_out.empty and (time.time() - t_start) < 0.5:
+                                raise RuntimeError("real_scan_empty_fast")
+                            return df_out
                         except Exception as re:
                             last_retry_err = re
                             continue
