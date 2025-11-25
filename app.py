@@ -840,6 +840,15 @@ def main():
     max_price = st.sidebar.number_input("Max Price", 1.0, 5000.0, 50.0, 1.0)
     top_n = st.sidebar.slider("Top N Results", 5, tier.max_results, min(25, tier.max_results), 5)
 
+    max_nasdaq_scan = st.sidebar.number_input(
+        "Max NASDAQ tickers to scan",
+        min_value=100,
+        max_value=6000,
+        value=1200,
+        step=100,
+        help="Caps NASDAQ universe to speed up scans. Applied to NASDAQ + Combo scans.",
+    )
+
     premarket = st.sidebar.checkbox("Include Premarket Scan", value=False, disabled=not tier.can_premarket)
     afterhours = st.sidebar.checkbox("Include After-hours Scan", value=False, disabled=not tier.can_afterhours)
     unusual_vol = st.sidebar.checkbox("Unusual Volume Filter", value=True, disabled=not tier.can_unusual_volume)
@@ -850,6 +859,7 @@ def main():
     # Load universes
     sp500 = safe_call(load_sp500_universe, label="SP500 universe")
     nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
+    nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
 
     # Universe diagnostics (your preference)
     with st.expander("Universe Info", expanded=True):
@@ -858,8 +868,8 @@ def main():
             st.markdown(f"**SP500 size:** {len(sp500)}")
             st.caption(f"Sample: {', '.join(sp500[:20])}")
         with c2:
-            st.markdown(f"**NASDAQ size:** {len(nasdaq)}")
-            st.caption(f"Sample: {', '.join(nasdaq[:20])}")
+            st.markdown(f"**NASDAQ size:** {len(nasdaq_capped)} (capped from {len(nasdaq)})")
+            st.caption(f"Sample: {', '.join(nasdaq_capped[:20])}")
 
     # Buttons (hard-wired universes)
     b1, b2, b3 = st.columns([1, 1, 2])
@@ -921,9 +931,9 @@ def main():
     if run_sp500_btn:
         do_scan(sp500, "SP500")
     if run_nasdaq_btn:
-        do_scan(nasdaq, "NASDAQ")
+        do_scan(nasdaq_capped, "NASDAQ")
     if run_combo_btn:
-        do_scan(sp500 + nasdaq, "Combo")
+        do_scan(sp500 + nasdaq_capped, "Combo")
 
     df = st.session_state.results_df
 
