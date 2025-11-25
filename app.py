@@ -38,15 +38,17 @@ def banner(msg: str, level: str = "info"):
         st.info(msg)
 
 
-def safe_call(fn, *args, retries: int = 2, sleep_s: float = 0.8, label: str = ""):
-    """Retry wrapper to harden flaky providers (yfinance, etc.)."""
+def safe_call(fn, *args, retries: int = 2, sleep_s: float = 0.8, label: str = "", **kwargs):
+    """Retry wrapper to harden flaky providers (yfinance, etc.). Supports kwargs."""
     last_err = None
     for i in range(retries + 1):
         try:
-            return fn(*args)
+            return fn(*args, **kwargs)
         except Exception as e:
             last_err = e
-            st.caption(f"⚠️ {label or fn.__name__} failed (attempt {i+1}/{retries+1}): {e}")
+            st.caption(
+                f"⚠️ {label or fn.__name__} failed (attempt {i+1}/{retries+1}): {e}"
+            )
             time.sleep(sleep_s)
     raise last_err
 
