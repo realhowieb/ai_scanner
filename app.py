@@ -198,6 +198,12 @@ try:
 except Exception:
     yf = None
 
+# Built-in candlestick fallback (no extra deps beyond plotly)
+try:
+    import plotly.graph_objects as go
+except Exception:
+    go = None
+
 
 def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
     """Returns (authenticated, username, display_name)."""
@@ -560,10 +566,85 @@ _real_chart = (
 )
 
 
+def _fetch_unadjusted_ohlc(ticker: str, period: str = "6mo", interval: str = "1d") -> Optional[pd.DataFrame]:
+    """Fetch unadjusted OHLCV for charting."""
+    if yf is None:
+        return None
+    try:
+        df = yf.download(
+            ticker,
+            period=period,
+            interval=interval,
+            auto_adjust=False,
+            progress=False,
+            threads=False,
+        )
+        if df is None or df.empty:
+            return None
+        df = df.reset_index()
+        # Normalize column names if needed
+        cols = {c.lower(): c for c in df.columns}
+        # Ensure expected columns exist
+        if "date" not in cols and "datetime" in cols:
+            df.rename(columns={cols["datetime"]: "Date"}, inplace=True)
+        return df
+    except Exception:
+        return None
+
+
+def _render_builtin_candlestick(ticker: str):
+    """Render a candlestick chart using unadjusted OHLC and optional volume."""
+    if go is None:
+        st.write("Plotly not installed; cannot render built-in chart.")
+        return
+
+    df = _fetch_unadjusted_ohlc(ticker)
+    if df is None or df.empty:
+        st.write(f"No OHLC data available for {ticker}.")
+        return
+
+    # Expected columns from yfinance: Date, Open, High, Low, Close, Volume
+    fig = go.Figure(
+        data=[
+            go.Candlestick(
+                x=df["Date"],
+                open=df.get("Open"),
+                high=df.get("High"),
+                low=df.get("Low"),
+                close=df.get("Close"),
+                name=ticker,
+            )
+        ]
+    )
+    fig.update_layout(
+        title=f"{ticker} Candlestick (unadjusted)",
+        xaxis_title="Date",
+        yaxis_title="Price",
+        height=520,
+        xaxis_rangeslider_visible=False,
+        margin=dict(l=10, r=10, t=40, b=10),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Optional volume bar
+    if "Volume" in df.columns:
+        st.caption("Volume")
+        vol_fig = go.Figure(
+            data=[go.Bar(x=df["Date"], y=df["Volume"], name="Volume")]
+        )
+        vol_fig.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(vol_fig, use_container_width=True)
+
+
 def render_chart_for_ticker(ticker: str):
+    """Prefer your custom chart renderer; fall back to built-in unadjusted candlestick."""
     if callable(_real_chart):
-        return _real_chart(ticker)
-    st.write(f"📊 Chart placeholder for **{ticker}**")
+        try:
+            return _real_chart(ticker)
+        except Exception as e:
+            st.caption(f"Custom chart renderer failed for {ticker}: {e}. Using built-in chart.")
+
+    _render_builtin_candlestick(ticker)
 
 
 # ---------- Main UI ----------
