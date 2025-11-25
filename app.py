@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import os
 import time
 import traceback
@@ -427,18 +428,37 @@ def run_breakout_scan(
     diagnostics: bool = True,
 ) -> pd.DataFrame:
     if callable(_real_scan):
-        # Your real scanner should accept these kwargs. If not, adapt here.
-        return _real_scan(
-            tickers,
-            premarket=premarket,
-            afterhours=afterhours,
-            unusual_volume=unusual_volume,
-            min_gap=min_gap,
-            min_price=min_price,
-            max_price=max_price,
-            top_n=top_n,
-            diagnostics=diagnostics,
-        )
+        # Try to match your real scan function signature safely.
+        try:
+            sig = inspect.signature(_real_scan)
+            accepted = set(sig.parameters.keys())
+
+            # Build kwargs, then drop anything the real function doesn't accept.
+            call_kwargs = {
+                "premarket": premarket,
+                "afterhours": afterhours,
+                "unusual_volume": unusual_volume,
+                "min_gap": min_gap,
+                "min_price": min_price,
+                "max_price": max_price,
+                "top_n": top_n,
+                "diagnostics": diagnostics,
+            }
+            filtered_kwargs = {k: v for k, v in call_kwargs.items() if k in accepted}
+
+            # Preferred: pass tickers as first arg if accepted or if function takes *args.
+            if accepted:
+                return _real_scan(tickers, **filtered_kwargs)
+            return _real_scan(tickers)
+        except TypeError as e:
+            # Fallback 1: maybe your function wants no kwargs at all.
+            try:
+                return _real_scan(tickers)
+            except Exception:
+                raise e
+        except Exception:
+            # Surface real scan errors clearly.
+            raise
 
     # ---------- Fallback stub so app still runs ----------
     rows = []
