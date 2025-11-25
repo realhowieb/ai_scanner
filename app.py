@@ -218,30 +218,61 @@ _load_nasdaq = (
 
 
 def _fetch_yahoo_universe(scr_id: str, count: int = 1000) -> List[str]:
-    """Fetch predefined Yahoo Finance screener tickers (unofficial but commonly used)."""
+    """Fetch predefined Yahoo Finance screener tickers.
+
+    Yahoo can rate-limit (429). We send a browser UA and retry a couple times with
+    exponential backoff. If still limited, caller should fall back to Wikipedia.
+    """
     if requests is None:
         raise RuntimeError("requests not available")
 
     url = "https://query2.finance.yahoo.com/v1/finance/screener/predefined/saved"
     params = {"scrIds": scr_id, "count": count, "start": 0}
-    r = requests.get(url, params=params, timeout=10)
-    r.raise_for_status()
-    data = r.json()
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/119.0 Safari/537.36"
+        ),
+        "Accept": "application/json,text/plain,*/*",
+        "Referer": "https://finance.yahoo.com/",
+    }
 
-    quotes = (
-        data.get("finance", {})
-            .get("result", [{}])[0]
-            .get("quotes", [])
-    )
-    tickers = [q.get("symbol") for q in quotes if q.get("symbol")]
-    # De-dupe while preserving order
-    seen = set()
-    out = []
-    for t in tickers:
-        if t not in seen:
-            seen.add(t)
-            out.append(t)
-    return out
+    last_err = None
+    for attempt in range(3):
+        try:
+            r = requests.get(url, params=params, headers=headers, timeout=12)
+            if r.status_code == 429:
+                # backoff and retry
+                time.sleep(1.5 * (2 ** attempt))
+                continue
+            r.raise_for_status()
+            data = r.json()
+            quotes = (
+                data.get("finance", {})
+                    .get("result", [{}])[0]
+                    .get("quotes", [])
+            )
+            tickers = [q.get("symbol") for q in quotes if q.get("symbol")]
+            # De-dupe while preserving order
+            seen = set()
+            out = []
+            for t in tickers:
+                if t not in seen:
+                    seen.add(t)
+                    out.append(t)
+            return out
+        except Exception as e:
+            last_err = e
+            # brief pause before next attempt
+            time.sleep(0.8 * (attempt + 1))
+
+    raise last_err or RuntimeError("Yahoo universe fetch failed")
+def _note_yahoo_fail(which: str, err: Exception):
+    key = f"yahoo_fail_noted_{which}"
+    if not st.session_state.get(key):
+        st.session_state[key] = True
+        st.caption(f"Yahoo {which} universe fallback unavailable (rate-limited). Using Wikipedia instead.")
 
 
 def _fetch_wikipedia_table(url: str, col: str) -> List[str]:
@@ -264,11 +295,11 @@ def load_sp500_universe() -> List[str]:
 
     # Yahoo Finance predefined screener fallback
     try:
-        tickers = _fetch_yahoo_universe("sp500", count=700)
+        tickers = _fetch_yahoo_universe("sp500", count=520)
         if tickers:
             return tickers
     except Exception as e:
-        st.caption(f"Yahoo SP500 universe fallback failed: {e}")
+        _note_yahoo_fail("SP500", e)
 
     # Wikipedia fallback (stable)
     wiki = _fetch_wikipedia_table(
@@ -288,11 +319,11 @@ def load_nasdaq_universe() -> List[str]:
 
     # Yahoo Finance predefined screener fallback (Nasdaq 100)
     try:
-        tickers = _fetch_yahoo_universe("nasdaq100", count=200)
+        tickers = _fetch_yahoo_universe("nasdaq100", count=120)
         if tickers:
             return tickers
     except Exception as e:
-        st.caption(f"Yahoo NASDAQ universe fallback failed: {e}")
+        _note_yahoo_fail("NASDAQ", e)
 
     # Wikipedia fallback (Nasdaq-100)
     wiki = _fetch_wikipedia_table(
