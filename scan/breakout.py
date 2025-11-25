@@ -207,3 +207,66 @@ def run_sp500_scan(
 # Backwards-compat alias (in case older code imports the misspelled name)
 # NOTE: do not advertise this; keep for smooth migration only.
 _breakout_scanner_typo_alias = breakout_scanner
+
+
+# Streamlit-app-friendly wrapper for scanning a list of tickers
+def run_breakout_scan(
+    tickers: Iterable[str],
+    min_price: float = 1.0,
+    max_price: float = 10_000.0,
+    include_ta: bool = False,
+    spy_df: Optional[pd.DataFrame] = None,
+    **kwargs,
+) -> pd.DataFrame:
+    """App-friendly breakout scan.
+
+    The Streamlit app passes a list of tickers plus filter kwargs. This wrapper
+    fetches price data for those tickers (parallel if available) and then calls
+    `breakout_scanner`.
+
+    Parameters
+    ----------
+    tickers : Iterable[str]
+        Symbols to scan.
+    min_price, max_price : float
+        Filters applied to the latest close.
+    include_ta : bool
+        If True, append RSI14 and EMA20 when TA helpers are available.
+    spy_df : DataFrame, optional
+        Optional SPY OHLCV to compute RS vs market. If not provided, we will
+        attempt to fetch SPY alongside the tickers.
+
+    Returns
+    -------
+    DataFrame
+        Breakout results sorted by Breakout %.
+    """
+    tickers = list(tickers)
+    if not tickers:
+        return pd.DataFrame()
+
+    price_data: Dict[str, pd.DataFrame] = {}
+
+    # Prefer parallel fetcher if available
+    try:
+        from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
+        price_data, _skipped = fetch_price_data_parallel(tickers + ["SPY"])
+    except Exception:
+        # Fallback: try batch fetcher
+        try:
+            from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
+            price_data, _skipped = fetch_price_data_batch(tickers + ["SPY"])
+        except Exception:
+            price_data = {}
+
+    # Choose SPY df for RS calc
+    if spy_df is None:
+        spy_df = price_data.get("SPY")
+
+    return breakout_scanner(
+        price_data=price_data,
+        min_price=min_price,
+        max_price=max_price,
+        include_ta=include_ta,
+        spy_df=spy_df,
+    )
