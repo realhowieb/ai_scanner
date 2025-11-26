@@ -7,7 +7,7 @@ import streamlit as st
 
 from .engine import get_neon_conn
 from .schema import ensure_neon_users_schema
-from config import USERS_DB  # local fallback user config
+
 
 # Optional: auth library + hasher for seeding hashed passwords
 try:
@@ -207,3 +207,27 @@ def fetch_all_users() -> pd.DataFrame:
             for uname, cfg in USERS_DB.items()
         ]
         return pd.DataFrame(data)
+ # Local fallback user config (used if Neon is unavailable or empty)
+ # username -> { "name": full_name, "password": plain_text_demo, "tier": "basic|pro|premium|admin" }
+USERS_DB = {
+    "basic1": {
+        "name": "Basic Demo User",
+        "password": "basic123",
+        "tier": "basic",
+    },
+    "pro1": {
+        "name": "Pro Demo User",
+        "password": "pro123",
+        "tier": "pro",
+    },
+    "premium1": {
+        "name": "Premium Demo User",
+        "password": "premium123",
+        "tier": "premium",
+    },
+    "admin1": {
+        "name": "Admin Demo User",
+        "password": "admin123",
+        "tier": "premium",
+    },
+}
