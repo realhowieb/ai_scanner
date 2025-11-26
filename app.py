@@ -9,6 +9,7 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
+from datetime import datetime, date
 
 import json
 import sqlite3
@@ -164,6 +165,73 @@ def save_run(name: str, results_json: str) -> None:
         conn.close()
     except Exception:
         # Fail silently; history is a convenience feature.
+        pass
+
+
+# --- Daily snapshot helper ---
+def save_daily_snapshot(label: str, results_json: str) -> None:
+    """Save a once-per-day snapshot for a given label (e.g., 'SP500', 'NASDAQ').
+
+    This creates a run named 'Daily snapshot YYYY-MM-DD | LABEL' in Neon if available,
+    else in local SQLite. If a snapshot with that name already exists for today, it is
+    not duplicated.
+    """
+    # Build deterministic snapshot name for today + label
+    today_str = date.today().isoformat()
+    snapshot_name = f"Daily snapshot {today_str} | {label}"
+
+    # Try Neon first
+    try:
+        conn = get_neon_conn()
+        if conn is not None:
+            cur = conn.cursor()
+            # Ensure table exists in Neon
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS runs (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    results_json TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            # Check if snapshot already exists
+            cur.execute("SELECT 1 FROM runs WHERE name = %s LIMIT 1", (snapshot_name,))
+            if cur.fetchone():
+                cur.close()
+                conn.close()
+                return
+            # Insert snapshot
+            cur.execute(
+                "INSERT INTO runs (name, results_json) VALUES (%s, %s)",
+                (snapshot_name, results_json),
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            return
+    except Exception:
+        # Fall through to SQLite if Neon unavailable or failing
+        pass
+
+    # Fallback to local SQLite snapshot storage
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        # Ensure table exists (schema already enforced by _ensure_tables)
+        cur.execute("SELECT 1 FROM runs WHERE name = ? LIMIT 1", (snapshot_name,))
+        if cur.fetchone():
+            conn.close()
+            return
+        cur.execute(
+            "INSERT INTO runs (name, results_json) VALUES (?, ?)",
+            (snapshot_name, results_json),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        # Snapshots are convenience only; never break the app.
         pass
 
 def list_runs(limit: int = 50):
@@ -1519,11 +1587,20 @@ def main():
                 dt = time.time() - t0
                 st.session_state.results_df = df
                 banner(f"✅ {label} scan complete in {dt:.1f}s. Returned {len(df)} rows.", "success")
-                # Persist this scan to the runs DB (local SQLite history)
+                # Persist this scan to the runs DB (history + optional daily snapshot)
                 try:
                     results_json = df.to_json(orient="records") if df is not None else "[]"
                     run_name = f"{label} | {len(df)} results | {dt:.1f}s"
                     save_run(run_name, results_json)
+
+                    # Morning snapshot: one per day per label (approx. before noon server time)
+                    try:
+                        current_hour = datetime.now().hour
+                        if current_hour < 12:
+                            save_daily_snapshot(label, results_json)
+                    except Exception:
+                        # Snapshot is best-effort only
+                        pass
                 except Exception:
                     # Never fail the UI just because DB logging failed
                     pass
