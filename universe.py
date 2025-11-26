@@ -12,6 +12,8 @@ try:
 except Exception:
     requests = None
 
+from scan.engine import safe_yf_download
+
 
 def _try_import(path: str, attr: str | None = None):
     """Local copy of safe import helper for universe loaders."""
@@ -258,3 +260,91 @@ def load_nasdaq_universe() -> List[str]:
         return wiki
 
     return ["TSLA", "PLTR", "AMD", "SOFI", "SNOW", "CRWD"]
+
+
+def filter_universe(tickers: List[str]) -> List[str]:
+    """Basic cleaning for ticker universes (remove obvious junk)."""
+    cleaned = []
+    for t in tickers:
+        if not isinstance(t, str):
+            continue
+        sym = t.strip().upper()
+        if not sym:
+            continue
+        # Ignore symbols that contain spaces or obvious non-equity prefixes
+        if " " in sym:
+            continue
+        if sym.startswith("^"):
+            continue
+        if len(sym) > 10:
+            continue
+        cleaned.append(sym)
+    # De-dupe while preserving order
+    seen = set()
+    out: List[str] = []
+    for sym in cleaned:
+        if sym not in seen:
+            seen.add(sym)
+            out.append(sym)
+    return out
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def apply_liquidity_filter_batch(
+    tickers: List[str],
+    *,
+    min_price: float,
+    min_avg_dollar_vol: float,
+) -> List[str]:
+    """Filter tickers by approximate price and 20D dollar volume using yfinance."""
+    if not tickers:
+        return []
+
+    # Use the shared safe_yf_download from scan.engine
+    prices = safe_yf_download(tickers, period="1mo", interval="1d", group_by="ticker")
+    if prices is None or prices.empty:
+        return tickers  # fallback: do not filter if data missing
+
+    keep: List[str] = []
+
+    def _get_series(sym: str, field: str):
+        if prices is None or prices.empty:
+            return None
+        if isinstance(prices.columns, pd.MultiIndex):
+            try:
+                return prices[(sym, field)].dropna()
+            except Exception:
+                try:
+                    return prices[(field, sym)].dropna()
+                except Exception:
+                    return None
+        try:
+            return prices[field].dropna()
+        except Exception:
+            return None
+
+    for sym in tickers:
+        try:
+            close = _get_series(sym, "Close")
+            vol = _get_series(sym, "Volume")
+            if close is None or vol is None:
+                continue
+            close = close.dropna()
+            vol = vol.dropna()
+            if close.empty or vol.empty:
+                continue
+
+            last_close = float(close.iloc[-1])
+            if last_close < min_price:
+                continue
+
+            window_v = min(20, len(vol))
+            avg_vol20 = float(vol.tail(window_v).mean()) if window_v > 0 else float(vol.iloc[-1])
+            dollar_vol20 = avg_vol20 * last_close
+
+            if dollar_vol20 >= min_avg_dollar_vol:
+                keep.append(sym)
+        except Exception:
+            continue
+
+    return keep if keep else tickers
