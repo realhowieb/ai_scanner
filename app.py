@@ -456,13 +456,30 @@ def safe_yf_download(
     interval: str = "1d",
     group_by: str = "ticker",
 ) -> pd.DataFrame:
-    """Batch yfinance.download with retries and minimal overhead."""
+    """Batch yfinance.download with retries and per-ticker fallback.
+
+    Behaviour:
+      - Uses a single batched yfinance.download call (fast path).
+      - If the batch fails entirely, retries via safe_call and returns an empty
+        DataFrame on total failure.
+      - If the batch succeeds but some tickers are missing from the MultiIndex
+        columns, it will retry those missing tickers one-by-one and attempt to
+        merge them into the batch result.
+
+    This helps with cases where Yahoo times out on a subset of symbols but still
+    returns data for the rest of the batch.
+    """
     if yf is None or not tickers:
         return pd.DataFrame()
 
-    tickers_str = " ".join(ticker for ticker in tickers if isinstance(ticker, str) and ticker)
+    # Clean and normalize tickers
+    clean_tickers = [t for t in tickers if isinstance(t, str) and t]
+    if not clean_tickers:
+        return pd.DataFrame()
 
-    def _download():
+    tickers_str = " ".join(clean_tickers)
+
+    def _download_batch():
         return yf.download(
             tickers=tickers_str,
             period=period,
@@ -473,10 +490,58 @@ def safe_yf_download(
             threads=True,
         )
 
+    # First, try the batched download with the generic retry wrapper
     try:
-        return safe_call(_download, label=f"yfinance batch ({len(tickers)} symbols)")
+        data = safe_call(_download_batch, label=f"yfinance batch ({len(clean_tickers)} symbols)")
     except Exception:
         return pd.DataFrame()
+
+    if data is None or data.empty:
+        return pd.DataFrame()
+
+    # If not a MultiIndex columns object, it's a single-ticker or odd layout; just return it.
+    if not isinstance(data.columns, pd.MultiIndex):
+        return data
+
+    # Identify missing tickers in the MultiIndex top level
+    present = {str(c[0]) for c in data.columns}
+    missing = [t for t in clean_tickers if t not in present]
+
+    if not missing:
+        return data
+
+    # Retry missing tickers one-by-one and merge successful ones back into the batch.
+    for sym in missing:
+        try:
+            def _download_single():
+                return yf.download(
+                    tickers=sym,
+                    period=period,
+                    interval=interval,
+                    group_by="ticker",
+                    auto_adjust=False,
+                    progress=False,
+                    threads=False,
+                )
+
+            single = safe_call(_download_single, label=f"yfinance retry {sym}")
+            if single is None or single.empty:
+                continue
+
+            # For single-ticker, yfinance usually returns a flat column layout.
+            # We normalize by adding (sym, field) columns into the batch DataFrame.
+            if not isinstance(single.index, type(data.index)):
+                # Align on the union of indices if they differ
+                data = data.join(single, how="outer", rsuffix=f"_{sym}")
+                continue
+
+            for col in single.columns:
+                data[(sym, col)] = single[col]
+        except Exception as e:
+            st.caption(f"⚠️ Retry for {sym} failed: {e}")
+            continue
+
+    return data
 
 
 # ---------- Scan output coercion helper ----------
