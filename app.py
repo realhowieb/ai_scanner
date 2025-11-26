@@ -281,6 +281,7 @@ def save_daily_snapshot(label: str, results_json: str, username: Optional[str] =
         # Snapshots are convenience only; never break the app.
         pass
 
+@st.cache_data(show_spinner=False, ttl=120)
 def list_runs(limit: int = 50):
     """Return a list of recent runs (id, name, created_at), preferring Neon."""
     # Try Neon first
@@ -667,7 +668,6 @@ class Tier:
     can_ai_notes: bool = False
     max_results: int = 25
 
-def get_user_tier(username: str) -> Tier:
 def get_user_tier(username: str, users: Dict[str, Dict[str, str]]) -> Tier:
     tier_key = users.get(username, {}).get("tier", "basic")
     cfg = TIERS_CONFIG.get(tier_key, TIERS_CONFIG["basic"])
@@ -1943,6 +1943,12 @@ def main():
                         pass
                 except Exception:
                     # Never fail the UI just because DB logging failed
+                    pass
+
+                # Clear cached run list so new scan appears immediately in history
+                try:
+                    list_runs.clear()  # type: ignore
+                except Exception:
                     pass
             except Exception as e:
                 banner(f"❌ Scan failed: {e}", "error")
