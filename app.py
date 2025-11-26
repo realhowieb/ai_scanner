@@ -210,6 +210,72 @@ def load_users():
         return USERS_DB
 
 
+# --- Helper: fetch all users (including inactive) as DataFrame ---
+def fetch_all_users() -> pd.DataFrame:
+    """Return all users from Neon (including inactive) as a DataFrame.
+
+    Falls back to a DataFrame built from the local USERS_DB if Neon is
+    unavailable or the table is empty.
+    """
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            # Fallback to USERS_DB
+            rows = []
+            for uname, cfg in USERS_DB.items():
+                rows.append(
+                    {
+                        "id": None,
+                        "username": uname,
+                        "full_name": cfg.get("name", uname),
+                        "tier": cfg.get("tier", "basic"),
+                        "is_active": True,
+                        "created_at": None,
+                    }
+                )
+            return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+        _ensure_neon_users_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, username, full_name, tier, is_active, created_at FROM users ORDER BY id ASC"
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        if not rows:
+            return pd.DataFrame()
+
+        out_rows = []
+        for r in rows:
+            if isinstance(r, dict):
+                out_rows.append(
+                    {
+                        "id": r.get("id"),
+                        "username": r.get("username"),
+                        "full_name": r.get("full_name"),
+                        "tier": r.get("tier"),
+                        "is_active": r.get("is_active"),
+                        "created_at": r.get("created_at"),
+                    }
+                )
+            else:
+                out_rows.append(
+                    {
+                        "id": r[0],
+                        "username": r[1],
+                        "full_name": r[2],
+                        "tier": r[3],
+                        "is_active": r[4],
+                        "created_at": r[5],
+                    }
+                )
+        return pd.DataFrame(out_rows)
+    except Exception:
+        return pd.DataFrame()
+
+
 # --- DB Status Helper ---
 @st.cache_data(show_spinner=False, ttl=60)
 def get_db_status() -> str:
@@ -705,6 +771,7 @@ USERS_DB = {
         "tier": "premium",
     },
 }
+ADMIN_USERS = {"premium1"}  # usernames allowed to access the Admin Users page
 
 
 def get_user_tier(username: str) -> Tier:
@@ -2110,6 +2177,60 @@ def main():
                 st.caption("No past scans saved yet.")
         else:
             st.caption("No past scans saved yet.")
+
+    # --- Admin Users Page ---
+    if username in ADMIN_USERS:
+        with st.expander("👑 Admin: Manage Users", expanded=False):
+            users_df = fetch_all_users()
+            if users_df is None or users_df.empty:
+                st.caption("No users found in Neon users table.")
+            else:
+                st.caption("View and edit user tiers. Changes apply to Neon-backed accounts.")
+                st.dataframe(
+                    users_df[["id", "username", "full_name", "tier", "is_active", "created_at"]],
+                    use_container_width=True,
+                    height=260,
+                )
+
+                usernames_list = users_df["username"].tolist()
+                selected_user = st.selectbox("Select user to edit", usernames_list)
+                row = users_df[users_df["username"] == selected_user].iloc[0]
+
+                new_tier = st.selectbox(
+                    "Tier",
+                    ["basic", "pro", "premium"],
+                    index=["basic", "pro", "premium"].index(
+                        row["tier"] if row["tier"] in ["basic", "pro", "premium"] else "basic"
+                    ),
+                )
+                new_active = st.checkbox("Active", value=bool(row["is_active"]))
+
+                if st.button("Save User Changes"):
+                    try:
+                        conn = get_neon_conn()
+                        if conn is None:
+                            st.error("Neon connection unavailable; cannot update users.")
+                        else:
+                            _ensure_neon_users_schema(conn)
+                            cur = conn.cursor()
+                            cur.execute(
+                                "UPDATE users SET tier = %s, is_active = %s WHERE username = %s",
+                                (new_tier, new_active, selected_user),
+                            )
+                            conn.commit()
+                            cur.close()
+                            conn.close()
+                            # Clear cached users so changes are picked up immediately
+                            try:
+                                load_users.clear()  # type: ignore[attr-defined]
+                            except Exception:
+                                pass
+                            st.success(
+                                f"Updated user '{selected_user}' to tier '{new_tier}' (active={new_active})."
+                            )
+                            st.experimental_rerun()
+                    except Exception as e:
+                        st.error(f"Failed to update user: {e}")
 
     st.divider()
     st.caption("⚠️ Not financial advice. Educational tool only.")
