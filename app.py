@@ -590,6 +590,18 @@ USERS_DB = {
 ADMIN_USERS = {"premium1","howard"}  # usernames allowed to access the Admin Users page
 
 
+@dataclass
+class Tier:
+    name: str
+    can_scan_sp500: bool = True
+    can_scan_nasdaq: bool = False
+    can_premarket: bool = False
+    can_afterhours: bool = False
+    can_unusual_volume: bool = False
+    can_export_csv: bool = False
+    can_ai_notes: bool = False
+    max_results: int = 25
+
 def get_user_tier(username: str) -> Tier:
     users = load_users()
     tier_key = users.get(username, {}).get("tier", "basic")
@@ -716,24 +728,18 @@ def pricing_sidebar(current_username: Optional[str]):
         horizontal=True,
     )
 
-    # Display prices for each tier (kept here for simplicity; matches your Stripe setup)
-    price_table = {
-        "basic": {"Monthly": 19, "Yearly": 190},
-        "pro": {"Monthly": 49, "Yearly": 490},
-        "premium": {"Monthly": 99, "Yearly": 990},
-    }
-
     cols = st.sidebar.columns(len(upsell_keys))
     for i, key in enumerate(upsell_keys):
-        t = TIERS[key]
+        cfg = TIERS_CONFIG.get(key, {})
+        name = cfg.get("name", key.title())
+        monthly_price = cfg.get("price_monthly", 0)
+        yearly_price = cfg.get("price_yearly", 0)
+        features = cfg.get("features", [])
         with cols[i]:
-            monthly_price = price_table[key]["Monthly"]
-            yearly_price = price_table[key]["Yearly"]
-
             # Center-align everything in this card
             st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
 
-            st.markdown(f"**{t.name}**")
+            st.markdown(f"**{name}**")
 
             # Best value badge for Pro on Yearly
             if key == "pro" and billing_period == "Yearly":
@@ -759,10 +765,10 @@ def pricing_sidebar(current_username: Optional[str]):
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown(f"- SP500: {'✅' if t.can_scan_sp500 else '❌'}")
-            st.markdown(f"- NASDAQ: {'✅' if t.can_scan_nasdaq else '❌'}")
-            st.markdown(f"- Export: {'✅' if t.can_export_csv else '❌'}")
-            if t.can_ai_notes:
+            st.markdown(f"- SP500: {'✅' if ('SP500 Scan' in features or 'SP500' in features) else '❌'}")
+            st.markdown(f"- NASDAQ: {'✅' if 'NASDAQ' in features else '❌'}")
+            st.markdown(f"- Export: {'✅' if 'ExportCSV' in features else '❌'}")
+            if 'AI Notes' in features:
                 st.markdown("- AI Notes: ✅")
             else:
                 st.markdown("- AI Notes: ❌")
@@ -772,7 +778,7 @@ def pricing_sidebar(current_username: Optional[str]):
 
             if checkout_url:
                 st.link_button(
-                    f"Subscribe {t.name} ({billing_period})",
+                    f"Subscribe {name} ({billing_period})",
                     checkout_url,
                 )
             else:
