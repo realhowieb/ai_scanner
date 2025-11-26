@@ -676,7 +676,15 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         cookie_expiry_days=7,
     )
 
-    name, auth_status, username = authenticator.login("Login", "main")
+    name, auth_status, username = authenticator.login(
+        "main",
+        fields={
+            "Form name": "Login",
+            "Username": "Username",
+            "Password": "Password",
+            "Login": "Login",
+        },
+    )
 
     if auth_status is False:
         banner("Username/password incorrect", "error")
