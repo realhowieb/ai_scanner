@@ -566,17 +566,17 @@ USERS_DB = {
     # -----------------------
     "basic1": {
         "name": "Basic User 1",
-        "password": "$2b$12$oceKWoeoJp2Gq9dC8NQNUuBY0oZt/yvf1DPY931F6G8f9l96yHK/e",
+        "password": "test123",
         "tier": "basic",
     },
     "basic2": {
         "name": "Basic User 2",
-        "password": "$2b$12$oceKWoeoJp2Gq9dC8NQNUuBY0oZt/yvf1DPY931F6G8f9l96yHK/e",
+        "password": "test123",
         "tier": "basic",
     },
     "basic3": {
         "name": "Basic User 3",
-        "password": "$2b$12$oceKWoeoJp2Gq9dC8NQNUuBY0oZt/yvf1DPY931F6G8f9l96yHK/e",
+        "password": "test123",
         "tier": "basic",
     },
 
@@ -585,17 +585,17 @@ USERS_DB = {
     # -----------------------
     "pro1": {
         "name": "Pro User 1",
-        "password": "$2b$12$eO2.qSpgJ6OTvZk0Ot1VRuG0VByoA6o0/bW.Fjtqc0MGz6LJwNixW",
+        "password": "pro123",
         "tier": "pro",
     },
     "pro2": {
         "name": "Pro User 2",
-        "password": "$2b$12$eO2.qSpgJ6OTvZk0Ot1VRuG0VByoA6o0/bW.Fjtqc0MGz6LJwNixW",
+        "password": "pro123",
         "tier": "pro",
     },
     "pro3": {
         "name": "Pro User 3",
-        "password": "$2b$12$eO2.qSpgJ6OTvZk0Ot1VRuG0VByoA6o0/bW.Fjtqc0MGz6LJwNixW",
+        "password": "pro123",
         "tier": "pro",
     },
 
@@ -604,17 +604,17 @@ USERS_DB = {
     # -----------------------
     "premium1": {
         "name": "Premium User 1",
-        "password": "$2b$12$YfYNpSiVtlXwmuPG8ZG1pObfiY4xJRqKdozW4tu7cI4YPVlw8Hq8G",
+        "password": "premium123",
         "tier": "premium",
     },
     "premium2": {
         "name": "Premium User 2",
-        "password": "$2b$12$YfYNpSiVtlXwmuPG8ZG1pObfiY4xJRqKdozW4tu7cI4YPVlw8Hq8G",
+        "password": "premium123",
         "tier": "premium",
     },
     "premium3": {
         "name": "Premium User 3",
-        "password": "$2b$12$YfYNpSiVtlXwmuPG8ZG1pObfiY4xJRqKdozW4tu7cI4YPVlw8Hq8G",
+        "password": "premium123",
         "tier": "premium",
     },
 }
