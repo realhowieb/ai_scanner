@@ -1525,6 +1525,98 @@ def render_chart_for_ticker(ticker: str, force_builtin: bool = False):
     _render_builtin_candlestick(ticker)
 
 
+def generate_ai_note(row: pd.Series) -> str:
+    """Heuristic, on-device "AI" note using the breakout metrics for one ticker.
+
+    This keeps the app self-contained (no external API calls) and explains why a
+    name is scoring well or poorly based on its columns.
+    """
+    def _fmt(val, nd=2, suffix=""):
+        try:
+            if pd.isna(val):
+                return "N/A"
+            return f"{float(val):.{nd}f}{suffix}"
+        except Exception:
+            return "N/A"
+
+    ticker = row.get("Ticker", "?")
+    score = row.get("BreakoutScore", np.nan)
+    pattern = row.get("PatternTag", "") or "Neutral"
+    gap = row.get("Gap%", np.nan)
+    trend20 = row.get("Trend20D%", np.nan)
+    trend10 = row.get("Trend10D%", np.nan)
+    vol_rel = row.get("VolRel20", np.nan)
+    rs = row.get("RS_Rank", np.nan)
+    vol20 = row.get("Volatility20D%", np.nan)
+    dollar_vol = row.get("DollarVol20", np.nan)
+
+    parts = []
+
+    # High-level summary
+    parts.append(
+        f"**{ticker}** currently has a BreakoutScore of **{_fmt(score, 1)}** with pattern tag **{pattern}**."
+    )
+
+    # Trend + relative strength
+    trend_bits = []
+    if not pd.isna(trend20):
+        trend_bits.append(f"~{_fmt(trend20, 1, '%')} over the last 20 days")
+    if not pd.isna(trend10):
+        trend_bits.append(f"~{_fmt(trend10, 1, '%')} over the last 10 days")
+    if trend_bits:
+        line = "Price trend: " + ", ".join(trend_bits) + "."
+        parts.append(line)
+
+    if not pd.isna(rs):
+        try:
+            rs_val = float(rs)
+            if rs_val >= 80:
+                rs_comment = "strong relative strength vs the universe (top 20%)."
+            elif rs_val >= 60:
+                rs_comment = "above-average relative strength (top 40%)."
+            elif rs_val >= 40:
+                rs_comment = "roughly middle-of-the-pack relative strength."
+            else:
+                rs_comment = "weak relative strength vs peers right now."
+            parts.append(f"RS Rank is **{_fmt(rs, 1)}**, indicating {rs_comment}")
+        except Exception:
+            pass
+
+    # Gap + volume behaviour
+    gap_bits = []
+    if not pd.isna(gap):
+        gap_bits.append(f"gap of {_fmt(gap, 1, '%')} vs the prior close")
+    if not pd.isna(vol_rel):
+        gap_bits.append(f"volume running at roughly {_fmt(vol_rel, 2)}x the 20D average")
+    if gap_bits:
+        parts.append("Today it is showing a " + " and ".join(gap_bits) + ".")
+
+    if not pd.isna(dollar_vol):
+        parts.append(
+            f"Liquidity check: 20D avg dollar volume is around **${_fmt(dollar_vol/1_000_000, 1)}M**, "
+            "which helps with entries and exits."
+        )
+
+    if not pd.isna(vol20):
+        try:
+            vol_val = float(vol20)
+            if vol_val <= 8:
+                vol_comment = "Price action has been relatively quiet (low volatility)."
+            elif vol_val <= 18:
+                vol_comment = "Volatility is moderate and tradable for most setups."
+            else:
+                vol_comment = "This is a high-volatility name; position sizing and risk management are critical."
+            parts.append(f"Volatility (20D) sits near **{_fmt(vol20, 1, '%')}**, {vol_comment}")
+        except Exception:
+            pass
+
+    parts.append(
+        "This is not a trade recommendation. Consider support/resistance on the chart, overall market context, "
+        "and your own risk management rules before acting."
+    )
+
+    return "\n\n".join(parts)
+
 # ---------- Main UI ----------
 
 def main():
@@ -1818,10 +1910,21 @@ def main():
         pick = st.selectbox("Select ticker to chart", df["Ticker"].tolist())
         render_chart_for_ticker(pick)
 
-        # AI notes placeholder (tier-gated)
+        # AI notes (tier-gated)
         if tier.can_ai_notes:
             st.subheader("AI Notes (Premium)")
-            st.write("Add your AI commentary here.")
+            try:
+                # Use the same ticker the user selected for the chart
+                row = df[df["Ticker"] == pick].iloc[0]
+                auto_note = generate_ai_note(row)
+                st.markdown(auto_note)
+                st.text_area(
+                    "Edit or copy these notes (Premium only):",
+                    value=auto_note,
+                    height=220,
+                )
+            except Exception:
+                st.caption("AI notes are unavailable for the selected row.")
         else:
             st.caption("AI Notes are Premium-only.")
     else:
