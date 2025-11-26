@@ -2313,7 +2313,7 @@ def main():
                                 pass
 
                             st.success(f"User '{new_username}' created successfully!")
-                            st.experimental_rerun()
+                            st.rerun()
                     except Exception as e:
                         st.error(f"Failed to create user: {e}")
 
@@ -2366,7 +2366,7 @@ def main():
                             st.success(
                                 f"Updated user '{selected_user}' to tier '{new_tier}' (active={new_active})."
                             )
-                            st.experimental_rerun()
+                            st.rerun()
                     except Exception as e:
                         st.error(f"Failed to update user: {e}")
 
