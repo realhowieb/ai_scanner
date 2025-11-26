@@ -161,9 +161,19 @@ def seed_neon_users_from_local():
         # Nothing in table? → seed from USERS_DB
         if count == 0:
             for uname, cfg in USERS_DB.items():
+                # Hash passwords before inserting into Neon when auth library is available
+                raw_pwd = cfg["password"]
+                hashed_pwd = raw_pwd
+                try:
+                    if stauth is not None:
+                        hashed_pwd = stauth.Hasher([raw_pwd]).generate()[0]
+                except Exception:
+                    # Fallback to raw password if hashing fails; not ideal, but avoids seeding failure
+                    hashed_pwd = raw_pwd
+
                 cur.execute(
                     "INSERT INTO users (username, full_name, password, tier) VALUES (%s, %s, %s, %s)",
-                    (uname, cfg["name"], cfg["password"], cfg["tier"])
+                    (uname, cfg["name"], hashed_pwd, cfg["tier"])
                 )
             conn.commit()
 
