@@ -1,17 +1,28 @@
 # db/engine.py
 from pathlib import Path
 import sqlite3
-import psycopg2
+import psycopg
 import streamlit as st
 
 DB_PATH = Path("scanner.sqlite")
 
 def get_neon_conn():
+    """Return a new Neon PostgreSQL connection using Streamlit secrets.
+
+    Expects st.secrets["neon"]["database_url"] to contain a full Postgres URI.
+    """
     try:
         url = st.secrets["neon"]["database_url"]
     except Exception:
+        # Secrets not configured; Neon not available.
         return None
-    return psycopg2.connect(url, sslmode="require")
+
+    try:
+        conn = psycopg.connect(url)
+        return conn
+    except Exception as e:
+        st.caption(f"⚠️ Neon connection failed (engine): {e}")
+        return None
 
 def get_sqlite_conn():
     conn = sqlite3.connect(DB_PATH)
