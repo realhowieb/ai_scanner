@@ -91,6 +91,38 @@ def get_neon_conn():
         return None
 
 
+# --- Neon DB Schema Helper ---
+def _ensure_neon_runs_schema(conn) -> None:
+    """Ensure the Neon 'runs' table exists with the extended schema.
+
+    This is idempotent and safe to call before inserts. It upgrades older
+    tables that only had (id, name, results_json, created_at) by adding the
+    newer metadata columns as needed.
+    """
+    cur = conn.cursor()
+    # Base table (older deployments may already have this minimal schema)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS runs (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            results_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    # Incremental column adds for newer metadata
+    cur.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS label TEXT")
+    cur.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS username TEXT")
+    cur.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS row_count INT")
+    cur.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS duration_sec REAL")
+    cur.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_snapshot BOOLEAN DEFAULT FALSE")
+    # created_at may already exist; this is just defensive if older schema omitted it
+    cur.execute(
+        "ALTER TABLE runs ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    )
+
+
 # --- DB Status Helper ---
 @st.cache_data(show_spinner=False, ttl=60)
 def get_db_status() -> str:
@@ -135,23 +167,9 @@ def save_run(
     try:
         conn = get_neon_conn()
         if conn is not None:
+            # Ensure Neon table is present and upgraded to the extended schema
+            _ensure_neon_runs_schema(conn)
             cur = conn.cursor()
-            # Ensure table exists in Neon with extended schema
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS runs (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    results_json TEXT NOT NULL,
-                    label TEXT,
-                    username TEXT,
-                    row_count INT,
-                    duration_sec REAL,
-                    is_snapshot BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
             cur.execute(
                 """
                 INSERT INTO runs (name, results_json, label, username, row_count, duration_sec, is_snapshot)
@@ -200,23 +218,9 @@ def save_daily_snapshot(label: str, results_json: str, username: Optional[str] =
     try:
         conn = get_neon_conn()
         if conn is not None:
+            # Ensure Neon table is present and upgraded to the extended schema
+            _ensure_neon_runs_schema(conn)
             cur = conn.cursor()
-            # Ensure table exists in Neon with extended schema
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS runs (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    results_json TEXT NOT NULL,
-                    label TEXT,
-                    username TEXT,
-                    row_count INT,
-                    duration_sec REAL,
-                    is_snapshot BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
             # Check if snapshot already exists
             cur.execute("SELECT 1 FROM runs WHERE name = %s LIMIT 1", (snapshot_name,))
             if cur.fetchone():
