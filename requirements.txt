@@ -16,5 +16,5 @@ psycopg[binary]
 apscheduler
 plotly
 requests
-streamlit-authenticator==0.3.2
+streamlit-authenticator>=0.3.2
 bcrypt
