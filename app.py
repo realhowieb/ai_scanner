@@ -123,6 +123,93 @@ def _ensure_neon_runs_schema(conn) -> None:
     )
 
 
+# --- Neon users schema and helpers ---
+def _ensure_neon_users_schema(conn):
+    """Create Neon users table if missing."""
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            full_name TEXT NOT NULL,
+            password TEXT NOT NULL,
+            tier TEXT NOT NULL DEFAULT 'basic',
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+
+
+def seed_neon_users_from_local():
+    """
+    If Neon.users is empty, seed it using the hard-coded USERS_DB.
+    This runs once, then never again unless Neon is wiped.
+    """
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return
+
+        _ensure_neon_users_schema(conn)
+
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM users WHERE is_active = TRUE")
+        row = cur.fetchone()
+        count = row[0] if row is not None and len(row) > 0 else 0
+
+        # Nothing in table? → seed from USERS_DB
+        if count == 0:
+            for uname, cfg in USERS_DB.items():
+                cur.execute(
+                    "INSERT INTO users (username, full_name, password, tier) VALUES (%s, %s, %s, %s)",
+                    (uname, cfg["name"], cfg["password"], cfg["tier"])
+                )
+            conn.commit()
+
+        cur.close()
+        conn.close()
+    except Exception:
+        # Seeding is best-effort only; never break the app here.
+        pass
+
+
+def load_users():
+    """
+    Load active users from Neon.
+    If Neon is offline or empty, fallback to in-memory USERS_DB.
+    """
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return USERS_DB
+
+        _ensure_neon_users_schema(conn)
+
+        cur = conn.cursor()
+        cur.execute("SELECT username, full_name, password, tier FROM users WHERE is_active = TRUE")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        out: Dict[str, Dict[str, str]] = {}
+        for r in rows:
+            uname = r.get("username") if isinstance(r, dict) else r[0]
+            full_name = r.get("full_name") if isinstance(r, dict) else r[1]
+            password = r.get("password") if isinstance(r, dict) else r[2]
+            tier = r.get("tier") if isinstance(r, dict) else r[3]
+            if not uname:
+                continue
+            out[uname] = {
+                "name": full_name or uname,
+                "password": password or "",
+                "tier": tier or "basic",
+            }
+        return out if out else USERS_DB
+    except Exception:
+        return USERS_DB
+
+
 # --- DB Status Helper ---
 @st.cache_data(show_spinner=False, ttl=60)
 def get_db_status() -> str:
@@ -621,7 +708,8 @@ USERS_DB = {
 
 
 def get_user_tier(username: str) -> Tier:
-    tier_key = USERS_DB.get(username, {}).get("tier", "basic")
+    users = load_users()
+    tier_key = users.get(username, {}).get("tier", "basic")
     return TIERS.get(tier_key, TIERS["basic"])
 
 
@@ -668,9 +756,10 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         banner("streamlit-authenticator not installed. Running in DEMO mode.", "warning")
         return True, "howard", "Howard"
 
-    usernames = list(USERS_DB.keys())
+    users_map = load_users()
+    usernames = list(users_map.keys())
     authenticator = stauth.Authenticate(
-        {"usernames": {u: {"name": USERS_DB[u]["name"], "password": USERS_DB[u]["password"]} for u in usernames}},
+        {"usernames": {u: {"name": users_map[u]["name"], "password": users_map[u]["password"]} for u in usernames}},
         "breakout_scanner_cookie",
         "breakout_scanner_signature",
         cookie_expiry_days=7,
@@ -716,7 +805,8 @@ def pricing_sidebar(current_username: Optional[str]):
     - Premium users see a small thank-you message (no upgrade cards)
     """
     tiers_order = ["basic", "pro", "premium"]
-    current_key = USERS_DB.get(current_username or "", {}).get("tier", "basic")
+    users = load_users()
+    current_key = users.get(current_username or "", {}).get("tier", "basic")
     try:
         start_idx = tiers_order.index(current_key) + 1
     except ValueError:
@@ -1646,6 +1736,12 @@ def main():
     authed, username, display_name = auth_ui()
     if not authed:
         st.stop()
+
+    # Seed Neon users table once (no-op if already populated or Neon unavailable)
+    try:
+        seed_neon_users_from_local()
+    except Exception:
+        pass
 
     tier = get_user_tier(username)
 
