@@ -918,14 +918,34 @@ def pricing_sidebar(current_username: Optional[str]):
             monthly_price = price_table[key]["Monthly"]
             yearly_price = price_table[key]["Yearly"]
 
+            # Center-align everything in this card
+            st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+
             st.markdown(f"**{t.name}**")
 
-            # Show both prices, even though the toggle controls which link is used
-            st.markdown(
-                f"**${monthly_price}/mo** · **${yearly_price}/yr**"
-            )
-            if billing_period == "Yearly":
-                st.caption("Yearly ≈ 2 months free vs monthly.")
+            # Best value badge for Pro on Yearly
+            if key == "pro" and billing_period == "Yearly":
+                st.markdown(
+                    "<div style='font-size: 0.8rem; color: #22c55e; font-weight: 600; margin-bottom: 0.2rem;'>"
+                    "⭐ Best value"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # Show only the selected billing period price
+            if billing_period == "Monthly":
+                st.markdown(f"<div style='font-size: 1.1rem; font-weight: 700;'>${monthly_price}/mo</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f"<div style='font-size: 1.1rem; font-weight: 700; color: #22c55e;'>${yearly_price}/yr</div>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    "<div style='font-size: 0.8rem; color: #9ca3af;'>≈ 2 months free vs monthly.</div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown(f"- SP500: {'✅' if t.can_scan_sp500 else '❌'}")
             st.markdown(f"- NASDAQ: {'✅' if t.can_scan_nasdaq else '❌'}")
