@@ -22,7 +22,7 @@ class Settings:
     tz: str = _get("TZ", "America/New_York")
     max_workers: int = int(_get("MAX_WORKERS", "4"))
     chunk_size: int = int(_get("CHUNK_SIZE", "70"))
-    yfinance_timeout_ms: int = int(_get("YF_TIMEOUT_MS", "10000"))
+    yfinance_timeout_ms: int = int(_get("YF_TIMEOUT_MS", "15000"))
     show_diagnostics_default: bool = _get("SHOW_DIAGNOSTICS", "0") == "1"
 
 SETTINGS = Settings()
@@ -44,8 +44,8 @@ STRIPE_YEARLY_LINKS = {
 TIERS_CONFIG = {
     "basic": {
         "name": "Basic",
-        "price_monthly": 10,
-        "price_yearly": 100,
+        "price_monthly": 19,
+        "price_yearly": 190,
         "features": ["SP500 Scan"],
     },
     "pro": {
