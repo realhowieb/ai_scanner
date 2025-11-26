@@ -784,9 +784,17 @@ def get_user_tier(username: str) -> Tier:
 # Replace with real Stripe Payment Links.
 
 STRIPE_LINKS = {
-    "basic": "https://buy.stripe.com/fZu7sNgEi4JW4j98zo1Jm00",
-    "pro": "https://buy.stripe.com/7sY28tbjYfoA7vl3f41Jm01",
-    "premium": "hhttps://buy.stripe.com/28E8wR0Fk90cbLBaHw1Jm02",
+    # Basic
+    "basic_monthly": "https://buy.stripe.com/fZu7sNgEi4JW4j98zo1Jm00",
+    "basic_yearly": "https://buy.stripe.com/7sY8wRds62BOdTJ4j81Jm05",
+
+    # Pro
+    "pro_monthly": "https://buy.stripe.com/7sY28tbjYfoA7vl3f41Jm01",
+    "pro_yearly": "https://buy.stripe.com/aFa9AV9bQ1xKeXN7vk1Jm04",
+
+    # Premium
+    "premium_monthly": "https://buy.stripe.com/28E8wR0Fk90cbLBaHw1Jm02",
+    "premium_yearly": "https://buy.stripe.com/7sY28t1Jo6S416X7vk1Jm03",
 }
 
 
@@ -870,6 +878,7 @@ def pricing_sidebar(current_username: Optional[str]):
     - Basic users see Pro + Premium
     - Pro users see Premium
     - Premium users see a small thank-you message (no upgrade cards)
+    - Includes a Monthly / Yearly toggle that switches Stripe links.
     """
     tiers_order = ["basic", "pro", "premium"]
     users = load_users()
@@ -881,21 +890,62 @@ def pricing_sidebar(current_username: Optional[str]):
 
     upsell_keys = tiers_order[start_idx:]
 
+    st.sidebar.markdown("## 💳 Upgrade")
+
     if not upsell_keys:
-        st.sidebar.markdown("## 💳 Upgrade")
         st.sidebar.caption("You're on the top Premium plan. Thank you for subscribing!")
         return
 
-    st.sidebar.markdown("## 💳 Upgrade")
+    # Billing period toggle
+    billing_period = st.sidebar.radio(
+        "Billing period",
+        ["Monthly", "Yearly"],
+        index=0,
+        horizontal=True,
+    )
+
+    # Display prices for each tier (kept here for simplicity; matches your Stripe setup)
+    price_table = {
+        "basic": {"Monthly": 19, "Yearly": 190},
+        "pro": {"Monthly": 49, "Yearly": 490},
+        "premium": {"Monthly": 99, "Yearly": 990},
+    }
+
     cols = st.sidebar.columns(len(upsell_keys))
     for i, key in enumerate(upsell_keys):
         t = TIERS[key]
         with cols[i]:
+            monthly_price = price_table[key]["Monthly"]
+            yearly_price = price_table[key]["Yearly"]
+
             st.markdown(f"**{t.name}**")
+
+            # Show both prices, even though the toggle controls which link is used
+            st.markdown(
+                f"**${monthly_price}/mo** · **${yearly_price}/yr**"
+            )
+            if billing_period == "Yearly":
+                st.caption("Yearly ≈ 2 months free vs monthly.")
+
             st.markdown(f"- SP500: {'✅' if t.can_scan_sp500 else '❌'}")
             st.markdown(f"- NASDAQ: {'✅' if t.can_scan_nasdaq else '❌'}")
             st.markdown(f"- Export: {'✅' if t.can_export_csv else '❌'}")
-            st.link_button(f"Subscribe {t.name}", STRIPE_LINKS[key])
+            if t.can_ai_notes:
+                st.markdown("- AI Notes: ✅")
+            else:
+                st.markdown("- AI Notes: ❌")
+
+            # Choose the correct Stripe link key based on billing period
+            link_key = f"{key}_{billing_period.lower()}"
+            checkout_url = STRIPE_LINKS.get(link_key)
+
+            if checkout_url:
+                st.link_button(
+                    f"Subscribe {t.name} ({billing_period})",
+                    checkout_url,
+                )
+            else:
+                st.caption("Stripe link not configured yet for this plan/period.")
 
 
 # ---------- Universe filtering helper ----------
