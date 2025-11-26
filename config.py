@@ -52,7 +52,14 @@ TIERS_CONFIG = {
         "name": "Pro",
         "price_monthly": 25,
         "price_yearly": 250,
-        "features": ["SP500", "NASDAQ", "Breakout Score"],
+        "features": [
+            "SP500 Scan",
+            "NASDAQ",
+            "ExportCSV",
+            "Premarket",
+            "AfterHours",
+            "UnusualVolume",
+        ],
     },
     "premium": {
         "name": "Premium",
