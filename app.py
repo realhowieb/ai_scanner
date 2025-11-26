@@ -561,12 +561,62 @@ TIERS: Dict[str, Tier] = {
 # Password hashes should be bcrypt from streamlit-authenticator.
 
 USERS_DB = {
-    "howard": {
-        "name": "Howard",
-        # Example bcrypt hash ONLY. Replace with your own.
-        "password": "$2b$12$9e7Gq1l8Jc0aZ5g2QFHOiO3nHvxT7O1s2W5U2nZfA5c7xU2p1Jk9C",
+    # -----------------------
+    # BASIC TIER USERS
+    # -----------------------
+    "basic1": {
+        "name": "Basic User 1",
+        "password": "$2b$12$oceKWoeoJp2Gq9dC8NQNUuBY0oZt/yvf1DPY931F6G8f9l96yHK/e",
+        "tier": "basic",
+    },
+    "basic2": {
+        "name": "Basic User 2",
+        "password": "$2b$12$oceKWoeoJp2Gq9dC8NQNUuBY0oZt/yvf1DPY931F6G8f9l96yHK/e",
+        "tier": "basic",
+    },
+    "basic3": {
+        "name": "Basic User 3",
+        "password": "$2b$12$oceKWoeoJp2Gq9dC8NQNUuBY0oZt/yvf1DPY931F6G8f9l96yHK/e",
+        "tier": "basic",
+    },
+
+    # -----------------------
+    # PRO TIER USERS
+    # -----------------------
+    "pro1": {
+        "name": "Pro User 1",
+        "password": "$2b$12$eO2.qSpgJ6OTvZk0Ot1VRuG0VByoA6o0/bW.Fjtqc0MGz6LJwNixW",
+        "tier": "pro",
+    },
+    "pro2": {
+        "name": "Pro User 2",
+        "password": "$2b$12$eO2.qSpgJ6OTvZk0Ot1VRuG0VByoA6o0/bW.Fjtqc0MGz6LJwNixW",
+        "tier": "pro",
+    },
+    "pro3": {
+        "name": "Pro User 3",
+        "password": "$2b$12$eO2.qSpgJ6OTvZk0Ot1VRuG0VByoA6o0/bW.Fjtqc0MGz6LJwNixW",
+        "tier": "pro",
+    },
+
+    # -----------------------
+    # PREMIUM TIER USERS
+    # -----------------------
+    "premium1": {
+        "name": "Premium User 1",
+        "password": "$2b$12$YfYNpSiVtlXwmuPG8ZG1pObfiY4xJRqKdozW4tu7cI4YPVlw8Hq8G",
         "tier": "premium",
-    }
+    },
+    "premium2": {
+        "name": "Premium User 2",
+        "password": "$2b$12$YfYNpSiVtlXwmuPG8ZG1pObfiY4xJRqKdozW4tu7cI4YPVlw8Hq8G",
+        "tier": "premium",
+    },
+    "premium3": {
+        "name": "Premium User 3",
+        "password": "$2b$12$YfYNpSiVtlXwmuPG8ZG1pObfiY4xJRqKdozW4tu7cI4YPVlw8Hq8G",
+        "tier": "premium",
+    },
 }
 
 
