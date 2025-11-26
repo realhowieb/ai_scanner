@@ -96,38 +96,25 @@ def get_neon_conn():
 def get_db_status() -> str:
     """Return current DB status: 'neon', 'sqlite', or 'none'.
 
-    Uses a lightweight check against Neon first, then SQLite. Cached briefly so we
-    don't hammer the DBs on every rerun.
+    This is a lightweight, config-based check to keep startup fast. We avoid
+    live connections here and rely on real DB calls in save_run/list_runs.
     """
-    # Try Neon first
+    # If Neon is configured in secrets, treat it as the primary backend.
     try:
-        conn = get_neon_conn()
-        if conn is not None:
-            try:
-                cur = conn.cursor()
-                cur.execute("SELECT 1")
-                _ = cur.fetchone()
-                cur.close()
-                conn.close()
-                return "neon"
-            except Exception:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+        neon_cfg = st.secrets.get("neon", {})  # type: ignore[attr-defined]
+        if isinstance(neon_cfg, dict) and neon_cfg.get("database_url"):
+            return "neon"
     except Exception:
         pass
 
-    # Fallback: check local SQLite availability
+    # If the local SQLite file exists, report sqlite as available.
     try:
-        conn = _get_conn()
-        cur = conn.cursor()
-        cur.execute("SELECT 1")
-        _ = cur.fetchone()
-        conn.close()
-        return "sqlite"
+        if DB_PATH.exists():
+            return "sqlite"
     except Exception:
-        return "none"
+        pass
+
+    return "none"
 
 def save_run(
     name: str,
