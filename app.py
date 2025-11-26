@@ -676,15 +676,24 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         cookie_expiry_days=7,
     )
 
-    name, auth_status, username = authenticator.login(
-        "main",
-        fields={
-            "Form name": "Login",
-            "Username": "Username",
-            "Password": "Password",
-            "Login": "Login",
-        },
-    )
+    # New API (v0.3+): login() returns None for rendered locations; values are in st.session_state
+    try:
+        authenticator.login(
+            "main",
+            fields={
+                "Form name": "Login",
+                "Username": "Username",
+                "Password": "Password",
+                "Login": "Login",
+            },
+        )
+    except Exception as e:
+        banner(f"Auth error: {e}", "error")
+        return False, None, None
+
+    auth_status = st.session_state.get("authentication_status", None)
+    name = st.session_state.get("name")
+    username = st.session_state.get("username")
 
     if auth_status is False:
         banner("Username/password incorrect", "error")
