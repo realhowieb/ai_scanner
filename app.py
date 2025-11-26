@@ -17,6 +17,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
 # --- Simple local DB for scan history (SQLite). ---
 DB_PATH = Path(__file__).with_name("scanner.sqlite")
 
@@ -59,8 +62,56 @@ def _ensure_tables() -> None:
 
 _ensure_tables()
 
+def get_neon_conn():
+    """Return a new Neon PostgreSQL connection using Streamlit secrets.
+
+    Expects st.secrets["neon"]["database_url"] to contain a full Postgres URI, e.g.:
+    postgresql://USER:PASSWORD@host/dbname?sslmode=require
+    """
+    try:
+        db_url = st.secrets["neon"]["database_url"]
+    except Exception:
+        # Secrets not configured; Neon not available in this environment.
+        return None
+
+    try:
+        conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+        return conn
+    except Exception as e:
+        # Surface an info caption but don't hard-fail the app.
+        st.caption(f"⚠️ Neon connection failed: {e}")
+        return None
+
 def save_run(name: str, results_json: str) -> None:
-    """Save a scan run to the local SQLite file."""
+    """Save a scan run to Neon PostgreSQL if available, else local SQLite."""
+    # Try Neon first
+    try:
+        conn = get_neon_conn()
+        if conn is not None:
+            cur = conn.cursor()
+            # Ensure table exists in Neon
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS runs (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    results_json TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cur.execute(
+                "INSERT INTO runs (name, results_json) VALUES (%s, %s)",
+                (name, results_json),
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            return
+    except Exception as e:
+        st.caption(f"⚠️ Neon DB write failed, falling back to SQLite: {e}")
+
+    # Fallback to local SQLite
     try:
         conn = _get_conn()
         cur = conn.cursor()
@@ -75,7 +126,33 @@ def save_run(name: str, results_json: str) -> None:
         pass
 
 def list_runs(limit: int = 50):
-    """Return a list of recent runs (id, name, created_at)."""
+    """Return a list of recent runs (id, name, created_at), preferring Neon."""
+    # Try Neon first
+    try:
+        conn = get_neon_conn()
+        if conn is not None:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT id, name, created_at FROM runs ORDER BY id DESC LIMIT %s",
+                (limit,),
+            )
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+            out = []
+            for r in rows:
+                out.append(
+                    {
+                        "id": r["id"],
+                        "name": r["name"],
+                        "timestamp": r["created_at"],
+                    }
+                )
+            return out
+    except Exception as e:
+        st.caption(f"⚠️ Neon DB read failed, falling back to SQLite: {e}")
+
+    # Fallback to local SQLite
     try:
         conn = _get_conn()
         cur = conn.cursor()
@@ -87,17 +164,35 @@ def list_runs(limit: int = 50):
         conn.close()
         out = []
         for r in rows:
-            out.append({
-                "id": r["id"],
-                "name": r["name"],
-                "timestamp": r["created_at"],
-            })
+            out.append(
+                {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "timestamp": r["created_at"],
+                }
+            )
         return out
     except Exception:
         return []
 
 def load_run_results(run_id: int) -> str:
-    """Return the JSON payload for a given run id."""
+    """Return the JSON payload for a given run id, preferring Neon."""
+    # Try Neon first
+    try:
+        conn = get_neon_conn()
+        if conn is not None:
+            cur = conn.cursor()
+            cur.execute("SELECT results_json FROM runs WHERE id = %s", (run_id,))
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row:
+                return row["results_json"]
+    except Exception:
+        # Fall through to SQLite
+        pass
+
+    # Fallback to local SQLite
     conn = _get_conn()
     cur = conn.cursor()
     cur.execute("SELECT results_json FROM runs WHERE id = ?", (run_id,))
