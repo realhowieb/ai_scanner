@@ -41,7 +41,7 @@ def _ensure_tables() -> None:
         # Inspect the existing schema to ensure it has the expected columns
         cur.execute("PRAGMA table_info(runs)")
         cols = [row[1] for row in cur.fetchall()]  # row[1] is the column name
-        required_cols = {"id", "name", "results_json", "created_at"}
+        required_cols = {"id", "name", "results_json", "label", "username", "row_count", "duration_sec", "is_snapshot", "created_at"}
         if not required_cols.issubset(set(cols)):
             # Old or incompatible schema: drop and recreate
             cur.execute("DROP TABLE IF EXISTS runs")
@@ -54,6 +54,11 @@ def _ensure_tables() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             results_json TEXT NOT NULL,
+            label TEXT,
+            username TEXT,
+            row_count INTEGER,
+            duration_sec REAL,
+            is_snapshot INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """
@@ -124,27 +129,48 @@ def get_db_status() -> str:
     except Exception:
         return "none"
 
-def save_run(name: str, results_json: str) -> None:
-    """Save a scan run to Neon PostgreSQL if available, else local SQLite."""
+def save_run(
+    name: str,
+    results_json: str,
+    *,
+    label: Optional[str] = None,
+    username: Optional[str] = None,
+    row_count: Optional[int] = None,
+    duration_sec: Optional[float] = None,
+    is_snapshot: bool = False,
+) -> None:
+    """Save a scan run to Neon PostgreSQL if available, else local SQLite.
+
+    Extra metadata is stored in dedicated columns so history can be queried by
+    label/username and used for analytics.
+    """
     # Try Neon first
     try:
         conn = get_neon_conn()
         if conn is not None:
             cur = conn.cursor()
-            # Ensure table exists in Neon
+            # Ensure table exists in Neon with extended schema
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS runs (
                     id SERIAL PRIMARY KEY,
                     name TEXT NOT NULL,
                     results_json TEXT NOT NULL,
+                    label TEXT,
+                    username TEXT,
+                    row_count INT,
+                    duration_sec REAL,
+                    is_snapshot BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
             cur.execute(
-                "INSERT INTO runs (name, results_json) VALUES (%s, %s)",
-                (name, results_json),
+                """
+                INSERT INTO runs (name, results_json, label, username, row_count, duration_sec, is_snapshot)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (name, results_json, label, username, row_count, duration_sec, is_snapshot),
             )
             conn.commit()
             cur.close()
@@ -158,8 +184,11 @@ def save_run(name: str, results_json: str) -> None:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO runs (name, results_json) VALUES (?, ?)",
-            (name, results_json),
+            """
+            INSERT INTO runs (name, results_json, label, username, row_count, duration_sec, is_snapshot)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (name, results_json, label, username, row_count, duration_sec, int(is_snapshot)),
         )
         conn.commit()
         conn.close()
@@ -169,7 +198,7 @@ def save_run(name: str, results_json: str) -> None:
 
 
 # --- Daily snapshot helper ---
-def save_daily_snapshot(label: str, results_json: str) -> None:
+def save_daily_snapshot(label: str, results_json: str, username: Optional[str] = None) -> None:
     """Save a once-per-day snapshot for a given label (e.g., 'SP500', 'NASDAQ').
 
     This creates a run named 'Daily snapshot YYYY-MM-DD | LABEL' in Neon if available,
@@ -185,13 +214,18 @@ def save_daily_snapshot(label: str, results_json: str) -> None:
         conn = get_neon_conn()
         if conn is not None:
             cur = conn.cursor()
-            # Ensure table exists in Neon
+            # Ensure table exists in Neon with extended schema
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS runs (
                     id SERIAL PRIMARY KEY,
                     name TEXT NOT NULL,
                     results_json TEXT NOT NULL,
+                    label TEXT,
+                    username TEXT,
+                    row_count INT,
+                    duration_sec REAL,
+                    is_snapshot BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -202,10 +236,13 @@ def save_daily_snapshot(label: str, results_json: str) -> None:
                 cur.close()
                 conn.close()
                 return
-            # Insert snapshot
+            # Insert snapshot (marked as is_snapshot)
             cur.execute(
-                "INSERT INTO runs (name, results_json) VALUES (%s, %s)",
-                (snapshot_name, results_json),
+                """
+                INSERT INTO runs (name, results_json, label, username, row_count, duration_sec, is_snapshot)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (snapshot_name, results_json, label, username, None, None, True),
             )
             conn.commit()
             cur.close()
@@ -225,8 +262,11 @@ def save_daily_snapshot(label: str, results_json: str) -> None:
             conn.close()
             return
         cur.execute(
-            "INSERT INTO runs (name, results_json) VALUES (?, ?)",
-            (snapshot_name, results_json),
+            """
+            INSERT INTO runs (name, results_json, label, username, row_count, duration_sec, is_snapshot)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (snapshot_name, results_json, label, username, None, None, 1),
         )
         conn.commit()
         conn.close()
@@ -1590,14 +1630,23 @@ def main():
                 # Persist this scan to the runs DB (history + optional daily snapshot)
                 try:
                     results_json = df.to_json(orient="records") if df is not None else "[]"
-                    run_name = f"{label} | {len(df)} results | {dt:.1f}s"
-                    save_run(run_name, results_json)
+                    row_count = len(df) if df is not None else 0
+                    run_name = f"{label} | {row_count} results | {dt:.1f}s"
+                    save_run(
+                        run_name,
+                        results_json,
+                        label=label,
+                        username=username,
+                        row_count=row_count,
+                        duration_sec=dt,
+                        is_snapshot=False,
+                    )
 
                     # Morning snapshot: one per day per label (approx. before noon server time)
                     try:
                         current_hour = datetime.now().hour
                         if current_hour < 12:
-                            save_daily_snapshot(label, results_json)
+                            save_daily_snapshot(label, results_json, username=username)
                     except Exception:
                         # Snapshot is best-effort only
                         pass
@@ -1769,9 +1818,18 @@ def main():
                         except Exception as e:
                             st.error(f"Failed to load scan #{selected_id}: {e}")
                 with col_hist2:
-                    st.caption(
-                        "History is stored in a local scanner.sqlite file next to app.py."
-                    )
+                    if db_status == "neon":
+                        st.caption(
+                            "History is stored in Neon (cloud Postgres). Local scanner.sqlite is used as a fallback."
+                        )
+                    elif db_status == "sqlite":
+                        st.caption(
+                            "History is stored in a local scanner.sqlite file next to app.py."
+                        )
+                    else:
+                        st.caption(
+                            "History storage backend is currently unavailable."
+                        )
             else:
                 st.caption("No past scans saved yet.")
         else:
