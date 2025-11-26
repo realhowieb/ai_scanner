@@ -1813,7 +1813,10 @@ def main():
     tier = get_user_tier(username)
 
     st.sidebar.markdown(f"### 👤 {display_name}")
-    st.sidebar.markdown(f"**Plan:** `{tier.name}`")
+    if username in ADMIN_USERS:
+        st.sidebar.markdown("**Plan:** `Admin`")
+    else:
+        st.sidebar.markdown(f"**Plan:** `{tier.name}`")
 
     # DB status badge
     try:
