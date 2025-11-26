@@ -2187,7 +2187,7 @@ def main():
             new_username = st.text_input("New Username")
             new_full_name = st.text_input("Full Name")
             new_password = st.text_input("Password", type="password")
-            new_tier_create = st.selectbox("Tier", ["basic", "pro", "premium"])
+            new_tier_create = st.selectbox("Tier", ["basic", "pro", "premium"], key="create_user_tier")
             new_active_create = st.checkbox("Active", value=True)
 
             if st.button("Create User"):
@@ -2246,6 +2246,7 @@ def main():
                     index=["basic", "pro", "premium"].index(
                         row["tier"] if row["tier"] in ["basic", "pro", "premium"] else "basic"
                     ),
+                    key="edit_user_tier",
                 )
                 new_active = st.checkbox("Active", value=bool(row["is_active"]))
 
