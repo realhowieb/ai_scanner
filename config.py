@@ -26,3 +26,38 @@ class Settings:
     show_diagnostics_default: bool = _get("SHOW_DIAGNOSTICS", "0") == "1"
 
 SETTINGS = Settings()
+
+# ---------- Stripe Billing Configuration ----------
+STRIPE_MONTHLY_LINKS = {
+    "basic":  "https://buy.stripe.com/basic-monthly",
+    "pro":    "https://buy.stripe.com/pro-monthly",
+    "premium": "https://buy.stripe.com/premium-monthly",
+}
+
+STRIPE_YEARLY_LINKS = {
+    "basic":  "https://buy.stripe.com/basic-yearly",
+    "pro":    "https://buy.stripe.com/pro-yearly",
+    "premium": "https://buy.stripe.com/premium-yearly",
+}
+
+# ---------- Tier Metadata ----------
+TIERS_CONFIG = {
+    "basic": {
+        "name": "Basic",
+        "price_monthly": 10,
+        "price_yearly": 100,
+        "features": ["SP500 Scan"],
+    },
+    "pro": {
+        "name": "Pro",
+        "price_monthly": 25,
+        "price_yearly": 250,
+        "features": ["SP500", "NASDAQ", "Breakout Score"],
+    },
+    "premium": {
+        "name": "Premium",
+        "price_monthly": 49,
+        "price_yearly": 490,
+        "features": ["Everything in Pro", "AI Notes", "Snapshots"],
+    },
+}

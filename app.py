@@ -523,55 +523,7 @@ st.set_page_config(
 
 # ---------- Tiers / Plans ----------
 
-@dataclass
-class Tier:
-    name: str
-    can_scan_sp500: bool
-    can_scan_nasdaq: bool
-    can_premarket: bool
-    can_afterhours: bool
-    can_unusual_volume: bool
-    can_export_csv: bool
-    can_ai_notes: bool
-    max_results: int
-
-
-TIERS: Dict[str, Tier] = {
-    "basic": Tier(
-        name="Basic",
-        can_scan_sp500=True,
-        can_scan_nasdaq=False,
-        can_premarket=False,
-        can_afterhours=False,
-        can_unusual_volume=False,
-        can_export_csv=False,
-        can_ai_notes=False,
-        max_results=25,
-    ),
-    "pro": Tier(
-        name="Pro",
-        can_scan_sp500=True,
-        can_scan_nasdaq=True,
-        can_premarket=True,
-        can_afterhours=True,
-        can_unusual_volume=True,
-        can_export_csv=True,
-        can_ai_notes=False,
-        max_results=75,
-    ),
-    "premium": Tier(
-        name="Premium",
-        can_scan_sp500=True,
-        can_scan_nasdaq=True,
-        can_premarket=True,
-        can_afterhours=True,
-        can_unusual_volume=True,
-        can_export_csv=True,
-        can_ai_notes=True,
-        max_results=200,
-    ),
-}
-
+from config import TIERS_CONFIG, STRIPE_MONTHLY_LINKS, STRIPE_YEARLY_LINKS
 
 # ---------- Local demo user store ----------
 # Replace with your real user DB / Firestore later.
@@ -641,25 +593,20 @@ ADMIN_USERS = {"premium1","howard"}  # usernames allowed to access the Admin Use
 def get_user_tier(username: str) -> Tier:
     users = load_users()
     tier_key = users.get(username, {}).get("tier", "basic")
-    return TIERS.get(tier_key, TIERS["basic"])
+    cfg = TIERS_CONFIG.get(tier_key, TIERS_CONFIG["basic"])
+    return Tier(
+        name=cfg["name"],
+        can_scan_sp500=("SP500 Scan" in cfg["features"]),
+        can_scan_nasdaq=("NASDAQ" in cfg["features"]),
+        can_premarket=("Premarket" in cfg["features"]),
+        can_afterhours=("AfterHours" in cfg["features"]),
+        can_unusual_volume=("UnusualVolume" in cfg["features"]),
+        can_export_csv=("ExportCSV" in cfg["features"]),
+        can_ai_notes=("AI Notes" in cfg["features"]),
+        max_results=cfg.get("max_results", 25),
+    )
 
 
-# ---------- Stripe payment links (placeholders) ----------
-# Replace with real Stripe Payment Links.
-
-STRIPE_LINKS = {
-    # Basic
-    "basic_monthly": "https://buy.stripe.com/fZu7sNgEi4JW4j98zo1Jm00",
-    "basic_yearly": "https://buy.stripe.com/7sY8wRds62BOdTJ4j81Jm05",
-
-    # Pro
-    "pro_monthly": "https://buy.stripe.com/7sY28tbjYfoA7vl3f41Jm01",
-    "pro_yearly": "https://buy.stripe.com/aFa9AV9bQ1xKeXN7vk1Jm04",
-
-    # Premium
-    "premium_monthly": "https://buy.stripe.com/28E8wR0Fk90cbLBaHw1Jm02",
-    "premium_yearly": "https://buy.stripe.com/7sY28t1Jo6S416X7vk1Jm03",
-}
 
 
 # ---------- Auth ----------
@@ -821,8 +768,7 @@ def pricing_sidebar(current_username: Optional[str]):
                 st.markdown("- AI Notes: ❌")
 
             # Choose the correct Stripe link key based on billing period
-            link_key = f"{key}_{billing_period.lower()}"
-            checkout_url = STRIPE_LINKS.get(link_key)
+            checkout_url = (STRIPE_MONTHLY_LINKS if billing_period == "Monthly" else STRIPE_YEARLY_LINKS).get(key)
 
             if checkout_url:
                 st.link_button(
