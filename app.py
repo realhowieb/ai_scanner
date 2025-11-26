@@ -2284,13 +2284,23 @@ def main():
                         else:
                             _ensure_neon_users_schema(conn)
                             cur = conn.cursor()
+
+                            # Hash password before storing in Neon when auth library is available
+                            pwd_to_store = new_password
+                            try:
+                                if stauth is not None:
+                                    pwd_to_store = stauth.Hasher([new_password]).generate()[0]
+                            except Exception:
+                                # If hashing fails, fall back to raw (not ideal but avoids blocking admin)
+                                pwd_to_store = new_password
+
                             cur.execute(
                                 """
                                 INSERT INTO users (username, full_name, password, tier, is_active)
                                 VALUES (%s, %s, %s, %s, %s)
                                 ON CONFLICT (username) DO NOTHING
                                 """,
-                                (new_username, new_full_name, new_password, new_tier_create, new_active_create),
+                                (new_username, new_full_name, pwd_to_store, new_tier_create, new_active_create),
                             )
                             conn.commit()
                             cur.close()
