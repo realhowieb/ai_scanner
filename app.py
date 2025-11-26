@@ -784,9 +784,9 @@ def get_user_tier(username: str) -> Tier:
 # Replace with real Stripe Payment Links.
 
 STRIPE_LINKS = {
-    "basic": "https://buy.stripe.com/test_basic_link",
-    "pro": "https://buy.stripe.com/test_pro_link",
-    "premium": "https://buy.stripe.com/test_premium_link",
+    "basic": "https://buy.stripe.com/fZu7sNgEi4JW4j98zo1Jm00",
+    "pro": "https://buy.stripe.com/7sY28tbjYfoA7vl3f41Jm01",
+    "premium": "hhttps://buy.stripe.com/28E8wR0Fk90cbLBaHw1Jm02",
 }
 
 
