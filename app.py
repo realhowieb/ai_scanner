@@ -1758,7 +1758,9 @@ def main():
 
     # Seed Neon users table once (no-op if already populated or Neon unavailable)
     try:
-        seed_neon_users_from_local()
+        if not st.session_state.get("seeded_neon_users"):
+            seed_neon_users_from_local()
+            st.session_state["seeded_neon_users"] = True
     except Exception:
         pass
 

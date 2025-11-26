@@ -72,7 +72,7 @@ def seed_neon_users_from_local() -> None:
         st.caption(f"⚠️ Neon user seeding failed: {e}")
 
 
-@st.cache_data(show_spinner=False, ttl=60)
+@st.cache_data(show_spinner=False, ttl=300)
 def load_users() -> Dict[str, Dict[str, Any]]:
     """
     Load users from Neon if available; otherwise fall back to the local USERS_DB.
