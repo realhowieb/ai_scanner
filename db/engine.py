@@ -4,7 +4,7 @@ import sqlite3
 import psycopg
 import streamlit as st
 
-DB_PATH = Path("scanner.sqlite")
+DB_PATH = Path(__file__).resolve().parent.parent / "scanner.sqlite"
 
 def get_neon_conn():
     """Return a new Neon PostgreSQL connection using Streamlit secrets.
@@ -18,7 +18,7 @@ def get_neon_conn():
         return None
 
     try:
-        conn = psycopg.connect(url)
+        conn = psycopg.connect(url, row_factory=psycopg.rows.dict_row)
         return conn
     except Exception as e:
         st.caption(f"⚠️ Neon connection failed (engine): {e}")
@@ -31,12 +31,20 @@ def get_sqlite_conn():
 
 @st.cache_data(show_spinner=False, ttl=60)
 def get_db_status() -> str:
+    """Return 'neon', 'sqlite', or 'none' based on actual connectivity."""
+    # Try Neon
     try:
-        _ = st.secrets["neon"]["database_url"]
-        return "neon"
+        conn = get_neon_conn()
+        if conn is not None:
+            conn.close()
+            return "neon"
     except Exception:
         pass
 
-    if DB_PATH.exists():
+    # Try SQLite
+    try:
+        conn = get_sqlite_conn()
+        conn.close()
         return "sqlite"
-    return "none"
+    except Exception:
+        return "none"

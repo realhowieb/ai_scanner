@@ -119,22 +119,6 @@ def get_db_status() -> str:
 
 
 
-# --- Neon users schema and helpers ---
-def _ensure_neon_users_schema(conn):
-    """Create Neon users table if missing."""
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            full_name TEXT NOT NULL,
-            password TEXT NOT NULL,
-            tier TEXT NOT NULL DEFAULT 'basic',
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
 
 
 # Optional for Yahoo Finance universe fallback
@@ -1958,7 +1942,7 @@ def main():
                             if conn is None:
                                 st.error("Neon connection unavailable; cannot create user.")
                             else:
-                                _ensure_neon_users_schema(conn)
+                                ensure_neon_users_schema(conn)
                                 cur = conn.cursor()
 
                                 # Hash password before storing in Neon when auth library is available
@@ -2026,7 +2010,7 @@ def main():
                             if conn is None:
                                 st.error("Neon connection unavailable; cannot update user.")
                             else:
-                                _ensure_neon_users_schema(conn)
+                                ensure_neon_users_schema(conn)
                                 cur = conn.cursor()
                                 cur.execute(
                                     """
