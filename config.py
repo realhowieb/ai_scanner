@@ -58,6 +58,15 @@ TIERS_CONFIG = {
         "name": "Premium",
         "price_monthly": 49,
         "price_yearly": 490,
-        "features": ["Everything in Pro", "AI Notes", "Snapshots"],
+        "features": [
+            "SP500 Scan",
+            "NASDAQ",
+            "ExportCSV",
+            "AI Notes",
+            "Premarket",
+            "AfterHours",
+            "UnusualVolume",
+            "Snapshots",
+        ],
     },
 }
