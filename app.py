@@ -2178,8 +2178,10 @@ def main():
                 st.caption("No users found in Neon users table.")
             else:
                 st.caption("View and edit user tiers. Changes apply to Neon-backed accounts.")
+                desired_cols = ["id", "username", "full_name", "tier", "is_active", "created_at"]
+                display_cols = [c for c in desired_cols if c in users_df.columns]
                 st.dataframe(
-                    users_df[["id", "username", "full_name", "tier", "is_active", "created_at"]],
+                    users_df[display_cols],
                     use_container_width=True,
                     height=260,
                 )
