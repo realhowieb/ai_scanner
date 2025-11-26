@@ -1861,8 +1861,13 @@ def main():
         runs_list = []
         try:
             runs_list = list_runs()
-        except Exception:
-            st.caption("History unavailable (DB error).")
+        except Exception as e:
+            st.error(f"History unavailable (DB error): {e}")
+            try:
+                st.code(traceback.format_exc())
+            except Exception:
+                pass
+            runs_list = []
 
         if runs_list:
             options = []
