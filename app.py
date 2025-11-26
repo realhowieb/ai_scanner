@@ -62,6 +62,7 @@ def _ensure_tables() -> None:
 
 _ensure_tables()
 
+
 def get_neon_conn():
     """Return a new Neon PostgreSQL connection using Streamlit secrets.
 
@@ -82,6 +83,45 @@ def get_neon_conn():
         # Surface an info caption but don't hard-fail the app.
         st.caption(f"⚠️ Neon connection failed: {e}")
         return None
+
+
+# --- DB Status Helper ---
+@st.cache_data(show_spinner=False, ttl=60)
+def get_db_status() -> str:
+    """Return current DB status: 'neon', 'sqlite', or 'none'.
+
+    Uses a lightweight check against Neon first, then SQLite. Cached briefly so we
+    don't hammer the DBs on every rerun.
+    """
+    # Try Neon first
+    try:
+        conn = get_neon_conn()
+        if conn is not None:
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT 1")
+                _ = cur.fetchone()
+                cur.close()
+                conn.close()
+                return "neon"
+            except Exception:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Fallback: check local SQLite availability
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        _ = cur.fetchone()
+        conn.close()
+        return "sqlite"
+    except Exception:
+        return "none"
 
 def save_run(name: str, results_json: str) -> None:
     """Save a scan run to Neon PostgreSQL if available, else local SQLite."""
@@ -1334,6 +1374,19 @@ def main():
 
     st.sidebar.markdown(f"### 👤 {display_name}")
     st.sidebar.markdown(f"**Plan:** `{tier.name}`")
+
+    # DB status badge
+    try:
+        db_status = get_db_status()
+    except Exception:
+        db_status = "none"
+
+    if db_status == "neon":
+        st.sidebar.markdown("🟢 **DB:** Neon (cloud)")
+    elif db_status == "sqlite":
+        st.sidebar.markdown("🟡 **DB:** Local SQLite")
+    else:
+        st.sidebar.markdown("🔴 **DB:** Unavailable")
 
     pricing_sidebar()
 
