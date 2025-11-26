@@ -708,10 +708,30 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
     return True, username, name
 
 
-def pricing_sidebar():
+def pricing_sidebar(current_username: Optional[str]):
+    """Show upgrade options only for tiers above the user's current plan.
+
+    - Basic users see Pro + Premium
+    - Pro users see Premium
+    - Premium users see a small thank-you message (no upgrade cards)
+    """
+    tiers_order = ["basic", "pro", "premium"]
+    current_key = USERS_DB.get(current_username or "", {}).get("tier", "basic")
+    try:
+        start_idx = tiers_order.index(current_key) + 1
+    except ValueError:
+        start_idx = 1  # default: treat as basic if unknown
+
+    upsell_keys = tiers_order[start_idx:]
+
+    if not upsell_keys:
+        st.sidebar.markdown("## 💳 Upgrade")
+        st.sidebar.caption("You're on the top Premium plan. Thank you for subscribing!")
+        return
+
     st.sidebar.markdown("## 💳 Upgrade")
-    cols = st.sidebar.columns(3)
-    for i, key in enumerate(["basic", "pro", "premium"]):
+    cols = st.sidebar.columns(len(upsell_keys))
+    for i, key in enumerate(upsell_keys):
         t = TIERS[key]
         with cols[i]:
             st.markdown(f"**{t.name}**")
@@ -1645,7 +1665,7 @@ def main():
     else:
         st.sidebar.markdown("🔴 **DB:** Unavailable")
 
-    pricing_sidebar()
+    pricing_sidebar(username)
 
     # Sidebar filters
     st.sidebar.markdown("## Filters")
