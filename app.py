@@ -133,9 +133,8 @@ def get_db_status() -> str:
     """
     # If Neon is configured in secrets, treat it as the primary backend.
     try:
-        neon_cfg = st.secrets.get("neon", {})  # type: ignore[attr-defined]
-        if isinstance(neon_cfg, dict) and neon_cfg.get("database_url"):
-            return "neon"
+        _ = st.secrets["neon"]["database_url"]  # type: ignore[index]
+        return "neon"
     except Exception:
         pass
 
