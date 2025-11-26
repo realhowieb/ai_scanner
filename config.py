@@ -29,15 +29,15 @@ SETTINGS = Settings()
 
 # ---------- Stripe Billing Configuration ----------
 STRIPE_MONTHLY_LINKS = {
-    "basic":  "https://buy.stripe.com/basic-monthly",
-    "pro":    "https://buy.stripe.com/pro-monthly",
-    "premium": "https://buy.stripe.com/premium-monthly",
+    "basic":  "https://buy.stripe.com/fZu7sNgEi4JW4j98zo1Jm00",
+    "pro":    "https://buy.stripe.com/7sY28tbjYfoA7vl3f41Jm01",
+    "premium": "https://buy.stripe.com/28E8wR0Fk90cbLBaHw1Jm02",
 }
 
 STRIPE_YEARLY_LINKS = {
-    "basic":  "https://buy.stripe.com/basic-yearly",
-    "pro":    "https://buy.stripe.com/pro-yearly",
-    "premium": "https://buy.stripe.com/premium-yearly",
+    "basic":  "https://buy.stripe.com/7sY8wRds62BOdTJ4j81Jm05",
+    "pro":    "https://buy.stripe.com/aFa9AV9bQ1xKeXN7vk1Jm04",
+    "premium": "https://buy.stripe.com/7sY28t1Jo6S416X7vk1Jm03",
 }
 
 # ---------- Tier Metadata ----------
