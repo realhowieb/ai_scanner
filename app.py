@@ -1581,7 +1581,41 @@ def main():
             "or relax filters (Min Gap %, price range, Unusual Volume Filter). "
             "If you see 0 results, try lowering Min Gap or turning off the Unusual Volume Filter."
         )
-        st.dataframe(df, use_container_width=True, height=420)
+
+        # --- Pro styling for results table ---
+        styled = df.style
+
+        # Heatmap for BreakoutScore
+        if "BreakoutScore" in df.columns:
+            styled = styled.background_gradient(axis=None, cmap="RdYlGn", subset=["BreakoutScore"])
+
+        # Conditional formatting for RS_Rank (0-100)
+        if "RS_Rank" in df.columns:
+            styled = styled.background_gradient(axis=None, cmap="Greens", subset=["RS_Rank"])
+
+        # Bold / color trend markers
+        def _trend_style(series: pd.Series):
+            styles = []
+            for v in series:
+                try:
+                    val = float(v)
+                except Exception:
+                    styles.append("")
+                    continue
+                if val >= 20:
+                    styles.append("font-weight: bold; color: #006400;")  # strong uptrend
+                elif val <= -10:
+                    styles.append("font-weight: bold; color: #8B0000;")  # strong downtrend
+                else:
+                    styles.append("")
+            return styles
+
+        if "Trend20D%" in df.columns:
+            styled = styled.apply(_trend_style, subset=["Trend20D%"])
+        if "Trend10D%" in df.columns:
+            styled = styled.apply(_trend_style, subset=["Trend10D%"])
+
+        st.dataframe(styled, use_container_width=True, height=420)
 
         # Export (tier-gated)
         if tier.can_export_csv:
