@@ -91,6 +91,32 @@ def get_neon_conn():
         return None
 
 
+# --- DB status badge helper ---
+def get_db_status() -> str:
+    """Return 'neon', 'sqlite', or 'none' for DB status badge.
+
+    - Tries Neon first via get_neon_conn()
+    - Falls back to local SQLite (scanner.sqlite)
+    - Returns 'none' only if both are unavailable
+    """
+    # Prefer Neon if available
+    try:
+        conn = get_neon_conn()
+        if conn is not None:
+            conn.close()
+            return "neon"
+    except Exception:
+        pass
+
+    # Fallback: local SQLite (we already ran _ensure_tables at startup)
+    try:
+        conn = _get_conn()
+        conn.close()
+        return "sqlite"
+    except Exception:
+        return "none"
+
+
 
 
 # --- Neon users schema and helpers ---
