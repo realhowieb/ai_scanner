@@ -2181,6 +2181,50 @@ def main():
     # --- Admin Users Page ---
     if username in ADMIN_USERS:
         with st.expander("👑 Admin: Manage Users", expanded=False):
+            # --- Create New User ---
+            st.subheader("➕ Create New User")
+
+            new_username = st.text_input("New Username")
+            new_full_name = st.text_input("Full Name")
+            new_password = st.text_input("Password", type="password")
+            new_tier_create = st.selectbox("Tier", ["basic", "pro", "premium"])
+            new_active_create = st.checkbox("Active", value=True)
+
+            if st.button("Create User"):
+                if not new_username or not new_full_name or not new_password:
+                    st.error("All fields are required.")
+                else:
+                    try:
+                        conn = get_neon_conn()
+                        if conn is None:
+                            st.error("Neon connection unavailable; cannot create user.")
+                        else:
+                            _ensure_neon_users_schema(conn)
+                            cur = conn.cursor()
+                            cur.execute(
+                                """
+                                INSERT INTO users (username, full_name, password, tier, is_active)
+                                VALUES (%s, %s, %s, %s, %s)
+                                ON CONFLICT (username) DO NOTHING
+                                """,
+                                (new_username, new_full_name, new_password, new_tier_create, new_active_create),
+                            )
+                            conn.commit()
+                            cur.close()
+                            conn.close()
+
+                            # Clear cache so new user is available immediately
+                            try:
+                                load_users.clear()  # type: ignore
+                            except Exception:
+                                pass
+
+                            st.success(f"User '{new_username}' created successfully!")
+                            st.experimental_rerun()
+                    except Exception as e:
+                        st.error(f"Failed to create user: {e}")
+
+            # --- Existing Users Table + Edit UI ---
             users_df = fetch_all_users()
             if users_df is None or users_df.empty:
                 st.caption("No users found in Neon users table.")
