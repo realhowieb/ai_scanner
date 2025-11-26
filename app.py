@@ -12,113 +12,10 @@ from typing import List, Dict, Optional, Tuple
 from datetime import datetime, date
 
 import json
-import sqlite3
 
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-import psycopg
-from psycopg.rows import dict_row
-
-# --- Simple local DB for scan history (SQLite). ---
-DB_PATH = Path(__file__).with_name("scanner.sqlite")
-
-def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def _ensure_tables() -> None:
-    conn = _get_conn()
-    cur = conn.cursor()
-
-    # Check if the runs table exists
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='runs'")
-    exists = cur.fetchone() is not None
-
-    if exists:
-        # Inspect the existing schema to ensure it has the expected columns
-        cur.execute("PRAGMA table_info(runs)")
-        cols = [row[1] for row in cur.fetchall()]  # row[1] is the column name
-        required_cols = {"id", "name", "results_json", "label", "username", "row_count", "duration_sec", "is_snapshot", "created_at"}
-        if not required_cols.issubset(set(cols)):
-            # Old or incompatible schema: drop and recreate
-            cur.execute("DROP TABLE IF EXISTS runs")
-            conn.commit()
-
-    # Create the expected schema if it doesn't exist (or after dropping old one)
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            results_json TEXT NOT NULL,
-            label TEXT,
-            username TEXT,
-            row_count INTEGER,
-            duration_sec REAL,
-            is_snapshot INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    conn.commit()
-    conn.close()
-
-_ensure_tables()
-
-
-def get_neon_conn():
-    """Return a new Neon PostgreSQL connection using Streamlit secrets.
-
-    Expects st.secrets["neon"]["database_url"] to contain a full Postgres URI, e.g.:
-    postgresql://USER:PASSWORD@host/dbname?sslmode=require
-    """
-    try:
-        db_url = st.secrets["neon"]["database_url"]
-    except Exception:
-        # Secrets not configured; Neon not available in this environment.
-        return None
-
-    try:
-        # psycopg3: use row_factory=dict_row to return dict-like rows
-        conn = psycopg.connect(db_url, row_factory=dict_row)
-        return conn
-    except Exception as e:
-        # Surface an info caption but don't hard-fail the app.
-        st.caption(f"⚠️ Neon connection failed: {e}")
-        return None
-
-
-# --- DB status badge helper ---
-def get_db_status() -> str:
-    """Return 'neon', 'sqlite', or 'none' for DB status badge.
-
-    - Tries Neon first via get_neon_conn()
-    - Falls back to local SQLite (scanner.sqlite)
-    - Returns 'none' only if both are unavailable
-    """
-    # Prefer Neon if available
-    try:
-        conn = get_neon_conn()
-        if conn is not None:
-            conn.close()
-            return "neon"
-    except Exception:
-        pass
-
-    # Fallback: local SQLite (we already ran _ensure_tables at startup)
-    try:
-        conn = _get_conn()
-        conn.close()
-        return "sqlite"
-    except Exception:
-        return "none"
-
-
-
-
 
 
 # Optional for Yahoo Finance universe fallback
@@ -456,6 +353,8 @@ except Exception:
 import streamlit as st
 from db.users import seed_neon_users_from_local, load_users, fetch_all_users
 from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
+
+from db.engine import get_db_status, get_neon_conn
 
 # Optional live price override for the 'Last' column
 try:
