@@ -668,7 +668,7 @@ class Tier:
     max_results: int = 25
 
 def get_user_tier(username: str) -> Tier:
-    users = load_users()
+def get_user_tier(username: str, users: Dict[str, Dict[str, str]]) -> Tier:
     tier_key = users.get(username, {}).get("tier", "basic")
     cfg = TIERS_CONFIG.get(tier_key, TIERS_CONFIG["basic"])
     return Tier(
@@ -761,7 +761,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
     return True, username, name
 
 
-def pricing_sidebar(current_username: Optional[str]):
+def pricing_sidebar(current_username: Optional[str], users: Dict[str, Dict[str, str]]):
     """Show upgrade options only for tiers above the user's current plan.
 
     - Basic users see Pro + Premium
@@ -770,7 +770,6 @@ def pricing_sidebar(current_username: Optional[str]):
     - Includes a Monthly / Yearly toggle that switches Stripe links.
     """
     tiers_order = ["basic", "pro", "premium"]
-    users = load_users()
     current_key = users.get(current_username or "", {}).get("tier", "basic")
     try:
         start_idx = tiers_order.index(current_key) + 1
@@ -1764,7 +1763,10 @@ def main():
     except Exception:
         pass
 
-    tier = get_user_tier(username)
+    # Load users once per rerun to avoid redundant Neon hits
+    users_map = load_users()
+
+    tier = get_user_tier(username, users_map)
 
     st.sidebar.markdown(f"### 👤 {display_name}")
     if username in ADMIN_USERS:
@@ -1785,7 +1787,7 @@ def main():
     else:
         st.sidebar.markdown("🔴 **DB:** Unavailable")
 
-    pricing_sidebar(username)
+    pricing_sidebar(username, users_map)
 
     # Sidebar filters
     st.sidebar.markdown("## Filters")
