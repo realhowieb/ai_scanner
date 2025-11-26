@@ -771,7 +771,7 @@ USERS_DB = {
         "tier": "premium",
     },
 }
-ADMIN_USERS = {"premium1"}  # usernames allowed to access the Admin Users page
+ADMIN_USERS = {"premium1","howard"}  # usernames allowed to access the Admin Users page
 
 
 def get_user_tier(username: str) -> Tier:
