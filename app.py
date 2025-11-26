@@ -17,8 +17,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg
+from psycopg.rows import dict_row
 
 # --- Simple local DB for scan history (SQLite). ---
 DB_PATH = Path(__file__).with_name("scanner.sqlite")
@@ -75,7 +75,8 @@ def get_neon_conn():
         return None
 
     try:
-        conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+        # psycopg3: use row_factory=dict_row to return dict-like rows
+        conn = psycopg.connect(db_url, row_factory=dict_row)
         return conn
     except Exception as e:
         # Surface an info caption but don't hard-fail the app.
