@@ -84,6 +84,19 @@ def render_scan_controls(
         )
         st.caption("Pro/Premium only.")
 
+    # Watchlist scan button (uses active_watchlist_tickers from session_state)
+    watchlist_tickers = st.session_state.get("active_watchlist_tickers", []) or []
+    has_watchlist = isinstance(watchlist_tickers, list) and len(watchlist_tickers) > 0
+
+    bw, _ = st.columns([1, 3])
+    with bw:
+        run_watchlist_btn = st.button(
+            "Run Watchlist Scan",
+            use_container_width=True,
+            disabled=not has_watchlist,
+        )
+        st.caption("Scans only tickers from your active watchlist.")
+
     # Ensure results DataFrame exists in session state
     if "results_df" not in st.session_state:
         st.session_state.results_df = pd.DataFrame()
@@ -207,3 +220,16 @@ def render_scan_controls(
         st.session_state["combo_capped"] = combo_capped
 
         do_scan(combo_capped, "Combo")
+
+    if run_watchlist_btn:
+        # Normalize and validate tickers from the active watchlist
+        tickers = [
+            str(t).strip().upper()
+            for t in (st.session_state.get("active_watchlist_tickers") or [])
+            if str(t).strip()
+        ]
+        if not tickers:
+            _banner("Active watchlist has no tickers to scan.", "warning")
+        else:
+            label = f"Watchlist ({len(tickers)} tickers)"
+            do_scan(tickers, label)
