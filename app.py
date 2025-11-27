@@ -30,7 +30,18 @@ BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from charts import render_chart_for_ticker
+try:
+    from charts import render_chart_for_ticker
+except ModuleNotFoundError:
+    try:
+        from ui.charts import render_chart_for_ticker  # type: ignore
+    except ModuleNotFoundError:
+        try:
+            from ai_scanner.charts import render_chart_for_ticker  # type: ignore
+        except ModuleNotFoundError:
+            def render_chart_for_ticker(ticker: str, *args, **kwargs):
+                import streamlit as st  # local import to avoid circulars
+                st.info("Chart module not available; add charts.py to enable charts.")
 # ============================================
 # Breakout Stock Scanner — Subscription Ready
 # Single-file entrypoint (replaces bootstrapper)
