@@ -143,6 +143,31 @@ def render_results(
             if col in df.columns:
                 styled = styled.applymap(_change_style, subset=[col])
 
+        # Color Last, Prev Close, Open, High, Low relative to Prev Close (green if above, red if below)
+        if "Prev Close" in df.columns:
+            def _price_relative_style(v, prev_close):
+                try:
+                    val = float(v)
+                    pc = float(prev_close)
+                except Exception:
+                    return ""
+                if val > pc:
+                    return "color: #00C853; font-weight: 500;"
+                if val < pc:
+                    return "color: #FF5252; font-weight: 500;"
+                return ""
+
+            # Apply per-row
+            def _apply_price_row(row):
+                styles = {}
+                pc = row.get("Prev Close", None)
+                for c in ["Last", "Prev Close", "Open", "High", "Low"]:
+                    if c in row:
+                        styles[c] = _price_relative_style(row[c], pc)
+                return pd.Series(styles)
+
+            styled = styled.apply(_apply_price_row, axis=1)
+
     st.dataframe(styled, use_container_width=True, height=420)
 
     # Export (tier-gated)
