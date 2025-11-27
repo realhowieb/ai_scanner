@@ -7,14 +7,16 @@ from db.schema import ensure_neon_watchlists_schema
 
 
 def _get_conn():
-    """Return a Neon connection for watchlists.
-
-    We don't rely on get_db_status here, because runs/history might be using
-    SQLite while Neon is still available for premium features. If Neon is not
-    configured or reachable, this will raise and the UI will fall back
-    gracefully with a caption.
     """
-    return get_neon_conn()
+    Always return a fresh Neon connection.
+
+    If Neon is not configured or reachable, raise a clear error so the
+    watchlists UI can fall back gracefully instead of silently receiving None.
+    """
+    conn = get_neon_conn()
+    if conn is None:
+        raise RuntimeError("Neon is not available (missing URL or connection failed).")
+    return conn
 
 
 def _ensure_schema(conn) -> None:
