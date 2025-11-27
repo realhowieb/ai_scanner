@@ -36,10 +36,35 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         return True, "howard", "Howard"
 
     users_map: Dict[str, Dict[str, str]] = load_users()
-    usernames = list(users_map.keys())
+    if not users_map:
+        banner("No users found in auth backend. Falling back to DEMO login.", "warning")
+        return True, "howard", "Howard"
+
+    # Build credentials dict for streamlit-authenticator.
+    # Handle both plain-text and already-hashed passwords.
+    credentials: Dict[str, Dict[str, Dict[str, str]]] = {"usernames": {}}
+    for username, data in users_map.items():
+        display_name = data.get("name") or data.get("full_name") or username
+        stored_password = data.get("password", "")
+
+        # If the password already looks like a bcrypt hash (starts with "$2"),
+        # use it as-is. Otherwise, hash it on the fly so authenticator can
+        # validate against the plain-text password the user types.
+        if isinstance(stored_password, str) and stored_password.startswith("$2"):
+            hashed_password = stored_password
+        else:
+            try:
+                hashed_password = stauth.Hasher([stored_password]).generate()[0]
+            except Exception:
+                hashed_password = stored_password  # last-resort fallback
+
+        credentials["usernames"][username] = {
+            "name": display_name,
+            "password": hashed_password,
+        }
 
     authenticator = stauth.Authenticate(
-        {"usernames": {u: {"name": users_map[u]["name"], "password": users_map[u]["password"]} for u in usernames}},
+        credentials,
         "breakout_scanner_cookie",
         "breakout_scanner_signature",
         cookie_expiry_days=7,
