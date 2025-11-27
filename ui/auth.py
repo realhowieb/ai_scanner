@@ -70,7 +70,18 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         cookie_expiry_days=7,
     )
 
-    # New API (v0.3+): login() returns None for rendered locations; values are in st.session_state
+    # If the user is already authenticated, don't render the login form again.
+    # Just show the logout button and return the stored identity.
+    existing_status = st.session_state.get("authentication_status", None)
+    if existing_status is True:
+        name = st.session_state.get("name") or st.session_state.get("username")
+        username = st.session_state.get("username")
+        with st.sidebar:
+            authenticator.logout("Logout", "sidebar")
+        if username:
+            return True, username, name
+
+    # New API (v0.3+): login() renders the form and stores values in st.session_state
     try:
         authenticator.login(
             "main",
