@@ -1,28 +1,18 @@
 from __future__ import annotations
 
-import importlib
-import inspect
-import os
-import re
-import time
-import traceback
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
-from datetime import datetime, date
-
-import json
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-
 # Ensure local project directory is on sys.path so sibling modules (charts, ui, db, etc.) can be imported
 BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
+
+# ---------- Charts fallback import ----------
 
 try:
     from charts import render_chart_for_ticker
@@ -33,20 +23,28 @@ except ModuleNotFoundError:
         try:
             from ai_scanner.charts import render_chart_for_ticker  # type: ignore
         except ModuleNotFoundError:
+
             def render_chart_for_ticker(ticker: str, *args, **kwargs):
                 import streamlit as st  # local import to avoid circulars
+
                 st.info("Chart module not available; add charts.py to enable charts.")
+
+
+# ---------- AI Notes fallback import ----------
+
 try:
     from ai_notes import generate_ai_note
 except ModuleNotFoundError:
     try:
         from ui.ai_notes import generate_ai_note  # type: ignore
     except ModuleNotFoundError:
+
         def generate_ai_note(row: pd.Series) -> str:
             """Heuristic, on-device 'AI' note using the breakout metrics for one ticker.
 
             Local fallback implementation used when ai_notes module is not available.
             """
+
             def _fmt(val, nd=2, suffix=""):
                 try:
                     if pd.isna(val):
@@ -66,7 +64,7 @@ except ModuleNotFoundError:
             vol20 = row.get("Volatility20D%", np.nan)
             dollar_vol = row.get("DollarVol20", np.nan)
 
-            parts = []
+            parts: list[str] = []
 
             # High-level summary
             parts.append(
@@ -75,7 +73,7 @@ except ModuleNotFoundError:
             )
 
             # Trend + relative strength
-            trend_bits = []
+            trend_bits: list[str] = []
             if not pd.isna(trend20):
                 trend_bits.append(f"~{_fmt(trend20, 1, '%')} over the last 20 days")
             if not pd.isna(trend10):
@@ -99,7 +97,7 @@ except ModuleNotFoundError:
                     pass
 
             # Gap + volume behaviour
-            gap_bits = []
+            gap_bits: list[str] = []
             if not pd.isna(gap):
                 gap_bits.append(f"gap of {_fmt(gap, 1, '%')} vs the prior close")
             if not pd.isna(vol_rel):
@@ -110,7 +108,7 @@ except ModuleNotFoundError:
             if not pd.isna(dollar_vol):
                 parts.append(
                     "Liquidity check: 20D avg dollar volume is around "
-                    f"**${_fmt(dollar_vol/1_000_000, 1)}M**, which helps with entries and exits."
+                    f"**${_fmt(dollar_vol / 1_000_000, 1)}M**, which helps with entries and exits."
                 )
 
             if not pd.isna(vol20):
@@ -136,9 +134,11 @@ except ModuleNotFoundError:
             )
 
             return "\n\n".join(parts)
+
+
 # ============================================
 # Breakout Stock Scanner — Subscription Ready
-# Single-file entrypoint (replaces bootstrapper)
+# Single-file entrypoint (Streamlit)
 # ============================================
 
 
@@ -161,27 +161,31 @@ try:
 except Exception:
     from auth.tiering_fallback import USERS_DB, ADMIN_USERS, get_user_tier, Tier
 
-# ---------- Auth ----------
-from db.users import seed_neon_users_from_local, load_users, fetch_all_users
-from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
 
-from ui.auth import auth_ui
-from ui.pricing import pricing_sidebar
-from ui.admin_users import render_admin_users_panel
-from ui.history import render_history_expander
-from ui.results import render_results, get_results_df
-from ui.scans import render_scan_controls
-from ui.universe_panel import render_universe_panel, init_universe_state
-from ui.filters import render_filters
-from ui.db_status import render_db_status_badge
-from auth.tiering_utils import derive_tier_flags
-from ui.header import render_header
-from ui.footer import render_footer
+# ---------- Auth / DB / UI imports ----------
+
+from db.users import seed_neon_users_from_local, load_users, fetch_all_users  # noqa: E402
+from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results  # noqa: E402
+
+from ui.auth import auth_ui  # noqa: E402
+from ui.pricing import pricing_sidebar  # noqa: E402
+from ui.admin_users import render_admin_users_panel  # noqa: E402
+from ui.history import render_history_expander  # noqa: E402
+from ui.results import render_results, get_results_df  # noqa: E402
+from ui.scans import render_scan_controls  # noqa: E402
+from ui.universe_panel import render_universe_panel, init_universe_state  # noqa: E402
+from ui.filters import render_filters  # noqa: E402
+from ui.db_status import render_db_status_badge  # noqa: E402
+from auth.tiering_utils import derive_tier_flags  # noqa: E402
+from ui.header import render_header  # noqa: E402
+from ui.footer import render_footer  # noqa: E402
 
 
 # ---------- Main UI ----------
 
-def main():
+
+def main() -> None:
+    """Main Streamlit UI entrypoint."""
     render_header()
 
     authed, username, display_name = auth_ui()
@@ -221,8 +225,10 @@ def main():
     # DB status badge
     db_status = render_db_status_badge()
 
+    # Pricing & plan upsell
     pricing_sidebar(username, users_map)
 
+    # Sidebar filters
     (
         min_gap,
         min_price,
@@ -242,6 +248,7 @@ def main():
     # Universe diagnostics (lazy; based on last scan)
     render_universe_panel()
 
+    # Scan controls + execution
     render_scan_controls(
         can_scan_sp500=can_scan_sp500,
         can_scan_nasdaq=can_scan_nasdaq,
@@ -258,13 +265,14 @@ def main():
         username=username,
     )
 
+    # Results table + charts + AI notes
     df = get_results_df()
-    render_results(df,can_export_csv, can_ai_notes, render_chart_for_ticker,generate_ai_note)
+    render_results(df, can_export_csv, can_ai_notes, render_chart_for_ticker, generate_ai_note)
 
-    # --- Scan History (DB-backed via local SQLite_ ---
+    # Scan History (DB-backed via Neon/SQLite)
     render_history_expander(db_status)
 
-    # --- Admin Users Page ---
+    # Admin Users Page
     render_admin_users_panel(username, ADMIN_USERS, db_status)
 
     render_footer()
