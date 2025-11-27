@@ -173,12 +173,21 @@ from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
 
 from db.engine import get_db_status, get_neon_conn
 
-from ui.universe import (
-    load_sp500_universe,
-    load_nasdaq_universe,
-    filter_universe,
-    apply_liquidity_filter_batch,
-)
+try:
+    from ui.universe import (
+        load_sp500_universe,
+        load_nasdaq_universe,
+        filter_universe,
+        apply_liquidity_filter_batch,
+    )
+except ModuleNotFoundError:
+    # Fallback for environments where `ai_scanner` is the package root
+    from ai_scanner.ui.universe import (
+        load_sp500_universe,
+        load_nasdaq_universe,
+        filter_universe,
+        apply_liquidity_filter_batch,
+    )
 from scan.engine import safe_call, cached_real_scan, _override_last_prices, safe_yf_download
 
 # Optional live price override for the 'Last' column
