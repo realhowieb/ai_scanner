@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Dict, Any
 
 from db.engine import get_neon_conn
+from db.schema import ensure_neon_watchlists_schema
 
 
 def _get_conn():
@@ -17,30 +18,8 @@ def _get_conn():
 
 
 def _ensure_schema(conn) -> None:
-    """Create watchlist tables if they don't exist."""
-    cur = conn.cursor()
-    # Simple, Neon-friendly schema
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS watchlists (
-            id          BIGSERIAL PRIMARY KEY,
-            user_id     TEXT NOT NULL,
-            name        TEXT NOT NULL,
-            created_at  TIMESTAMPTZ DEFAULT NOW()
-        );
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS watchlist_items (
-            id            BIGSERIAL PRIMARY KEY,
-            watchlist_id  BIGINT NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
-            ticker        TEXT NOT NULL
-        );
-        """
-    )
-    conn.commit()
-    cur.close()
+    """Ensure the Neon watchlists schema exists."""
+    ensure_neon_watchlists_schema(conn)
 
 
 def list_watchlists(user_id: str) -> List[Dict[str, Any]]:
