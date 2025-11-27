@@ -269,6 +269,7 @@ from ui.results import render_results
 from ui.scans import render_scan_controls
 from ui.universe_panel import render_universe_panel
 from ui.filters import render_filters
+from ui.db_status import render_db_status_badge
 
 try:
     from ui.universe import (
@@ -352,17 +353,7 @@ def main():
         st.sidebar.markdown(f"**Plan:** `{tier.name}`")
 
     # DB status badge
-    try:
-        db_status = get_db_status()
-    except Exception:
-        db_status = "none"
-
-    if db_status == "neon":
-        st.sidebar.markdown("🟢 **DB:** Neon (cloud)")
-    elif db_status == "sqlite":
-        st.sidebar.markdown("🟡 **DB:** Local SQLite")
-    else:
-        st.sidebar.markdown("🔴 **DB:** Unavailable")
+    db_status = render_db_status_badge()
 
     pricing_sidebar(username, users_map)
 
