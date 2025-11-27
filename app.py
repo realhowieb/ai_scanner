@@ -24,7 +24,10 @@ try:
 except Exception:  # requests may not be installed in some runtimes
     requests = None
 
-from charts import render_chart_for_ticker
+try:
+    from charts import render_chart_for_ticker
+except ModuleNotFoundError:
+    from ai_scanner.charts import render_chart_for_ticker
 # ============================================
 # Breakout Stock Scanner — Subscription Ready
 # Single-file entrypoint (replaces bootstrapper)
