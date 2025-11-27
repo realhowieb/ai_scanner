@@ -328,9 +328,6 @@ def main() -> None:
     # DB status badge
     db_status = render_db_status_badge()
 
-    # Pricing & plan upsell
-    pricing_sidebar(username, users_map)
-
     # Sidebar filters
     (
         min_gap,
@@ -392,6 +389,9 @@ def main() -> None:
 
     # Admin Users Page
     render_admin_users_panel(username, ADMIN_USERS, db_status)
+
+    # Pricing & plan upsell (loaded last to prevent blocking main UI)
+    pricing_sidebar(username, users_map)
 
     render_footer()
 
