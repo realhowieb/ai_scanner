@@ -452,6 +452,34 @@ def main():
 
     tier = get_user_tier(username, users_map)
 
+    # Safely derive capability flags from Tier object or its features list
+    tier_features = getattr(tier, "features", []) or []
+
+    def _tier_flag(attr_name: str, feature_name: str) -> bool:
+        """Return a boolean capability flag for the given tier.
+
+        Prefer an explicit attribute (e.g., tier.can_premarket). If it doesn't exist,
+        fall back to checking the feature name inside the tier_features list.
+        """
+        if hasattr(tier, attr_name):
+            try:
+                return bool(getattr(tier, attr_name))
+            except Exception:
+                pass
+        # Fallback to feature-name based check
+        if feature_name == "SP500 Scan":
+            # Some configs might use 'SP500' instead of 'SP500 Scan'
+            return ("SP500 Scan" in tier_features) or ("SP500" in tier_features)
+        return feature_name in tier_features
+
+    can_scan_sp500 = _tier_flag("can_scan_sp500", "SP500 Scan")
+    can_scan_nasdaq = _tier_flag("can_scan_nasdaq", "NASDAQ")
+    can_premarket = _tier_flag("can_premarket", "Premarket")
+    can_afterhours = _tier_flag("can_afterhours", "AfterHours")
+    can_unusual_volume = _tier_flag("can_unusual_volume", "UnusualVolume")
+    can_export_csv = _tier_flag("can_export_csv", "ExportCSV")
+    can_ai_notes = _tier_flag("can_ai_notes", "AI Notes")
+
     st.sidebar.markdown(f"### 👤 {display_name}")
     if username in ADMIN_USERS:
         st.sidebar.markdown("**Plan:** `Admin`")
@@ -498,9 +526,9 @@ def main():
         help="Caps SP500+NASDAQ universe for Combo scans.",
     )
 
-    premarket = st.sidebar.checkbox("Include Premarket Scan", value=False, disabled=not tier.can_premarket)
-    afterhours = st.sidebar.checkbox("Include After-hours Scan", value=False, disabled=not tier.can_afterhours)
-    unusual_vol = st.sidebar.checkbox("Unusual Volume Filter", value=False, disabled=not tier.can_unusual_volume)
+    premarket = st.sidebar.checkbox("Include Premarket Scan", value=False, disabled=not can_premarket)
+    afterhours = st.sidebar.checkbox("Include After-hours Scan", value=False, disabled=not can_afterhours)
+    unusual_vol = st.sidebar.checkbox("Unusual Volume Filter", value=False, disabled=not can_unusual_volume)
 
     st.sidebar.divider()
     diagnostics = st.sidebar.checkbox("Show diagnostics", value=True)
@@ -542,18 +570,18 @@ def main():
     b1, b2, b3 = st.columns([1, 1, 2])
 
     with b1:
-        run_sp500_btn = st.button("Run SP500 Scan", use_container_width=True, disabled=not tier.can_scan_sp500)
+        run_sp500_btn = st.button("Run SP500 Scan", use_container_width=True, disabled=not can_scan_sp500)
         st.caption("Runs SP500 regardless of sidebar universe.")
 
     with b2:
-        run_nasdaq_btn = st.button("Run NASDAQ Scan", use_container_width=True, disabled=not tier.can_scan_nasdaq)
+        run_nasdaq_btn = st.button("Run NASDAQ Scan", use_container_width=True, disabled=not can_scan_nasdaq)
         st.caption("Runs NASDAQ regardless of sidebar universe.")
 
     with b3:
         run_combo_btn = st.button(
             "Run Combo Scan (SP500+NASDAQ)",
             use_container_width=True,
-            disabled=not (tier.can_scan_sp500 and tier.can_scan_nasdaq),
+            disabled=not (can_scan_sp500 and can_scan_nasdaq),
         )
         st.caption("Pro/Premium only.")
 
@@ -725,7 +753,7 @@ def main():
         st.dataframe(styled, use_container_width=True, height=420)
 
         # Export (tier-gated)
-        if tier.can_export_csv:
+        if can_export_csv:
             csv = df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 "⬇️ Download CSV",
@@ -743,7 +771,7 @@ def main():
         render_chart_for_ticker(pick)
 
         # AI notes (tier-gated)
-        if tier.can_ai_notes:
+        if can_ai_notes:
             st.subheader("AI Notes (Premium)")
             try:
                 # Use the same ticker the user selected for the chart
