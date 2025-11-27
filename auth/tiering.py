@@ -52,7 +52,7 @@ USERS_DB: Dict[str, Dict[str, str]] = {
 # ------------------------------
 ADMIN_USERS = {
     "admin",
-    "demo_admin",
+    "howard",
 }
 
 
