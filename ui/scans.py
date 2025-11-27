@@ -45,6 +45,7 @@ def _banner(msg: str, level: str = "info") -> None:
         st.info(msg)
 
 
+
 @st.cache_data(ttl=60)
 def _get_live_quote(ticker: str) -> Optional[float]:
     """Best-effort live quote lookup for a single ticker.
@@ -77,6 +78,94 @@ def _get_live_quote(ticker: str) -> Optional[float]:
         return None
 
     return None
+
+
+# --- Watchlist DataFrame builder for View Watchlist ---
+def build_watchlist_df(tickers: List[str]) -> pd.DataFrame:
+    """Build a rich watchlist DataFrame for the center 'View Watchlist' table."""
+    try:
+        import yfinance as yf  # type: ignore
+    except Exception:
+        # If yfinance is unavailable, just return a minimal frame with symbols only.
+        return pd.DataFrame(
+            [
+                {
+                    "Symbol": str(sym).strip().upper(),
+                    "Name": None,
+                    "Last": None,
+                    "Change": None,
+                    "% Change": None,
+                    "Prev Close": None,
+                    "Open": None,
+                    "High": None,
+                    "Low": None,
+                }
+                for sym in tickers
+            ]
+        )
+
+    rows = []
+    for sym in tickers:
+        sym = str(sym).strip().upper()
+        last = prev_close = open_ = high = low = None
+        name = None
+
+        try:
+            t = yf.Ticker(sym)
+            fast = getattr(t, "fast_info", None)
+
+            if fast is not None:
+                # Try several common fast_info fields for current/regular price
+                last = (
+                    getattr(fast, "last_price", None)
+                    or getattr(fast, "regular_market_price", None)
+                )
+                prev_close = getattr(fast, "previous_close", None)
+                open_ = getattr(fast, "open", None)
+                high = getattr(fast, "day_high", None)
+                low = getattr(fast, "day_low", None)
+
+            # Fallback with history if needed
+            if last is None or prev_close is None:
+                hist = t.history(period="2d")
+                if not hist.empty and "Close" in hist.columns:
+                    closes = hist["Close"].tolist()
+                    if len(closes) >= 1 and last is None:
+                        last = float(closes[-1])
+                    if len(closes) >= 2 and prev_close is None:
+                        prev_close = float(closes[-2])
+
+            # Try to get a readable name
+            try:
+                info = t.get_info() if hasattr(t, "get_info") else getattr(t, "info", {})
+            except Exception:
+                info = {}
+            name = info.get("shortName") or info.get("longName") or ""
+        except Exception:
+            # Leave values as None on failure
+            pass
+
+        change = None
+        change_pct = None
+        if last is not None and prev_close not in (None, 0):
+            change = float(last) - float(prev_close)
+            change_pct = (change / float(prev_close)) * 100.0
+
+        rows.append(
+            {
+                "Symbol": sym,
+                "Name": name,
+                "Last": last,
+                "Change": change,
+                "% Change": change_pct,
+                "Prev Close": prev_close,
+                "Open": open_,
+                "High": high,
+                "Low": low,
+            }
+        )
+
+    return pd.DataFrame(rows)
 
 
 def render_scan_controls(
@@ -278,59 +367,7 @@ def render_scan_controls(
         if not tickers:
             _banner("Active watchlist has no tickers to view.", "warning")
         else:
-            rows = []
-            try:
-                import yfinance as yf  # type: ignore
-                for sym in tickers:
-                    price = None
-                    prev_close = None
-                    try:
-                        ticker_obj = yf.Ticker(sym)
-                        fast_info = getattr(ticker_obj, "fast_info", None)
-                        # Try to get last price and previous close from fast_info
-                        if fast_info is not None:
-                            price = getattr(fast_info, "last_price", None)
-                            prev_close = getattr(fast_info, "previous_close", None)
-                        # Fallbacks if fast_info is missing or incomplete
-                        if price is None or prev_close is None:
-                            hist = ticker_obj.history(period="2d")
-                            if not hist.empty and "Close" in hist.columns:
-                                closes = hist["Close"].tolist()
-                                if len(closes) >= 1 and price is None:
-                                    price = float(closes[-1])
-                                if len(closes) >= 2 and prev_close is None:
-                                    prev_close = float(closes[-2])
-                    except Exception:
-                        price = None
-                        prev_close = None
-
-                    change = None
-                    change_pct = None
-                    if price is not None and prev_close not in (None, 0):
-                        change = float(price) - float(prev_close)
-                        change_pct = (change / float(prev_close)) * 100.0
-
-                    rows.append(
-                        {
-                            "Ticker": sym,
-                            "Price": price,
-                            "$ Change": change,
-                            "% Change": change_pct,
-                        }
-                    )
-            except Exception:
-                # If yfinance or network is unavailable, still show tickers without prices
-                rows = [
-                    {
-                        "Ticker": sym,
-                        "Price": None,
-                        "$ Change": None,
-                        "% Change": None,
-                    }
-                    for sym in tickers
-                ]
-
-            df_view = pd.DataFrame(rows)
+            df_view = build_watchlist_df(tickers)
             st.session_state.results_df = df_view
             _banner(
                 f"Showing active watchlist with {len(tickers)} tickers (with prices & daily change).",
