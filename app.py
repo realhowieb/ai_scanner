@@ -263,6 +263,7 @@ from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
 from db.engine import get_db_status, get_neon_conn
 from ui.auth import auth_ui
 from ui.pricing import pricing_sidebar
+from ui.admin_users import render_admin_users_panel
 
 try:
     from ui.universe import (
@@ -720,128 +721,7 @@ def main():
             st.caption("No past scans saved yet.")
 
     # --- Admin Users Page ---
-    if username in ADMIN_USERS:
-        with st.expander("👑 Admin: Manage Users", expanded=False):
-            # Avoid Neon hits on every rerun; only load when admin opts in.
-            enable_admin = st.checkbox(
-                "Enable admin user management",
-                value=False,
-                key="enable_admin_users",
-            )
-
-            if not enable_admin:
-                st.caption("Toggle the switch above to load and manage Neon users.")
-            else:
-                # --- Create New User ---
-                st.subheader("➕ Create New User")
-
-                new_username = st.text_input("New Username")
-                new_full_name = st.text_input("Full Name")
-                new_password = st.text_input("Password", type="password")
-                new_tier_create = st.selectbox("Tier", ["basic", "pro", "premium"], key="create_user_tier")
-                new_active_create = st.checkbox("Active", value=True, key="create_user_active")
-
-                if st.button("Create User"):
-                    if not new_username or not new_full_name or not new_password:
-                        st.error("All fields are required.")
-                    else:
-                        try:
-                            conn = get_neon_conn()
-                            if conn is None:
-                                st.error("Neon connection unavailable; cannot create user.")
-                            else:
-                                ensure_neon_users_schema(conn)
-                                cur = conn.cursor()
-
-                                # Hash password before storing in Neon when auth library is available
-                                pwd_to_store = new_password
-                                try:
-                                    if stauth is not None:
-                                        pwd_to_store = stauth.Hasher([new_password]).generate()[0]
-                                except Exception:
-                                    # If hashing fails, fall back to raw (not ideal but avoids blocking admin)
-                                    pwd_to_store = new_password
-
-                                cur.execute(
-                                    """
-                                    INSERT INTO users (username, full_name, password, tier, is_active)
-                                    VALUES (%s, %s, %s, %s, %s)
-                                    ON CONFLICT (username) DO NOTHING
-                                    """,
-                                    (new_username, new_full_name, pwd_to_store, new_tier_create, new_active_create),
-                                )
-                                conn.commit()
-                                cur.close()
-                                conn.close()
-
-                                # Clear cache so new user is available immediately
-                                try:
-                                    load_users.clear()  # type: ignore
-                                except Exception:
-                                    pass
-
-                                st.success(f"User '{new_username}' created successfully!")
-                                st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed to create user: {e}")
-
-                # --- Existing Users Table + Edit UI ---
-                users_df = fetch_all_users()
-                if users_df is None or users_df.empty:
-                    st.caption("No users found in Neon users table.")
-                else:
-                    st.caption("View and edit user tiers. Changes apply to Neon-backed accounts.")
-                    desired_cols = ["id", "username", "full_name", "tier", "is_active", "created_at"]
-                    display_cols = [c for c in desired_cols if c in users_df.columns]
-                    st.dataframe(
-                        users_df[display_cols],
-                        use_container_width=True,
-                        height=260,
-                    )
-
-                    usernames_list = users_df["username"].tolist()
-                    selected_user = st.selectbox("Select user to edit", usernames_list)
-                    row = users_df[users_df["username"] == selected_user].iloc[0]
-
-                    new_tier = st.selectbox(
-                        "Tier",
-                        ["basic", "pro", "premium"],
-                        index=["basic", "pro", "premium"].index(
-                            row["tier"] if row["tier"] in ["basic", "pro", "premium"] else "basic"
-                        ),
-                    )
-                    new_active = st.checkbox("Active", value=bool(row["is_active"]))
-
-                    if st.button("Update User"):
-                        try:
-                            conn = get_neon_conn()
-                            if conn is None:
-                                st.error("Neon connection unavailable; cannot update user.")
-                            else:
-                                ensure_neon_users_schema(conn)
-                                cur = conn.cursor()
-                                cur.execute(
-                                    """
-                                    UPDATE users
-                                    SET tier = %s,
-                                        is_active = %s
-                                    WHERE username = %s
-                                    """,
-                                    (new_tier, new_active, selected_user),
-                                )
-                                conn.commit()
-                                cur.close()
-                                conn.close()
-
-                                try:
-                                    load_users.clear()  # type: ignore
-                                except Exception:
-                                    pass
-
-                                st.success(f"User '{selected_user}' updated successfully!")
-                                st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed to update user: {e}")
+    render_admin_users_panel(username, ADMIN_USERS, db_status)
 
     st.divider()
     st.caption("⚠️ Not financial advice. Educational tool only.")
