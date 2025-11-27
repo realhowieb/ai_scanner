@@ -14,6 +14,7 @@ import streamlit as st
 
 from db.runs import save_run, save_daily_snapshot, list_runs
 from scan.engine import safe_call, cached_real_scan, _override_last_prices
+from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
 # Universe loaders (imported here so this module is self-contained)
 try:
@@ -308,5 +309,20 @@ def render_scan_controls(
         if not ticker:
             _banner("Please enter a ticker symbol to search.", "warning")
         else:
+            # Optionally auto-add this ticker to the active watchlist
+            active_watchlist_id = st.session_state.get("active_watchlist_id")
+            if active_watchlist_id is not None:
+                try:
+                    # Fetch current tickers for the active watchlist
+                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
+                    norm_existing = {str(t).strip().upper() for t in existing}
+                    if ticker not in norm_existing:
+                        updated = sorted(norm_existing | {ticker})
+                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
+                        st.caption(f"Added {ticker} to your active watchlist.")
+                except Exception:
+                    # Never break the UI if Neon/watchlists are unavailable
+                    pass
+
             # Run the same breakout engine but on a single stock
             do_scan([ticker], f"Search: {ticker}")
