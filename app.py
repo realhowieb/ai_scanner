@@ -184,10 +184,73 @@ st.set_page_config(
 # ---------- Tiers / Plans ----------
 
 from config import TIERS_CONFIG, STRIPE_MONTHLY_LINKS, STRIPE_YEARLY_LINKS
-try:
-    from tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier
-except ModuleNotFoundError:
-    from ai_scanner.tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier  # type: ignore
+
+# Try to import tiering module from different locations
+_tiering_mod = _try_import("tiering")
+if _tiering_mod is None:
+    _tiering_mod = _try_import("ai_scanner.tiering")
+
+if _tiering_mod is not None:
+    USERS_DB = getattr(_tiering_mod, "USERS_DB", {})
+    ADMIN_USERS = getattr(_tiering_mod, "ADMIN_USERS", set())
+    get_user_tier = getattr(_tiering_mod, "get_user_tier")
+    Tier = getattr(_tiering_mod, "Tier")
+else:
+    # Minimal safe fallback so the app can still run in environments
+    # where tiering.py is not importable.
+    @dataclass
+    class Tier:  # type: ignore
+        key: str = "basic"
+        name: str = "Basic"
+        features: list = None
+        max_results: int = 25
+        is_premium: bool = False
+
+        def __post_init__(self):
+            if self.features is None:
+                self.features = []
+
+        # Backwards-compatible properties used in the app
+        @property
+        def can_scan_sp500(self) -> bool:
+            return "SP500 Scan" in self.features or "SP500" in self.features
+
+        @property
+        def can_scan_nasdaq(self) -> bool:
+            return "NASDAQ" in self.features
+
+        @property
+        def can_premarket(self) -> bool:
+            return "Premarket" in self.features
+
+        @property
+        def can_afterhours(self) -> bool:
+            return "AfterHours" in self.features
+
+        @property
+        def can_unusual_volume(self) -> bool:
+            return "UnusualVolume" in self.features
+
+        @property
+        def can_export_csv(self) -> bool:
+            return "ExportCSV" in self.features
+
+        @property
+        def can_ai_notes(self) -> bool:
+            return "AI Notes" in self.features
+
+    USERS_DB: Dict[str, Dict[str, str]] = {}
+    ADMIN_USERS = set()
+
+    def get_user_tier(username: str, users: Dict[str, Dict[str, str]]) -> Tier:  # type: ignore
+        cfg = TIERS_CONFIG.get("basic", TIERS_CONFIG[next(iter(TIERS_CONFIG))])
+        return Tier(
+            key="basic",
+            name=cfg.get("name", "Basic"),
+            features=cfg.get("features", []),
+            max_results=cfg.get("max_results", 25),
+            is_premium=False,
+        )
 
 # ---------- Auth ----------
 try:
