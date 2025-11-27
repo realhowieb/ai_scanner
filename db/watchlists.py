@@ -8,7 +8,7 @@ from db.schema import ensure_neon_watchlists_schema
 
 def _get_conn():
     """
-    Always return a fresh Neon connection.
+    Always return a fresh Neon connection AND ensure schema exists.
 
     If Neon is not configured or reachable, raise a clear error so the
     watchlists UI can fall back gracefully instead of silently receiving None.
@@ -16,6 +16,10 @@ def _get_conn():
     conn = get_neon_conn()
     if conn is None:
         raise RuntimeError("Neon is not available (missing URL or connection failed).")
+
+    # Ensure schema every time we open a new connection (safe & idempotent)
+    ensure_neon_watchlists_schema(conn)
+
     return conn
 
 
@@ -26,7 +30,6 @@ def _ensure_schema(conn) -> None:
 
 def list_watchlists(user_id: str) -> List[Dict[str, Any]]:
     conn = _get_conn()
-    _ensure_schema(conn)
     cur = conn.cursor()
     cur.execute(
         "SELECT id, name, created_at FROM watchlists WHERE user_id = %s ORDER BY created_at DESC",
@@ -48,7 +51,6 @@ def create_watchlist(user_id: str, name: str) -> int:
     depending on RETURNING id, which can be finicky on some drivers.
     """
     conn = _get_conn()
-    _ensure_schema(conn)
     cur = conn.cursor()
     # Simple insert without RETURNING
     cur.execute(
@@ -62,7 +64,6 @@ def create_watchlist(user_id: str, name: str) -> int:
 
 def delete_watchlist(watchlist_id: int, user_id: str) -> None:
     conn = _get_conn()
-    _ensure_schema(conn)
     cur = conn.cursor()
     # Ensure user owns the watchlist
     cur.execute(
@@ -75,7 +76,6 @@ def delete_watchlist(watchlist_id: int, user_id: str) -> None:
 
 def get_watchlist_tickers(watchlist_id: int, user_id: str) -> List[str]:
     conn = _get_conn()
-    _ensure_schema(conn)
     cur = conn.cursor()
     # Check ownership
     cur.execute(
@@ -98,7 +98,6 @@ def get_watchlist_tickers(watchlist_id: int, user_id: str) -> List[str]:
 def set_watchlist_tickers(watchlist_id: int, user_id: str, tickers: List[str]) -> None:
     """Replace all tickers in a watchlist with the provided list."""
     conn = _get_conn()
-    _ensure_schema(conn)
     cur = conn.cursor()
 
     # Ownership check
