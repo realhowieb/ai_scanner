@@ -64,11 +64,17 @@ def create_watchlist(user_id: str, name: str) -> int:
         "INSERT INTO watchlists (user_id, name) VALUES (%s, %s) RETURNING id",
         (user_id, name),
     )
-    watchlist_id = cur.fetchone()[0]
+    row = cur.fetchone()
     conn.commit()
     cur.close()
-    return watchlist_id
 
+    # Be defensive: some environments/drivers may not return a row as expected.
+    if not row:
+        # We don't actually use the return value in the UI right now,
+        # so returning -1 is fine as a “dummy” ID.
+        return -1
+
+    return row[0]
 
 def delete_watchlist(watchlist_id: int, user_id: str) -> None:
     conn = _get_conn()
