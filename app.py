@@ -267,6 +267,7 @@ from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
 from ui.results import render_results
 from ui.scans import render_scan_controls
+from ui.universe_panel import render_universe_panel
 
 try:
     from ui.universe import (
@@ -407,27 +408,7 @@ def main():
         st.session_state["combo_capped"] = []
 
     # Universe diagnostics (lazy; based on last scan)
-    with st.expander("Universe Info", expanded=True):
-        sp500 = st.session_state.get("sp500_universe", [])
-        nasdaq_full = st.session_state.get("nasdaq_universe", [])
-        nasdaq_capped = st.session_state.get("nasdaq_capped", [])
-
-        if sp500 or nasdaq_full:
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown(f"**SP500 size:** {len(sp500)}" if sp500 else "**SP500 size:** (not loaded yet)")
-                if sp500:
-                    st.caption(f"Sample: {', '.join(sp500[:20])}")
-            with c2:
-                if nasdaq_full:
-                    st.markdown(f"**NASDAQ size:** {len(nasdaq_capped) or len(nasdaq_full)}"
-                                f"{' (capped)' if nasdaq_capped else ''}")
-                    st.caption(f"Sample: {', '.join((nasdaq_capped or nasdaq_full)[:20])}")
-                else:
-                    st.markdown("**NASDAQ size:** (not loaded yet)")
-                    st.caption("Run a NASDAQ or Combo scan to populate NASDAQ universe.")
-        else:
-            st.caption("Universes will appear here after you run your first scan (SP500, NASDAQ, or Combo).")
+    render_universe_panel()
 
     render_scan_controls(
         can_scan_sp500=can_scan_sp500,
