@@ -42,7 +42,106 @@ except ModuleNotFoundError:
             def render_chart_for_ticker(ticker: str, *args, **kwargs):
                 import streamlit as st  # local import to avoid circulars
                 st.info("Chart module not available; add charts.py to enable charts.")
-from ai_notes import generate_ai_note
+try:
+    from ai_notes import generate_ai_note
+except ModuleNotFoundError:
+    try:
+        from ui.ai_notes import generate_ai_note  # type: ignore
+    except ModuleNotFoundError:
+        def generate_ai_note(row: pd.Series) -> str:
+            """Heuristic, on-device 'AI' note using the breakout metrics for one ticker.
+
+            Local fallback implementation used when ai_notes module is not available.
+            """
+            def _fmt(val, nd=2, suffix=""):
+                try:
+                    if pd.isna(val):
+                        return "N/A"
+                    return f"{float(val):.{nd}f}{suffix}"
+                except Exception:
+                    return "N/A"
+
+            ticker = row.get("Ticker", "?")
+            score = row.get("BreakoutScore", np.nan)
+            pattern = row.get("PatternTag", "") or "Neutral"
+            gap = row.get("Gap%", np.nan)
+            trend20 = row.get("Trend20D%", np.nan)
+            trend10 = row.get("Trend10D%", np.nan)
+            vol_rel = row.get("VolRel20", np.nan)
+            rs = row.get("RS_Rank", np.nan)
+            vol20 = row.get("Volatility20D%", np.nan)
+            dollar_vol = row.get("DollarVol20", np.nan)
+
+            parts = []
+
+            # High-level summary
+            parts.append(
+                f"**{ticker}** currently has a BreakoutScore of **{_fmt(score, 1)}** "
+                f"with pattern tag **{pattern}**."
+            )
+
+            # Trend + relative strength
+            trend_bits = []
+            if not pd.isna(trend20):
+                trend_bits.append(f"~{_fmt(trend20, 1, '%')} over the last 20 days")
+            if not pd.isna(trend10):
+                trend_bits.append(f"~{_fmt(trend10, 1, '%')} over the last 10 days")
+            if trend_bits:
+                parts.append("Price trend: " + ", ".join(trend_bits) + ".")
+
+            if not pd.isna(rs):
+                try:
+                    rs_val = float(rs)
+                    if rs_val >= 80:
+                        rs_comment = "strong relative strength vs the universe (top 20%)."
+                    elif rs_val >= 60:
+                        rs_comment = "above-average relative strength (top 40%)."
+                    elif rs_val >= 40:
+                        rs_comment = "roughly middle-of-the-pack relative strength."
+                    else:
+                        rs_comment = "weak relative strength vs peers right now."
+                    parts.append(f"RS Rank is **{_fmt(rs, 1)}**, indicating {rs_comment}")
+                except Exception:
+                    pass
+
+            # Gap + volume behaviour
+            gap_bits = []
+            if not pd.isna(gap):
+                gap_bits.append(f"gap of {_fmt(gap, 1, '%')} vs the prior close")
+            if not pd.isna(vol_rel):
+                gap_bits.append(f"volume running at roughly {_fmt(vol_rel, 2)}x the 20D average")
+            if gap_bits:
+                parts.append("Today it is showing a " + " and ".join(gap_bits) + ".")
+
+            if not pd.isna(dollar_vol):
+                parts.append(
+                    "Liquidity check: 20D avg dollar volume is around "
+                    f"**${_fmt(dollar_vol/1_000_000, 1)}M**, which helps with entries and exits."
+                )
+
+            if not pd.isna(vol20):
+                try:
+                    vol_val = float(vol20)
+                    if vol_val <= 8:
+                        vol_comment = "Price action has been relatively quiet (low volatility)."
+                    elif vol_val <= 18:
+                        vol_comment = "Volatility is moderate and tradable for most setups."
+                    else:
+                        vol_comment = (
+                            "This is a high-volatility name; position sizing and risk management are critical."
+                        )
+                    parts.append(
+                        f"Volatility (20D) sits near **{_fmt(vol20, 1, '%')}**, {vol_comment}"
+                    )
+                except Exception:
+                    pass
+
+            parts.append(
+                "This is not a trade recommendation. Consider support/resistance on the chart, "
+                "overall market context, and your own risk management rules before acting."
+            )
+
+            return "\n\n".join(parts)
 # ============================================
 # Breakout Stock Scanner — Subscription Ready
 # Single-file entrypoint (replaces bootstrapper)
