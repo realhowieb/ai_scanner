@@ -53,7 +53,7 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
     else:
         st.sidebar.caption("No watchlists yet. Create one below.")
 
-    # If there is an active watchlist with tickers, show a simple table with prices
+    # If there is an active watchlist with tickers, show a simple table with prices & changes
     if active_id is not None and active_tickers:
         with st.sidebar.expander("View active watchlist (with prices)", expanded=False):
             rows = []
@@ -62,22 +62,56 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
                 for t in active_tickers:
                     sym = str(t).strip().upper()
                     price = None
+                    prev_close = None
                     try:
                         ticker_obj = yf.Ticker(sym)
                         fast_info = getattr(ticker_obj, "fast_info", None)
+
+                        # Try to get last price
                         if fast_info is not None:
                             price = getattr(fast_info, "last_price", None)
-                        if price is None:
-                            # Fallback to last close
-                            hist = ticker_obj.history(period="1d")
+                            prev_close = getattr(fast_info, "previous_close", None)
+
+                        # Fallbacks if fast_info is missing or incomplete
+                        if price is None or prev_close is None:
+                            hist = ticker_obj.history(period="2d")
                             if not hist.empty and "Close" in hist.columns:
-                                price = float(hist["Close"].iloc[-1])
+                                closes = hist["Close"].tolist()
+                                # Last close is current, prior close is previous bar if it exists
+                                if len(closes) >= 1 and price is None:
+                                    price = float(closes[-1])
+                                if len(closes) >= 2 and prev_close is None:
+                                    prev_close = float(closes[-2])
+
                     except Exception:
                         price = None
-                    rows.append({"Ticker": sym, "Price": price})
+                        prev_close = None
+
+                    change = None
+                    change_pct = None
+                    if price is not None and prev_close not in (None, 0):
+                        change = float(price) - float(prev_close)
+                        change_pct = (change / float(prev_close)) * 100.0
+
+                    rows.append(
+                        {
+                            "Ticker": sym,
+                            "Price": price,
+                            "$ Change": change,
+                            "% Change": change_pct,
+                        }
+                    )
             except Exception:
                 # If yfinance or network is unavailable, still show tickers without prices
-                rows = [{"Ticker": str(t).strip().upper(), "Price": None} for t in active_tickers]
+                rows = [
+                    {
+                        "Ticker": str(t).strip().upper(),
+                        "Price": None,
+                        "$ Change": None,
+                        "% Change": None,
+                    }
+                    for t in active_tickers
+                ]
 
             if pd is not None:
                 df = pd.DataFrame(rows)
@@ -85,10 +119,16 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
             else:
                 # Fallback: simple text listing
                 for row in rows:
-                    if row["Price"] is not None:
-                        st.write(f"{row['Ticker']}: {row['Price']}")
+                    price = row.get("Price")
+                    change = row.get("$ Change")
+                    change_pct = row.get("% Change")
+                    if price is not None:
+                        txt = f"{row['Ticker']}: {price:.2f}"
+                        if change is not None and change_pct is not None:
+                            txt += f" ({change:+.2f}, {change_pct:+.2f}%)"
                     else:
-                        st.write(f"{row['Ticker']}: —")
+                        txt = f"{row['Ticker']}: —"
+                    st.write(txt)
 
     with st.sidebar.expander("Manage watchlists", expanded=False):
         new_name = st.text_input("New watchlist name", key="wl_new_name")
