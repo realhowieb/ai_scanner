@@ -185,6 +185,24 @@ from ui.watchlists import render_watchlists_panel
 # ---------- Main UI ----------
 
 
+def render_market_snapshot_placeholder() -> None:
+    """Simple placeholder for a 'Today’s Market Snapshot' row.
+
+    In a future iteration, you can wire this up to real index/ETF data.
+    For now it provides structure and a familiar trading-dashboard feel.
+    """
+    st.subheader("Today’s Market Snapshot")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("S&P 500", "—", "—")
+    with c2:
+        st.metric("NASDAQ", "—", "—")
+    with c3:
+        st.metric("Top Gainer", "—", "—")
+    with c4:
+        st.metric("Most Active", "—", "—")
+
+
 def main() -> None:
     """Main Streamlit UI entrypoint."""
     render_header()
@@ -257,6 +275,9 @@ def main() -> None:
     # Store in session_state so scan controls and other modules can use the active watchlist
     st.session_state["active_watchlist_id"] = active_watchlist_id
     st.session_state["active_watchlist_tickers"] = active_watchlist_tickers
+
+    # Today’s market snapshot row
+    render_market_snapshot_placeholder()
 
     # Scan controls + execution
     render_scan_controls(
