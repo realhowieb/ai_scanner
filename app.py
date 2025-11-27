@@ -183,78 +183,12 @@ st.set_page_config(
 
 # ---------- Tiers / Plans ----------
 
-from config import TIERS_CONFIG, STRIPE_MONTHLY_LINKS, STRIPE_YEARLY_LINKS
-
-# Try to import tiering module from different locations
-_tiering_mod = _try_import("tiering")
-if _tiering_mod is None:
-    _tiering_mod = _try_import("auth.tiering")
-if _tiering_mod is None:
-    _tiering_mod = _try_import("ai_scanner.tiering")
-if _tiering_mod is None:
-    _tiering_mod = _try_import("ai_scanner.auth.tiering")
-
-if _tiering_mod is not None:
-    USERS_DB = getattr(_tiering_mod, "USERS_DB", {})
-    ADMIN_USERS = getattr(_tiering_mod, "ADMIN_USERS", set())
-    get_user_tier = getattr(_tiering_mod, "get_user_tier")
-    Tier = getattr(_tiering_mod, "Tier")
-else:
-    # Minimal safe fallback so the app can still run in environments
-    # where tiering.py is not importable.
-    @dataclass
-    class Tier:  # type: ignore
-        key: str = "basic"
-        name: str = "Basic"
-        features: list = None
-        max_results: int = 25
-        is_premium: bool = False
-
-        def __post_init__(self):
-            if self.features is None:
-                self.features = []
-
-        # Backwards-compatible properties used in the app
-        @property
-        def can_scan_sp500(self) -> bool:
-            return "SP500 Scan" in self.features or "SP500" in self.features
-
-        @property
-        def can_scan_nasdaq(self) -> bool:
-            return "NASDAQ" in self.features
-
-        @property
-        def can_premarket(self) -> bool:
-            return "Premarket" in self.features
-
-        @property
-        def can_afterhours(self) -> bool:
-            return "AfterHours" in self.features
-
-        @property
-        def can_unusual_volume(self) -> bool:
-            return "UnusualVolume" in self.features
-
-        @property
-        def can_export_csv(self) -> bool:
-            return "ExportCSV" in self.features
-
-        @property
-        def can_ai_notes(self) -> bool:
-            return "AI Notes" in self.features
-
-    USERS_DB: Dict[str, Dict[str, str]] = {}
-    ADMIN_USERS = set()
-
-    def get_user_tier(username: str, users: Dict[str, Dict[str, str]]) -> Tier:  # type: ignore
-        cfg = TIERS_CONFIG.get("basic", TIERS_CONFIG[next(iter(TIERS_CONFIG))])
-        return Tier(
-            key="basic",
-            name=cfg.get("name", "Basic"),
-            features=cfg.get("features", []),
-            max_results=cfg.get("max_results", 25),
-            is_premium=False,
-        )
+# Tier configuration & user tier resolution live in the auth.tiering module.
+# Fall back to auth.tiering_fallback if the main module is unavailable.
+try:
+    from auth.tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier
+except Exception:
+    from auth.tiering_fallback import USERS_DB, ADMIN_USERS, get_user_tier, Tier
 
 # ---------- Auth ----------
 from db.users import seed_neon_users_from_local, load_users, fetch_all_users
@@ -270,6 +204,7 @@ from ui.scans import render_scan_controls
 from ui.universe_panel import render_universe_panel
 from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
+from auth.tiering_utils import derive_tier_flags
 
 try:
     from ui.universe import (
@@ -318,33 +253,16 @@ def main():
 
     tier = get_user_tier(username, users_map)
 
-    # Safely derive capability flags from Tier object or its features list
-    tier_features = getattr(tier, "features", []) or []
-
-    def _tier_flag(attr_name: str, feature_name: str) -> bool:
-        """Return a boolean capability flag for the given tier.
-
-        Prefer an explicit attribute (e.g., tier.can_premarket). If it doesn't exist,
-        fall back to checking the feature name inside the tier_features list.
-        """
-        if hasattr(tier, attr_name):
-            try:
-                return bool(getattr(tier, attr_name))
-            except Exception:
-                pass
-        # Fallback to feature-name based check
-        if feature_name == "SP500 Scan":
-            # Some configs might use 'SP500' instead of 'SP500 Scan'
-            return ("SP500 Scan" in tier_features) or ("SP500" in tier_features)
-        return feature_name in tier_features
-
-    can_scan_sp500 = _tier_flag("can_scan_sp500", "SP500 Scan")
-    can_scan_nasdaq = _tier_flag("can_scan_nasdaq", "NASDAQ")
-    can_premarket = _tier_flag("can_premarket", "Premarket")
-    can_afterhours = _tier_flag("can_afterhours", "AfterHours")
-    can_unusual_volume = _tier_flag("can_unusual_volume", "UnusualVolume")
-    can_export_csv = _tier_flag("can_export_csv", "ExportCSV")
-    can_ai_notes = _tier_flag("can_ai_notes", "AI Notes")
+    # Derive capability flags from the Tier object in a single helper,
+    # so the interpretation of features is centralized.
+    flags = derive_tier_flags(tier)
+    can_scan_sp500 = flags["can_scan_sp500"]
+    can_scan_nasdaq = flags["can_scan_nasdaq"]
+    can_premarket = flags["can_premarket"]
+    can_afterhours = flags["can_afterhours"]
+    can_unusual_volume = flags["can_unusual_volume"]
+    can_export_csv = flags["can_export_csv"]
+    can_ai_notes = flags["can_ai_notes"]
 
     st.sidebar.markdown(f"### 👤 {display_name}")
     if username in ADMIN_USERS:
