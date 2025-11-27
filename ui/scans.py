@@ -141,6 +141,14 @@ def render_scan_controls(
                 st.caption(f"✅ {label}: {len(df)} results returned from scan.")
                 dt = time.time() - t0
                 st.session_state.results_df = df
+
+                # If a Watchlist scan returns 0 rows, show a hint about relaxing filters.
+                if (str(label).startswith("Watchlist")) and (df is None or df.empty):
+                    st.caption(
+                        "No watchlist members passed your current filters. "
+                        "Try lowering Min Gap %, widening the price range, or disabling Unusual Volume."
+                    )
+
                 _banner(f"✅ {label} scan complete in {dt:.1f}s. Returned {len(df)} rows.", "success")
 
                 # Persist this scan to the runs DB (history + optional daily snapshot)
