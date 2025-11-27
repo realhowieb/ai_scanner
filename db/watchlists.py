@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from typing import List, Dict, Any
 
-from db.engine import get_db_status, get_neon_conn
+from db.engine import get_neon_conn
 
 
 def _get_conn():
-    """Watchlists are Neon-only. Raise if Neon is not available."""
-    status = get_db_status()
-    if status != "neon":
-        raise RuntimeError("Watchlists require Neon DB (status: %s)" % status)
+    """Return a Neon connection for watchlists.
+
+    We don't rely on get_db_status here, because runs/history might be using
+    SQLite while Neon is still available for premium features. If Neon is not
+    configured or reachable, this will raise and the UI will fall back
+    gracefully with a caption.
+    """
     return get_neon_conn()
 
 
