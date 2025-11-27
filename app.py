@@ -257,15 +257,11 @@ else:
         )
 
 # ---------- Auth ----------
-try:
-    import streamlit_authenticator as stauth
-except Exception:
-    stauth = None
-import streamlit as st
 from db.users import seed_neon_users_from_local, load_users, fetch_all_users
 from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
 
 from db.engine import get_db_status, get_neon_conn
+from ui.auth import auth_ui
 
 try:
     from ui.universe import (
@@ -289,54 +285,6 @@ try:
     import yfinance as yf
 except Exception:
     yf = None
-
-
-def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
-    """Returns (authenticated, username, display_name)."""
-    if stauth is None:
-        banner("streamlit-authenticator not installed. Running in DEMO mode.", "warning")
-        return True, "howard", "Howard"
-
-    users_map = load_users()
-    usernames = list(users_map.keys())
-    authenticator = stauth.Authenticate(
-        {"usernames": {u: {"name": users_map[u]["name"], "password": users_map[u]["password"]} for u in usernames}},
-        "breakout_scanner_cookie",
-        "breakout_scanner_signature",
-        cookie_expiry_days=7,
-    )
-
-    # New API (v0.3+): login() returns None for rendered locations; values are in st.session_state
-    try:
-        authenticator.login(
-            "main",
-            fields={
-                "Form name": "Login",
-                "Username": "Username",
-                "Password": "Password",
-                "Login": "Login",
-            },
-        )
-    except Exception as e:
-        banner(f"Auth error: {e}", "error")
-        return False, None, None
-
-    auth_status = st.session_state.get("authentication_status", None)
-    name = st.session_state.get("name")
-    username = st.session_state.get("username")
-
-    if auth_status is False:
-        banner("Username/password incorrect", "error")
-        return False, None, None
-    if auth_status is None:
-        banner("Please enter your credentials.", "info")
-        return False, None, None
-
-    with st.sidebar:
-        authenticator.logout("Logout", "sidebar")
-
-    return True, username, name
-
 
 def pricing_sidebar(current_username: Optional[str], users: Dict[str, Dict[str, str]]):
     """Show upgrade options only for tiers above the user's current plan.
