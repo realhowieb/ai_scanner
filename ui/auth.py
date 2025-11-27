@@ -8,6 +8,7 @@ from typing import Tuple, Optional, Dict
 
 import streamlit as st
 
+# streamlit-authenticator is optional so the app can still run in demo mode
 try:
     import streamlit_authenticator as stauth
 except Exception:
@@ -29,12 +30,17 @@ def banner(msg: str, level: str = "info") -> None:
 
 
 def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
-    """Returns (authenticated, username, display_name)."""
-    # Demo mode when streamlit-authenticator isn't available
+    """Render the auth UI and return (authenticated, username, display_name).
+
+    Uses streamlit-authenticator when available; otherwise falls back to a demo login.
+    """
+
+    # --- DEMO MODE: streamlit-authenticator not installed ---
     if stauth is None:
         banner("streamlit-authenticator not installed. Running in DEMO mode.", "warning")
         return True, "howard", "Howard"
 
+    # --- Load users from Neon / SQLite (or local USERS_DB fallback) ---
     users_map: Dict[str, Dict[str, str]] = load_users()
     if not users_map:
         banner("No users found in auth backend. Falling back to DEMO login.", "warning")
@@ -70,8 +76,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         cookie_expiry_days=7,
     )
 
-    # If the user is already authenticated, don't render the login form again.
-    # Just show the logout button and return the stored identity.
+    # --- Already authenticated? Short-circuit and skip rendering the login form ---
     existing_status = st.session_state.get("authentication_status", None)
     if existing_status is True:
         name = st.session_state.get("name") or st.session_state.get("username")
@@ -81,7 +86,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         if username:
             return True, username, name
 
-    # New API (v0.3+): login() renders the form and stores values in st.session_state
+    # --- First-time / not yet authenticated: render login form ---
     try:
         authenticator.login(
             "main",
@@ -107,6 +112,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         banner("Please enter your credentials.", "info")
         return False, None, None
 
+    # Successful login: show logout in sidebar and return identity
     with st.sidebar:
         authenticator.logout("Logout", "sidebar")
 
