@@ -266,7 +266,7 @@ from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
 from ui.results import render_results
-from ui.results import render_scan_controls
+from ui.scans import render_scan_controls
 
 try:
     from ui.universe import (
