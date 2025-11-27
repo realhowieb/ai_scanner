@@ -25,6 +25,9 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
         watchlists = list_watchlists(user_id)
     except Exception as e:
         st.sidebar.caption("Watchlists require Neon DB (cloud) and may be unavailable.")
+        # Show the underlying error in dev so we can diagnose connection/config issues.
+        with st.sidebar.expander("Watchlist error details", expanded=False):
+            st.code(str(e) or repr(e))
         # For safety, don't crash the app; just return empty.
         return None, []
 
