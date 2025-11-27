@@ -24,6 +24,7 @@ try:
 except Exception:  # requests may not be installed in some runtimes
     requests = None
 
+from charts import render_chart_for_ticker
 # ============================================
 # Breakout Stock Scanner — Subscription Ready
 # Single-file entrypoint (replaces bootstrapper)
@@ -197,19 +198,6 @@ except Exception:
     yf = None
 
 
-# Built-in candlestick fallback (no extra deps beyond plotly)
-try:
-    import plotly.graph_objects as go
-except Exception:
-    go = None
-
-# Matplotlib fallback if Plotly isn't available
-try:
-    import matplotlib.pyplot as plt
-except Exception:
-    plt = None
-
-
 def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
     """Returns (authenticated, username, display_name)."""
     if stauth is None:
@@ -344,159 +332,7 @@ def pricing_sidebar(current_username: Optional[str], users: Dict[str, Dict[str, 
             else:
                 st.caption("Stripe link not configured yet for this plan/period.")
 
-_real_chart = None
 
-
-def _fetch_unadjusted_ohlc(ticker: str, period: str = "6mo", interval: str = "1d") -> Optional[pd.DataFrame]:
-    """Fetch unadjusted OHLCV for charting with multiple retries and normalization."""
-    if yf is None:
-        return None
-
-    def _norm(df: pd.DataFrame) -> Optional[pd.DataFrame]:
-        if df is None or df.empty:
-            return None
-        df = df.reset_index()
-        cols_lower = {c.lower() for c in df.columns}
-        if "date" not in cols_lower and "datetime" in cols_lower:
-            for c in df.columns:
-                if c.lower() == "datetime":
-                    df.rename(columns={c: "Date"}, inplace=True)
-                    break
-        if "date" not in {c.lower() for c in df.columns} and "Date" not in df.columns:
-            return None
-        return df
-
-    attempts = []
-    attempts.append((ticker, period, interval))
-    attempts.append((ticker, "3mo", interval))
-    attempts.append((ticker, "1mo", interval))
-    if "." in ticker:
-        attempts.append((ticker.replace(".", "-"), period, interval))
-    if ticker.endswith((".NS", ".TO", ".L", ".AX", ".SA", ".HK", ".F")):
-        attempts.append((ticker.split(".")[0], period, interval))
-
-    for sym, per, inter in attempts:
-        try:
-            df = yf.download(
-                sym,
-                period=per,
-                interval=inter,
-                auto_adjust=False,
-                progress=False,
-                threads=False,
-            )
-            out = _norm(df)
-            if out is not None:
-                return out
-        except Exception:
-            continue
-
-    try:
-        hist = yf.Ticker(ticker).history(period="6mo", interval=interval, auto_adjust=False)
-        out = _norm(hist)
-        if out is not None:
-            return out
-    except Exception:
-        pass
-
-    return None
-
-
-def _render_builtin_candlestick(ticker: str):
-    """Render a candlestick chart using unadjusted OHLC.
-
-    Uses Plotly if available; otherwise falls back to a simple matplotlib line chart
-    with EMA overlays and resistance.
-    """
-    df = _fetch_unadjusted_ohlc(ticker)
-    if df is None or df.empty:
-        st.warning(
-            f"No OHLC data available for {ticker}. This may occur if the symbol is OTC, delisted, newly listed, "
-            "or not supported by Yahoo Finance. Try another ticker."
-        )
-        return
-
-    # Indicators
-    try:
-        df["EMA9"] = df["Close"].ewm(span=9, adjust=False).mean()
-        df["EMA21"] = df["Close"].ewm(span=21, adjust=False).mean()
-        df["Res20"] = df["High"].rolling(20, min_periods=1).max()
-        if "Volume" in df.columns:
-            df["VolSMA20"] = df["Volume"].rolling(20, min_periods=1).mean()
-    except Exception:
-        pass
-
-    # --- Matplotlib fallback if Plotly is missing ---
-    if go is None or plt is None:
-        if plt is None:
-            st.write("No chart backend available (Plotly and Matplotlib missing).")
-            return
-        fig, ax = plt.subplots()
-        ax.plot(df["Date"], df["Close"], label="Close")
-        if "EMA9" in df.columns:
-            ax.plot(df["Date"], df["EMA9"], label="EMA9")
-        if "EMA21" in df.columns:
-            ax.plot(df["Date"], df["EMA21"], label="EMA21")
-        if "Res20" in df.columns:
-            ax.plot(df["Date"], df["Res20"], label="Resistance 20D High")
-        ax.set_title(f"{ticker} Price (unadjusted) with EMAs")
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Price")
-        ax.legend(loc="upper left")
-        st.pyplot(fig, use_container_width=True)
-
-        if "Volume" in df.columns:
-            vfig, vax = plt.subplots()
-            vax.bar(df["Date"], df["Volume"], label="Volume")
-            if "VolSMA20" in df.columns:
-                vax.plot(df["Date"], df["VolSMA20"], label="Vol SMA20")
-            vax.set_title(f"{ticker} Volume")
-            vax.legend(loc="upper left")
-            st.pyplot(vfig, use_container_width=True)
-        return
-
-    # Expected columns from yfinance: Date, Open, High, Low, Close, Volume
-    fig = go.Figure()
-    fig.add_trace(
-        go.Candlestick(
-            x=df["Date"],
-            open=df.get("Open"),
-            high=df.get("High"),
-            low=df.get("Low"),
-            close=df.get("Close"),
-            name=ticker,
-        )
-    )
-    if "EMA9" in df.columns:
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["EMA9"], name="EMA9", mode="lines"))
-    if "EMA21" in df.columns:
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["EMA21"], name="EMA21", mode="lines"))
-    if "Res20" in df.columns:
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["Res20"], name="Resistance(20D High)", mode="lines"))
-    fig.update_layout(
-        title=f"{ticker} Candlestick (unadjusted) • EMA9/EMA21 • 20D Resistance",
-        xaxis_title="Date",
-        yaxis_title="Price",
-        height=520,
-        xaxis_rangeslider_visible=False,
-        margin=dict(l=10, r=10, t=40, b=10),
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Optional volume bar
-    if "Volume" in df.columns:
-        st.caption("Volume")
-        vol_fig = go.Figure()
-        vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume"))
-        if "VolSMA20" in df.columns:
-            vol_fig.add_trace(go.Scatter(x=df["Date"], y=df["VolSMA20"], name="Vol SMA20", mode="lines"))
-        vol_fig.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10))
-        st.plotly_chart(vol_fig, use_container_width=True)
-
-
-def render_chart_for_ticker(ticker: str, force_builtin: bool = False):
-    """Always render built‑in unadjusted candlestick charts."""
-    _render_builtin_candlestick(ticker)
 
 
 def generate_ai_note(row: pd.Series) -> str:
