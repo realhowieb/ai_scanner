@@ -57,24 +57,24 @@ def list_watchlists(user_id: str) -> List[Dict[str, Any]]:
 
 
 def create_watchlist(user_id: str, name: str) -> int:
+    """Create a new watchlist for the user.
+
+    We don't actually need the new ID on the caller side because the UI
+    immediately re-queries all watchlists and refreshes. So we avoid
+    depending on RETURNING id, which can be finicky on some drivers.
+    """
     conn = _get_conn()
     _ensure_schema(conn)
     cur = conn.cursor()
+    # Simple insert without RETURNING
     cur.execute(
-        "INSERT INTO watchlists (user_id, name) VALUES (%s, %s) RETURNING id",
+        "INSERT INTO watchlists (user_id, name) VALUES (%s, %s)",
         (user_id, name),
     )
-    row = cur.fetchone()
     conn.commit()
     cur.close()
-
-    # Be defensive: some environments/drivers may not return a row as expected.
-    if not row:
-        # We don't actually use the return value in the UI right now,
-        # so returning -1 is fine as a “dummy” ID.
-        return -1
-
-    return row[0]
+    # We don't use this return value in the UI, so a dummy value is fine.
+    return -1
 
 def delete_watchlist(watchlist_id: int, user_id: str) -> None:
     conn = _get_conn()
