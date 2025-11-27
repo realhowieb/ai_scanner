@@ -4,6 +4,11 @@ from typing import List, Optional, Tuple
 
 import streamlit as st
 
+try:
+    import pandas as pd  # type: ignore
+except Exception:  # pragma: no cover
+    pd = None
+
 from db.watchlists import (
     list_watchlists,
     create_watchlist,
@@ -47,6 +52,43 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
         active_tickers = get_watchlist_tickers(active_id, user_id)
     else:
         st.sidebar.caption("No watchlists yet. Create one below.")
+
+    # If there is an active watchlist with tickers, show a simple table with prices
+    if active_id is not None and active_tickers:
+        with st.sidebar.expander("View active watchlist (with prices)", expanded=False):
+            rows = []
+            try:
+                import yfinance as yf  # type: ignore
+                for t in active_tickers:
+                    sym = str(t).strip().upper()
+                    price = None
+                    try:
+                        ticker_obj = yf.Ticker(sym)
+                        fast_info = getattr(ticker_obj, "fast_info", None)
+                        if fast_info is not None:
+                            price = getattr(fast_info, "last_price", None)
+                        if price is None:
+                            # Fallback to last close
+                            hist = ticker_obj.history(period="1d")
+                            if not hist.empty and "Close" in hist.columns:
+                                price = float(hist["Close"].iloc[-1])
+                    except Exception:
+                        price = None
+                    rows.append({"Ticker": sym, "Price": price})
+            except Exception:
+                # If yfinance or network is unavailable, still show tickers without prices
+                rows = [{"Ticker": str(t).strip().upper(), "Price": None} for t in active_tickers]
+
+            if pd is not None:
+                df = pd.DataFrame(rows)
+                st.dataframe(df, hide_index=True, use_container_width=True)
+            else:
+                # Fallback: simple text listing
+                for row in rows:
+                    if row["Price"] is not None:
+                        st.write(f"{row['Ticker']}: {row['Price']}")
+                    else:
+                        st.write(f"{row['Ticker']}: —")
 
     with st.sidebar.expander("Manage watchlists", expanded=False):
         new_name = st.text_input("New watchlist name", key="wl_new_name")
