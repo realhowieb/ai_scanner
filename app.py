@@ -179,6 +179,7 @@ from ui.db_status import render_db_status_badge  # noqa: E402
 from auth.tiering_utils import derive_tier_flags  # noqa: E402
 from ui.header import render_header  # noqa: E402
 from ui.footer import render_footer  # noqa: E402
+from ui.watchlists import render_watchlists_panel
 
 
 # ---------- Main UI ----------
@@ -241,6 +242,8 @@ def main() -> None:
         unusual_vol,
         diagnostics,
     ) = render_filters(tier)
+
+    active_watchlist_id, active_watchlist_tickers = render_watchlists_panel(username)
 
     # Universe state (lazy-loaded on first scan to keep startup fast)
     init_universe_state()
