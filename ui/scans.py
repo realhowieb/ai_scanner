@@ -5,7 +5,7 @@ that runs the breakout scan and persists results to the runs DB.
 """
 
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 import time
 import traceback
 
@@ -42,6 +42,40 @@ def _banner(msg: str, level: str = "info") -> None:
         st.error(msg)
     else:
         st.info(msg)
+
+
+@st.cache_data(ttl=60)
+def _get_live_quote(ticker: str) -> Optional[float]:
+    """Best-effort live quote lookup for a single ticker.
+
+    Uses yfinance if available. Returns a float price or None on failure.
+    Cached briefly so repeated reruns don't hammer the API.
+    """
+    if not ticker:
+        return None
+    try:
+        import yfinance as yf  # type: ignore
+    except Exception:
+        return None
+
+    try:
+        t = yf.Ticker(ticker)
+        # Prefer fast_info if available
+        fast_info = getattr(t, "fast_info", None)
+        last_price = None
+        if fast_info is not None:
+            last_price = getattr(fast_info, "last_price", None)
+        if last_price is not None:
+            return float(last_price)
+
+        # Fallback: use last close from 1d history
+        hist = t.history(period="1d")
+        if not hist.empty and "Close" in hist.columns:
+            return float(hist["Close"].iloc[-1])
+    except Exception:
+        return None
+
+    return None
 
 
 def render_scan_controls(
@@ -114,6 +148,15 @@ def render_scan_controls(
             key="single_search_btn",
             use_container_width=True,
         )
+
+    # Show a best-effort live quote under the search bar when a ticker is entered
+    normalized_ticker = (search_ticker or "").strip().upper()
+    if normalized_ticker:
+        quote = _get_live_quote(normalized_ticker)
+        if quote is not None:
+            st.caption(f"{normalized_ticker} ~ ${quote:.2f}")
+        else:
+            st.caption(f"{normalized_ticker}: live quote unavailable.")
 
     # Ensure results DataFrame exists in session state
     if "results_df" not in st.session_state:
