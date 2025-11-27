@@ -223,6 +223,9 @@ def main() -> None:
     else:
         st.sidebar.markdown(f"**Plan:** `{tier.name}`")
 
+    # Visual separation in main content
+    st.markdown("---")
+
     # DB status badge
     db_status = render_db_status_badge()
 
@@ -272,9 +275,15 @@ def main() -> None:
         username=username,
     )
 
-    # Results table + charts + AI notes
+    st.markdown("---")
+
+    # Results table + charts + AI notes in an expander
     df = get_results_df()
-    render_results(df, can_export_csv, can_ai_notes, render_chart_for_ticker, generate_ai_note)
+    num_rows = 0 if df is None else len(df)
+    with st.expander(f"📊 Latest scan results ({num_rows} rows)", expanded=num_rows > 0):
+        render_results(df, can_export_csv, can_ai_notes, render_chart_for_ticker, generate_ai_note)
+
+    st.markdown("---")
 
     # Scan History (DB-backed via Neon/SQLite)
     render_history_expander(db_status)

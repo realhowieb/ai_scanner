@@ -189,6 +189,9 @@ def render_scan_controls(
     and also updates the universe-related keys used elsewhere in the app.
     """
 
+    st.subheader("⚡ Quick Market Scans")
+    st.caption("Run SP500, NASDAQ, and combo scans using your current filters.")
+
     # Buttons (hard-wired universes)
     b1, b2, b3 = st.columns([1, 1, 2])
 
@@ -209,6 +212,8 @@ def render_scan_controls(
         st.caption("Pro/Premium only.")
 
     # Watchlist actions (uses active_watchlist_tickers from session_state)
+    st.markdown("### 📋 Watchlist Tools")
+
     watchlist_tickers = st.session_state.get("active_watchlist_tickers", []) or []
     has_watchlist = isinstance(watchlist_tickers, list) and len(watchlist_tickers) > 0
 
