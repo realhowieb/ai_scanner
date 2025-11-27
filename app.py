@@ -6,6 +6,7 @@ import os
 import re
 import time
 import traceback
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -24,10 +25,12 @@ try:
 except Exception:  # requests may not be installed in some runtimes
     requests = None
 
-try:
-    from charts import render_chart_for_ticker
-except ModuleNotFoundError:
-    from ai_scanner.charts import render_chart_for_ticker
+# Ensure local project directory is on sys.path so sibling modules (charts, ui, db, etc.) can be imported
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from charts import render_chart_for_ticker
 # ============================================
 # Breakout Stock Scanner — Subscription Ready
 # Single-file entrypoint (replaces bootstrapper)
