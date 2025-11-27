@@ -188,7 +188,11 @@ from config import TIERS_CONFIG, STRIPE_MONTHLY_LINKS, STRIPE_YEARLY_LINKS
 # Try to import tiering module from different locations
 _tiering_mod = _try_import("tiering")
 if _tiering_mod is None:
+    _tiering_mod = _try_import("auth.tiering")
+if _tiering_mod is None:
     _tiering_mod = _try_import("ai_scanner.tiering")
+if _tiering_mod is None:
+    _tiering_mod = _try_import("ai_scanner.auth.tiering")
 
 if _tiering_mod is not None:
     USERS_DB = getattr(_tiering_mod, "USERS_DB", {})
