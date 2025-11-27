@@ -4,6 +4,12 @@ from typing import List, Optional, Tuple
 
 import streamlit as st
 
+# Optional auto-refresh component for realtime watchlist updates
+try:
+    from streamlit_autorefresh import st_autorefresh  # type: ignore
+except Exception:  # pragma: no cover
+    st_autorefresh = None
+
 try:
     import pandas as pd  # type: ignore
 except Exception:  # pragma: no cover
@@ -24,6 +30,13 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
     Returns:
         (active_watchlist_id, active_watchlist_tickers)
     """
+    # Auto-refresh the app every 10 seconds if the component is available,
+    # so watchlist prices & changes update in near realtime.
+    if st_autorefresh is not None:
+        st_autorefresh(interval=10_000, key="watchlist_autorefresh")
+    else:
+        st.sidebar.caption("Tip: install `streamlit-autorefresh` to enable live updating every 10s.")
+
     st.sidebar.markdown("### 📋 My Watchlists")
 
     try:
