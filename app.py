@@ -169,19 +169,20 @@ from ui.auth import auth_ui
 from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
-from ui.results import render_results
+from ui.results import render_results, get_results_df
 from ui.scans import render_scan_controls
 from ui.universe_panel import render_universe_panel, init_universe_state
 from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
 from auth.tiering_utils import derive_tier_flags
+from ui.header import render_header
+from ui.footer import render_footer
 
 
 # ---------- Main UI ----------
 
 def main():
-    st.title("📈 Breakout Stock Scanner")
-    st.caption("Money Moves • AI Breakout Score • Subscription Ready")
+    render_header()
 
     authed, username, display_name = auth_ui()
     if not authed:
@@ -257,7 +258,7 @@ def main():
         username=username,
     )
 
-    df = st.session_state.results_df
+    df = get_results_df()
     render_results(df,can_export_csv, can_ai_notes, render_chart_for_ticker,generate_ai_note)
 
     # --- Scan History (DB-backed via local SQLite_ ---
@@ -266,8 +267,7 @@ def main():
     # --- Admin Users Page ---
     render_admin_users_panel(username, ADMIN_USERS, db_status)
 
-    st.divider()
-    st.caption("⚠️ Not financial advice. Educational tool only.")
+    render_footer()
 
 
 if __name__ == "__main__":

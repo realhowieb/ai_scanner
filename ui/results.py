@@ -2,8 +2,17 @@
 
 from typing import Callable, Optional
 
+
 import pandas as pd
 import streamlit as st
+
+
+def get_results_df() -> Optional[pd.DataFrame]:
+    """Return the current results DataFrame from session_state.
+
+    If none exists yet, return None.
+    """
+    return st.session_state.get("results_df")
 
 
 def render_results(
