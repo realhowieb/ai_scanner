@@ -47,6 +47,7 @@ TIERS_CONFIG = {
         "price_monthly": 19,
         "price_yearly": 190,
         "features": ["SP500 Scan"],
+        "max_results": 25,
     },
     "pro": {
         "name": "Pro",
@@ -60,6 +61,7 @@ TIERS_CONFIG = {
             "AfterHours",
             "UnusualVolume",
         ],
+        "max_results": 100,
     },
     "premium": {
         "name": "Premium",
@@ -75,5 +77,6 @@ TIERS_CONFIG = {
             "UnusualVolume",
             "Snapshots",
         ],
+        "max_results": 200,
     },
 }
