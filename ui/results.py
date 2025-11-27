@@ -6,6 +6,12 @@ from typing import Callable, Optional
 import pandas as pd
 import streamlit as st
 
+# Optional auto-refresh for results-only live mode
+try:
+    from streamlit_autorefresh import st_autorefresh  # type: ignore
+except Exception:
+    st_autorefresh = None
+
 
 def get_results_df() -> Optional[pd.DataFrame]:
     """Return the current results DataFrame from session_state.
@@ -34,6 +40,19 @@ def render_results(
     if df is None or df.empty:
         st.caption("Run a scan to see results.")
         return
+
+    # Optional Live Mode: user-controlled auto-refresh every 10s for the results table
+    if st_autorefresh is not None:
+        live_results = st.checkbox(
+            "🔁 Live results (10s refresh)",
+            value=False,
+            key="results_live_mode",
+            help="When enabled, the results table refreshes about every 10 seconds.",
+        )
+        if live_results:
+            st_autorefresh(interval=10_000, key="results_autorefresh")
+    else:
+        st.caption("Tip: install `streamlit-autorefresh` to enable live results refresh.")
 
     st.subheader("Results")
     st.caption(
