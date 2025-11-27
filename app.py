@@ -251,6 +251,9 @@ def main() -> None:
 
     # Watchlists (loaded after universe & filters so session state is stable)
     active_watchlist_id, active_watchlist_tickers = render_watchlists_panel(username)
+    # Store in session_state so scan controls and other modules can use the active watchlist
+    st.session_state["active_watchlist_id"] = active_watchlist_id
+    st.session_state["active_watchlist_tickers"] = active_watchlist_tickers
 
     # Scan controls + execution
     render_scan_controls(
