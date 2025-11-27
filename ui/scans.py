@@ -97,6 +97,24 @@ def render_scan_controls(
         )
         st.caption("Scans only tickers from your active watchlist.")
 
+    # --- Single-ticker search & scan ---
+    st.markdown("### 🔍 Search & Scan Single Ticker")
+
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        search_ticker = st.text_input(
+            "Ticker symbol",
+            key="single_search_ticker",
+            placeholder="AAPL",
+            help="Type a ticker symbol (e.g., AAPL, TSLA, NVDA) and run a focused breakout scan.",
+        )
+    with c2:
+        run_single_search_btn = st.button(
+            "Search & Scan",
+            key="single_search_btn",
+            use_container_width=True,
+        )
+
     # Ensure results DataFrame exists in session state
     if "results_df" not in st.session_state:
         st.session_state.results_df = pd.DataFrame()
@@ -107,7 +125,7 @@ def render_scan_controls(
             t0 = time.time()
             try:
                 st.caption(f"🔎 Scanning {len(tickers)} tickers for {label}...")
-                if len(tickers) < 50:
+                if (len(tickers) < 50) and not str(label).startswith("Watchlist") and not str(label).startswith("Search:"):
                     st.warning(
                         f"{label} universe is very small ({len(tickers)} tickers). "
                         "This usually means a fallback/stub universe is still being used."
@@ -241,3 +259,11 @@ def render_scan_controls(
         else:
             label = f"Watchlist ({len(tickers)} tickers)"
             do_scan(tickers, label)
+
+    if run_single_search_btn:
+        ticker = (search_ticker or "").strip().upper()
+        if not ticker:
+            _banner("Please enter a ticker symbol to search.", "warning")
+        else:
+            # Run the same breakout engine but on a single stock
+            do_scan([ticker], f"Search: {ticker}")
