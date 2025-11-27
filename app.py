@@ -19,12 +19,6 @@ import pandas as pd
 import streamlit as st
 
 
-# Optional for Yahoo Finance universe fallback
-try:
-    import requests
-except Exception:  # requests may not be installed in some runtimes
-    requests = None
-
 # Ensure local project directory is on sys.path so sibling modules (charts, ui, db, etc.) can be imported
 BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
@@ -147,29 +141,6 @@ except ModuleNotFoundError:
 # Single-file entrypoint (replaces bootstrapper)
 # ============================================
 
-# ---------- Safe import helpers ----------
-
-def _try_import(path: str, attr: str | None = None):
-    """Import a module by dotted path; optionally return a named attribute."""
-    try:
-        mod = importlib.import_module(path)
-        return getattr(mod, attr) if attr else mod
-    except Exception:
-        return None
-
-
-def banner(msg: str, level: str = "info"):
-    if level == "success":
-        st.success(msg)
-    elif level == "warning":
-        st.warning(msg)
-    elif level == "error":
-        st.error(msg)
-    else:
-        st.info(msg)
-
-
-
 
 # ---------- Page config ----------
 
@@ -194,7 +165,6 @@ except Exception:
 from db.users import seed_neon_users_from_local, load_users, fetch_all_users
 from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
 
-from db.engine import get_db_status, get_neon_conn
 from ui.auth import auth_ui
 from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
@@ -205,29 +175,6 @@ from ui.universe_panel import render_universe_panel
 from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
 from auth.tiering_utils import derive_tier_flags
-
-try:
-    from ui.universe import (
-        load_sp500_universe,
-        load_nasdaq_universe,
-        filter_universe,
-        apply_liquidity_filter_batch,
-    )
-except ModuleNotFoundError:
-    # Fallback for environments where `ai_scanner` is the package root
-    from ai_scanner.ui.universe import (
-        load_sp500_universe,
-        load_nasdaq_universe,
-        filter_universe,
-        apply_liquidity_filter_batch,
-    )
-from scan.engine import safe_call, cached_real_scan, _override_last_prices, safe_yf_download
-
-# Optional live price override for the 'Last' column
-try:
-    import yfinance as yf
-except Exception:
-    yf = None
 
 
 # ---------- Main UI ----------
