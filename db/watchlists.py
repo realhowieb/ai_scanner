@@ -109,7 +109,19 @@ def get_watchlist_tickers(watchlist_id: int, user_id: str) -> List[str]:
     )
     rows = cur.fetchall()
     cur.close()
-    return [r[0] for r in rows]
+
+    tickers: List[str] = []
+    for r in rows:
+        if isinstance(r, dict):
+            # psycopg dict_row case
+            val = r.get("ticker")
+        else:
+            # tuple-style row (e.g. sqlite or default cursor)
+            val = r[0] if len(r) > 0 else None
+        if val:
+            tickers.append(str(val).upper())
+
+    return tickers
 
 
 def set_watchlist_tickers(watchlist_id: int, user_id: str, tickers: List[str]) -> None:
