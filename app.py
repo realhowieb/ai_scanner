@@ -262,6 +262,7 @@ from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
 
 from db.engine import get_db_status, get_neon_conn
 from ui.auth import auth_ui
+from ui.pricing import pricing_sidebar
 
 try:
     from ui.universe import (
