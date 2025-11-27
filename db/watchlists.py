@@ -37,10 +37,27 @@ def list_watchlists(user_id: str) -> List[Dict[str, Any]]:
     )
     rows = cur.fetchall()
     cur.close()
-    return [
-        {"id": r[0], "name": r[1], "created_at": r[2]}
-        for r in rows
-    ]
+    # Normalize rows so we support both dict_row (psycopg) and tuple-style rows.
+    normalized: List[Dict[str, Any]] = []
+    for r in rows:
+        if isinstance(r, dict):
+            normalized.append(
+                {
+                    "id": r.get("id"),
+                    "name": r.get("name"),
+                    "created_at": r.get("created_at"),
+                }
+            )
+        else:
+            # Fallback for positional rows
+            normalized.append(
+                {
+                    "id": r[0],
+                    "name": r[1],
+                    "created_at": r[2] if len(r) > 2 else None,
+                }
+            )
+    return normalized
 
 
 def create_watchlist(user_id: str, name: str) -> int:
