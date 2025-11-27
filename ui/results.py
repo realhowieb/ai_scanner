@@ -94,6 +94,55 @@ def render_results(
     if "Trend10D%" in df.columns:
         styled = styled.apply(_trend_style, subset=["Trend10D%"])
 
+    # Watchlist-style numeric formatting (Symbol/Last/Change/% Change/etc.)
+    watchlist_cols = {"Last", "Change", "% Change", "Prev Close", "Open", "High", "Low"}
+    if watchlist_cols.intersection(df.columns):
+        # Define per-column formatters
+        def _fmt_price(x):
+            try:
+                return f"{float(x):.2f}"
+            except Exception:
+                return x
+
+        def _fmt_change(x):
+            try:
+                return f"{float(x):+,.2f}"
+            except Exception:
+                return x
+
+        def _fmt_pct(x):
+            try:
+                return f"{float(x):+,.2f}%"
+            except Exception:
+                return x
+
+        fmt: dict[str, object] = {}
+        for col in df.columns:
+            if col in ["Last", "Prev Close", "Open", "High", "Low"]:
+                fmt[col] = _fmt_price
+            elif col == "Change":
+                fmt[col] = _fmt_change
+            elif col == "% Change":
+                fmt[col] = _fmt_pct
+
+        styled = styled.format(fmt)
+
+        # Color Change / % Change: green for up, red for down
+        def _change_style(v):
+            try:
+                val = float(v)
+            except Exception:
+                return ""
+            if val > 0:
+                return "color: #00C853; font-weight: 600;"  # green
+            if val < 0:
+                return "color: #FF5252; font-weight: 600;"  # red
+            return ""
+
+        for col in ["Change", "% Change"]:
+            if col in df.columns:
+                styled = styled.applymap(_change_style, subset=[col])
+
     st.dataframe(styled, use_container_width=True, height=420)
 
     # Export (tier-gated)
