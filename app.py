@@ -266,6 +266,7 @@ from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
 from ui.results import render_results
+from ui.results import render_scan_controls
 
 try:
     from ui.universe import (
@@ -428,146 +429,21 @@ def main():
         else:
             st.caption("Universes will appear here after you run your first scan (SP500, NASDAQ, or Combo).")
 
-    # Buttons (hard-wired universes)
-    b1, b2, b3 = st.columns([1, 1, 2])
-
-    with b1:
-        run_sp500_btn = st.button("Run SP500 Scan", use_container_width=True, disabled=not can_scan_sp500)
-        st.caption("Runs SP500 regardless of sidebar universe.")
-
-    with b2:
-        run_nasdaq_btn = st.button("Run NASDAQ Scan", use_container_width=True, disabled=not can_scan_nasdaq)
-        st.caption("Runs NASDAQ regardless of sidebar universe.")
-
-    with b3:
-        run_combo_btn = st.button(
-            "Run Combo Scan (SP500+NASDAQ)",
-            use_container_width=True,
-            disabled=not (can_scan_sp500 and can_scan_nasdaq),
-        )
-        st.caption("Pro/Premium only.")
-
-    # Session state for results
-    if "results_df" not in st.session_state:
-        st.session_state.results_df = pd.DataFrame()
-
-    def do_scan(tickers: List[str], label: str):
-        def _run_scan_body():
-            n_input = len(tickers)
-            t0 = time.time()
-            try:
-                st.caption(f"🔎 Scanning {len(tickers)} tickers for {label}...")
-                if len(tickers) < 50:
-                    st.warning(
-                        f"{label} universe is very small ({len(tickers)} tickers). "
-                        "This usually means a fallback/stub universe is still being used."
-                    )
-
-                df = safe_call(
-                    cached_real_scan,
-                    tuple(tickers),
-                    premarket=premarket,
-                    afterhours=afterhours,
-                    unusual_volume=unusual_vol,
-                    min_gap=min_gap,
-                    min_price=min_price,
-                    max_price=max_price,
-                    top_n=top_n,
-                    diagnostics=diagnostics,
-                    label="cached_real_scan",
-                )
-
-                # Apply Top N cap here to avoid doing last-price overrides on hundreds of rows.
-                if df is not None and not df.empty:
-                    df = df.head(top_n).reset_index(drop=True)
-
-                    if premarket or afterhours:
-                        df = _override_last_prices(df)
-
-                filtered_count = len(df) if df is not None else 0
-                if diagnostics:
-                    st.caption(f"📊 Filtered down from {n_input} tickers to {filtered_count} results after filters.")
-
-                st.caption(f"✅ {label}: {len(df)} results returned from scan.")
-                dt = time.time() - t0
-                st.session_state.results_df = df
-                banner(f"✅ {label} scan complete in {dt:.1f}s. Returned {len(df)} rows.", "success")
-                # Persist this scan to the runs DB (history + optional daily snapshot)
-                try:
-                    results_json = df.to_json(orient="records") if df is not None else "[]"
-                    row_count = len(df) if df is not None else 0
-                    run_name = f"{label} | {row_count} results | {dt:.1f}s"
-                    save_run(
-                        run_name,
-                        results_json,
-                        label=label,
-                        username=username,
-                        row_count=row_count,
-                        duration_sec=dt,
-                        is_snapshot=False,
-                    )
-
-                    # Morning snapshot: one per day per label (approx. before noon server time)
-                    try:
-                        current_hour = datetime.now().hour
-                        if current_hour < 12:
-                            save_daily_snapshot(label, results_json, username=username)
-                    except Exception:
-                        # Snapshot is best-effort only
-                        pass
-                except Exception:
-                    # Never fail the UI just because DB logging failed
-                    pass
-
-                # Clear cached run list so new scan appears immediately in history
-                try:
-                    list_runs.clear()  # type: ignore
-                except Exception:
-                    pass
-            except Exception as e:
-                banner(f"❌ Scan failed: {e}", "error")
-                if diagnostics:
-                    st.code(traceback.format_exc())
-
-        # Some environments (e.g., restricted sandboxes, Python 3.13 runtimes) may not
-        # allow starting new threads, which Streamlit's spinner uses internally.
-        # Wrap the spinner in a try/except and fall back to running without it.
-        try:
-            with st.spinner(f"Scanning {label}..."):
-                _run_scan_body()
-        except Exception:
-            _run_scan_body()
-
-    if run_sp500_btn:
-        sp500 = safe_call(load_sp500_universe, label="SP500 universe")
-        sp500 = filter_universe(sp500)
-        st.session_state["sp500_universe"] = sp500
-        do_scan(sp500, "SP500")
-
-    if run_nasdaq_btn:
-        nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
-        nasdaq = filter_universe(nasdaq)
-        nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
-        st.session_state["nasdaq_universe"] = nasdaq
-        st.session_state["nasdaq_capped"] = nasdaq_capped
-        do_scan(nasdaq_capped, "NASDAQ")
-
-    if run_combo_btn:
-        sp500 = safe_call(load_sp500_universe, label="SP500 universe")
-        nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
-        sp500 = filter_universe(sp500)
-        nasdaq = filter_universe(nasdaq)
-        nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
-        combo_universe = sp500 + nasdaq_capped
-        combo_liquid = apply_liquidity_filter_batch(combo_universe)
-        combo_capped = combo_liquid[: int(max_combo_scan)]
-
-        st.session_state["sp500_universe"] = sp500
-        st.session_state["nasdaq_universe"] = nasdaq
-        st.session_state["nasdaq_capped"] = nasdaq_capped
-        st.session_state["combo_capped"] = combo_capped
-
-        do_scan(combo_capped, "Combo")
+    render_scan_controls(
+        can_scan_sp500=can_scan_sp500,
+        can_scan_nasdaq=can_scan_nasdaq,
+        max_nasdaq_scan=int(max_nasdaq_scan),
+        max_combo_scan=int(max_combo_scan),
+        min_gap=float(min_gap),
+        min_price=float(min_price),
+        max_price=float(max_price),
+        top_n=int(top_n),
+        premarket=bool(premarket),
+        afterhours=bool(afterhours),
+        unusual_vol=bool(unusual_vol),
+        diagnostics=bool(diagnostics),
+        username=username,
+    )
 
     df = st.session_state.results_df
     render_results(df,can_export_csv, can_ai_notes, render_chart_for_ticker,generate_ai_note)
