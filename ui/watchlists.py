@@ -30,10 +30,16 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
     Returns:
         (active_watchlist_id, active_watchlist_tickers)
     """
-    # Auto-refresh the app every 10 seconds if the component is available,
-    # so watchlist prices & changes update in near realtime.
+    # Optional Live Mode: user-controlled auto-refresh every 10s
     if st_autorefresh is not None:
-        st_autorefresh(interval=50_000, key="watchlist_autorefresh")
+        live_mode = st.sidebar.checkbox(
+            "🔁 Live watchlist (10s refresh)",
+            value=False,
+            key="watchlist_live_mode",
+            help="When enabled, the watchlist prices & changes refresh about every 10 seconds.",
+        )
+        if live_mode:
+            st_autorefresh(interval=10_000, key="watchlist_autorefresh")
     else:
         st.sidebar.caption("Tip: install `streamlit-autorefresh` to enable live updating every 10s.")
 
