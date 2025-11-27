@@ -3,6 +3,21 @@
 import streamlit as st
 
 
+def init_universe_state() -> None:
+    """Ensure universe-related keys exist in session_state.
+
+    This keeps first-run startup clean and centralizes state init.
+    """
+    if "sp500_universe" not in st.session_state:
+        st.session_state["sp500_universe"] = []
+    if "nasdaq_universe" not in st.session_state:
+        st.session_state["nasdaq_universe"] = []
+    if "nasdaq_capped" not in st.session_state:
+        st.session_state["nasdaq_capped"] = []
+    if "combo_capped" not in st.session_state:
+        st.session_state["combo_capped"] = []
+
+
 def render_universe_panel() -> None:
     """Render the Universe Info expander based on session state.
 

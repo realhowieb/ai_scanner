@@ -171,7 +171,7 @@ from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
 from ui.results import render_results
 from ui.scans import render_scan_controls
-from ui.universe_panel import render_universe_panel
+from ui.universe_panel import render_universe_panel, init_universe_state
 from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
 from auth.tiering_utils import derive_tier_flags
@@ -236,14 +236,7 @@ def main():
     ) = render_filters(tier)
 
     # Universe state (lazy-loaded on first scan to keep startup fast)
-    if "sp500_universe" not in st.session_state:
-        st.session_state["sp500_universe"] = []
-    if "nasdaq_universe" not in st.session_state:
-        st.session_state["nasdaq_universe"] = []
-    if "nasdaq_capped" not in st.session_state:
-        st.session_state["nasdaq_capped"] = []
-    if "combo_capped" not in st.session_state:
-        st.session_state["combo_capped"] = []
+    init_universe_state()
 
     # Universe diagnostics (lazy; based on last scan)
     render_universe_panel()
