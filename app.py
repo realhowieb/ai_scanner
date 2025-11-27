@@ -184,7 +184,10 @@ st.set_page_config(
 # ---------- Tiers / Plans ----------
 
 from config import TIERS_CONFIG, STRIPE_MONTHLY_LINKS, STRIPE_YEARLY_LINKS
-from tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier
+try:
+    from tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier
+except ModuleNotFoundError:
+    from ai_scanner.tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier  # type: ignore
 
 # ---------- Auth ----------
 try:
