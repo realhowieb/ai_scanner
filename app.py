@@ -268,6 +268,7 @@ from ui.history import render_history_expander
 from ui.results import render_results
 from ui.scans import render_scan_controls
 from ui.universe_panel import render_universe_panel
+from ui.filters import render_filters
 
 try:
     from ui.universe import (
@@ -365,37 +366,18 @@ def main():
 
     pricing_sidebar(username, users_map)
 
-    # Sidebar filters
-    st.sidebar.markdown("## Filters")
-    min_gap = st.sidebar.slider("Min Gap %", -10.0, 20.0, 1.0, 0.5)
-    min_price = st.sidebar.number_input("Min Price", 0.5, 500.0, 1.0, 0.5)
-    max_price = st.sidebar.number_input("Max Price", 1.0, 5000.0, 1000.0, 1.0)
-    top_n = st.sidebar.slider("Top N Results", 5, tier.max_results, min(25, tier.max_results), 5)
-
-    max_nasdaq_scan = st.sidebar.number_input(
-        "Max NASDAQ tickers to scan",
-        min_value=100,
-        max_value=6000,
-        value=1200,
-        step=100,
-        help="Caps NASDAQ universe to speed up scans. Applied to NASDAQ + Combo scans.",
-    )
-
-    max_combo_scan = st.sidebar.number_input(
-        "Max Combo tickers to scan",
-        min_value=100,
-        max_value=6000,
-        value=1000,
-        step=100,
-        help="Caps SP500+NASDAQ universe for Combo scans.",
-    )
-
-    premarket = st.sidebar.checkbox("Include Premarket Scan", value=False, disabled=not can_premarket)
-    afterhours = st.sidebar.checkbox("Include After-hours Scan", value=False, disabled=not can_afterhours)
-    unusual_vol = st.sidebar.checkbox("Unusual Volume Filter", value=False, disabled=not can_unusual_volume)
-
-    st.sidebar.divider()
-    diagnostics = st.sidebar.checkbox("Show diagnostics", value=True)
+    (
+        min_gap,
+        min_price,
+        max_price,
+        top_n,
+        max_nasdaq_scan,
+        max_combo_scan,
+        premarket,
+        afterhours,
+        unusual_vol,
+        diagnostics,
+    ) = render_filters(tier)
 
     # Universe state (lazy-loaded on first scan to keep startup fast)
     if "sp500_universe" not in st.session_state:
