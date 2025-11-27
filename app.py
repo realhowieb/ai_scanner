@@ -182,6 +182,32 @@ from ui.footer import render_footer  # noqa: E402
 from ui.watchlists import render_watchlists_panel
 
 
+# ---------- Cached index fetch helper ----------
+
+@st.cache_data(ttl=60)
+def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
+    """Fetch last and previous close for an index proxy (e.g., SPY, QQQ).
+
+    Returns (last, prev) or (None, None) on failure. Cached briefly to
+    avoid re-querying yfinance on every rerun.
+    """
+    try:
+        import yfinance as yf  # type: ignore
+    except Exception:
+        return None, None
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="2d")
+        if hist is None or hist.empty or "Close" not in hist.columns:
+            return None, None
+        closes = hist["Close"].tolist()
+        last = float(closes[-1])
+        prev = float(closes[-2]) if len(closes) > 1 else last
+        return last, prev
+    except Exception:
+        return None, None
+
+
 # ---------- Main UI ----------
 
 
@@ -194,28 +220,15 @@ def render_market_snapshot_placeholder() -> None:
     """
     st.subheader("Today’s Market Snapshot")
 
-    # Try to import yfinance locally to avoid hard dependency if not installed.
-    try:
-        import yfinance as yf  # type: ignore
-    except Exception:
-        yf = None
-
     c1, c2, c3, c4 = st.columns(4)
 
     def _render_index_metric(col, label: str, symbol: str) -> None:
         with col:
-            if yf is None:
+            last, prev = _fetch_index_snapshot(symbol)
+            if last is None or prev is None:
                 st.metric(label, "—", "—")
                 return
             try:
-                ticker = yf.Ticker(symbol)
-                hist = ticker.history(period="2d")
-                if hist is None or hist.empty or "Close" not in hist.columns:
-                    st.metric(label, "—", "—")
-                    return
-                closes = hist["Close"].tolist()
-                last = float(closes[-1])
-                prev = float(closes[-2]) if len(closes) > 1 else last
                 change_pct = ((last - prev) / prev) * 100.0 if prev not in (0, None) else 0.0
                 st.metric(label, f"{last:.2f}", f"{change_pct:+.2f}%")
             except Exception:
@@ -354,8 +367,12 @@ def main() -> None:
     st.session_state["active_watchlist_id"] = active_watchlist_id
     st.session_state["active_watchlist_tickers"] = active_watchlist_tickers
 
-    # Today’s market snapshot row
-    render_market_snapshot_placeholder()
+    # Today’s market snapshot row (guarded so a failure here never breaks the page)
+    try:
+        with st.spinner("Loading market snapshot..."):
+            render_market_snapshot_placeholder()
+    except Exception as e:
+        st.warning(f"Market snapshot unavailable: {e}")
 
     # Scan controls + execution
     render_scan_controls(
