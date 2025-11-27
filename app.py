@@ -243,13 +243,14 @@ def main() -> None:
         diagnostics,
     ) = render_filters(tier)
 
-    active_watchlist_id, active_watchlist_tickers = render_watchlists_panel(username)
-
     # Universe state (lazy-loaded on first scan to keep startup fast)
     init_universe_state()
 
     # Universe diagnostics (lazy; based on last scan)
     render_universe_panel()
+
+    # Watchlists (loaded after universe & filters so session state is stable)
+    active_watchlist_id, active_watchlist_tickers = render_watchlists_panel(username)
 
     # Scan controls + execution
     render_scan_controls(
