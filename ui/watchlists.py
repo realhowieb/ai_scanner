@@ -52,14 +52,14 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
         if st.button("Create watchlist", key="wl_create_btn"):
             if new_name.strip():
                 create_watchlist(user_id, new_name.strip())
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.warning("Please enter a name for your watchlist.")
 
         if active_id is not None:
             if st.button("Delete active watchlist", key="wl_delete_btn"):
                 delete_watchlist(active_id, user_id)
-                st.experimental_rerun()
+                st.rerun()
 
             tickers_str = ",".join(active_tickers)
             edited = st.text_area(
@@ -76,7 +76,7 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
                 ]
                 set_watchlist_tickers(active_id, user_id, tickers)
                 st.success("Watchlist updated.")
-                st.experimental_rerun()
+                st.rerun()
         else:
             st.caption("Create a watchlist to add tickers.")
 
