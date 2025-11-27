@@ -186,21 +186,102 @@ from ui.watchlists import render_watchlists_panel
 
 
 def render_market_snapshot_placeholder() -> None:
-    """Simple placeholder for a 'Today’s Market Snapshot' row.
+    """Render a 'Today’s Market Snapshot' row.
 
-    In a future iteration, you can wire this up to real index/ETF data.
-    For now it provides structure and a familiar trading-dashboard feel.
+    Uses SPY and QQQ as proxies for the S&P 500 and NASDAQ 100 via yfinance,
+    and, if available, the latest scan results for top gainer and most active.
+    Falls back gracefully to placeholders if data is unavailable.
     """
     st.subheader("Today’s Market Snapshot")
+
+    # Try to import yfinance locally to avoid hard dependency if not installed.
+    try:
+        import yfinance as yf  # type: ignore
+    except Exception:
+        yf = None
+
     c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("S&P 500", "—", "—")
-    with c2:
-        st.metric("NASDAQ", "—", "—")
+
+    def _render_index_metric(col, label: str, symbol: str) -> None:
+        with col:
+            if yf is None:
+                st.metric(label, "—", "—")
+                return
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period="2d")
+                if hist is None or hist.empty or "Close" not in hist.columns:
+                    st.metric(label, "—", "—")
+                    return
+                closes = hist["Close"].tolist()
+                last = float(closes[-1])
+                prev = float(closes[-2]) if len(closes) > 1 else last
+                change_pct = ((last - prev) / prev) * 100.0 if prev not in (0, None) else 0.0
+                st.metric(label, f"{last:.2f}", f"{change_pct:+.2f}%")
+            except Exception:
+                st.metric(label, "—", "—")
+
+    # Index proxies for S&P and NASDAQ
+    _render_index_metric(c1, "S&P 500 (SPY)", "SPY")
+    _render_index_metric(c2, "NASDAQ 100 (QQQ)", "QQQ")
+
+    # Top Gainer and Most Active from latest results if available
+    from ui.results import get_results_df
+
+    df = None
+    try:
+        df = get_results_df()
+    except Exception:
+        df = None
+
     with c3:
-        st.metric("Top Gainer", "—", "—")
+        label = "Top Gainer"
+        if df is None or df.empty or "% Change" not in df.columns:
+            st.metric(label, "—", "—")
+        else:
+            try:
+                top_row = df.sort_values("% Change", ascending=False).iloc[0]
+                sym = str(top_row.get("Ticker", "—"))
+                pct = top_row.get("% Change", None)
+                if pct is None:
+                    st.metric(label, sym, "—")
+                else:
+                    st.metric(label, sym, f"{float(pct):+,.2f}%")
+            except Exception:
+                st.metric(label, "—", "—")
+
     with c4:
-        st.metric("Most Active", "—", "—")
+        label = "Most Active"
+        if df is None or df.empty:
+            st.metric(label, "—", "—")
+        else:
+            # Prefer DollarVol20 if present, else Volume column if present
+            vol_col = None
+            if "DollarVol20" in df.columns:
+                vol_col = "DollarVol20"
+            elif "Volume" in df.columns:
+                vol_col = "Volume"
+
+            if vol_col is None:
+                st.metric(label, "—", "—")
+            else:
+                try:
+                    most_row = df.sort_values(vol_col, ascending=False).iloc[0]
+                    sym = str(most_row.get("Ticker", "—"))
+                    val = most_row.get(vol_col, None)
+                    if val is None:
+                        st.metric(label, sym, "—")
+                    else:
+                        # Format as e.g. $25.3M or 12.4M shares
+                        if vol_col == "DollarVol20":
+                            millions = float(val) / 1_000_000.0
+                            delta_str = f"${millions:,.1f}M"
+                        else:
+                            millions = float(val) / 1_000_000.0
+                            delta_str = f"{millions:,.1f}M sh"
+                        st.metric(label, sym, delta_str)
+                except Exception:
+                    st.metric(label, "—", "—")
 
 
 def main() -> None:
