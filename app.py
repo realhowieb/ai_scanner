@@ -359,6 +359,9 @@ def main():
         afterhours,
         unusual_vol,
         diagnostics,
+        min_dollar_vol,
+        include_ta,
+        apply_gap_filter,
     ) = render_filters(tier)
 
     # -------- User Settings Footer (Save Defaults) --------
