@@ -192,6 +192,7 @@ def render_price_ticker():
         white-space: nowrap;
         animation: ticker-move 35s linear infinite;
         font-size: 14px;
+        will-change: transform;
     }}
     .ticker__item {{
         display: inline-block;
@@ -201,12 +202,12 @@ def render_price_ticker():
     }}
     @keyframes ticker-move {{
         0% {{ transform: translate3d(0, 0, 0); }}
-        100% {{ transform: translate3d(-100%, 0, 0); }}
+        100% {{ transform: translate3d(-50%, 0, 0); }}
     }}
     </style>
     <div class="ticker-wrap">
       <div class="ticker">
-        {items_html}
+        {items_html} {items_html}  <!-- duplicate for seamless loop -->
       </div>
     </div>
     """
