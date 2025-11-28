@@ -225,7 +225,13 @@ def render_price_ticker():
     )
 
 # --------------- User Settings Footer (Save Defaults) ----------------
-def render_user_settings_footer(username: str | None) -> None:
+def render_user_settings_footer(
+    username: str | None,
+    *,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    diagnostics: bool | None = None,
+) -> None:
     """
     Render a small footer in the sidebar that shows user/settings status
     and exposes a 'Save as my default settings' button when storage is wired.
@@ -245,20 +251,28 @@ def render_user_settings_footer(username: str | None) -> None:
         f"storage: {'available' if callable(upsert_user_settings) else 'unavailable'}"
     )
 
+    # Pull current filter values, preferring explicit args over session_state
+    universe_val = st.session_state.get("universe")
+    min_price_val = min_price if min_price is not None else st.session_state.get("min_price")
+    max_price_val = max_price if max_price is not None else st.session_state.get("max_price")
+    min_dollar_vol_val = st.session_state.get("min_dollar_vol")
+    include_ta_val = st.session_state.get("include_ta")
+    apply_gap_filter_val = st.session_state.get("apply_gap_filter")
+    show_diag_val = diagnostics if diagnostics is not None else st.session_state.get("show_diagnostics_ui")
+
     if session_username and callable(upsert_user_settings):
         st.sidebar.caption(f"Signed in as: {session_username}")
         if st.sidebar.button("💾 Save as my default settings"):
             try:
-                # We read whatever is in session_state; missing keys will be None.
                 upsert_user_settings(
                     user_id=session_username,
-                    universe=st.session_state.get("universe"),
-                    min_price=st.session_state.get("min_price"),
-                    max_price=st.session_state.get("max_price"),
-                    min_dollar_vol=st.session_state.get("min_dollar_vol"),
-                    include_ta=st.session_state.get("include_ta"),
-                    apply_gap_filter=st.session_state.get("apply_gap_filter"),
-                    show_diagnostics_ui=st.session_state.get("show_diagnostics_ui"),
+                    universe=universe_val,
+                    min_price=min_price_val,
+                    max_price=max_price_val,
+                    min_dollar_vol=min_dollar_vol_val,
+                    include_ta=include_ta_val,
+                    apply_gap_filter=apply_gap_filter_val,
+                    show_diagnostics_ui=show_diag_val,
                 )
                 st.sidebar.success("Default scan settings saved for your account.")
             except Exception as e:
@@ -333,9 +347,6 @@ def main():
     # -------- DB Status --------
     db_status = render_db_status_badge()
 
-    # -------- User Settings Footer (Save Defaults) --------
-    render_user_settings_footer(username)
-
     # -------- Filters --------
     (
         min_gap,
@@ -349,6 +360,14 @@ def main():
         unusual_vol,
         diagnostics,
     ) = render_filters(tier)
+
+    # -------- User Settings Footer (Save Defaults) --------
+    render_user_settings_footer(
+        username,
+        min_price=float(min_price) if min_price is not None else None,
+        max_price=float(max_price) if max_price is not None else None,
+        diagnostics=bool(diagnostics) if diagnostics is not None else None,
+    )
 
 
     # -------- Watchlists --------
