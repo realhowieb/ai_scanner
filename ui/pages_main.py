@@ -747,7 +747,14 @@ def _render_sidebar_settings():
         )
 
         # --- Save as default for this user ---
+        # Diagnostics: show who we think is logged in and whether storage is wired
+        st.caption(
+            f"User settings status — user: {username or 'not set'}, "
+            f"storage: {'available' if callable(upsert_user_settings) else 'unavailable'}"
+        )
+
         if username and callable(upsert_user_settings):  # type: ignore[truthy-function]
+            st.caption(f"Signed in as: {username}")
             if st.button("💾 Save as my default settings"):
                 try:
                     upsert_user_settings(  # type: ignore[misc]
@@ -764,7 +771,13 @@ def _render_sidebar_settings():
                 except Exception as e:
                     st.error(f"Failed to save default settings: {e}")
         elif username:
+            st.caption(f"Signed in as: {username}")
             st.caption("User settings storage is not available (Neon-only feature).")
+        else:
+            st.caption(
+                "No username set in session_state — defaults cannot be saved between sessions. "
+                "Set st.session_state['username'] in your auth/login flow if you want per-user defaults."
+            )
 
 def _render_runs_table(max_rows: int = 200):
     if list_runs is None:
