@@ -53,6 +53,13 @@ except Exception:
 from db.users import seed_neon_users_from_local, load_users
 from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
 
+# User settings (per-user defaults) – optional Neon-backed feature
+try:
+    from db.user_settings import get_user_settings, upsert_user_settings
+except Exception:
+    get_user_settings = None
+    upsert_user_settings = None
+
 from ui.auth import auth_ui
 from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
@@ -217,6 +224,54 @@ def render_price_ticker():
         unsafe_allow_html=True,
     )
 
+# --------------- User Settings Footer (Save Defaults) ----------------
+def render_user_settings_footer(username: str | None) -> None:
+    """
+    Render a small footer in the sidebar that shows user/settings status
+    and exposes a 'Save as my default settings' button when storage is wired.
+    """
+    # Normalize / persist username in session for downstream use
+    session_username = (
+        username
+        or st.session_state.get("username")
+        or st.session_state.get("user")
+    )
+    if session_username:
+        st.session_state["username"] = session_username
+
+    # Diagnostics caption so we always know why the button is or isn't visible
+    st.sidebar.caption(
+        f"User settings status — user: {session_username or 'not set'}, "
+        f"storage: {'available' if callable(upsert_user_settings) else 'unavailable'}"
+    )
+
+    if session_username and callable(upsert_user_settings):
+        st.sidebar.caption(f"Signed in as: {session_username}")
+        if st.sidebar.button("💾 Save as my default settings"):
+            try:
+                # We read whatever is in session_state; missing keys will be None.
+                upsert_user_settings(
+                    user_id=session_username,
+                    universe=st.session_state.get("universe"),
+                    min_price=st.session_state.get("min_price"),
+                    max_price=st.session_state.get("max_price"),
+                    min_dollar_vol=st.session_state.get("min_dollar_vol"),
+                    include_ta=st.session_state.get("include_ta"),
+                    apply_gap_filter=st.session_state.get("apply_gap_filter"),
+                    show_diagnostics_ui=st.session_state.get("show_diagnostics_ui"),
+                )
+                st.sidebar.success("Default scan settings saved for your account.")
+            except Exception as e:
+                st.sidebar.error(f"Failed to save default settings: {e}")
+    elif session_username:
+        st.sidebar.caption(f"Signed in as: {session_username}")
+        st.sidebar.caption("User settings storage is not available (Neon-only feature).")
+    else:
+        st.sidebar.caption(
+            "No username set — defaults cannot be saved between sessions. "
+            "If you want per-user defaults, ensure auth sets st.session_state['username']."
+        )
+
 # ============================================================
 #                       MAIN UI
 # ============================================================
@@ -277,6 +332,9 @@ def main():
 
     # -------- DB Status --------
     db_status = render_db_status_badge()
+
+    # -------- User Settings Footer (Save Defaults) --------
+    render_user_settings_footer(username)
 
     # -------- Filters --------
     (
