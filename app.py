@@ -170,13 +170,13 @@ def main():
         # Stop here for this rerun so the *next* rerun loads the full dashboard
         st.stop()
 
-    # -------- Seed Neon (once) --------
-    try:
-        if not st.session_state.get("seeded_neon_users"):
+    # -------- Seed Neon silently (server-level, not per-login) --------
+    if "neon_seeded_once" not in st.session_state:
+        try:
             seed_neon_users_from_local()
-            st.session_state["seeded_neon_users"] = True
-    except Exception:
-        pass
+        except Exception:
+            pass  # suppress any messages or warnings
+        st.session_state["neon_seeded_once"] = True
 
     # -------- Load Users + Tier --------
     users_map = load_users()
