@@ -636,26 +636,77 @@ def _pill(label: str, value: str, help_text: Optional[str] = None):
         unsafe_allow_html=True,
     )
 
+# --- User settings (optional, Neon only) ---
+try:
+    from db.user_settings import get_user_settings, upsert_user_settings  # type: ignore
+except Exception:  # pragma: no cover
+    get_user_settings = None  # type: ignore
+    upsert_user_settings = None  # type: ignore
 
 def _render_sidebar_settings():
+    # Who is logged in?
+    username = st.session_state.get("username") or st.session_state.get("user")
+
+    # One-time load of saved settings for this user (if Neon + helper available)
+    if (
+        username
+        and callable(get_user_settings)  # type: ignore[truthy-function]
+        and not st.session_state.get("_loaded_user_settings", False)
+    ):
+        try:
+            saved = get_user_settings(username)  # type: ignore[misc]
+        except Exception:
+            saved = None
+        if isinstance(saved, dict):
+            # Only hydrate keys that are not already in session_state
+            for key in (
+                "universe",
+                "min_price",
+                "max_price",
+                "min_dollar_vol",
+                "include_ta",
+                "apply_gap_filter",
+                "show_diagnostics_ui",
+            ):
+                if key in saved and saved[key] is not None and key not in st.session_state:
+                    st.session_state[key] = saved[key]
+        st.session_state["_loaded_user_settings"] = True
+
     with st.sidebar:
         st.header("Scan Settings")
 
         # Universe
+        universe_options = ["S&P 500", "Nasdaq 100", "S&P 600", "All (US)", "Custom"]
+        default_universe = st.session_state.get("universe", "S&P 500")
+        try:
+            universe_index = universe_options.index(default_universe)
+        except ValueError:
+            universe_index = 0
+
         universe = st.selectbox(
             "Universe",
-            ["S&P 500", "Nasdaq 100", "S&P 600", "All (US)", "Custom"],
-            index=0,
-            help="Which symbol universe to scan."
+            universe_options,
+            index=universe_index,
+            help="Which symbol universe to scan.",
         )
         st.session_state["universe"] = universe
 
         # Price filters
         c1, c2 = st.columns(2)
         with c1:
-            min_price = st.number_input("Min Price", min_value=0.0, value=float(st.session_state.get("min_price", 1.0)), step=0.5)
+            min_price = st.number_input(
+                "Min Price",
+                min_value=0.0,
+                value=float(st.session_state.get("min_price", 1.0)),
+                step=0.5,
+            )
         with c2:
-            max_price = st.number_input("Max Price", min_value=0.0, value=float(st.session_state.get("max_price", 1000.0)), step=1.0)
+            max_price = st.number_input(
+                "Max Price",
+                min_value=0.0,
+                value=float(st.session_state.get("max_price", 1000.0)),
+                step=1.0,
+            )
         st.session_state["min_price"] = float(min_price)
         st.session_state["max_price"] = float(max_price)
 
@@ -665,24 +716,55 @@ def _render_sidebar_settings():
             min_value=0.0,
             value=float(st.session_state.get("min_dollar_vol", 1_000_000.0)),
             step=100_000.0,
-            help="Filter out thinly traded symbols using price*volume."
+            help="Filter out thinly traded symbols using price*volume.",
         )
         st.session_state["min_dollar_vol"] = float(min_dollar_vol)
 
         # Technical calculations toggle
-        include_ta = st.checkbox("Include technical indicators (EMA/RSI/ATR)", value=bool(st.session_state.get("include_ta", True)))
+        include_ta = st.checkbox(
+            "Include technical indicators (EMA/RSI/ATR)",
+            value=bool(st.session_state.get("include_ta", True)),
+        )
         st.session_state["include_ta"] = bool(include_ta)
 
         # Gap/Unusual volume scan toggle
-        apply_gap_filter = st.checkbox("Also run Gap + Unusual Volume scan", value=bool(st.session_state.get("apply_gap_filter", False)))
+        apply_gap_filter = st.checkbox(
+            "Also run Gap + Unusual Volume scan",
+            value=bool(st.session_state.get("apply_gap_filter", False)),
+        )
         st.session_state["apply_gap_filter"] = bool(apply_gap_filter)
 
         # Diagnostics
-        show_diagnostics_ui = st.checkbox("Show Diagnostics", value=bool(st.session_state.get("show_diagnostics_ui", False)))
+        show_diagnostics_ui = st.checkbox(
+            "Show Diagnostics",
+            value=bool(st.session_state.get("show_diagnostics_ui", False)),
+        )
         st.session_state["show_diagnostics_ui"] = bool(show_diagnostics_ui)
 
-        st.caption("Sidebar settings are passed automatically into run functions (only parameters they accept are used).")
+        st.caption(
+            "Sidebar settings are passed automatically into run functions "
+            "(only parameters they accept are used)."
+        )
 
+        # --- Save as default for this user ---
+        if username and callable(upsert_user_settings):  # type: ignore[truthy-function]
+            if st.button("💾 Save as my default settings"):
+                try:
+                    upsert_user_settings(  # type: ignore[misc]
+                        user_id=username,
+                        universe=st.session_state.get("universe"),
+                        min_price=st.session_state.get("min_price"),
+                        max_price=st.session_state.get("max_price"),
+                        min_dollar_vol=st.session_state.get("min_dollar_vol"),
+                        include_ta=st.session_state.get("include_ta"),
+                        apply_gap_filter=st.session_state.get("apply_gap_filter"),
+                        show_diagnostics_ui=st.session_state.get("show_diagnostics_ui"),
+                    )
+                    st.success("Default scan settings saved for your account.")
+                except Exception as e:
+                    st.error(f"Failed to save default settings: {e}")
+        elif username:
+            st.caption("User settings storage is not available (Neon-only feature).")
 
 def _render_runs_table(max_rows: int = 200):
     if list_runs is None:
