@@ -135,7 +135,24 @@ def main():
     # -------- AUTH FIRST --------
     authed, username, display_name = auth_ui()
     if not authed:
-        return
+        st.stop()
+
+    # -------- ONE-TIME SPLASH SCREEN AFTER LOGIN --------
+    if st.session_state.get("just_logged_in") is None:
+        st.session_state["just_logged_in"] = True
+
+        st.markdown(
+            """
+            <div style='text-align:center; padding-top:70px; padding-bottom:40px;'>
+                <h1 style='font-size: 42px; margin-bottom: 0;'>📈 Breakout Stock Scanner</h1>
+                <p style='color:#cccccc; font-size:18px; margin-top:10px;'>Loading your dashboard…</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown("---")
+        st.stop()   # ← Stop here so the next rerun loads the full dashboard
+
 
     # -------- Seed Neon (once) --------
     try:
