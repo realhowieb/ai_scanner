@@ -182,9 +182,10 @@ def render_price_ticker():
         background: #0f1117;
         border-top: 1px solid #333;
         border-bottom: 1px solid #333;
-        padding: 2px 0;
-        margin-top: 4px;   /* tighten gap below header */
-        margin-bottom: 4px;  /* tighten gap before next section */
+        padding: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+        line-height: 1.0;
     }}
     .ticker {{
         display: inline-block;
