@@ -260,7 +260,7 @@ def main():
             """,
             unsafe_allow_html=True,
         )
-        st.markdown("---")
+        #st.markdown("---")
         # Stop here for this rerun so the *next* rerun loads the full dashboard
         st.stop()
 
