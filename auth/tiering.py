@@ -66,6 +66,11 @@ class Tier:
     features: list
     max_results: int
     is_premium: bool = False
+    can_premarket: bool = False
+    can_afterhours: bool = False
+    can_unusual_volume: bool = False
+    can_export_csv: bool = False
+    can_ai_notes: bool = False
 
 
 # ------------------------------
@@ -99,10 +104,19 @@ def get_user_tier(username: str, users: Optional[Dict[str, Dict[str, str]]] = No
         tier_key = "basic"
         cfg = TIERS_CONFIG["basic"]
 
+    features = cfg.get("features", [])
+    # Normalize feature names for matching (case-insensitive)
+    features_lower = [str(f).lower() for f in features]
+
     return Tier(
         key=tier_key,
         name=cfg.get("name", tier_key.capitalize()),
-        features=cfg.get("features", []),
+        features=features,
         max_results=cfg.get("max_results", 25),
         is_premium=(tier_key == "premium"),
+        can_premarket=("premarket" in features_lower),
+        can_afterhours=("afterhours" in features_lower),
+        can_unusual_volume=("unusualvolume" in features_lower),
+        can_export_csv=("exportcsv" in features_lower),
+        can_ai_notes=("ai notes" in features_lower),
     )
