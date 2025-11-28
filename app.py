@@ -339,6 +339,29 @@ def main():
     tier = get_user_tier(username, users_map)
     flags = derive_tier_flags(tier)
 
+    # -------- Load Saved User Settings (if available) --------
+    if username and callable(get_user_settings):
+        try:
+            saved = get_user_settings(username)
+        except Exception:
+            saved = None
+
+        if saved:
+            # Only seed session_state keys that are not already present,
+            # so we don't override anything the user has already changed this session.
+            if "min_price" not in st.session_state and saved.get("min_price") is not None:
+                st.session_state["min_price"] = float(saved["min_price"])
+            if "max_price" not in st.session_state and saved.get("max_price") is not None:
+                st.session_state["max_price"] = float(saved["max_price"])
+            if "min_dollar_vol" not in st.session_state and saved.get("min_dollar_vol") is not None:
+                st.session_state["min_dollar_vol"] = float(saved["min_dollar_vol"])
+            if "include_ta" not in st.session_state and saved.get("include_ta") is not None:
+                st.session_state["include_ta"] = bool(saved["include_ta"])
+            if "apply_gap_filter" not in st.session_state and saved.get("apply_gap_filter") is not None:
+                st.session_state["apply_gap_filter"] = bool(saved["apply_gap_filter"])
+            if "show_diagnostics_ui" not in st.session_state and saved.get("show_diagnostics_ui") is not None:
+                st.session_state["show_diagnostics_ui"] = bool(saved["show_diagnostics_ui"])
+
     # -------- Sidebar Account Info --------
     st.sidebar.markdown(f"### 👤 {display_name}")
     st.sidebar.markdown(f"**Plan:** `{ 'Admin' if username in ADMIN_USERS else tier.name }`")

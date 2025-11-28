@@ -5,7 +5,7 @@ from typing import Tuple
 import streamlit as st
 
 
-def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool, bool, bool]:
+def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool, bool, bool, float, bool, bool]:
     """Render the sidebar filters and return the selected values.
 
     Returns:
@@ -20,12 +20,36 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             afterhours,
             unusual_vol,
             diagnostics,
+            min_dollar_vol,
+            include_ta,
+            apply_gap_filter,
         )
     """
     st.sidebar.markdown("## Filters")
+    # Seed defaults from session_state if present (loaded from user_settings)
+    default_min_price = float(st.session_state.get("min_price", 1.0))
+    default_max_price = float(st.session_state.get("max_price", 1000.0))
+    default_min_dollar_vol = float(st.session_state.get("min_dollar_vol", 1_000_000.0))
+    default_include_ta = bool(st.session_state.get("include_ta", True))
+    default_apply_gap_filter = bool(st.session_state.get("apply_gap_filter", False))
+    default_diagnostics = bool(st.session_state.get("show_diagnostics_ui", True))
     min_gap = st.sidebar.slider("Min Gap %", -10.0, 20.0, 1.0, 0.5)
-    min_price = st.sidebar.number_input("Min Price", 0.5, 500.0, 1.0, 0.5)
-    max_price = st.sidebar.number_input("Max Price", 1.0, 5000.0, 1000.0, 1.0)
+    min_price = st.sidebar.number_input(
+        "Min Price",
+        0.5,
+        500.0,
+        default_min_price,
+        0.5,
+        key="min_price",
+    )
+    max_price = st.sidebar.number_input(
+        "Max Price",
+        1.0,
+        5000.0,
+        default_max_price,
+        1.0,
+        key="max_price",
+    )
     top_n = st.sidebar.slider("Top N Results", 5, tier.max_results, min(25, tier.max_results), 5)
 
     max_nasdaq_scan = st.sidebar.number_input(
@@ -50,7 +74,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     min_dollar_vol = st.sidebar.number_input(
         "Min Dollar Volume",
         min_value=0.0,
-        value=1_000_000.0,
+        value=default_min_dollar_vol,
         step=100_000.0,
         key="min_dollar_vol",
         help="Only include stocks with minimum dollar volume."
@@ -74,18 +98,22 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
 
     include_ta = st.sidebar.checkbox(
         "Include Technical Indicators",
-        value=True,
-        key="include_ta"
+        value=default_include_ta,
+        key="include_ta",
     )
 
     apply_gap_filter = st.sidebar.checkbox(
         "Apply Gap Filter",
-        value=False,
-        key="apply_gap_filter"
+        value=default_apply_gap_filter,
+        key="apply_gap_filter",
     )
 
     st.sidebar.divider()
-    diagnostics = st.sidebar.checkbox("Show diagnostics", value=True)
+    diagnostics = st.sidebar.checkbox(
+        "Show diagnostics",
+        value=default_diagnostics,
+        key="show_diagnostics_ui",
+    )
 
     return (
         float(min_gap),
