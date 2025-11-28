@@ -198,9 +198,6 @@ def main():
         diagnostics,
     ) = render_filters(tier)
 
-    # -------- Universe State --------
-    init_universe_state()
-    render_universe_panel()
 
     # -------- Watchlists --------
     watch_id, watch_tickers = render_watchlists_panel(username)
@@ -243,6 +240,10 @@ def main():
 
     # -------- Scan History --------
     render_history_expander(db_status)
+
+    # -------- Universe State --------
+    init_universe_state()
+    render_universe_panel()
 
     # -------- Admin Panel --------
     render_admin_users_panel(username, ADMIN_USERS, db_status)
