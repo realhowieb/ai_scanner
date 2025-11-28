@@ -46,6 +46,16 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         help="Caps SP500+NASDAQ universe for Combo scans.",
     )
 
+    # Minimum Dollar Volume
+    min_dollar_vol = st.sidebar.number_input(
+        "Min Dollar Volume",
+        min_value=0.0,
+        value=1_000_000.0,
+        step=100_000.0,
+        key="min_dollar_vol",
+        help="Only include stocks with minimum dollar volume."
+    )
+
     premarket = st.sidebar.checkbox(
         "Include Premarket Scan",
         value=False,
@@ -62,6 +72,18 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         disabled=not getattr(tier, "can_unusual_volume", False),
     )
 
+    include_ta = st.sidebar.checkbox(
+        "Include Technical Indicators",
+        value=True,
+        key="include_ta"
+    )
+
+    apply_gap_filter = st.sidebar.checkbox(
+        "Apply Gap Filter",
+        value=False,
+        key="apply_gap_filter"
+    )
+
     st.sidebar.divider()
     diagnostics = st.sidebar.checkbox("Show diagnostics", value=True)
 
@@ -76,4 +98,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         bool(afterhours),
         bool(unusual_vol),
         bool(diagnostics),
+        float(min_dollar_vol),
+        bool(include_ta),
+        bool(apply_gap_filter),
     )
