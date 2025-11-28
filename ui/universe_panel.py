@@ -24,7 +24,7 @@ def render_universe_panel() -> None:
     Shows sizes and sample tickers for SP500 and NASDAQ universes
     populated by the scan controls.
     """
-    with st.expander("🌐 Universe Info", expanded=True):
+    with st.expander("🌐 Universe Info", expanded=False):
         sp500 = st.session_state.get("sp500_universe", [])
         nasdaq_full = st.session_state.get("nasdaq_universe", [])
         nasdaq_capped = st.session_state.get("nasdaq_capped", [])
