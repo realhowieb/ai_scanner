@@ -135,10 +135,14 @@ def main():
     # -------- AUTH FIRST --------
     authed, username, display_name = auth_ui()
     if not authed:
+        # If not authenticated, don't render anything else.
         st.stop()
 
-    # -------- ONE-TIME SPLASH SCREEN AFTER LOGIN --------
-    if st.session_state.get("just_logged_in") is None:
+    # Check the underlying authenticator state explicitly
+    is_authed_state = st.session_state.get("authentication_status") is True
+
+    # -------- ONE-TIME SPLASH SCREEN AFTER SUCCESSFUL LOGIN --------
+    if is_authed_state and not st.session_state.get("just_logged_in"):
         st.session_state["just_logged_in"] = True
 
         st.markdown(
@@ -151,8 +155,8 @@ def main():
             unsafe_allow_html=True,
         )
         st.markdown("---")
-        st.stop()   # ← Stop here so the next rerun loads the full dashboard
-
+        # Stop here for this rerun so the *next* rerun loads the full dashboard
+        st.stop()
 
     # -------- Seed Neon (once) --------
     try:
@@ -243,7 +247,6 @@ def main():
 
     # -------- Footer --------
     render_footer()
-
 
 if __name__ == "__main__":
     main()
