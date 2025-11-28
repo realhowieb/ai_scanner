@@ -334,7 +334,6 @@ def main():
 
     # -------- Universe State --------
     init_universe_state()
-    st.subheader("🌐 Universe Info")
     render_universe_panel()
 
     # -------- Admin Panel --------
