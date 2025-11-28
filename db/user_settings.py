@@ -174,15 +174,9 @@ def upsert_user_settings(
     unusual_vol: Optional[bool] = None,
 ) -> None:
     """
-    Insert or update a user's default scan settings.
-
-    Called from the sidebar "Save as my default settings" button.
+    Insert or update per-user scan settings in the Neon-backed user_settings table.
     """
-    conn = _get_conn()
-    if conn is None:
-        raise RuntimeError("Neon DB not available for user settings")
-
-    with conn:
+    with _get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -255,3 +249,4 @@ def upsert_user_settings(
                     "unusual_vol": unusual_vol,
                 },
             )
+        conn.commit()
