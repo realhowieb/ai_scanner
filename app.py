@@ -7,143 +7,35 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-# Ensure local project directory is on sys.path so sibling modules (charts, ui, db, etc.) can be imported
+# Ensure project base directory importable
 BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-# ---------- Charts fallback import ----------
-
+# --------------- Charts import fallback ----------------
 try:
     from charts import render_chart_for_ticker
-except ModuleNotFoundError:
+except Exception:
     try:
         from ui.charts import render_chart_for_ticker  # type: ignore
-    except ModuleNotFoundError:
-        try:
-            from ai_scanner.charts import render_chart_for_ticker  # type: ignore
-        except ModuleNotFoundError:
+    except Exception:
 
-            def render_chart_for_ticker(ticker: str, *args, **kwargs):
-                import streamlit as st  # local import to avoid circulars
+        def render_chart_for_ticker(ticker: str, *args, **kwargs):
+            st.info("Chart module not available.")
 
-                st.info("Chart module not available; add charts.py to enable charts.")
-
-
-# ---------- AI Notes fallback import ----------
-
+# --------------- AI Notes fallback ----------------
 try:
     from ai_notes import generate_ai_note
-except ModuleNotFoundError:
+except Exception:
     try:
         from ui.ai_notes import generate_ai_note  # type: ignore
-    except ModuleNotFoundError:
+    except Exception:
 
         def generate_ai_note(row: pd.Series) -> str:
-            """Heuristic, on-device 'AI' note using the breakout metrics for one ticker.
-
-            Local fallback implementation used when ai_notes module is not available.
-            """
-
-            def _fmt(val, nd=2, suffix=""):
-                try:
-                    if pd.isna(val):
-                        return "N/A"
-                    return f"{float(val):.{nd}f}{suffix}"
-                except Exception:
-                    return "N/A"
-
-            ticker = row.get("Ticker", "?")
-            score = row.get("BreakoutScore", np.nan)
-            pattern = row.get("PatternTag", "") or "Neutral"
-            gap = row.get("Gap%", np.nan)
-            trend20 = row.get("Trend20D%", np.nan)
-            trend10 = row.get("Trend10D%", np.nan)
-            vol_rel = row.get("VolRel20", np.nan)
-            rs = row.get("RS_Rank", np.nan)
-            vol20 = row.get("Volatility20D%", np.nan)
-            dollar_vol = row.get("DollarVol20", np.nan)
-
-            parts: list[str] = []
-
-            # High-level summary
-            parts.append(
-                f"**{ticker}** currently has a BreakoutScore of **{_fmt(score, 1)}** "
-                f"with pattern tag **{pattern}**."
-            )
-
-            # Trend + relative strength
-            trend_bits: list[str] = []
-            if not pd.isna(trend20):
-                trend_bits.append(f"~{_fmt(trend20, 1, '%')} over the last 20 days")
-            if not pd.isna(trend10):
-                trend_bits.append(f"~{_fmt(trend10, 1, '%')} over the last 10 days")
-            if trend_bits:
-                parts.append("Price trend: " + ", ".join(trend_bits) + ".")
-
-            if not pd.isna(rs):
-                try:
-                    rs_val = float(rs)
-                    if rs_val >= 80:
-                        rs_comment = "strong relative strength vs the universe (top 20%)."
-                    elif rs_val >= 60:
-                        rs_comment = "above-average relative strength (top 40%)."
-                    elif rs_val >= 40:
-                        rs_comment = "roughly middle-of-the-pack relative strength."
-                    else:
-                        rs_comment = "weak relative strength vs peers right now."
-                    parts.append(f"RS Rank is **{_fmt(rs, 1)}**, indicating {rs_comment}")
-                except Exception:
-                    pass
-
-            # Gap + volume behaviour
-            gap_bits: list[str] = []
-            if not pd.isna(gap):
-                gap_bits.append(f"gap of {_fmt(gap, 1, '%')} vs the prior close")
-            if not pd.isna(vol_rel):
-                gap_bits.append(f"volume running at roughly {_fmt(vol_rel, 2)}x the 20D average")
-            if gap_bits:
-                parts.append("Today it is showing a " + " and ".join(gap_bits) + ".")
-
-            if not pd.isna(dollar_vol):
-                parts.append(
-                    "Liquidity check: 20D avg dollar volume is around "
-                    f"**${_fmt(dollar_vol / 1_000_000, 1)}M**, which helps with entries and exits."
-                )
-
-            if not pd.isna(vol20):
-                try:
-                    vol_val = float(vol20)
-                    if vol_val <= 8:
-                        vol_comment = "Price action has been relatively quiet (low volatility)."
-                    elif vol_val <= 18:
-                        vol_comment = "Volatility is moderate and tradable for most setups."
-                    else:
-                        vol_comment = (
-                            "This is a high-volatility name; position sizing and risk management are critical."
-                        )
-                    parts.append(
-                        f"Volatility (20D) sits near **{_fmt(vol20, 1, '%')}**, {vol_comment}"
-                    )
-                except Exception:
-                    pass
-
-            parts.append(
-                "This is not a trade recommendation. Consider support/resistance on the chart, "
-                "overall market context, and your own risk management rules before acting."
-            )
-
-            return "\n\n".join(parts)
+            return "AI notes module missing."
 
 
-# ============================================
-# Breakout Stock Scanner — Subscription Ready
-# Single-file entrypoint (Streamlit)
-# ============================================
-
-
-# ---------- Page config ----------
-
+# --------------- Page config ----------------
 st.set_page_config(
     page_title="Breakout Stock Scanner",
     page_icon="📈",
@@ -151,54 +43,39 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-
-# ---------- Tiers / Plans ----------
-
-# Tier configuration & user tier resolution live in the auth.tiering module.
-# Fall back to auth.tiering_fallback if the main module is unavailable.
+# --------------- Tiering ----------------
 try:
     from auth.tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier
 except Exception:
     from auth.tiering_fallback import USERS_DB, ADMIN_USERS, get_user_tier, Tier
 
+# --------------- DB modules & UI modules ----------------
+from db.users import seed_neon_users_from_local, load_users
+from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
 
-# ---------- Auth / DB / UI imports ----------
-
-from db.users import seed_neon_users_from_local, load_users, fetch_all_users  # noqa: E402
-from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results  # noqa: E402
-
-from ui.auth import auth_ui  # noqa: E402
-from ui.pricing import pricing_sidebar  # noqa: E402
-from ui.admin_users import render_admin_users_panel  # noqa: E402
-from ui.history import render_history_expander  # noqa: E402
-from ui.results import render_results, get_results_df  # noqa: E402
-from ui.scans import render_scan_controls  # noqa: E402
-from ui.universe_panel import render_universe_panel, init_universe_state  # noqa: E402
-from ui.filters import render_filters  # noqa: E402
-from ui.db_status import render_db_status_badge  # noqa: E402
-from auth.tiering_utils import derive_tier_flags  # noqa: E402
-from ui.header import render_header  # noqa: E402
-from ui.footer import render_footer  # noqa: E402
+from ui.auth import auth_ui
+from ui.pricing import pricing_sidebar
+from ui.admin_users import render_admin_users_panel
+from ui.history import render_history_expander
+from ui.results import render_results, get_results_df
+from ui.scans import render_scan_controls
+from ui.universe_panel import render_universe_panel, init_universe_state
+from ui.filters import render_filters
+from ui.db_status import render_db_status_badge
+from auth.tiering_utils import derive_tier_flags
+from ui.header import render_header
+from ui.footer import render_footer
 from ui.watchlists import render_watchlists_panel
 
 
-# ---------- Cached index fetch helper ----------
-
+# --------------- Cached Market Snapshot Helper ----------------
 @st.cache_data(ttl=60)
-def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
-    """Fetch last and previous close for an index proxy (e.g., SPY, QQQ).
-
-    Returns (last, prev) or (None, None) on failure. Cached briefly to
-    avoid re-querying yfinance on every rerun.
-    """
+def _fetch_index_snapshot(symbol: str):
     try:
-        import yfinance as yf  # type: ignore
-    except Exception:
-        return None, None
-    try:
+        import yfinance as yf
         ticker = yf.Ticker(symbol)
         hist = ticker.history(period="2d")
-        if hist is None or hist.empty or "Close" not in hist.columns:
+        if hist is None or hist.empty:
             return None, None
         closes = hist["Close"].tolist()
         last = float(closes[-1])
@@ -208,104 +85,59 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
         return None, None
 
 
-# ---------- Main UI ----------
-
-
-def render_market_snapshot_placeholder() -> None:
-    """Render a 'Today’s Market Snapshot' row.
-
-    Uses SPY and QQQ as proxies for the S&P 500 and NASDAQ 100 via yfinance,
-    and, if available, the latest scan results for top gainer and most active.
-    Falls back gracefully to placeholders if data is unavailable.
-    """
-    st.subheader("Today’s Market Snapshot")
-
+def render_market_snapshot():
+    st.subheader("Today's Market Snapshot")
     c1, c2, c3, c4 = st.columns(4)
 
-    def _render_index_metric(col, label: str, symbol: str) -> None:
+    def _idx(col, label, symbol):
         with col:
             last, prev = _fetch_index_snapshot(symbol)
-            if last is None or prev is None:
+            if last is None:
                 st.metric(label, "—", "—")
                 return
-            try:
-                change_pct = ((last - prev) / prev) * 100.0 if prev not in (0, None) else 0.0
-                st.metric(label, f"{last:.2f}", f"{change_pct:+.2f}%")
-            except Exception:
-                st.metric(label, "—", "—")
+            pct = ((last - prev) / prev) * 100 if prev else 0
+            st.metric(label, f"{last:.2f}", f"{pct:+.2f}%")
 
-    # Index proxies for S&P and NASDAQ
-    _render_index_metric(c1, "S&P 500 (SPY)", "SPY")
-    _render_index_metric(c2, "NASDAQ 100 (QQQ)", "QQQ")
+    _idx(c1, "S&P 500 (SPY)", "SPY")
+    _idx(c2, "NASDAQ 100 (QQQ)", "QQQ")
 
-    # Top Gainer and Most Active from latest results if available
-    from ui.results import get_results_df
-
-    df = None
-    try:
-        df = get_results_df()
-    except Exception:
-        df = None
-
+    # Top Gainer / Most Active from last scan
+    df = get_results_df()
     with c3:
-        label = "Top Gainer"
-        if df is None or df.empty or "% Change" not in df.columns:
-            st.metric(label, "—", "—")
+        if df is None or df.empty or "% Change" not in df:
+            st.metric("Top Gainer", "—", "—")
         else:
-            try:
-                top_row = df.sort_values("% Change", ascending=False).iloc[0]
-                sym = str(top_row.get("Ticker", "—"))
-                pct = top_row.get("% Change", None)
-                if pct is None:
-                    st.metric(label, sym, "—")
-                else:
-                    st.metric(label, sym, f"{float(pct):+,.2f}%")
-            except Exception:
-                st.metric(label, "—", "—")
+            top = df.sort_values("% Change", ascending=False).iloc[0]
+            pct = float(top["% Change"])
+            st.metric("Top Gainer", top.get("Ticker", "—"), f"{pct:+.2f}%")
 
     with c4:
-        label = "Most Active"
         if df is None or df.empty:
-            st.metric(label, "—", "—")
+            st.metric("Most Active", "—", "—")
         else:
-            # Prefer DollarVol20 if present, else Volume column if present
-            vol_col = None
-            if "DollarVol20" in df.columns:
-                vol_col = "DollarVol20"
-            elif "Volume" in df.columns:
-                vol_col = "Volume"
-
-            if vol_col is None:
-                st.metric(label, "—", "—")
+            vol_col = "DollarVol20" if "DollarVol20" in df else "Volume" if "Volume" in df else None
+            if not vol_col:
+                st.metric("Most Active", "—", "—")
             else:
-                try:
-                    most_row = df.sort_values(vol_col, ascending=False).iloc[0]
-                    sym = str(most_row.get("Ticker", "—"))
-                    val = most_row.get(vol_col, None)
-                    if val is None:
-                        st.metric(label, sym, "—")
-                    else:
-                        # Format as e.g. $25.3M or 12.4M shares
-                        if vol_col == "DollarVol20":
-                            millions = float(val) / 1_000_000.0
-                            delta_str = f"${millions:,.1f}M"
-                        else:
-                            millions = float(val) / 1_000_000.0
-                            delta_str = f"{millions:,.1f}M sh"
-                        st.metric(label, sym, delta_str)
-                except Exception:
-                    st.metric(label, "—", "—")
+                row = df.sort_values(vol_col, ascending=False).iloc[0]
+                val = float(row[vol_col]) / 1_000_000
+                suffix = "M" if vol_col == "DollarVol20" else "M sh"
+                st.metric("Most Active", row.get("Ticker", "—"), f"{val:.1f}{suffix}")
 
 
-def main() -> None:
-    """Main Streamlit UI entrypoint."""
+# ============================================================
+#                       MAIN UI
+# ============================================================
+
+def main():
     render_header()
 
+    # -------- AUTH FIRST --------
     authed, username, display_name = auth_ui()
     if not authed:
-        st.stop()
+        return
 
-    # Seed Neon users table once (no-op if already populated or Neon unavailable)
+    # -------- Seed Neon (once) --------
     try:
         if not st.session_state.get("seeded_neon_users"):
             seed_neon_users_from_local()
@@ -313,35 +145,20 @@ def main() -> None:
     except Exception:
         pass
 
-    # Load users once per rerun to avoid redundant Neon hits
+    # -------- Load Users + Tier --------
     users_map = load_users()
-
     tier = get_user_tier(username, users_map)
-
-    # Derive capability flags from the Tier object in a single helper,
-    # so the interpretation of features is centralized.
     flags = derive_tier_flags(tier)
-    can_scan_sp500 = flags["can_scan_sp500"]
-    can_scan_nasdaq = flags["can_scan_nasdaq"]
-    can_premarket = flags["can_premarket"]
-    can_afterhours = flags["can_afterhours"]
-    can_unusual_volume = flags["can_unusual_volume"]
-    can_export_csv = flags["can_export_csv"]
-    can_ai_notes = flags["can_ai_notes"]
 
+    # -------- Sidebar Account Info --------
     st.sidebar.markdown(f"### 👤 {display_name}")
-    if username in ADMIN_USERS:
-        st.sidebar.markdown("**Plan:** `Admin`")
-    else:
-        st.sidebar.markdown(f"**Plan:** `{tier.name}`")
-
-    # Visual separation in main content
+    st.sidebar.markdown(f"**Plan:** `{ 'Admin' if username in ADMIN_USERS else tier.name }`")
     st.markdown("---")
 
-    # DB status badge
+    # -------- DB Status --------
     db_status = render_db_status_badge()
 
-    # Sidebar filters
+    # -------- Filters --------
     (
         min_gap,
         min_price,
@@ -355,29 +172,26 @@ def main() -> None:
         diagnostics,
     ) = render_filters(tier)
 
-    # Universe state (lazy-loaded on first scan to keep startup fast)
+    # -------- Universe State --------
     init_universe_state()
-
-    # Universe diagnostics (lazy; based on last scan)
     render_universe_panel()
 
-    # Watchlists (loaded after universe & filters so session state is stable)
-    active_watchlist_id, active_watchlist_tickers = render_watchlists_panel(username)
-    # Store in session_state so scan controls and other modules can use the active watchlist
-    st.session_state["active_watchlist_id"] = active_watchlist_id
-    st.session_state["active_watchlist_tickers"] = active_watchlist_tickers
+    # -------- Watchlists --------
+    watch_id, watch_tickers = render_watchlists_panel(username)
+    st.session_state["active_watchlist_id"] = watch_id
+    st.session_state["active_watchlist_tickers"] = watch_tickers
 
-    # Today’s market snapshot row (guarded so a failure here never breaks the page)
+    # -------- Market Snapshot --------
     try:
         with st.spinner("Loading market snapshot..."):
-            render_market_snapshot_placeholder()
-    except Exception as e:
-        st.warning(f"Market snapshot unavailable: {e}")
+            render_market_snapshot()
+    except Exception:
+        st.warning("Market snapshot unavailable")
 
-    # Scan controls + execution
+    # -------- Scan Controls --------
     render_scan_controls(
-        can_scan_sp500=can_scan_sp500,
-        can_scan_nasdaq=can_scan_nasdaq,
+        can_scan_sp500=flags["can_scan_sp500"],
+        can_scan_nasdaq=flags["can_scan_nasdaq"],
         max_nasdaq_scan=int(max_nasdaq_scan),
         max_combo_scan=int(max_combo_scan),
         min_gap=float(min_gap),
@@ -393,23 +207,24 @@ def main() -> None:
 
     st.markdown("---")
 
-    # Results table + charts + AI notes in an expander
+    # -------- Results --------
     df = get_results_df()
-    num_rows = 0 if df is None else len(df)
-    with st.expander(f"📊 Latest scan results ({num_rows} rows)", expanded=num_rows > 0):
-        render_results(df, can_export_csv, can_ai_notes, render_chart_for_ticker, generate_ai_note)
+    rows = 0 if df is None else len(df)
+    with st.expander(f"📊 Latest scan results ({rows} rows)", expanded=rows > 0):
+        render_results(df, flags["can_export_csv"], flags["can_ai_notes"], render_chart_for_ticker, generate_ai_note)
 
     st.markdown("---")
 
-    # Scan History (DB-backed via Neon/SQLite)
+    # -------- Scan History --------
     render_history_expander(db_status)
 
-    # Admin Users Page
+    # -------- Admin Panel --------
     render_admin_users_panel(username, ADMIN_USERS, db_status)
 
-    # Pricing & plan upsell (loaded last to prevent blocking main UI)
+    # -------- Pricing (Load Last) --------
     pricing_sidebar(username, users_map)
 
+    # -------- Footer --------
     render_footer()
 
 
