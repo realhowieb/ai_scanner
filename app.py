@@ -135,10 +135,22 @@ def main():
     # -------- AUTH FIRST --------
     authed, username, display_name = auth_ui()
     if not authed:
-        # If not authenticated, don't render anything else.
+        # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
 
-    # Check the underlying authenticator state explicitly
+    # At this point, auth_ui has decided we're logged in.
+    # The login form might still be in the DOM for this rerun, so hide it with CSS.
+    st.markdown(
+        """
+        <style>
+        /* Hide the streamlit-authenticator login form once authenticated */
+        div[data-testid="stForm"] {display: none !important;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Also check the raw authenticator state
     is_authed_state = st.session_state.get("authentication_status") is True
 
     # -------- ONE-TIME SPLASH SCREEN AFTER SUCCESSFUL LOGIN --------
