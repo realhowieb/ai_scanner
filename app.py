@@ -212,7 +212,10 @@ def render_price_ticker():
     </div>
     """
 
-    st.markdown(ticker_html, unsafe_allow_html=True)
+    st.markdown(
+        f"<div style='margin:0;padding:0;'>{ticker_html}</div>",
+        unsafe_allow_html=True,
+    )
 
 # ============================================================
 #                       MAIN UI
