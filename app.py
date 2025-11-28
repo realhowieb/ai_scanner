@@ -253,6 +253,14 @@ def render_user_settings_footer(
 
     # Pull current filter values, preferring explicit args over session_state
     universe_val = st.session_state.get("universe")
+    min_gap_val = st.session_state.get("min_gap")
+    top_n_val = st.session_state.get("top_n")
+    max_nasdaq_scan_val = st.session_state.get("max_nasdaq_scan")
+    max_combo_scan_val = st.session_state.get("max_combo_scan")
+    premarket_val = st.session_state.get("premarket")
+    afterhours_val = st.session_state.get("afterhours")
+    unusual_vol_val = st.session_state.get("unusual_vol")
+
     min_price_val = min_price if min_price is not None else st.session_state.get("min_price")
     max_price_val = max_price if max_price is not None else st.session_state.get("max_price")
     min_dollar_vol_val = st.session_state.get("min_dollar_vol")
@@ -273,6 +281,13 @@ def render_user_settings_footer(
                     include_ta=include_ta_val,
                     apply_gap_filter=apply_gap_filter_val,
                     show_diagnostics_ui=show_diag_val,
+                    min_gap=min_gap_val,
+                    top_n=top_n_val,
+                    max_nasdaq_scan=max_nasdaq_scan_val,
+                    max_combo_scan=max_combo_scan_val,
+                    premarket=premarket_val,
+                    afterhours=afterhours_val,
+                    unusual_vol=unusual_vol_val,
                 )
                 st.sidebar.success("Default scan settings saved for your account.")
             except Exception as e:
