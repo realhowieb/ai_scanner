@@ -144,9 +144,7 @@ def upsert_user_settings(
                     min_dollar_vol,
                     include_ta,
                     apply_gap_filter,
-                    show_diagnostics_ui,
-                    created_at,
-                    updated_at
+                    show_diagnostics_ui
                 )
                 VALUES (
                     %(user_id)s,
@@ -156,9 +154,7 @@ def upsert_user_settings(
                     %(min_dollar_vol)s,
                     %(include_ta)s,
                     %(apply_gap_filter)s,
-                    %(show_diagnostics_ui)s,
-                    NOW(),
-                    NOW()
+                    %(show_diagnostics_ui)s
                 )
                 ON CONFLICT (user_id) DO UPDATE
                 SET
@@ -168,8 +164,7 @@ def upsert_user_settings(
                     min_dollar_vol = EXCLUDED.min_dollar_vol,
                     include_ta = EXCLUDED.include_ta,
                     apply_gap_filter = EXCLUDED.apply_gap_filter,
-                    show_diagnostics_ui = EXCLUDED.show_diagnostics_ui,
-                    updated_at = NOW();
+                    show_diagnostics_ui = EXCLUDED.show_diagnostics_ui;
                 """,
                 {
                     "user_id": user_id,
