@@ -83,14 +83,21 @@ def get_user_tier(username: str, users: Optional[Dict[str, Dict[str, str]]] = No
 
     # 1. Neon DB results (if provided)
     if users and username in users:
-        tier_key = users[username].get("tier", "basic").lower()
+        raw_tier = users[username].get("tier", "basic")
+        if raw_tier is not None:
+            tier_key = str(raw_tier).strip().lower()
 
     # 2. Local fallback
     elif username in USERS_DB:
-        tier_key = USERS_DB[username].get("tier", "basic").lower()
+        raw_tier = USERS_DB[username].get("tier", "basic")
+        if raw_tier is not None:
+            tier_key = str(raw_tier).strip().lower()
 
-    # Pull tier config
-    cfg = TIERS_CONFIG.get(tier_key, TIERS_CONFIG["basic"])
+    # Ensure we only use known tiers; otherwise, treat as basic
+    cfg = TIERS_CONFIG.get(tier_key)
+    if cfg is None:
+        tier_key = "basic"
+        cfg = TIERS_CONFIG["basic"]
 
     return Tier(
         key=tier_key,
