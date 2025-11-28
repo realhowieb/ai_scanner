@@ -218,6 +218,8 @@ def render_price_ticker():
 # ============================================================
 
 def main():
+    # Show ticker above the header (layout option B)
+    render_price_ticker()
     render_header()
 
     # -------- AUTH FIRST --------
@@ -258,9 +260,6 @@ def main():
         # Stop here for this rerun so the *next* rerun loads the full dashboard
         st.stop()
 
-
-    # -------- Price Ticker under header --------
-    render_price_ticker()
 
     # -------- Load Users + Tier --------
     users_map = load_users()
