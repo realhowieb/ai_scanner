@@ -125,6 +125,93 @@ def render_market_snapshot():
                 st.metric("Most Active", row.get("Ticker", "—"), f"{val:.1f}{suffix}")
 
 
+# --------------- Price Ticker ----------------
+TICKER_STRIP = ["SPY", "QQQ", "IWM", "DIA", "VIX", "AAPL", "MSFT", "NVDA", "TSLA"]
+
+
+@st.cache_data(ttl=30)
+def _fetch_ticker_quotes(symbols: list[str]):
+    """Return list of dicts: [{'symbol', 'last', 'change_pct'}, ...]."""
+    try:
+        import yfinance as yf  # type: ignore
+    except Exception:
+        return []
+
+    results = []
+    for sym in symbols:
+        try:
+            t = yf.Ticker(sym)
+            hist = t.history(period="2d")
+            if hist is None or hist.empty or "Close" not in hist.columns:
+                continue
+            closes = hist["Close"].tolist()
+            last = float(closes[-1])
+            prev = float(closes[-2]) if len(closes) > 1 else last
+            change_pct = ((last - prev) / prev) * 100.0 if prev not in (0, None) else 0.0
+            results.append({"symbol": sym, "last": last, "change_pct": change_pct})
+        except Exception:
+            continue
+    return results
+
+
+def render_price_ticker():
+    """Render a scrolling ticker just under the main header."""
+    data = _fetch_ticker_quotes(TICKER_STRIP)
+    if not data:
+        return  # nothing to show
+
+    # Build HTML for ticker items
+    items_html = ""
+    for row in data:
+        sym = row["symbol"]
+        last = row["last"]
+        cpct = row["change_pct"]
+        color = "#2ecc71" if cpct >= 0 else "#e74c3c"
+        items_html += (
+            f"<span class='ticker__item'>"
+            f"{sym}&nbsp;{last:.2f}&nbsp;"
+            f"<span style='color:{color};'>{cpct:+.2f}%</span>"
+            f"</span>"
+        )
+
+    ticker_html = f"""
+    <style>
+    .ticker-wrap {{
+        width: 100%;
+        overflow: hidden;
+        background: #0f1117;
+        border-top: 1px solid #333;
+        border-bottom: 1px solid #333;
+        padding: 4px 0;
+        margin-top: 12px;
+        margin-bottom: 12px;
+    }}
+    .ticker {{
+        display: inline-block;
+        white-space: nowrap;
+        animation: ticker-move 35s linear infinite;
+        font-size: 14px;
+    }}
+    .ticker__item {{
+        display: inline-block;
+        margin-right: 40px;
+        color: #e0e0e0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    @keyframes ticker-move {{
+        0% {{ transform: translate3d(0, 0, 0); }}
+        100% {{ transform: translate3d(-100%, 0, 0); }}
+    }}
+    </style>
+    <div class="ticker-wrap">
+      <div class="ticker">
+        {items_html}
+      </div>
+    </div>
+    """
+
+    st.markdown(ticker_html, unsafe_allow_html=True)
+
 # ============================================================
 #                       MAIN UI
 # ============================================================
@@ -170,6 +257,9 @@ def main():
         # Stop here for this rerun so the *next* rerun loads the full dashboard
         st.stop()
 
+
+    # -------- Price Ticker under header --------
+    render_price_ticker()
 
     # -------- Load Users + Tier --------
     users_map = load_users()
