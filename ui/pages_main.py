@@ -872,6 +872,18 @@ def _render_market_heat():
 # -------------------- Main Page --------------------
 
 def render():
+    # Tighten top padding so main content sits closer to the header
+    st.markdown(
+        """
+        <style>
+            .block-container {
+                padding-top: 1rem !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.title("AI Scanner Dashboard")
     _pill("Env", st.session_state.get("profile", "dev"))
     _pill("Now", _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
