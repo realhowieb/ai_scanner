@@ -260,7 +260,7 @@ def main():
             """,
             unsafe_allow_html=True,
         )
-        #st.markdown("---")
+        st.markdown("---")
         # Stop here for this rerun so the *next* rerun loads the full dashboard
         st.stop()
 
@@ -273,7 +273,7 @@ def main():
     # -------- Sidebar Account Info --------
     st.sidebar.markdown(f"### 👤 {display_name}")
     st.sidebar.markdown(f"**Plan:** `{ 'Admin' if username in ADMIN_USERS else tier.name }`")
-    st.markdown("---")
+    #st.markdown("---")
 
     # -------- DB Status --------
     db_status = render_db_status_badge()
