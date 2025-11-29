@@ -603,11 +603,58 @@ def render_scan_controls(
             if price is not None:
                 st.success(f"✅ Alpaca Market Data OK. AAPL extended price: ${price:.2f}")
             else:
+                import datetime
+                now = datetime.datetime.utcnow()
+
+                # Weekend-aware messaging
+                if now.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+                    st.info("🟦 Market is closed (weekend). Extended-hours data is usually unavailable.")
+                else:
+                    st.info("Market may be outside active extended-hours windows.")
+
                 _banner(
                     "Connected to Alpaca but no price was returned for AAPL. "
-                    "This may mean no recent extended-hours trades or a data issue.",
+                    "Attempting to show raw Alpaca response for AAPL below for debugging.",
                     "warning",
                 )
+
+                # Detailed Alpaca debug request
+                debug_url = "https://data.alpaca.markets/v2/stocks/snapshots"
+                debug_params = {
+                    "symbols": "AAPL",
+                    "feed": st.secrets.get("ALPACA_FEED", "iex"),
+                }
+                try:
+                    debug_resp = requests.get(
+                        debug_url, headers=headers, params=debug_params, timeout=5
+                    )
+                    st.write("Alpaca debug HTTP status:", debug_resp.status_code)
+                    try:
+                        debug_json = debug_resp.json() or {}
+                        st.write("Alpaca debug top-level keys:", list(debug_json.keys()))
+                        snaps = debug_json.get("snapshots") or {}
+                        aapl_snap = snaps.get("AAPL") or {}
+                        st.write(
+                            "Alpaca debug 'snapshots' keys:",
+                            list(snaps.keys()) if isinstance(snaps, dict) else snaps,
+                        )
+                        st.write(
+                            "Alpaca debug AAPL snapshot keys:",
+                            list(aapl_snap.keys()) if isinstance(aapl_snap, dict) else aapl_snap,
+                        )
+                        st.text_area(
+                            "Raw Alpaca JSON (truncated)",
+                            value=str(debug_json)[:1200],
+                            height=200,
+                        )
+                    except Exception:
+                        st.text_area(
+                            "Raw Alpaca response (non-JSON, truncated)",
+                            value=(debug_resp.text or "")[:1200],
+                            height=200,
+                        )
+                except Exception as e:
+                    st.error(f"Alpaca debug request failed: {e}")
 
     if run_single_search_btn:
         ticker = (search_ticker or "").strip().upper()
