@@ -608,8 +608,8 @@ def render_scan_controls(
             )
         else:
             with st.spinner("Contacting Alpaca for AAPL snapshot..."):
-                quotes = _get_alpaca_extended_last_prices(["AAPL"])
-            price = quotes.get("AAPL")
+                quotes = _get_alpaca_extended_last_prices(["INTC"])
+            price = quotes.get("INTC")
             if price is not None:
                 st.success(f"✅ Alpaca Market Data OK. AAPL extended price: ${price:.2f}")
             else:
