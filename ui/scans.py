@@ -11,9 +11,10 @@ import traceback
 
 import pandas as pd
 import streamlit as st
+import requests  # NEW
 
 from db.runs import save_run, save_daily_snapshot, list_runs
-from scan.engine import safe_call, cached_real_scan, _override_last_prices
+from scan.engine import safe_call, cached_real_scan
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
 # Universe loaders (imported here so this module is self-contained)
@@ -78,6 +79,124 @@ def _get_live_quote(ticker: str) -> Optional[float]:
         return None
 
     return None
+
+
+# --- Alpaca extended-hours helpers ---
+
+ALPACA_MAX_SNAPSHOT_BATCH = 50  # keep batches small for free tier
+
+
+def _get_alpaca_headers() -> Optional[dict]:
+    """Return Alpaca auth headers from Streamlit secrets or None if not configured."""
+    try:
+        key = st.secrets["ALPACA_API_KEY_ID"]
+        secret = st.secrets["ALPACA_API_SECRET_KEY"]
+    except Exception:
+        return None
+
+    if not key or not secret:
+        return None
+
+    return {
+        "APCA-API-KEY-ID": key,
+        "APCA-API-SECRET-KEY": secret,
+    }
+
+
+def _get_alpaca_extended_last_prices(symbols: List[str]) -> dict[str, float]:
+    """
+    Fetch extended-hours latest prices using Alpaca snapshots.
+
+    Uses the free IEX feed; data is delayed but includes premarket / after-hours
+    trades when available. If Alpaca is not configured or the request fails,
+    returns an empty dict.
+    """
+    headers = _get_alpaca_headers()
+    if not headers:
+        return {}
+
+    symbols = [str(s).strip().upper() for s in symbols if s]
+    if not symbols:
+        return {}
+
+    out: dict[str, float] = {}
+    base_url = "https://data.alpaca.markets/v2/stocks/snapshots"
+
+    for i in range(0, len(symbols), ALPACA_MAX_SNAPSHOT_BATCH):
+        batch = symbols[i : i + ALPACA_MAX_SNAPSHOT_BATCH]
+        params = {
+            "symbols": ",".join(batch),
+            "feed": "iex",  # free tier feed
+        }
+        try:
+            resp = requests.get(base_url, headers=headers, params=params, timeout=5)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            # If Alpaca is unavailable or misconfigured, skip this batch
+            continue
+
+        snapshots = data.get("snapshots") or {}
+        for sym in batch:
+            snap = snapshots.get(sym)
+            if not snap:
+                continue
+
+            last_trade = snap.get("latestTrade") or {}
+            price = last_trade.get("p")
+
+            # Fallback to minute bar close if needed
+            if price is None:
+                minute = snap.get("minuteBar") or {}
+                c = minute.get("c")
+                if c is not None:
+                    price = c
+
+            if price is not None:
+                out[sym] = float(price)
+
+    return out
+
+
+def _apply_alpaca_extended_prices(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Override the 'Last' (or similar) price column using Alpaca extended-hours prices.
+
+    If Alpaca is not configured or returns no data, the original DataFrame is returned.
+    """
+    if df is None or df.empty:
+        return df
+
+    # Detect symbol column
+    symbol_col = None
+    for cand in ("Ticker", "Symbol", "symbol"):
+        if cand in df.columns:
+            symbol_col = cand
+            break
+
+    if symbol_col is None:
+        return df
+
+    symbols = df[symbol_col].astype(str).tolist()
+    quotes = _get_alpaca_extended_last_prices(symbols)
+    if not quotes:
+        return df
+
+    # Decide which price column to override; prefer 'Last'
+    price_cols = ["Last", "Price", "Close"]
+    target_col = next((c for c in price_cols if c in df.columns), None)
+    if target_col is None:
+        target_col = "Last"
+        if target_col not in df.columns:
+            df[target_col] = None
+
+    def _apply_row(row):
+        sym = str(row[symbol_col]).strip().upper()
+        new_price = quotes.get(sym)
+        return float(new_price) if new_price is not None else row[target_col]
+
+    df[target_col] = df.apply(_apply_row, axis=1)
+    return df
 
 
 # --- Watchlist DataFrame builder for View Watchlist ---
@@ -307,7 +426,9 @@ def render_scan_controls(
                     df = df.head(top_n).reset_index(drop=True)
 
                     if premarket or afterhours:
-                        df = _override_last_prices(df)
+                        # Use Alpaca Market Data for extended-hours prices.
+                        # If Alpaca is not configured or returns nothing, this is a no-op.
+                        df = _apply_alpaca_extended_prices(df)
 
                 filtered_count = len(df) if df is not None else 0
                 if diagnostics:
