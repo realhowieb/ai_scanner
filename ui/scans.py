@@ -413,7 +413,23 @@ def render_scan_controls(
         nasdaq = filter_universe(nasdaq)
         nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
         combo_universe = sp500 + nasdaq_capped
-        combo_liquid = apply_liquidity_filter_batch(combo_universe)
+
+        # Apply a liquidity filter to the combined universe, using the same
+        # min_price / max_price / min_dollar_vol filters as the main scan
+        # when the helper supports them. Fall back to the legacy signature
+        # if the extended parameters are not accepted.
+        min_dollar_vol = st.session_state.get("min_dollar_vol")
+        try:
+            combo_liquid = apply_liquidity_filter_batch(
+                combo_universe,
+                min_price=min_price,
+                max_price=max_price,
+                min_dollar_vol=min_dollar_vol,
+            )
+        except TypeError:
+            # Older versions of apply_liquidity_filter_batch may only take the universe
+            combo_liquid = apply_liquidity_filter_batch(combo_universe)
+
         combo_capped = combo_liquid[: int(max_combo_scan)]
 
         st.session_state["sp500_universe"] = sp500
