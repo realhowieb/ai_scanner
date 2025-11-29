@@ -36,12 +36,23 @@ except Exception:
 
 
 # --------------- Page config ----------------
+
 st.set_page_config(
     page_title="Breakout Stock Scanner",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# --------------- DEBUG: Secrets visibility (temporary) ----------------
+try:
+    st.sidebar.write("DEBUG secrets keys:", list(st.secrets.keys()))
+    st.sidebar.write(
+        "DEBUG has ALPACA_API_KEY_ID?",
+        "ALPACA_API_KEY_ID" in st.secrets,
+    )
+except Exception:
+    st.sidebar.write("DEBUG: st.secrets not available")
 
 # --------------- Tiering ----------------
 try:
