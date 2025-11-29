@@ -103,18 +103,45 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         help="Only include stocks with minimum dollar volume."
     )
 
-    premarket = st.sidebar.checkbox(
-        "Include Premarket Scan",
-        value=default_premarket,
-        key="premarket",
-        disabled=not getattr(tier, "can_premarket", False),
+    # Session mode selector (mutually exclusive)
+    # Derive a default mode based on saved session_state flags.
+    if default_premarket:
+        default_session_mode = "Premarket"
+    elif default_afterhours:
+        default_session_mode = "After-hours"
+    else:
+        default_session_mode = "Regular"
+
+    # Build options based on tier capabilities.
+    session_options = ["Regular"]
+    if getattr(tier, "can_premarket", False):
+        session_options.append("Premarket")
+    if getattr(tier, "can_afterhours", False):
+        session_options.append("After-hours")
+
+    # Ensure the default is valid given the available options.
+    if default_session_mode not in session_options:
+        default_session_mode = "Regular"
+    default_index = session_options.index(default_session_mode)
+
+    session_mode = st.sidebar.radio(
+        "Session mode",
+        options=session_options,
+        index=default_index,
+        key="session_mode",
+        help="Choose which market session to use for price data.",
     )
-    afterhours = st.sidebar.checkbox(
-        "Include After-hours Scan",
-        value=default_afterhours,
-        key="afterhours",
-        disabled=not getattr(tier, "can_afterhours", False),
-    )
+
+    premarket = session_mode == "Premarket"
+    afterhours = session_mode == "After-hours"
+
+    # Optional: keep these in session_state so defaults persist smoothly.
+    try:
+        st.session_state["premarket"] = premarket
+        st.session_state["afterhours"] = afterhours
+    except Exception:
+        pass
+
     unusual_vol = st.sidebar.checkbox(
         "Unusual Volume Filter",
         value=default_unusual_vol,
