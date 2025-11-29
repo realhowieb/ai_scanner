@@ -76,7 +76,7 @@ from ui.watchlists import render_watchlists_panel
 
 
 # --------------- Cached Market Snapshot Helper ----------------
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def _fetch_index_snapshot(symbol: str):
     try:
         import yfinance as yf
@@ -204,7 +204,7 @@ def render_market_snapshot():
 TICKER_STRIP = ["SPY", "QQQ", "IWM", "DIA", "VIX", "AAPL", "MSFT", "NVDA", "TSLA"]
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=30, show_spinner=False)
 def _fetch_ticker_quotes(symbols: list[str]):
     """Return list of dicts: [{'symbol', 'last', 'change_pct'}, ...]."""
     try:
