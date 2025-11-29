@@ -136,7 +136,17 @@ def _get_alpaca_extended_last_prices(symbols: List[str]) -> dict[str, float]:
             # If Alpaca is unavailable or misconfigured, skip this batch
             continue
 
-        snapshots = data.get("snapshots") or {}
+        # Alpaca may return either:
+        # 1) {"snapshots": {"AAPL": {...}, "TSLA": {...}}}
+        # 2) {"AAPL": {...}, "TSLA": {...}}
+        raw_snaps = data.get("snapshots")
+        if isinstance(raw_snaps, dict) and raw_snaps:
+            snapshots = raw_snaps
+        elif isinstance(data, dict):
+            snapshots = data
+        else:
+            snapshots = {}
+
         for sym in batch:
             snap = snapshots.get(sym)
             if not snap:
@@ -632,8 +642,18 @@ def render_scan_controls(
                     try:
                         debug_json = debug_resp.json() or {}
                         st.write("Alpaca debug top-level keys:", list(debug_json.keys()))
-                        snaps = debug_json.get("snapshots") or {}
+
+                        # Handle both shapes: with/without 'snapshots' wrapper
+                        raw_snaps = debug_json.get("snapshots")
+                        if isinstance(raw_snaps, dict) and raw_snaps:
+                            snaps = raw_snaps
+                        elif isinstance(debug_json, dict):
+                            snaps = debug_json
+                        else:
+                            snaps = {}
+
                         aapl_snap = snaps.get("AAPL") or {}
+
                         st.write(
                             "Alpaca debug 'snapshots' keys:",
                             list(snaps.keys()) if isinstance(snaps, dict) else snaps,
