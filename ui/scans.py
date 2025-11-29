@@ -414,37 +414,24 @@ def render_scan_controls(
         nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
         combo_universe = sp500 + nasdaq_capped
 
-        # Apply a liquidity filter to the combined universe, using the same
-        # min_price / max_price / min_dollar_vol filters as the main scan.
-        # Use safe_call and handle both the new and legacy signatures so we
-        # don't crash inside the cache wrapper.
+        # Apply a liquidity filter to the combined universe using the same
+        # min_price / min_dollar_vol filters as the main scan.
+        # NOTE: apply_liquidity_filter_batch does not accept max_price, so we
+        # only pass min_price and min_dollar_vol here.
         min_dollar_vol = st.session_state.get("min_dollar_vol")
         if min_dollar_vol is None:
             min_dollar_vol = 0.0
 
-        combo_liquid = None
-        try:
-            # Preferred: extended signature with price + dollar volume filters
-            combo_liquid = safe_call(
-                apply_liquidity_filter_batch,
-                combo_universe,
-                min_price=min_price,
-                max_price=max_price,
-                min_dollar_vol=min_dollar_vol,
-                label="Combo liquidity filter",
-            )
-        except TypeError:
-            # Fallback: older signature that only takes the universe
-            combo_liquid = safe_call(
-                apply_liquidity_filter_batch,
-                combo_universe,
-                label="Combo liquidity filter (legacy)",
-            )
-        except Exception:
-            # As a last resort, skip liquidity filtering and just use the raw combo universe
-            combo_liquid = combo_universe
+        combo_liquid = safe_call(
+            apply_liquidity_filter_batch,
+            combo_universe,
+            min_price=min_price,
+            min_dollar_vol=min_dollar_vol,
+            label="Combo liquidity filter",
+        )
 
-        if combo_liquid is None:
+        # If the liquidity filter failed or returned nothing, fall back to the raw universe.
+        if not combo_liquid:
             combo_liquid = combo_universe
 
         combo_capped = combo_liquid[: int(max_combo_scan)]
