@@ -513,20 +513,20 @@ def main():
 
     # Premarket toggle only takes effect during premarket session
     if premarket and session != "premarket":
+        # Clamp to regular mode for this run; avoid mutating widget state directly.
         premarket = False
-        st.session_state["premarket"] = False
         st.sidebar.info(
             "Premarket scans only run between 4:00–9:30am ET on trading days. "
-            "The toggle has been reset to Regular mode."
+            "The toggle has been reset to Regular mode for this scan."
         )
 
     # After-hours toggle only takes effect during after-hours session
     if afterhours and session != "afterhours":
+        # Clamp to regular mode for this run; avoid mutating widget state directly.
         afterhours = False
-        st.session_state["afterhours"] = False
         st.sidebar.info(
             "After-hours scans only run between 4:00–8:00pm ET on trading days. "
-            "The toggle has been reset to Regular mode."
+            "The toggle has been reset to Regular mode for this scan."
         )
 
     # -------- User Settings Footer (Save Defaults) --------
