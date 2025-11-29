@@ -280,7 +280,8 @@ def render_scan_controls(
                     mode_bits.append("After-hours")
                 if not mode_bits:
                     mode_bits.append("Regular")
-                st.caption(f"Mode: {', '.join(mode_bits)} scan.")
+                mode_label = ", ".join(mode_bits)
+                st.markdown(f"**Mode:** `{mode_label}` scan")
                 if (len(tickers) < 50) and not str(label).startswith("Watchlist") and not str(label).startswith("Search:"):
                     st.warning(
                         f"{label} universe is very small ({len(tickers)} tickers). "
