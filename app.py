@@ -111,13 +111,32 @@ def render_market_snapshot():
     # Top Gainer / Most Active from last scan
     df = get_results_df()
     with c3:
-        if df is None or df.empty or "% Change" not in df:
+        if df is None or df.empty:
             st.metric("Top Gainer", "—", "—")
         else:
-            top = df.sort_values("% Change", ascending=False).iloc[0]
-            pct = float(top["% Change"])
-            st.metric("Top Gainer", top.get("Ticker", "—"), f"{pct:+.2f}%")
+            # Try to detect a suitable percent-change / gap metric column
+            metric_candidates = ["% Change", "Change %", "pct_change", "gap_pct", "gap"]
+            metric_col = next((c for c in metric_candidates if c in df.columns), None)
 
+            if metric_col is None:
+                # No usable metric column found; fall back gracefully
+                st.metric("Top Gainer", "—", "—")
+                # Optional subtle caption so we know why it's blank
+                st.caption("Top Gainer: no % change / gap column found in results.")
+                # If you want to debug once, uncomment:
+                # st.write("Top Gainer DEBUG columns:", list(df.columns))
+            else:
+                # Sort by the gain metric descending and take the top row
+                top = df.sort_values(metric_col, ascending=False).iloc[0]
+                ticker = top.get("Ticker") or top.get("symbol") or str(top.name)
+
+                try:
+                    raw_val = float(top[metric_col])
+                except Exception:
+                    raw_val = 0.0
+
+                change_str = f"{raw_val:+.2f}%"
+                st.metric("Top Gainer", ticker, change_str)
     with c4:
         if df is None or df.empty:
             st.metric("Most Active", "—", "—")
