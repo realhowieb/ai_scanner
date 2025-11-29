@@ -417,7 +417,7 @@ def render_scan_controls(
         # Apply a liquidity filter to the combined universe using the same
         # min_price / min_dollar_vol filters as the main scan.
         # NOTE: apply_liquidity_filter_batch does not accept max_price, so we
-        # only pass min_price and min_dollar_vol here, and we call it directly
+        # only pass min_price and min_avg_dollar_vol here, and we call it directly
         # (not via safe_call) to avoid any time.sleep-based retry logic causing
         # issues in restricted environments.
         min_dollar_vol = st.session_state.get("min_dollar_vol")
@@ -425,22 +425,11 @@ def render_scan_controls(
             min_dollar_vol = 0.0
 
         try:
-            # Preferred: new signature with min_price + min_dollar_vol
             combo_liquid = apply_liquidity_filter_batch(
                 combo_universe,
                 min_price=min_price,
-                min_dollar_vol=min_dollar_vol,
+                min_avg_dollar_vol=min_dollar_vol,
             )
-        except TypeError:
-            # Legacy signature: only takes the universe list
-            try:
-                combo_liquid = apply_liquidity_filter_batch(combo_universe)
-            except Exception as e:
-                _banner(
-                    f"⚠️ Combo liquidity filter failed (legacy): {e}",
-                    "warning",
-                )
-                combo_liquid = combo_universe
         except Exception as e:
             _banner(
                 f"⚠️ Combo liquidity filter failed: {e}",
