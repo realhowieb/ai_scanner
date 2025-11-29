@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from datetime import datetime, time
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -43,6 +45,40 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# --------------- Market session helper (US/Eastern) ----------------
+
+def get_market_session(now: datetime | None = None) -> str:
+    """
+    Return one of 'premarket', 'regular', 'afterhours', or 'closed'
+    based on the current US/Eastern time.
+    """
+    tz = ZoneInfo("US/Eastern")
+    if now is None:
+        now = datetime.now(tz)
+    else:
+        now = now.astimezone(tz)
+
+    # Weekend: Saturday (5) / Sunday (6)
+    if now.weekday() >= 5:
+        return "closed"
+
+    t = now.time()
+
+    # Premarket roughly 4:00–9:30 ET
+    if time(4, 0) <= t < time(9, 30):
+        return "premarket"
+
+    # Regular session 9:30–16:00 ET
+    if time(9, 30) <= t < time(16, 0):
+        return "regular"
+
+    # After-hours 16:00–20:00 ET
+    if time(16, 0) <= t < time(20, 0):
+        return "afterhours"
+
+    # Everything else is treated as closed
+    return "closed"
 
 # --------------- Tiering ----------------
 try:
@@ -470,6 +506,28 @@ def main():
         include_ta,
         apply_gap_filter,
     ) = render_filters(tier)
+
+    # -------- Market session gating for extended-hours toggles --------
+    session = get_market_session()
+    st.sidebar.caption(f"Market session (US/Eastern): {session.capitalize()}")
+
+    # Premarket toggle only takes effect during premarket session
+    if premarket and session != "premarket":
+        premarket = False
+        st.session_state["premarket"] = False
+        st.sidebar.info(
+            "Premarket scans only run between 4:00–9:30am ET on trading days. "
+            "The toggle has been reset to Regular mode."
+        )
+
+    # After-hours toggle only takes effect during after-hours session
+    if afterhours and session != "afterhours":
+        afterhours = False
+        st.session_state["afterhours"] = False
+        st.sidebar.info(
+            "After-hours scans only run between 4:00–8:00pm ET on trading days. "
+            "The toggle has been reset to Regular mode."
+        )
 
     # -------- User Settings Footer (Save Defaults) --------
     render_user_settings_footer(
