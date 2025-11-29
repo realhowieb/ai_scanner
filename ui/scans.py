@@ -415,20 +415,37 @@ def render_scan_controls(
         combo_universe = sp500 + nasdaq_capped
 
         # Apply a liquidity filter to the combined universe, using the same
-        # min_price / max_price / min_dollar_vol filters as the main scan
-        # when the helper supports them. Fall back to the legacy signature
-        # if the extended parameters are not accepted.
+        # min_price / max_price / min_dollar_vol filters as the main scan.
+        # Use safe_call and handle both the new and legacy signatures so we
+        # don't crash inside the cache wrapper.
         min_dollar_vol = st.session_state.get("min_dollar_vol")
+        if min_dollar_vol is None:
+            min_dollar_vol = 0.0
+
+        combo_liquid = None
         try:
-            combo_liquid = apply_liquidity_filter_batch(
+            # Preferred: extended signature with price + dollar volume filters
+            combo_liquid = safe_call(
+                apply_liquidity_filter_batch,
                 combo_universe,
                 min_price=min_price,
                 max_price=max_price,
                 min_dollar_vol=min_dollar_vol,
+                label="Combo liquidity filter",
             )
         except TypeError:
-            # Older versions of apply_liquidity_filter_batch may only take the universe
-            combo_liquid = apply_liquidity_filter_batch(combo_universe)
+            # Fallback: older signature that only takes the universe
+            combo_liquid = safe_call(
+                apply_liquidity_filter_batch,
+                combo_universe,
+                label="Combo liquidity filter (legacy)",
+            )
+        except Exception:
+            # As a last resort, skip liquidity filtering and just use the raw combo universe
+            combo_liquid = combo_universe
+
+        if combo_liquid is None:
+            combo_liquid = combo_universe
 
         combo_capped = combo_liquid[: int(max_combo_scan)]
 
