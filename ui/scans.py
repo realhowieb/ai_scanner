@@ -581,6 +581,34 @@ def render_scan_controls(
 
         do_scan(combo_capped, "Combo")
 
+    # --- Alpaca Market Data self-test ---
+    st.markdown("### 🧪 Data Provider Diagnostics")
+
+    if st.button(
+        "Test Alpaca Market Data (AAPL)",
+        key="btn_test_alpaca",
+        use_container_width=True,
+    ):
+        headers = _get_alpaca_headers()
+        if not headers:
+            _banner(
+                "Alpaca API keys are not configured in Streamlit secrets. "
+                "Set ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY in .streamlit/secrets.toml.",
+                "error",
+            )
+        else:
+            with st.spinner("Contacting Alpaca for AAPL snapshot..."):
+                quotes = _get_alpaca_extended_last_prices(["AAPL"])
+            price = quotes.get("AAPL")
+            if price is not None:
+                st.success(f"✅ Alpaca Market Data OK. AAPL extended price: ${price:.2f}")
+            else:
+                _banner(
+                    "Connected to Alpaca but no price was returned for AAPL. "
+                    "This may mean no recent extended-hours trades or a data issue.",
+                    "warning",
+                )
+
     if run_single_search_btn:
         ticker = (search_ticker or "").strip().upper()
         if not ticker:
