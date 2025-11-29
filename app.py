@@ -44,16 +44,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# --------------- DEBUG: Secrets visibility (temporary) ----------------
-try:
-    st.sidebar.write("DEBUG secrets keys:", list(st.secrets.keys()))
-    st.sidebar.write(
-        "DEBUG has ALPACA_API_KEY_ID?",
-        "ALPACA_API_KEY_ID" in st.secrets,
-    )
-except Exception:
-    st.sidebar.write("DEBUG: st.secrets not available")
-
 # --------------- Tiering ----------------
 try:
     from auth.tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier
