@@ -411,11 +411,7 @@ def render_user_settings_footer(
 # ============================================================
 
 def main():
-    # Show ticker above the header (layout option B)
-    render_price_ticker()
-    render_header()
-
-    # -------- AUTH FIRST --------
+    # -------- AUTH FIRST (NOW FIRST) --------
     authed, username, display_name = auth_ui()
     if not authed:
         # Not logged in: show only the login card (auth_ui handles it)
@@ -453,7 +449,10 @@ def main():
         # Stop here for this rerun so the *next* rerun loads the full dashboard
         st.stop()
 
-
+    # -------- ONLY NOW RENDER HEADER + TICKER --------
+    # Show ticker above the header (layout option B)
+    render_price_ticker()
+    render_header()
     # -------- Load Users + Tier --------
     users_map = load_users()
     tier = get_user_tier(username, users_map)
