@@ -165,135 +165,157 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
 
 def render_market_snapshot():
     st.subheader("Today's Market Snapshot")
-    c1, c2, c3, c4 = st.columns(4)
 
-    def _idx(col, label, symbol):
-        with col:
-            last, prev = _fetch_index_snapshot(symbol)
-            if last is None:
-                st.metric(label, "—", "—")
-                return
-            pct = ((last - prev) / prev) * 100 if prev else 0
-            st.metric(label, f"{last:.2f}", f"{pct:+.2f}%")
+    try:
+        c1, c2, c3, c4 = st.columns(4)
 
-    _idx(c1, "S&P 500 (SPY)", "SPY")
-    _idx(c2, "NASDAQ 100 (QQQ)", "QQQ")
+        def _idx(col, label, symbol):
+            with col:
+                last, prev = _fetch_index_snapshot(symbol)
+                if last is None:
+                    st.metric(label, "—", "—")
+                    return
+                pct = ((last - prev) / prev) * 100 if prev else 0
+                st.metric(label, f"{last:.2f}", f"{pct:+.2f}%")
 
-    # Top Gainer / Most Active from last scan
-    df = get_results_df()
-    with c3:
+        _idx(c1, "S&P 500 (SPY)", "SPY")
+        _idx(c2, "NASDAQ 100 (QQQ)", "QQQ")
+
+        # Top Gainer / Most Active from last scan
         try:
-            if df is None or df.empty:
-                st.metric("Top Gainer", "—", "—")
-            else:
-                # Try to detect a suitable percent-change / gap / gain metric column
-                # by scanning column names case-insensitively.
-                lower_map = {col: col.lower() for col in df.columns}
-                metric_col = None
-
-                # 1) Prefer columns whose names clearly indicate change/gain
-                for col, lower in lower_map.items():
-                    if any(
-                        key in lower
-                        for key in [
-                            "% change",
-                            "change %",
-                            "pct_change",
-                            "pct change",
-                            "change",
-                            "gain",
-                            "gainer",
-                            "chg",
-                        ]
-                    ):
-                        metric_col = col
-                        break
-
-                # 2) If none found, look for anything with "gap" in the name
-                if metric_col is None:
-                    for col, lower in lower_map.items():
-                        if "gap" in lower:
-                            metric_col = col
-                            break
-
-                # 3) As a fallback, choose the first reasonable numeric column
-                if metric_col is None:
-                    numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-                    blacklist = {
-                        "volume",
-                        "vol",
-                        "avg_volume",
-                        "average_volume",
-                        "dollar_volume",
-                        "dollar vol",
-                        "market_cap",
-                        "market cap",
-                    }
-                    for col in numeric_cols:
-                        if lower_map[col] not in blacklist:
-                            metric_col = col
-                            break
-
-                if metric_col is None:
-                    # Truly no usable metric column found; fall back gracefully
-                    st.metric("Top Gainer", "—", "—")
-                    st.caption("Top Gainer: no suitable change/gain metric found in results.")
-                else:
-                    # Sort by the detected gain metric descending and take the top row
-                    # Use a numeric view of the column to avoid type errors on mixed types.
-                    numeric_series = pd.to_numeric(df[metric_col], errors="coerce")
-                    idx = numeric_series.idxmax()
-                    if pd.isna(numeric_series.loc[idx]):
-                        st.metric("Top Gainer", "—", "—")
-                    else:
-                        top = df.loc[idx]
-                        ticker = (
-                            top.get("Ticker")
-                            or top.get("symbol")
-                            or top.get("Symbol")
-                            or str(top.name)
-                        )
-                        raw_val = float(numeric_series.loc[idx])
-                        change_str = f"{raw_val:+.2f}%"
-                        st.metric("Top Gainer", ticker, change_str)
+            df = get_results_df()
         except Exception as e:
-            st.metric("Top Gainer", "—", "—")
+            df = None
             try:
                 if bool(st.session_state.get("show_diagnostics_ui", False)):
-                    st.caption(f"Top Gainer error: {e}")
+                    st.caption(f"Results snapshot error: {e}")
             except Exception:
                 pass
-    with c4:
-        try:
-            if df is None or df.empty:
-                st.metric("Most Active", "—", "—")
-            else:
-                vol_col = (
-                    "DollarVol20"
-                    if "DollarVol20" in df
-                    else "Volume"
-                    if "Volume" in df
-                    else None
-                )
-                if not vol_col:
+
+        with c3:
+            try:
+                if df is None or df.empty:
+                    st.metric("Top Gainer", "—", "—")
+                else:
+                    # Try to detect a suitable percent-change / gap / gain metric column
+                    # by scanning column names case-insensitively.
+                    lower_map = {col: col.lower() for col in df.columns}
+                    metric_col = None
+
+                    # 1) Prefer columns whose names clearly indicate change/gain
+                    for col, lower in lower_map.items():
+                        if any(
+                            key in lower
+                            for key in [
+                                "% change",
+                                "change %",
+                                "pct_change",
+                                "pct change",
+                                "change",
+                                "gain",
+                                "gainer",
+                                "chg",
+                            ]
+                        ):
+                            metric_col = col
+                            break
+
+                    # 2) If none found, look for anything with "gap" in the name
+                    if metric_col is None:
+                        for col, lower in lower_map.items():
+                            if "gap" in lower:
+                                metric_col = col
+                                break
+
+                    # 3) As a fallback, choose the first reasonable numeric column
+                    if metric_col is None:
+                        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+                        blacklist = {
+                            "volume",
+                            "vol",
+                            "avg_volume",
+                            "average_volume",
+                            "dollar_volume",
+                            "dollar vol",
+                            "market_cap",
+                            "market cap",
+                        }
+                        for col in numeric_cols:
+                            if lower_map[col] not in blacklist:
+                                metric_col = col
+                                break
+
+                    if metric_col is None:
+                        # Truly no usable metric column found; fall back gracefully
+                        st.metric("Top Gainer", "—", "—")
+                        st.caption("Top Gainer: no suitable change/gain metric found in results.")
+                    else:
+                        # Sort by the detected gain metric descending and take the top row
+                        # Use a numeric view of the column to avoid type errors on mixed types.
+                        numeric_series = pd.to_numeric(df[metric_col], errors="coerce")
+                        idx = numeric_series.idxmax()
+                        if pd.isna(numeric_series.loc[idx]):
+                            st.metric("Top Gainer", "—", "—")
+                        else:
+                            top = df.loc[idx]
+                            ticker = (
+                                top.get("Ticker")
+                                or top.get("symbol")
+                                or top.get("Symbol")
+                                or str(top.name)
+                            )
+                            raw_val = float(numeric_series.loc[idx])
+                            change_str = f"{raw_val:+.2f}%"
+                            st.metric("Top Gainer", ticker, change_str)
+            except Exception as e:
+                st.metric("Top Gainer", "—", "—")
+                try:
+                    if bool(st.session_state.get("show_diagnostics_ui", False)):
+                        st.caption(f"Top Gainer error: {e}")
+                except Exception:
+                    pass
+
+        with c4:
+            try:
+                if df is None or df.empty:
                     st.metric("Most Active", "—", "—")
                 else:
-                    numeric_vol = pd.to_numeric(df[vol_col], errors="coerce")
-                    idx = numeric_vol.idxmax()
-                    if pd.isna(numeric_vol.loc[idx]):
+                    vol_col = (
+                        "DollarVol20"
+                        if "DollarVol20" in df
+                        else "Volume"
+                        if "Volume" in df
+                        else None
+                    )
+                    if not vol_col:
                         st.metric("Most Active", "—", "—")
                     else:
-                        row = df.loc[idx]
-                        val = float(numeric_vol.loc[idx]) / 1_000_000
-                        suffix = "M" if vol_col == "DollarVol20" else "M sh"
-                        st.metric("Most Active", row.get("Ticker", "—"), f"{val:.1f}{suffix}")
-        except Exception as e:
-            st.metric("Most Active", "—", "—")
-            try:
-                if bool(st.session_state.get("show_diagnostics_ui", False)):
-                    st.caption(f"Most Active error: {e}")
-            except Exception:
-                pass
+                        numeric_vol = pd.to_numeric(df[vol_col], errors="coerce")
+                        idx = numeric_vol.idxmax()
+                        if pd.isna(numeric_vol.loc[idx]):
+                            st.metric("Most Active", "—", "—")
+                        else:
+                            row = df.loc[idx]
+                            val = float(numeric_vol.loc[idx]) / 1_000_000
+                            suffix = "M" if vol_col == "DollarVol20" else "M sh"
+                            st.metric("Most Active", row.get("Ticker", "—"), f"{val:.1f}{suffix}")
+            except Exception as e:
+                st.metric("Most Active", "—", "—")
+                try:
+                    if bool(st.session_state.get("show_diagnostics_ui", False)):
+                        st.caption(f"Most Active error: {e}")
+                except Exception:
+                    pass
+
+    except Exception as outer_e:
+        # As a final safeguard, never let errors escape this function.
+        try:
+            if bool(st.session_state.get("show_diagnostics_ui", False)):
+                st.caption(f"Market snapshot error: {outer_e}")
+        except Exception:
+            pass
+        # Show a minimal inline warning inside the panel, but do not re-raise.
+        st.write("Market snapshot panel could not be fully rendered.")
 
 
 # --------------- Price Ticker ----------------
@@ -692,17 +714,7 @@ def main():
     st.session_state["active_watchlist_tickers"] = watch_tickers
 
     # -------- Market Snapshot --------
-    try:
-        render_market_snapshot()
-    except Exception as e:
-        # When diagnostics are enabled, show full exception details in the sidebar.
-        try:
-            if bool(st.session_state.get("show_diagnostics_ui", False)):
-                st.sidebar.exception(e)
-        except Exception:
-            # If session_state is not accessible for some reason, ignore.
-            pass
-        st.warning("Market snapshot unavailable")
+    render_market_snapshot()
 
     # -------- Scan Controls --------
     render_scan_controls(
