@@ -241,28 +241,77 @@ def render_market_snapshot():
 TICKER_STRIP = ["SPY", "QQQ", "IWM", "DIA", "VIX", "AAPL", "MSFT", "NVDA", "TSLA"]
 
 
-@st.cache_data(ttl=30, show_spinner=False)
-def _fetch_ticker_quotes(symbols: list[str]):
-    """Return list of dicts: [{'symbol', 'last', 'change_pct'}, ...]."""
+
+@st.cache_data(ttl=180, show_spinner=False)
+def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
+    """Return list of dicts: [{'symbol', 'last', 'change_pct'}, ...] using a batched yfinance download."""
     try:
         import yfinance as yf  # type: ignore
     except Exception:
         return []
 
-    results = []
+    if not symbols:
+        return []
+
+    # Ensure unique, uppercase symbols for consistency
+    symbols = [s.upper() for s in dict.fromkeys(symbols).keys()]
+
+    try:
+        # Single batched request for all symbols.
+        # For multiple tickers, this returns a DataFrame with a MultiIndex
+        # on the columns: level 0 = field (Open/High/Low/Close/...), level 1 = symbol.
+        hist = yf.download(
+            symbols,
+            period="2d",
+            group_by="ticker",
+            auto_adjust=False,
+            progress=False,
+            threads=False,
+        )
+    except Exception:
+        return []
+
+    if hist is None or hist.empty:
+        return []
+
+    results: list[dict[str, float]] = []
+
+    # Handle both single-symbol and multi-symbol shapes.
+    # If only one symbol, columns are typically a flat Index.
     for sym in symbols:
         try:
-            t = yf.Ticker(sym)
-            hist = t.history(period="2d")
-            if hist is None or hist.empty or "Close" not in hist.columns:
+            if isinstance(hist.columns, pd.MultiIndex):
+                # Multi-symbol case: use the 'Close' field for this symbol
+                if ("Close", sym) not in hist.columns:
+                    continue
+                closes = hist[("Close", sym)].dropna()
+            else:
+                # Single-symbol case: standard OHLC columns
+                if "Close" not in hist.columns:
+                    continue
+                closes = hist["Close"].dropna()
+
+            if closes.empty:
                 continue
-            closes = hist["Close"].tolist()
-            last = float(closes[-1])
-            prev = float(closes[-2]) if len(closes) > 1 else last
-            change_pct = ((last - prev) / prev) * 100.0 if prev not in (0, None) else 0.0
-            results.append({"symbol": sym, "last": last, "change_pct": change_pct})
+
+            last = float(closes.iloc[-1])
+            prev = float(closes.iloc[-2]) if len(closes) > 1 else last
+            if prev in (0, None):
+                change_pct = 0.0
+            else:
+                change_pct = ((last - prev) / prev) * 100.0
+
+            results.append(
+                {
+                    "symbol": sym,
+                    "last": last,
+                    "change_pct": change_pct,
+                }
+            )
         except Exception:
+            # If anything is off for a particular symbol, just skip it.
             continue
+
     return results
 
 
