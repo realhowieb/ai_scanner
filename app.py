@@ -117,16 +117,19 @@ from ui.watchlists import render_watchlists_panel
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
     """
-    Fetch the last and previous close for a single index/ETF symbol
-    using a short yfinance download window. Cached to avoid repeated hits.
+    Fetch the last and previous close for a single index/ETF symbol.
+
+    Tries yf.download first; if that fails or returns no data,
+    falls back to the legacy Ticker().history() approach.
     """
     try:
         import yfinance as yf  # type: ignore
     except Exception:
         return None, None
 
+    # --- First attempt: download ---
+    hist = None
     try:
-        # Single-symbol download; returns a flat-column DataFrame.
         hist = yf.download(
             symbol,
             period="2d",
@@ -135,18 +138,29 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
             threads=False,
         )
     except Exception:
-        return None, None
+        hist = None
 
-    if hist is None or hist.empty or "Close" not in hist.columns:
-        return None, None
+    if hist is not None and not hist.empty and "Close" in hist.columns:
+        closes = hist["Close"].dropna().tolist()
+        if closes:
+            last = float(closes[-1])
+            prev = float(closes[-2]) if len(closes) > 1 else last
+            return last, prev
 
-    closes = hist["Close"].dropna().tolist()
-    if not closes:
+    # --- Fallback: legacy Ticker().history() ---
+    try:
+        t = yf.Ticker(symbol)
+        hist_single = t.history(period="2d")
+        if hist_single is None or hist_single.empty or "Close" not in hist_single.columns:
+            return None, None
+        closes = hist_single["Close"].dropna().tolist()
+        if not closes:
+            return None, None
+        last = float(closes[-1])
+        prev = float(closes[-2]) if len(closes) > 1 else last
+        return last, prev
+    except Exception:
         return None, None
-
-    last = float(closes[-1])
-    prev = float(closes[-2]) if len(closes) > 1 else last
-    return last, prev
 
 
 def render_market_snapshot():
@@ -264,7 +278,11 @@ TICKER_STRIP = ["SPY", "QQQ", "IWM", "DIA", "VIX", "AAPL", "MSFT", "NVDA", "TSLA
 
 @st.cache_data(ttl=180, show_spinner=False)
 def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
-    """Return list of dicts: [{'symbol', 'last', 'change_pct'}, ...] using a batched yfinance download."""
+    """Return list of dicts: [{'symbol', 'last', 'change_pct'}, ...].
+
+    Tries a batched yfinance download first; if that fails, falls back
+    to the legacy per-symbol Ticker().history() approach.
+    """
     try:
         import yfinance as yf  # type: ignore
     except Exception:
@@ -276,10 +294,11 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
     # Ensure unique, uppercase symbols for consistency
     symbols = [s.upper() for s in dict.fromkeys(symbols).keys()]
 
+    results: list[dict[str, float]] = []
+
+    # --- First attempt: batched download ---
+    hist = None
     try:
-        # Single batched request for all symbols.
-        # For multiple tickers, this returns a DataFrame with a MultiIndex
-        # on the columns: level 0 = field (Open/High/Low/Close/...), level 1 = symbol.
         hist = yf.download(
             symbols,
             period="2d",
@@ -289,33 +308,61 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
             threads=False,
         )
     except Exception:
-        return []
+        hist = None
 
-    if hist is None or hist.empty:
-        return []
+    if hist is not None and not hist.empty:
+        # Handle both single-symbol and multi-symbol shapes.
+        for sym in symbols:
+            try:
+                if isinstance(hist.columns, pd.MultiIndex):
+                    if ("Close", sym) not in hist.columns:
+                        continue
+                    closes = hist[("Close", sym)].dropna()
+                else:
+                    if "Close" not in hist.columns:
+                        continue
+                    closes = hist["Close"].dropna()
 
-    results: list[dict[str, float]] = []
-
-    # Handle both single-symbol and multi-symbol shapes.
-    # If only one symbol, columns are typically a flat Index.
-    for sym in symbols:
-        try:
-            if isinstance(hist.columns, pd.MultiIndex):
-                # Multi-symbol case: use the 'Close' field for this symbol
-                if ("Close", sym) not in hist.columns:
+                if closes.empty:
                     continue
-                closes = hist[("Close", sym)].dropna()
-            else:
-                # Single-symbol case: standard OHLC columns
-                if "Close" not in hist.columns:
-                    continue
-                closes = hist["Close"].dropna()
 
-            if closes.empty:
+                last = float(closes.iloc[-1])
+                prev = float(closes.iloc[-2]) if len(closes) > 1 else last
+                if prev in (0, None):
+                    change_pct = 0.0
+                else:
+                    change_pct = ((last - prev) / prev) * 100.0
+
+                results.append(
+                    {
+                        "symbol": sym,
+                        "last": last,
+                        "change_pct": change_pct,
+                    }
+                )
+            except Exception:
                 continue
 
-            last = float(closes.iloc[-1])
-            prev = float(closes.iloc[-2]) if len(closes) > 1 else last
+        if results:
+            return results
+
+    # --- Fallback: legacy per-symbol calls ---
+    try:
+        import yfinance as yf  # type: ignore
+    except Exception:
+        return results
+
+    for sym in symbols:
+        try:
+            t = yf.Ticker(sym)
+            hist_single = t.history(period="2d")
+            if hist_single is None or hist_single.empty or "Close" not in hist_single.columns:
+                continue
+            closes = hist_single["Close"].dropna().tolist()
+            if not closes:
+                continue
+            last = float(closes[-1])
+            prev = float(closes[-2]) if len(closes) > 1 else last
             if prev in (0, None):
                 change_pct = 0.0
             else:
@@ -329,7 +376,6 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
                 }
             )
         except Exception:
-            # If anything is off for a particular symbol, just skip it.
             continue
 
     return results
