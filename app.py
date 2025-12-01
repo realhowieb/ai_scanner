@@ -108,8 +108,10 @@ from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
 from auth.tiering_utils import derive_tier_flags
 from ui.header import render_header
+
 from ui.footer import render_footer
 from ui.watchlists import render_watchlists_panel
+from market_data import get_latest_quotes
 
 
 
@@ -119,15 +121,34 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
     """
     Fetch the last and previous close for a single index/ETF symbol.
 
-    Tries yf.download first; if that fails or returns no data,
-    falls back to the legacy Ticker().history() approach.
+    Tries Alpaca snapshots first; if that fails or returns no data,
+    falls back to yfinance-based history.
     """
+    # --- First attempt: Alpaca via market_data.get_latest_quotes ---
+    try:
+        quotes = get_latest_quotes([symbol])
+    except Exception:
+        quotes = {}
+
+    if quotes:
+        q = quotes.get(symbol.upper())
+        if isinstance(q, dict):
+            last = q.get("last")
+            prev = q.get("prev_close")
+            try:
+                if last is not None:
+                    last_f = float(last)
+                    prev_f = float(prev) if prev is not None else last_f
+                    return last_f, prev_f
+            except Exception:
+                pass
+
+    # --- Fallback: yfinance download / history ---
     try:
         import yfinance as yf  # type: ignore
     except Exception:
         return None, None
 
-    # --- First attempt: download ---
     hist = None
     try:
         hist = yf.download(
@@ -331,14 +352,9 @@ TICKER_STRIP = ["SPY", "QQQ", "IWM", "DIA", "VIX", "AAPL", "MSFT", "NVDA", "TSLA
 def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
     """Return list of dicts: [{'symbol', 'last', 'change_pct'}, ...].
 
-    Tries a batched yfinance download first; if that fails, falls back
-    to the legacy per-symbol Ticker().history() approach.
+    Tries Alpaca snapshots first; if that fails or returns no data,
+    falls back to a batched yfinance download and then to per-symbol history.
     """
-    try:
-        import yfinance as yf  # type: ignore
-    except Exception:
-        return []
-
     if not symbols:
         return []
 
@@ -347,7 +363,47 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
 
     results: list[dict[str, float]] = []
 
-    # --- First attempt: batched download ---
+    # --- First attempt: Alpaca via market_data.get_latest_quotes ---
+    try:
+        quotes = get_latest_quotes(symbols)
+    except Exception:
+        quotes = {}
+
+    if quotes:
+        for sym in symbols:
+            q = quotes.get(sym)
+            if not isinstance(q, dict):
+                continue
+            last = q.get("last")
+            prev = q.get("prev_close")
+            try:
+                if last is None:
+                    continue
+                last_f = float(last)
+                prev_f = float(prev) if prev is not None else last_f
+                if prev_f in (0, None):
+                    change_pct = 0.0
+                else:
+                    change_pct = ((last_f - prev_f) / prev_f) * 100.0
+                results.append(
+                    {
+                        "symbol": sym,
+                        "last": last_f,
+                        "change_pct": change_pct,
+                    }
+                )
+            except Exception:
+                continue
+
+    if results:
+        return results
+
+    # --- Fallback: batched yfinance download ---
+    try:
+        import yfinance as yf  # type: ignore
+    except Exception:
+        return []
+
     hist = None
     try:
         hist = yf.download(
@@ -362,7 +418,6 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
         hist = None
 
     if hist is not None and not hist.empty:
-        # Handle both single-symbol and multi-symbol shapes.
         for sym in symbols:
             try:
                 if isinstance(hist.columns, pd.MultiIndex):
@@ -397,12 +452,7 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
         if results:
             return results
 
-    # --- Fallback: legacy per-symbol calls ---
-    try:
-        import yfinance as yf  # type: ignore
-    except Exception:
-        return results
-
+    # --- Final fallback: legacy per-symbol calls ---
     for sym in symbols:
         try:
             t = yf.Ticker(sym)
