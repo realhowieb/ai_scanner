@@ -157,13 +157,6 @@ def _download_multi_alpaca(
     if not symbols:
         return {}
 
-    params = {
-        "symbols": ",".join(sorted(symbols)),
-        "timeframe": timeframe,
-        "limit": limit,
-        "adjustment": "raw",
-        "feed": "iex",
-    }
     url = f"{cfg['data_url']}/v2/stocks/bars"
     headers = {
         "APCA-API-KEY-ID": cfg["api_key"],
@@ -171,49 +164,73 @@ def _download_multi_alpaca(
         "Accept": "application/json",
     }
 
-    resp = _req.get(url, headers=headers, params=params, timeout=timeout_s)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Alpaca bars request failed with status {resp.status_code}")
+    out: Dict[str, _pd.DataFrame] = {}
 
-    try:
-        payload = resp.json()
-    except Exception as e:  # pragma: no cover
-        raise RuntimeError(f"Failed to decode Alpaca bars JSON: {type(e).__name__}") from e
-
-    # Alpaca responds with a dict under 'bars': {symbol: [bars...]}, but we
-    # defensively handle a top-level mapping as well.
-    bars_by_symbol = payload.get("bars") if isinstance(payload, dict) else {}
-    if not bars_by_symbol and isinstance(payload, dict):
-        # Some legacy formats may use a different key; treat payload itself
-        bars_by_symbol = {
-            k: v for k, v in payload.items() if isinstance(v, list)
+    # Alpaca has practical limits on how many symbols can be requested in a
+    # single /v2/stocks/bars call. To stay well under those limits (and to keep
+    # responses fast for large universes like NASDAQ/Combo), we further chunk
+    # the provided tickers into modest sub-batches.
+    max_symbols_per_call = 150
+    for chunk in _chunks(symbols, max_symbols_per_call):
+        params = {
+            "symbols": ",".join(sorted(chunk)),
+            "timeframe": timeframe,
+            "limit": limit,
+            "adjustment": "raw",
+            "feed": "iex",
         }
 
-    out: Dict[str, _pd.DataFrame] = {}
-    for sym, bars in (bars_by_symbol or {}).items():
-        if not bars:
-            continue
-        df = _pd.DataFrame(bars)
-        if df.empty:
+        try:
+            resp = _req.get(url, headers=headers, params=params, timeout=timeout_s)
+        except Exception:
+            # Network / transport error for this chunk: skip it and continue with others.
             continue
 
-        # Expect columns like t/o/h/l/c/v
-        if "t" in df.columns:
-            df["t"] = _pd.to_datetime(df["t"], errors="coerce")
-            df = df.set_index("t")
+        if resp.status_code != 200:
+            # Do not raise for a single-chunk failure; just skip this chunk so that
+            # partial results can still be used. The caller will fall back to
+            # yfinance only if *all* chunks fail to return any data.
+            continue
 
-        rename: Dict[str, str] = {}
-        for old, new in (("o", "Open"), ("h", "High"), ("l", "Low"), ("c", "Close"), ("v", "Volume")):
-            if old in df.columns:
-                rename[old] = new
-        if rename:
-            df = df.rename(columns=rename)
+        try:
+            payload = resp.json()
+        except Exception:
+            # Malformed JSON for this chunk; skip it.
+            continue
 
-        if "Adj Close" not in df.columns and "Close" in df.columns:
-            df["Adj Close"] = df["Close"]
+        # Alpaca responds with a dict under 'bars': {symbol: [bars...]}, but we
+        # defensively handle a top-level mapping as well.
+        bars_by_symbol = payload.get("bars") if isinstance(payload, dict) else {}
+        if not bars_by_symbol and isinstance(payload, dict):
+            # Some legacy formats may use a different key; treat payload itself
+            bars_by_symbol = {
+                k: v for k, v in payload.items() if isinstance(v, list)
+            }
 
-        df = _normalize_df(df)
-        out[str(sym).upper()] = df
+        for sym, bars in (bars_by_symbol or {}).items():
+            if not bars:
+                continue
+            df = _pd.DataFrame(bars)
+            if df.empty:
+                continue
+
+            # Expect columns like t/o/h/l/c/v
+            if "t" in df.columns:
+                df["t"] = _pd.to_datetime(df["t"], errors="coerce")
+                df = df.set_index("t")
+
+            rename: Dict[str, str] = {}
+            for old, new in (("o", "Open"), ("h", "High"), ("l", "Low"), ("c", "Close"), ("v", "Volume")):
+                if old in df.columns:
+                    rename[old] = new
+            if rename:
+                df = df.rename(columns=rename)
+
+            if "Adj Close" not in df.columns and "Close" in df.columns:
+                df["Adj Close"] = df["Close"]
+
+            df = _normalize_df(df)
+            out[str(sym).upper()] = df
 
     return out
 
