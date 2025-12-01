@@ -1,7 +1,7 @@
 """ai_scanner.prices
 
 Robust, parallel price fetching utilities used across the app.
-- Parallel batched downloads via yfinance, with adaptive chunking
+- Parallel batched downloads via Alpaca Market Data when configured (fallback to yfinance), with adaptive chunking
 - Exponential backoff + jitter on errors
 - Missing-ticker rescue using mini-batches
 - Clean return format: (dict[str, pd.DataFrame], list[tuple[str, str]])
@@ -17,9 +17,15 @@ import concurrent.futures as _fut
 import datetime as _dt
 import time as _time
 import random as _random
+import os as _os
 
 import numpy as _np
 import pandas as _pd
+
+try:
+    import requests as _req
+except Exception:  # pragma: no cover
+    _req = None
 
 try:
     import yfinance as _yf
@@ -56,6 +62,162 @@ class PriceFetchConfig:
     success_budget: int | None = None
 
 
+# ----------------- Alpaca helpers -----------------
+
+
+def _get_alpaca_config() -> Dict[str, str] | None:
+    """Return Alpaca API configuration if available, otherwise None.
+
+    We try, in order:
+      1) streamlit.secrets (if Streamlit is installed)
+      2) environment variables
+    """
+    api_key: str | None = None
+    api_secret: str | None = None
+    data_url: str | None = None
+
+    # Try Streamlit secrets first
+    try:  # pragma: no cover - optional dependency
+        import streamlit as _st  # type: ignore
+
+        secrets = getattr(_st, "secrets", {})
+        api_key = secrets.get("ALPACA_API_KEY_ID") or api_key
+        api_secret = secrets.get("ALPACA_API_SECRET_KEY") or api_secret
+        data_url = secrets.get("ALPACA_DATA_URL") or data_url
+    except Exception:
+        pass
+
+    # Fallback to environment
+    api_key = api_key or _os.getenv("ALPACA_API_KEY_ID")
+    api_secret = api_secret or _os.getenv("ALPACA_API_SECRET_KEY")
+    data_url = data_url or _os.getenv("ALPACA_DATA_URL") or "https://data.alpaca.markets"
+
+    if not api_key or not api_secret or _req is None:
+        return None
+
+    return {
+        "api_key": api_key,
+        "api_secret": api_secret,
+        "data_url": data_url.rstrip("/"),
+    }
+
+
+def _alpaca_timeframe_from_interval(interval: str) -> str | None:
+    """Map yfinance-style intervals to Alpaca timeframes (subset only).
+
+    We currently support daily-only (1d) in this prices module.
+    """
+    mapping = {
+        "1d": "1Day",
+        "1D": "1Day",
+    }
+    return mapping.get(interval)
+
+
+def _alpaca_limit_from_period(period: str) -> int:
+    """Convert a yfinance-style period string into an approximate bar limit."""
+    default = 60
+    try:
+        p = period.lower()
+        if p.endswith("d"):
+            return max(1, int(p[:-1]))
+        if p.endswith("mo"):
+            months = int(p[:-2])
+            return max(1, months * 21)  # ~21 trading days per month
+        if p.endswith("y"):
+            years = int(p[:-1])
+            return max(1, years * 252)  # ~252 trading days per year
+    except Exception:
+        pass
+    return default
+
+
+def _download_multi_alpaca(
+    tickers: Sequence[str],
+    period: str,
+    interval: str,
+    prepost: bool,  # kept for signature compatibility; daily bars ignore it
+    timeout_s: float,
+) -> Dict[str, _pd.DataFrame]:
+    """Download bars for multiple symbols from Alpaca Market Data.
+
+    Returns a dict[symbol -> DataFrame] with OHLCV columns shaped like
+    yfinance output (Open, High, Low, Close, Adj Close, Volume).
+    """
+    cfg = _get_alpaca_config()
+    if cfg is None:
+        raise RuntimeError("Alpaca configuration is not available.")
+
+    timeframe = _alpaca_timeframe_from_interval(interval)
+    if timeframe is None:
+        raise RuntimeError(f"Unsupported interval for Alpaca bars: {interval!r}")
+
+    limit = _alpaca_limit_from_period(period)
+    symbols = [s for s in dict.fromkeys(tickers) if isinstance(s, str) and s.strip()]
+    if not symbols:
+        return {}
+
+    params = {
+        "symbols": ",".join(sorted(symbols)),
+        "timeframe": timeframe,
+        "limit": limit,
+        "adjustment": "raw",
+        "feed": "iex",
+    }
+    url = f"{cfg['data_url']}/v2/stocks/bars"
+    headers = {
+        "APCA-API-KEY-ID": cfg["api_key"],
+        "APCA-API-SECRET-KEY": cfg["api_secret"],
+        "Accept": "application/json",
+    }
+
+    resp = _req.get(url, headers=headers, params=params, timeout=timeout_s)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Alpaca bars request failed with status {resp.status_code}")
+
+    try:
+        payload = resp.json()
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError(f"Failed to decode Alpaca bars JSON: {type(e).__name__}") from e
+
+    # Alpaca responds with a dict under 'bars': {symbol: [bars...]}, but we
+    # defensively handle a top-level mapping as well.
+    bars_by_symbol = payload.get("bars") if isinstance(payload, dict) else {}
+    if not bars_by_symbol and isinstance(payload, dict):
+        # Some legacy formats may use a different key; treat payload itself
+        bars_by_symbol = {
+            k: v for k, v in payload.items() if isinstance(v, list)
+        }
+
+    out: Dict[str, _pd.DataFrame] = {}
+    for sym, bars in (bars_by_symbol or {}).items():
+        if not bars:
+            continue
+        df = _pd.DataFrame(bars)
+        if df.empty:
+            continue
+
+        # Expect columns like t/o/h/l/c/v
+        if "t" in df.columns:
+            df["t"] = _pd.to_datetime(df["t"], errors="coerce")
+            df = df.set_index("t")
+
+        rename: Dict[str, str] = {}
+        for old, new in (("o", "Open"), ("h", "High"), ("l", "Low"), ("c", "Close"), ("v", "Volume")):
+            if old in df.columns:
+                rename[old] = new
+        if rename:
+            df = df.rename(columns=rename)
+
+        if "Adj Close" not in df.columns and "Close" in df.columns:
+            df["Adj Close"] = df["Close"]
+
+        df = _normalize_df(df)
+        out[str(sym).upper()] = df
+
+    return out
+
+
 # ----------------- Helpers -----------------
 
 def _log(logger: Callable[[str], None] | None, msg: str) -> None:
@@ -86,10 +248,26 @@ def _download_multi(
     prepost: bool,
     timeout_s: float,
 ) -> Dict[str, _pd.DataFrame]:
-    if not _yf:
-        raise RuntimeError("yfinance is not installed.")
+    """Download a batch of symbols using Alpaca first, then yfinance as fallback."""
+    # Preferred path: Alpaca bars
+    try:
+        alpaca_data = _download_multi_alpaca(
+            tickers=tickers,
+            period=period,
+            interval=interval,
+            prepost=prepost,
+            timeout_s=timeout_s,
+        )
+    except Exception:
+        alpaca_data = {}
 
-    # yfinance.download with list returns multiindex columns; `group_by='ticker'`
+    if alpaca_data:
+        return alpaca_data
+
+    # Fallback: yfinance multi-download
+    if not _yf:
+        raise RuntimeError("Neither Alpaca Market Data nor yfinance is available.")
+
     data = _yf.download(
         tickers=list(tickers),
         period=period,
@@ -163,10 +341,18 @@ def _download_batch(
 
     # Per-ticker fallback (slower, but more reliable)
     for sym in batch:
+        if _yf is None:
+            skipped.append((sym, "yf_not_installed"))
+            continue
         try:
             df = _yf.download(
-                sym, period=cfg.period, interval=cfg.interval, prepost=cfg.prepost,
-                timeout=cfg.timeout_s, progress=False, threads=False
+                sym,
+                period=cfg.period,
+                interval=cfg.interval,
+                prepost=cfg.prepost,
+                timeout=cfg.timeout_s,
+                progress=False,
+                threads=False,
             )
             if not df.empty:
                 data[sym] = _normalize_df(df)
