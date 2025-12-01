@@ -1,17 +1,7 @@
 import math
-import time
-import random
-from functools import lru_cache
 from typing import Dict, Iterable, Optional, Tuple, List
 
-
 import pandas as pd
-
-# Optional yfinance for ultra-fast batch downloads (single call)
-try:
-    import yfinance as yf  # type: ignore
-except Exception:  # pragma: no cover
-    yf = None  # type: ignore
 
 # Optional TA helpers. If not present, TA columns will be skipped even when include_ta=True
 try:
@@ -214,29 +204,6 @@ def run_sp500_scan(
     )
 
 
-@lru_cache(maxsize=64)
-def _yf_batch_download_cached(
-    tickers_key: Tuple[str, ...],
-    period: str = "1mo",
-    interval: str = "1d",
-) -> pd.DataFrame:
-    """Cached yfinance batch download for a tuple of tickers."""
-    if yf is None:
-        return pd.DataFrame()
-    try:
-        return yf.download(
-            " ".join(tickers_key),
-            period=period,
-            interval=interval,
-            group_by="ticker",
-            auto_adjust=False,
-            progress=False,
-            threads=True,
-        )
-    except Exception:
-        return pd.DataFrame()
-
-
 # Backwards-compat alias (in case older code imports the misspelled name)
 # NOTE: do not advertise this; keep for smooth migration only.
 _breakout_scanner_typo_alias = breakout_scanner
@@ -254,10 +221,8 @@ def run_breakout_scan(
     """App-friendly breakout scan.
 
     The Streamlit app passes a list of tickers plus filter kwargs. This wrapper
-    fetches price data for those tickers and then calls `breakout_scanner`.
-
-    Speed optimization: if yfinance is available, we download all tickers in a
-    single batched request, which is much faster than per-ticker calls.
+    fetches price data for those tickers using the shared price-data module and
+    then calls `breakout_scanner`.
     """
     tickers = [t for t in list(tickers) if t]
     if not tickers:
@@ -268,68 +233,15 @@ def run_breakout_scan(
 
     price_data: Dict[str, pd.DataFrame] = {}
 
-    # 1) Fastest path: chunked yfinance batch download (reduces 429s)
-    if yf is not None:
+    try:
+        from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
+        price_data, _skipped = fetch_price_data_parallel(tickers_plus_spy)
+    except Exception:
         try:
-            # Chunk to avoid Yahoo throttling
-            chunk_size = int(kwargs.get("chunk_size", 150))
-            period = str(kwargs.get("period", "1mo"))
-            interval = str(kwargs.get("interval", "1d"))
-
-            batches: List[pd.DataFrame] = []
-            for i in range(0, len(tickers_plus_spy), chunk_size):
-                chunk = tuple(tickers_plus_spy[i:i + chunk_size])
-                if not chunk:
-                    continue
-                b = _yf_batch_download_cached(chunk, period=period, interval=interval)
-                if b is not None and not b.empty:
-                    batches.append(b)
-                # small jitter between chunks to reduce rate-limits without killing speed
-                time.sleep(random.uniform(0.3, 0.8))
-
-            if batches:
-                batch = pd.concat(batches, axis=1)
-            else:
-                batch = pd.DataFrame()
-
-            if batch is not None and not batch.empty:
-                if isinstance(batch.columns, pd.MultiIndex):
-                    lvl0 = batch.columns.levels[0]
-                    field_names = {str(x).lower() for x in lvl0}
-                    fields_like = {"open", "high", "low", "close", "adj close", "volume"}
-                    if field_names & fields_like:
-                        for t in tickers_plus_spy:
-                            try:
-                                sub = batch.xs(t, level=1, axis=1, drop_level=True)
-                                if sub is not None and not sub.empty:
-                                    price_data[t] = sub.dropna(how="all")
-                            except Exception:
-                                continue
-                    else:
-                        for t in tickers_plus_spy:
-                            try:
-                                sub = batch.xs(t, level=0, axis=1, drop_level=True)
-                                if sub is not None and not sub.empty:
-                                    price_data[t] = sub.dropna(how="all")
-                            except Exception:
-                                continue
-                else:
-                    if len(tickers_plus_spy) == 1:
-                        price_data[tickers_plus_spy[0]] = batch.dropna(how="all")
+            from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
+            price_data, _skipped = fetch_price_data_batch(tickers_plus_spy)
         except Exception:
             price_data = {}
-
-    # 2) Fallbacks if batch download failed
-    if not price_data:
-        try:
-            from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
-            price_data, _skipped = fetch_price_data_parallel(tickers_plus_spy)
-        except Exception:
-            try:
-                from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
-                price_data, _skipped = fetch_price_data_batch(tickers_plus_spy)
-            except Exception:
-                price_data = {}
 
     if not price_data:
         return pd.DataFrame()
