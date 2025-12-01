@@ -4,14 +4,13 @@
 # --- Premium Breakout v2 Engine + utilities (merged) ---
 from typing import List, Dict, Tuple, Optional
 
+import time
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-try:
-    import yfinance as yf
-except Exception:
-    yf = None
+from market_data import get_latest_quotes
 
 
 def safe_call(
@@ -39,124 +38,8 @@ def safe_call(
     raise last_err
 
 
-def _override_last_prices(df: pd.DataFrame) -> pd.DataFrame:
-    """Override df['Last'] with live-ish last trade prices."""
-    if yf is None or df is None or df.empty or "Ticker" not in df.columns:
-        return df
-    last_map = {}
-    for t in df["Ticker"].astype(str).tolist():
-        try:
-            tk = yf.Ticker(t)
-            price = None
-            try:
-                fi = getattr(tk, "fast_info", {}) or {}
-                price = fi.get("last_price")
-            except Exception:
-                price = None
-            if price is None:
-                try:
-                    info = tk.info or {}
-                    price = info.get("regularMarketPrice") or info.get("currentPrice")
-                except Exception:
-                    price = None
-            if price is not None and np.isfinite(price):
-                last_map[t] = float(price)
-        except Exception:
-            continue
-    if last_map:
-        out = df.copy()
-        if "Last" not in out.columns:
-            out["Last"] = np.nan
-        out["Last"] = out["Ticker"].map(last_map).fillna(out["Last"])
-        return out
-    return df
 
 
-def safe_yf_download(
-    tickers: List[str],
-    *,
-    period: str = "1mo",
-    interval: str = "1d",
-    group_by: str = "ticker",
-) -> pd.DataFrame:
-    """Batch yfinance.download with retries and per-ticker fallback.
-
-    Behaviour:
-      - Uses a single batched yfinance.download call (fast path).
-      - If the batch fails entirely, retries via safe_call and returns an empty
-        DataFrame on total failure.
-      - If the batch succeeds but some tickers are missing from the MultiIndex
-        columns, it will retry those missing tickers one-by-one and attempt to
-        merge them into the batch result.
-    """
-    if yf is None or not tickers:
-        return pd.DataFrame()
-
-    clean_tickers = [t for t in tickers if isinstance(t, str) and t]
-    if not clean_tickers:
-        return pd.DataFrame()
-
-    tickers_str = " ".join(clean_tickers)
-
-    def _download_batch():
-        return yf.download(
-            tickers=tickers_str,
-            period=period,
-            interval=interval,
-            group_by=group_by,
-            auto_adjust=False,
-            progress=False,
-            threads=True,
-        )
-
-    try:
-        data = safe_call(_download_batch, label=f"yfinance batch ({len(clean_tickers)} symbols)")
-    except Exception:
-        return pd.DataFrame()
-
-    if data is None or data.empty:
-        return pd.DataFrame()
-
-    if not isinstance(data.columns, pd.MultiIndex):
-        return data
-
-    present = {str(c[0]) for c in data.columns}
-    missing = [t for t in clean_tickers if t not in present]
-
-    if not missing:
-        return data
-
-    for sym in missing:
-        try:
-            def _download_single():
-                return yf.download(
-                    tickers=sym,
-                    period=period,
-                    interval=interval,
-                    group_by="ticker",
-                    auto_adjust=False,
-                    progress=False,
-                    threads=False,
-                )
-
-            single = safe_call(_download_single, label=f"yfinance retry {sym}")
-            if single is None or single.empty:
-                continue
-
-            if not isinstance(single.index, type(data.index)):
-                data = data.join(single, how="outer", rsuffix=f"_{sym}")
-                continue
-
-            for col in single.columns:
-                data[(sym, col)] = single[col]
-        except Exception as e:
-            try:
-                st.caption(f"⚠️ Retry for {sym} failed: {e}")
-            except Exception:
-                pass
-            continue
-
-    return data
 
 
 def _coerce_scan_output(out, tickers: List[str]) -> pd.DataFrame:
@@ -202,91 +85,90 @@ def run_breakout_scan_v2(
     top_n: int,
     diagnostics: bool = True,
 ) -> pd.DataFrame:
-    """Premium Breakout v2.1 Engine (Balanced mode)."""
-    if yf is None or not tickers:
-        rows = []
-        for t in tickers:
-            price = float(np.random.uniform(min_price, max_price))
-            vol = int(np.random.randint(300_000, 20_000_000))
-            gap = float(np.random.uniform(min_gap, min_gap + 10))
-            score = float(np.random.uniform(0, 100))
-            rows.append(
-                {
-                    "Ticker": t,
-                    "BreakoutScore": round(score, 2),
-                    "Last": round(price, 2),
-                    "Volume": vol,
-                    "Gap%": round(gap, 2),
-                    "BreakoutPos20D": np.nan,
-                    "Trend20D%": np.nan,
-                    "Trend10D%": np.nan,
-                    "VolRel20": np.nan,
-                    "DollarVol20": np.nan,
-                    "Volatility20D%": np.nan,
-                    "RS_Rank": np.nan,
-                    "PatternTag": "Stub",
-                    "ScoreNote": "Stub/no yfinance.",
-                    "Premarket": premarket,
-                    "AfterHours": afterhours,
-                    "UnusualVol": False,
-                }
-            )
-        df = pd.DataFrame(rows)
-        if df.empty:
-            return df
-        df = df[df["Last"].between(min_price, max_price)]
-        df = df[df["Gap%"] >= min_gap]
-        df = df.sort_values("BreakoutScore", ascending=False).head(top_n).reset_index(
-            drop=True
-        )
-        return df
+    """Premium Breakout v2.1 Engine (Balanced mode).
 
-    batch = safe_yf_download(tickers, period="1mo", interval="1d", group_by="ticker")
-    if batch is None or batch.empty:
+    Uses the shared price-data module (which is now Alpaca-first with
+    yfinance fallback) for daily OHLCV history, and `get_latest_quotes`
+    for the most recent last/prev_close/volume where available.
+    """
+    if not tickers:
         return pd.DataFrame()
+
+    # Fetch historical daily bars via ai_scanner.data.prices
+    price_data: Dict[str, pd.DataFrame] = {}
+    try:
+        from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
+    except Exception:
+        fetch_price_data_parallel = None  # type: ignore
+    try:
+        from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
+    except Exception:
+        fetch_price_data_batch = None  # type: ignore
+
+    if fetch_price_data_parallel is not None:
+        try:
+            price_data, _skipped = fetch_price_data_parallel(tickers)
+        except Exception:
+            price_data = {}
+
+    if not price_data and fetch_price_data_batch is not None:
+        try:
+            price_data, _skipped = fetch_price_data_batch(tickers)
+        except Exception:
+            price_data = {}
+
+    if not price_data:
+        return pd.DataFrame()
+
+    # Fetch latest quotes from Alpaca to override last/prev/volume when possible
+    try:
+        live_quotes = get_latest_quotes(tickers)
+    except Exception:
+        live_quotes = {}
 
     rows: List[Dict] = []
 
-    def _get_series(sym: str, field: str) -> Optional[pd.Series]:
-        if batch is None or batch.empty:
-            return None
-        if isinstance(batch.columns, pd.MultiIndex):
-            try:
-                return batch[(sym, field)].dropna()
-            except Exception:
-                try:
-                    return batch[(field, sym)].dropna()
-                except Exception:
-                    return None
-        try:
-            return batch[field].dropna()
-        except Exception:
-            return None
-
     for sym in tickers:
         try:
-            close = _get_series(sym, "Close")
-            high = _get_series(sym, "High")
-            vol = _get_series(sym, "Volume")
-            if close is None or high is None or vol is None:
+            df_sym = price_data.get(sym)
+            if df_sym is None or df_sym.empty:
+                continue
+
+            try:
+                close = df_sym["Close"].dropna()
+                high = df_sym["High"].dropna()
+                vol = df_sym["Volume"].dropna()
+            except Exception:
+                continue
+
+            if close.empty or high.empty or vol.empty:
                 continue
             if len(close) < 5 or len(vol) < 5:
                 continue
 
-            close = close.dropna()
-            high = high.dropna()
-            vol = vol.dropna()
-            if close.empty or high.empty or vol.empty:
-                continue
-
             last_close = float(close.iloc[-1])
+            prev_close = float(close.iloc[-2]) if len(close) >= 2 else last_close
+            last_vol = float(vol.iloc[-1])
+
+            # If live Alpaca quotes are available, override last/prev/volume
+            q = live_quotes.get(sym)
+            if isinstance(q, dict):
+                try:
+                    if q.get("last") is not None:
+                        last_close = float(q["last"])
+                    if q.get("prev_close") is not None:
+                        prev_close = float(q["prev_close"])
+                    if q.get("volume") is not None:
+                        last_vol = float(q["volume"])
+                except Exception:
+                    pass
+
             if last_close <= 0:
                 continue
 
             if not (min_price <= last_close <= max_price):
                 continue
 
-            prev_close = float(close.iloc[-2]) if len(close) >= 2 else last_close
             gap_pct = (
                 ((last_close - prev_close) / prev_close) * 100 if prev_close > 0 else 0.0
             )
@@ -315,7 +197,6 @@ def run_breakout_scan_v2(
             avg_vol20 = (
                 float(vol.tail(window_v).mean()) if window_v > 0 else float(vol.iloc[-1])
             )
-            last_vol = float(vol.iloc[-1])
             vol_rel20 = (last_vol / avg_vol20) if avg_vol20 > 0 else 1.0
             dollar_vol20 = avg_vol20 * last_close
 
