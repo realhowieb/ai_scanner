@@ -112,21 +112,41 @@ from ui.footer import render_footer
 from ui.watchlists import render_watchlists_panel
 
 
+
 # --------------- Cached Market Snapshot Helper ----------------
-@st.cache_data(ttl=60, show_spinner=False)
-def _fetch_index_snapshot(symbol: str):
+@st.cache_data(ttl=300, show_spinner=False)
+def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
+    """
+    Fetch the last and previous close for a single index/ETF symbol
+    using a short yfinance download window. Cached to avoid repeated hits.
+    """
     try:
-        import yfinance as yf
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="2d")
-        if hist is None or hist.empty:
-            return None, None
-        closes = hist["Close"].tolist()
-        last = float(closes[-1])
-        prev = float(closes[-2]) if len(closes) > 1 else last
-        return last, prev
+        import yfinance as yf  # type: ignore
     except Exception:
         return None, None
+
+    try:
+        # Single-symbol download; returns a flat-column DataFrame.
+        hist = yf.download(
+            symbol,
+            period="2d",
+            auto_adjust=False,
+            progress=False,
+            threads=False,
+        )
+    except Exception:
+        return None, None
+
+    if hist is None or hist.empty or "Close" not in hist.columns:
+        return None, None
+
+    closes = hist["Close"].dropna().tolist()
+    if not closes:
+        return None, None
+
+    last = float(closes[-1])
+    prev = float(closes[-2]) if len(closes) > 1 else last
+    return last, prev
 
 
 def render_market_snapshot():
