@@ -385,6 +385,15 @@ def render_price_ticker():
     """Render a scrolling ticker just under the main header."""
     data = _fetch_ticker_quotes(TICKER_STRIP)
     if not data:
+        # Optional diagnostics: surface a hint when no ticker data is available.
+        try:
+            if bool(st.session_state.get("show_diagnostics_ui", False)):
+                st.sidebar.warning(
+                    "Price ticker: no data returned from yfinance. "
+                    "This may be a network issue, rate limiting, or a weekend/holiday."
+                )
+        except Exception:
+            pass
         return  # nothing to show
 
     # Build HTML for ticker items
@@ -661,12 +670,12 @@ def main():
     try:
         render_market_snapshot()
     except Exception as e:
-        # Show detailed error in the sidebar when diagnostics are enabled
+        # When diagnostics are enabled, show full exception details in the sidebar.
         try:
-            if bool(diagnostics):
-                st.sidebar.error(f"Market snapshot error: {e}")
+            if bool(st.session_state.get("show_diagnostics_ui", False)):
+                st.sidebar.exception(e)
         except Exception:
-            # If diagnostics is not in scope for some reason, just ignore
+            # If session_state is not accessible for some reason, ignore.
             pass
         st.warning("Market snapshot unavailable")
 
