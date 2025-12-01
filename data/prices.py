@@ -265,26 +265,18 @@ def _download_multi(
     prepost: bool,
     timeout_s: float,
 ) -> Dict[str, _pd.DataFrame]:
-    """Download a batch of symbols using Alpaca first, then yfinance as fallback."""
-    # Preferred path: Alpaca bars
-    try:
-        alpaca_data = _download_multi_alpaca(
-            tickers=tickers,
-            period=period,
-            interval=interval,
-            prepost=prepost,
-            timeout_s=timeout_s,
-        )
-    except Exception:
-        alpaca_data = {}
+    """Download a batch of symbols using yfinance only.
 
-    if alpaca_data:
-        return alpaca_data
-
-    # Fallback: yfinance multi-download
+    We intentionally skip Alpaca OHLCV here because the free Alpaca IEX
+    plan does not provide enough historical bar coverage for large
+    universes (SP500/NASDAQ). For historical prices we rely on yfinance,
+    while Alpaca is still used elsewhere for real-time quotes.
+    """
     if not _yf:
-        raise RuntimeError("Neither Alpaca Market Data nor yfinance is available.")
+        raise RuntimeError("yfinance is not available in this environment.")
 
+    # yfinance supports multi-ticker downloads; threads=False because we
+    # parallelize at a higher level in this module.
     data = _yf.download(
         tickers=list(tickers),
         period=period,
@@ -292,22 +284,22 @@ def _download_multi(
         prepost=prepost,
         timeout=timeout_s,
         group_by="ticker",
-        threads=False,  # we parallelize at a higher level
+        threads=False,
         progress=False,
     )
 
-    # Normalize to dict[ticker -> DataFrame]
     out: Dict[str, _pd.DataFrame] = {}
 
-    # If only a single ticker, yfinance returns regular columns; handle both shapes.
+    # Multi-ticker case: columns are a MultiIndex (ticker, field)
     if isinstance(data.columns, _pd.MultiIndex):
-        for sym in set(k for k, _ in data.columns):
+        for sym in {k for k, _ in data.columns}:
             df = data[sym].copy()
             if not df.empty:
-                out[sym] = _normalize_df(df)
+                out[str(sym).upper()] = _normalize_df(df)
     else:
-        # Single ticker path: we don't know its name reliably; caller will split
-        # batches so this path is rare; we leave to per-ticker fallback if needed.
+        # Single-ticker case: we cannot reliably infer the symbol name from the
+        # DataFrame alone. In practice, callers use batch sizes > 1, and per-
+        # ticker fallback in `_download_batch` will handle any stragglers.
         pass
 
     return out
