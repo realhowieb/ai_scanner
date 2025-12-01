@@ -12,7 +12,7 @@ try:
 except Exception:
     requests = None
 
-from scan.engine import safe_yf_download
+from ai_scanner.scan.liquidity import apply_liquidity_filter_batch as _core_liquidity_filter
 
 
 def _try_import(path: str, attr: str | None = None):
@@ -296,55 +296,21 @@ def apply_liquidity_filter_batch(
     min_price: float,
     min_avg_dollar_vol: float,
 ) -> List[str]:
-    """Filter tickers by approximate price and 20D dollar volume using yfinance."""
+    """Filter tickers by approximate price and 20D dollar volume.
+
+    Delegates to the shared scan.liquidity.apply_liquidity_filter_batch,
+    which is now Alpaca-first with yfinance fallback.
+    """
     if not tickers:
         return []
 
-    # Use the shared safe_yf_download from scan.engine
-    prices = safe_yf_download(tickers, period="1mo", interval="1d", group_by="ticker")
-    if prices is None or prices.empty:
-        return tickers  # fallback: do not filter if data missing
-
-    keep: List[str] = []
-
-    def _get_series(sym: str, field: str):
-        if prices is None or prices.empty:
-            return None
-        if isinstance(prices.columns, pd.MultiIndex):
-            try:
-                return prices[(sym, field)].dropna()
-            except Exception:
-                try:
-                    return prices[(field, sym)].dropna()
-                except Exception:
-                    return None
-        try:
-            return prices[field].dropna()
-        except Exception:
-            return None
-
-    for sym in tickers:
-        try:
-            close = _get_series(sym, "Close")
-            vol = _get_series(sym, "Volume")
-            if close is None or vol is None:
-                continue
-            close = close.dropna()
-            vol = vol.dropna()
-            if close.empty or vol.empty:
-                continue
-
-            last_close = float(close.iloc[-1])
-            if last_close < min_price:
-                continue
-
-            window_v = min(20, len(vol))
-            avg_vol20 = float(vol.tail(window_v).mean()) if window_v > 0 else float(vol.iloc[-1])
-            dollar_vol20 = avg_vol20 * last_close
-
-            if dollar_vol20 >= min_avg_dollar_vol:
-                keep.append(sym)
-        except Exception:
-            continue
-
-    return keep if keep else tickers
+    try:
+        return _core_liquidity_filter(
+            tickers,
+            min_price=min_price,
+            min_avg_dollar_vol=min_avg_dollar_vol,
+        )
+    except Exception:
+        # If anything goes wrong in the core filter, fall back to returning the
+        # unfiltered universe rather than failing the entire app.
+        return tickers
