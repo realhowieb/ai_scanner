@@ -12,7 +12,13 @@ try:
 except Exception:
     requests = None
 
-from ai_scanner.scan.liquidity import apply_liquidity_filter_batch as _core_liquidity_filter
+try:
+    from ai_scanner.scan.liquidity import apply_liquidity_filter_batch as _core_liquidity_filter
+except Exception:
+    try:
+        from scan.liquidity import apply_liquidity_filter_batch as _core_liquidity_filter
+    except Exception:
+        _core_liquidity_filter = None  # type: ignore
 
 
 def _try_import(path: str, attr: str | None = None):
@@ -303,6 +309,10 @@ def apply_liquidity_filter_batch(
     """
     if not tickers:
         return []
+
+    if _core_liquidity_filter is None:
+        # Core liquidity filter is unavailable (import failed); do not block the app.
+        return tickers
 
     try:
         return _core_liquidity_filter(
