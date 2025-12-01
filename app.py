@@ -141,7 +141,11 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
         hist = None
 
     if hist is not None and not hist.empty and "Close" in hist.columns:
-        closes = hist["Close"].dropna().tolist()
+        close_block = hist["Close"]
+        # If Close is a DataFrame (multi-column), select the first column
+        if isinstance(close_block, pd.DataFrame):
+            close_block = close_block.iloc[:, 0]
+        closes = close_block.dropna().to_list()
         if closes:
             last = float(closes[-1])
             prev = float(closes[-2]) if len(closes) > 1 else last
