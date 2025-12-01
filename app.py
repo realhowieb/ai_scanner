@@ -613,9 +613,15 @@ def main():
 
     # -------- Market Snapshot --------
     try:
-        with st.spinner("Loading market snapshot..."):
-            render_market_snapshot()
-    except Exception:
+        render_market_snapshot()
+    except Exception as e:
+        # Show detailed error in the sidebar when diagnostics are enabled
+        try:
+            if bool(diagnostics):
+                st.sidebar.error(f"Market snapshot error: {e}")
+        except Exception:
+            # If diagnostics is not in scope for some reason, just ignore
+            pass
         st.warning("Market snapshot unavailable")
 
     # -------- Scan Controls --------
