@@ -1,6 +1,3 @@
-
-
-
 # --- Premium Breakout v2 Engine + utilities (merged) ---
 from typing import List, Dict, Tuple, Optional
 
@@ -327,39 +324,26 @@ def run_breakout_scan(
     top_n: int,
     diagnostics: bool = True,
 ) -> pd.DataFrame:
-    """Wrapper that prefers v2 engine but can fall back to any legacy engine."""
-    try:
-        return run_breakout_scan_v2(
-            tickers,
-            premarket=premarket,
-            afterhours=afterhours,
-            unusual_volume=unusual_volume,
-            min_gap=min_gap,
-            min_price=min_price,
-            max_price=max_price,
-            top_n=top_n,
-            diagnostics=diagnostics,
-        )
-    except Exception:
-        # Fallback: try a legacy engine in scan.breakout if present
-        try:
-            from . import breakout as legacy_breakout
+    """Public entry point for breakout scans.
 
-            if hasattr(legacy_breakout, "run_breakout_scan"):
-                return legacy_breakout.run_breakout_scan(
-                    tickers,
-                    premarket=premarket,
-                    afterhours=afterhours,
-                    unusual_volume=unusual_volume,
-                    min_gap=min_gap,
-                    min_price=min_price,
-                    max_price=max_price,
-                    top_n=top_n,
-                    diagnostics=diagnostics,
-                )
-        except Exception:
-            pass
-        raise
+    This wrapper intentionally delegates directly to the legacy
+    `scan.breakout.run_breakout_scan` implementation so that we can
+    rely on the previous, stable behaviour while the v2 engine and
+    data plumbing are refined.
+    """
+    from . import breakout as legacy_breakout
+
+    return legacy_breakout.run_breakout_scan(
+        tickers,
+        premarket=premarket,
+        afterhours=afterhours,
+        unusual_volume=unusual_volume,
+        min_gap=min_gap,
+        min_price=min_price,
+        max_price=max_price,
+        top_n=top_n,
+        diagnostics=diagnostics,
+    )
 
 
 @st.cache_data(ttl=600, show_spinner=False)
