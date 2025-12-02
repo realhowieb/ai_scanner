@@ -115,7 +115,21 @@ def run_breakout_scan_v2(
             price_data = {}
 
     if not price_data:
+        if diagnostics:
+            try:
+                st.caption("📉 v2: price_data is EMPTY – no history returned for this universe.")
+            except Exception:
+                pass
         return pd.DataFrame()
+
+    # Debug: how much data did we actually get?
+    if diagnostics:
+        try:
+            st.caption(
+                f"📊 v2: got price history for {len(price_data)} of {len(tickers)} symbols."
+            )
+        except Exception:
+            pass
 
     # Fetch latest quotes from Alpaca to override last/prev/volume when possible
     try:
