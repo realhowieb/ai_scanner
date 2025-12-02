@@ -367,6 +367,12 @@ def _download_batch(
     for attempt in range(1, cfg.batch_retries + 2):
         try:
             multi = _download_multi(batch, cfg.period, cfg.interval, cfg.prepost, cfg.timeout_s)
+            # If the multi-ticker download returned no data at all, treat this as a
+            # failure so that we can fall back to per-symbol downloads below. This
+            # is common on restricted hosts where large multi-ticker requests are
+            # throttled, even though single-symbol downloads work.
+            if not multi:
+                raise RuntimeError("multi-download returned no data")
             data.update(multi)
             # Mark any symbols from batch that didn't appear as missing
             missing = [s for s in batch if s not in multi]
