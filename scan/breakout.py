@@ -144,6 +144,11 @@ def run_breakout_scan(
         st = None  # type: ignore[assignment]
 
     if not isinstance(price_data, dict) or not price_data:
+        if st is not None:
+            try:
+                st.error("❌ run_breakout_scan: price_data is EMPTY – no OHLCV fetched.")
+            except Exception:
+                pass
         return pd.DataFrame()
 
     # Prepare SPY for relative strength, if available.
@@ -207,7 +212,8 @@ def run_breakout_scan(
         # 3) Unusual volume filter: require rel_vol >= 1.5 by default
         if unusual_volume:
             try:
-                if rel_vol != rel_vol or rel_vol < 1.5:  # NaN check + threshold
+                # NaN check + threshold
+                if rel_vol != rel_vol or rel_vol < 1.5:
                     skipped_unusual += 1
                     continue
             except Exception:

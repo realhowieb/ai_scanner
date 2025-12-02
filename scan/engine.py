@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import List, Callable, TypeVar, Any
 import pandas as pd
 import streamlit as st
