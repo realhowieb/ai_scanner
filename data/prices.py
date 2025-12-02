@@ -374,6 +374,8 @@ def _download_batch(
         if _yf is None:
             skipped.append((sym_u, "yf_not_installed"))
             continue
+
+        # First, isolate errors that come from yfinance itself.
         try:
             df = _yf.download(
                 sym_u,
@@ -381,12 +383,22 @@ def _download_batch(
                 interval=cfg.interval,
                 progress=False,
             )
-            if df is None or df.empty:
-                skipped.append((sym_u, "empty_single"))
-                continue
+        except Exception as e:
+            skipped.append((sym_u, f"error_download:{type(e).__name__}:{e}"))
+            continue
+
+        if df is None or df.empty:
+            skipped.append((sym_u, "empty_single"))
+            continue
+
+        # Next, try to normalize the DataFrame. If normalization fails, keep the
+        # raw df so that downstream code still has something to work with, and
+        # record the normalization error separately.
+        try:
             data[sym_u] = _normalize_df(df)
         except Exception as e:
-            skipped.append((sym_u, f"error_single:{type(e).__name__}:{e}"))
+            data[sym_u] = df
+            skipped.append((sym_u, f"error_normalize:{type(e).__name__}:{e}"))
 
     return data, skipped
 
