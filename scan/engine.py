@@ -80,6 +80,7 @@ def run_breakout_scan(
     top_n: int,
     diagnostics: bool = True,
 ) -> pd.DataFrame:
+    st.caption(f"🚀 run_breakout_scan called with {len(tickers)} tickers")
     """Public entry point for breakout scans.
 
     This function is responsible for:
