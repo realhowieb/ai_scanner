@@ -261,6 +261,17 @@ def run_breakout_scan(
     if not price_data:
         return pd.DataFrame()
 
+    # Debug: show price_data size and a sample of keys
+    try:
+        import streamlit as st
+        st.caption(
+            f"📊 Debug: price_data has {len(price_data)} symbols. "
+            f"Sample: {list(price_data.keys())[:10]}"
+        )
+    except Exception:
+        # Ignore if Streamlit isn't active (e.g., during tests)
+        pass
+
     # Choose SPY df for RS calc
     if spy_df is None:
         spy_df = price_data.get("SPY")
