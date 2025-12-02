@@ -218,16 +218,15 @@ def run_breakout_scan_v2(
             else:
                 vol20_pct = 0.0
 
-            min_avg_vol = 200_000
-            min_dollar_vol = 10_000_000
-            if avg_vol20 < min_avg_vol:
+            # Liquidity & volume filters (relaxed to avoid over-filtering entire universes).
+            min_avg_vol = 50_000
+            min_dollar_vol = 1_000_000
+            if avg_vol20 < min_avg_vol or dollar_vol20 < min_dollar_vol:
                 continue
-            if dollar_vol20 < min_dollar_vol:
-                continue
-            if vol_rel20 < 0.8:
+            if vol_rel20 < 0.5:
                 continue
 
-            if unusual_volume and vol_rel20 < 1.5:
+            if unusual_volume and vol_rel20 < 1.3:
                 continue
 
             if gap_pct < min_gap:
@@ -340,24 +339,55 @@ def run_breakout_scan(
 ) -> pd.DataFrame:
     """Public entry point for breakout scans.
 
-    This wrapper intentionally delegates directly to the legacy
-    `scan.breakout.run_breakout_scan` implementation so that we can
-    rely on the previous, stable behaviour while the v2 engine and
-    data plumbing are refined.
+    Prefer the v2 engine (which uses the shared prices module). If v2
+    fails or returns an empty DataFrame, fall back to the legacy
+    `scan.breakout.run_breakout_scan` implementation.
     """
-    from . import breakout as legacy_breakout
+    # Try v2 first
+    try:
+        df_v2 = run_breakout_scan_v2(
+            tickers,
+            premarket=premarket,
+            afterhours=afterhours,
+            unusual_volume=unusual_volume,
+            min_gap=min_gap,
+            min_price=min_price,
+            max_price=max_price,
+            top_n=top_n,
+            diagnostics=diagnostics,
+        )
+        if isinstance(df_v2, pd.DataFrame) and not df_v2.empty:
+            return df_v2
+    except Exception as e:
+        if diagnostics:
+            try:
+                st.caption(f"⚠️ Breakout v2 failed, falling back to legacy: {e}")
+            except Exception:
+                pass
 
-    return legacy_breakout.run_breakout_scan(
-        tickers,
-        premarket=premarket,
-        afterhours=afterhours,
-        unusual_volume=unusual_volume,
-        min_gap=min_gap,
-        min_price=min_price,
-        max_price=max_price,
-        top_n=top_n,
-        diagnostics=diagnostics,
-    )
+    # Fallback: legacy engine
+    try:
+        from . import breakout as legacy_breakout
+
+        df_legacy = legacy_breakout.run_breakout_scan(
+            tickers,
+            premarket=premarket,
+            afterhours=afterhours,
+            unusual_volume=unusual_volume,
+            min_gap=min_gap,
+            min_price=min_price,
+            max_price=max_price,
+            top_n=top_n,
+            diagnostics=diagnostics,
+        )
+        return df_legacy
+    except Exception as e:
+        if diagnostics:
+            try:
+                st.caption(f"⚠️ Legacy breakout engine failed: {e}")
+            except Exception:
+                pass
+        return pd.DataFrame()
 
 
 @st.cache_data(ttl=600, show_spinner=False)
