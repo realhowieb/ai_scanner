@@ -350,6 +350,37 @@ def _normalize_df(df: _pd.DataFrame) -> _pd.DataFrame:
 
     df = df.copy()
 
+    # Normalize column names to canonical OHLCV labels.
+    # This handles common variants like 'open', 'Open ', 'adj_close', etc.
+    try:
+        col_map: Dict[object, str] = {}
+        for col in list(df.columns):
+            name = str(col).strip()
+            lower = name.lower().replace("_", " ")
+
+            if lower in ("open", "o"):
+                new = "Open"
+            elif lower in ("high", "h"):
+                new = "High"
+            elif lower in ("low", "l"):
+                new = "Low"
+            elif lower in ("close", "c"):
+                new = "Close"
+            elif lower in ("adj close", "adjclose", "adjusted close"):
+                new = "Adj Close"
+            elif lower in ("volume", "vol", "v"):
+                new = "Volume"
+            else:
+                new = name
+
+            col_map[col] = new
+
+        if col_map:
+            df = df.rename(columns=col_map)
+    except Exception:
+        # If anything goes wrong during renaming, keep the original columns.
+        pass
+
     # Float-like OHLC columns
     for c in ["Open", "High", "Low", "Close", "Adj Close"]:
         if c not in df.columns:
