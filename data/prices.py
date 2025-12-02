@@ -386,7 +386,7 @@ def _download_batch(
                 continue
             data[sym_u] = _normalize_df(df)
         except Exception as e:
-            skipped.append((sym_u, f"error_single:{type(e).__name__}"))
+            skipped.append((sym_u, f"error_single:{type(e).__name__}:{e}"))
 
     return data, skipped
 
