@@ -813,7 +813,7 @@ def main():
     # --- Debug: yfinance status ---
     with st.expander("🔧 Debug: yfinance status", expanded=False):
         try:
-            from ai_scanner.data.prices import debug_yfinance_status  # type: ignore
+            from data.prices import debug_yfinance_status  # type: ignore
 
             if st.button("Run yfinance self-test", key="debug_yf_status"):
                 status = debug_yfinance_status("AAPL")
