@@ -810,6 +810,36 @@ def main():
     # -------- Pricing (Load Last) --------
     pricing_sidebar(username, users_map)
 
+    # --- Debug: yfinance status ---
+    with st.expander("🔧 Debug: yfinance status", expanded=False):
+        try:
+            from ai_scanner.data.prices import debug_yfinance_status  # type: ignore
+
+            if st.button("Run yfinance self-test", key="debug_yf_status"):
+                status = debug_yfinance_status("AAPL")
+                st.write(status)
+                if not status.get("available"):
+                    st.warning(
+                        "yfinance is not importable. Make sure 'yfinance' is in your "
+                        "requirements.txt or installed in this environment."
+                    )
+                elif status.get("test_error"):
+                    st.error(
+                        "yfinance was imported but the test download failed. This is "
+                        "usually a network or rate-limit issue on the hosting platform."
+                    )
+                elif status.get("test_rows", 0) == 0:
+                    st.warning(
+                        "yfinance returned 0 rows for AAPL (60d). Yahoo may be "
+                        "throttling or this environment may be blocking outbound calls."
+                    )
+                else:
+                    st.success(
+                        f"yfinance looks healthy. Rows returned: {status.get('test_rows')}"
+                    )
+        except Exception as e:
+            st.caption(f"(yfinance debug not available: {e})")
+
     # -------- Footer --------
     render_footer()
 

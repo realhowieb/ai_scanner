@@ -27,10 +27,14 @@ try:
 except Exception:  # pragma: no cover
     _req = None
 
+# yfinance import (used for historical OHLCV). We keep the import error so
+# the UI can surface a clear message when running in restricted environments.
 try:
-    import yfinance as _yf
-except Exception:  # pragma: no cover
-    _yf = None  # allows unit testing without yfinance installed
+    import yfinance as _yf  # type: ignore
+    _YF_IMPORT_ERROR: Exception | None = None
+except Exception as e:  # pragma: no cover - environment-specific
+    _yf = None  # type: ignore
+    _YF_IMPORT_ERROR = e
 
 # ---------- Public API ----------
 __all__ = [
@@ -60,6 +64,34 @@ class PriceFetchConfig:
     backoff_base: float = 1.2
     # Optional budget limiter (max count of successful tickers)
     success_budget: int | None = None
+
+
+# Diagnostic helper for yfinance import and network status
+def debug_yfinance_status(symbol: str = "AAPL") -> dict:
+    """Return a small diagnostic snapshot about yfinance health.
+
+    This is used by the Streamlit UI to help explain why price_data might
+    be empty (e.g. yfinance not installed, import error, or network
+    failures when calling Yahoo).
+    """
+    status: dict[str, object] = {
+        "available": bool(_yf is not None),
+        "import_error": str(_YF_IMPORT_ERROR) if "._YF_IMPORT_ERROR".split(".")[-1] in globals() and _YF_IMPORT_ERROR else None,
+        "test_symbol": symbol,
+        "test_rows": None,
+        "test_error": None,
+    }
+
+    if _yf is None:
+        return status
+
+    try:
+        df = _yf.download(symbol, period="60d", interval="1d", progress=False)
+        status["test_rows"] = int(len(df))
+    except Exception as e:  # pragma: no cover - depends on network
+        status["test_error"] = str(e)
+
+    return status
 
 
 # ----------------- Alpaca helpers -----------------
@@ -273,7 +305,7 @@ def _download_multi(
     while Alpaca is still used elsewhere for real-time quotes.
     """
     if not _yf:
-        raise RuntimeError("yfinance is not available in this environment.")
+        raise RuntimeError("yfinance is not available in this environment (import failed).")
 
     # yfinance supports multi-ticker downloads; threads=False because we
     # parallelize at a higher level in this module.
