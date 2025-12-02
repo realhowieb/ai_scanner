@@ -380,7 +380,6 @@ def _download_batch(
                 period=cfg.period,
                 interval=cfg.interval,
                 prepost=cfg.prepost,
-                timeout=cfg.timeout_s,
                 progress=False,
                 threads=False,
             )
