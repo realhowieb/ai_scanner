@@ -1,3 +1,6 @@
+from typing import List
+import pandas as pd
+
 def run_breakout_scan(
     tickers: List[str],
     *,
