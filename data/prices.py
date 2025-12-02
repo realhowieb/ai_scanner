@@ -356,44 +356,27 @@ def _download_batch(
     batch: Sequence[str],
     cfg: PriceFetchConfig,
 ) -> Tuple[Dict[str, _pd.DataFrame], List[Tuple[str, str]]]:
-    """Download a batch of symbols; returns (data, skipped)"""
+    """Download a batch of symbols using per-symbol yfinance calls only.
+
+    This intentionally bypasses the multi-ticker `_download_multi` path,
+    which can return empty results on restricted hosts even when single-
+    symbol downloads work. It is slower but much more reliable for
+    environments like Streamlit Cloud.
+    """
     data: Dict[str, _pd.DataFrame] = {}
     skipped: List[Tuple[str, str]] = []
 
     if not batch:
         return data, skipped
 
-    # Try a few times for the whole batch
-    for attempt in range(1, cfg.batch_retries + 2):
-        try:
-            multi = _download_multi(batch, cfg.period, cfg.interval, cfg.prepost, cfg.timeout_s)
-            # If the multi-ticker download returned no data at all, treat this as a
-            # failure so that we can fall back to per-symbol downloads below. This
-            # is common on restricted hosts where large multi-ticker requests are
-            # throttled, even though single-symbol downloads work.
-            if not multi:
-                raise RuntimeError("multi-download returned no data")
-            data.update(multi)
-            # Mark any symbols from batch that didn't appear as missing
-            missing = [s for s in batch if s not in multi]
-            for s in missing:
-                skipped.append((s, "missing_in_batch"))
-            return data, skipped
-        except Exception as e:
-            if attempt <= cfg.batch_retries:
-                _backoff_sleep(cfg.backoff_base, attempt)
-            else:
-                # mark whole batch as failed; try per-ticker fallback below
-                _ = str(e)
-
-    # Per-ticker fallback (slower, but more reliable)
     for sym in batch:
+        sym_u = str(sym).upper()
         if _yf is None:
-            skipped.append((sym, "yf_not_installed"))
+            skipped.append((sym_u, "yf_not_installed"))
             continue
         try:
             df = _yf.download(
-                sym,
+                sym_u,
                 period=cfg.period,
                 interval=cfg.interval,
                 prepost=cfg.prepost,
@@ -401,12 +384,12 @@ def _download_batch(
                 progress=False,
                 threads=False,
             )
-            if not df.empty:
-                data[sym] = _normalize_df(df)
-            else:
-                skipped.append((sym, "empty_after_fallback"))
+            if df is None or df.empty:
+                skipped.append((sym_u, "empty_single"))
+                continue
+            data[sym_u] = _normalize_df(df)
         except Exception as e:
-            skipped.append((sym, f"error_fallback:{type(e).__name__}"))
+            skipped.append((sym_u, f"error_single:{type(e).__name__}"))
 
     return data, skipped
 
