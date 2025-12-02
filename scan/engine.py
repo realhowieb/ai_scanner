@@ -98,24 +98,56 @@ def run_breakout_scan(
     spy_df: pd.DataFrame | None = None
 
     # Prefer the parallel fetcher, but fall back to the batch implementation
-    # if it returns no data or raises.
+    # if it returns no data or raises. While debugging, we explicitly surface
+    # any exceptions so we can see why price_data is empty.
+    parallel_error = None
+    batch_error = None
+
+    # --- Parallel fetch attempt ---
     try:
         from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
 
         price_data, _skipped = fetch_price_data_parallel(tickers_plus_spy)
         if not price_data:
             raise RuntimeError("parallel price fetch returned no data")
-    except Exception:
+    except Exception as e:
+        import traceback
+
+        parallel_error = traceback.format_exc()
+        try:
+            st.error(f"❌ fetch_price_data_parallel failed: {e}")
+            st.code(parallel_error, language="python")
+        except Exception:
+            print("fetch_price_data_parallel failed:", parallel_error)
+        price_data = {}
+
+    # --- Batch fetch attempt (only if parallel failed or returned nothing) ---
+    if not price_data:
         try:
             from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
 
             price_data, _skipped = fetch_price_data_batch(tickers_plus_spy)
             if not price_data:
                 raise RuntimeError("batch price fetch returned no data")
+        except Exception as e:
+            import traceback
+
+            batch_error = traceback.format_exc()
+            try:
+                st.error(f"❌ fetch_price_data_batch failed: {e}")
+                st.code(batch_error, language="python")
+            except Exception:
+                print("fetch_price_data_batch failed:", batch_error)
+            price_data = {}
+
+    # If both attempts failed, bail out with an empty DataFrame but only after
+    # surfacing the underlying errors above.
+    if not price_data:
+        try:
+            st.error("❌ Price fetch failed: no data returned from either parallel or batch.")
         except Exception:
-            # As a last resort, return an empty DataFrame so the caller can
-            # handle the "no data" condition gracefully.
-            return pd.DataFrame()
+            pass
+        return pd.DataFrame()
 
     # Diagnostics: show what the fetch layer actually returned
     if diagnostics:
