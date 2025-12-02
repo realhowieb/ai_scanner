@@ -105,7 +105,7 @@ def run_breakout_scan(
 
     # --- Parallel fetch attempt ---
     try:
-        from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
+        from data.prices import fetch_price_data_parallel  # type: ignore
 
         price_data, _skipped = fetch_price_data_parallel(tickers_plus_spy)
         if not price_data:
@@ -124,7 +124,7 @@ def run_breakout_scan(
     # --- Batch fetch attempt (only if parallel failed or returned nothing) ---
     if not price_data:
         try:
-            from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
+            from data.prices import fetch_price_data_batch  # type: ignore
 
             price_data, _skipped = fetch_price_data_batch(tickers_plus_spy)
             if not price_data:
