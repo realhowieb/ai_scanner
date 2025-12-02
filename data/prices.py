@@ -338,17 +338,49 @@ def _download_multi(
 
 
 def _normalize_df(df: _pd.DataFrame) -> _pd.DataFrame:
-    # Ensure expected columns exist; coerce numerics; avoid SettingWithCopy
-    cols_f32 = [c for c in ["Open", "High", "Low", "Close", "Adj Close"] if c in df.columns]
-    if cols_f32:
-        df = df.copy()
-        for c in cols_f32:
-            df[c] = _pd.to_numeric(df[c], errors="coerce").astype("float32")
+    """Best-effort normalization of an OHLCV DataFrame.
+
+    This helper is intentionally defensive: any failure to coerce dtypes will
+    leave the original column values in place rather than raising. This avoids
+    crashes like "TypeError: arg must be a list, tuple, 1-d array, or Series"
+    that can occur with some yfinance/pandas combinations.
+    """
+    if df is None or not isinstance(df, _pd.DataFrame):
+        return df
+
+    df = df.copy()
+
+    # Float-like OHLC columns
+    for c in ["Open", "High", "Low", "Close", "Adj Close"]:
+        if c not in df.columns:
+            continue
+        try:
+            df[c] = _pd.to_numeric(df[c], errors="coerce")
+            try:
+                df[c] = df[c].astype("float32")
+            except TypeError:
+                pass
+        except Exception:
+            continue
+
+    # Volume column
     if "Volume" in df.columns:
-        df["Volume"] = _pd.to_numeric(df["Volume"], errors="coerce").astype("int64")
-    # Sort by index if not sorted
-    if not df.index.is_monotonic_increasing:
-        df = df.sort_index()
+        try:
+            df["Volume"] = _pd.to_numeric(df["Volume"], errors="coerce")
+            try:
+                df["Volume"] = df["Volume"].astype("int64")
+            except TypeError:
+                pass
+        except Exception:
+            pass
+
+    # Sort index defensively
+    try:
+        if not df.index.is_monotonic_increasing:
+            df = df.sort_index()
+    except Exception:
+        pass
+
     return df
 
 
