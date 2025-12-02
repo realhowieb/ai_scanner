@@ -73,15 +73,45 @@ def run_breakout_scan(
 ) -> pd.DataFrame:
     """Public entry point for breakout scans.
 
-    For now, this delegates directly to the legacy `scan.breakout.run_breakout_scan`
-    implementation, which has the most stable behaviour in this environment.
-    The v2 engine (`run_breakout_scan_v2`) is still available for future use,
-    but is not called by default.
+    This function is responsible for:
+    - Extending the ticker list with SPY for relative-strength style metrics.
+    - Fetching OHLCV price data for the requested universe.
+    - Delegating to `scan.breakout.run_breakout_scan`, which expects a
+      mapping of symbol -> DataFrame and an optional SPY DataFrame.
     """
     from . import breakout as legacy_breakout
 
+    # Ensure SPY is included for RS calculations.
+    tickers_plus_spy = sorted(set(list(tickers) + ["SPY"]))
+
+    price_data: dict[str, pd.DataFrame] = {}
+    spy_df: pd.DataFrame | None = None
+
+    # Prefer the parallel fetcher, but fall back to the batch implementation
+    # if it returns no data or raises.
+    try:
+        from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
+
+        price_data, _skipped = fetch_price_data_parallel(tickers_plus_spy)
+        if not price_data:
+            raise RuntimeError("parallel price fetch returned no data")
+    except Exception:
+        try:
+            from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
+
+            price_data, _skipped = fetch_price_data_batch(tickers_plus_spy)
+            if not price_data:
+                raise RuntimeError("batch price fetch returned no data")
+        except Exception:
+            # As a last resort, return an empty DataFrame so the caller can
+            # handle the "no data" condition gracefully.
+            return pd.DataFrame()
+
+    spy_df = price_data.get("SPY")
+
     return legacy_breakout.run_breakout_scan(
-        tickers,
+        price_data=price_data,
+        spy_df=spy_df,
         premarket=premarket,
         afterhours=afterhours,
         unusual_volume=unusual_volume,
