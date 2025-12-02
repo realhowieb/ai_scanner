@@ -837,6 +837,24 @@ def main():
                     st.success(
                         f"yfinance looks healthy. Rows returned: {status.get('test_rows')}"
                     )
+
+            if st.button("Test price data batch (AAPL, MSFT, NVDA)", key="debug_price_batch"):
+                try:
+                    from data.prices import fetch_price_data_batch  # type: ignore
+
+                    price_data, skipped = fetch_price_data_batch(["AAPL", "MSFT", "NVDA"])
+                    st.write({
+                        "price_data_len": len(price_data),
+                        "skipped": skipped[:10],
+                    })
+                    if not price_data:
+                        st.warning("fetch_price_data_batch returned no data for the test symbols.")
+                    else:
+                        for sym, df in list(price_data.items()):
+                            st.write(f"Symbol: {sym}")
+                            st.dataframe(df.tail())
+                except Exception as e2:
+                    st.error(f"price data batch debug failed: {e2}")
         except Exception as e:
             st.caption(f"(yfinance debug not available: {e})")
 
