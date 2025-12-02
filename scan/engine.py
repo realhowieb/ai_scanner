@@ -9,24 +9,31 @@ def safe_call(
     *args: Any,
     label: str | None = None,
     **kwargs: Any,
-) -> T | None:
-    """Generic wrapper to safely call a function used by the scans.
+) -> T:
+    """Debug helper: call a function and surface any exceptions.
 
-    If the underlying function raises, we log a warning to the Streamlit UI
-    (when available) and return None instead of crashing the app.
+    Instead of swallowing errors and returning None, this version logs the full
+    traceback to Streamlit (when available) and then re-raises so that the app
+    shows a clear error box. This is useful while we are debugging the scan engine.
     """
     try:
         return fn(*args, **kwargs)
     except Exception as e:
+        import traceback
+
+        tb = traceback.format_exc()
+        msg_label = label or fn.__name__
+
+        # Try to surface the error inside the Streamlit app
         try:
-            if label:
-                st.warning(f"{label} failed: {e}")
-            else:
-                st.warning(f"{fn.__name__} failed: {e}")
+            st.error(f"❌ {msg_label} crashed: {e}")
+            st.code(tb, language="python")
         except Exception:
-            # If Streamlit isn't available (e.g. during offline tests), just ignore.
-            pass
-        return None
+            # Fallback to console log if Streamlit UI is not available
+            print(f"{msg_label} crashed: {e}\n{tb}")
+
+        # Re-raise so Streamlit shows the red error box with the traceback
+        raise
 
 @st.cache_data(show_spinner=False)
 def cached_real_scan(
