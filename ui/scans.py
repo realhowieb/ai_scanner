@@ -14,7 +14,7 @@ import streamlit as st
 import requests  # NEW
 
 from db.runs import save_run, save_daily_snapshot, list_runs
-from scan.engine import safe_call, cached_real_scan
+from scan.engine import safe_call, run_breakout_scan
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
 # Universe loaders (imported here so this module is self-contained)
@@ -427,9 +427,9 @@ def render_scan_controls(
                         "This usually means a fallback/stub universe is still being used."
                     )
 
-                df = safe_call(
-                    cached_real_scan,
-                    tuple(tickers),
+                # TEMP: bypass cached_real_scan/safe_call and hit the engine directly
+                df = run_breakout_scan(
+                    tickers=list(tickers),
                     premarket=premarket,
                     afterhours=afterhours,
                     unusual_volume=unusual_vol,
@@ -438,11 +438,19 @@ def render_scan_controls(
                     max_price=max_price,
                     top_n=top_n,
                     diagnostics=diagnostics,
-                    label="cached_real_scan",
                 )
+
+                # Debug: show what the engine actually returned
+                st.caption(f"🔥 Direct engine call returned: {0 if df is None else len(df)} rows")
 
                 # Apply Top N cap here to avoid doing last-price overrides on hundreds of rows.
                 if df is not None and not df.empty:
+                    # Show a preview so we can see real rows, not just "0 results"
+                    try:
+                        st.dataframe(df.head(min(top_n, 20)))
+                    except Exception:
+                        pass
+
                     df = df.head(top_n).reset_index(drop=True)
 
                     if premarket or afterhours:
