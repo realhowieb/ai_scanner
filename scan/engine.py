@@ -116,10 +116,33 @@ def run_breakout_scan(
             # handle the "no data" condition gracefully.
             return pd.DataFrame()
 
-    spy_df = price_data.get("SPY")
+    # Diagnostics: show what the fetch layer actually returned
+    if diagnostics:
+        try:
+            st.caption(
+                f"🧩 engine.run_breakout_scan: fetched price_data for "
+                f"{len(price_data)} symbols; sample keys: {list(price_data.keys())[:10]}"
+            )
+        except Exception:
+            pass
 
-    return legacy_breakout.run_breakout_scan(
-        price_data=price_data,
+    spy_df = price_data.get("SPY")
+    if "SPY" in price_data:
+        price_data_no_spy = {k: v for k, v in price_data.items() if k != "SPY"}
+    else:
+        price_data_no_spy = price_data
+
+    if diagnostics:
+        try:
+            st.caption(
+                f"➡️ engine.run_breakout_scan: calling breakout with "
+                f"{len(price_data_no_spy)} symbols (excluding SPY)"
+            )
+        except Exception:
+            pass
+
+    df = legacy_breakout.run_breakout_scan(
+        price_data=price_data_no_spy,
         spy_df=spy_df,
         premarket=premarket,
         afterhours=afterhours,
@@ -130,3 +153,14 @@ def run_breakout_scan(
         top_n=top_n,
         diagnostics=diagnostics,
     )
+
+    if diagnostics:
+        try:
+            st.caption(
+                f"⬅️ engine.run_breakout_scan: breakout returned "
+                f"{0 if df is None else len(df)} rows"
+            )
+        except Exception:
+            pass
+
+    return df
