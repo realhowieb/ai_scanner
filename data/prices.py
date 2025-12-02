@@ -379,9 +379,7 @@ def _download_batch(
                 sym_u,
                 period=cfg.period,
                 interval=cfg.interval,
-                prepost=cfg.prepost,
                 progress=False,
-                threads=False,
             )
             if df is None or df.empty:
                 skipped.append((sym_u, "empty_single"))
