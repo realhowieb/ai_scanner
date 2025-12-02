@@ -179,18 +179,26 @@ def run_sp500_scan(
     except Exception as e:
         raise RuntimeError("Could not import load_sp500_tickers") from e
 
-    # Prefer parallel price fetcher if available
-    price_data = {}
+    # Prefer parallel price fetcher if available, but fall back if it returns
+    # empty data or raises.
+    price_data: Dict[str, pd.DataFrame] = {}
+    tickers = list(load_sp500_tickers())
+
     try:
         from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
-        tickers = list(load_sp500_tickers())
+
         price_data, _skipped = fetch_price_data_parallel(tickers)
+        if not price_data:
+            # Treat an empty result as a failure so we can fall back.
+            raise RuntimeError("parallel price fetch returned no data")
     except Exception:
         # Fallback: try batch fetcher
         try:
             from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
-            tickers = list(load_sp500_tickers())
+
             price_data, _skipped = fetch_price_data_batch(tickers)
+            if not price_data:
+                raise RuntimeError("batch price fetch returned no data")
         except Exception as e2:
             raise RuntimeError("Could not fetch price data for SP500 universe") from e2
 
@@ -235,11 +243,18 @@ def run_breakout_scan(
 
     try:
         from ai_scanner.data.prices import fetch_price_data_parallel  # type: ignore
+
         price_data, _skipped = fetch_price_data_parallel(tickers_plus_spy)
+        if not price_data:
+            # If parallel fetch returns no data, fall back to batch.
+            raise RuntimeError("parallel price fetch returned no data")
     except Exception:
         try:
             from ai_scanner.data.prices import fetch_price_data_batch  # type: ignore
+
             price_data, _skipped = fetch_price_data_batch(tickers_plus_spy)
+            if not price_data:
+                raise RuntimeError("batch price fetch returned no data")
         except Exception:
             price_data = {}
 
