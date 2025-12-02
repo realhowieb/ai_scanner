@@ -400,6 +400,16 @@ def render_scan_controls(
             n_input = len(tickers)
             t0 = time.time()
             try:
+                # Debug: show universe size and a few sample tickers before calling the engine
+                try:
+                    st.caption(
+                        f"🔍 Debug: running scan on {len(tickers)} tickers. "
+                        f"Sample: {tickers[:10]}"
+                    )
+                except Exception:
+                    # If something goes wrong with rendering the debug caption,
+                    # ignore it so scans still run.
+                    pass
                 st.caption(f"🔎 Scanning {len(tickers)} tickers for {label}...")
                 # Show the current session mode (Regular / Premarket / After-hours)
                 mode_bits = []
