@@ -67,10 +67,23 @@ def _render_builtin_candlestick(
 
     Falls back to a basic line chart if Plotly is not installed.
     """
-    if df is None or df.empty:
+    # Defensive: ensure we have a proper DataFrame copy
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
         st.info("No chart data available for this symbol.")
         return
 
+    df = df.copy()
+
+    # Ensure column names are unique; drop duplicate labels and keep first
+    try:
+        if df.columns.duplicated().any():
+            df = df.loc[:, ~df.columns.duplicated()]
+    except Exception:
+        # If anything goes wrong, leave df as-is; Plotly will still raise a clear error
+        pass
+
+    # Ensure required OHLC columns exist
+    required_ohlc = {"Open", "High", "Low", "Close"}
     if "Close" not in df.columns:
         st.info("Price data missing 'Close' column for this symbol.")
         return
@@ -82,7 +95,7 @@ def _render_builtin_candlestick(
 
     fig = go.Figure()
 
-    if {"Open", "High", "Low", "Close"}.issubset(df.columns):
+    if required_ohlc.issubset(df.columns):
         fig.add_candlestick(
             x=df.index,
             open=df["Open"],
@@ -115,7 +128,7 @@ def _render_builtin_candlestick(
         title=f"{ticker} – Daily Chart",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 # ---------- Public chart API ----------
