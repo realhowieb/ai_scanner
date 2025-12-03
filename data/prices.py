@@ -458,7 +458,12 @@ def _download_batch(
         # raw df so that downstream code still has something to work with, and
         # record the normalization error separately.
         try:
-            data[sym_u] = _normalize_df(df)
+            norm = _normalize_df(df)
+            try:
+                norm.attrs["source"] = "batch_single"
+            except Exception:
+                pass
+            data[sym_u] = norm
         except Exception as e:
             data[sym_u] = df
             skipped.append((sym_u, f"error_normalize:{type(e).__name__}:{e}"))
@@ -469,6 +474,7 @@ def _download_batch(
 def _rescue_missing_in_minibatches(
     missing_syms: Sequence[str],
     cfg: PriceFetchConfig,
+    logger: Callable[[str], None] | None = None,
 ) -> Tuple[Dict[str, _pd.DataFrame], List[Tuple[str, str]]]:
     data: Dict[str, _pd.DataFrame] = {}
     skipped: List[Tuple[str, str]] = []
@@ -490,6 +496,14 @@ def _rescue_missing_in_minibatches(
                 mini_missing = list(mini)  # treat all as missing this round
             if attempt <= cfg.mini_retries:
                 _backoff_sleep(cfg.backoff_base, attempt)
+        # Tag each DataFrame in got with source
+        for df in got.values():
+            try:
+                df.attrs["source"] = "rescue_multi"
+            except Exception:
+                pass
+        if got:
+            _log(logger, f"[prices] Rescue mini-batch got {len(got)} symbols; sample: {list(got.keys())[:8]}")
         # Record results
         data.update(got)
         for s in mini_missing:
@@ -568,7 +582,7 @@ def fetch_price_data_parallel(
         missing = [s for s in tickers if s not in price_data]
         if missing:
             _log(logger, f"[prices] Rescuing {len(missing)} missing symbols in mini-batches of {cfg.mini_size}…")
-            got, sk2 = _rescue_missing_in_minibatches(missing, cfg)
+            got, sk2 = _rescue_missing_in_minibatches(missing, cfg, logger)
             price_data.update(got)
             skipped.extend(sk2)
 
