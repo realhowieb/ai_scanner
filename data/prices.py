@@ -262,6 +262,11 @@ def _download_multi_alpaca(
                 df["Adj Close"] = df["Close"]
 
             df = _normalize_df(df)
+            try:
+                df.attrs["source"] = "alpaca_multi"
+                df.attrs["symbol"] = str(sym).upper()
+            except Exception:
+                pass
             out[str(sym).upper()] = df
 
     return out
@@ -444,6 +449,8 @@ def _download_batch(
                 sym_u,
                 period=cfg.period,
                 interval=cfg.interval,
+                prepost=cfg.prepost,
+                timeout=cfg.timeout_s,
                 progress=False,
             )
         except Exception as e:
@@ -461,6 +468,7 @@ def _download_batch(
             norm = _normalize_df(df)
             try:
                 norm.attrs["source"] = "batch_single"
+                norm.attrs["symbol"] = sym_u
             except Exception:
                 pass
             data[sym_u] = norm
@@ -496,10 +504,11 @@ def _rescue_missing_in_minibatches(
                 mini_missing = list(mini)  # treat all as missing this round
             if attempt <= cfg.mini_retries:
                 _backoff_sleep(cfg.backoff_base, attempt)
-        # Tag each DataFrame in got with source
-        for df in got.values():
+        # Tag each DataFrame in got with source + symbol
+        for sym, df in got.items():
             try:
                 df.attrs["source"] = "rescue_multi"
+                df.attrs["symbol"] = str(sym).upper()
             except Exception:
                 pass
         if got:
