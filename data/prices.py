@@ -655,12 +655,29 @@ def fetch_price_data_parallel(
     for sym in cfg.tickers:
         key = _cache_key(sym, cfg)
         cached = _PRICE_CACHE.get(key)
+
+        # Validate cached frame: must be a non-empty DataFrame and, if a
+        # `.attrs["symbol"]` tag is present, it must match this ticker.
+        use_cached = False
         if isinstance(cached, _pd.DataFrame) and not cached.empty:
             try:
-                df_cached = cached.copy(deep=True)
+                sym_u = str(sym).upper()
+                cached_sym = str(getattr(cached, "attrs", {}).get("symbol", sym_u)).upper()
+                if cached_sym == sym_u:
+                    use_cached = True
+                else:
+                    # Drop clearly mismatched cache entries so they don't get reused.
+                    _PRICE_CACHE.pop(key, None)
+            except Exception:
+                # If anything goes wrong while validating, treat as a cache miss.
+                use_cached = False
+
+        if use_cached:
+            try:
+                df_cached = cached.copy(deep=True)  # type: ignore[assignment]
             except Exception:
                 # Fallback: construct a new DataFrame from the cached object
-                df_cached = _pd.DataFrame(cached)
+                df_cached = _pd.DataFrame(cached)  # type: ignore[arg-type]
             price_data[str(sym).upper()] = df_cached
             cache_hits += 1
         else:
