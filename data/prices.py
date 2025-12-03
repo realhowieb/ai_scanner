@@ -626,16 +626,45 @@ def fetch_price_data_parallel(
     skipped: List[Tuple[str, str]] = []
 
     chunks = list(_chunks(cfg.tickers, cfg.chunk_size))
+    if not chunks:
+        return {}, []
 
-    # Download batches **sequentially** to avoid yfinance thread-safety issues.
-    for batch in chunks:
-        _log(logger, f"[prices] Downloading chunk of {len(batch)} symbols…")
-        try:
-            data, sk = _download_batch(batch, cfg)
-        except Exception as e:  # very defensive
-            data, sk = {}, [(s, f"batch_error:{type(e).__name__}:{e}") for s in batch]
-        price_data.update(data)
-        skipped.extend(sk)
+    # --- Limited parallelism over _download_batch ---
+    # If only one chunk or caller forces max_workers=1, keep it simple/serial.
+    if len(chunks) == 1 or cfg.max_workers <= 1:
+        for batch in chunks:
+            _log(logger, f"[prices] Downloading chunk of {len(batch)} symbols…")
+            try:
+                data, sk = _download_batch(batch, cfg)
+            except Exception as e:  # very defensive
+                data, sk = {}, [(s, f"batch_error:{type(e).__name__}:{e}") for s in batch]
+            price_data.update(data)
+            skipped.extend(sk)
+    else:
+        # Use a small cap on workers to avoid hammering yfinance too hard.
+        worker_count = min(max(1, cfg.max_workers), 4, len(chunks))
+        _log(
+            logger,
+            f"[prices] Downloading {len(chunks)} chunks with {worker_count} workers (chunk_size={cfg.chunk_size})…",
+        )
+        with _fut.ThreadPoolExecutor(max_workers=worker_count) as ex:
+            future_map = {ex.submit(_download_batch, batch, cfg): batch for batch in chunks}
+            done = 0
+            total = len(future_map)
+            for fut in _fut.as_completed(future_map):
+                batch = future_map[fut]
+                try:
+                    data, sk = fut.result()
+                except Exception as e:
+                    data, sk = {}, [(s, f"batch_error:{type(e).__name__}:{e}") for s in batch]
+                done += 1
+                _log(
+                    logger,
+                    f"[prices] Chunk {done}/{total} ready ({len(data)} ok, {len(sk)} skipped)",
+                )
+                price_data.update(data)
+                skipped.extend(sk)
+    # --- End limited parallelism block ---
 
     # Optionally rescue missing
     if cfg.rescue_missing:
