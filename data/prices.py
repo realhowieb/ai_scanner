@@ -61,6 +61,7 @@ __all__ = [
 ]
 
 
+@dataclass
 class PriceFetchConfig:
     tickers: Sequence[str]
     period: str = "60d"
