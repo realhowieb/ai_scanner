@@ -22,6 +22,21 @@ import os as _os
 import numpy as _np
 import pandas as _pd
 
+# --- In-memory price DataFrame cache ---
+from typing import Dict
+_PRICE_CACHE: Dict[str, _pd.DataFrame] = {}
+
+def clear_price_cache() -> None:
+    """Clear the in-memory price DataFrame cache.
+
+    This is useful when debugging or when you suspect stale OHLCV data.
+    """
+    try:
+        _PRICE_CACHE.clear()
+    except Exception:
+        # Extremely defensive: if anything goes wrong, just ignore.
+        pass
+
 try:
     import requests as _req
 except Exception:  # pragma: no cover
@@ -42,6 +57,7 @@ __all__ = [
     "fetch_price_data_parallel",
     "fetch_price_data_batch",
     "fetch_price_data_streaming",
+    "clear_price_cache",
 ]
 
 
@@ -274,12 +290,19 @@ def _download_multi_alpaca(
 
 # ----------------- Helpers -----------------
 
+
 def _log(logger: Callable[[str], None] | None, msg: str) -> None:
     if logger:
         try:
             logger(msg)
         except Exception:
             pass
+
+
+# --- Helper for cache keys ---
+def _cache_key(sym: str, cfg: PriceFetchConfig) -> str:
+    """Build a stable cache key for a given symbol + config."""
+    return f"{str(sym).upper()}|{cfg.period}|{cfg.interval}|{'1' if cfg.prepost else '0'}"
 
 
 def _chunks(seq: Sequence[str], n: int) -> Iterable[List[str]]:
@@ -573,6 +596,7 @@ def _rescue_missing_in_minibatches(
 
 # ----------------- Public Orchestrator -----------------
 
+
 def fetch_price_data_parallel(
     tickers: Sequence[str],
     *,
@@ -625,45 +649,67 @@ def fetch_price_data_parallel(
     price_data: Dict[str, _pd.DataFrame] = {}
     skipped: List[Tuple[str, str]] = []
 
-    chunks = list(_chunks(cfg.tickers, cfg.chunk_size))
-    if not chunks:
-        return {}, []
+    # --- Cache lookups -------------------------------------------------
+    remaining: List[str] = []
+    cache_hits = 0
+    for sym in cfg.tickers:
+        key = _cache_key(sym, cfg)
+        cached = _PRICE_CACHE.get(key)
+        if isinstance(cached, _pd.DataFrame) and not cached.empty:
+            try:
+                df_cached = cached.copy(deep=True)
+            except Exception:
+                # Fallback: construct a new DataFrame from the cached object
+                df_cached = _pd.DataFrame(cached)
+            price_data[str(sym).upper()] = df_cached
+            cache_hits += 1
+        else:
+            remaining.append(sym)
+
+    if cache_hits:
+        _log(logger, f"[prices] Cache hits: {cache_hits} symbols")
+
+    download_tickers: List[str] = remaining
+
+    # -------------------------------------------------------------------
+    chunks = list(_chunks(download_tickers, cfg.chunk_size))
 
     # --- Limited parallelism over _download_batch ---
-    # If only one chunk or caller forces max_workers=1, keep it simple/serial.
-    if len(chunks) == 1 or cfg.max_workers <= 1:
-        for batch in chunks:
-            _log(logger, f"[prices] Downloading chunk of {len(batch)} symbols…")
-            try:
-                data, sk = _download_batch(batch, cfg)
-            except Exception as e:  # very defensive
-                data, sk = {}, [(s, f"batch_error:{type(e).__name__}:{e}") for s in batch]
-            price_data.update(data)
-            skipped.extend(sk)
-    else:
-        # Use a small cap on workers to avoid hammering yfinance too hard.
-        worker_count = min(max(1, cfg.max_workers), 4, len(chunks))
-        _log(
-            logger,
-            f"[prices] Downloading {len(chunks)} chunks with {worker_count} workers (chunk_size={cfg.chunk_size})…",
-        )
-        with _fut.ThreadPoolExecutor(max_workers=worker_count) as ex:
-            future_map = {ex.submit(_download_batch, batch, cfg): batch for batch in chunks}
-            done = 0
-            total = len(future_map)
-            for fut in _fut.as_completed(future_map):
-                batch = future_map[fut]
+    if chunks:
+        # If only one chunk or caller forces max_workers=1, keep it simple/serial.
+        if len(chunks) == 1 or cfg.max_workers <= 1:
+            for batch in chunks:
+                _log(logger, f"[prices] Downloading chunk of {len(batch)} symbols…")
                 try:
-                    data, sk = fut.result()
-                except Exception as e:
+                    data, sk = _download_batch(batch, cfg)
+                except Exception as e:  # very defensive
                     data, sk = {}, [(s, f"batch_error:{type(e).__name__}:{e}") for s in batch]
-                done += 1
-                _log(
-                    logger,
-                    f"[prices] Chunk {done}/{total} ready ({len(data)} ok, {len(sk)} skipped)",
-                )
                 price_data.update(data)
                 skipped.extend(sk)
+        else:
+            # Use a small cap on workers to avoid hammering yfinance too hard.
+            worker_count = min(max(1, cfg.max_workers), 4, len(chunks))
+            _log(
+                logger,
+                f"[prices] Downloading {len(chunks)} chunks with {worker_count} workers (chunk_size={cfg.chunk_size})…",
+            )
+            with _fut.ThreadPoolExecutor(max_workers=worker_count) as ex:
+                future_map = {ex.submit(_download_batch, batch, cfg): batch for batch in chunks}
+                done = 0
+                total = len(future_map)
+                for fut in _fut.as_completed(future_map):
+                    batch = future_map[fut]
+                    try:
+                        data, sk = fut.result()
+                    except Exception as e:
+                        data, sk = {}, [(s, f"batch_error:{type(e).__name__}:{e}") for s in batch]
+                    done += 1
+                    _log(
+                        logger,
+                        f"[prices] Chunk {done}/{total} ready ({len(data)} ok, {len(sk)} skipped)",
+                    )
+                    price_data.update(data)
+                    skipped.extend(sk)
     # --- End limited parallelism block ---
 
     # Optionally rescue missing
@@ -706,6 +752,14 @@ def fetch_price_data_parallel(
             valid_price_data[sym] = df
         else:
             skipped.append((sym, "invalid_frame"))
+
+    # Update cache with validated frames so future scans can reuse them safely.
+    for sym, df in valid_price_data.items():
+        key = _cache_key(sym, cfg)
+        try:
+            _PRICE_CACHE[key] = df.copy(deep=True)
+        except Exception:
+            _PRICE_CACHE[key] = df
 
     return valid_price_data, skipped
 
