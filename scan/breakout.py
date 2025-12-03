@@ -128,14 +128,16 @@ def run_breakout_scan(
     top_n,
     diagnostics,
 ):
-    """Rebuilt breakout scan.
+    """Breakout scan with richer metrics.
 
     This implementation:
     - Normalizes each symbol's OHLCV data.
     - Computes basic breakout metrics (pct change, gap, 20-day high, rel volume).
+    - Adds 10/20 day trend, breakout position vs 20-day high, 20-day volatility,
+      and dollar volume.
     - Applies price filters, optional gap and unusual volume filters.
     - Uses SPY (if provided) to compute a simple relative-strength metric.
-    - Ranks results by a composite score and returns the top N rows.
+    - Ranks results by a composite breakout score and returns the top N rows.
     """
     # Optional: Streamlit diagnostics
     try:
@@ -180,6 +182,7 @@ def run_breakout_scan(
 
     for symbol, raw_df in price_data.items():
         attempted += 1
+
         df = _prep_symbol_df(raw_df)
         if df.empty:
             skipped_invalid += 1
@@ -191,9 +194,11 @@ def run_breakout_scan(
             continue
 
         close = metrics["Close"]
+        prev_close = metrics["PrevClose"]
         pct_change = metrics["PctChange"]
         gap_pct = metrics["GapPct"]
         vol_today = metrics["Volume"]
+        vol_avg_20 = metrics["VolAvg20"]
         rel_vol = metrics["RelVol"]
         high_20 = metrics["High20"]
         is_breakout = metrics["IsBreakout"]
@@ -203,7 +208,7 @@ def run_breakout_scan(
             skipped_price += 1
             continue
 
-        # 2) Gap filter: if min_gap > 0, require gap >= min_gap
+        # 2) Gap filter: if min_gap > 0, require |gap| >= min_gap
         if min_gap is not None and min_gap > 0:
             if abs(gap_pct) < min_gap:
                 skipped_gap += 1
@@ -220,6 +225,47 @@ def run_breakout_scan(
                 skipped_unusual += 1
                 continue
 
+        # --- Extended metrics ---
+
+        # Trend over last 20 / 10 closes
+        trend_20 = float("nan")
+        trend_10 = float("nan")
+        try:
+            if len(df) >= 21:
+                trend_20 = (float(df["Close"].iloc[-1]) / float(df["Close"].iloc[-21]) - 1.0) * 100.0
+            if len(df) >= 11:
+                trend_10 = (float(df["Close"].iloc[-1]) / float(df["Close"].iloc[-11]) - 1.0) * 100.0
+        except Exception:
+            trend_20 = float("nan")
+            trend_10 = float("nan")
+
+        # Position vs 20-day high (1.0 == at high)
+        breakout_pos_20d = float("nan")
+        try:
+            if high_20 and high_20 > 0:
+                breakout_pos_20d = close / high_20
+        except Exception:
+            breakout_pos_20d = float("nan")
+
+        # Dollar volume using today's volume and last price, or 20-day avg
+        dollar_vol_20 = float("nan")
+        try:
+            if vol_avg_20 and vol_avg_20 > 0:
+                dollar_vol_20 = close * vol_avg_20
+            elif vol_today and vol_today > 0:
+                dollar_vol_20 = close * vol_today
+        except Exception:
+            dollar_vol_20 = float("nan")
+
+        # 20-day volatility (std dev of daily returns)
+        vol_20d = float("nan")
+        try:
+            if len(df) >= 21:
+                rets = df["Close"].pct_change().iloc[-20:]
+                vol_20d = float(rets.std() * 100.0)
+        except Exception:
+            vol_20d = float("nan")
+
         # Relative strength vs SPY (simple ratio)
         rs = None
         try:
@@ -228,30 +274,67 @@ def run_breakout_scan(
         except Exception:
             rs = None
 
+        # Pattern tag: basic labeling based on breakout / gap / volume
+        pattern_tag = "Base/Neutral"
+        try:
+            if is_breakout and rel_vol and rel_vol >= 1.5 and gap_pct >= 0:
+                pattern_tag = "BreakoutHigh"
+            elif is_breakout and gap_pct >= 0:
+                pattern_tag = "NearHigh"
+            elif gap_pct <= -2.0:
+                pattern_tag = "GapDown"
+        except Exception:
+            pattern_tag = "Base/Neutral"
+
         # Composite breakout score:
-        # - Favor strong % change
-        # - Slightly favor bigger gaps
-        # - Boost for unusual volume
-        # - Boost if at/near 20-day high
-        score = pct_change
-        score += gap_pct * 0.5
-        if rel_vol and rel_vol == rel_vol:  # not NaN
-            score += (rel_vol - 1.0) * 10.0
-        if is_breakout:
-            score += 5.0
+        #   - Favor strong short-term trend and % change
+        #   - Reward being close to 20-day high
+        #   - Reward higher relative volume and positive gap
+        score = 0.0
+        try:
+            # Base on daily move
+            score += pct_change
+
+            # Trend weighting
+            if trend_20 == trend_20 and trend_20 > 0:
+                score += trend_20 * 0.4
+            if trend_10 == trend_10 and trend_10 > 0:
+                score += trend_10 * 0.6
+
+            # Position vs high (closer to 1.0 is better)
+            if breakout_pos_20d == breakout_pos_20d:
+                score += (breakout_pos_20d - 0.9) * 50.0  # reward > 0.9
+
+            # Gap contribution
+            score += gap_pct * 0.5
+
+            # Volume contribution
+            if rel_vol and rel_vol == rel_vol:
+                score += (rel_vol - 1.0) * 10.0
+
+            # Small bonus for confirmed breakout
+            if is_breakout:
+                score += 5.0
+        except Exception:
+            # Fall back to simple pct_change score on any error
+            score = pct_change
 
         rows.append(
             {
                 "Ticker": symbol,
+                "BreakoutScore": score,
                 "Last": close,
-                "%Change": pct_change,
-                "GapPct": gap_pct,
                 "Volume": vol_today,
-                "RelVol": rel_vol,
-                "High20": high_20,
-                "IsBreakout": is_breakout,
+                "GapPct": gap_pct,
+                "BreakoutPos20D": breakout_pos_20d,
+                "Trend20D%": trend_20,
+                "Trend10D%": trend_10,
+                "VolRel20": rel_vol,
+                "DollarVol20": dollar_vol_20,
+                "Volatility20D%": vol_20d,
+                "PatternTag": pattern_tag,
                 "RSvsSPY": rs,
-                "Score": score,
+                "IsBreakout": is_breakout,
             }
         )
         added += 1
@@ -271,9 +354,9 @@ def run_breakout_scan(
     if df_out.empty:
         return df_out
 
-    # Rank by composite score and return top N
+    # Rank by composite breakout score and return top N
     try:
-        df_out = df_out.sort_values("Score", ascending=False).head(top_n)
+        df_out = df_out.sort_values("BreakoutScore", ascending=False).head(top_n)
     except Exception:
         # As a fallback, just limit the number of rows.
         df_out = df_out.head(top_n)
