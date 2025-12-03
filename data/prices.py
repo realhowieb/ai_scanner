@@ -606,14 +606,14 @@ def fetch_price_data_parallel(
     skipped: List[Tuple[str, str]] = []
 
     chunks = list(_chunks(cfg.tickers, cfg.chunk_size))
-    # Download batches in parallel
-    with _fut.ThreadPoolExecutor(max_workers=cfg.max_workers) as ex:
-        for batch in chunks:
-            _log(logger, f"[prices] Downloading chunk of {len(batch)} symbols…")
-        results = list(ex.map(lambda b: _download_batch(b, cfg), chunks))
 
-    # Aggregate
-    for data, sk in results:
+    # Download batches **sequentially** to avoid yfinance thread-safety issues.
+    for batch in chunks:
+        _log(logger, f"[prices] Downloading chunk of {len(batch)} symbols…")
+        try:
+            data, sk = _download_batch(batch, cfg)
+        except Exception as e:  # very defensive
+            data, sk = {}, [(s, f"batch_error:{type(e).__name__}:{e}") for s in batch]
         price_data.update(data)
         skipped.extend(sk)
 
