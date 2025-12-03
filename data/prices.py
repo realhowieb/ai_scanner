@@ -382,6 +382,13 @@ def _normalize_df(df: _pd.DataFrame) -> _pd.DataFrame:
 
         if col_map:
             df = df.rename(columns=col_map)
+            # Ensure column names are unique (drop duplicate labels, keep first).
+            try:
+                if df.columns.duplicated().any():
+                    df = df.loc[:, ~df.columns.duplicated()]
+            except Exception:
+                # If anything goes wrong during deduplication, keep the original columns.
+                pass
     except Exception:
         # If anything goes wrong during renaming, keep the original columns.
         pass
