@@ -587,9 +587,24 @@ def fetch_price_data_parallel(
         skipped.append((s, "missing_final"))
 
     if still_missing:
-        _log(logger, f"[prices] Missing in final result: {', '.join(still_missing[:8])}{'…' if len(still_missing) > 8 else ''}")
+        _log(
+            logger,
+            f"[prices] Missing in final result: "
+            f"{', '.join(still_missing[:8])}"
+            f"{'…' if len(still_missing) > 8 else ''}"
+        )
 
-    return price_data, skipped
+    # Final cleanup: only return symbols that have a non-empty DataFrame.
+    # This prevents downstream scanners from operating on placeholders or
+    # partially-constructed frames.
+    valid_price_data: Dict[str, _pd.DataFrame] = {}
+    for sym, df in price_data.items():
+        if isinstance(df, _pd.DataFrame) and not df.empty:
+            valid_price_data[sym] = df
+        else:
+            skipped.append((sym, "invalid_frame"))
+
+    return valid_price_data, skipped
 
 
 # ----------------- Back-compat shims -----------------
