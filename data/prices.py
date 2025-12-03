@@ -482,12 +482,19 @@ def _download_batch(
         # record the normalization error separately.
         try:
             norm = _normalize_df(df)
+            # Safeguard: ensure columns are unique after normalization
             try:
-                norm.attrs["source"] = "batch_single"
-                norm.attrs["symbol"] = sym_u
+                if norm.columns.duplicated().any():
+                    norm = norm.loc[:, ~norm.columns.duplicated()]
             except Exception:
                 pass
-            data[sym_u] = norm.copy(deep=True)
+            # Ensure no two tickers share identical DataFrame references and reset index
+            try:
+                norm = norm.reset_index(drop=False).copy(deep=True)
+                norm.attrs["symbol"] = sym_u
+                data[sym_u] = norm
+            except Exception:
+                data[sym_u] = norm.copy(deep=True)
         except Exception as e:
             data[sym_u] = df
             skipped.append((sym_u, f"error_normalize:{type(e).__name__}:{e}"))
