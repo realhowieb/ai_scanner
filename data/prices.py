@@ -484,39 +484,63 @@ def _rescue_missing_in_minibatches(
     cfg: PriceFetchConfig,
     logger: Callable[[str], None] | None = None,
 ) -> Tuple[Dict[str, _pd.DataFrame], List[Tuple[str, str]]]:
+    """
+    Rescue pass for symbols that failed in the main parallel batches.
+
+    IMPORTANT:
+    - Uses _download_batch (per-symbol yfinance) instead of the
+      multi-ticker _download_multi to avoid any chance of misaligned /
+      duplicated data coming from yfinance's multi-symbol mode.
+    """
     data: Dict[str, _pd.DataFrame] = {}
     skipped: List[Tuple[str, str]] = []
+
     if not missing_syms:
         return data, skipped
 
     for mini in _chunks(missing_syms, cfg.mini_size):
-        # Retry each mini-batch with its own small attempts
-        got: Dict[str, _pd.DataFrame] = {}
-        mini_missing: List[str] = []
+        if not mini:
+            continue
+
+        _log(logger, f"[prices] Rescue mini-batch of {len(mini)} symbols…")
+
+        # We will retry this mini-batch a few times using _download_batch,
+        # shrinking the 'still_missing' set as we successfully rescue symbols.
+        still_missing: List[str] = list(mini)
+
         for attempt in range(1, cfg.mini_retries + 2):
             try:
-                multi = _download_multi(mini, cfg.period, cfg.interval, cfg.prepost, cfg.timeout_s)
-                got.update(multi)
-                mini_missing = [s for s in mini if s not in multi]
-                if not mini_missing:
-                    break
-            except Exception:
-                mini_missing = list(mini)  # treat all as missing this round
-            if attempt <= cfg.mini_retries:
+                got_batch, skipped_batch = _download_batch(still_missing, cfg)
+            except Exception as e:  # very defensive
+                got_batch = {}
+                skipped_batch = [
+                    (s, f"rescue_error:{type(e).__name__}:{e}") for s in still_missing
+                ]
+
+            # Tag rescued frames
+            for sym, df in got_batch.items():
+                try:
+                    df.attrs["source"] = "rescue_single"
+                    df.attrs["symbol"] = str(sym).upper()
+                except Exception:
+                    pass
+
+            data.update(got_batch)
+            skipped.extend(skipped_batch)
+
+            # Recompute what is still missing after this attempt
+            still_missing = [s for s in still_missing if s not in got_batch]
+
+            if not still_missing:
+                break  # this mini-batch is fully rescued
+
+            if attempt <= cfg.mini_retries and still_missing:
                 _backoff_sleep(cfg.backoff_base, attempt)
-        # Tag each DataFrame in got with source + symbol
-        for sym, df in got.items():
-            try:
-                df.attrs["source"] = "rescue_multi"
-                df.attrs["symbol"] = str(sym).upper()
-            except Exception:
-                pass
-        if got:
-            _log(logger, f"[prices] Rescue mini-batch got {len(got)} symbols; sample: {list(got.keys())[:8]}")
-        # Record results
-        data.update(got)
-        for s in mini_missing:
+
+        # Any symbols that are still missing after all attempts are marked as such
+        for s in still_missing:
             skipped.append((s, "missing_after_rescue"))
+
     return data, skipped
 
 
