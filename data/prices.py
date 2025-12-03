@@ -61,7 +61,6 @@ __all__ = [
 ]
 
 
-@dataclass
 class PriceFetchConfig:
     tickers: Sequence[str]
     period: str = "60d"
@@ -656,17 +655,19 @@ def fetch_price_data_parallel(
         key = _cache_key(sym, cfg)
         cached = _PRICE_CACHE.get(key)
 
-        # Validate cached frame: must be a non-empty DataFrame and, if a
-        # `.attrs["symbol"]` tag is present, it must match this ticker.
+        # Validate cached frame: must be a non-empty DataFrame and must have
+        # a `.attrs["symbol"]` tag that matches this ticker. Older cache
+        # entries without a symbol tag are treated as stale and discarded.
         use_cached = False
         if isinstance(cached, _pd.DataFrame) and not cached.empty:
             try:
                 sym_u = str(sym).upper()
-                cached_sym = str(getattr(cached, "attrs", {}).get("symbol", sym_u)).upper()
-                if cached_sym == sym_u:
+                attrs = getattr(cached, "attrs", {}) or {}
+                cached_sym = attrs.get("symbol", None)
+                if isinstance(cached_sym, str) and cached_sym.upper() == sym_u:
                     use_cached = True
                 else:
-                    # Drop clearly mismatched cache entries so they don't get reused.
+                    # Stale or mismatched cache entry: remove so it can't be reused.
                     _PRICE_CACHE.pop(key, None)
             except Exception:
                 # If anything goes wrong while validating, treat as a cache miss.
