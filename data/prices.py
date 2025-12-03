@@ -330,7 +330,7 @@ def _download_multi(
     # Multi-ticker case: columns are a MultiIndex (ticker, field)
     if isinstance(data.columns, _pd.MultiIndex):
         for sym in {k for k, _ in data.columns}:
-            df = data[sym].copy()
+            df = _pd.DataFrame(data[sym]).copy(deep=True)
             if not df.empty:
                 out[str(sym).upper()] = _normalize_df(df)
     else:
@@ -460,6 +460,15 @@ def _download_batch(
                 timeout=cfg.timeout_s,
                 progress=False,
             )
+            # Defensive: ensure each symbol gets its own independent DataFrame
+            # so there is no shared state across tickers that could lead to
+            # duplicated OHLCV data when downstream code mutates frames.
+            try:
+                df = _pd.DataFrame(df).copy(deep=True)
+            except Exception:
+                # If anything goes wrong, keep the original df; the later
+                # empty-check and normalization will handle bad objects.
+                pass
         except Exception as e:
             skipped.append((sym_u, f"error_download:{type(e).__name__}:{e}"))
             continue
@@ -478,7 +487,7 @@ def _download_batch(
                 norm.attrs["symbol"] = sym_u
             except Exception:
                 pass
-            data[sym_u] = norm
+            data[sym_u] = norm.copy(deep=True)
         except Exception as e:
             data[sym_u] = df
             skipped.append((sym_u, f"error_normalize:{type(e).__name__}:{e}"))
@@ -532,7 +541,11 @@ def _rescue_missing_in_minibatches(
                 except Exception:
                     pass
 
-            data.update(got_batch)
+            for _sym, _df in got_batch.items():
+                try:
+                    data[_sym] = _df.copy(deep=True)
+                except Exception:
+                    data[_sym] = _df
             skipped.extend(skipped_batch)
 
             # Recompute what is still missing after this attempt
