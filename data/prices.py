@@ -515,24 +515,19 @@ def _download_batch(
             skipped.append((sym_u, "yf_not_installed"))
             continue
 
-        # First, isolate errors that come from yfinance itself.
+        # 1) Pull raw bars via per-symbol Ticker().history
         try:
-            df = _yf.download(
-                sym_u,
+            ticker_obj = _yf.Ticker(sym_u)
+            df = ticker_obj.history(
                 period=cfg.period,
                 interval=cfg.interval,
                 prepost=cfg.prepost,
-                timeout=cfg.timeout_s,
-                progress=False,
+                auto_adjust=False,
             )
             # Defensive: ensure each symbol gets its own independent DataFrame
-            # so there is no shared state across tickers that could lead to
-            # duplicated OHLCV data when downstream code mutates frames.
             try:
                 df = _pd.DataFrame(df).copy(deep=True)
             except Exception:
-                # If anything goes wrong, keep the original df; the later
-                # empty-check and normalization will handle bad objects.
                 pass
         except Exception as e:
             skipped.append((sym_u, f"error_download:{type(e).__name__}:{e}"))
@@ -542,25 +537,28 @@ def _download_batch(
             skipped.append((sym_u, "empty_single"))
             continue
 
-        # Next, try to normalize the DataFrame. If normalization fails, keep the
-        # raw df so that downstream code still has something to work with, and
-        # record the normalization error separately.
+        # 2) Normalize the DataFrame but keep the DateTimeIndex semantics
         try:
             norm = _normalize_df(df)
+
             # Safeguard: ensure columns are unique after normalization
             try:
                 if norm.columns.duplicated().any():
                     norm = norm.loc[:, ~norm.columns.duplicated()]
             except Exception:
                 pass
-            # Ensure no two tickers share identical DataFrame references and reset index
+
+            # Tag the frame with its symbol and make sure it is not shared
             try:
-                norm = norm.reset_index(drop=False).copy(deep=True)
                 norm.attrs["symbol"] = sym_u
-                data[sym_u] = norm
+                norm = norm.copy(deep=True)
             except Exception:
-                data[sym_u] = norm.copy(deep=True)
+                norm = norm.copy()
+
+            data[sym_u] = norm
         except Exception as e:
+            # If normalization blows up, fall back to the raw df so the caller
+            # still has something to work with.
             data[sym_u] = df
             skipped.append((sym_u, f"error_normalize:{type(e).__name__}:{e}"))
 
