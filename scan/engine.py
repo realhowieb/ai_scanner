@@ -6,6 +6,42 @@ import streamlit as st
 
 T = TypeVar("T")
 
+SCAN_PROFILES: dict[str, dict[str, float | bool]] = {
+    "regular": {
+        "min_gap_factor": 1.0,
+        "force_unusual_volume": False,
+    },
+    "aggressive": {
+        "min_gap_factor": 0.75,
+        "force_unusual_volume": False,
+    },
+    "conservative": {
+        "min_gap_factor": 1.25,
+        "force_unusual_volume": True,
+    },
+}
+
+def _apply_scan_profile(
+    profile: str,
+    *,
+    min_gap: float,
+    unusual_volume: bool,
+) -> tuple[float, bool]:
+    """Return adjusted (min_gap, unusual_volume) based on the chosen scan profile.
+
+    Profiles are intentionally simple:
+    - "regular": pass-through
+    - "aggressive": slightly lower the min_gap, keep unusual-volume as requested
+    - "conservative": slightly raise the min_gap and always enable unusual-volume
+    """
+    config = SCAN_PROFILES.get(profile, SCAN_PROFILES["regular"])
+    factor = float(config.get("min_gap_factor", 1.0))
+    force_unusual = bool(config.get("force_unusual_volume", False))
+
+    effective_min_gap = max(0.0, min_gap * factor)
+    effective_unusual_volume = unusual_volume or force_unusual
+    return effective_min_gap, effective_unusual_volume
+
 def safe_call(
     fn: Callable[..., T],
     *args: Any,
@@ -48,6 +84,7 @@ def cached_real_scan(
     min_price: float,
     max_price: float,
     top_n: int,
+    profile: str = "regular",
     diagnostics: bool = True,
     use_cache: bool = True,
 ) -> pd.DataFrame:
@@ -56,6 +93,8 @@ def cached_real_scan(
     This matches the signature used in ui/scans.py, which passes a tuple of
     tickers and the filter parameters. The implementation just delegates to
     `run_breakout_scan`, which currently uses the legacy breakout engine.
+
+    Accepts a `profile` parameter controlling scan behaviour, defaults to "regular".
     """
     return run_breakout_scan(
         list(tickers),
@@ -66,6 +105,7 @@ def cached_real_scan(
         min_price=min_price,
         max_price=max_price,
         top_n=top_n,
+        profile=profile,
         diagnostics=diagnostics,
         use_cache=use_cache,
     )
@@ -80,12 +120,13 @@ def run_breakout_scan(
     min_price: float,
     max_price: float,
     top_n: int,
+    profile: str = "regular",
     diagnostics: bool = True,
     use_cache: bool = True,
 ) -> pd.DataFrame:
     st.caption(
         f"🚀 run_breakout_scan called with {len(tickers)} tickers "
-        f"(use_cache={use_cache})"
+        f"(use_cache={use_cache}, profile={profile!r})"
     )
     """Public entry point for breakout scans.
 
@@ -95,6 +136,12 @@ def run_breakout_scan(
     - Delegating to `scan.breakout.run_breakout_scan`, which expects a
       mapping of symbol -> DataFrame and an optional SPY DataFrame.
     """
+    effective_min_gap, effective_unusual_volume = _apply_scan_profile(
+        profile,
+        min_gap=min_gap,
+        unusual_volume=unusual_volume,
+    )
+
     from . import breakout as legacy_breakout
 
     # Ensure SPY is included for RS calculations.
@@ -177,8 +224,10 @@ def run_breakout_scan(
     if diagnostics:
         try:
             st.caption(
-                f"➡️ engine.run_breakout_scan: calling breakout with "
-                f"{len(price_data_no_spy)} symbols (excluding SPY)"
+                f"➡️ engine.run_breakout_scan: profile={profile!r}, "
+                f"effective_min_gap={effective_min_gap:.4f}, "
+                f"effective_unusual_volume={effective_unusual_volume}; "
+                f"calling breakout with {len(price_data_no_spy)} symbols (excluding SPY)"
             )
         except Exception:
             pass
@@ -188,8 +237,8 @@ def run_breakout_scan(
         spy_df=spy_df,
         premarket=premarket,
         afterhours=afterhours,
-        unusual_volume=unusual_volume,
-        min_gap=min_gap,
+        unusual_volume=effective_unusual_volume,
+        min_gap=effective_min_gap,
         min_price=min_price,
         max_price=max_price,
         top_n=top_n,

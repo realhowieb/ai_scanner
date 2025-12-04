@@ -318,6 +318,19 @@ def render_scan_controls(
     and also updates the universe-related keys used elsewhere in the app.
     """
 
+    # Scan profile selector (Regular / Aggressive / Conservative)
+    profile_label = st.radio(
+        "Scan profile",
+        ["Regular", "Aggressive", "Conservative"],
+        horizontal=True,
+        key="scan_profile_choice",
+    )
+    scan_profile = profile_label.lower().strip()
+    st.caption(
+        f"Current scan profile: **{profile_label}** "
+        "(tunes min gap and unusual volume behavior)."
+    )
+
     st.subheader("⚡ Quick Market Scans")
     st.caption("Run SP500, NASDAQ, and combo scans using your current filters.")
 
@@ -421,6 +434,7 @@ def render_scan_controls(
                     mode_bits.append("Regular")
                 mode_label = ", ".join(mode_bits)
                 st.markdown(f"**Mode:** `{mode_label}` scan")
+                st.caption(f"Profile: {profile_label} ({scan_profile!r})")
                 if (len(tickers) < 50) and not str(label).startswith("Watchlist") and not str(label).startswith("Search:"):
                     st.warning(
                         f"{label} universe is very small ({len(tickers)} tickers). "
@@ -437,6 +451,7 @@ def render_scan_controls(
                     min_price=min_price,
                     max_price=max_price,
                     top_n=top_n,
+                    profile=scan_profile,
                     diagnostics=diagnostics,
                 )
 
