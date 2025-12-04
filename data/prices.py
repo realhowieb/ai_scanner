@@ -18,6 +18,7 @@ import datetime as _dt
 import time as _time
 import random as _random
 import os as _os
+import hashlib as _hashlib
 
 import numpy as _np
 import pandas as _pd
@@ -460,6 +461,37 @@ def _normalize_df(df: _pd.DataFrame) -> _pd.DataFrame:
     return df
 
 
+# --- Frame fingerprinting helper ---
+def _frame_fingerprint(df: _pd.DataFrame) -> str | None:
+    """
+    Build a lightweight fingerprint for a price DataFrame.
+
+    This is used as a defensive guardrail against the rare case where
+    multiple *different* tickers end up with the exact same OHLCV data
+    due to upstream API quirks. We intentionally only sample a few rows
+    so this stays inexpensive even for large universes.
+    """
+    if not isinstance(df, _pd.DataFrame) or df.empty:
+        return None
+
+    # Focus on core OHLCV columns only.
+    cols = [c for c in ["Open", "High", "Low", "Close", "Adj Close", "Volume"] if c in df.columns]
+    if not cols:
+        return None
+
+    try:
+        # Take a few rows from the head and tail to build a sample.
+        sample_head = df[cols].head(4)
+        sample_tail = df[cols].tail(4)
+        sample = _pd.concat([sample_head, sample_tail], axis=0)
+        # Convert to CSV bytes and hash them.
+        payload = sample.to_csv(index=False).encode("utf-8")
+        return _hashlib.sha1(payload).hexdigest()
+    except Exception:
+        # If anything goes wrong, just skip fingerprinting.
+        return None
+
+
 def _download_batch(
     batch: Sequence[str],
     cfg: PriceFetchConfig,
@@ -782,15 +814,37 @@ def fetch_price_data_parallel(
         else:
             skipped.append((sym, "invalid_frame"))
 
-    # Update cache with validated frames so future scans can reuse them safely.
+    # Defensive de-duplication: if multiple tickers end up with *identical*
+    # OHLCV data fingerprints, treat the later ones as poisoned duplicates
+    # and drop them. This is extremely unlikely to affect legitimate data
+    # but protects against upstream multi-ticker bugs.
+    fingerprints: Dict[str, str] = {}
+    deduped_price_data: Dict[str, _pd.DataFrame] = {}
     for sym, df in valid_price_data.items():
+        fp = _frame_fingerprint(df)
+        if fp is None:
+            # No fingerprint available; keep the frame as-is.
+            deduped_price_data[sym] = df
+            continue
+
+        owner = fingerprints.get(fp)
+        if owner is None:
+            fingerprints[fp] = sym
+            deduped_price_data[sym] = df
+        else:
+            # This frame looks identical to another symbol's data; skip it.
+            skipped.append((sym, f"duplicate_frame_like:{owner}"))
+
+    # Update cache with validated, de-duplicated frames so future scans
+    # can reuse them safely.
+    for sym, df in deduped_price_data.items():
         key = _cache_key(sym, cfg)
         try:
             _PRICE_CACHE[key] = df.copy(deep=True)
         except Exception:
             _PRICE_CACHE[key] = df
 
-    return valid_price_data, skipped
+    return deduped_price_data, skipped
 
 
 # ----------------- Back-compat shims -----------------
