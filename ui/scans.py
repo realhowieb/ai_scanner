@@ -408,10 +408,15 @@ def render_scan_controls(
     if "results_df" not in st.session_state:
         st.session_state.results_df = pd.DataFrame()
 
-    def do_scan(tickers: List[str], label: str):
+    def do_scan(tickers: List[str], label: str, profile_override: Optional[str] = None):
         def _run_scan_body():
             n_input = len(tickers)
             t0 = time.time()
+            # Decide which scan profile to use for this run
+            effective_profile = (profile_override or scan_profile)
+            effective_profile_label = (
+                profile_label if profile_override is None else profile_override.capitalize()
+            )
             try:
                 # Debug: show universe size and a few sample tickers before calling the engine
                 try:
@@ -434,7 +439,7 @@ def render_scan_controls(
                     mode_bits.append("Regular")
                 mode_label = ", ".join(mode_bits)
                 st.markdown(f"**Mode:** `{mode_label}` scan")
-                st.caption(f"Profile: {profile_label} ({scan_profile!r})")
+                st.caption(f"Profile: {effective_profile_label} ({effective_profile!r})")
                 if (len(tickers) < 50) and not str(label).startswith("Watchlist") and not str(label).startswith("Search:"):
                     st.warning(
                         f"{label} universe is very small ({len(tickers)} tickers). "
@@ -451,7 +456,7 @@ def render_scan_controls(
                     min_price=min_price,
                     max_price=max_price,
                     top_n=top_n,
-                    profile=scan_profile,
+                    profile=effective_profile,
                     diagnostics=diagnostics,
                 )
 
@@ -623,6 +628,83 @@ def render_scan_controls(
         st.session_state["combo_capped"] = combo_capped
 
         do_scan(combo_capped, "Combo")
+
+    # --- Featured profile scans (shortcut buttons) ---
+    st.markdown("### 🎯 Featured Profile Scans")
+
+    fp1, fp2, fp3 = st.columns(3)
+
+    # SP500 Aggressive
+    with fp1:
+        if st.button(
+            "SP500 (Aggressive)",
+            key="btn_sp500_aggressive",
+            use_container_width=True,
+            disabled=not can_scan_sp500,
+        ):
+            sp500 = safe_call(load_sp500_universe, label="SP500 universe (Aggressive)")
+            sp500 = filter_universe(sp500)
+            st.session_state["sp500_universe"] = sp500
+            do_scan(sp500, "SP500 (Aggressive)", profile_override="aggressive")
+
+    # NASDAQ Aggressive (capped)
+    with fp2:
+        if st.button(
+            "NASDAQ (Aggressive)",
+            key="btn_nasdaq_aggressive",
+            use_container_width=True,
+            disabled=not can_scan_nasdaq,
+        ):
+            nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe (Aggressive)")
+            nasdaq = filter_universe(nasdaq)
+            nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
+            st.session_state["nasdaq_universe"] = nasdaq
+            st.session_state["nasdaq_capped"] = nasdaq_capped
+            do_scan(nasdaq_capped, "NASDAQ (Aggressive)", profile_override="aggressive")
+
+    # Combo Conservative
+    with fp3:
+        if st.button(
+            "Combo (Conservative)",
+            key="btn_combo_conservative",
+            use_container_width=True,
+            disabled=not (can_scan_sp500 and can_scan_nasdaq),
+        ):
+            sp500 = safe_call(load_sp500_universe, label="SP500 universe (Combo Conservative)")
+            nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe (Combo Conservative)")
+            sp500 = filter_universe(sp500)
+            nasdaq = filter_universe(nasdaq)
+            nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
+            combo_universe = sp500 + nasdaq_capped
+
+            min_dollar_vol = st.session_state.get("min_dollar_vol")
+            if min_dollar_vol is None:
+                min_dollar_vol = 0.0
+
+            try:
+                combo_liquid = apply_liquidity_filter_batch(
+                    combo_universe,
+                    min_price=min_price,
+                    min_avg_dollar_vol=min_dollar_vol,
+                )
+            except Exception as e:
+                _banner(
+                    f"⚠️ Combo (Conservative) liquidity filter failed: {e}",
+                    "warning",
+                )
+                combo_liquid = combo_universe
+
+            if combo_liquid is None or len(combo_liquid) == 0:
+                combo_liquid = combo_universe
+
+            combo_capped = combo_liquid[: int(max_combo_scan)]
+
+            st.session_state["sp500_universe"] = sp500
+            st.session_state["nasdaq_universe"] = nasdaq
+            st.session_state["nasdaq_capped"] = nasdaq_capped
+            st.session_state["combo_capped"] = combo_capped
+
+            do_scan(combo_capped, "Combo (Conservative)", profile_override="conservative")
 
     # --- Alpaca Market Data self-test ---
     st.markdown("### 🧪 Data Provider Diagnostics")
