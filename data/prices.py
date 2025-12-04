@@ -24,8 +24,10 @@ import numpy as _np
 import pandas as _pd
 
 # --- In-memory price DataFrame cache ---
-from typing import Dict
-_PRICE_CACHE: Dict[str, _pd.DataFrame] = {}
+# We keep a short TTL so repeated scans within a few seconds can reuse
+# results, but fresh data is fetched on subsequent runs.
+_PRICE_CACHE_TTL_SECONDS: float = 60.0  # ~1 minute; tuned for daily bars
+_PRICE_CACHE: Dict[str, tuple[_pd.DataFrame, float]] = {}
 
 def clear_price_cache() -> None:
     """Clear the in-memory price DataFrame cache.
@@ -729,12 +731,23 @@ def fetch_price_data_parallel(
     cache_hits = 0
     for sym in cfg.tickers:
         key = _cache_key(sym, cfg)
-        cached = _PRICE_CACHE.get(key)
-
-        # Validate cached frame: must be a non-empty DataFrame and must have
-        # a `.attrs["symbol"]` tag that matches this ticker. Older cache
-        # entries without a symbol tag are treated as stale and discarded.
+        cached_entry = _PRICE_CACHE.get(key)
         use_cached = False
+        cached_df: _pd.DataFrame | None = None
+
+        if isinstance(cached_entry, tuple) and len(cached_entry) == 2:
+            candidate_df, ts = cached_entry
+            # Enforce a simple TTL so that intraday re-runs still get fresh data
+            if (ts is not None) and (_time.time() - float(ts) <= _PRICE_CACHE_TTL_SECONDS):
+                cached = candidate_df
+            else:
+                # Stale entry; drop it
+                _PRICE_CACHE.pop(key, None)
+                cached = None
+        else:
+            # Backwards-compat: old-style entries without a timestamp are treated as stale
+            cached = None
+
         if isinstance(cached, _pd.DataFrame) and not cached.empty:
             try:
                 sym_u = str(sym).upper()
@@ -742,19 +755,17 @@ def fetch_price_data_parallel(
                 cached_sym = attrs.get("symbol", None)
                 if isinstance(cached_sym, str) and cached_sym.upper() == sym_u:
                     use_cached = True
+                    cached_df = cached
                 else:
-                    # Stale or mismatched cache entry: remove so it can't be reused.
                     _PRICE_CACHE.pop(key, None)
             except Exception:
-                # If anything goes wrong while validating, treat as a cache miss.
                 use_cached = False
 
-        if use_cached:
+        if use_cached and cached_df is not None:
             try:
-                df_cached = cached.copy(deep=True)  # type: ignore[assignment]
+                df_cached = cached_df.copy(deep=True)
             except Exception:
-                # Fallback: construct a new DataFrame from the cached object
-                df_cached = _pd.DataFrame(cached)  # type: ignore[arg-type]
+                df_cached = _pd.DataFrame(cached_df)
             price_data[str(sym).upper()] = df_cached
             cache_hits += 1
         else:
@@ -873,9 +884,9 @@ def fetch_price_data_parallel(
     for sym, df in deduped_price_data.items():
         key = _cache_key(sym, cfg)
         try:
-            _PRICE_CACHE[key] = df.copy(deep=True)
+            _PRICE_CACHE[key] = (df.copy(deep=True), _time.time())
         except Exception:
-            _PRICE_CACHE[key] = df
+            _PRICE_CACHE[key] = (df, _time.time())
 
     return deduped_price_data, skipped
 
