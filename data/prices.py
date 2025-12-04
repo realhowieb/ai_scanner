@@ -518,16 +518,51 @@ def _download_batch(
         # 1) Pull raw bars via per-symbol Ticker().history
         try:
             ticker_obj = _yf.Ticker(sym_u)
+            # IMPORTANT:
+            # - auto_adjust=False: do not apply total-return adjustments
+            # - actions=False: avoid mixing in dividends/splits as adjustments
             df = ticker_obj.history(
                 period=cfg.period,
                 interval=cfg.interval,
                 prepost=cfg.prepost,
                 auto_adjust=False,
+                actions=False,
             )
             # Defensive: ensure each symbol gets its own independent DataFrame
             try:
                 df = _pd.DataFrame(df).copy(deep=True)
             except Exception:
+                pass
+
+            # yfinance may still return OHLC values that are effectively
+            # split-adjusted. If we have a Stock Splits column, we can
+            # reconstruct raw Yahoo-style prices by undoing the cumulative
+            # split factor. This keeps scanner calculations aligned with
+            # what you see on finance.yahoo.com.
+            try:
+                if (
+                    isinstance(df, _pd.DataFrame)
+                    and not df.empty
+                    and "Stock Splits" in df.columns
+                ):
+                    # Build a cumulative split factor series. Stock Splits
+                    # is usually 0 when no split occurred; replace 0 with 1
+                    # so the cumulative product behaves correctly.
+                    split_series = df["Stock Splits"].replace(0, 1)
+                    # Newer rows first => reverse, cumprod, reverse back.
+                    cumulative_split = split_series.iloc[::-1].cumprod().iloc[::-1]
+
+                    # Only adjust columns that actually exist.
+                    for col in ["Open", "High", "Low", "Close"]:
+                        if col in df.columns:
+                            df[col] = df[col] * cumulative_split
+
+                    # Keep Adj Close in sync with the raw Close that the
+                    # rest of the app expects.
+                    if "Close" in df.columns:
+                        df["Adj Close"] = df["Close"]
+            except Exception:
+                # If anything goes wrong while de-adjusting, keep df as-is.
                 pass
         except Exception as e:
             skipped.append((sym_u, f"error_download:{type(e).__name__}:{e}"))
