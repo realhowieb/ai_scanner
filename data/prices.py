@@ -325,44 +325,52 @@ def _download_multi(
     prepost: bool,
     timeout_s: float,
 ) -> Dict[str, _pd.DataFrame]:
-    """Download a batch of symbols using yfinance only.
+    """Safe multi-symbol download wrapper.
 
-    We intentionally skip Alpaca OHLCV here because the free Alpaca IEX
-    plan does not provide enough historical bar coverage for large
-    universes (SP500/NASDAQ). For historical prices we rely on yfinance,
-    while Alpaca is still used elsewhere for real-time quotes.
+    Historically this used yfinance's native *multi-ticker* download, but on
+    some hosts that path can silently "poison" results (misaligned OHLCV,
+    duplicate values across symbols, etc.).
+
+    To avoid that, this helper now delegates to `_download_batch`, which
+    performs **per-symbol** yfinance downloads plus `_normalize_df`. The
+    signature is preserved for older call sites, but the behavior is now
+    equivalent to a single robust batch fetch.
     """
     if not _yf:
         raise RuntimeError("yfinance is not available in this environment (import failed).")
 
-    # yfinance supports multi-ticker downloads; threads=False because we
-    # parallelize at a higher level in this module.
-    data = _yf.download(
-        tickers=list(tickers),
+    # Normalize and deduplicate symbols up-front.
+    norm_syms: List[str] = [
+        str(s).upper()
+        for s in (tickers or [])
+        if isinstance(s, str) and s.strip()
+    ]
+    # Preserve order but drop duplicates.
+    norm_syms = list(dict.fromkeys(norm_syms))
+
+    if not norm_syms:
+        return {}
+
+    # Build a minimal config that mirrors the original arguments but forces
+    # single-threaded behavior (since `_download_batch` loops over symbols).
+    cfg = PriceFetchConfig(
+        tickers=norm_syms,
         period=period,
         interval=interval,
         prepost=prepost,
-        timeout=timeout_s,
-        group_by="ticker",
-        threads=False,
-        progress=False,
+        max_workers=1,
+        chunk_size=max(1, len(norm_syms)),
+        timeout_s=timeout_s,
+        batch_retries=0,
+        rescue_missing=False,
+        mini_size=1,
+        mini_retries=0,
+        backoff_base=1.2,
+        success_budget=None,
     )
 
-    out: Dict[str, _pd.DataFrame] = {}
-
-    # Multi-ticker case: columns are a MultiIndex (ticker, field)
-    if isinstance(data.columns, _pd.MultiIndex):
-        for sym in {k for k, _ in data.columns}:
-            df = _pd.DataFrame(data[sym]).copy(deep=True)
-            if not df.empty:
-                out[str(sym).upper()] = _normalize_df(df)
-    else:
-        # Single-ticker case: we cannot reliably infer the symbol name from the
-        # DataFrame alone. In practice, callers use batch sizes > 1, and per-
-        # ticker fallback in `_download_batch` will handle any stragglers.
-        pass
-
-    return out
+    data, _skipped = _download_batch(norm_syms, cfg)
+    return data
 
 
 def _normalize_df(df: _pd.DataFrame) -> _pd.DataFrame:
