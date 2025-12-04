@@ -337,7 +337,9 @@ def _download_multi(
     equivalent to a single robust batch fetch.
     """
     if not _yf:
-        raise RuntimeError("yfinance is not available in this environment (import failed).")
+        raise RuntimeError(
+            "yfinance is not available in this environment (import failed)."
+        )
 
     # Normalize and deduplicate symbols up-front.
     norm_syms: List[str] = [
