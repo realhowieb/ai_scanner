@@ -49,6 +49,7 @@ def cached_real_scan(
     max_price: float,
     top_n: int,
     diagnostics: bool = True,
+    use_cache: bool = True,
 ) -> pd.DataFrame:
     """Cached wrapper around the real breakout scan.
 
@@ -66,6 +67,7 @@ def cached_real_scan(
         max_price=max_price,
         top_n=top_n,
         diagnostics=diagnostics,
+        use_cache=use_cache,
     )
 
 def run_breakout_scan(
@@ -79,8 +81,12 @@ def run_breakout_scan(
     max_price: float,
     top_n: int,
     diagnostics: bool = True,
+    use_cache: bool = True,
 ) -> pd.DataFrame:
-    st.caption(f"🚀 run_breakout_scan called with {len(tickers)} tickers")
+    st.caption(
+        f"🚀 run_breakout_scan called with {len(tickers)} tickers "
+        f"(use_cache={use_cache})"
+    )
     """Public entry point for breakout scans.
 
     This function is responsible for:
@@ -107,7 +113,10 @@ def run_breakout_scan(
     try:
         from data.prices import fetch_price_data_parallel  # type: ignore
 
-        price_data, _skipped = fetch_price_data_parallel(tickers_plus_spy)
+        price_data, _skipped = fetch_price_data_parallel(
+            tickers_plus_spy,
+            use_cache=use_cache,
+        )
         if not price_data:
             raise RuntimeError("parallel price fetch returned no data")
     except Exception as e:
