@@ -56,6 +56,10 @@ def _init_scan_session_state() -> None:
     if "scan_live_mode" not in st.session_state:
         st.session_state.scan_live_mode = False
 
+    # Track which step is currently active in the 3-step scanner UI
+    if "scan_active_step" not in st.session_state:
+        st.session_state.scan_active_step = 1
+
 
 
 def run_scan_engine(
@@ -231,17 +235,35 @@ def render_three_step_scanner() -> None:
     """
     _init_scan_session_state()
 
+    # Helper to render step headers with active/inactive indicator
+    def _step_header(step_num: int, label: str) -> None:
+        """Render a step header with a small active/inactive indicator."""
+        active_step = int(st.session_state.get("scan_active_step", 1) or 1)
+        # Active step gets a green dot and bold text; others are dimmed
+        if step_num == active_step:
+            prefix = "🟢"
+            text = f"**{label}**"
+        else:
+            prefix = "⚪️"
+            text = label
+        st.markdown(f"### {prefix} {step_num}️⃣ {text}")
+
 
     # ─────────────────────────────
     # STEP 1 — SELECT MARKET
     # ─────────────────────────────
-    st.markdown("### 1️⃣ Select Market Universe")
+    _step_header(1, "Select Market Universe")
 
     market_cols = st.columns(3)
 
     def _market_button(label: str, value: str, col) -> None:
         if col.button(label, key=f"market_{value}"):
             st.session_state.scan_market = value
+            # Move the highlight to Step 2 after choosing a market
+            st.session_state.scan_active_step = max(
+                int(st.session_state.get("scan_active_step", 1) or 1),
+                2,
+            )
 
     _market_button("SP500", "SP500", market_cols[0])
     _market_button("NASDAQ", "NASDAQ", market_cols[1])
@@ -254,7 +276,7 @@ def render_three_step_scanner() -> None:
     # ─────────────────────────────
     # STEP 2 — SELECT STRATEGY
     # ─────────────────────────────
-    st.markdown("### 2️⃣ Select Strategy")
+    _step_header(2, "Select Strategy")
 
     strategy_cols_row1 = st.columns(3)
     strategy_cols_row2 = st.columns(3)
@@ -262,6 +284,11 @@ def render_three_step_scanner() -> None:
     def _strategy_button(label: str, value: str, col) -> None:
         if col.button(label, key=f"strategy_{value}"):
             st.session_state.scan_strategy = value
+            # Move the highlight to Step 3 after choosing a strategy
+            st.session_state.scan_active_step = max(
+                int(st.session_state.get("scan_active_step", 1) or 1),
+                3,
+            )
 
     _strategy_button("Gap-Up", "gap_up", strategy_cols_row1[0])
     _strategy_button("Gap-Down", "gap_down", strategy_cols_row1[1])
@@ -281,7 +308,7 @@ def render_three_step_scanner() -> None:
     # ─────────────────────────────
     # STEP 3 — PROFILE + RUN + RESULTS
     # ─────────────────────────────
-    st.markdown("### 3️⃣ Profile, Run Scan & View Results")
+    _step_header(3, "Profile, Run Scan & View Results")
 
     profile_cols = st.columns(3)
 
@@ -311,6 +338,8 @@ def render_three_step_scanner() -> None:
     results_placeholder = st.empty()
 
     if run_clicked:
+        # Keep the focus on Step 3 when running a scan
+        st.session_state.scan_active_step = 3
         with progress_placeholder.container():
             with st.spinner("Running scan… this may take a few seconds for large universes."):
                 df = run_scan_engine(
