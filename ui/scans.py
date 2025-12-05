@@ -343,8 +343,12 @@ def render_three_step_scanner() -> None:
 
     if run_clicked:
         with progress_placeholder.container():
-            # Show custom loading GIF
-            st.image("hsf_spinner.gif", width=150)
+            # Show custom loading GIF from assets folder
+            try:
+                st.image("assets/hsf_spinner.gif", width=150)
+            except Exception:
+                # Fallback if the GIF path is wrong or unreadable
+                st.write("🚀 Running scan...")
 
             # Run scan without Streamlit spinner since we now show GIF
             df = run_scan_engine(
