@@ -771,7 +771,7 @@ def main():
         username=username,
     )
 
-    st.markdown("## (Experimental) 3-Step Scanner Layout")
+    st.markdown("## EZ 3-Step AI Scanner")
     render_three_step_scanner()
     st.markdown("---")
 
@@ -797,7 +797,7 @@ def main():
     pricing_sidebar(username, users_map)
 
     # --- Debug: yfinance status ---
-    with st.expander("🔧 Debug: yfinance status", expanded=False):
+    with st.expander("🔧 Debug: Data Status", expanded=False):
         try:
             from data.prices import debug_yfinance_status  # type: ignore
 
