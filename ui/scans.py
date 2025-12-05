@@ -757,8 +757,8 @@ def render_scan_controls(
     watchlist_tickers = st.session_state.get("active_watchlist_tickers", []) or []
     has_watchlist = isinstance(watchlist_tickers, list) and len(watchlist_tickers) > 0
 
-    # Top row: view / scan / export / clear
-    cw1, cw2, cw3, cw4 = st.columns([1, 1, 1, 1])
+    # Top row: view / scan / export
+    cw1, cw2, cw3 = st.columns([1, 1, 1])
     with cw1:
         view_watchlist_btn = st.button(
             "View Watchlist",
@@ -785,15 +785,8 @@ def render_scan_controls(
             key="btn_export_watchlist",
             disabled=not has_watchlist,
         )
-    with cw4:
-        clear_watchlist_btn = st.button(
-            "Clear Watchlist",
-            key="btn_clear_watchlist",
-            use_container_width=True,
-            disabled=not has_watchlist,
-        )
 
-    # Second row: add/remove ticker controls
+    # Middle row: add/remove ticker controls
     aw1, aw2, aw3 = st.columns([3, 1, 1])
     with aw1:
         watchlist_add_symbol = st.text_input(
@@ -814,6 +807,14 @@ def render_scan_controls(
             key="btn_remove_watchlist_symbol",
             use_container_width=True,
         )
+
+    # Bottom row: destructive action on its own line
+    clear_watchlist_btn = st.button(
+        "Clear Watchlist",
+        key="btn_clear_watchlist",
+        use_container_width=True,
+        disabled=not has_watchlist,
+    )
 
     st.caption("Use your active watchlist for viewing, scanning, and managing symbols.")
 
