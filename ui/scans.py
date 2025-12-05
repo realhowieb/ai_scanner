@@ -345,7 +345,7 @@ def render_three_step_scanner() -> None:
         # First, render the loader inside the placeholder so it can show immediately
         with progress_placeholder.container():
             try:
-                st.image("assets/hsf_spinner_3d.gif", width=150)
+                st.image("assets/hsf_spinner_coinflip.gif", width=150)
                 st.caption("Scanning markets… Money Moves loading 💸")
             except Exception:
                 # Fallback if the GIF path is wrong or unreadable
