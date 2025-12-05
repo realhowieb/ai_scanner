@@ -1027,7 +1027,38 @@ def render_scan_controls(
         combo_capped = _build_combo_capped("Combo")
         do_scan(combo_capped, "Combo")
 
-    # --- Alpaca Market Data self-test ---
+
+    if run_single_search_btn:
+        ticker = (search_ticker or "").strip().upper()
+        if not ticker:
+            _banner("Please enter a ticker symbol to search.", "warning")
+        else:
+            # Optionally auto-add this ticker to the active watchlist
+            active_watchlist_id = st.session_state.get("active_watchlist_id")
+            if active_watchlist_id is not None:
+                try:
+                    # Fetch current tickers for the active watchlist
+                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
+                    norm_existing = {str(t).strip().upper() for t in existing}
+                    if ticker not in norm_existing:
+                        updated = sorted(norm_existing | {ticker})
+                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
+                        st.caption(f"Added {ticker} to your active watchlist.")
+                except Exception:
+                    # Never break the UI if Neon/watchlists are unavailable
+                    pass
+
+            # Run the same breakout engine but on a single stock
+            do_scan([ticker], f"Search: {ticker}")
+
+
+# --- Data Provider Diagnostics (moved from render_scan_controls) ---
+def render_data_provider_diagnostics() -> None:
+    """Render Alpaca / data provider diagnostics.
+
+    Intended to be called from a dedicated Debug / Data Provider tab instead
+    of the main scanner layout.
+    """
     st.markdown("### 🧪 Data Provider Diagnostics")
 
     if st.button(
@@ -1054,7 +1085,10 @@ def render_scan_controls(
 
                 # Weekend-aware messaging
                 if now.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
-                    st.info("🟦 Market is closed (weekend). Extended-hours data is usually unavailable.")
+                    st.info(
+                        "🟦 Market is closed (weekend). "
+                        "Extended-hours data is usually unavailable."
+                    )
                 else:
                     st.info("Market may be outside active extended-hours windows.")
 
@@ -1064,7 +1098,6 @@ def render_scan_controls(
                     "warning",
                 )
 
-                # Detailed Alpaca debug request
                 debug_url = "https://data.alpaca.markets/v2/stocks/snapshots"
                 debug_params = {
                     "symbols": "AAPL",
@@ -1079,7 +1112,6 @@ def render_scan_controls(
                         debug_json = debug_resp.json() or {}
                         st.write("Alpaca debug top-level keys:", list(debug_json.keys()))
 
-                        # Handle both shapes: with/without 'snapshots' wrapper
                         raw_snaps = debug_json.get("snapshots")
                         if isinstance(raw_snaps, dict) and raw_snaps:
                             snaps = raw_snaps
@@ -1096,7 +1128,9 @@ def render_scan_controls(
                         )
                         st.write(
                             "Alpaca debug AAPL snapshot keys:",
-                            list(aapl_snap.keys()) if isinstance(aapl_snap, dict) else aapl_snap,
+                            list(aapl_snap.keys())
+                            if isinstance(aapl_snap, dict)
+                            else aapl_snap,
                         )
                         st.text_area(
                             "Raw Alpaca JSON (truncated)",
@@ -1111,26 +1145,3 @@ def render_scan_controls(
                         )
                 except Exception as e:
                     st.error(f"Alpaca debug request failed: {e}")
-
-    if run_single_search_btn:
-        ticker = (search_ticker or "").strip().upper()
-        if not ticker:
-            _banner("Please enter a ticker symbol to search.", "warning")
-        else:
-            # Optionally auto-add this ticker to the active watchlist
-            active_watchlist_id = st.session_state.get("active_watchlist_id")
-            if active_watchlist_id is not None:
-                try:
-                    # Fetch current tickers for the active watchlist
-                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
-                    norm_existing = {str(t).strip().upper() for t in existing}
-                    if ticker not in norm_existing:
-                        updated = sorted(norm_existing | {ticker})
-                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
-                        st.caption(f"Added {ticker} to your active watchlist.")
-                except Exception:
-                    # Never break the UI if Neon/watchlists are unavailable
-                    pass
-
-            # Run the same breakout engine but on a single stock
-            do_scan([ticker], f"Search: {ticker}")
