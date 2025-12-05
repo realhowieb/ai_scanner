@@ -331,7 +331,11 @@ def render_three_step_scanner() -> None:
         )
 
         if df is not None and not df.empty:
-            results_placeholder.dataframe(df, height=480)
+            # Do not render the table here; rely on the shared Latest scan results panel.
+            results_placeholder.info(
+                f"Results updated in **Latest scan results** "
+                f"panel ({len(df)} rows)."
+            )
         else:
             results_placeholder.info(
                 "No results matched the current filters. "
