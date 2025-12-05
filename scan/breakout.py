@@ -146,7 +146,7 @@ def run_breakout_scan(
         st = None  # type: ignore[assignment]
 
     if not isinstance(price_data, dict) or not price_data:
-        if st is not None:
+        if st is not None and diagnostics:
             try:
                 st.error("❌ run_breakout_scan: price_data is EMPTY – no OHLCV fetched.")
             except Exception:
@@ -162,7 +162,7 @@ def run_breakout_scan(
         except Exception:
             spy_close = None
 
-    if st is not None:
+    if st is not None and diagnostics:
         try:
             st.caption(
                 f"📊 Breakout debug: incoming price_data has {len(price_data)} symbols. "
@@ -341,7 +341,7 @@ def run_breakout_scan(
 
     df_out = pd.DataFrame(rows)
 
-    if st is not None:
+    if st is not None and diagnostics:
         try:
             st.caption(
                 f"🧪 Breakout summary: attempted={attempted}, added={added}, "
