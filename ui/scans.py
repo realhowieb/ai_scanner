@@ -763,7 +763,7 @@ def render_scan_controls(
             do_scan(combo_capped, "Combo (Conservative)", profile_override="conservative")
 
     # --- Strategy scans based on Combo universe (SP500 + NASDAQ) ---
-    st.markdown("### 🧩 Strategy Scans")
+    st.markdown("### 🧩 Strategy Scans ")
     st.caption("Use prebuilt strategies (gap, volume, momentum) on the Combo universe (SP500 + capped NASDAQ).")
 
     s1, s2, s3 = st.columns(3)
