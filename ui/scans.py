@@ -342,8 +342,8 @@ def render_three_step_scanner() -> None:
     results_placeholder = st.empty()
 
     if run_clicked:
+        # First, render the loader inside the placeholder so it can show immediately
         with progress_placeholder.container():
-            # Show custom loading GIF from assets folder
             try:
                 st.image("assets/hsf_spinner_3d.gif", width=150)
                 st.caption("Scanning markets… Money Moves loading 💸")
@@ -351,13 +351,16 @@ def render_three_step_scanner() -> None:
                 # Fallback if the GIF path is wrong or unreadable
                 st.write("🚀 Running scan...")
 
-            # Run scan without Streamlit spinner since we now show GIF
-            df = run_scan_engine(
-                market=st.session_state.scan_market,
-                strategy=st.session_state.scan_strategy,
-                profile=st.session_state.scan_profile,
-                live_mode=st.session_state.scan_live_mode,
-            )
+        # Now run the scan *after* the loader has been drawn
+        df = run_scan_engine(
+            market=st.session_state.scan_market,
+            strategy=st.session_state.scan_strategy,
+            profile=st.session_state.scan_profile,
+            live_mode=st.session_state.scan_live_mode,
+        )
+
+        # Optionally clear the loader when done
+        # progress_placeholder.empty()
 
         num_rows = 0 if df is None else len(df)
         status_placeholder.success(
