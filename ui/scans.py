@@ -746,6 +746,7 @@ def render_scan_controls(
 
     # --- Strategy scans based on Combo universe (SP500 + NASDAQ) ---
     st.markdown("### 🧩 Strategy Scans (Combo Universe)")
+    st.caption("Use prebuilt strategies (gap, volume, momentum) on the Combo universe (SP500 + capped NASDAQ).")
 
     s1, s2, s3 = st.columns(3)
     s4, s5, s6 = st.columns(3)
