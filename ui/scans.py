@@ -772,8 +772,6 @@ def render_scan_controls(
             label_visibility="collapsed",
         )
     with c2:
-        # Spacer so the button aligns vertically with the text input
-        st.write("")
         run_single_search_btn = st.button(
             "Search & Scan 💸",
             key="single_search_btn",
