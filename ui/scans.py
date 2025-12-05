@@ -337,6 +337,41 @@ def render_three_step_scanner() -> None:
                 "No results matched the current filters. "
                 "Try lowering the minimum gap %, price, or volume filters."
             )
+
+        # ⭐ NEW: keep Latest scan results in sync and log to history
+        try:
+            # Update the shared results_df so the Latest scan results panel shows this run
+            st.session_state.results_df = df if df is not None else pd.DataFrame()
+
+            # Persist this run to the history DB (mirrors do_scan behaviour)
+            if df is not None:
+                filtered_count = len(df)
+                duration_sec = 0.0  # 3‑step engine already finished; no fine‑grained timing here
+                results_json = df.to_json(orient="records")
+                run_label = (
+                    f"3-Step | {st.session_state.scan_market} • "
+                    f"{st.session_state.scan_strategy.replace('_', ' ').title()} • "
+                    f"{st.session_state.scan_profile.title()}"
+                )
+                run_name = f"{run_label} | {filtered_count} results"
+                save_run(
+                    run_name,
+                    results_json,
+                    label=run_label,
+                    username=st.session_state.get("username", "anonymous"),
+                    row_count=filtered_count,
+                    duration_sec=duration_sec,
+                    is_snapshot=False,
+                )
+
+                # Clear cached run list so the new run appears immediately in history
+                try:
+                    list_runs.clear()  # type: ignore
+                except Exception:
+                    pass
+        except Exception:
+            # Never break the UI because of logging issues
+            pass
     else:
         status_placeholder.info(
             "Choose a **Market**, **Strategy**, and **Profile**, then click **Run Scan**."
