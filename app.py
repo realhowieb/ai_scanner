@@ -102,7 +102,7 @@ from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
 from ui.results import render_results, get_results_df
-from ui.scans import render_three_step_scanner
+from ui.scans import render_scan_controls, render_three_step_scanner
 from ui.universe_panel import render_universe_panel, init_universe_state
 from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
@@ -657,22 +657,6 @@ def main():
     # Also check the raw authenticator state
     is_authed_state = st.session_state.get("authentication_status") is True
 
-    # -------- ONE-TIME SPLASH SCREEN AFTER SUCCESSFUL LOGIN --------
-    if is_authed_state and not st.session_state.get("just_logged_in"):
-        st.session_state["just_logged_in"] = True
-
-        st.markdown(
-            """
-            <div style='text-align:center; padding-top:70px; padding-bottom:40px;'>
-                <h1 style='font-size: 42px; margin-bottom: 0;'>📈 Breakout Stock Scanner</h1>
-                <p style='color:#cccccc; font-size:18px; margin-top:10px;'>Loading your dashboard…</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.markdown("---")
-        # Stop here for this rerun so the *next* rerun loads the full dashboard
-        st.stop()
 
     # -------- ONLY NOW RENDER HEADER + TICKER --------
     # Show ticker above the header (layout option B)
