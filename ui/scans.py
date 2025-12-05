@@ -515,41 +515,60 @@ def render_scan_controls(
         def _run_scan_body():
             n_input = len(tickers)
             t0 = time.time()
+
             # Decide which scan profile to use for this run
             effective_profile = (profile_override or scan_profile)
             effective_profile_label = (
                 profile_label if profile_override is None else profile_override.capitalize()
             )
-            try:
-                # Debug: show universe size and a few sample tickers before calling the engine
-                try:
-                    st.caption(
-                        f"🔍 Debug: running scan on {len(tickers)} tickers. "
-                        f"Sample: {tickers[:10]}"
-                    )
-                except Exception:
-                    # If something goes wrong with rendering the debug caption,
-                    # ignore it so scans still run.
-                    pass
-                st.caption(f"🔎 Scanning {len(tickers)} tickers for {label}...")
-                # Show the current session mode (Regular / Premarket / After-hours)
-                mode_bits = []
-                if premarket:
-                    mode_bits.append("Premarket")
-                if afterhours:
-                    mode_bits.append("After-hours")
-                if not mode_bits:
-                    mode_bits.append("Regular")
-                mode_label = ", ".join(mode_bits)
-                st.markdown(f"**Mode:** `{mode_label}` scan")
-                st.caption(f"Profile: {effective_profile_label} ({effective_profile!r})")
-                if (len(tickers) < 50) and not str(label).startswith("Watchlist") and not str(label).startswith("Search:"):
-                    st.warning(
-                        f"{label} universe is very small ({len(tickers)} tickers). "
-                        "This usually means a fallback/stub universe is still being used."
-                    )
 
-                # TEMP: bypass cached_real_scan/safe_call and hit the engine directly
+            # --- Clean status + progress bar UI ---
+            # Show the current session mode (Regular / Premarket / After-hours) and profile
+            mode_bits = []
+            if premarket:
+                mode_bits.append("Premarket")
+            if afterhours:
+                mode_bits.append("After-hours")
+            if not mode_bits:
+                mode_bits.append("Regular")
+            mode_label = ", ".join(mode_bits)
+
+            st.markdown(
+                f"**Mode:** `{mode_label}` scan  •  Profile: `{effective_profile_label}`"
+            )
+
+            # Warn on very small universes (likely stub/fallback)
+            if (
+                len(tickers) < 50
+                and not str(label).startswith("Watchlist")
+                and not str(label).startswith("Search:")
+            ):
+                st.caption(
+                    f"⚠️ {label} universe is very small ({len(tickers)} tickers). "
+                    "This usually means a fallback/stub universe is still being used."
+                )
+
+            # Progress bar + status line
+            progress = st.progress(0)
+            status = st.empty()
+
+            # Rough estimate of time based on universe size (tune as needed)
+            est_seconds = len(tickers) * 0.015
+            status.write(
+                f"🔄 Preparing scan for **{len(tickers)}** tickers… "
+                f"estimated ~{est_seconds:.1f}s"
+            )
+
+            try:
+                # Phase 1: pre-flight / parameters (0–20%)
+                progress.progress(20)
+
+                # Phase 2: run engine (20–90%)
+                status.write("🚀 Running breakout engine… this may take a moment.")
+
+                # For a clean UI, always disable engine-level diagnostics here
+                engine_diagnostics = False
+
                 df = run_breakout_scan(
                     tickers=list(tickers),
                     premarket=premarket,
@@ -560,10 +579,12 @@ def render_scan_controls(
                     max_price=max_price,
                     top_n=top_n,
                     profile=effective_profile,
-                    diagnostics=diagnostics,
+                    diagnostics=engine_diagnostics,
                 )
 
-                # Apply any strategy-specific post-filter (e.g., gap-up / most active)
+                progress.progress(70)
+
+                # Phase 3: apply any strategy-specific post-filter (e.g., gap-up / most active)
                 if df is not None and not df.empty and post_filter is not None:
                     try:
                         df = post_filter(df)
@@ -571,17 +592,8 @@ def render_scan_controls(
                         if diagnostics:
                             st.caption(f"⚠️ Post-filter for {label} failed: {pf_exc}")
 
-                # Debug: show what the engine actually returned
-                st.caption(f"🔥 Direct engine call returned: {0 if df is None else len(df)} rows")
-
-                # Apply Top N cap here to avoid doing last-price overrides on hundreds of rows.
+                # Phase 4: cap to Top N + extended-hours price override (70–95%)
                 if df is not None and not df.empty:
-                    # Show a preview so we can see real rows, not just "0 results"
-                    try:
-                        st.dataframe(df.head(min(top_n, 20)))
-                    except Exception:
-                        pass
-
                     df = df.head(top_n).reset_index(drop=True)
 
                     if premarket or afterhours:
@@ -589,11 +601,17 @@ def render_scan_controls(
                         # If Alpaca is not configured or returns nothing, this is a no-op.
                         df = _apply_alpaca_extended_prices(df)
 
+                progress.progress(95)
+
                 filtered_count = len(df) if df is not None else 0
                 if diagnostics:
-                    st.caption(f"📊 Filtered down from {n_input} tickers to {filtered_count} results after filters.")
+                    st.caption(
+                        f"📊 Filtered down from {n_input} tickers to {filtered_count} results after filters."
+                    )
 
-                st.caption(f"✅ {label}: {len(df)} results returned from scan.")
+                status.write(f"✨ Scan complete: **{filtered_count}** results.")
+                progress.progress(100)
+
                 dt = time.time() - t0
                 st.session_state.results_df = df
 
@@ -604,12 +622,15 @@ def render_scan_controls(
                         "Try lowering Min Gap %, widening the price range, or disabling Unusual Volume."
                     )
 
-                _banner(f"✅ {label} scan complete in {dt:.1f}s. Returned {len(df)} rows.", "success")
+                _banner(
+                    f"✅ {label} scan complete in {dt:.1f}s. Returned {filtered_count} rows.",
+                    "success",
+                )
 
                 # Persist this scan to the runs DB (history + optional daily snapshot)
                 try:
                     results_json = df.to_json(orient="records") if df is not None else "[]"
-                    row_count = len(df) if df is not None else 0
+                    row_count = filtered_count
                     run_name = f"{label} | {row_count} results | {dt:.1f}s"
                     save_run(
                         run_name,
@@ -638,19 +659,16 @@ def render_scan_controls(
                     list_runs.clear()  # type: ignore
                 except Exception:
                     pass
+
             except Exception as e:
+                progress.progress(100)
+                status.write("❌ Scan failed.")
                 _banner(f"❌ Scan failed: {e}", "error")
                 if diagnostics:
                     st.code(traceback.format_exc())
 
-        # Some environments (e.g., restricted sandboxes, Python 3.13 runtimes) may not
-        # allow starting new threads, which Streamlit's spinner uses internally.
-        # Wrap the spinner in a try/except and fall back to running without it.
-        try:
-            with st.spinner(f"Scanning {label}..."):
-                _run_scan_body()
-        except Exception:
-            _run_scan_body()
+        # Run the scan with our custom progress bar UI (no extra spinner wrapper)
+        _run_scan_body()
 
     if "view_watchlist_btn" in locals() and view_watchlist_btn:
         # Normalize and validate tickers from the active watchlist
@@ -745,7 +763,7 @@ def render_scan_controls(
             do_scan(combo_capped, "Combo (Conservative)", profile_override="conservative")
 
     # --- Strategy scans based on Combo universe (SP500 + NASDAQ) ---
-    st.markdown("### 🧩 Strategy Scans (Combo Universe)")
+    st.markdown("### 🧩 Strategy Scans")
     st.caption("Use prebuilt strategies (gap, volume, momentum) on the Combo universe (SP500 + capped NASDAQ).")
 
     s1, s2, s3 = st.columns(3)
