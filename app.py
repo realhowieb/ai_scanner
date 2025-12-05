@@ -102,7 +102,7 @@ from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
 from ui.results import render_results, get_results_df
-from ui.scans import render_scan_controls, render_three_step_scanner
+from ui.scans import render_three_step_scanner
 from ui.universe_panel import render_universe_panel, init_universe_state
 from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
