@@ -345,7 +345,7 @@ def render_three_step_scanner() -> None:
         with progress_placeholder.container():
             # Show custom loading GIF from assets folder
             try:
-                st.image("assets/hsf_spinner.gif", width=150)
+                st.image("assets/hsf_spinner_3d.gif", width=150)
             except Exception:
                 # Fallback if the GIF path is wrong or unreadable
                 st.write("🚀 Running scan...")
