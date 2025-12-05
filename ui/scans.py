@@ -778,6 +778,14 @@ def render_scan_controls(
             use_container_width=True,
         )
 
+    # Toggle: auto-add searched ticker to active watchlist
+    add_single_to_watchlist = st.checkbox(
+        "Add to active watchlist",
+        value=True,
+        key="single_search_add_to_watchlist",
+        help="If enabled, the searched ticker is added to your active watchlist after a scan.",
+    )
+
     # Show a best-effort live quote under the search bar when a ticker is entered
     normalized_ticker = (search_ticker or "").strip().upper()
     if normalized_ticker:
@@ -1107,20 +1115,22 @@ def render_scan_controls(
         if not ticker:
             _banner("Please enter a ticker symbol to search.", "warning")
         else:
-            # Optionally auto-add this ticker to the active watchlist
-            active_watchlist_id = st.session_state.get("active_watchlist_id")
-            if active_watchlist_id is not None:
-                try:
-                    # Fetch current tickers for the active watchlist
-                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
-                    norm_existing = {str(t).strip().upper() for t in existing}
-                    if ticker not in norm_existing:
-                        updated = sorted(norm_existing | {ticker})
-                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
-                        st.caption(f"Added {ticker} to your active watchlist.")
-                except Exception:
-                    # Never break the UI if Neon/watchlists are unavailable
-                    pass
+            # Respect toggle: auto-add this ticker to the active watchlist only if enabled
+            add_to_watchlist = st.session_state.get("single_search_add_to_watchlist", True)
+            if add_to_watchlist:
+                active_watchlist_id = st.session_state.get("active_watchlist_id")
+                if active_watchlist_id is not None:
+                    try:
+                        # Fetch current tickers for the active watchlist
+                        existing = get_watchlist_tickers(active_watchlist_id, username) or []
+                        norm_existing = {str(t).strip().upper() for t in existing}
+                        if ticker not in norm_existing:
+                            updated = sorted(norm_existing | {ticker})
+                            set_watchlist_tickers(active_watchlist_id, username, list(updated))
+                            st.caption(f"Added {ticker} to your active watchlist.")
+                    except Exception:
+                        # Never break the UI if Neon/watchlists are unavailable
+                        pass
 
             # Run the same breakout engine but on a single stock
             do_scan([ticker], f"Search: {ticker}")
