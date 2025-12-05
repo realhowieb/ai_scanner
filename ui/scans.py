@@ -311,16 +311,14 @@ def render_three_step_scanner() -> None:
     results_placeholder = st.empty()
 
     if run_clicked:
-        progress_bar = progress_placeholder.progress(0, text="Starting scan…")
-
-        df = run_scan_engine(
-            market=st.session_state.scan_market,
-            strategy=st.session_state.scan_strategy,
-            profile=st.session_state.scan_profile,
-            live_mode=st.session_state.scan_live_mode,
-        )
-
-        progress_bar.progress(100, text="Scan complete")
+        with progress_placeholder.container():
+            with st.spinner("Running scan… this may take a few seconds for large universes."):
+                df = run_scan_engine(
+                    market=st.session_state.scan_market,
+                    strategy=st.session_state.scan_strategy,
+                    profile=st.session_state.scan_profile,
+                    live_mode=st.session_state.scan_live_mode,
+                )
 
         num_rows = 0 if df is None else len(df)
         status_placeholder.success(
