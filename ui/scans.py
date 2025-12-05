@@ -231,7 +231,6 @@ def render_three_step_scanner() -> None:
     """
     _init_scan_session_state()
 
-    st.markdown("## 🔍 Breakout Scanner")
 
     # ─────────────────────────────
     # STEP 1 — SELECT MARKET
