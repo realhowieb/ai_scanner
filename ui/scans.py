@@ -761,6 +761,7 @@ def render_scan_controls(
 
     # --- Single-ticker search & scan ---
     st.markdown("### 🔍 Search & Scan Single Ticker")
+    st.caption("Enter a symbol and run a focused breakout scan.")
 
     c1, c2 = st.columns([3, 1])
     with c1:
@@ -768,11 +769,13 @@ def render_scan_controls(
             "Ticker symbol",
             key="single_search_ticker",
             placeholder="AAPL",
-            help="Type a ticker symbol (e.g., AAPL, TSLA, NVDA) and run a focused breakout scan.",
+            label_visibility="collapsed",
         )
     with c2:
+        # Spacer so the button aligns vertically with the text input
+        st.write("")
         run_single_search_btn = st.button(
-            "Search & Scan",
+            "Search & Scan 💸",
             key="single_search_btn",
             use_container_width=True,
         )
