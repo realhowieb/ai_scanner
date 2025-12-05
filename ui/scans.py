@@ -5,7 +5,7 @@ that runs the breakout scan and persists results to the runs DB.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Callable
 import time
 import traceback
 
@@ -408,7 +408,110 @@ def render_scan_controls(
     if "results_df" not in st.session_state:
         st.session_state.results_df = pd.DataFrame()
 
-    def do_scan(tickers: List[str], label: str, profile_override: Optional[str] = None):
+    # --- Helper to build a combo (SP500 + NASDAQ) capped universe with liquidity filter ---
+    def _build_combo_capped(universe_label: str) -> List[str]:
+        """Build a Combo universe (SP500 + capped NASDAQ) with a liquidity filter applied."""
+        sp500 = safe_call(load_sp500_universe, label=f"SP500 universe ({universe_label})")
+        nasdaq = safe_call(load_nasdaq_universe, label=f"NASDAQ universe ({universe_label})")
+        sp500 = filter_universe(sp500)
+        nasdaq = filter_universe(nasdaq)
+        nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
+        combo_universe = sp500 + nasdaq_capped
+
+        # Liquidity filter: reuse the same min_price / min_dollar_vol logic as main Combo
+        min_dollar_vol = st.session_state.get("min_dollar_vol")
+        if min_dollar_vol is None:
+            min_dollar_vol = 0.0
+
+        try:
+            combo_liquid = apply_liquidity_filter_batch(
+                combo_universe,
+                min_price=min_price,
+                min_avg_dollar_vol=min_dollar_vol,
+            )
+        except Exception as e:
+            _banner(
+                f"⚠️ {universe_label} liquidity filter failed: {e}",
+                "warning",
+            )
+            combo_liquid = combo_universe
+
+        if combo_liquid is None or len(combo_liquid) == 0:
+            combo_liquid = combo_universe
+
+        combo_capped = combo_liquid[: int(max_combo_scan)]
+
+        # Persist universes in session_state for downstream use
+        st.session_state["sp500_universe"] = sp500
+        st.session_state["nasdaq_universe"] = nasdaq
+        st.session_state["nasdaq_capped"] = nasdaq_capped
+        st.session_state["combo_capped"] = combo_capped
+
+        return combo_capped
+
+    # --- Post-filter helpers for strategy scans (operate on breakout results) ---
+    def _pf_gap_up(df: pd.DataFrame) -> pd.DataFrame:
+        if "GapPct" not in df.columns:
+            st.caption("⚠️ Gap-Up Scan: no 'GapPct' column in results.")
+            return df.head(0)
+        return df[df["GapPct"] > 0].sort_values("GapPct", ascending=False)
+
+    def _pf_gap_down(df: pd.DataFrame) -> pd.DataFrame:
+        if "GapPct" not in df.columns:
+            st.caption("⚠️ Gap-Down Scan: no 'GapPct' column in results.")
+            return df.head(0)
+        return df[df["GapPct"] < 0].sort_values("GapPct", ascending=True)
+
+    def _pf_most_active(df: pd.DataFrame) -> pd.DataFrame:
+        col = None
+        if "DollarVol20" in df.columns:
+            col = "DollarVol20"
+        elif "Volume" in df.columns:
+            col = "Volume"
+        if col is None:
+            st.caption("⚠️ Most Active Scan: no 'DollarVol20' or 'Volume' column in results.")
+            return df.head(0)
+        return df.sort_values(col, ascending=False)
+
+    def _pf_top_gainers(df: pd.DataFrame) -> pd.DataFrame:
+        col = None
+        if "Trend10D%" in df.columns:
+            col = "Trend10D%"
+        elif "GapPct" in df.columns:
+            col = "GapPct"
+        if col is None:
+            st.caption("⚠️ Top Gainers Scan: no 'Trend10D%' or 'GapPct' column in results.")
+            return df.head(0)
+        return df.sort_values(col, ascending=False)
+
+    def _pf_unusual_volume(df: pd.DataFrame) -> pd.DataFrame:
+        if "VolRel20" not in df.columns:
+            st.caption("⚠️ Unusual Volume Scan: no 'VolRel20' column in results.")
+            return df.head(0)
+        return df[df["VolRel20"] >= 2].sort_values("VolRel20", ascending=False)
+
+    def _pf_momentum(df: pd.DataFrame) -> pd.DataFrame:
+        if "Trend20D%" not in df.columns or "Trend10D%" not in df.columns:
+            st.caption("⚠️ Momentum Scan: missing 'Trend20D%' or 'Trend10D%' columns.")
+            return df.head(0)
+        mask = (df["Trend20D%"] > 0) & (df["Trend10D%"] > 0)
+        return df[mask].sort_values("Trend20D%", ascending=False)
+
+    def _pf_breakout_only(df: pd.DataFrame) -> pd.DataFrame:
+        if "IsBreakout" not in df.columns:
+            st.caption("⚠️ Breakout-Only Scan: no 'IsBreakout' column in results.")
+            return df.head(0)
+        base = df[df["IsBreakout"] == True]
+        if "BreakoutScore" in base.columns:
+            return base.sort_values("BreakoutScore", ascending=False)
+        return base
+
+    def do_scan(
+        tickers: List[str],
+        label: str,
+        profile_override: Optional[str] = None,
+        post_filter: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None,
+    ):
         def _run_scan_body():
             n_input = len(tickers)
             t0 = time.time()
@@ -459,6 +562,14 @@ def render_scan_controls(
                     profile=effective_profile,
                     diagnostics=diagnostics,
                 )
+
+                # Apply any strategy-specific post-filter (e.g., gap-up / most active)
+                if df is not None and not df.empty and post_filter is not None:
+                    try:
+                        df = post_filter(df)
+                    except Exception as pf_exc:
+                        if diagnostics:
+                            st.caption(f"⚠️ Post-filter for {label} failed: {pf_exc}")
 
                 # Debug: show what the engine actually returned
                 st.caption(f"🔥 Direct engine call returned: {0 if df is None else len(df)} rows")
@@ -586,47 +697,7 @@ def render_scan_controls(
         do_scan(nasdaq_capped, "NASDAQ")
 
     if run_combo_btn:
-        sp500 = safe_call(load_sp500_universe, label="SP500 universe")
-        nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
-        sp500 = filter_universe(sp500)
-        nasdaq = filter_universe(nasdaq)
-        nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
-        combo_universe = sp500 + nasdaq_capped
-
-        # Apply a liquidity filter to the combined universe using the same
-        # min_price / min_dollar_vol filters as the main scan.
-        # NOTE: apply_liquidity_filter_batch does not accept max_price, so we
-        # only pass min_price and min_avg_dollar_vol here, and we call it directly
-        # (not via safe_call) to avoid any time.sleep-based retry logic causing
-        # issues in restricted environments.
-        min_dollar_vol = st.session_state.get("min_dollar_vol")
-        if min_dollar_vol is None:
-            min_dollar_vol = 0.0
-
-        try:
-            combo_liquid = apply_liquidity_filter_batch(
-                combo_universe,
-                min_price=min_price,
-                min_avg_dollar_vol=min_dollar_vol,
-            )
-        except Exception as e:
-            _banner(
-                f"⚠️ Combo liquidity filter failed: {e}",
-                "warning",
-            )
-            combo_liquid = combo_universe
-
-        # If the liquidity filter failed or returned nothing, fall back to the raw universe.
-        if combo_liquid is None or len(combo_liquid) == 0:
-            combo_liquid = combo_universe
-
-        combo_capped = combo_liquid[: int(max_combo_scan)]
-
-        st.session_state["sp500_universe"] = sp500
-        st.session_state["nasdaq_universe"] = nasdaq
-        st.session_state["nasdaq_capped"] = nasdaq_capped
-        st.session_state["combo_capped"] = combo_capped
-
+        combo_capped = _build_combo_capped("Combo")
         do_scan(combo_capped, "Combo")
 
     # --- Featured profile scans (shortcut buttons) ---
@@ -670,41 +741,92 @@ def render_scan_controls(
             use_container_width=True,
             disabled=not (can_scan_sp500 and can_scan_nasdaq),
         ):
-            sp500 = safe_call(load_sp500_universe, label="SP500 universe (Combo Conservative)")
-            nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe (Combo Conservative)")
-            sp500 = filter_universe(sp500)
-            nasdaq = filter_universe(nasdaq)
-            nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
-            combo_universe = sp500 + nasdaq_capped
-
-            min_dollar_vol = st.session_state.get("min_dollar_vol")
-            if min_dollar_vol is None:
-                min_dollar_vol = 0.0
-
-            try:
-                combo_liquid = apply_liquidity_filter_batch(
-                    combo_universe,
-                    min_price=min_price,
-                    min_avg_dollar_vol=min_dollar_vol,
-                )
-            except Exception as e:
-                _banner(
-                    f"⚠️ Combo (Conservative) liquidity filter failed: {e}",
-                    "warning",
-                )
-                combo_liquid = combo_universe
-
-            if combo_liquid is None or len(combo_liquid) == 0:
-                combo_liquid = combo_universe
-
-            combo_capped = combo_liquid[: int(max_combo_scan)]
-
-            st.session_state["sp500_universe"] = sp500
-            st.session_state["nasdaq_universe"] = nasdaq
-            st.session_state["nasdaq_capped"] = nasdaq_capped
-            st.session_state["combo_capped"] = combo_capped
-
+            combo_capped = _build_combo_capped("Combo Conservative")
             do_scan(combo_capped, "Combo (Conservative)", profile_override="conservative")
+
+    # --- Strategy scans based on Combo universe (SP500 + NASDAQ) ---
+    st.markdown("### 🧩 Strategy Scans (Combo Universe)")
+
+    s1, s2, s3 = st.columns(3)
+    s4, s5, s6 = st.columns(3)
+
+    # Gap-Up (Combo)
+    with s1:
+        if st.button(
+            "Gap-Up (Combo)",
+            key="btn_gap_up_combo",
+            use_container_width=True,
+            disabled=not (can_scan_sp500 and can_scan_nasdaq),
+        ):
+            combo_capped = _build_combo_capped("Gap-Up Combo")
+            do_scan(combo_capped, "Gap-Up (Combo)", post_filter=_pf_gap_up)
+
+    # Gap-Down (Combo)
+    with s2:
+        if st.button(
+            "Gap-Down (Combo)",
+            key="btn_gap_down_combo",
+            use_container_width=True,
+            disabled=not (can_scan_sp500 and can_scan_nasdaq),
+        ):
+            combo_capped = _build_combo_capped("Gap-Down Combo")
+            do_scan(combo_capped, "Gap-Down (Combo)", post_filter=_pf_gap_down)
+
+    # Top Gainers (Combo)
+    with s3:
+        if st.button(
+            "Top Gainers (Combo)",
+            key="btn_top_gainers_combo",
+            use_container_width=True,
+            disabled=not (can_scan_sp500 and can_scan_nasdaq),
+        ):
+            combo_capped = _build_combo_capped("Top Gainers Combo")
+            do_scan(combo_capped, "Top Gainers (Combo)", post_filter=_pf_top_gainers)
+
+    # Most Active (Combo)
+    with s4:
+        if st.button(
+            "Most Active (Combo)",
+            key="btn_most_active_combo",
+            use_container_width=True,
+            disabled=not (can_scan_sp500 and can_scan_nasdaq),
+        ):
+            combo_capped = _build_combo_capped("Most Active Combo")
+            do_scan(combo_capped, "Most Active (Combo)", post_filter=_pf_most_active)
+
+    # Unusual Volume (Combo)
+    with s5:
+        if st.button(
+            "Unusual Volume (Combo)",
+            key="btn_unusual_volume_combo",
+            use_container_width=True,
+            disabled=not (can_scan_sp500 and can_scan_nasdaq),
+        ):
+            combo_capped = _build_combo_capped("Unusual Volume Combo")
+            do_scan(combo_capped, "Unusual Volume (Combo)", post_filter=_pf_unusual_volume)
+
+    # Momentum (Combo)
+    with s6:
+        if st.button(
+            "Momentum (Combo)",
+            key="btn_momentum_combo",
+            use_container_width=True,
+            disabled=not (can_scan_sp500 and can_scan_nasdaq),
+        ):
+            combo_capped = _build_combo_capped("Momentum Combo")
+            do_scan(combo_capped, "Momentum (Combo)", post_filter=_pf_momentum)
+
+    # Breakout-Only (Combo) – centered under the grid
+    c_breakout1, c_breakout2, c_breakout3 = st.columns(3)
+    with c_breakout2:
+        if st.button(
+            "Breakout-Only (Combo)",
+            key="btn_breakout_only_combo",
+            use_container_width=True,
+            disabled=not (can_scan_sp500 and can_scan_nasdaq),
+        ):
+            combo_capped = _build_combo_capped("Breakout-Only Combo")
+            do_scan(combo_capped, "Breakout-Only (Combo)", post_filter=_pf_breakout_only)
 
     # --- Alpaca Market Data self-test ---
     st.markdown("### 🧪 Data Provider Diagnostics")
