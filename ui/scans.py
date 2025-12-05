@@ -257,89 +257,105 @@ def render_three_step_scanner() -> None:
             icon = "⚪️"
         st.markdown(f"### {icon} {step_num} {title}")
 
-    # ─────────────────────────────
-    # STEP 1 — SELECT MARKET
-    # ─────────────────────────────
-    _step_header(1, "Select Market Universe")
+    # Helper to build a label string for collapsible sections
+    def _step_label(step_num: int, title: str) -> str:
+        active = active_step == step_num
+        done_map = {1: step1_done, 2: step2_done, 3: step3_done}
+        done = done_map.get(step_num, False)
 
-    market_cols = st.columns(3)
-
-    def _market_button(label: str, value: str, col) -> None:
-        if col.button(label, key=f"market_{value}"):
-            st.session_state.scan_market = value
-            # NEW: advance to step 2
-            st.session_state.scan_active_step = 2
-
-    _market_button("SP500", "SP500", market_cols[0])
-    _market_button("NASDAQ", "NASDAQ", market_cols[1])
-    _market_button("Combo (SP500 + NASDAQ)", "COMBO", market_cols[2])
-
-    st.caption(f"**Current market:** {st.session_state.scan_market}")
-
-    st.markdown("---")
+        if active:
+            icon = "🔵"
+        elif done:
+            icon = "🟢"
+        else:
+            icon = "⚪️"
+        return f"{icon} {step_num} {title}"
 
     # ─────────────────────────────
-    # STEP 2 — SELECT STRATEGY
+    # STEP 1 — SELECT MARKET (Collapsible)
     # ─────────────────────────────
-    _step_header(2, "Select Strategy")
+    with st.expander(
+        _step_label(1, "Select Market Universe"),
+        expanded=(active_step == 1),
+    ):
+        market_cols = st.columns(3)
 
-    strategy_cols_row1 = st.columns(3)
-    strategy_cols_row2 = st.columns(3)
+        def _market_button(label: str, value: str, col) -> None:
+            if col.button(label, key=f"market_{value}"):
+                st.session_state.scan_market = value
+                # NEW: advance to step 2
+                st.session_state.scan_active_step = 2
 
-    def _strategy_button(label: str, value: str, col) -> None:
-        if col.button(label, key=f"strategy_{value}"):
-            st.session_state.scan_strategy = value
-            # NEW: advance to step 3
-            st.session_state.scan_active_step = 3
+        _market_button("SP500", "SP500", market_cols[0])
+        _market_button("NASDAQ", "NASDAQ", market_cols[1])
+        _market_button("Combo (SP500 + NASDAQ)", "COMBO", market_cols[2])
 
-    _strategy_button("Gap-Up", "gap_up", strategy_cols_row1[0])
-    _strategy_button("Gap-Down", "gap_down", strategy_cols_row1[1])
-    _strategy_button("Most Active", "most_active", strategy_cols_row1[2])
-
-    _strategy_button("Unusual Volume", "unusual_vol", strategy_cols_row2[0])
-    _strategy_button("Momentum", "momentum", strategy_cols_row2[1])
-    _strategy_button("Breakout-Only", "breakout_only", strategy_cols_row2[2])
-
-    st.caption(
-        f"**Current strategy:** "
-        f"{st.session_state.scan_strategy.replace('_', ' ').title()}"
-    )
-
-    st.markdown("---")
+        st.caption(f"**Current market:** {st.session_state.scan_market}")
 
     # ─────────────────────────────
-    # STEP 3 — PROFILE + RUN + RESULTS
+    # STEP 2 — SELECT STRATEGY (Collapsible)
     # ─────────────────────────────
-    _step_header(3, "Profile, Run Scan & View Results")
+    with st.expander(
+        _step_label(2, "Select Strategy"),
+        expanded=(active_step == 2),
+    ):
+        strategy_cols_row1 = st.columns(3)
+        strategy_cols_row2 = st.columns(3)
 
-    profile_cols = st.columns(3)
+        def _strategy_button(label: str, value: str, col) -> None:
+            if col.button(label, key=f"strategy_{value}"):
+                st.session_state.scan_strategy = value
+                # NEW: advance to step 3
+                st.session_state.scan_active_step = 3
 
-    def _profile_button(label: str, value: str, col) -> None:
-        if col.button(label, key=f"profile_{value}"):
-            st.session_state.scan_profile = value
-            # NEW: set active step to 3 (remain on step 3)
-            st.session_state.scan_active_step = 3
+        _strategy_button("Gap-Up", "gap_up", strategy_cols_row1[0])
+        _strategy_button("Gap-Down", "gap_down", strategy_cols_row1[1])
+        _strategy_button("Most Active", "most_active", strategy_cols_row1[2])
 
-    _profile_button("Aggressive", "aggressive", profile_cols[0])
-    _profile_button("Regular", "regular", profile_cols[1])
-    _profile_button("Conservative", "conservative", profile_cols[2])
+        _strategy_button("Unusual Volume", "unusual_vol", strategy_cols_row2[0])
+        _strategy_button("Momentum", "momentum", strategy_cols_row2[1])
+        _strategy_button("Breakout-Only", "breakout_only", strategy_cols_row2[2])
 
-    st.caption(f"**Current profile:** {st.session_state.scan_profile.title()}")
+        st.caption(
+            f"**Current strategy:** "
+            f"{st.session_state.scan_strategy.replace('_', ' ').title()}"
+        )
 
-    st.markdown("")
+    # ─────────────────────────────
+    # STEP 3 — PROFILE + RUN + RESULTS (Collapsible)
+    # ─────────────────────────────
+    with st.expander(
+        _step_label(3, "Profile, Run Scan & View Results"),
+        expanded=(active_step == 3),
+    ):
+        profile_cols = st.columns(3)
 
-    # Run / Live controls
-    run_cols = st.columns([2, 1, 1])
-    run_clicked = run_cols[0].button("🚀 Run Scan", key="run_scan_button")
-    st.session_state.scan_live_mode = run_cols[1].toggle(
-        "Live (10s refresh)",
-        value=st.session_state.scan_live_mode,
-        key="live_toggle",
-    )
+        def _profile_button(label: str, value: str, col) -> None:
+            if col.button(label, key=f"profile_{value}"):
+                st.session_state.scan_profile = value
+                # NEW: set active step to 3 (remain on step 3)
+                st.session_state.scan_active_step = 3
 
-    progress_placeholder = st.empty()
-    status_placeholder = st.empty()
-    results_placeholder = st.empty()
+        _profile_button("Aggressive", "aggressive", profile_cols[0])
+        _profile_button("Regular", "regular", profile_cols[1])
+        _profile_button("Conservative", "conservative", profile_cols[2])
+
+        st.caption(f"**Current profile:** {st.session_state.scan_profile.title()}")
+
+        st.markdown("")
+
+        # Run / Live controls
+        run_cols = st.columns([2, 1, 1])
+        run_clicked = run_cols[0].button("🚀 Run Scan", key="run_scan_button")
+        st.session_state.scan_live_mode = run_cols[1].toggle(
+            "Live (10s refresh)",
+            value=st.session_state.scan_live_mode,
+            key="live_toggle",
+        )
+
+        progress_placeholder = st.empty()
+        status_placeholder = st.empty()
+        results_placeholder = st.empty()
 
     if run_clicked:
         # Use basic Streamlit spinner instead of GIF loader
