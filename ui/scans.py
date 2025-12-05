@@ -343,13 +343,16 @@ def render_three_step_scanner() -> None:
 
     if run_clicked:
         with progress_placeholder.container():
-            with st.spinner("Running scan… this may take a few seconds for large universes."):
-                df = run_scan_engine(
-                    market=st.session_state.scan_market,
-                    strategy=st.session_state.scan_strategy,
-                    profile=st.session_state.scan_profile,
-                    live_mode=st.session_state.scan_live_mode,
-                )
+            # Show custom loading GIF
+            st.image("hsf_spinner.gif", width=150)
+
+            # Run scan without Streamlit spinner since we now show GIF
+            df = run_scan_engine(
+                market=st.session_state.scan_market,
+                strategy=st.session_state.scan_strategy,
+                profile=st.session_state.scan_profile,
+                live_mode=st.session_state.scan_live_mode,
+            )
 
         num_rows = 0 if df is None else len(df)
         status_placeholder.success(
