@@ -17,6 +17,7 @@ from db.runs import save_run, save_daily_snapshot, list_runs
 from scan.engine import safe_call, run_breakout_scan
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
+
 # Universe loaders (imported here so this module is self-contained)
 try:
     from ui.universe import (
@@ -32,6 +33,315 @@ except ModuleNotFoundError:
         filter_universe,
         apply_liquidity_filter_batch,
     )
+
+
+# --- Three-step scanner session helpers (universe / strategy / profile) ---
+
+DEFAULT_MARKET = "SP500"
+DEFAULT_STRATEGY = "gap_up"
+DEFAULT_PROFILE = "aggressive"
+
+
+def _init_scan_session_state() -> None:
+    """Ensure we have default selections in session_state for the 3-step scanner layout.
+
+    These keys are safe to add even if the legacy button-based layout is still in use.
+    """
+    if "scan_market" not in st.session_state:
+        st.session_state.scan_market = DEFAULT_MARKET
+    if "scan_strategy" not in st.session_state:
+        st.session_state.scan_strategy = DEFAULT_STRATEGY
+    if "scan_profile" not in st.session_state:
+        st.session_state.scan_profile = DEFAULT_PROFILE
+    if "scan_live_mode" not in st.session_state:
+        st.session_state.scan_live_mode = False
+
+
+
+def run_scan_engine(
+    market: str,
+    strategy: str,
+    profile: str,
+    live_mode: bool = False,
+) -> pd.DataFrame:
+    """Run a scan based on Market / Strategy / Profile selections.
+
+    This function reuses the same breakout engine used by the legacy button-based
+    layout, but chooses a universe and simple parameter defaults based on the
+    user's selections.
+    """
+    # 1) Resolve universe for the selected market
+    market = (market or "").upper().strip()
+    profile = (profile or "").lower().strip()
+    strategy = (strategy or "").lower().strip()
+
+    # Prefer existing universes stored in session_state (set by legacy scans)
+    sp500: Optional[List[str]] = st.session_state.get("sp500_universe")
+    nasdaq: Optional[List[str]] = st.session_state.get("nasdaq_universe")
+    nasdaq_capped: Optional[List[str]] = st.session_state.get("nasdaq_capped")
+    combo_capped: Optional[List[str]] = st.session_state.get("combo_capped")
+
+    # Helper to safely load + filter a universe if not already cached
+    def _ensure_sp500() -> List[str]:
+        nonlocal sp500
+        if not sp500:
+            base = safe_call(load_sp500_universe, label="SP500 universe (3-step)")
+            sp500 = filter_universe(base)
+            st.session_state["sp500_universe"] = sp500
+        return sp500 or []
+
+    def _ensure_nasdaq() -> List[str]:
+        nonlocal nasdaq, nasdaq_capped
+        if not nasdaq:
+            base = safe_call(load_nasdaq_universe, label="NASDAQ universe (3-step)")
+            nasdaq = filter_universe(base)
+            st.session_state["nasdaq_universe"] = nasdaq
+        if not nasdaq_capped:
+            max_nasdaq_scan = int(st.session_state.get("max_nasdaq_scan", 2000))
+            nasdaq_capped = (nasdaq or [])[:max_nasdaq_scan]
+            st.session_state["nasdaq_capped"] = nasdaq_capped
+        return nasdaq_capped or []
+
+    def _ensure_combo() -> List[str]:
+        nonlocal combo_capped
+        if combo_capped:
+            return combo_capped
+        base_sp = _ensure_sp500()
+        base_nq = _ensure_nasdaq()
+        max_combo_scan = int(st.session_state.get("max_combo_scan", 4000))
+        universe = (base_sp or []) + (base_nq or [])
+        combo_capped_local = universe[:max_combo_scan]
+        st.session_state["combo_capped"] = combo_capped_local
+        combo_capped = combo_capped_local
+        return combo_capped or []
+
+    if market == "SP500":
+        tickers = _ensure_sp500()
+    elif market == "NASDAQ":
+        tickers = _ensure_nasdaq()
+    else:  # "COMBO" or anything else
+        tickers = _ensure_combo()
+
+    if not tickers:
+        return pd.DataFrame()
+
+    # 2) Derive basic scan parameters from profile + sidebar settings (if present)
+    # Pull existing sidebar config where available, otherwise fall back to sane defaults.
+    min_price = float(st.session_state.get("min_price", 1.0))
+    max_price = float(st.session_state.get("max_price", 1000.0))
+    top_n = int(st.session_state.get("top_n", 150))
+    premarket = bool(st.session_state.get("premarket", False))
+    afterhours = bool(st.session_state.get("afterhours", False))
+
+    # Profile-based defaults
+    if profile == "aggressive":
+        min_gap = float(st.session_state.get("min_gap_pct_aggressive", 0.0))
+        unusual_volume = bool(st.session_state.get("unusual_vol_aggressive", False))
+    elif profile == "conservative":
+        min_gap = float(st.session_state.get("min_gap_pct_conservative", 3.0))
+        unusual_volume = bool(st.session_state.get("unusual_vol_conservative", True))
+    else:  # "regular" or unknown
+        min_gap = float(st.session_state.get("min_gap_pct", 1.0))
+        unusual_volume = bool(st.session_state.get("unusual_vol", True))
+
+    # 3) Run the core breakout engine (no diagnostics for clean UI)
+    df = run_breakout_scan(
+        tickers=list(tickers),
+        premarket=premarket,
+        afterhours=afterhours,
+        unusual_volume=unusual_volume,
+        min_gap=min_gap,
+        min_price=min_price,
+        max_price=max_price,
+        top_n=top_n,
+        profile=profile or "regular",
+        diagnostics=False,
+        use_cache=not live_mode,
+    )
+
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    # 4) Strategy-specific post-filters (operate on the breakout results)
+    def _strategy_gap_up(frame: pd.DataFrame) -> pd.DataFrame:
+        if "GapPct" not in frame.columns:
+            return frame.head(0)
+        return frame[frame["GapPct"] > 0].sort_values("GapPct", ascending=False)
+
+    def _strategy_gap_down(frame: pd.DataFrame) -> pd.DataFrame:
+        if "GapPct" not in frame.columns:
+            return frame.head(0)
+        return frame[frame["GapPct"] < 0].sort_values("GapPct", ascending=True)
+
+    def _strategy_most_active(frame: pd.DataFrame) -> pd.DataFrame:
+        col = "DollarVol20" if "DollarVol20" in frame.columns else (
+            "Volume" if "Volume" in frame.columns else None
+        )
+        if col is None:
+            return frame.head(0)
+        return frame.sort_values(col, ascending=False)
+
+    def _strategy_unusual_vol(frame: pd.DataFrame) -> pd.DataFrame:
+        if "VolRel20" not in frame.columns:
+            return frame.head(0)
+        return frame[frame["VolRel20"] >= 2].sort_values("VolRel20", ascending=False)
+
+    def _strategy_momentum(frame: pd.DataFrame) -> pd.DataFrame:
+        if "Trend20D%" not in frame.columns or "Trend10D%" not in frame.columns:
+            return frame.head(0)
+        mask = (frame["Trend20D%"] > 0) & (frame["Trend10D%"] > 0)
+        return frame[mask].sort_values("Trend20D%", ascending=False)
+
+    def _strategy_breakout_only(frame: pd.DataFrame) -> pd.DataFrame:
+        if "IsBreakout" not in frame.columns:
+            return frame.head(0)
+        base = frame[frame["IsBreakout"] == True]
+        if "BreakoutScore" in base.columns:
+            return base.sort_values("BreakoutScore", ascending=False)
+        return base
+
+    strategy_map = {
+        "gap_up": _strategy_gap_up,
+        "gap_down": _strategy_gap_down,
+        "most_active": _strategy_most_active,
+        "unusual_vol": _strategy_unusual_vol,
+        "momentum": _strategy_momentum,
+        "breakout_only": _strategy_breakout_only,
+    }
+
+    post = strategy_map.get(strategy)
+    if post is not None:
+        try:
+            df = post(df)
+        except Exception:
+            # On any filter error, just return the unfiltered results (capped below)
+            pass
+
+    # 5) Cap to Top N and return
+    df = df.head(top_n).reset_index(drop=True)
+    return df
+
+
+# --- 3-step scanner clean layout (experimental) ---
+def render_three_step_scanner() -> None:
+    """Clean 3-step scanner layout: Market → Strategy → Profile + Run.
+
+    This does not replace the existing render_scan_controls() yet; it can be
+    called from app.py alongside or instead of the legacy layout.
+    """
+    _init_scan_session_state()
+
+    st.markdown("## 🔍 Breakout Scanner")
+
+    # ─────────────────────────────
+    # STEP 1 — SELECT MARKET
+    # ─────────────────────────────
+    st.markdown("### 1️⃣ Select Market Universe")
+
+    market_cols = st.columns(3)
+
+    def _market_button(label: str, value: str, col) -> None:
+        if col.button(label, key=f"market_{value}"):
+            st.session_state.scan_market = value
+
+    _market_button("SP500", "SP500", market_cols[0])
+    _market_button("NASDAQ", "NASDAQ", market_cols[1])
+    _market_button("Combo (SP500 + NASDAQ)", "COMBO", market_cols[2])
+
+    st.caption(f"**Current market:** {st.session_state.scan_market}")
+
+    st.markdown("---")
+
+    # ─────────────────────────────
+    # STEP 2 — SELECT STRATEGY
+    # ─────────────────────────────
+    st.markdown("### 2️⃣ Select Strategy")
+
+    strategy_cols_row1 = st.columns(3)
+    strategy_cols_row2 = st.columns(3)
+
+    def _strategy_button(label: str, value: str, col) -> None:
+        if col.button(label, key=f"strategy_{value}"):
+            st.session_state.scan_strategy = value
+
+    _strategy_button("Gap-Up", "gap_up", strategy_cols_row1[0])
+    _strategy_button("Gap-Down", "gap_down", strategy_cols_row1[1])
+    _strategy_button("Most Active", "most_active", strategy_cols_row1[2])
+
+    _strategy_button("Unusual Volume", "unusual_vol", strategy_cols_row2[0])
+    _strategy_button("Momentum", "momentum", strategy_cols_row2[1])
+    _strategy_button("Breakout-Only", "breakout_only", strategy_cols_row2[2])
+
+    st.caption(
+        f"**Current strategy:** "
+        f"{st.session_state.scan_strategy.replace('_', ' ').title()}"
+    )
+
+    st.markdown("---")
+
+    # ─────────────────────────────
+    # STEP 3 — PROFILE + RUN + RESULTS
+    # ─────────────────────────────
+    st.markdown("### 3️⃣ Profile, Run Scan & View Results")
+
+    profile_cols = st.columns(3)
+
+    def _profile_button(label: str, value: str, col) -> None:
+        if col.button(label, key=f"profile_{value}"):
+            st.session_state.scan_profile = value
+
+    _profile_button("Aggressive", "aggressive", profile_cols[0])
+    _profile_button("Regular", "regular", profile_cols[1])
+    _profile_button("Conservative", "conservative", profile_cols[2])
+
+    st.caption(f"**Current profile:** {st.session_state.scan_profile.title()}")
+
+    st.markdown("")
+
+    # Run / Live controls
+    run_cols = st.columns([2, 1, 1])
+    run_clicked = run_cols[0].button("🚀 Run Scan", key="run_scan_button")
+    st.session_state.scan_live_mode = run_cols[1].toggle(
+        "Live (10s refresh)",
+        value=st.session_state.scan_live_mode,
+        key="live_toggle",
+    )
+
+    progress_placeholder = st.empty()
+    status_placeholder = st.empty()
+    results_placeholder = st.empty()
+
+    if run_clicked:
+        progress_bar = progress_placeholder.progress(0, text="Starting scan…")
+
+        df = run_scan_engine(
+            market=st.session_state.scan_market,
+            strategy=st.session_state.scan_strategy,
+            profile=st.session_state.scan_profile,
+            live_mode=st.session_state.scan_live_mode,
+        )
+
+        progress_bar.progress(100, text="Scan complete")
+
+        num_rows = 0 if df is None else len(df)
+        status_placeholder.success(
+            f"✅ Scan complete. Returned **{num_rows}** rows "
+            f"for **{st.session_state.scan_market}** • "
+            f"Strategy **{st.session_state.scan_strategy.replace('_', ' ').title()}** • "
+            f"Profile **{st.session_state.scan_profile.title()}**."
+        )
+
+        if df is not None and not df.empty:
+            results_placeholder.dataframe(df, height=480)
+        else:
+            results_placeholder.info(
+                "No results matched the current filters. "
+                "Try lowering the minimum gap %, price, or volume filters."
+            )
+    else:
+        status_placeholder.info(
+            "Choose a **Market**, **Strategy**, and **Profile**, then click **Run Scan**."
+        )
 
 
 def _banner(msg: str, level: str = "info") -> None:
