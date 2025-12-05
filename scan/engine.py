@@ -85,7 +85,7 @@ def cached_real_scan(
     max_price: float,
     top_n: int,
     profile: str = "regular",
-    diagnostics: bool = True,
+    diagnostics: bool = False,
     use_cache: bool = True,
 ) -> pd.DataFrame:
     """Cached wrapper around the real breakout scan.
@@ -121,7 +121,7 @@ def run_breakout_scan(
     max_price: float,
     top_n: int,
     profile: str = "regular",
-    diagnostics: bool = True,
+    diagnostics: bool = False,
     use_cache: bool = True,
 ) -> pd.DataFrame:
     if diagnostics:
