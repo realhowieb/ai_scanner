@@ -55,8 +55,7 @@ def _init_scan_session_state() -> None:
         st.session_state.scan_profile = DEFAULT_PROFILE
     if "scan_live_mode" not in st.session_state:
         st.session_state.scan_live_mode = False
-
-    # Track which step is currently active in the 3-step scanner UI
+    # NEW: initialize scan_active_step
     if "scan_active_step" not in st.session_state:
         st.session_state.scan_active_step = 1
 
@@ -235,19 +234,14 @@ def render_three_step_scanner() -> None:
     """
     _init_scan_session_state()
 
-    # Helper to render step headers with active/inactive indicator
-    def _step_header(step_num: int, label: str) -> None:
-        """Render a step header with a small active/inactive indicator."""
-        active_step = int(st.session_state.get("scan_active_step", 1) or 1)
-        # Active step gets a green dot and bold text; others are dimmed
-        if step_num == active_step:
-            prefix = "🟢"
-            text = f"**{label}**"
-        else:
-            prefix = "⚪️"
-            text = label
-        st.markdown(f"### {prefix} {step_num}️⃣ {text}")
+    # NEW: get active step from session state
+    active_step = int(st.session_state.get("scan_active_step", 1))
 
+    # Helper to render step headers with active indicator
+    def _step_header(step_num: int, title: str) -> None:
+        active = active_step == step_num
+        icon = "🟢" if active else "⚪️"
+        st.markdown(f"### {icon} {step_num} {title}")
 
     # ─────────────────────────────
     # STEP 1 — SELECT MARKET
@@ -259,11 +253,8 @@ def render_three_step_scanner() -> None:
     def _market_button(label: str, value: str, col) -> None:
         if col.button(label, key=f"market_{value}"):
             st.session_state.scan_market = value
-            # Move the highlight to Step 2 after choosing a market
-            st.session_state.scan_active_step = max(
-                int(st.session_state.get("scan_active_step", 1) or 1),
-                2,
-            )
+            # NEW: advance to step 2
+            st.session_state.scan_active_step = 2
 
     _market_button("SP500", "SP500", market_cols[0])
     _market_button("NASDAQ", "NASDAQ", market_cols[1])
@@ -284,11 +275,8 @@ def render_three_step_scanner() -> None:
     def _strategy_button(label: str, value: str, col) -> None:
         if col.button(label, key=f"strategy_{value}"):
             st.session_state.scan_strategy = value
-            # Move the highlight to Step 3 after choosing a strategy
-            st.session_state.scan_active_step = max(
-                int(st.session_state.get("scan_active_step", 1) or 1),
-                3,
-            )
+            # NEW: advance to step 3
+            st.session_state.scan_active_step = 3
 
     _strategy_button("Gap-Up", "gap_up", strategy_cols_row1[0])
     _strategy_button("Gap-Down", "gap_down", strategy_cols_row1[1])
@@ -315,6 +303,8 @@ def render_three_step_scanner() -> None:
     def _profile_button(label: str, value: str, col) -> None:
         if col.button(label, key=f"profile_{value}"):
             st.session_state.scan_profile = value
+            # NEW: set active step to 3 (remain on step 3)
+            st.session_state.scan_active_step = 3
 
     _profile_button("Aggressive", "aggressive", profile_cols[0])
     _profile_button("Regular", "regular", profile_cols[1])
@@ -338,8 +328,6 @@ def render_three_step_scanner() -> None:
     results_placeholder = st.empty()
 
     if run_clicked:
-        # Keep the focus on Step 3 when running a scan
-        st.session_state.scan_active_step = 3
         with progress_placeholder.container():
             with st.spinner("Running scan… this may take a few seconds for large universes."):
                 df = run_scan_engine(
@@ -403,6 +391,8 @@ def render_three_step_scanner() -> None:
         except Exception:
             # Never break the UI because of logging issues
             pass
+        # NEW: keep step 3 active after scan
+        st.session_state.scan_active_step = 3
     else:
         status_placeholder.info(
             "Choose a **Market**, **Strategy**, and **Profile**, then click **Run Scan**."
