@@ -234,13 +234,27 @@ def render_three_step_scanner() -> None:
     """
     _init_scan_session_state()
 
+    # Step done flags: True if selection exists in session_state
+    step1_done = bool(st.session_state.get("scan_market"))
+    step2_done = bool(st.session_state.get("scan_strategy"))
+    step3_done = bool(st.session_state.get("scan_profile"))
+
     # NEW: get active step from session state
     active_step = int(st.session_state.get("scan_active_step", 1))
 
-    # Helper to render step headers with active indicator
+    # Helper to render step headers with active/completed indicator
     def _step_header(step_num: int, title: str) -> None:
+        # active step = blue, completed = green, upcoming = white
         active = active_step == step_num
-        icon = "🟢" if active else "⚪️"
+        done_map = {1: step1_done, 2: step2_done, 3: step3_done}
+        done = done_map.get(step_num, False)
+
+        if active:
+            icon = "🔵"
+        elif done:
+            icon = "🟢"
+        else:
+            icon = "⚪️"
         st.markdown(f"### {icon} {step_num} {title}")
 
     # ─────────────────────────────
