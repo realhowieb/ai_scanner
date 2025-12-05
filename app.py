@@ -771,7 +771,7 @@ def main():
         username=username,
     )
 
-    st.markdown("## EZ 3-Step AI Scanner")
+    st.markdown("## 🤖 EZ 3-Step AI Scanner")
     render_three_step_scanner()
     st.markdown("---")
 
