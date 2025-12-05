@@ -124,10 +124,15 @@ def run_breakout_scan(
     diagnostics: bool = True,
     use_cache: bool = True,
 ) -> pd.DataFrame:
-    st.caption(
-        f"🚀 run_breakout_scan called with {len(tickers)} tickers "
-        f"(use_cache={use_cache}, profile={profile!r})"
-    )
+    if diagnostics:
+        try:
+            st.caption(
+                f"🚀 run_breakout_scan called with {len(tickers)} tickers "
+                f"(use_cache={use_cache}, profile={profile!r})"
+            )
+        except Exception:
+            # If the UI is not available (e.g., during background runs), just ignore.
+            pass
     """Public entry point for breakout scans.
 
     This function is responsible for:
@@ -170,10 +175,15 @@ def run_breakout_scan(
         import traceback
 
         parallel_error = traceback.format_exc()
-        try:
-            st.error(f"❌ fetch_price_data_parallel failed: {e}")
-            st.code(parallel_error, language="python")
-        except Exception:
+        if diagnostics:
+            try:
+                st.error(f"❌ fetch_price_data_parallel failed: {e}")
+                st.code(parallel_error, language="python")
+            except Exception:
+                # Fall back to console logging if Streamlit is not available
+                print("fetch_price_data_parallel failed:", parallel_error)
+        else:
+            # In non-diagnostic mode, suppress UI noise and log only to console
             print("fetch_price_data_parallel failed:", parallel_error)
         price_data = {}
 
@@ -189,10 +199,15 @@ def run_breakout_scan(
             import traceback
 
             batch_error = traceback.format_exc()
-            try:
-                st.error(f"❌ fetch_price_data_batch failed: {e}")
-                st.code(batch_error, language="python")
-            except Exception:
+            if diagnostics:
+                try:
+                    st.error(f"❌ fetch_price_data_batch failed: {e}")
+                    st.code(batch_error, language="python")
+                except Exception:
+                    # Fall back to console logging if Streamlit is not available
+                    print("fetch_price_data_batch failed:", batch_error)
+            else:
+                # In non-diagnostic mode, suppress UI noise and log only to console
                 print("fetch_price_data_batch failed:", batch_error)
             price_data = {}
 
