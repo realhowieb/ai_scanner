@@ -20,3 +20,4 @@ streamlit-authenticator>=0.3.2
 bcrypt
 streamlit-autorefresh
 alpaca-py
+xgboost
