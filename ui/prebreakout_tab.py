@@ -11,6 +11,7 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
+from ml_prebreakout import load_prebreakout_model, train_prebreakout_model
 
 
 def _get_latest_results_df() -> Optional[pd.DataFrame]:
@@ -33,6 +34,45 @@ def render_prebreakout_tab() -> None:
         with values in [0.0, 1.0].
     """
     st.markdown("### 🔮 Early Breakout Candidates (Model-based)")
+
+    # --- Model status + training controls ---
+    with st.expander("🧠 Model status & training", expanded=False):
+        bundle = load_prebreakout_model()
+        if bundle:
+            features = bundle.get("features", [])
+            feature_preview = ", ".join(features[:8])
+            if len(features) > 8:
+                feature_preview += ", ..."
+
+            st.success(
+                f"Current model loaded.\n\n"
+                f"- AUC: **{bundle.get('auc', 0):.3f}**\n"
+                f"- Trained at: **{bundle.get('trained_at', 'unknown')}**\n"
+                f"- Features: `{feature_preview}`"
+            )
+        else:
+            st.warning(
+                "No pre-breakout model is currently loaded. "
+                "Train a new model using your historical runs."
+            )
+
+        if st.button("🚀 Train / Refresh model from DB history", use_container_width=True):
+            with st.spinner("Training pre-breakout model from DB history..."):
+                trained_bundle = train_prebreakout_model(
+                    days_back=90,
+                    horizon_scans=3,
+                )
+            if trained_bundle:
+                st.success(
+                    f"Model trained! AUC={trained_bundle.get('auc', 0):.3f}, "
+                    f"trained_at={trained_bundle.get('trained_at', 'unknown')}"
+                )
+            else:
+                st.error(
+                    "Training failed. Check the app logs for details "
+                    "(e.g., missing history or missing IsBreakout column)."
+                )
+
     st.caption(
         "These candidates are ranked by a model trained on your historical scans "
         "to detect pre-breakout patterns (rising trend, volume pressure, and "
