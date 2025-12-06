@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import json
 import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 from xgboost import XGBClassifier
-from db.runs import list_runs
+from db.runs import list_runs, load_run_results
 
 
 MODEL_PATH = "prebreakout_model.pkl"
@@ -15,14 +16,13 @@ def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
     """
     Load past runs from the runs DB and explode results into a ticker-level DataFrame.
 
-    Assumes db.runs.list_runs(limit=...) returns an iterable of dicts with at least:
-      - created_at (ISO string or datetime)
-      - label (optional)
-      - results_json or results (JSON array of rows from your scanner)
+    Uses:
+      - db.runs.list_runs(limit=...) for run metadata
+      - db.runs.load_run_results(run_id) to fetch the results_json payload
 
     The returned DataFrame will have one row per (Symbol, run_time) with columns such as:
-      Symbol, run_time, IsBreakout, BreakoutScore, GapPct, VolRel20,
-      DollarVol20, Trend10D%, Trend20D%, Last, etc. (where available).
+      Symbol, Timestamp, run_label, run_time, IsBreakout, BreakoutScore, GapPct,
+      VolRel20, DollarVol20, Trend10D%, Trend20D%, Last, etc. (where available).
     """
     try:
         runs = list_runs(limit=max_runs)
@@ -34,8 +34,10 @@ def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
     cutoff = datetime.utcnow() - timedelta(days=days_back)
 
     for run in runs:
-        # Created_at / timestamp parsing
+        run_id = run.get("id")
         created_at = run.get("created_at") or run.get("timestamp")
+
+        # Normalize created_at to a datetime
         if isinstance(created_at, str):
             try:
                 created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
@@ -46,22 +48,33 @@ def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
             continue
 
         label = run.get("label", "")
-        results_json = run.get("results_json") or run.get("results")
+
+        # Fetch full results_json for this run
+        try:
+            results_json = load_run_results(run_id) if run_id is not None else None
+        except Exception as e:
+            print(f"[ml_prebreakout] Failed to load results for run {run_id}: {e}")
+            continue
+
         if not results_json:
             continue
 
+        # Parse JSON string or accept already-parsed list
         try:
             rows = results_json
-            # If stored as JSON string, parse it
             if isinstance(results_json, str):
-                import json
-
                 rows = json.loads(results_json)
-        except Exception:
-            # Skip malformed results
+        except Exception as e:
+            print(f"[ml_prebreakout] Malformed results_json for run {run_id}: {e}")
+            continue
+
+        if not isinstance(rows, list):
             continue
 
         for row in rows:
+            if not isinstance(row, dict):
+                continue
+
             # Support both "Symbol" and "Ticker" keys
             sym = str(row.get("Symbol") or row.get("Ticker") or "").strip().upper()
             if not sym:
@@ -76,6 +89,7 @@ def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
             records.append(rec)
 
     if not records:
+        print("[ml_prebreakout] No records built from run history.")
         return pd.DataFrame()
 
     df = pd.DataFrame(records)
@@ -93,6 +107,7 @@ def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
             df[col] = np.nan
 
     df = df.sort_values(["Symbol", "Timestamp"]).reset_index(drop=True)
+    print(f"[ml_prebreakout] load_run_history built {len(df)} rows from {len(runs)} runs.")
     return df
 
 
