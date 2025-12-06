@@ -108,7 +108,7 @@ from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
 from auth.tiering_utils import derive_tier_flags
 from ui.header import render_header
-from ml_prebreakout import score_prebreakout
+from ui.ml_prebreakout import render_prebreakout_tab
 from ui.footer import render_footer
 from ui.watchlists import render_watchlists_panel
 from market_data import get_latest_quotes
@@ -775,11 +775,39 @@ def main():
     render_three_step_scanner()
     st.markdown("---")
 
-    # -------- Results --------
+    # -------- Results + Early Breakout Candidates --------
     df = get_results_df()
     rows = 0 if df is None else len(df)
-    with st.expander(f"📊 Latest scan results ({rows} rows)", expanded=rows > 0):
-        render_results(df, flags["can_export_csv"], flags["can_ai_notes"], render_chart_for_ticker, generate_ai_note)
+
+    tab1, tab2 = st.tabs(
+        [
+            f"📊 Latest scan results ({rows} rows)",
+            "🔮 Early Breakout Candidates",
+        ]
+    )
+
+    with tab1:
+        # Preserve existing latest results behavior
+        if rows == 0:
+            with st.expander(f"📊 Latest scan results ({rows} rows)", expanded=False):
+                render_results(
+                    df,
+                    flags["can_export_csv"],
+                    flags["can_ai_notes"],
+                    render_chart_for_ticker,
+                    generate_ai_note,
+                )
+        else:
+            render_results(
+                df,
+                flags["can_export_csv"],
+                flags["can_ai_notes"],
+                render_chart_for_ticker,
+                generate_ai_note,
+            )
+
+    with tab2:
+        render_prebreakout_tab()
 
     st.markdown("---")
 
