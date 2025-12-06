@@ -21,3 +21,5 @@ bcrypt
 streamlit-autorefresh
 alpaca-py
 xgboost
+scikit-learn
+joblib
