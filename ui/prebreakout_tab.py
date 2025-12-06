@@ -56,6 +56,25 @@ def render_prebreakout_tab() -> None:
         st.write(f"Raw runs returned: {len(runs)}")
         st.json(runs)
 
+    # --- DEBUG: Inspect sample run results_json ---
+    if st.button("🧪 Debug: Sample run results_json"):
+        from db.runs import list_runs, load_run_results
+
+        runs = list_runs(limit=1)
+        if not runs:
+            st.warning("No runs available from list_runs().")
+        else:
+            run_id = runs[0].get("id")
+            st.write(f"Inspecting run_id={run_id}")
+            raw = load_run_results(run_id)
+
+            if raw is None:
+                st.error("results_json is None for this run.")
+            else:
+                st.success(f"results_json type: {type(raw)}")
+                # Show just the first 1000 characters to avoid flooding the UI
+                st.code(str(raw)[:1000])
+
     # --- Model status + training controls ---
     with st.expander("🧠 Model status & training", expanded=False):
         bundle = load_prebreakout_model()
