@@ -108,7 +108,7 @@ from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
 from auth.tiering_utils import derive_tier_flags
 from ui.header import render_header
-
+from ml_prebreakout import score_prebreakout
 from ui.footer import render_footer
 from ui.watchlists import render_watchlists_panel
 from market_data import get_latest_quotes

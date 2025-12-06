@@ -222,6 +222,13 @@ def run_scan_engine(
 
     # 5) Cap to Top N and return
     df = df.head(top_n).reset_index(drop=True)
+
+    # 6) Optional: score pre-breakout probabilities
+    try:
+        df = score_prebreakout(df)
+    except Exception:
+        # Never break scans if the model is missing or fails
+        pass
     return df
 
 
