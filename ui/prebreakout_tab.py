@@ -48,6 +48,14 @@ def render_prebreakout_tab() -> None:
             st.success("✅ History loaded successfully!")
             st.dataframe(df_debug.head(50), use_container_width=True)
 
+    # --- DEBUG: Check raw runs from db.runs.list_runs ---
+    if st.button("🔎 Debug: Raw runs from DB"):
+        from db.runs import list_runs
+
+        runs = list_runs(limit=5)
+        st.write(f"Raw runs returned: {len(runs)}")
+        st.json(runs)
+
     # --- Model status + training controls ---
     with st.expander("🧠 Model status & training", expanded=False):
         bundle = load_prebreakout_model()
