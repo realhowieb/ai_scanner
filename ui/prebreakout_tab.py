@@ -35,6 +35,19 @@ def render_prebreakout_tab() -> None:
     """
     st.markdown("### 🔮 Early Breakout Candidates (Model-based)")
 
+    # --- DEBUG: Check run history ---
+    if st.button("🔍 Debug: Check DB history"):
+        from ml_prebreakout import load_run_history
+
+        df_debug = load_run_history(days_back=365)
+        st.write(f"Rows loaded from history: {len(df_debug)}")
+
+        if len(df_debug) == 0:
+            st.warning("⚠️ No runs found in DB. Run SP500/NASDAQ/Combo scans first.")
+        else:
+            st.success("✅ History loaded successfully!")
+            st.dataframe(df_debug.head(50), use_container_width=True)
+
     # --- Model status + training controls ---
     with st.expander("🧠 Model status & training", expanded=False):
         bundle = load_prebreakout_model()
