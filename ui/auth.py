@@ -151,7 +151,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
             unsafe_allow_html=True,
         )
 
-        st.markdown('<div class="auth-card" style="width:100%; max-width:520px;">', unsafe_allow_html=True)
+        #st.markdown('<div class="auth-card" style="width:100%; max-width:520px;">', unsafe_allow_html=True)
 
         try:
             authenticator.login(
