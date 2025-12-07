@@ -4,7 +4,7 @@ def render_header():
     st.markdown(
         """
         <div style='margin:0.5rem 0 0.25rem 0; display:flex; align-items:center;'>
-            <img src="assets/market_ai_logo.png"
+            <img src="assets/market_ai_logo_tighter.png"
                  style="height:52px; width:auto; display:block;" />
         </div>
         <div style='margin:0 0 0.75rem 0;'>
