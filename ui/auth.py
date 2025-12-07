@@ -112,7 +112,18 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
 
     # LEFT SIDE (Logo + tagline)
     with left_col:
-        st.markdown("<div style='padding-top:3rem;'>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="
+                display:flex;
+                flex-direction:column;
+                justify-content:center;
+                height:70vh;
+                padding-left:2rem;
+            ">
+            """,
+            unsafe_allow_html=True,
+        )
         st.image("assets/market_ai_logo_tighter.png", width=360)
         st.markdown(
             """
@@ -131,15 +142,16 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
             <div style="
                 display:flex;
                 flex-direction:column;
-                align-items:center;
+                align-items:flex-start;
                 justify-content:center;
                 height:70vh;
+                padding-right:2rem;
             ">
             """,
             unsafe_allow_html=True,
         )
 
-        st.markdown('<div class="auth-card" style="width:100%;">', unsafe_allow_html=True)
+        st.markdown('<div class="auth-card" style="width:100%; max-width:520px;">', unsafe_allow_html=True)
 
         try:
             authenticator.login(
