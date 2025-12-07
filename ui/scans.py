@@ -489,10 +489,13 @@ def _get_live_quote(ticker: str) -> Optional[float]:
 
 # --- Mini chart for single symbol (used in single-ticker scan panel) ---
 def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
-    """Render a small candlestick chart for a single symbol using yfinance and plotly.
+    """Render a small price chart for a single symbol, based primarily on Close.
 
-    This is used by the 'Search & Scan Single Ticker' panel to show a quick view
-    of recent price action for the searched ticker.
+    We keep this very simple and robust:
+    - Use Close as the primary series.
+    - Optionally overlay MA20 and MA50.
+    - If OHLC is available, we can still show a candlestick; otherwise we fall
+      back to a Close-line chart.
     """
     if not symbol:
         return
@@ -528,29 +531,17 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
         )
         return
 
-    # Require standard OHLC columns; if they are missing, bail out with a clear message
-    required_cols = ["Open", "High", "Low", "Close"]
-    available_cols = [c for c in required_cols if c in data.columns]
-    missing = [c for c in required_cols if c not in data.columns]
+    # Prefer Close; fall back to Adj Close if needed
+    price_series = None
+    if "Close" in data.columns:
+        price_series = data["Close"]
+    elif "Adj Close" in data.columns:
+        price_series = data["Adj Close"]
 
-    if missing:
+    if price_series is None or price_series.dropna().empty:
         st.warning(
-            f"Downloaded data for {symbol} is missing OHLC columns {missing}; "
-            "cannot render candlestick chart."
-        )
-        # Optional: show a small peek at the raw data for debugging
-        try:
-            st.caption("Raw price data (tail):")
-            st.dataframe(data.tail(), use_container_width=True)
-        except Exception:
-            pass
-        return
-
-    # Drop any rows where OHLC are NaN using only the columns that actually exist
-    if not available_cols:
-        st.warning(
-            f"Downloaded data for {symbol} has no usable OHLC columns after validation; "
-            "cannot render candlestick chart."
+            f"Downloaded data for {symbol} has no usable Close/Adj Close prices; "
+            "cannot render chart."
         )
         try:
             st.caption("Raw price data (tail):")
@@ -559,26 +550,53 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
             pass
         return
 
-    cleaned = data.dropna(subset=available_cols, how="any")
-    if cleaned.empty:
+    # Clean NaNs out of the main price series
+    price_series = price_series.dropna()
+    if price_series.empty:
         st.warning(
-            f"Price history for {symbol} had no valid OHLC rows to plot. "
-            "This can happen on illiquid symbols or during long closures."
+            f"Price history for {symbol} had no valid Close values to plot."
         )
         return
 
-    fig = go.Figure(
-        data=[
-            go.Candlestick(
-                x=cleaned.index,
-                open=cleaned["Open"],
-                high=cleaned["High"],
-                low=cleaned["Low"],
-                close=cleaned["Close"],
-                name=symbol,
-            )
-        ]
+    # Build a basic figure: line chart of Close, with MA20/MA50 if enough data
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=price_series.index,
+            y=price_series.values,
+            mode="lines",
+            name="Price",
+        )
     )
+
+    # Moving averages (based on Close) if we have enough points
+    try:
+        ma20 = price_series.rolling(window=20).mean()
+        ma50 = price_series.rolling(window=50).mean()
+
+        if ma20.dropna().shape[0] > 0:
+            fig.add_trace(
+                go.Scatter(
+                    x=ma20.index,
+                    y=ma20.values,
+                    mode="lines",
+                    name="MA20",
+                )
+            )
+        if ma50.dropna().shape[0] > 0:
+            fig.add_trace(
+                go.Scatter(
+                    x=ma50.index,
+                    y=ma50.values,
+                    mode="lines",
+                    name="MA50",
+                )
+            )
+    except Exception:
+        # If MA calculation fails, we still show the main price line
+        pass
+
     fig.update_layout(
         title=f"{symbol} — last {days} trading days",
         xaxis_title="Date",
