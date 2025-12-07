@@ -88,48 +88,60 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
 
     # --- First-time / not yet authenticated: render login form ---
 
-    # Lightly tighten top padding for the login page
+    # Tighten top padding and define the login card style
     st.markdown(
         """
         <style>
             .block-container {
                 padding-top: 1.5rem !important;
             }
+            .auth-card {
+                background-color: #111319;
+                border-radius: 14px;
+                padding: 1.75rem 2rem 2rem;
+                box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+                border: 1px solid rgba(255, 255, 255, 0.04);
+            }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # Centered logo + tagline above the login form
-    col_left, col_center, col_right = st.columns([1, 2, 1])
-    with col_center:
-        st.image(
-            "assets/market_ai_logo_tighter.png",
-            use_container_width=False,
-            width=500,
-        )
-        st.markdown(
-            """
-            <p style='margin:0.25rem 0 1rem; font-size:0.95rem; color:gray; text-align:center;'>
+    # Perfectly centered full-width login logo + tagline
+    st.markdown(
+        """
+        <div style="display:flex; flex-direction:column; align-items:center; margin-top:1rem; margin-bottom:0.5rem;">
+            <img src="assets/market_ai_logo_tighter.png" width="380" />
+            <p style="margin-top:0.3rem; font-size:1rem; color:gray; text-align:center;">
                 Sign in to MarketPulse AI
             </p>
-            """,
-            unsafe_allow_html=True,
-        )
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    try:
-        authenticator.login(
-            "main",
-            fields={
-                "Form name": "Login",
-                "Username": "Username",
-                "Password": "Password",
-                "Login": "Login",
-            },
-        )
-    except Exception as e:
-        banner(f"Auth error: {e}", "error")
-        return False, None, None
+    # Center the login form inside a card
+    card_left, card_center, card_right = st.columns([1, 2, 1])
+    with card_center:
+        st.markdown('<div class="auth-card">', unsafe_allow_html=True)
+
+        try:
+            authenticator.login(
+                "main",
+                fields={
+                    "Form name": "Login",
+                    "Username": "Username",
+                    "Password": "Password",
+                    "Login": "Login",
+                },
+            )
+        except Exception as e:
+            banner(f"Auth error: {e}", "error")
+            # close the card div so layout isn't broken
+            st.markdown("</div>", unsafe_allow_html=True)
+            return False, None, None
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
     auth_status = st.session_state.get("authentication_status", None)
     name = st.session_state.get("name")
