@@ -489,13 +489,15 @@ def _get_live_quote(ticker: str) -> Optional[float]:
 
 # --- Mini chart for single symbol (used in single-ticker scan panel) ---
 def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
-    """Render a small price chart for a single symbol, based primarily on Close.
+    """Render a small price chart for a single symbol, reusing the same pattern
+    as the other scans: use yfinance.Ticker().history and plot Close + MAs.
 
-    We keep this very simple and robust:
-    - Use Close as the primary series.
-    - Optionally overlay MA20 and MA50.
-    - If OHLC is available, we can still show a candlestick; otherwise we fall
-      back to a Close-line chart.
+    We deliberately keep this simple and robust:
+    - Use Ticker().history(period="6mo") so we get a sane daily history like the
+      rest of the app.
+    - Plot a Close line with optional MA20 / MA50.
+    - If OHLC is available, we can add a light candlestick-style backbone later,
+      but Close+MAs are the primary view.
     """
     if not symbol:
         return
@@ -508,110 +510,100 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
         st.info("Charting libraries (yfinance/plotly) are not available.")
         return
 
-    end = datetime.utcnow()
-    start = end - timedelta(days=days)
+    sym = str(symbol).strip().upper()
+    if not sym:
+        return
 
     try:
-        data = yf.download(
-            symbol,
-            start=start,
-            end=end,
-            progress=False,
-            auto_adjust=False,
-        )
+        t = yf.Ticker(sym)
+        # Use history(period="6mo") to match other parts of the app that use daily charts
+        hist = t.history(period="6mo", interval="1d")
     except Exception as e:
-        st.error(f"Failed to load price data for {symbol}: {e}")
+        st.error(f"Failed to load price history for {sym}: {e}")
         return
 
-    # If empty → likely weekend/holiday or ticker issue
-    if data is None or data.empty:
+    if hist is None or hist.empty:
         st.warning(
-            f"No price data returned for {symbol} in the last {days} days. "
-            "Market may be closed (weekend/holiday) or the symbol is not available."
+            f"No price history returned for {sym} over the last 6 months. "
+            "Market data may be unavailable for this symbol."
         )
         return
 
-    # Prefer Adj Close; fall back to Close if needed
+    # Prefer Close; fall back to Adj Close if needed
     price_series = None
-    if "Adj Close" in data.columns:
-        price_series = data["Adj Close"]
-    elif "Close" in data.columns:
-        price_series = data["Close"]
+    if "Close" in hist.columns:
+        price_series = hist["Close"].dropna()
+    elif "Adj Close" in hist.columns:
+        price_series = hist["Adj Close"].dropna()
 
-    if price_series is None or price_series.dropna().empty:
+    if price_series is None or price_series.empty:
         st.warning(
-            f"Downloaded data for {symbol} has no usable Close/Adj Close prices; "
+            f"Downloaded history for {sym} has no usable Close/Adj Close prices; "
             "cannot render chart."
         )
         try:
-            st.caption("Raw price data (tail):")
-            st.dataframe(data.tail(), use_container_width=True)
+            st.caption("Raw history (tail):")
+            st.dataframe(hist.tail(), use_container_width=True)
         except Exception:
             pass
         return
 
-    # Clean NaNs out of the main price series
-    price_series = price_series.dropna()
-    if price_series.empty:
-        st.warning(
-            f"Price history for {symbol} had no valid Close values to plot."
-        )
-        return
+    # Optionally trim to the requested number of recent trading days
+    if days is not None and days > 0 and price_series.shape[0] > days:
+        price_series = price_series.iloc[-days:]
 
-    # Build a basic figure: line chart of Close, with MA20/MA50 if enough data
+    # Build the figure: Close line with MA20 / MA50 similar to the main scanner charts
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=price_series.index,
+            y=price_series.values,
+            mode="lines",
+            name="Price",
+        )
+    )
+
+    # Moving averages (based on Close) if we have enough points
     try:
-        fig = go.Figure()
+        ma20 = price_series.rolling(window=20).mean()
+        ma50 = price_series.rolling(window=50).mean()
 
-        fig.add_trace(
-            go.Scatter(
-                x=price_series.index,
-                y=price_series.values,
-                mode="lines",
-                name="Price",
+        if ma20.dropna().shape[0] >= 5:
+            fig.add_trace(
+                go.Scatter(
+                    x=ma20.index,
+                    y=ma20.values,
+                    mode="lines",
+                    name="MA20",
+                )
             )
-        )
-
-        # Moving averages (based on Close/Adj Close) if we have enough points
-        try:
-            ma20 = price_series.rolling(window=20).mean()
-            ma50 = price_series.rolling(window=50).mean()
-
-            # Only draw MA lines if we have a reasonable number of non-NaN points
-            if ma20.dropna().shape[0] >= 5:
-                fig.add_trace(
-                    go.Scatter(
-                        x=ma20.index,
-                        y=ma20.values,
-                        mode="lines",
-                        name="MA20",
-                    )
+        if ma50.dropna().shape[0] >= 5:
+            fig.add_trace(
+                go.Scatter(
+                    x=ma50.index,
+                    y=ma50.values,
+                    mode="lines",
+                    name="MA50",
                 )
-            if ma50.dropna().shape[0] >= 5:
-                fig.add_trace(
-                    go.Scatter(
-                        x=ma50.index,
-                        y=ma50.values,
-                        mode="lines",
-                        name="MA50",
-                    )
-                )
-        except Exception:
-            # If MA calculation fails, we still show the main price line
-            pass
+            )
+    except Exception:
+        # If MA calculation fails, we still show the main price line
+        pass
 
-        fig.update_layout(
-            title=f"{symbol} — last {days} trading days",
-            xaxis_title="Date",
-            yaxis_title="Price",
-            xaxis_rangeslider_visible=False,
-            height=350,
-            margin=dict(l=10, r=10, t=40, b=10),
-        )
+    fig.update_layout(
+        title=f"{sym} — last {min(days, price_series.shape[0])} trading days",
+        xaxis_title="Date",
+        yaxis_title="Price",
+        xaxis_rangeslider_visible=False,
+        height=350,
+        margin=dict(l=10, r=10, t=40, b=10),
+    )
+    try:
         st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
-        # Never let charting errors crash the app; show a warning and raw data tail instead
         st.warning(
-            f"Failed to render chart for {symbol} due to an internal plotting error: {e}"
+            f"Failed to render chart for {sym} due to an internal plotting error: {e}"
         )
         try:
             st.caption("Raw Close-series data (tail):")
