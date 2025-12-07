@@ -4,7 +4,7 @@ Contains the scan buttons (SP500, NASDAQ, Combo) and the core do_scan logic
 that runs the breakout scan and persists results to the runs DB.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Callable
 import time
 import traceback
@@ -484,6 +484,60 @@ def _get_live_quote(ticker: str) -> Optional[float]:
         return None
 
     return None
+
+
+# --- Mini chart for single symbol (used in single-ticker scan panel) ---
+def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
+    """Render a small candlestick chart for a single symbol using yfinance and plotly.
+
+    This is used by the 'Search & Scan Single Ticker' panel to show a quick view
+    of recent price action for the searched ticker.
+    """
+    if not symbol:
+        return
+
+    # Local imports so this file doesn't hard-depend on these libs at import time
+    try:
+        import yfinance as yf  # type: ignore
+        import plotly.graph_objects as go  # type: ignore
+    except Exception:
+        st.info("Charting libraries (yfinance/plotly) are not available.")
+        return
+
+    end = datetime.utcnow()
+    start = end - timedelta(days=days)
+
+    try:
+        data = yf.download(symbol, start=start, end=end, progress=False)
+    except Exception as e:
+        st.error(f"Failed to load price data for {symbol}: {e}")
+        return
+
+    if data is None or data.empty:
+        st.warning(f"No price data found for {symbol} in the last {days} days.")
+        return
+
+    fig = go.Figure(
+        data=[
+            go.Candlestick(
+                x=data.index,
+                open=data["Open"],
+                high=data["High"],
+                low=data["Low"],
+                close=data["Close"],
+                name=symbol,
+            )
+        ]
+    )
+    fig.update_layout(
+        title=f"{symbol} — last {days} trading days",
+        xaxis_title="Date",
+        yaxis_title="Price",
+        xaxis_rangeslider_visible=False,
+        height=350,
+        margin=dict(l=10, r=10, t=40, b=10),
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 
 # --- Alpaca extended-hours helpers ---
@@ -1256,6 +1310,10 @@ def render_scan_controls(
 
             # Run the same breakout engine but on a single stock
             do_scan([ticker], f"Search: {ticker}")
+
+            # Show a mini price chart for this ticker in the same panel
+            st.markdown("### 📈 Price chart")
+            _render_single_symbol_chart(ticker)
 
 
 # --- Data Provider Diagnostics (moved from render_scan_controls) ---
