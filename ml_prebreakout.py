@@ -192,7 +192,7 @@ def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.Data
 
 
 def train_prebreakout_model(
-    days_back: int = 90,
+    days_back: int = 30,
     horizon_scans: int = 3,
     model_path: str = MODEL_PATH,
 ):

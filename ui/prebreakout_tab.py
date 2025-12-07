@@ -35,45 +35,49 @@ def render_prebreakout_tab() -> None:
     """
     st.markdown("### 🔮 Early Breakout Candidates (Model-based)")
 
-    # --- DEBUG: Check run history ---
-    if st.button("🔍 Debug: Check DB history"):
-        from ml_prebreakout import load_run_history
+    # Diagnostics toggle
+    show_diag = st.checkbox("Show diagnostics", key="show_diagnostics", value=False)
 
-        df_debug = load_run_history(days_back=365)
-        st.write(f"Rows loaded from history: {len(df_debug)}")
+    if show_diag:
+        # --- DEBUG: Check run history ---
+        if st.button("🔍 Debug: Check DB history"):
+            from ml_prebreakout import load_run_history
 
-        if len(df_debug) == 0:
-            st.warning("⚠️ No runs found in DB. Run SP500/NASDAQ/Combo scans first.")
-        else:
-            st.success("✅ History loaded successfully!")
-            st.dataframe(df_debug.head(50), use_container_width=True)
+            df_debug = load_run_history(days_back=365)
+            st.write(f"Rows loaded from history: {len(df_debug)}")
 
-    # --- DEBUG: Check raw runs from db.runs.list_runs ---
-    if st.button("🔎 Debug: Raw runs from DB"):
-        from db.runs import list_runs
-
-        runs = list_runs(limit=5)
-        st.write(f"Raw runs returned: {len(runs)}")
-        st.json(runs)
-
-    # --- DEBUG: Inspect sample run results_json ---
-    if st.button("🧪 Debug: Sample run results_json"):
-        from db.runs import list_runs, load_run_results
-
-        runs = list_runs(limit=1)
-        if not runs:
-            st.warning("No runs available from list_runs().")
-        else:
-            run_id = runs[0].get("id")
-            st.write(f"Inspecting run_id={run_id}")
-            raw = load_run_results(run_id)
-
-            if raw is None:
-                st.error("results_json is None for this run.")
+            if len(df_debug) == 0:
+                st.warning("⚠️ No runs found in DB. Run SP500/NASDAQ/Combo scans first.")
             else:
-                st.success(f"results_json type: {type(raw)}")
-                # Show just the first 1000 characters to avoid flooding the UI
-                st.code(str(raw)[:1000])
+                st.success("✅ History loaded successfully!")
+                st.dataframe(df_debug.head(50), use_container_width=True)
+
+        # --- DEBUG: Check raw runs from db.runs.list_runs ---
+        if st.button("🔎 Debug: Raw runs from DB"):
+            from db.runs import list_runs
+
+            runs = list_runs(limit=5)
+            st.write(f"Raw runs returned: {len(runs)}")
+            st.json(runs)
+
+        # --- DEBUG: Inspect sample run results_json ---
+        if st.button("🧪 Debug: Sample run results_json"):
+            from db.runs import list_runs, load_run_results
+
+            runs = list_runs(limit=1)
+            if not runs:
+                st.warning("No runs available from list_runs().")
+            else:
+                run_id = runs[0].get("id")
+                st.write(f"Inspecting run_id={run_id}")
+                raw = load_run_results(run_id)
+
+                if raw is None:
+                    st.error("results_json is None for this run.")
+                else:
+                    st.success(f"results_json type: {type(raw)}")
+                    # Show just the first 1000 characters to avoid flooding the UI
+                    st.code(str(raw)[:1000])
 
     # --- Model status + training controls ---
     with st.expander("🧠 Model status & training", expanded=False):
