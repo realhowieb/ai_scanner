@@ -1,18 +1,22 @@
 import streamlit as st
 
 def render_header():
-    # Center the header content with a middle column
-    _, center_col, _ = st.columns([1, 3, 1])
+    # Left-aligned single column
+    col = st.columns([1])[0]
 
-    with center_col:
+    with col:
         st.image(
             "assets/market_ai_logo_tighter.png",
             use_container_width=False,
-            width=260,
+            width=260,   # adjust as needed
         )
+
         st.markdown(
             """
-            <p style='margin:0.25rem 0 0; font-size:0.95rem; color:gray; text-align:center;'>
+            <p style='margin:0.1rem 0 1rem; 
+                      font-size:0.95rem; 
+                      color:gray; 
+                      text-align:left;'>
                 Money Moves · AI Breakout Score · Subscription Ready
             </p>
             """,
