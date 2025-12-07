@@ -1,18 +1,6 @@
 import streamlit as st
 
 def render_header():
-    # Reduce top padding for the main page container
-    st.markdown(
-        """
-        <style>
-            .block-container {
-                padding-top: 0rem !important;
-            }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
     # Left-aligned single column
     col = st.columns([1])[0]
 
