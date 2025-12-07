@@ -552,17 +552,44 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
     if days is not None and days > 0 and price_series.shape[0] > days:
         price_series = price_series.iloc[-days:]
 
-    # Build the figure: Close line with MA20 / MA50 similar to the main scanner charts
+    # Build the figure: candlestick + MA20 / MA50 similar to the main scanner charts.
+    # If OHLC is missing or fails, fall back to a simple Close line.
     fig = go.Figure()
+    added_candles = False
 
-    fig.add_trace(
-        go.Scatter(
-            x=price_series.index,
-            y=price_series.values,
-            mode="lines",
-            name="Price",
+    # Try to build a candlestick chart using OHLC columns aligned to the trimmed index.
+    try:
+        required_ohlc = {"Open", "High", "Low", "Close"}
+        if required_ohlc.issubset(set(hist.columns)):
+            # Align OHLC data to the same index as the trimmed price_series
+            ohlc = hist.loc[price_series.index]
+            ohlc = ohlc.dropna(subset=["Open", "High", "Low", "Close"], how="any")
+            if not ohlc.empty:
+                fig.add_trace(
+                    go.Candlestick(
+                        x=ohlc.index,
+                        open=ohlc["Open"],
+                        high=ohlc["High"],
+                        low=ohlc["Low"],
+                        close=ohlc["Close"],
+                        name="Price",
+                    )
+                )
+                added_candles = True
+    except Exception:
+        # If anything goes wrong, we'll fall back to a Close line below.
+        added_candles = False
+
+    # Fallback: simple Close line if we couldn't add a candlestick
+    if not added_candles:
+        fig.add_trace(
+            go.Scatter(
+                x=price_series.index,
+                y=price_series.values,
+                mode="lines",
+                name="Price",
+            )
         )
-    )
 
     # Moving averages (based on Close) if we have enough points
     try:
