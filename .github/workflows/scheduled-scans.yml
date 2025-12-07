@@ -1,0 +1,44 @@
+name: Scheduled Market Scans
+
+on:
+  # Manual trigger if you ever want to run it by hand from the Actions tab
+  workflow_dispatch:
+
+  # Automated schedule (Mon–Fri, US market days)
+  # Times below are in UTC (GitHub Actions runs on UTC):
+  # 14:35 UTC  → 09:35 ET  (after open)
+  # 17:00 UTC  → 12:00 ET  (midday)
+  # 20:30 UTC  → 15:30 ET  (power hour)
+  # 21:10 UTC  → 16:10 ET  (after close)
+  schedule:
+    - cron: '35 14 * * 1-5'
+    - cron: '0 17 * * 1-5'
+    - cron: '30 20 * * 1-5'
+    - cron: '10 21 * * 1-5'
+
+jobs:
+  run-scans:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scheduled scans
+        env:
+          # 🔑 Add these in GitHub → Settings → Secrets and variables → Actions
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          # Add any other env vars your app expects here
+        run: python cron_runner.py
