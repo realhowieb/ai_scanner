@@ -128,7 +128,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
     # Center the login form inside a card
     card_left, card_center, card_right = st.columns([1, 2, 1])
     with card_center:
-        st.markdown('<div class="auth-card">', unsafe_allow_html=True)
+        #st.markdown('<div class="auth-card">', unsafe_allow_html=True)
 
         try:
             authenticator.login(
