@@ -98,7 +98,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
             .auth-card {
                 background-color: #111319;
                 border-radius: 14px;
-                padding: 0.75rem 2rem 2rem;
+                padding: 0rem 2rem 2rem;
                 box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
                 border: 1px solid rgba(255, 255, 255, 0.04);
             }
