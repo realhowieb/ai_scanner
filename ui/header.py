@@ -7,7 +7,7 @@ def render_header():
         pass
     st.markdown(
         """
-        <h1 style='margin-bottom:0px;'>📈 Breakout Stock Scanner</h1>
+        <h1 style='margin-bottom:0px;'>📈MarketPulse AI</h1>
         <p style='margin-top:0px; margin-bottom:0px; color:gray;'>Money Moves • AI Breakout Score • Subscription Ready</p>
         """,
         unsafe_allow_html=True,
