@@ -107,26 +107,16 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         unsafe_allow_html=True,
     )
 
-    # Full-width header bar with centered MarketPulse AI logo aligned to the login card column
+    # Header with centered MarketPulse AI logo aligned to the login card column
     header_left, header_center, header_right = st.columns([1, 2, 1])
     with header_center:
+        # Streamlit handles the asset path, no more broken HTML <img>
+        st.image("assets/market_ai_logo_tighter.png", width=420)
         st.markdown(
             """
-            <div style="
-                width:100%;
-                background-color:#0f1116;
-                padding:2rem 0 1.5rem;
-                display:flex;
-                flex-direction:column;
-                justify-content:center;
-                align-items:center;
-                border-bottom:1px solid rgba(255, 255, 255, 0.05);
-            ">
-                <img src="assets/market_ai_logo_tighter.png" style="width:420px; max-width:90%;" />
-                <p style="margin-top:0.4rem; font-size:1rem; color:gray;">
-                    Sign in to MarketPulse AI
-                </p>
-            </div>
+            <p style="text-align:center; margin-top:0.4rem; font-size:1rem; color:gray;">
+                Sign in to MarketPulse AI
+            </p>
             """,
             unsafe_allow_html=True,
         )
@@ -134,7 +124,8 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
     # Center the login form inside a card
     card_left, card_center, card_right = st.columns([1, 2, 1])
     with card_center:
-        #st.markdown('<div class="auth-card">', unsafe_allow_html=True)
+        # open the card wrapper
+        st.markdown('<div class="auth-card">', unsafe_allow_html=True)
 
         try:
             authenticator.login(
@@ -152,8 +143,8 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
             st.markdown("</div>", unsafe_allow_html=True)
             return False, None, None
 
+        # close the card wrapper (normal path)
         st.markdown("</div>", unsafe_allow_html=True)
-
     auth_status = st.session_state.get("authentication_status", None)
     name = st.session_state.get("name")
     username = st.session_state.get("username")
