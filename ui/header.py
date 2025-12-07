@@ -1,6 +1,18 @@
 import streamlit as st
 
 def render_header():
+    # Reduce top padding for the main page container
+    st.markdown(
+        """
+        <style>
+            .block-container {
+                padding-top: 0.5rem !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # Left-aligned single column
     col = st.columns([1])[0]
 
@@ -8,5 +20,5 @@ def render_header():
         st.image(
             "assets/market_ai_logo_tighter.png",
             use_container_width=False,
-            width=300,   # adjust as needed
+            width=300,  # keep or tweak as you like
         )
