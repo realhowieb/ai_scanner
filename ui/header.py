@@ -10,15 +10,3 @@ def render_header():
             use_container_width=False,
             width=260,   # adjust as needed
         )
-
-        st.markdown(
-            """
-            <p style='margin:0.1rem 0 1rem; 
-                      font-size:0.95rem; 
-                      color:gray; 
-                      text-align:left;'>
-                Money Moves · AI Breakout Score · Subscription Ready
-            </p>
-            """,
-            unsafe_allow_html=True,
-        )
