@@ -16,6 +16,6 @@ def render_header() -> None:
         st.image(
             "assets/market_ai_logo_tighter.png",
             use_container_width=False,
-            width=420,  # smaller = less perceived padding
+            width=600,  # smaller = less perceived padding
         )
         st.markdown("</div>", unsafe_allow_html=True)
