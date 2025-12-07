@@ -6,7 +6,7 @@ def render_header():
         """
         <style>
             .block-container {
-                padding-top: 0.5rem !important;
+                padding-top: 0.3rem !important;
             }
         </style>
         """,
