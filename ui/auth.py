@@ -107,23 +107,23 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         unsafe_allow_html=True,
     )
 
-    # Left-aligned layout: logo + tagline + login card in a single column
-    content_col, _ = st.columns([1, 2])
-    with content_col:
-        # Logo
-        st.image("assets/market_ai_logo_tighter.png", width=420)
+    # Layout: logo on the left, login card centered
+    left_col, center_col, right_col = st.columns([1, 1.5, 1])
 
-        # Tagline (left-aligned now)
+    # LEFT: Logo + tagline
+    with left_col:
+        st.image("assets/market_ai_logo_tighter.png", width=360)
         st.markdown(
             """
-            <p style="text-align:left; margin-top:0.4rem; font-size:1rem; color:gray;">
+            <p style="text-align:left; margin-top:0.3rem; font-size:1.1rem; color:gray;">
                 Sign in to MarketPulse AI
             </p>
             """,
             unsafe_allow_html=True,
         )
 
-        # Login card wrapper
+    # CENTER: Login card
+    with center_col:
         st.markdown('<div class="auth-card">', unsafe_allow_html=True)
 
         try:
