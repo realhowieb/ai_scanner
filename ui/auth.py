@@ -108,14 +108,19 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
     )
 
     # Perfectly centered full-width login logo + tagline
+    logo_col_left, logo_col_center, logo_col_right = st.columns([1, 2, 1])
+    with logo_col_center:
+        st.image(
+            "assets/market_ai_logo_tighter.png",
+            width=380,
+            use_container_width=False,
+        )
+
     st.markdown(
         """
-        <div style="display:flex; flex-direction:column; align-items:center; margin-top:1rem; margin-bottom:0.5rem;">
-            <img src="assets/market_ai_logo_tighter.png" width="380" />
-            <p style="margin-top:0.3rem; font-size:1rem; color:gray; text-align:center;">
-                Sign in to MarketPulse AI
-            </p>
-        </div>
+        <p style="margin-top:0.3rem; font-size:1rem; color:gray; text-align:center;">
+            Sign in to MarketPulse AI
+        </p>
         """,
         unsafe_allow_html=True,
     )
