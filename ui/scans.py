@@ -530,7 +530,9 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
 
     # Require standard OHLC columns; if they are missing, bail out with a clear message
     required_cols = ["Open", "High", "Low", "Close"]
+    available_cols = [c for c in required_cols if c in data.columns]
     missing = [c for c in required_cols if c not in data.columns]
+
     if missing:
         st.warning(
             f"Downloaded data for {symbol} is missing OHLC columns {missing}; "
@@ -544,8 +546,20 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
             pass
         return
 
-    # Drop any rows where OHLC are NaN
-    cleaned = data.dropna(subset=required_cols, how="any")
+    # Drop any rows where OHLC are NaN using only the columns that actually exist
+    if not available_cols:
+        st.warning(
+            f"Downloaded data for {symbol} has no usable OHLC columns after validation; "
+            "cannot render candlestick chart."
+        )
+        try:
+            st.caption("Raw price data (tail):")
+            st.dataframe(data.tail(), use_container_width=True)
+        except Exception:
+            pass
+        return
+
+    cleaned = data.dropna(subset=available_cols, how="any")
     if cleaned.empty:
         st.warning(
             f"Price history for {symbol} had no valid OHLC rows to plot. "
