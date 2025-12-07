@@ -87,6 +87,36 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
             return True, username, name
 
     # --- First-time / not yet authenticated: render login form ---
+
+    # Lightly tighten top padding for the login page
+    st.markdown(
+        """
+        <style>
+            .block-container {
+                padding-top: 1.5rem !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Centered logo + tagline above the login form
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    with col_center:
+        st.image(
+            "assets/market_ai_logo_tighter.png",
+            use_container_width=False,
+            width=260,
+        )
+        st.markdown(
+            """
+            <p style='margin:0.25rem 0 1rem; font-size:0.95rem; color:gray; text-align:center;'>
+                Sign in to MarketPulse AI
+            </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
     try:
         authenticator.login(
             "main",
