@@ -106,7 +106,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         st.image(
             "assets/market_ai_logo_tighter.png",
             use_container_width=False,
-            width=260,
+            width=500,
         )
         st.markdown(
             """
