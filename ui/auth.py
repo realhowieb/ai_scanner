@@ -117,8 +117,8 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
             <div style="
                 display:flex;
                 flex-direction:column;
-                justify-content:center;
-                height:70vh;
+                justify-content:flex-start;
+                padding-top:3rem;
                 padding-left:2rem;
             ">
             """,
@@ -143,8 +143,8 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
                 display:flex;
                 flex-direction:column;
                 align-items:flex-start;
-                justify-content:center;
-                height:70vh;
+                justify-content:flex-start;
+                padding-top:3rem;
                 padding-right:2rem;
             ">
             """,
