@@ -508,13 +508,56 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
     start = end - timedelta(days=days)
 
     try:
-        data = yf.download(symbol, start=start, end=end, progress=False)
+        # Use auto_adjust=False so we keep full OHLC columns; yfinance can sometimes
+        # return only Adj Close on weekends/holidays.
+        data = yf.download(
+            symbol,
+            start=start,
+            end=end,
+            progress=False,
+            auto_adjust=False,
+        )
     except Exception as e:
         st.error(f"Failed to load price data for {symbol}: {e}")
         return
 
+    # If empty → likely weekend/holiday or ticker issue
     if data is None or data.empty:
-        st.warning(f"No price data found for {symbol} in the last {days} days.")
+        st.warning(
+            f"No price data returned for {symbol} in the last {days} days. "
+            "Market may be closed (weekend/holiday) or the symbol is not available."
+        )
+        return
+
+    # Ensure we have OHLC columns; yfinance sometimes omits them or returns all-NaN.
+    # Fallback: copy from Adj Close when necessary so the chart is never blank.
+    if "Adj Close" in data.columns:
+        adj = data["Adj Close"]
+    else:
+        adj = None
+
+    for col in ["Open", "High", "Low", "Close"]:
+        if col not in data.columns:
+            if adj is not None:
+                data[col] = adj
+            else:
+                # Create a neutral series if absolutely nothing else is available
+                data[col] = 0.0
+        else:
+            # If the column exists but is entirely NaN, also fall back to Adj Close
+            if data[col].isna().all():
+                if adj is not None:
+                    data[col] = adj
+                else:
+                    data[col] = 0.0
+
+    # Drop rows where all OHLC are still NaN/zero, just in case
+    data = data.dropna(subset=["Open", "High", "Low", "Close"], how="all")
+    if data.empty:
+        st.warning(
+        f"Price history for {symbol} had no valid candles to plot after cleaning. "
+        "This can happen on illiquid symbols or during long market closures."
+        )
         return
 
     fig = go.Figure(
