@@ -531,12 +531,12 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
         )
         return
 
-    # Prefer Close; fall back to Adj Close if needed
+    # Prefer Adj Close; fall back to Close if needed
     price_series = None
-    if "Close" in data.columns:
-        price_series = data["Close"]
-    elif "Adj Close" in data.columns:
+    if "Adj Close" in data.columns:
         price_series = data["Adj Close"]
+    elif "Close" in data.columns:
+        price_series = data["Close"]
 
     if price_series is None or price_series.dropna().empty:
         st.warning(
@@ -571,12 +571,13 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
             )
         )
 
-        # Moving averages (based on Close) if we have enough points
+        # Moving averages (based on Close/Adj Close) if we have enough points
         try:
             ma20 = price_series.rolling(window=20).mean()
             ma50 = price_series.rolling(window=50).mean()
 
-            if ma20.dropna().shape[0] > 0:
+            # Only draw MA lines if we have a reasonable number of non-NaN points
+            if ma20.dropna().shape[0] >= 5:
                 fig.add_trace(
                     go.Scatter(
                         x=ma20.index,
@@ -585,7 +586,7 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
                         name="MA20",
                     )
                 )
-            if ma50.dropna().shape[0] > 0:
+            if ma50.dropna().shape[0] >= 5:
                 fig.add_trace(
                     go.Scatter(
                         x=ma50.index,
