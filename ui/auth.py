@@ -107,24 +107,23 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         unsafe_allow_html=True,
     )
 
-    # Header with centered MarketPulse AI logo aligned to the login card column
-    header_left, header_center, header_right = st.columns([1, 2, 1])
-    with header_center:
-        # Streamlit handles the asset path, no more broken HTML <img>
+    # Left-aligned layout: logo + tagline + login card in a single column
+    content_col, _ = st.columns([1, 2])
+    with content_col:
+        # Logo
         st.image("assets/market_ai_logo_tighter.png", width=420)
+
+        # Tagline (left-aligned now)
         st.markdown(
             """
-            <p style="text-align:center; margin-top:0.4rem; font-size:1rem; color:gray;">
+            <p style="text-align:left; margin-top:0.4rem; font-size:1rem; color:gray;">
                 Sign in to MarketPulse AI
             </p>
             """,
             unsafe_allow_html=True,
         )
 
-    # Center the login form inside a card
-    card_left, card_center, card_right = st.columns([1, 2, 1])
-    with card_center:
-        # open the card wrapper
+        # Login card wrapper
         st.markdown('<div class="auth-card">', unsafe_allow_html=True)
 
         try:
@@ -145,6 +144,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
 
         # close the card wrapper (normal path)
         st.markdown("</div>", unsafe_allow_html=True)
+
     auth_status = st.session_state.get("authentication_status", None)
     name = st.session_state.get("name")
     username = st.session_state.get("username")
