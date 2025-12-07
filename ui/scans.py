@@ -879,10 +879,11 @@ def render_scan_controls(
 
     st.caption("Use your active watchlist for viewing, scanning, and managing symbols.")
 
-    # --- Single-ticker search & scan ---
+    # --- Single-ticker search, chart, and scan ---
     st.markdown("### 🔍 Search & Scan Single Ticker")
-    st.caption("Enter a symbol and run a focused breakout scan.")
+    st.caption("Enter a symbol, view its chart, and optionally run a focused breakout scan.")
 
+    # Top row: ticker + chart search button
     c1, c2 = st.columns([3, 1])
     with c1:
         search_ticker = st.text_input(
@@ -892,19 +893,27 @@ def render_scan_controls(
             label_visibility="collapsed",
         )
     with c2:
-        run_single_search_btn = st.button(
-            "Search & Scan 💸",
-            key="single_search_btn",
+        show_chart_btn = st.button(
+            "Show Chart 📈",
+            key="single_show_chart_btn",
             use_container_width=True,
         )
 
-    # Toggle: auto-add searched ticker to active watchlist
-    add_single_to_watchlist = st.checkbox(
-        "Add to active watchlist",
-        value=True,
-        key="single_search_add_to_watchlist",
-        help="If enabled, the searched ticker is added to your active watchlist after a scan.",
-    )
+    # Second row: watchlist toggle + scan button
+    c3, c4 = st.columns([2, 2])
+    with c3:
+        add_single_to_watchlist = st.checkbox(
+            "Add to active watchlist",
+            value=True,
+            key="single_search_add_to_watchlist",
+            help="If enabled, the searched ticker is added to your active watchlist when you run a scan.",
+        )
+    with c4:
+        run_single_scan_btn = st.button(
+            "Run Single-Ticker Scan 💸",
+            key="single_search_scan_btn",
+            use_container_width=True,
+        )
 
     # Show a best-effort live quote under the search bar when a ticker is entered
     normalized_ticker = (search_ticker or "").strip().upper()
@@ -1286,10 +1295,20 @@ def render_scan_controls(
                 except Exception:
                     _banner("Failed to update active watchlist (database unavailable).", "error")
 
-    if run_single_search_btn:
+    # Handle chart-only search
+    if "show_chart_btn" in locals() and show_chart_btn:
         ticker = (search_ticker or "").strip().upper()
         if not ticker:
-            _banner("Please enter a ticker symbol to search.", "warning")
+            _banner("Please enter a ticker symbol to chart.", "warning")
+        else:
+            st.markdown("### 📈 Price chart")
+            _render_single_symbol_chart(ticker)
+
+    # Handle single-ticker scan (optionally adding to active watchlist)
+    if "run_single_scan_btn" in locals() and run_single_scan_btn:
+        ticker = (search_ticker or "").strip().upper()
+        if not ticker:
+            _banner("Please enter a ticker symbol to scan.", "warning")
         else:
             # Respect toggle: auto-add this ticker to the active watchlist only if enabled
             add_to_watchlist = st.session_state.get("single_search_add_to_watchlist", True)
@@ -1310,10 +1329,6 @@ def render_scan_controls(
 
             # Run the same breakout engine but on a single stock
             do_scan([ticker], f"Search: {ticker}")
-
-            # Show a mini price chart for this ticker in the same panel
-            st.markdown("### 📈 Price chart")
-            _render_single_symbol_chart(ticker)
 
 
 # --- Data Provider Diagnostics (moved from render_scan_controls) ---
