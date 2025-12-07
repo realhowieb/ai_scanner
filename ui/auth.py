@@ -124,7 +124,7 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
 
     # CENTER: Login card
     with center_col:
-        st.markdown('<div class="auth-card">', unsafe_allow_html=True)
+        #st.markdown('<div class="auth-card">', unsafe_allow_html=True)
 
         try:
             authenticator.login(
