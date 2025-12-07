@@ -107,24 +107,39 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         unsafe_allow_html=True,
     )
 
-    # Layout: logo on the left, login card centered
-    left_col, center_col, right_col = st.columns([1, 1.5, 1])
+    # Modern SaaS login layout: logo on left, card on right but balanced
+    left_col, right_col = st.columns([1, 1.2])
 
-    # LEFT: Logo + tagline
+    # LEFT SIDE (Logo + tagline)
     with left_col:
+        st.markdown("<div style='padding-top:3rem;'>", unsafe_allow_html=True)
         st.image("assets/market_ai_logo_tighter.png", width=360)
         st.markdown(
             """
-            <p style="text-align:left; margin-top:0.3rem; font-size:1.1rem; color:gray;">
-                Sign in to MarketPulse AI
+            <p style="text-align:left; margin-top:0.7rem; font-size:1.2rem; color:gray;">
+                Welcome back to MarketPulse AI
             </p>
             """,
             unsafe_allow_html=True,
         )
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # CENTER: Login card
-    with center_col:
-        #st.markdown('<div class="auth-card">', unsafe_allow_html=True)
+    # RIGHT SIDE (Centered Login Card)
+    with right_col:
+        st.markdown(
+            """
+            <div style="
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+                height:70vh;
+            ">
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown('<div class="auth-card" style="width:100%;">', unsafe_allow_html=True)
 
         try:
             authenticator.login(
@@ -138,12 +153,10 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
             )
         except Exception as e:
             banner(f"Auth error: {e}", "error")
-            # close the card div so layout isn't broken
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div></div>", unsafe_allow_html=True)
             return False, None, None
 
-        # close the card wrapper (normal path)
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div></div>", unsafe_allow_html=True)
 
     auth_status = st.session_state.get("authentication_status", None)
     name = st.session_state.get("name")
