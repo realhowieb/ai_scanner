@@ -107,23 +107,29 @@ def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
         unsafe_allow_html=True,
     )
 
-    # Perfectly centered full-width login logo + tagline
-    logo_col_left, logo_col_center, logo_col_right = st.columns([1, 2, 1])
-    with logo_col_center:
-        st.image(
-            "assets/market_ai_logo_tighter.png",
-            width=380,
-            use_container_width=False,
+    # Full-width header bar with centered MarketPulse AI logo aligned to the login card column
+    header_left, header_center, header_right = st.columns([1, 2, 1])
+    with header_center:
+        st.markdown(
+            """
+            <div style="
+                width:100%;
+                background-color:#0f1116;
+                padding:2rem 0 1.5rem;
+                display:flex;
+                flex-direction:column;
+                justify-content:center;
+                align-items:center;
+                border-bottom:1px solid rgba(255, 255, 255, 0.05);
+            ">
+                <img src="assets/market_ai_logo_tighter.png" style="width:420px; max-width:90%;" />
+                <p style="margin-top:0.4rem; font-size:1rem; color:gray;">
+                    Sign in to MarketPulse AI
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-
-    st.markdown(
-        """
-        <p style="margin-top:0.3rem; font-size:1rem; color:gray; text-align:center;">
-            Sign in to MarketPulse AI
-        </p>
-        """,
-        unsafe_allow_html=True,
-    )
 
     # Center the login form inside a card
     card_left, card_center, card_right = st.columns([1, 2, 1])
