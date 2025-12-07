@@ -544,8 +544,15 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
                 # Create a neutral series if absolutely nothing else is available
                 data[col] = 0.0
         else:
-            # If the column exists but is entirely NaN, also fall back to Adj Close
-            if data[col].isna().all():
+            # If the column exists but is entirely NaN, also fall back to Adj Close.
+            # Use an explicit bool() cast to avoid any ambiguous truth value issues.
+            try:
+                all_nan = bool(data[col].isna().all())
+            except Exception:
+                # If anything goes wrong, assume it's all NaN and fall back.
+                all_nan = True
+
+            if all_nan:
                 if adj is not None:
                     data[col] = adj
                 else:
