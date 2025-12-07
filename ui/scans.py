@@ -14,6 +14,7 @@ import streamlit as st
 import requests  # NEW
 
 from db.runs import save_run, save_daily_snapshot, list_runs
+from ml_prebreakout import score_prebreakout
 from scan.engine import safe_call, run_breakout_scan
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
