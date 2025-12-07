@@ -559,11 +559,21 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
                     data[col] = 0.0
 
     # Drop rows where all OHLC are still NaN/zero, just in case
-    data = data.dropna(subset=["Open", "High", "Low", "Close"], how="all")
+    ohlc_cols = [c for c in ["Open", "High", "Low", "Close"] if c in data.columns]
+    if ohlc_cols:
+        data = data.dropna(subset=ohlc_cols, how="all")
+    else:
+        # If none of the OHLC columns exist for some reason, bail out gracefully
+        st.warning(
+            f"Price history for {symbol} is missing OHLC columns after cleaning; "
+            "cannot render chart."
+        )
+        return
+
     if data.empty:
         st.warning(
-        f"Price history for {symbol} had no valid candles to plot after cleaning. "
-        "This can happen on illiquid symbols or during long market closures."
+            f"Price history for {symbol} had no valid candles to plot after cleaning. "
+            "This can happen on illiquid symbols or during long market closures."
         )
         return
 
