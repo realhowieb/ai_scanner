@@ -559,53 +559,64 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
         return
 
     # Build a basic figure: line chart of Close, with MA20/MA50 if enough data
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Scatter(
-            x=price_series.index,
-            y=price_series.values,
-            mode="lines",
-            name="Price",
-        )
-    )
-
-    # Moving averages (based on Close) if we have enough points
     try:
-        ma20 = price_series.rolling(window=20).mean()
-        ma50 = price_series.rolling(window=50).mean()
+        fig = go.Figure()
 
-        if ma20.dropna().shape[0] > 0:
-            fig.add_trace(
-                go.Scatter(
-                    x=ma20.index,
-                    y=ma20.values,
-                    mode="lines",
-                    name="MA20",
-                )
+        fig.add_trace(
+            go.Scatter(
+                x=price_series.index,
+                y=price_series.values,
+                mode="lines",
+                name="Price",
             )
-        if ma50.dropna().shape[0] > 0:
-            fig.add_trace(
-                go.Scatter(
-                    x=ma50.index,
-                    y=ma50.values,
-                    mode="lines",
-                    name="MA50",
-                )
-            )
-    except Exception:
-        # If MA calculation fails, we still show the main price line
-        pass
+        )
 
-    fig.update_layout(
-        title=f"{symbol} — last {days} trading days",
-        xaxis_title="Date",
-        yaxis_title="Price",
-        xaxis_rangeslider_visible=False,
-        height=350,
-        margin=dict(l=10, r=10, t=40, b=10),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        # Moving averages (based on Close) if we have enough points
+        try:
+            ma20 = price_series.rolling(window=20).mean()
+            ma50 = price_series.rolling(window=50).mean()
+
+            if ma20.dropna().shape[0] > 0:
+                fig.add_trace(
+                    go.Scatter(
+                        x=ma20.index,
+                        y=ma20.values,
+                        mode="lines",
+                        name="MA20",
+                    )
+                )
+            if ma50.dropna().shape[0] > 0:
+                fig.add_trace(
+                    go.Scatter(
+                        x=ma50.index,
+                        y=ma50.values,
+                        mode="lines",
+                        name="MA50",
+                    )
+                )
+        except Exception:
+            # If MA calculation fails, we still show the main price line
+            pass
+
+        fig.update_layout(
+            title=f"{symbol} — last {days} trading days",
+            xaxis_title="Date",
+            yaxis_title="Price",
+            xaxis_rangeslider_visible=False,
+            height=350,
+            margin=dict(l=10, r=10, t=40, b=10),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        # Never let charting errors crash the app; show a warning and raw data tail instead
+        st.warning(
+            f"Failed to render chart for {symbol} due to an internal plotting error: {e}"
+        )
+        try:
+            st.caption("Raw Close-series data (tail):")
+            st.dataframe(price_series.to_frame(name="Close").tail(), use_container_width=True)
+        except Exception:
+            pass
 
 
 # --- Alpaca extended-hours helpers ---
