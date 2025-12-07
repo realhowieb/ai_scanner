@@ -1,14 +1,14 @@
 import streamlit as st
 
 def render_header():
-    try:
-        st.image("assets/market_ai_logo.png", width=260)
-    except Exception:
-        pass
     st.markdown(
         """
-        <div style='margin-top:0.75rem; margin-bottom:1.5rem;'>
-            <p style='margin:0; font-size:0.95rem; color:gray;'>
+        <div style='margin:0.5rem 0 0.25rem 0; display:flex; align-items:center;'>
+            <img src="assets/market_ai_logo.png"
+                 style="height:52px; width:auto; display:block;" />
+        </div>
+        <div style='margin:0 0 0.75rem 0;'>
+            <p style='margin:0; font-size:0.9rem; color:gray;'>
                 Money Moves · AI Breakout Score · Subscription Ready
             </p>
         </div>
