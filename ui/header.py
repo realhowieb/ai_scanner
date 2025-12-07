@@ -1,6 +1,10 @@
 import streamlit as st
 
 def render_header():
+    try:
+        st.image("assets/market_ai_logo.png", width=260)
+    except Exception:
+        pass
     st.markdown(
         """
         <h1 style='margin-bottom:0px;'>📈 Breakout Stock Scanner</h1>
