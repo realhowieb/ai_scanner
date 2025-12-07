@@ -20,5 +20,5 @@ def render_header():
         st.image(
             "assets/market_ai_logo_tighter.png",
             use_container_width=False,
-            width=300,  # keep or tweak as you like
+            width=1000,  # keep or tweak as you like
         )
