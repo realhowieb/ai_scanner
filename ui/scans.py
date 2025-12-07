@@ -509,8 +509,6 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
     start = end - timedelta(days=days)
 
     try:
-        # Use auto_adjust=False so we keep full OHLC columns; yfinance can sometimes
-        # return only Adj Close on weekends/holidays.
         data = yf.download(
             symbol,
             start=start,
@@ -530,53 +528,39 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
         )
         return
 
-    # Ensure we have OHLC columns; yfinance sometimes omits them or returns all-NaN.
-    # Fallback: copy from Adj Close when necessary so the chart is never blank.
-    if "Adj Close" in data.columns:
-        adj = data["Adj Close"]
-    else:
-        adj = None
+    # Require standard OHLC columns; if they are missing, bail out with a clear message
+    required_cols = ["Open", "High", "Low", "Close"]
+    missing = [c for c in required_cols if c not in data.columns]
+    if missing:
+        st.warning(
+            f"Downloaded data for {symbol} is missing OHLC columns {missing}; "
+            "cannot render candlestick chart."
+        )
+        # Optional: show a small peek at the raw data for debugging
+        try:
+            st.caption("Raw price data (tail):")
+            st.dataframe(data.tail(), use_container_width=True)
+        except Exception:
+            pass
+        return
 
-    for col in ["Open", "High", "Low", "Close"]:
-        if col not in data.columns:
-            if adj is not None:
-                data[col] = adj
-            else:
-                # Create a neutral series if absolutely nothing else is available
-                data[col] = 0.0
-        else:
-            # If the column exists but is entirely NaN, also fall back to Adj Close.
-            # Use an explicit bool() cast to avoid any ambiguous truth value issues.
-            try:
-                all_nan = bool(data[col].isna().all())
-            except Exception:
-                # If anything goes wrong, assume it's all NaN and fall back.
-                all_nan = True
-
-            if all_nan:
-                if adj is not None:
-                    data[col] = adj
-                else:
-                    data[col] = 0.0
-
-    # Optionally drop rows where all OHLC are NaN, but never fail if columns are odd
-    try:
-        ohlc_cols = [c for c in ["Open", "High", "Low", "Close"] if c in data.columns]
-        if ohlc_cols:
-            data = data.dropna(subset=ohlc_cols, how="all")
-    except Exception:
-        # If anything goes wrong here, just keep the original data; a sparse chart
-        # is better than crashing the entire app.
-        pass
+    # Drop any rows where OHLC are NaN
+    cleaned = data.dropna(subset=required_cols, how="any")
+    if cleaned.empty:
+        st.warning(
+            f"Price history for {symbol} had no valid OHLC rows to plot. "
+            "This can happen on illiquid symbols or during long closures."
+        )
+        return
 
     fig = go.Figure(
         data=[
             go.Candlestick(
-                x=data.index,
-                open=data["Open"],
-                high=data["High"],
-                low=data["Low"],
-                close=data["Close"],
+                x=cleaned.index,
+                open=cleaned["Open"],
+                high=cleaned["High"],
+                low=cleaned["Low"],
+                close=cleaned["Close"],
                 name=symbol,
             )
         ]
