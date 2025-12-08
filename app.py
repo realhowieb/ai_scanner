@@ -97,7 +97,7 @@ except Exception:
     get_user_settings = None
     upsert_user_settings = None
 
-from ui.auth import auth_ui, authenticator
+from ui.auth import auth_ui
 from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
