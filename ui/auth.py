@@ -1,188 +1,90 @@
-"""Authentication UI module.
-
-Provides:
-    - auth_ui(): returns (authenticated: bool, username: Optional[str], display_name: Optional[str])
-"""
-
-from typing import Tuple, Optional, Dict
+# ui/auth.py
 
 import streamlit as st
+from pathlib import Path
 
-# streamlit-authenticator is optional so the app can still run in demo mode
-try:
-    import streamlit_authenticator as stauth
-except Exception:
-    stauth = None
+# assume your authenticator + USERS_DB setup is already defined above:
+# authenticator = stauth.Authenticate(...)
 
-from db.users import load_users
+LOGO_PATH = Path("assets/marketpulse_ai_logo.png")  # adjust path if needed
 
 
-def banner(msg: str, level: str = "info") -> None:
-    """Lightweight banner helper for showing auth-related messages."""
-    if level == "success":
-        st.success(msg)
-    elif level == "warning":
-        st.warning(msg)
-    elif level == "error":
-        st.error(msg)
-    else:
-        st.info(msg)
-
-
-def auth_ui() -> Tuple[bool, Optional[str], Optional[str]]:
-    """Render the auth UI and return (authenticated, username, display_name).
-
-    Uses streamlit-authenticator when available; otherwise falls back to a demo login.
+def auth_ui():
     """
+    Render the branded MarketPulse AI login screen.
 
-    # --- DEMO MODE: streamlit-authenticator not installed ---
-    if stauth is None:
-        banner("streamlit-authenticator not installed. Running in DEMO mode.", "warning")
-        return True, "howard", "Howard"
-
-    # --- Load users from Neon / SQLite (or local USERS_DB fallback) ---
-    users_map: Dict[str, Dict[str, str]] = load_users()
-    if not users_map:
-        banner("No users found in auth backend. Falling back to DEMO login.", "warning")
-        return True, "howard", "Howard"
-
-    # Build credentials dict for streamlit-authenticator.
-    # Handle both plain-text and already-hashed passwords.
-    credentials: Dict[str, Dict[str, Dict[str, str]]] = {"usernames": {}}
-    for username, data in users_map.items():
-        display_name = data.get("name") or data.get("full_name") or username
-        stored_password = data.get("password", "")
-
-        # If the password already looks like a bcrypt hash (starts with "$2"),
-        # use it as-is. Otherwise, hash it on the fly so authenticator can
-        # validate against the plain-text password the user types.
-        if isinstance(stored_password, str) and stored_password.startswith("$2"):
-            hashed_password = stored_password
-        else:
-            try:
-                hashed_password = stauth.Hasher([stored_password]).generate()[0]
-            except Exception:
-                hashed_password = stored_password  # last-resort fallback
-
-        credentials["usernames"][username] = {
-            "name": display_name,
-            "password": hashed_password,
-        }
-
-    authenticator = stauth.Authenticate(
-        credentials,
-        "breakout_scanner_cookie",
-        "breakout_scanner_signature",
-        cookie_expiry_days=7,
-    )
-
-    # --- Already authenticated? Short-circuit and skip rendering the login form ---
-    existing_status = st.session_state.get("authentication_status", None)
-    if existing_status is True:
-        name = st.session_state.get("name") or st.session_state.get("username")
-        username = st.session_state.get("username")
-        with st.sidebar:
-            authenticator.logout("Logout", "sidebar")
-        if username:
-            return True, username, name
-
-    # --- First-time / not yet authenticated: render login form ---
-
-    # Tighten top padding and define the login card style
+    Returns:
+        (authed: bool, username: str | None, display_name: str)
+    """
+    # ---------- Global page padding tweaks just for the login view ----------
     st.markdown(
         """
         <style>
-            .block-container {
-                padding-top: 1.5rem !important;
-            }
-            .auth-card {
-                background-color: #111319;
-                border-radius: 14px;
-                padding: 0rem 2rem 2rem;
-                box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
-                border: 1px solid rgba(255, 255, 255, 0.04);
-            }
+        /* tighten top padding on the login page */
+        .block-container {
+            padding-top: 4rem !important;
+        }
+        .mp-login-card {
+            background: #101218;
+            padding: 2.5rem 2.5rem 2rem 2.5rem;
+            border-radius: 18px;
+            border: 1px solid #2b2f3a;
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+        }
+        .mp-login-title {
+            font-size: 1.9rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # Modern SaaS login layout: logo on left, card on right but balanced
-    left_col, right_col = st.columns([1, 1.2])
+    # ---------- Main horizontal layout: logo | login card ----------
+    # Using a little extra width for the form to balance visual weight
+    col_logo, col_form = st.columns([1, 1.15], gap="large")
 
-    # LEFT SIDE (Logo + tagline)
-    with left_col:
+    with col_logo:
+        st.markdown(" ")  # small spacer
+        if LOGO_PATH.exists():
+            st.image(str(LOGO_PATH), use_column_width=False, width=360)
+        else:
+            st.markdown("### MarketPulse AI")
+
         st.markdown(
-            """
-            <div style="
-                display:flex;
-                flex-direction:column;
-                justify-content:flex-start;
-                padding-top:3rem;
-                padding-left:2rem;
-            ">
-            """,
+            "<p style='margin-top: 1.5rem; font-size: 1.1rem; color:#d0d4e4;'>"
+            "Welcome back to <strong>MarketPulse AI</strong>."
+            "</p>",
             unsafe_allow_html=True,
         )
-        st.image("assets/market_ai_logo_tighter.png", width=360)
-        st.markdown(
-            """
-            <p style="text-align:left; margin-top:0.7rem; font-size:1.2rem; color:gray;">
-                Welcome back to MarketPulse AI
-            </p>
-            """,
-            unsafe_allow_html=True,
+
+    with col_form:
+        st.markdown('<div class="mp-login-card">', unsafe_allow_html=True)
+
+        st.markdown('<div class="mp-login-title">Login</div>', unsafe_allow_html=True)
+
+        # ----- Streamlit-authenticator form -----
+        name, auth_status, username = authenticator.login(
+            "Login",
+            "main",
+            # You can keep / remove kwargs you were already using (e.g. location)
         )
+
+        # Inline status message *inside* the card instead of full-width bar
+        if auth_status is False:
+            st.error("Username or password is incorrect.")
+        elif auth_status is None:
+            st.info("Please enter your credentials.")
+
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # RIGHT SIDE (Centered Login Card)
-    with right_col:
-        st.markdown(
-            """
-            <div style="
-                display:flex;
-                flex-direction:column;
-                align-items:flex-start;
-                justify-content:flex-start;
-                padding-top:3rem;
-                padding-right:2rem;
-            ">
-            """,
-            unsafe_allow_html=True,
-        )
+    # ---------- Return values for app.py ----------
+    if auth_status:
+        # Normalise values for rest of the app
+        user_id = username or name
+        display_name = name or (username or "")
+        st.session_state["username"] = user_id
+        return True, user_id, display_name
 
-        #st.markdown('<div class="auth-card" style="width:100%; max-width:520px;">', unsafe_allow_html=True)
-
-        try:
-            authenticator.login(
-                "main",
-                fields={
-                    "Form name": "Login",
-                    "Username": "Username",
-                    "Password": "Password",
-                    "Login": "Login",
-                },
-            )
-        except Exception as e:
-            banner(f"Auth error: {e}", "error")
-            st.markdown("</div></div>", unsafe_allow_html=True)
-            return False, None, None
-
-        st.markdown("</div></div>", unsafe_allow_html=True)
-
-    auth_status = st.session_state.get("authentication_status", None)
-    name = st.session_state.get("name")
-    username = st.session_state.get("username")
-
-    if auth_status is False:
-        banner("Username/password incorrect", "error")
-        return False, None, None
-    if auth_status is None:
-        banner("Please enter your credentials.", "info")
-        return False, None, None
-
-    # Successful login: show logout in sidebar and return identity
-    with st.sidebar:
-        authenticator.logout("Logout", "sidebar")
-
-    return True, username, name
+    return False, None, ""
