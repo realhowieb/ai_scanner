@@ -638,7 +638,7 @@ def render_user_settings_footer(
 
 def main():
     # -------- AUTH FIRST (NOW FIRST) --------
-    authed, username, display_name = auth_ui(authenticator)
+    authed, username, display_name = auth_ui()
     if not authed:
         # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
