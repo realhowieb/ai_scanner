@@ -10,7 +10,7 @@ from pathlib import Path
 LOGO_PATH = Path("assets/marketpulse_ai_logo.png")  # adjust path if needed
 
 
-def auth_ui(authenticator):
+def auth_ui():
     """
     Render the branded MarketPulse AI login screen.
 
@@ -64,6 +64,12 @@ def auth_ui(authenticator):
         st.markdown('<div class="mp-login-card">', unsafe_allow_html=True)
 
         st.markdown('<div class="mp-login-title">Login</div>', unsafe_allow_html=True)
+
+        # ----- Resolve authenticator instance -----
+        authenticator = st.session_state.get("authenticator")
+        if authenticator is None:
+            st.error("Authentication is not configured. Please contact support.")
+            return False, None, ""
 
         # ----- Streamlit-authenticator form -----
         name, auth_status, username = authenticator.login(
