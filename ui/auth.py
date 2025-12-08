@@ -1,13 +1,29 @@
 # ui/auth.py
 
 import streamlit as st
+import yaml
+import streamlit_authenticator as stauth
 from pathlib import Path
 
 
 # assume your authenticator + USERS_DB setup is already defined above:
 # authenticator = stauth.Authenticate(...)
 
+
 LOGO_PATH = Path("assets/marketpulse_ai_logo.png")  # adjust path if needed
+
+# Load authentication configuration and create a global authenticator instance
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
+with open(CONFIG_PATH, "r") as f:
+    _config = yaml.safe_load(f)
+
+authenticator = stauth.Authenticate(
+    _config["credentials"],
+    _config["cookie"]["name"],
+    _config["cookie"]["key"],
+    _config["cookie"]["expiry_days"],
+    _config.get("preauthorized"),
+)
 
 
 def auth_ui():
@@ -64,12 +80,6 @@ def auth_ui():
         st.markdown('<div class="mp-login-card">', unsafe_allow_html=True)
 
         st.markdown('<div class="mp-login-title">Login</div>', unsafe_allow_html=True)
-
-        # ----- Resolve authenticator instance -----
-        authenticator = st.session_state.get("authenticator")
-        if authenticator is None:
-            st.error("Authentication is not configured. Please contact support.")
-            return False, None, ""
 
         # ----- Streamlit-authenticator form -----
         name, auth_status, username = authenticator.login(
