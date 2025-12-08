@@ -13,17 +13,36 @@ from pathlib import Path
 LOGO_PATH = Path("assets/marketpulse_ai_logo.png")  # adjust path if needed
 
 # Load authentication configuration and create a global authenticator instance
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
-with open(CONFIG_PATH, "r") as f:
-    _config = yaml.safe_load(f)
+# Try a few likely locations for config.yaml so imports don't crash if it's missing.
+_config = None
+CONFIG_PATH = None
 
-authenticator = stauth.Authenticate(
-    _config["credentials"],
-    _config["cookie"]["name"],
-    _config["cookie"]["key"],
-    _config["cookie"]["expiry_days"],
-    _config.get("preauthorized"),
-)
+_candidate_paths = [
+    Path(__file__).resolve().parent.parent / "config.yaml",  # ai_scanner/config.yaml
+    Path(__file__).resolve().parents[2] / "config.yaml",      # project root/config.yaml
+    Path("config.yaml"),                                      # current working dir
+]
+
+for candidate in _candidate_paths:
+    if candidate.is_file():
+        CONFIG_PATH = candidate
+        break
+
+if CONFIG_PATH is not None:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        _config = yaml.safe_load(f) or {}
+
+if _config:
+    authenticator = stauth.Authenticate(
+        _config.get("credentials", {}),
+        _config.get("cookie", {}).get("name", "mpai_auth"),
+        _config.get("cookie", {}).get("key", "mpai_secret"),
+        _config.get("cookie", {}).get("expiry_days", 30),
+        _config.get("preauthorized", {}),
+    )
+else:
+    # Fall back to no authenticator; the UI will show a friendly message instead of crashing.
+    authenticator = None
 
 
 def auth_ui():
@@ -82,11 +101,15 @@ def auth_ui():
         st.markdown('<div class="mp-login-title">Login</div>', unsafe_allow_html=True)
 
         # ----- Streamlit-authenticator form -----
-        name, auth_status, username = authenticator.login(
-            "Login",
-            "main",
-            # You can keep / remove kwargs you were already using (e.g. location)
-        )
+        if authenticator is None:
+            st.error("Authentication is not configured. Please contact support.")
+            name, auth_status, username = None, None, None
+        else:
+            name, auth_status, username = authenticator.login(
+                "Login",
+                "main",
+                # You can keep / remove kwargs you were already using (e.g. location)
+            )
 
         # Inline status message *inside* the card instead of full-width bar
         if auth_status is False:
