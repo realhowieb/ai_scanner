@@ -320,14 +320,14 @@ def auth_ui(authenticator: t.Any | None = None) -> tuple[bool, t.Optional[str], 
                     submitted = st.form_submit_button("Login")
 
                 if submitted:
-                    # 🔐 TEMP: hard-coded demo account.
-                    if username_input == "demo" and password_input == "demo":
+                    # DEV MODE: allow any username, fixed password "demo"
+                    if password_input == "demo" and username_input.strip():
                         st.session_state.simple_auth_ok = True
-                        st.session_state.simple_username = username_input
-                        username = username_input
-                        name = username_input
+                        st.session_state.simple_username = username_input.strip()
+                        username = username_input.strip()
+                        name = username
                         auth_status = True
-                        st.success("Logged in as demo ✅")
+                        st.success(f"Logged in as {username} ✅")
                     else:
                         auth_status = False
                         st.error("Invalid username or password.")
