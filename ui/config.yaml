@@ -1,0 +1,12 @@
+
+
+credentials:
+  usernames:
+    demo:
+      name: "Demo User"
+      password: "demo"   # TODO: replace with a hashed password for production
+
+cookie:
+  name: "marketpulse_auth"
+  key: "supersecret_key_change_me"  # Random string used to sign the cookie
+  expiry_days: 30
