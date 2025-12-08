@@ -3,6 +3,8 @@
 import streamlit as st
 from pathlib import Path
 
+from streamlit_authenticator import authenticator
+
 # assume your authenticator + USERS_DB setup is already defined above:
 # authenticator = stauth.Authenticate(...)
 
