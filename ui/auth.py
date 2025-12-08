@@ -3,7 +3,6 @@
 import streamlit as st
 from pathlib import Path
 
-from streamlit_authenticator import authenticator
 
 # assume your authenticator + USERS_DB setup is already defined above:
 # authenticator = stauth.Authenticate(...)
@@ -11,7 +10,7 @@ from streamlit_authenticator import authenticator
 LOGO_PATH = Path("assets/marketpulse_ai_logo.png")  # adjust path if needed
 
 
-def auth_ui():
+def auth_ui(authenticator):
     """
     Render the branded MarketPulse AI login screen.
 
