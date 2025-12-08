@@ -290,6 +290,9 @@ def auth_ui(authenticator: t.Any | None = None) -> tuple[bool, t.Optional[str], 
         if auth is not None:
             try:
                 name, auth_status, username = auth.login("Login", "main")
+                # Force hide authenticator warnings so fallback form displays
+                if auth_status is None:
+                    raise Exception("skip to fallback")
             except Exception as e:
                 # If authenticator blows up, show warning and fall back to simple auth.
                 st.warning(f"Authenticator error: {e}. Falling back to basic login…")
