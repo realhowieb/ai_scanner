@@ -69,7 +69,7 @@ def seed_neon_users_from_local() -> None:
         conn.close()
     except Exception as e:
         # Best-effort seeding; log to UI but do not crash
-        st.caption(f"⚠️ Neon user seeding failed: {e}")
+        # st.caption(f"⚠️ Neon user seeding failed: {e}")
 
 
 @st.cache_data(show_spinner=False, ttl=300)
@@ -207,8 +207,8 @@ def fetch_all_users() -> pd.DataFrame:
             for uname, cfg in USERS_DB.items()
         ]
         return pd.DataFrame(data)
- # Local fallback user config (used if Neon is unavailable or empty)
- # username -> { "name": full_name, "password": plain_text_demo, "tier": "basic|pro|premium|admin" }
+# Local fallback user config (used if Neon is unavailable or empty)
+# username -> { "name": full_name, "password": plain_text_demo, "tier": "basic|pro|premium|admin" }
 USERS_DB = {
     "basic1": {
         "name": "Basic Demo User",
