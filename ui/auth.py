@@ -3,6 +3,11 @@ from db.users import load_users, seed_neon_users_from_local
 
 
 def auth_ui():
+    if "username" in st.session_state:
+        username = st.session_state["username"]
+        display_name = st.session_state.get("display_name", username)
+        return True, username, display_name
+
     st.markdown("### Login")
 
     username = st.text_input("Username", key="login_username")
@@ -11,7 +16,7 @@ def auth_ui():
     if st.button("Login", key="login_button"):
         if not username or not password:
             st.error("Please enter username and password.")
-            return None
+            return False, None, None
 
         # Try to ensure Neon users are seeded from local demo users.
         # If this fails, we still fall back to local USERS_DB via load_users().
@@ -25,12 +30,12 @@ def auth_ui():
             users = load_users() or {}
         except Exception as e:
             st.error(f"Login failed while loading users: {e}")
-            return None
+            return False, None, None
 
         user = users.get(username)
         if user is None:
             st.error("User not found.")
-            return None
+            return False, None, None
 
         # Expect user dict to contain a 'password' field.
         # Very basic auth: compare raw text (same as your previous system).
@@ -38,16 +43,20 @@ def auth_ui():
         stored_password = user.get("password")
         if stored_password is None:
             st.error("User record is missing a password field.")
-            return None
+            return False, None, None
 
         if password != stored_password:
             st.error("Incorrect password.")
-            return None
+            return False, None, None
 
         # Success → create session keys based on user record.
         # Use whatever fields exist in the user dict; fall back where needed.
         st.session_state["user_id"] = user.get("id") or user.get("user_id") or username
         st.session_state["username"] = username
+
+        display_name = user.get("display_name", username)
+        st.session_state["display_name"] = display_name
+
         if "plan" in user:
             st.session_state["plan"] = user.get("plan")
         if "tier" in user:
@@ -55,7 +64,7 @@ def auth_ui():
         if "is_admin" in user:
             st.session_state["is_admin"] = bool(user.get("is_admin"))
 
-        st.success("Logged in successfully. Reloading...")
-        st.rerun()
+        st.success("Logged in successfully.")
+        return True, username, display_name
 
-    return None
+    return False, None, None
