@@ -73,6 +73,30 @@ def seed_neon_users_from_local() -> None:
         pass
 
 
+# Helper: update a user's password in Neon (best-effort, silent fail)
+def update_neon_user_password(username: str, hashed_password: str) -> None:
+    """
+    Update a user's password in Neon to the new bcrypt hash.
+    Best-effort: failures are ignored so login still succeeds.
+    """
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return
+
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE users SET password = %s WHERE username = %s",
+            (hashed_password, username),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        # Silent fail — login will still succeed, migration just won't persist
+        pass
+
+
 @st.cache_data(show_spinner=False, ttl=300)
 def load_users() -> Dict[str, Dict[str, Any]]:
     """
