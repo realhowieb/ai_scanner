@@ -74,6 +74,78 @@ class Tier:
 
 
 # ------------------------------
+# Tier comparison helpers
+# ------------------------------
+
+# Rank order for tiers from lowest to highest privilege
+TIER_ORDER = {
+    "basic": 0,
+    "pro": 1,
+    "premium": 2,
+    "admin": 3,
+}
+
+
+def _normalize_tier_key(tier_or_key) -> str:
+    """
+    Normalize a Tier instance or string into a lowercase tier key.
+    Falls back to 'basic' when unknown.
+    """
+    if isinstance(tier_or_key, Tier):
+        key = tier_or_key.key
+    else:
+        key = str(tier_or_key or "basic")
+    return key.strip().lower()
+
+
+def has_min_tier(tier_or_key, required: str) -> bool:
+    """
+    Return True if the current tier is >= the required tier based on TIER_ORDER.
+
+    Example:
+        has_min_tier(current_tier, "pro")
+    """
+    current_key = _normalize_tier_key(tier_or_key)
+    required_key = str(required or "basic").strip().lower()
+    current_rank = TIER_ORDER.get(current_key, 0)
+    required_rank = TIER_ORDER.get(required_key, 0)
+    return current_rank >= required_rank
+
+
+def require_min_tier(tier_or_key, required: str, feature_name: str) -> bool:
+    """
+    UI-friendly helper: checks if the user has the required tier and,
+    if not, shows a warning in the Streamlit UI.
+
+    Returns True if allowed, False if blocked.
+
+    Example:
+        if not require_min_tier(user_tier, "premium", "Premarket Scanner"):
+            return
+    """
+    if has_min_tier(tier_or_key, required):
+        return True
+
+    # Lazy import to avoid hard dependency at module load time
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        return False
+
+    current_key = _normalize_tier_key(tier_or_key)
+    required_key = str(required or "basic").strip().lower()
+
+    current_label = current_key.capitalize()
+    required_label = required_key.capitalize()
+
+    st.warning(
+        f"🚫 **{feature_name}** is not available on your current plan "
+        f"(`{current_label}`). Upgrade to **{required_label}** or higher to use this feature."
+    )
+    return False
+
+
+# ------------------------------
 # Tier resolver
 # ------------------------------
 def get_user_tier(username: str, users: Optional[Dict[str, Dict[str, str]]] = None) -> Tier:
