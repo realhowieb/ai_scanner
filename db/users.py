@@ -70,6 +70,7 @@ def seed_neon_users_from_local() -> None:
     except Exception as e:
         # Best-effort seeding; log to UI but do not crash
         # st.caption(f"⚠️ Neon user seeding failed: {e}")
+        pass
 
 
 @st.cache_data(show_spinner=False, ttl=300)
