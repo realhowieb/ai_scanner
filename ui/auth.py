@@ -8,12 +8,14 @@ def auth_ui():
         display_name = st.session_state.get("display_name", username)
         return True, username, display_name
 
-    st.markdown("### Login")
+    login_placeholder = st.empty()
+    with login_placeholder.container():
+        st.markdown("### Login")
+        username = st.text_input("Username", key="login_username")
+        password = st.text_input("Password", type="password", key="login_password")
+        login_clicked = st.button("Login", key="login_button")
 
-    username = st.text_input("Username", key="login_username")
-    password = st.text_input("Password", type="password", key="login_password")
-
-    if st.button("Login", key="login_button"):
+    if login_clicked:
         if not username or not password:
             st.error("Please enter username and password.")
             return False, None, None
@@ -63,7 +65,8 @@ def auth_ui():
             st.session_state["tier"] = user.get("tier")
         if "is_admin" in user:
             st.session_state["is_admin"] = bool(user.get("is_admin"))
-
+        # Remove the login form from the screen after successful login.
+        login_placeholder.empty()
         st.success("Logged in successfully.")
         return True, username, display_name
 
