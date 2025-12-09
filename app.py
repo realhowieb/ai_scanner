@@ -822,7 +822,9 @@ def main():
             )
 
     with tab2:
-        render_prebreakout_tab()
+        # Pro+ only: Basic users cannot access Early Breakout Candidates
+        if require_min_tier(tier, "pro", "Early Breakout Candidates"):
+            render_prebreakout_tab()
 
     st.markdown("---")
 
