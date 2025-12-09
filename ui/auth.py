@@ -67,7 +67,7 @@ def auth_ui():
             st.session_state["is_admin"] = bool(user.get("is_admin"))
         # Remove the login form from the screen after successful login.
         login_placeholder.empty()
-        st.success("Logged in successfully.")
+        # No success banner to keep the UI clean after login.
         return True, username, display_name
 
     return False, None, None
