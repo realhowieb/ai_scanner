@@ -1,3 +1,4 @@
+import streamlit as st
 """
 Tiering module for user access levels.
 
@@ -192,3 +193,33 @@ def get_user_tier(username: str, users: Optional[Dict[str, Dict[str, str]]] = No
         can_export_csv=("exportcsv" in features_lower),
         can_ai_notes=("ai notes" in features_lower),
     )
+
+def render_pricing_section():
+    # Resolve the current tier name
+    current_tier_raw = st.session_state.get("tier", None)
+    if hasattr(current_tier_raw, "key"):
+        current_tier = current_tier_raw.key.lower()
+    elif isinstance(current_tier_raw, str):
+        current_tier = current_tier_raw.lower()
+    else:
+        current_tier = "basic"
+
+    # ... (other pricing cards, e.g., Basic)
+
+    # Pro pricing card
+    # ... (Pro card layout and feature bullets)
+    # Button logic for Pro
+    if current_tier in ("pro", "premium", "admin"):
+        # User already has Pro or better – show a disabled indicator instead of a subscribe button.
+        st.button("Included in your plan", key="pro_included", disabled=True)
+    else:
+        st.button("Subscribe Pro (Monthly)", key="subscribe_pro_monthly")
+
+    # Premium pricing card
+    # ... (Premium card layout and feature bullets)
+    # Button logic for Premium
+    if current_tier in ("premium", "admin"):
+        # User is already on Premium (or higher) – show a disabled indicator instead of a subscribe button.
+        st.button("Current plan", key="premium_current", disabled=True)
+    else:
+        st.button("Subscribe Premium (Monthly)", key="subscribe_premium_monthly")
