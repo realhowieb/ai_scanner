@@ -12,6 +12,7 @@ import traceback
 import pandas as pd
 import streamlit as st
 import requests  # NEW
+from auth.tiering import require_min_tier
 
 from db.runs import save_run, save_daily_snapshot, list_runs
 from ml_prebreakout import score_prebreakout
@@ -240,6 +241,11 @@ def render_three_step_scanner() -> None:
     This does not replace the existing render_scan_controls() yet; it can be
     called from app.py alongside or instead of the legacy layout.
     """
+    # Premium-only: EZ 3-Step AI Scanner is available on Premium and Admin tiers.
+    tier = st.session_state.get("tier")
+    if not require_min_tier(tier, "premium", "EZ 3-Step AI Scanner"):
+        return
+
     _init_scan_session_state()
 
     # Step done flags: True if selection exists in session_state
