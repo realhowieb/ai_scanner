@@ -694,6 +694,18 @@ def main():
     # -------- Sidebar Account Info --------
     st.sidebar.markdown(f"### 👤 {display_name}")
     st.sidebar.markdown(f"**Plan:** `{ 'Admin' if username in ADMIN_USERS else tier.name }`")
+    if st.sidebar.button("Log out", key="logout_button"):
+        for key in [
+            "user_id",
+            "username",
+            "display_name",
+            "plan",
+            "tier",
+            "is_admin",
+            "authentication_status",
+        ]:
+            st.session_state.pop(key, None)
+        st.rerun()
     #st.markdown("---")
 
     # -------- DB Status --------

@@ -65,6 +65,9 @@ def auth_ui():
             st.session_state["is_admin"] = bool(user.get("is_admin"))
 
         st.success("Logged in successfully.")
+        # Force a rerun so the login form disappears and the main app renders cleanly.
+        st.rerun()
+        # Fallback return (normally not reached because of st.rerun)
         return True, username, display_name
 
     return False, None, None
