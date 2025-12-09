@@ -82,7 +82,7 @@ def get_market_session(now: datetime | None = None) -> str:
 
 # --------------- Tiering ----------------
 try:
-    from auth.tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier
+    from auth.tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier, require_min_tier
 except Exception:
     from auth.tiering_fallback import USERS_DB, ADMIN_USERS, get_user_tier, Tier
 
@@ -667,6 +667,8 @@ def main():
     users_map = load_users()
     tier = get_user_tier(username, users_map)
     flags = derive_tier_flags(tier)
+    # Persist tier in session for downstream UI modules (e.g., scans, pricing, EZ 3-step)
+    st.session_state["tier"] = tier
 
     # -------- Load Saved User Settings (if available) --------
     if username and callable(get_user_settings):
@@ -824,8 +826,9 @@ def main():
 
     st.markdown("---")
 
-    # -------- Scan History --------
-    render_history_expander(db_status)
+    # -------- Scan History (Pro+ Only) --------
+    if require_min_tier(tier, "pro", "Scan History"):
+        render_history_expander(db_status)
 
     # -------- Universe State --------
     init_universe_state()
