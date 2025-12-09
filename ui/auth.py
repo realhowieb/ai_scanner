@@ -48,7 +48,11 @@ def auth_ui():
             return False, None, None
 
         pwd_bytes = password.encode("utf-8")
-        stored_str = str(stored_password)
+        # Normalize stored password to a clean string (handles bytes from DB as well)
+        if isinstance(stored_password, (bytes, bytearray)):
+            stored_str = stored_password.decode("utf-8", errors="ignore")
+        else:
+            stored_str = str(stored_password)
 
         # Helper: does this string look like a bcrypt hash?
         def _looks_bcrypt(s: str) -> bool:
