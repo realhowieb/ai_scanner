@@ -1,5 +1,6 @@
 import streamlit as st
 import bcrypt
+import time
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
 
 
@@ -8,6 +9,33 @@ def auth_ui():
         username = st.session_state["username"]
         display_name = st.session_state.get("display_name", username)
         return True, username, display_name
+
+    # Basic login rate limiting to prevent brute-force attempts
+    MAX_FAILED_ATTEMPTS = 5
+    LOCKOUT_SECONDS = 300  # 5 minutes
+
+    # If the user is currently locked out, show a message and block login
+    locked_until = st.session_state.get("login_locked_until")
+    if locked_until:
+        now = time.time()
+        if now < locked_until:
+            remaining = int(locked_until - now)
+            # Round up to at least 1 second for UX clarity
+            if remaining < 1:
+                remaining = 1
+            st.error(f"Too many failed login attempts. Please try again in {remaining} seconds.")
+            return False, None, None
+        else:
+            # Lockout expired; reset counters
+            st.session_state.pop("login_locked_until", None)
+            st.session_state.pop("failed_login_attempts", None)
+
+    def _register_failed_login_attempt():
+        """Increment failed attempts and apply lockout if threshold exceeded."""
+        failed = st.session_state.get("failed_login_attempts", 0) + 1
+        st.session_state["failed_login_attempts"] = failed
+        if failed >= MAX_FAILED_ATTEMPTS:
+            st.session_state["login_locked_until"] = time.time() + LOCKOUT_SECONDS
 
     login_placeholder = st.empty()
     with login_placeholder.container():
@@ -19,6 +47,7 @@ def auth_ui():
     if login_clicked:
         if not username or not password:
             st.error("Please enter username and password.")
+            # Do not count this as a brute-force attempt; user simply forgot fields.
             return False, None, None
 
         # Try to ensure Neon users are seeded from local demo users.
@@ -38,6 +67,7 @@ def auth_ui():
         user = users.get(username)
         if user is None:
             st.error("User not found.")
+            _register_failed_login_attempt()
             return False, None, None
 
         # Expect user dict to contain a 'password' field.
@@ -45,6 +75,7 @@ def auth_ui():
         stored_password = user.get("password")
         if stored_password is None:
             st.error("User record is missing a password field.")
+            _register_failed_login_attempt()
             return False, None, None
 
         pwd_bytes = password.encode("utf-8")
@@ -62,11 +93,13 @@ def auth_ui():
             # New-style bcrypt hash
             if not bcrypt.checkpw(pwd_bytes, stored_str.encode("utf-8")):
                 st.error("Incorrect password.")
+                _register_failed_login_attempt()
                 return False, None, None
         else:
             # Legacy plain-text password in DB
             if stored_str != password:
                 st.error("Incorrect password.")
+                _register_failed_login_attempt()
                 return False, None, None
 
             # Auto-migrate: convert legacy plain-text to bcrypt hash in Neon
@@ -93,6 +126,11 @@ def auth_ui():
             st.session_state["tier"] = user.get("tier")
         if "is_admin" in user:
             st.session_state["is_admin"] = bool(user.get("is_admin"))
+
+        # Reset failed-attempt tracking on successful login
+        st.session_state.pop("failed_login_attempts", None)
+        st.session_state.pop("login_locked_until", None)
+
         # Remove the login form from the screen after successful login.
         login_placeholder.empty()
         # No success banner to keep the UI clean after login.
