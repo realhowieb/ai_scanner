@@ -1,4 +1,5 @@
 import streamlit as st
+import bcrypt
 from db.users import load_users, seed_neon_users_from_local
 
 
@@ -47,7 +48,7 @@ def auth_ui():
             st.error("User record is missing a password field.")
             return False, None, None
 
-        if password != stored_password:
+        if not bcrypt.checkpw(password.encode("utf-8"), stored_password.encode("utf-8")):
             st.error("Incorrect password.")
             return False, None, None
 
