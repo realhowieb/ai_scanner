@@ -82,7 +82,14 @@ def get_market_session(now: datetime | None = None) -> str:
 
 # --------------- Tiering ----------------
 try:
-    from auth.tiering import USERS_DB, ADMIN_USERS, get_user_tier, Tier, require_min_tier
+    from auth.tiering import (
+        USERS_DB,
+        ADMIN_USERS,
+        get_user_tier,
+        Tier,
+        require_min_tier,
+        has_min_tier,
+    )
 except Exception:
     from auth.tiering_fallback import USERS_DB, ADMIN_USERS, get_user_tier, Tier
 
@@ -794,12 +801,22 @@ def main():
     df = get_results_df()
     rows = 0 if df is None else len(df)
 
-    tab1, tab2 = st.tabs(
-        [
-            f"📊 Latest scan results ({rows} rows)",
-            "🔮 Early Breakout Candidates",
-        ]
-    )
+    # Build tabs dynamically based on tier: Basic sees only Latest Results,
+    # Pro+ sees Latest Results + Early Breakout Candidates.
+    if has_min_tier(tier, "pro"):
+        tab1, tab2 = st.tabs(
+            [
+                f"📊 Latest scan results ({rows} rows)",
+                "🔮 Early Breakout Candidates",
+            ]
+        )
+    else:
+        (tab1,) = st.tabs(
+            [
+                f"📊 Latest scan results ({rows} rows)",
+            ]
+        )
+        tab2 = None
 
     with tab1:
         # Preserve existing latest results behavior
@@ -821,10 +838,11 @@ def main():
                 generate_ai_note,
             )
 
-    with tab2:
-        # Pro+ only: Basic users cannot access Early Breakout Candidates
-        if require_min_tier(tier, "pro", "Early Breakout Candidates"):
-            render_prebreakout_tab()
+    if tab2 is not None:
+        with tab2:
+            # Pro+ only: Basic users cannot access Early Breakout Candidates
+            if require_min_tier(tier, "pro", "Early Breakout Candidates"):
+                render_prebreakout_tab()
 
     st.markdown("---")
 
