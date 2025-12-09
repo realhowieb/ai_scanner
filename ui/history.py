@@ -5,12 +5,18 @@ from typing import List, Dict, Any
 import streamlit as st
 import pandas as pd
 import traceback
+from auth.tiering import has_min_tier
 
 from db.runs import list_runs, load_run_results
 
 
 def render_history_expander(db_status: str) -> None:
     """Render the Scan History expander and allow loading past runs."""
+    # Pro+ only: Basic users cannot view Scan History. Silent guard: no banner for lower tiers.
+    tier = st.session_state.get("tier")
+    if not has_min_tier(tier, "pro"):
+        return
+
     with st.expander("📜 Scan History", expanded=False):
         runs_list: List[Dict[str, Any]] = []
         try:
