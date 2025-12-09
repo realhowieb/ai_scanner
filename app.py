@@ -797,17 +797,19 @@ def main():
     render_three_step_scanner()
     st.markdown("---")
 
-    # -------- Results + Early Breakout Candidates --------
+    # -------- Results + Early Breakout Candidates + Scan History --------
     df = get_results_df()
     rows = 0 if df is None else len(df)
 
-    # Build tabs dynamically based on tier: Basic sees only Latest Results,
-    # Pro+ sees Latest Results + Early Breakout Candidates.
+    # Build tabs dynamically based on tier:
+    # - Basic: only Latest Results
+    # - Pro+ : Latest Results + Early Breakout Candidates + Scan History
     if has_min_tier(tier, "pro"):
-        tab1, tab2 = st.tabs(
+        tab1, tab2, tab3 = st.tabs(
             [
                 f"📊 Latest scan results ({rows} rows)",
                 "🔮 Early Breakout Candidates",
+                "📚 Scan History",
             ]
         )
     else:
@@ -817,6 +819,7 @@ def main():
             ]
         )
         tab2 = None
+        tab3 = None
 
     with tab1:
         # Preserve existing latest results behavior
@@ -844,11 +847,13 @@ def main():
             if require_min_tier(tier, "pro", "Early Breakout Candidates"):
                 render_prebreakout_tab()
 
-    st.markdown("---")
+    if tab3 is not None:
+        with tab3:
+            # Pro+ only: Basic users cannot access Scan History
+            if require_min_tier(tier, "pro", "Scan History"):
+                render_history_expander(db_status)
 
-    # -------- Scan History (Pro+ Only) --------
-    if require_min_tier(tier, "pro", "Scan History"):
-        render_history_expander(db_status)
+    st.markdown("---")
 
     # -------- Universe State --------
     init_universe_state()
