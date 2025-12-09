@@ -39,10 +39,12 @@ def auth_ui():
 
     login_placeholder = st.empty()
     with login_placeholder.container():
-        st.markdown("### Login")
-        username = st.text_input("Username", key="login_username")
-        password = st.text_input("Password", type="password", key="login_password")
-        login_clicked = st.button("Login", key="login_button")
+        st.markdown("### 🔐 Login")
+        card = st.container(border=True)
+        with card:
+            username = st.text_input("Username", key="login_username")
+            password = st.text_input("Password", type="password", key="login_password")
+            login_clicked = st.button("Login", key="login_button")
 
     if login_clicked:
         if not username or not password:
