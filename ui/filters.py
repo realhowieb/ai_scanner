@@ -157,7 +157,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
 
     include_ta = st.sidebar.checkbox(
         "Include Technical Indicators",
-        value=default_include_ta,
+        value=(default_include_ta if is_pro_plus else False),
         key="include_ta",
         disabled=not is_pro_plus,
     )
