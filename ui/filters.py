@@ -54,20 +54,28 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         step=0.5,
         key="min_gap",
     )
+
+    # Initialize min_price through session_state if not already set
+    if "min_price" not in st.session_state:
+        st.session_state["min_price"] = default_min_price
+
     min_price = st.sidebar.number_input(
         "Min Price",
         0.5,
         500.0,
-        default_min_price,
-        0.5,
+        step=0.5,
         key="min_price",
     )
+
+    # Initialize max_price through session_state if not already set
+    if "max_price" not in st.session_state:
+        st.session_state["max_price"] = default_max_price
+
     max_price = st.sidebar.number_input(
         "Max Price",
         1.0,
         5000.0,
-        default_max_price,
-        1.0,
+        step=1.0,
         key="max_price",
     )
     top_n = st.sidebar.slider(
@@ -117,11 +125,13 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         help="Caps SP500+NASDAQ universe for Combo scans.",
     )
 
-    # Minimum Dollar Volume
+    # Initialize min_dollar_vol through session_state if not already set
+    if "min_dollar_vol" not in st.session_state:
+        st.session_state["min_dollar_vol"] = default_min_dollar_vol
+
     min_dollar_vol = st.sidebar.number_input(
         "Min Dollar Volume",
         min_value=0.0,
-        value=default_min_dollar_vol,
         step=100_000.0,
         key="min_dollar_vol",
         help="Only include stocks with minimum dollar volume."
