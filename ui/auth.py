@@ -160,6 +160,21 @@ def logout_and_reset_session() -> None:
         "last_scan_universe",
         "scan_settings",
         "user_settings",
+        # Filter / scan settings we want to reset on logout so defaults reload from DB on next login
+        "universe",
+        "min_price",
+        "max_price",
+        "min_dollar_vol",
+        "include_ta",
+        "apply_gap_filter",
+        "show_diagnostics_ui",
+        "min_gap",
+        "top_n",
+        "max_nasdaq_scan",
+        "max_combo_scan",
+        "premarket",
+        "afterhours",
+        "unusual_vol",
     ]
     try:
         for key in auth_keys:
