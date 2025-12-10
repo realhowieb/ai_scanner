@@ -3,6 +3,7 @@
 from typing import Tuple
 
 import streamlit as st
+from auth.tiering import has_min_tier
 
 
 def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool, bool, bool, float, bool, bool]:
@@ -142,6 +143,9 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     except Exception:
         pass
 
+    # Pro+ tiers get advanced filters (TA + Gap); Basic sees them disabled.
+    is_pro_plus = has_min_tier(tier, "pro")
+
     unusual_vol = st.sidebar.checkbox(
         "Unusual Volume Filter",
         value=default_unusual_vol,
@@ -153,12 +157,14 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         "Include Technical Indicators",
         value=default_include_ta,
         key="include_ta",
+        disabled=not is_pro_plus,
     )
 
     apply_gap_filter = st.sidebar.checkbox(
         "Apply Gap Filter",
         value=default_apply_gap_filter,
         key="apply_gap_filter",
+        disabled=not is_pro_plus,
     )
 
     st.sidebar.divider()
