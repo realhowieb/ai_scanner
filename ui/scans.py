@@ -1009,7 +1009,7 @@ def render_scan_controls(
     with c3:
         add_single_to_watchlist = st.checkbox(
             "Add to active watchlist",
-            value=True,
+            value=False,
             key="single_search_add_to_watchlist",
             help="If enabled, the searched ticker is added to your active watchlist when you run a scan.",
         )
