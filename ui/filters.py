@@ -121,30 +121,53 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             current_max_nasdaq = 100
         st.session_state["max_nasdaq_scan"] = current_max_nasdaq
 
-    max_nasdaq_scan = st.sidebar.number_input(
-        "Max NASDAQ tickers to scan",
-        min_value=100,
-        max_value=nasdaq_cap,
-        step=100,
-        key="max_nasdaq_scan",
-        help="Caps NASDAQ universe to speed up scans. Applied to NASDAQ + Combo scans.",
-    )
-
-    # Tiny hint so users know why they can't go higher
-    st.sidebar.caption(f"🔒 Your plan caps NASDAQ scans at {nasdaq_cap} tickers.")
+    if getattr(tier, "key", "") == "basic":
+        max_nasdaq_scan = st.sidebar.number_input(
+            "Max NASDAQ tickers to scan",
+            min_value=100,
+            max_value=nasdaq_cap,
+            step=100,
+            key="max_nasdaq_scan",
+            disabled=True,
+            help="NASDAQ scan limits are a Pro+ feature.",
+        )
+        st.sidebar.caption("🔒 Pro+ feature – NASDAQ scans are not available on Basic.")
+    else:
+        max_nasdaq_scan = st.sidebar.number_input(
+            "Max NASDAQ tickers to scan",
+            min_value=100,
+            max_value=nasdaq_cap,
+            step=100,
+            key="max_nasdaq_scan",
+            help="Caps NASDAQ universe to speed up scans. Applied to NASDAQ + Combo scans.",
+        )
+        # Tiny hint so users know why they can't go higher
+        st.sidebar.caption(f"🔒 Your plan caps NASDAQ scans at {nasdaq_cap} tickers.")
 
     # Initialize max_combo_scan through session_state if not already set
     if "max_combo_scan" not in st.session_state:
         st.session_state["max_combo_scan"] = default_max_combo_scan
 
-    max_combo_scan = st.sidebar.number_input(
-        "Max Combo tickers to scan",
-        min_value=100,
-        max_value=6000,
-        step=100,
-        key="max_combo_scan",
-        help="Caps SP500+NASDAQ universe for Combo scans.",
-    )
+    if getattr(tier, "key", "") == "basic":
+        max_combo_scan = st.sidebar.number_input(
+            "Max Combo tickers to scan",
+            min_value=100,
+            max_value=6000,
+            step=100,
+            key="max_combo_scan",
+            disabled=True,
+            help="Combo scans are a Pro+ feature.",
+        )
+        st.sidebar.caption("🔒 Pro+ feature – Combo scans are not available on Basic.")
+    else:
+        max_combo_scan = st.sidebar.number_input(
+            "Max Combo tickers to scan",
+            min_value=100,
+            max_value=6000,
+            step=100,
+            key="max_combo_scan",
+            help="Caps SP500+NASDAQ universe for Combo scans.",
+        )
 
     # Initialize min_dollar_vol through session_state if not already set
     if "min_dollar_vol" not in st.session_state:
