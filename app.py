@@ -689,7 +689,6 @@ def main():
             except Exception:
                 saved = None
 
-            st.sidebar.caption(f"[debug] saved settings for {safe_username}: {saved}")
 
             if saved:
                 # Seed session_state from saved settings when available.
