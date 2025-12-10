@@ -152,6 +152,8 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         key="unusual_vol",
         disabled=not getattr(tier, "can_unusual_volume", False),
     )
+    if not getattr(tier, "can_unusual_volume", False):
+        st.sidebar.caption("🔒 Pro+ feature")
 
     include_ta = st.sidebar.checkbox(
         "Include Technical Indicators",
