@@ -159,6 +159,8 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         key="include_ta",
         disabled=not is_pro_plus,
     )
+    if not is_pro_plus:
+        st.sidebar.caption("🔒 Pro+ feature")
 
     apply_gap_filter = st.sidebar.checkbox(
         "Apply Gap Filter",
@@ -166,6 +168,8 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         key="apply_gap_filter",
         disabled=not is_pro_plus,
     )
+    if not is_pro_plus:
+        st.sidebar.caption("🔒 Pro+ feature")
 
     st.sidebar.divider()
     diagnostics = st.sidebar.checkbox(
