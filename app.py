@@ -865,53 +865,54 @@ def main():
     # -------- Pricing (Load Last) --------
     pricing_sidebar(username, users_map)
 
-    # --- Debug: yfinance status ---
-    with st.expander("🔧 Debug: Data Status", expanded=False):
-        try:
-            from data.prices import debug_yfinance_status  # type: ignore
+    # --- Debug: yfinance status (Admin only) ---
+    if username in ADMIN_USERS or (hasattr(tier, "key") and tier.key == "admin"):
+        with st.expander("🔧 Debug: Data Status", expanded=False):
+            try:
+                from data.prices import debug_yfinance_status  # type: ignore
 
-            if st.button("Run yfinance self-test", key="debug_yf_status"):
-                status = debug_yfinance_status("AAPL")
-                st.write(status)
-                if not status.get("available"):
-                    st.warning(
-                        "yfinance is not importable. Make sure 'yfinance' is in your "
-                        "requirements.txt or installed in this environment."
-                    )
-                elif status.get("test_error"):
-                    st.error(
-                        "yfinance was imported but the test download failed. This is "
-                        "usually a network or rate-limit issue on the hosting platform."
-                    )
-                elif status.get("test_rows", 0) == 0:
-                    st.warning(
-                        "yfinance returned 0 rows for AAPL (60d). Yahoo may be "
-                        "throttling or this environment may be blocking outbound calls."
-                    )
-                else:
-                    st.success(
-                        f"yfinance looks healthy. Rows returned: {status.get('test_rows')}"
-                    )
-
-            if st.button("Test price data batch (AAPL, MSFT, NVDA)", key="debug_price_batch"):
-                try:
-                    from data.prices import fetch_price_data_batch  # type: ignore
-
-                    price_data, skipped = fetch_price_data_batch(["AAPL", "MSFT", "NVDA"])
-                    st.write({
-                        "price_data_len": len(price_data),
-                        "skipped": skipped[:10],
-                    })
-                    if not price_data:
-                        st.warning("fetch_price_data_batch returned no data for the test symbols.")
+                if st.button("Run yfinance self-test", key="debug_yf_status"):
+                    status = debug_yfinance_status("AAPL")
+                    st.write(status)
+                    if not status.get("available"):
+                        st.warning(
+                            "yfinance is not importable. Make sure 'yfinance' is in your "
+                            "requirements.txt or installed in this environment."
+                        )
+                    elif status.get("test_error"):
+                        st.error(
+                            "yfinance was imported but the test download failed. This is "
+                            "usually a network or rate-limit issue on the hosting platform."
+                        )
+                    elif status.get("test_rows", 0) == 0:
+                        st.warning(
+                            "yfinance returned 0 rows for AAPL (60d). Yahoo may be "
+                            "throttling or this environment may be blocking outbound calls."
+                        )
                     else:
-                        for sym, df in list(price_data.items()):
-                            st.write(f"Symbol: {sym}")
-                            st.dataframe(df.tail())
-                except Exception as e2:
-                    st.error(f"price data batch debug failed: {e2}")
-        except Exception as e:
-            st.caption(f"(yfinance debug not available: {e})")
+                        st.success(
+                            f"yfinance looks healthy. Rows returned: {status.get('test_rows')}"
+                        )
+
+                if st.button("Test price data batch (AAPL, MSFT, NVDA)", key="debug_price_batch"):
+                    try:
+                        from data.prices import fetch_price_data_batch  # type: ignore
+
+                        price_data, skipped = fetch_price_data_batch(["AAPL", "MSFT", "NVDA"])
+                        st.write({
+                            "price_data_len": len(price_data),
+                            "skipped": skipped[:10],
+                        })
+                        if not price_data:
+                            st.warning("fetch_price_data_batch returned no data for the test symbols.")
+                        else:
+                            for sym, df in list(price_data.items()):
+                                st.write(f"Symbol: {sym}")
+                                st.dataframe(df.tail())
+                    except Exception as e2:
+                        st.error(f"price data batch debug failed: {e2}")
+            except Exception as e:
+                st.caption(f"(yfinance debug not available: {e})")
 
     # -------- Footer --------
     render_footer()
