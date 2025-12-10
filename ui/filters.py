@@ -179,7 +179,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     diagnostics = st.sidebar.checkbox(
         "Show diagnostics",
         value=default_diagnostics,
-        key="show_diagnostics",
+        key="show_diagnostics_ui",
     )
 
     return (
