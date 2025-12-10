@@ -679,9 +679,11 @@ def main():
 
     # -------- Load Saved User Settings (if available) --------
     if username and callable(get_user_settings):
-        # Only load from Neon once per session to avoid clobbering in-session changes
-        if not st.session_state.get("user_profile_loaded", False):
-            safe_username = (username or "").strip()
+        safe_username = (username or "").strip()
+        last_profile_user = st.session_state.get("profile_loaded_for_user")
+
+        # Only load from Neon when we haven't yet loaded for this user
+        if last_profile_user != safe_username:
             try:
                 saved = get_user_settings(safe_username)
             except Exception:
@@ -726,8 +728,8 @@ def main():
                 if saved.get("unusual_vol") is not None:
                     st.session_state["unusual_vol"] = bool(saved["unusual_vol"])
 
-                # Mark that we've applied the profile for this session
-                st.session_state["user_profile_loaded"] = True
+                # Mark that we've applied the profile for this specific user in this session
+                st.session_state["profile_loaded_for_user"] = safe_username
 
     # -------- Sidebar Account Info --------
     st.sidebar.markdown(f"### 👤 {display_name}")
