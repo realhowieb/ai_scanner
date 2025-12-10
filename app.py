@@ -104,7 +104,7 @@ except Exception:
     get_user_settings = None
     upsert_user_settings = None
 
-from ui.auth import auth_ui
+from ui.auth import auth_ui, logout_and_reset_session
 from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
@@ -704,17 +704,7 @@ def main():
     st.sidebar.markdown(f"### 👤 {display_name}")
     st.sidebar.markdown(f"**Plan:** `{ 'Admin' if username in ADMIN_USERS else tier.name }`")
     if st.sidebar.button("Log out", key="logout_button"):
-        for key in [
-            "user_id",
-            "username",
-            "display_name",
-            "plan",
-            "tier",
-            "is_admin",
-            "authentication_status",
-        ]:
-            st.session_state.pop(key, None)
-        st.rerun()
+        logout_and_reset_session()
     #st.markdown("---")
 
     # -------- DB Status --------

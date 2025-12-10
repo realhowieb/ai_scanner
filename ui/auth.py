@@ -139,3 +139,20 @@ def auth_ui():
         return True, username, display_name
 
     return False, None, None
+
+def logout_and_reset_session() -> None:
+    """Clear all app-specific session state and rerun so the login screen is shown again."""
+    try:
+        # Remove all keys from Streamlit session_state
+        keys = list(st.session_state.keys())
+        for k in keys:
+            del st.session_state[k]
+    except Exception:
+        # Best-effort cleanup; ignore issues with internal keys
+        pass
+
+    # Trigger a full rerun so the app re-evaluates from the top and shows login
+    if hasattr(st, "rerun"):
+        st.rerun()
+    else:
+        st.experimental_rerun()
