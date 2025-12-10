@@ -684,6 +684,8 @@ def main():
         except Exception:
             saved = None
 
+        st.sidebar.caption(f"[debug] saved settings for {username}: {saved}")
+
         if saved:
             # Always seed session_state from saved settings when available.
             # Streamlit widgets will overwrite these as the user interacts.
