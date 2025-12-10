@@ -132,6 +132,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             help="NASDAQ scan limits are a Pro+ feature.",
         )
         st.sidebar.caption("🔒 Pro+ feature – NASDAQ scans are not available on Basic.")
+        st.sidebar.markdown("<br>", unsafe_allow_html=True)
     else:
         max_nasdaq_scan = st.sidebar.number_input(
             "Max NASDAQ tickers to scan",
@@ -159,6 +160,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             help="Combo scans are a Pro+ feature.",
         )
         st.sidebar.caption("🔒 Pro+ feature – Combo scans are not available on Basic.")
+        st.sidebar.markdown("<br>", unsafe_allow_html=True)
     else:
         max_combo_scan = st.sidebar.number_input(
             "Max Combo tickers to scan",
@@ -231,6 +233,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     )
     if not getattr(tier, "can_unusual_volume", False):
         st.sidebar.caption("🔒 Pro+ feature")
+        st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
     include_ta = st.sidebar.checkbox(
         "Include Technical Indicators",
@@ -240,6 +243,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     )
     if not is_pro_plus:
         st.sidebar.caption("🔒 Pro+ feature")
+        st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
     apply_gap_filter = st.sidebar.checkbox(
         "Apply Gap Filter",
@@ -249,6 +253,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     )
     if not is_pro_plus:
         st.sidebar.caption("🔒 Pro+ feature")
+        st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
     st.sidebar.divider()
     diagnostics = st.sidebar.checkbox(
