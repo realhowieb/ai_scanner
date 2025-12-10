@@ -38,9 +38,11 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     default_afterhours = bool(st.session_state.get("afterhours", False))
     default_unusual_vol = bool(st.session_state.get("unusual_vol", False))
     default_min_dollar_vol = float(st.session_state.get("min_dollar_vol", 1_000_000.0))
-    default_include_ta = bool(st.session_state.get("include_ta", True))
+    # Include Technical Indicators and Show diagnostics pull from session_state keys
+    # that can be populated from user_settings. Default them to False when not set.
+    default_include_ta = bool(st.session_state.get("include_ta", False))
     default_apply_gap_filter = bool(st.session_state.get("apply_gap_filter", False))
-    default_diagnostics = bool(st.session_state.get("show_diagnostics_ui", True))
+    default_diagnostics = bool(st.session_state.get("show_diagnostics", False))
     min_gap = st.sidebar.slider(
         "Min Gap %",
         -10.0,
@@ -177,7 +179,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     diagnostics = st.sidebar.checkbox(
         "Show diagnostics",
         value=default_diagnostics,
-        key="show_diagnostics_ui",
+        key="show_diagnostics",
     )
 
     return (
