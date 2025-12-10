@@ -21,6 +21,8 @@ def pricing_sidebar(current_username: Optional[str], users: Dict[str, Dict[str, 
     """
     tiers_order = ["basic", "pro", "premium"]
     current_key = users.get(current_username or "", {}).get("tier", "basic")
+    # Normalize tier key: handle case/whitespace and unknown values gracefully.
+    current_key = (current_key or "basic").strip().lower()
     try:
         start_idx = tiers_order.index(current_key) + 1
     except ValueError:
@@ -28,11 +30,20 @@ def pricing_sidebar(current_username: Optional[str], users: Dict[str, Dict[str, 
 
     upsell_keys = tiers_order[start_idx:]
 
-    st.sidebar.markdown("## 💳 Upgrade")
+    st.sidebar.markdown("## 💳 Plan & Upgrade")
+    current_label = current_key.capitalize()
 
+    # If no higher tiers available (Premium), show a simple confirmation message.
     if not upsell_keys:
-        st.sidebar.caption("You're on the top Premium plan. Thank you for subscribing!")
+        st.sidebar.success(
+            "⭐ You're on the top **Premium** plan. All features are unlocked, "
+            "including EZ 3-Step AI Scanner, Early Breakout Candidates, Scan History, "
+            "advanced filters, and more."
+        )
         return
+
+    # Otherwise, show the current plan and upsell cards for higher tiers.
+    st.sidebar.caption(f"Current plan: **{current_label}**")
 
     # Billing period toggle
     billing_period = st.sidebar.radio(
