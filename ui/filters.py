@@ -78,12 +78,16 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         step=1.0,
         key="max_price",
     )
+
+    # Initialize top_n through session_state if not already set
+    if "top_n" not in st.session_state:
+        st.session_state["top_n"] = default_top_n
+
     top_n = st.sidebar.slider(
         "Top N Results",
         5,
         tier.max_results,
-        default_top_n,
-        5,
+        step=5,
         key="top_n",
     )
 
