@@ -106,11 +106,25 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     if default_max_nasdaq_scan < 100:
         default_max_nasdaq_scan = 100
 
+    # Initialize max_nasdaq_scan through session_state if not already set,
+    # and ensure it respects the tier cap on every run.
+    if "max_nasdaq_scan" not in st.session_state:
+        st.session_state["max_nasdaq_scan"] = default_max_nasdaq_scan
+    else:
+        try:
+            current_max_nasdaq = int(st.session_state["max_nasdaq_scan"])
+        except Exception:
+            current_max_nasdaq = default_max_nasdaq_scan
+        if current_max_nasdaq > nasdaq_cap:
+            current_max_nasdaq = nasdaq_cap
+        if current_max_nasdaq < 100:
+            current_max_nasdaq = 100
+        st.session_state["max_nasdaq_scan"] = current_max_nasdaq
+
     max_nasdaq_scan = st.sidebar.number_input(
         "Max NASDAQ tickers to scan",
         min_value=100,
         max_value=nasdaq_cap,
-        value=default_max_nasdaq_scan,
         step=100,
         key="max_nasdaq_scan",
         help="Caps NASDAQ universe to speed up scans. Applied to NASDAQ + Combo scans.",
@@ -119,11 +133,14 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Tiny hint so users know why they can't go higher
     st.sidebar.caption(f"🔒 Your plan caps NASDAQ scans at {nasdaq_cap} tickers.")
 
+    # Initialize max_combo_scan through session_state if not already set
+    if "max_combo_scan" not in st.session_state:
+        st.session_state["max_combo_scan"] = default_max_combo_scan
+
     max_combo_scan = st.sidebar.number_input(
         "Max Combo tickers to scan",
         min_value=100,
         max_value=6000,
-        value=default_max_combo_scan,
         step=100,
         key="max_combo_scan",
         help="Caps SP500+NASDAQ universe for Combo scans.",
