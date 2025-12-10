@@ -859,8 +859,9 @@ def main():
     init_universe_state()
     render_universe_panel()
 
-    # -------- Admin Panel --------
-    render_admin_users_panel(username, ADMIN_USERS, db_status)
+    # -------- Admin Panel (Admin only) --------
+    if username in ADMIN_USERS or (hasattr(tier, "key") and tier.key == "admin"):
+        render_admin_users_panel(username, ADMIN_USERS, db_status)
 
     # -------- Pricing (Load Last) --------
     pricing_sidebar(username, users_map)
