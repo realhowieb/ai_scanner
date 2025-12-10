@@ -141,14 +141,32 @@ def auth_ui():
     return False, None, None
 
 def logout_and_reset_session() -> None:
-    """Clear all app-specific session state and rerun so the login screen is shown again."""
+    """Clear auth-related session state and rerun so the login screen is shown again.
+
+    We avoid deleting *all* keys to prevent Streamlit from entering a weird state that
+    can result in a blank screen. Instead, we clear the keys we know we own.
+    """
+    auth_keys = [
+        "user_id",
+        "username",
+        "display_name",
+        "plan",
+        "tier",
+        "is_admin",
+        "authentication_status",
+        # Common app-level keys we control
+        "results_df",
+        "last_scan_at",
+        "last_scan_universe",
+        "scan_settings",
+        "user_settings",
+    ]
     try:
-        # Remove all keys from Streamlit session_state
-        keys = list(st.session_state.keys())
-        for k in keys:
-            del st.session_state[k]
+        for key in auth_keys:
+            if key in st.session_state:
+                st.session_state.pop(key, None)
     except Exception:
-        # Best-effort cleanup; ignore issues with internal keys
+        # Best-effort cleanup; ignore any issues here.
         pass
 
     # Trigger a full rerun so the app re-evaluates from the top and shows login
