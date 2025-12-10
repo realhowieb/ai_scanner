@@ -42,7 +42,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # that can be populated from user_settings. Default them to False when not set.
     default_include_ta = bool(st.session_state.get("include_ta", False))
     default_apply_gap_filter = bool(st.session_state.get("apply_gap_filter", False))
-    default_diagnostics = bool(st.session_state.get("show_diagnostics", False))
+    default_diagnostics = bool(st.session_state.get("show_diagnostics_ui", False))
     min_gap = st.sidebar.slider(
         "Min Gap %",
         -10.0,
