@@ -88,6 +88,8 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
     Returns a dict with keys matching sidebar state, or None if not found.
     """
     conn = _get_conn()
+    print(f"[DEBUG user_settings] get_user_settings called with user_id={user_id!r}")
+    print(f"[DEBUG user_settings] db_status={get_db_status()!r}, conn_is_none={conn is None}")
     if conn is None:
         return None
 
@@ -116,6 +118,7 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
                 (user_id,),
             )
             row = cur.fetchone()
+            print(f"[DEBUG user_settings] primary lookup row for {user_id!r} = {row!r}")
 
             # Fallback: be tolerant of stray whitespace or case differences in user_id
             if not row:
@@ -142,6 +145,7 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
                     (user_id,),
                 )
                 row = cur.fetchone()
+                print(f"[DEBUG user_settings] fallback lookup row for {user_id!r} = {row!r}")
 
     if not row:
         return None
