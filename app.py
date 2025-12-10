@@ -679,50 +679,55 @@ def main():
 
     # -------- Load Saved User Settings (if available) --------
     if username and callable(get_user_settings):
-        try:
-            saved = get_user_settings(username)
-        except Exception:
-            saved = None
+        # Only load from Neon once per session to avoid clobbering in-session changes
+        if not st.session_state.get("user_profile_loaded", False):
+            safe_username = (username or "").strip()
+            try:
+                saved = get_user_settings(safe_username)
+            except Exception:
+                saved = None
 
-        st.sidebar.caption(f"[debug] saved settings for {username}: {saved}")
+            st.sidebar.caption(f"[debug] saved settings for {safe_username}: {saved}")
 
-        if saved:
-            # Always seed session_state from saved settings when available.
-            # Streamlit widgets will overwrite these as the user interacts.
-            if saved.get("universe") is not None:
-                st.session_state["universe"] = saved["universe"]
+            if saved:
+                # Seed session_state from saved settings when available.
+                if saved.get("universe") is not None:
+                    st.session_state["universe"] = saved["universe"]
 
-            if saved.get("min_price") is not None:
-                st.session_state["min_price"] = float(saved["min_price"])
-            if saved.get("max_price") is not None:
-                st.session_state["max_price"] = float(saved["max_price"])
+                if saved.get("min_price") is not None:
+                    st.session_state["min_price"] = float(saved["min_price"])
+                if saved.get("max_price") is not None:
+                    st.session_state["max_price"] = float(saved["max_price"])
 
-            if saved.get("min_dollar_vol") is not None:
-                st.session_state["min_dollar_vol"] = float(saved["min_dollar_vol"])
+                if saved.get("min_dollar_vol") is not None:
+                    st.session_state["min_dollar_vol"] = float(saved["min_dollar_vol"])
 
-            if saved.get("include_ta") is not None:
-                st.session_state["include_ta"] = bool(saved["include_ta"])
-            if saved.get("apply_gap_filter") is not None:
-                st.session_state["apply_gap_filter"] = bool(saved["apply_gap_filter"])
+                if saved.get("include_ta") is not None:
+                    st.session_state["include_ta"] = bool(saved["include_ta"])
+                if saved.get("apply_gap_filter") is not None:
+                    st.session_state["apply_gap_filter"] = bool(saved["apply_gap_filter"])
 
-            if saved.get("show_diagnostics_ui") is not None:
-                st.session_state["show_diagnostics_ui"] = bool(saved["show_diagnostics_ui"])
+                if saved.get("show_diagnostics_ui") is not None:
+                    st.session_state["show_diagnostics_ui"] = bool(saved["show_diagnostics_ui"])
 
-            if saved.get("min_gap") is not None:
-                st.session_state["min_gap"] = float(saved["min_gap"])
-            if saved.get("top_n") is not None:
-                st.session_state["top_n"] = int(saved["top_n"])
-            if saved.get("max_nasdaq_scan") is not None:
-                st.session_state["max_nasdaq_scan"] = int(saved["max_nasdaq_scan"])
-            if saved.get("max_combo_scan") is not None:
-                st.session_state["max_combo_scan"] = int(saved["max_combo_scan"])
+                if saved.get("min_gap") is not None:
+                    st.session_state["min_gap"] = float(saved["min_gap"])
+                if saved.get("top_n") is not None:
+                    st.session_state["top_n"] = int(saved["top_n"])
+                if saved.get("max_nasdaq_scan") is not None:
+                    st.session_state["max_nasdaq_scan"] = int(saved["max_nasdaq_scan"])
+                if saved.get("max_combo_scan") is not None:
+                    st.session_state["max_combo_scan"] = int(saved["max_combo_scan"])
 
-            if saved.get("premarket") is not None:
-                st.session_state["premarket"] = bool(saved["premarket"])
-            if saved.get("afterhours") is not None:
-                st.session_state["afterhours"] = bool(saved["afterhours"])
-            if saved.get("unusual_vol") is not None:
-                st.session_state["unusual_vol"] = bool(saved["unusual_vol"])
+                if saved.get("premarket") is not None:
+                    st.session_state["premarket"] = bool(saved["premarket"])
+                if saved.get("afterhours") is not None:
+                    st.session_state["afterhours"] = bool(saved["afterhours"])
+                if saved.get("unusual_vol") is not None:
+                    st.session_state["unusual_vol"] = bool(saved["unusual_vol"])
+
+                # Mark that we've applied the profile for this session
+                st.session_state["user_profile_loaded"] = True
 
     # -------- Sidebar Account Info --------
     st.sidebar.markdown(f"### 👤 {display_name}")
