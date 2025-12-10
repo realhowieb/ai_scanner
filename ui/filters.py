@@ -43,12 +43,15 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     default_include_ta = bool(st.session_state.get("include_ta", False))
     default_apply_gap_filter = bool(st.session_state.get("apply_gap_filter", False))
     default_diagnostics = bool(st.session_state.get("show_diagnostics_ui", False))
+    # Initialize min_gap through session_state if not already set
+    if "min_gap" not in st.session_state:
+        st.session_state["min_gap"] = default_min_gap
+
     min_gap = st.sidebar.slider(
         "Min Gap %",
         -10.0,
         20.0,
-        default_min_gap,
-        0.5,
+        step=0.5,
         key="min_gap",
     )
     min_price = st.sidebar.number_input(
