@@ -117,6 +117,32 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
             )
             row = cur.fetchone()
 
+            # Fallback: be tolerant of stray whitespace or case differences in user_id
+            if not row:
+                cur.execute(
+                    """
+                    SELECT
+                        universe,
+                        min_price,
+                        max_price,
+                        min_dollar_vol,
+                        include_ta,
+                        apply_gap_filter,
+                        show_diagnostics_ui,
+                        min_gap,
+                        top_n,
+                        max_nasdaq_scan,
+                        max_combo_scan,
+                        premarket,
+                        afterhours,
+                        unusual_vol
+                    FROM user_settings
+                    WHERE TRIM(LOWER(user_id)) = TRIM(LOWER(%s))
+                    """,
+                    (user_id,),
+                )
+                row = cur.fetchone()
+
     if not row:
         return None
 
