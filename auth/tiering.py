@@ -141,7 +141,7 @@ def require_min_tier(tier_or_key, required: str, feature_name: str) -> bool:
 
     st.warning(
         f"🚫 **{feature_name}** is not available on your current plan "
-        f"(`{current_label}`). Upgrade to **{required_label}** or higher to use this feature."
+        f"(`{current_label}`). Upgrade to **{required_label}** to use this feature."
     )
     return False
 
