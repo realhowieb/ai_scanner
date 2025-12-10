@@ -685,41 +685,41 @@ def main():
             saved = None
 
         if saved:
-            # Only seed session_state keys that are not already present,
-            # so we don't override anything the user has already changed this session.
-            if "universe" not in st.session_state and saved.get("universe") is not None:
+            # Always seed session_state from saved settings when available.
+            # Streamlit widgets will overwrite these as the user interacts.
+            if saved.get("universe") is not None:
                 st.session_state["universe"] = saved["universe"]
 
-            if "min_price" not in st.session_state and saved.get("min_price") is not None:
+            if saved.get("min_price") is not None:
                 st.session_state["min_price"] = float(saved["min_price"])
-            if "max_price" not in st.session_state and saved.get("max_price") is not None:
+            if saved.get("max_price") is not None:
                 st.session_state["max_price"] = float(saved["max_price"])
 
-            if "min_dollar_vol" not in st.session_state and saved.get("min_dollar_vol") is not None:
+            if saved.get("min_dollar_vol") is not None:
                 st.session_state["min_dollar_vol"] = float(saved["min_dollar_vol"])
 
-            if "include_ta" not in st.session_state and saved.get("include_ta") is not None:
+            if saved.get("include_ta") is not None:
                 st.session_state["include_ta"] = bool(saved["include_ta"])
-            if "apply_gap_filter" not in st.session_state and saved.get("apply_gap_filter") is not None:
+            if saved.get("apply_gap_filter") is not None:
                 st.session_state["apply_gap_filter"] = bool(saved["apply_gap_filter"])
 
-            if "show_diagnostics_ui" not in st.session_state and saved.get("show_diagnostics_ui") is not None:
+            if saved.get("show_diagnostics_ui") is not None:
                 st.session_state["show_diagnostics_ui"] = bool(saved["show_diagnostics_ui"])
 
-            if "min_gap" not in st.session_state and saved.get("min_gap") is not None:
+            if saved.get("min_gap") is not None:
                 st.session_state["min_gap"] = float(saved["min_gap"])
-            if "top_n" not in st.session_state and saved.get("top_n") is not None:
+            if saved.get("top_n") is not None:
                 st.session_state["top_n"] = int(saved["top_n"])
-            if "max_nasdaq_scan" not in st.session_state and saved.get("max_nasdaq_scan") is not None:
+            if saved.get("max_nasdaq_scan") is not None:
                 st.session_state["max_nasdaq_scan"] = int(saved["max_nasdaq_scan"])
-            if "max_combo_scan" not in st.session_state and saved.get("max_combo_scan") is not None:
+            if saved.get("max_combo_scan") is not None:
                 st.session_state["max_combo_scan"] = int(saved["max_combo_scan"])
 
-            if "premarket" not in st.session_state and saved.get("premarket") is not None:
+            if saved.get("premarket") is not None:
                 st.session_state["premarket"] = bool(saved["premarket"])
-            if "afterhours" not in st.session_state and saved.get("afterhours") is not None:
+            if saved.get("afterhours") is not None:
                 st.session_state["afterhours"] = bool(saved["afterhours"])
-            if "unusual_vol" not in st.session_state and saved.get("unusual_vol") is not None:
+            if saved.get("unusual_vol") is not None:
                 st.session_state["unusual_vol"] = bool(saved["unusual_vol"])
 
     # -------- Sidebar Account Info --------
