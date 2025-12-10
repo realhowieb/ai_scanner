@@ -35,8 +35,8 @@ def render_prebreakout_tab() -> None:
     """
     st.markdown("### 🔮 Early Breakout Candidates (Model-based)")
 
-    # Diagnostics toggle
-    show_diag = st.checkbox("Show diagnostics", key="show_diagnostics", value=False)
+    # Diagnostics toggle (local to this tab; use a unique key to avoid collisions)
+    show_diag = st.checkbox("Show diagnostics", key="prebreakout_show_diagnostics", value=False)
 
     if show_diag:
         # --- DEBUG: Check run history ---
