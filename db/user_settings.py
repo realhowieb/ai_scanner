@@ -150,6 +150,27 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
     if not row:
         return None
 
+    # If the cursor returns a dict (e.g., RealDictCursor), we can return it directly.
+    # This matches the structure expected by the rest of the app (keys: universe, min_price, etc.).
+    if isinstance(row, dict):
+        return {
+            "universe": row.get("universe"),
+            "min_price": float(row["min_price"]) if row.get("min_price") is not None else None,
+            "max_price": float(row["max_price"]) if row.get("max_price") is not None else None,
+            "min_dollar_vol": float(row["min_dollar_vol"]) if row.get("min_dollar_vol") is not None else None,
+            "include_ta": bool(row["include_ta"]) if row.get("include_ta") is not None else None,
+            "apply_gap_filter": bool(row["apply_gap_filter"]) if row.get("apply_gap_filter") is not None else None,
+            "show_diagnostics_ui": bool(row["show_diagnostics_ui"]) if row.get("show_diagnostics_ui") is not None else None,
+            "min_gap": float(row["min_gap"]) if row.get("min_gap") is not None else None,
+            "top_n": int(row["top_n"]) if row.get("top_n") is not None else None,
+            "max_nasdaq_scan": int(row["max_nasdaq_scan"]) if row.get("max_nasdaq_scan") is not None else None,
+            "max_combo_scan": int(row["max_combo_scan"]) if row.get("max_combo_scan") is not None else None,
+            "premarket": bool(row["premarket"]) if row.get("premarket") is not None else None,
+            "afterhours": bool(row["afterhours"]) if row.get("afterhours") is not None else None,
+            "unusual_vol": bool(row["unusual_vol"]) if row.get("unusual_vol") is not None else None,
+        }
+
+    # Fallback: if we ever get a positional row (tuple), keep the original tuple-unpack logic.
     (
         universe,
         min_price,
