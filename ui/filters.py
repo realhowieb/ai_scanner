@@ -76,15 +76,33 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         key="top_n",
     )
 
+    # Tier-based cap for how many NASDAQ tickers can be scanned
+    # Basic: 800, Pro: 2000, Premium+ (and higher): 6000
+    if has_min_tier(tier, "premium"):
+        nasdaq_cap = 6000
+    elif has_min_tier(tier, "pro"):
+        nasdaq_cap = 4000
+    else:
+        nasdaq_cap = 1000
+
+    # Clamp the default NASDAQ max to the tier cap and a sane minimum
+    if default_max_nasdaq_scan > nasdaq_cap:
+        default_max_nasdaq_scan = nasdaq_cap
+    if default_max_nasdaq_scan < 100:
+        default_max_nasdaq_scan = 100
+
     max_nasdaq_scan = st.sidebar.number_input(
         "Max NASDAQ tickers to scan",
         min_value=100,
-        max_value=6000,
+        max_value=nasdaq_cap,
         value=default_max_nasdaq_scan,
         step=100,
         key="max_nasdaq_scan",
         help="Caps NASDAQ universe to speed up scans. Applied to NASDAQ + Combo scans.",
     )
+
+    # Tiny hint so users know why they can't go higher
+    st.sidebar.caption(f"🔒 Your plan caps NASDAQ scans at {nasdaq_cap} tickers.")
 
     max_combo_scan = st.sidebar.number_input(
         "Max Combo tickers to scan",
