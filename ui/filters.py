@@ -92,7 +92,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     )
 
     # Tier-based cap for how many NASDAQ tickers can be scanned
-    # Basic: 800, Pro: 2000, Premium+ (and higher): 6000
+    # Basic: 1000, Pro: 4000, Premium+ (and higher): 6000
     if has_min_tier(tier, "premium"):
         nasdaq_cap = 6000
     elif has_min_tier(tier, "pro"):

@@ -630,15 +630,61 @@ def render_user_settings_footer(
                 st.sidebar.success("Default scan settings saved for your account.")
             except Exception as e:
                 st.sidebar.error(f"Failed to save default settings: {e}")
-    elif session_username:
-        st.sidebar.caption(f"Signed in as: {session_username}")
-        st.sidebar.caption("User settings storage is not available (Neon-only feature).")
-    else:
-        st.sidebar.caption(
-            "No username set — defaults cannot be saved between sessions. "
-            "If you want per-user defaults, ensure auth sets st.session_state['username']."
-        )
 
+        # 🔄 Reset filters back to the saved profile from Neon
+        if callable(get_user_settings) and st.sidebar.button("🔄 Reset to saved profile"):
+            try:
+                saved = get_user_settings(session_username)
+            except Exception:
+                saved = None
+
+            if not saved:
+                st.sidebar.warning("No saved profile found to reset to.")
+            else:
+                # Apply saved settings into session_state so widgets pick them up
+                if saved.get("universe") is not None:
+                    st.session_state["universe"] = saved["universe"]
+
+                if saved.get("min_price") is not None:
+                    st.session_state["min_price"] = float(saved["min_price"])
+                if saved.get("max_price") is not None:
+                    st.session_state["max_price"] = float(saved["max_price"])
+
+                if saved.get("min_dollar_vol") is not None:
+                    st.session_state["min_dollar_vol"] = float(saved["min_dollar_vol"])
+
+                if saved.get("include_ta") is not None:
+                    st.session_state["include_ta"] = bool(saved["include_ta"])
+                if saved.get("apply_gap_filter") is not None:
+                    st.session_state["apply_gap_filter"] = bool(saved["apply_gap_filter"])
+
+                if saved.get("show_diagnostics_ui") is not None:
+                    st.session_state["show_diagnostics_ui"] = bool(saved["show_diagnostics_ui"])
+
+                if saved.get("min_gap") is not None:
+                    st.session_state["min_gap"] = float(saved["min_gap"])
+                if saved.get("top_n") is not None:
+                    st.session_state["top_n"] = int(saved["top_n"])
+                if saved.get("max_nasdaq_scan") is not None:
+                    st.session_state["max_nasdaq_scan"] = int(saved["max_nasdaq_scan"])
+                if saved.get("max_combo_scan") is not None:
+                    st.session_state["max_combo_scan"] = int(saved["max_combo_scan"])
+
+                if saved.get("premarket") is not None:
+                    st.session_state["premarket"] = bool(saved["premarket"])
+                if saved.get("afterhours") is not None:
+                    st.session_state["afterhours"] = bool(saved["afterhours"])
+                if saved.get("unusual_vol") is not None:
+                    st.session_state["unusual_vol"] = bool(saved["unusual_vol"])
+
+                # Mark that we've just reloaded the profile for this user
+                st.session_state["profile_loaded_for_user"] = session_username
+
+                # Rerun so the sidebar widgets immediately reflect the reset values
+                st.rerun()
+
+    elif session_username:
+        ...
 # ============================================================
 #                       MAIN UI
 # ============================================================
