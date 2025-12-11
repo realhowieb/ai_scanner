@@ -49,10 +49,12 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
 
     min_gap = st.sidebar.slider(
         "Min Gap %",
-        -10.0,
+        0.0,
         20.0,
         step=0.5,
         key="min_gap",
+        disabled=not st.session_state.get("apply_gap_filter", False),
+        help="Minimum gap-up percentage required to include a stock.",
     )
 
     # Initialize min_price through session_state if not already set
