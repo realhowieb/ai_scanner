@@ -640,6 +640,84 @@ def render_user_settings_footer(
 
     elif session_username:
         ...
+
+# --------------- UX Helpers ----------------
+
+def render_active_filters_summary(
+    *,
+    tier,
+    universe,
+    min_price: float,
+    max_price: float,
+    min_dollar_vol: float,
+    top_n: int,
+    premarket: bool,
+    afterhours: bool,
+    include_ta: bool,
+    unusual_vol: bool,
+    apply_gap_filter: bool,
+    min_gap: float,
+    max_nasdaq_scan: int,
+    max_combo_scan: int,
+) -> None:
+    """Compact summary of active filters shown above results."""
+    chips: list[str] = []
+
+    if universe:
+        chips.append(f"Universe: {universe}")
+
+    chips.append(f"Price: ${min_price:g}–${max_price:g}")
+
+    if min_dollar_vol and min_dollar_vol > 0:
+        chips.append(f"Min $Vol: {int(min_dollar_vol):,}")
+
+    chips.append(f"Top N: {int(top_n)}")
+    chips.append(f"NASDAQ cap: {int(max_nasdaq_scan):,}")
+    chips.append(f"Combo cap: {int(max_combo_scan):,}")
+
+    if premarket:
+        chips.append("Session: Premarket")
+    elif afterhours:
+        chips.append("Session: After-hours")
+    else:
+        chips.append("Session: Regular")
+
+    if include_ta:
+        chips.append("TA: ON")
+    if unusual_vol:
+        chips.append("Unusual Vol: ON")
+
+    if apply_gap_filter:
+        chips.append(f"Gap Filter: ON (≥ {float(min_gap):g}%)")
+
+    st.markdown("#### ✅ Active Filters")
+    st.caption(" • ".join(chips))
+
+
+def render_onboarding_hint(username: str, *, tier_name: str) -> None:
+    """One-time onboarding hint per session per user."""
+    key = f"onboarding_dismissed::{(username or '').strip().lower()}"
+    if st.session_state.get(key):
+        return
+
+    with st.expander("👋 Quick start (click once)", expanded=True):
+        st.markdown(
+            f"""
+**Welcome!** You’re signed in on **{tier_name}**.
+
+**Fast workflow:**
+1) Set filters in the sidebar  
+2) Click **Run Scan** (SP500 / NASDAQ / Combo)  
+3) Use **Save as my default settings** once you like your setup  
+4) Use **Reset to saved profile** anytime to revert
+
+Tip: turn on **Apply Gap Filter** to enforce **Min Gap %**.
+"""
+        )
+        if st.button("✅ Got it", key=f"onboarding_got_it::{username}"):
+            st.session_state[key] = True
+            st.rerun()
+
 # ============================================================
 #                       MAIN UI
 # ============================================================
@@ -675,6 +753,8 @@ def main():
     users_map = load_users()
     tier = get_user_tier(username, users_map)
     flags = derive_tier_flags(tier)
+    tier_name = "Admin" if username in ADMIN_USERS else tier.name
+    render_onboarding_hint(username, tier_name=tier_name)
     # Persist tier in session for downstream UI modules (e.g., scans, pricing, EZ 3-step)
     st.session_state["tier"] = tier
 
@@ -757,6 +837,22 @@ def main():
         include_ta,
         apply_gap_filter,
     ) = render_filters(tier)
+    render_active_filters_summary(
+        tier=tier,
+        universe=st.session_state.get("universe"),
+        min_price=float(min_price),
+        max_price=float(max_price),
+        min_dollar_vol=float(min_dollar_vol),
+        top_n=int(top_n),
+        premarket=bool(premarket),
+        afterhours=bool(afterhours),
+        include_ta=bool(include_ta),
+        unusual_vol=bool(unusual_vol),
+        apply_gap_filter=bool(apply_gap_filter),
+        min_gap=float(min_gap),
+        max_nasdaq_scan=int(max_nasdaq_scan),
+        max_combo_scan=int(max_combo_scan),
+    )
 
     # -------- Market session gating for extended-hours toggles --------
     session = get_market_session()
