@@ -867,7 +867,6 @@ def render_scan_controls(
     max_nasdaq_scan: int,
     max_combo_scan: int,
     min_gap: float,
-    apply_gap_filter: bool = False,
     min_price: float,
     max_price: float,
     top_n: int,
@@ -876,6 +875,7 @@ def render_scan_controls(
     unusual_vol: bool,
     diagnostics: bool,
     username: str,
+    apply_gap_filter: bool = False,
 ) -> None:
     """Render scan buttons and run scans when clicked.
 
