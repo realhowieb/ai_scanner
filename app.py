@@ -804,6 +804,7 @@ def main():
         max_nasdaq_scan=int(max_nasdaq_scan),
         max_combo_scan=int(max_combo_scan),
         min_gap=float(min_gap),
+        apply_gap_filter=bool(apply_gap_filter),
         min_price=float(min_price),
         max_price=float(max_price),
         top_n=int(top_n),
