@@ -225,9 +225,12 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Pro+ tiers get advanced filters (TA + Gap); Basic sees them disabled.
     is_pro_plus = has_min_tier(tier, "pro")
 
+    # Initialize unusual_vol through session_state if not already set
+    if "unusual_vol" not in st.session_state:
+        st.session_state["unusual_vol"] = default_unusual_vol
+
     unusual_vol = st.sidebar.checkbox(
         "Unusual Volume Filter",
-        value=default_unusual_vol,
         key="unusual_vol",
         disabled=not getattr(tier, "can_unusual_volume", False),
     )
@@ -235,9 +238,16 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         st.sidebar.caption("🔒 Pro+ feature")
         st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
+    # Initialize include_ta through session_state if not already set
+    if "include_ta" not in st.session_state:
+        st.session_state["include_ta"] = default_include_ta
+
+    # Basic users should never have TA enabled, even if a profile says so
+    if not is_pro_plus:
+        st.session_state["include_ta"] = False
+
     include_ta = st.sidebar.checkbox(
         "Include Technical Indicators",
-        value=(default_include_ta if is_pro_plus else False),
         key="include_ta",
         disabled=not is_pro_plus,
     )
@@ -245,9 +255,16 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         st.sidebar.caption("🔒 Pro+ feature")
         st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
+    # Initialize apply_gap_filter through session_state if not already set
+    if "apply_gap_filter" not in st.session_state:
+        st.session_state["apply_gap_filter"] = default_apply_gap_filter
+
+    # Basic users should never have gap filter enabled, even if a profile says so
+    if not is_pro_plus:
+        st.session_state["apply_gap_filter"] = False
+
     apply_gap_filter = st.sidebar.checkbox(
         "Apply Gap Filter",
-        value=default_apply_gap_filter,
         key="apply_gap_filter",
         disabled=not is_pro_plus,
     )
