@@ -47,15 +47,24 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     if "min_gap" not in st.session_state:
         st.session_state["min_gap"] = default_min_gap
 
+    # Pro+ tiers get advanced filters (TA + Gap); Basic sees them disabled.
+    is_pro_plus = has_min_tier(tier, "pro")
+
+    min_gap_disabled = (not is_pro_plus) or (not st.session_state.get("apply_gap_filter", False))
+
     min_gap = st.sidebar.slider(
         "Min Gap %",
         0.0,
         20.0,
         step=0.5,
         key="min_gap",
-        disabled=not st.session_state.get("apply_gap_filter", False),
+        disabled=min_gap_disabled,
         help="Minimum gap-up percentage required to include a stock.",
     )
+
+    if not is_pro_plus:
+        st.sidebar.caption("🔒 Pro+ feature")
+        st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
     # Initialize min_price through session_state if not already set
     if "min_price" not in st.session_state:
@@ -223,9 +232,6 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         st.session_state["afterhours"] = afterhours
     except Exception:
         pass
-
-    # Pro+ tiers get advanced filters (TA + Gap); Basic sees them disabled.
-    is_pro_plus = has_min_tier(tier, "pro")
 
     # Initialize unusual_vol through session_state if not already set
     if "unusual_vol" not in st.session_state:
