@@ -867,6 +867,7 @@ def render_scan_controls(
     max_nasdaq_scan: int,
     max_combo_scan: int,
     min_gap: float,
+    apply_gap_filter,  # <--- new argument, keep signature in sync with app.py
     min_price: float,
     max_price: float,
     top_n: int,
