@@ -272,10 +272,13 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         st.sidebar.caption("🔒 Pro+ feature")
         st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
+    # Initialize show_diagnostics_ui through session_state if not already set
+    if "show_diagnostics_ui" not in st.session_state:
+        st.session_state["show_diagnostics_ui"] = default_diagnostics
+
     st.sidebar.divider()
     diagnostics = st.sidebar.checkbox(
         "Show diagnostics",
-        value=default_diagnostics,
         key="show_diagnostics_ui",
     )
 
