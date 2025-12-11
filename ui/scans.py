@@ -867,7 +867,7 @@ def render_scan_controls(
     max_nasdaq_scan: int,
     max_combo_scan: int,
     min_gap: float,
-    apply_gap_filter,  # <--- new argument, keep signature in sync with app.py
+    apply_gap_filter: bool = False,
     min_price: float,
     max_price: float,
     top_n: int,
@@ -1209,6 +1209,19 @@ def render_scan_controls(
                 )
 
                 progress.progress(70)
+
+                # Phase 2.5: enforce GapPct >= min_gap only when Apply Gap Filter is enabled (gap-UP only)
+                if apply_gap_filter and df is not None and not df.empty:
+                    try:
+                        if "GapPct" in df.columns:
+                            df["GapPct"] = pd.to_numeric(df["GapPct"], errors="coerce").fillna(0.0)
+                            df = df[df["GapPct"] >= float(min_gap)]
+                        else:
+                            # If the engine didn't provide GapPct, the gap filter can't be applied
+                            df = df.head(0)
+                    except Exception as gap_exc:
+                        if diagnostics:
+                            st.caption(f"⚠️ Gap filter failed for {label}: {gap_exc}")
 
                 # Phase 3: apply any strategy-specific post-filter (e.g., gap-up / most active)
                 if df is not None and not df.empty and post_filter is not None:
