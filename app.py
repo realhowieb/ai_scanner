@@ -118,7 +118,68 @@ from ui.header import render_header
 from ui.prebreakout_tab import render_prebreakout_tab
 from ui.footer import render_footer
 from ui.watchlists import render_watchlists_panel
+
 from market_data import get_latest_quotes
+
+# --------------- Tier/Admin Helper Functions ----------------
+
+def _norm_str(v: object | None) -> str:
+    """Normalize user-provided / DB-provided strings to a safe canonical form."""
+    try:
+        return str(v or "").strip()
+    except Exception:
+        return ""
+
+
+def _norm_lower(v: object | None) -> str:
+    return _norm_str(v).lower()
+
+
+def _is_admin_user(username: str | None, tier_obj: object | None) -> bool:
+    """Admin check that is resilient to whitespace/case/enum differences."""
+    u = _norm_str(username)
+    if u and u in ADMIN_USERS:
+        return True
+
+    # Tier objects may expose `.key` (preferred) or `.name`.
+    try:
+        key = getattr(tier_obj, "key", None)
+        if _norm_lower(key) == "admin":
+            return True
+    except Exception:
+        pass
+
+    try:
+        name = getattr(tier_obj, "name", None)
+        if _norm_lower(name) == "admin":
+            return True
+    except Exception:
+        pass
+
+    # Last resort: string form
+    if _norm_lower(tier_obj) == "admin":
+        return True
+
+    return False
+
+
+def _tier_key(tier_obj: object | None) -> str:
+    """Return a stable tier key string for logging/comparisons/UI."""
+    try:
+        key = getattr(tier_obj, "key", None)
+        if key is not None:
+            return _norm_lower(key)
+    except Exception:
+        pass
+
+    try:
+        name = getattr(tier_obj, "name", None)
+        if name is not None:
+            return _norm_lower(name)
+    except Exception:
+        pass
+
+    return _norm_lower(tier_obj) or "basic"
 
 
 
@@ -752,11 +813,18 @@ def main():
     # -------- Load Users + Tier --------
     users_map = load_users()
     tier = get_user_tier(username, users_map)
+    is_admin = _is_admin_user(username, tier)
+    tier_key = _tier_key(tier)
+
     flags = derive_tier_flags(tier)
-    tier_name = "Admin" if username in ADMIN_USERS else tier.name
-    render_onboarding_hint(username, tier_name=tier_name)
-    # Persist tier in session for downstream UI modules (e.g., scans, pricing, EZ 3-step)
+    tier_name = "Admin" if is_admin else getattr(tier, "name", tier_key)
+
+    # Persist tier + flags in session for downstream UI modules
     st.session_state["tier"] = tier
+    st.session_state["tier_key"] = tier_key
+    st.session_state["is_admin"] = bool(is_admin)
+
+    render_onboarding_hint(username, tier_name=tier_name)
 
     # -------- Load Saved User Settings (if available) --------
     if username and callable(get_user_settings):
@@ -789,8 +857,9 @@ def main():
                 if saved.get("apply_gap_filter") is not None:
                     st.session_state["apply_gap_filter"] = bool(saved["apply_gap_filter"])
 
+                # Diagnostics UI is admin-only, even if a non-admin saved it historically.
                 if saved.get("show_diagnostics_ui") is not None:
-                    st.session_state["show_diagnostics_ui"] = bool(saved["show_diagnostics_ui"])
+                    st.session_state["show_diagnostics_ui"] = bool(saved["show_diagnostics_ui"]) and bool(st.session_state.get("is_admin"))
 
                 if saved.get("min_gap") is not None:
                     st.session_state["min_gap"] = float(saved["min_gap"])
@@ -813,7 +882,7 @@ def main():
 
     # -------- Sidebar Account Info --------
     st.sidebar.markdown(f"### 👤 {display_name}")
-    st.sidebar.markdown(f"**Plan:** `{ 'Admin' if username in ADMIN_USERS else tier.name }`")
+    st.sidebar.markdown(f"**Plan:** `{ 'Admin' if bool(st.session_state.get('is_admin')) else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`")
     if st.sidebar.button("Log out", key="logout_button"):
         logout_and_reset_session()
     #st.markdown("---")
@@ -837,6 +906,10 @@ def main():
         include_ta,
         apply_gap_filter,
     ) = render_filters(tier)
+    # Enforce admin-only diagnostics (even if UI/modules accidentally expose it)
+    if not bool(st.session_state.get("is_admin")):
+        diagnostics = False
+        st.session_state["show_diagnostics_ui"] = False
     render_active_filters_summary(
         tier=tier,
         universe=st.session_state.get("universe"),
@@ -978,14 +1051,14 @@ def main():
     render_universe_panel()
 
     # -------- Admin Panel (Admin only) --------
-    if username in ADMIN_USERS or (hasattr(tier, "key") and tier.key == "admin"):
+    if bool(st.session_state.get("is_admin")):
         render_admin_users_panel(username, ADMIN_USERS, db_status)
 
     # -------- Pricing (Load Last) --------
     pricing_sidebar(username, users_map)
 
     # --- Debug: yfinance status (Admin only) ---
-    if username in ADMIN_USERS or (hasattr(tier, "key") and tier.key == "admin"):
+    if bool(st.session_state.get("is_admin")):
         with st.expander("🔧 Debug: Data Status", expanded=False):
             try:
                 from data.prices import debug_yfinance_status  # type: ignore
