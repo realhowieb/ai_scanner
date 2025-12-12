@@ -890,6 +890,11 @@ def main():
     # -------- DB Status --------
     db_status = render_db_status_badge()
 
+    # Pre-clamp diagnostics BEFORE filters render widgets.
+    # Streamlit forbids mutating widget-bound session_state keys after widget creation.
+    if not bool(st.session_state.get("is_admin")):
+        st.session_state["show_diagnostics_ui"] = False
+
     # -------- Filters --------
     (
         min_gap,
@@ -909,7 +914,6 @@ def main():
     # Enforce admin-only diagnostics (even if UI/modules accidentally expose it)
     if not bool(st.session_state.get("is_admin")):
         diagnostics = False
-        st.session_state["show_diagnostics_ui"] = False
     render_active_filters_summary(
         tier=tier,
         universe=st.session_state.get("universe"),
