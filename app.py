@@ -817,6 +817,8 @@ def main():
     tier_key = _tier_key(tier)
 
     flags = derive_tier_flags(tier)
+    # Defensive clamp: CSV export is Pro/Premium only
+    flags["can_export_csv"] = bool(has_min_tier(tier, "pro"))
     tier_name = "Admin" if is_admin else getattr(tier, "name", tier_key)
 
     # Persist tier + flags in session for downstream UI modules

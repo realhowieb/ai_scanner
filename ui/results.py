@@ -168,7 +168,16 @@ def render_results(
 
             styled = styled.apply(_apply_price_row, axis=1)
 
-    st.dataframe(styled, use_container_width=True, height=420)
+    # Results table: Basic users must not see the interactive dataframe toolbar (includes CSV download).
+    # Pro/Premium can keep the interactive dataframe.
+    if can_export_csv:
+        st.dataframe(styled, use_container_width=True, height=420)
+    else:
+        # Render a non-interactive table for Basic (no toolbar download).
+        try:
+            st.table(df)
+        except Exception:
+            st.markdown(df.to_html(index=False), unsafe_allow_html=True)
 
     # Export (tier-gated)
     if can_export_csv:
