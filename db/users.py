@@ -201,6 +201,45 @@ def create_neon_user(*args, **kwargs) -> Dict[str, Any]:
     return create_user_account(*args, **kwargs)
 
 
+def find_username_by_display_name(display_name: str) -> str | None:
+    """Return the account username (email key) for a given display name (full_name).
+
+    This enables login via the user-chosen Username while keeping email as the primary key.
+    Matching is case-insensitive.
+    """
+    try:
+        name = (display_name or "").strip()
+        if not name:
+            return None
+
+        conn = get_neon_conn()
+        if conn is None:
+            return None
+
+        ensure_neon_users_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT username
+            FROM users
+            WHERE is_active = TRUE
+              AND LOWER(full_name) = LOWER(%s)
+            ORDER BY created_at DESC NULLS LAST
+            LIMIT 1
+            """,
+            (name,),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not row:
+            return None
+        return row[0] if isinstance(row, tuple) else row.get("username")
+    except Exception:
+        return None
+
+
 @st.cache_data(show_spinner=False, ttl=30)
 def load_users() -> Dict[str, Dict[str, Any]]:
     """
