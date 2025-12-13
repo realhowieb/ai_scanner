@@ -899,9 +899,6 @@ def main():
         f"**Plan:** `{ 'Admin' if bool(st.session_state.get('is_admin')) else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`"
     )
 
-    # Optional: show email subtly (comment out if you want it hidden entirely)
-    if raw_username and raw_username != name_label:
-        st.sidebar.caption(raw_username)
 
     if st.sidebar.button("Log out", key="logout_button"):
         logout_and_reset_session()
