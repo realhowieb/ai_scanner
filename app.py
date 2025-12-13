@@ -182,6 +182,38 @@ def _tier_key(tier_obj: object | None) -> str:
     return _norm_lower(tier_obj) or "basic"
 
 
+# Day 6: Upgrade CTA card for Basic users only
+def render_sidebar_upgrade_card(tier_obj: object | None) -> None:
+    """Show a simple upgrade CTA card for Basic users in the sidebar."""
+    try:
+        # Show only for Basic (no Pro access)
+        if has_min_tier(tier_obj, "pro"):
+            return
+    except Exception:
+        return
+
+    with st.sidebar.container(border=True):
+        st.markdown("### 💡 You’re on Basic")
+        st.caption(
+            "You’re seeing a limited scan.\n"
+            "Upgrade to unlock advanced filters, exports, and AI signals."
+        )
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("🚀 Upgrade to Pro", key="upgrade_to_pro", use_container_width=True):
+                st.session_state["show_pricing"] = True
+                st.session_state["pricing_focus"] = "pro"
+                st.rerun()
+        with c2:
+            if st.button("⭐ Upgrade to Premium", key="upgrade_to_premium", use_container_width=True):
+                st.session_state["show_pricing"] = True
+                st.session_state["pricing_focus"] = "premium"
+                st.rerun()
+
+        st.caption(
+            "Tip: Pro unlocks exports + advanced filters. Premium unlocks full-universe + Early Breakout."
+        )
 
 # --------------- Cached Market Snapshot Helper ----------------
 @st.cache_data(ttl=300, show_spinner=False)
@@ -898,7 +930,8 @@ def main():
     st.sidebar.markdown(
         f"**Plan:** `{ 'Admin' if bool(st.session_state.get('is_admin')) else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`"
     )
-
+    # Day 6: Upgrade CTA card (Basic users only)
+    render_sidebar_upgrade_card(tier)
 
     if st.sidebar.button("Log out", key="logout_button"):
         logout_and_reset_session()
@@ -1076,6 +1109,9 @@ def main():
         render_admin_users_panel(username, ADMIN_USERS, db_status)
 
     # -------- Pricing (Load Last) --------
+    # Optional: cue that the pricing section is relevant after pressing Upgrade
+    if st.session_state.get("show_pricing"):
+        st.sidebar.info("💳 Plans & Pricing")
     pricing_sidebar(username, users_map)
 
     # --- Debug: yfinance status (Admin only) ---
