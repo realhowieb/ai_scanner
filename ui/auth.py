@@ -4,6 +4,25 @@ import time
 import re
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
 
+# Direct Neon lookup fallback for username -> email mapping
+try:
+    from db.engine import get_neon_conn
+    from db.schema import ensure_neon_users_schema
+except Exception:
+    get_neon_conn = None
+    ensure_neon_users_schema = None
+
+# Optional helpers for username-login and persisting display names
+try:
+    from db.users import find_username_by_display_name
+except Exception:
+    find_username_by_display_name = None
+
+try:
+    from db.users import update_neon_user_full_name
+except Exception:
+    update_neon_user_full_name = None
+
 # Optional: account creation helpers may exist depending on your db.users implementation.
 try:
     from db.users import create_user_account  # preferred name
@@ -57,6 +76,45 @@ def _register_failed_login_attempt(max_attempts: int = 5, lockout_seconds: int =
 def _clear_failed_login_attempts() -> None:
     st.session_state.pop("failed_login_attempts", None)
     st.session_state.pop("login_locked_until", None)
+
+
+# --- Fallback: direct Neon query for display username -> email mapping ---
+def _lookup_email_by_display_username(display_username: str) -> str | None:
+    """Resolve display username (users.full_name) to email key (users.username)."""
+    try:
+        if get_neon_conn is None or ensure_neon_users_schema is None:
+            return None
+
+        name = (display_username or "").strip()
+        if not name:
+            return None
+
+        conn = get_neon_conn()
+        if conn is None:
+            return None
+
+        ensure_neon_users_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT username
+            FROM users
+            WHERE is_active = TRUE
+              AND LOWER(TRIM(full_name)) = LOWER(TRIM(%s))
+            ORDER BY created_at DESC NULLS LAST
+            LIMIT 1
+            """,
+            (name,),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not row:
+            return None
+        return row[0] if isinstance(row, tuple) else row.get("username")
+    except Exception:
+        return None
 
 
 def auth_ui():
@@ -209,6 +267,13 @@ def auth_ui():
             st.error(f"Sign up failed: {e}")
             return False, None, None
 
+        # Best-effort: persist chosen Username into DB full_name so username-login works
+        try:
+            if update_neon_user_full_name is not None:
+                update_neon_user_full_name(email_raw, username_raw)
+        except Exception:
+            pass
+
         # If db returned nothing, still proceed to login with defaults.
         user_rec = created_user if isinstance(created_user, dict) else {"password": pw_hash, "tier": "basic"}
 
@@ -242,6 +307,22 @@ def auth_ui():
             # Do not count this as a brute-force attempt; user simply forgot fields.
             return False, None, None
 
+        # Map display-username -> email (DB key) when user doesn't type an email
+        login_key = username
+        if "@" not in username:
+            mapped = None
+            # Prefer helper if present
+            if find_username_by_display_name is not None:
+                try:
+                    mapped = find_username_by_display_name(username_input)
+                except Exception:
+                    mapped = None
+            # Fallback: direct Neon query
+            if not mapped:
+                mapped = _lookup_email_by_display_username(username_input)
+            if mapped:
+                login_key = mapped.strip().lower()
+
         # Try to ensure Neon users are seeded from local demo users.
         # If this fails, we still fall back to local USERS_DB via load_users().
         try:
@@ -257,15 +338,14 @@ def auth_ui():
             return False, None, None
 
         # Primary lookup: email (stored as `username` in DB)
-        user = users.get(username)
-        login_key = username
+        user = users.get(login_key)
 
         # Secondary lookup: allow login by display username (full_name/display_name)
         if user is None and username:
             uname_guess = username
             for k, u in users.items():
                 try:
-                    dn = (u.get("display_name") or u.get("full_name") or "").strip().lower()
+                    dn = (u.get("display_name") or u.get("full_name") or u.get("name") or "").strip().lower()
                 except Exception:
                     dn = ""
                 if dn and dn == uname_guess:
@@ -333,7 +413,7 @@ def auth_ui():
         st.session_state["user_id"] = user.get("id") or user.get("user_id") or login_key
         st.session_state["username"] = login_key
 
-        display_name = user.get("display_name") or user.get("full_name") or login_key
+        display_name = user.get("display_name") or user.get("full_name") or user.get("name") or login_key
         st.session_state["display_name"] = display_name
 
         if "plan" in user:
