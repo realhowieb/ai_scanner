@@ -202,14 +202,12 @@ def render_sidebar_upgrade_card(tier_obj: object | None) -> None:
         c1, c2 = st.columns(2)
         with c1:
             if st.button("🚀 Upgrade to Pro", key="upgrade_to_pro", use_container_width=True):
-                st.session_state["show_pricing"] = True
                 st.session_state["pricing_focus"] = "pro"
-                st.rerun()
+                st.switch_page("pages/billing.py")
         with c2:
             if st.button("⭐ Upgrade to Premium", key="upgrade_to_premium", use_container_width=True):
-                st.session_state["show_pricing"] = True
                 st.session_state["pricing_focus"] = "premium"
-                st.rerun()
+                st.switch_page("pages/billing.py")
 
         st.caption(
             "Tip: Pro unlocks exports + advanced filters. Premium unlocks full-universe + Early Breakout."
@@ -1109,9 +1107,6 @@ def main():
         render_admin_users_panel(username, ADMIN_USERS, db_status)
 
     # -------- Pricing (Load Last) --------
-    # Optional: cue that the pricing section is relevant after pressing Upgrade
-    if st.session_state.get("show_pricing"):
-        st.sidebar.info("💳 Plans & Pricing")
     pricing_sidebar(username, users_map)
 
     # --- Debug: yfinance status (Admin only) ---
