@@ -883,8 +883,26 @@ def main():
                 st.session_state["profile_loaded_for_user"] = safe_username
 
     # -------- Sidebar Account Info --------
-    st.sidebar.markdown(f"### 👤 {display_name}")
-    st.sidebar.markdown(f"**Plan:** `{ 'Admin' if bool(st.session_state.get('is_admin')) else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`")
+    # Prefer display name; fall back to email prefix if missing
+    raw_display = (display_name or "").strip()
+    raw_username = (username or "").strip()
+
+    if raw_display:
+        name_label = raw_display
+    elif "@" in raw_username:
+        name_label = raw_username.split("@")[0]
+    else:
+        name_label = raw_username or "Account"
+
+    st.sidebar.markdown(f"### 👤 {name_label}")
+    st.sidebar.markdown(
+        f"**Plan:** `{ 'Admin' if bool(st.session_state.get('is_admin')) else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`"
+    )
+
+    # Optional: show email subtly (comment out if you want it hidden entirely)
+    if raw_username and raw_username != name_label:
+        st.sidebar.caption(raw_username)
+
     if st.sidebar.button("Log out", key="logout_button"):
         logout_and_reset_session()
     #st.markdown("---")
