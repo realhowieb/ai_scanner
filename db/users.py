@@ -169,22 +169,19 @@ def create_user_account(
     cur.close()
     conn.close()
 
-    if not row:
-        return {
-            "username": username,
-            "display_name": display_name,
-            "tier": tier_key,
-            "is_admin": tier_key == "admin",
-        }
-
-    # tuple-like fetch
-    u = row[0]
-    n = row[1]
-    t = (row[2] or "basic").strip().lower()
+    # Cursor rows can be tuple-like or dict-like depending on cursor factory
+    if isinstance(row, tuple):
+        u = row[0]
+        n = row[1]
+        t = (row[2] or "basic").strip().lower()
+    else:
+        u = row.get("username")
+        n = row.get("full_name")
+        t = (row.get("tier") or "basic").strip().lower()
 
     return {
-        "username": u,
-        "display_name": n or u,
+        "username": u or username,
+        "display_name": (n or u or username),
         "tier": t,
         "is_admin": t == "admin",
     }
