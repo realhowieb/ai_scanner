@@ -18,6 +18,47 @@ except Exception:
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+# -------------------- Login lockout helpers --------------------
+
+def _is_login_locked() -> bool:
+    """Return True if the user is currently locked out due to too many failed logins."""
+    try:
+        locked_until = st.session_state.get("login_locked_until")
+        if not locked_until:
+            return False
+        return time.time() < float(locked_until)
+    except Exception:
+        return False
+
+
+def _lockout_remaining_seconds() -> int:
+    try:
+        locked_until = st.session_state.get("login_locked_until")
+        if not locked_until:
+            return 0
+        remaining = int(float(locked_until) - time.time())
+        return max(0, remaining)
+    except Exception:
+        return 0
+
+
+def _register_failed_login_attempt(max_attempts: int = 5, lockout_seconds: int = 300) -> None:
+    """Increment failed attempts and apply lockout if threshold exceeded."""
+    try:
+        failed = int(st.session_state.get("failed_login_attempts") or 0) + 1
+    except Exception:
+        failed = 1
+
+    st.session_state["failed_login_attempts"] = failed
+    if failed >= int(max_attempts):
+        st.session_state["login_locked_until"] = time.time() + int(lockout_seconds)
+
+
+def _clear_failed_login_attempts() -> None:
+    st.session_state.pop("failed_login_attempts", None)
+    st.session_state.pop("login_locked_until", None)
+
+
 def auth_ui():
     if "username" in st.session_state:
         username = st.session_state["username"]
@@ -29,20 +70,16 @@ def auth_ui():
     LOCKOUT_SECONDS = 300  # 5 minutes
 
     # If the user is currently locked out, show a message and block login
-    locked_until = st.session_state.get("login_locked_until")
-    if locked_until:
-        now = time.time()
-        if now < locked_until:
-            remaining = int(locked_until - now)
-            # Round up to at least 1 second for UX clarity
-            if remaining < 1:
-                remaining = 1
-            st.error(f"Too many failed login attempts. Please try again in {remaining} seconds.")
-            return False, None, None
-        else:
-            # Lockout expired; reset counters
-            st.session_state.pop("login_locked_until", None)
-            st.session_state.pop("failed_login_attempts", None)
+    if _is_login_locked():
+        remaining = _lockout_remaining_seconds()
+        if remaining < 1:
+            remaining = 1
+        st.error(f"Too many failed login attempts. Please try again in {remaining} seconds.")
+        return False, None, None
+    else:
+        # Lockout expired; reset counters (best-effort)
+        if st.session_state.get("login_locked_until"):
+            _clear_failed_login_attempts()
 
     login_placeholder = st.empty()
     with login_placeholder.container():
@@ -160,8 +197,7 @@ def auth_ui():
         st.session_state["is_admin"] = bool(user_rec.get("is_admin", False))
 
         # Clear any lockout counters
-        st.session_state.pop("failed_login_attempts", None)
-        st.session_state.pop("login_locked_until", None)
+        _clear_failed_login_attempts()
 
         # Remove the auth UI and rerun into app
         login_placeholder.empty()
@@ -193,7 +229,7 @@ def auth_ui():
         user = users.get(username)
         if user is None:
             st.error("User not found.")
-            _register_failed_login_attempt()
+            _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
             return False, None, None
 
         # Expect user dict to contain a 'password' field.
@@ -201,7 +237,7 @@ def auth_ui():
         stored_password = user.get("password")
         if stored_password is None:
             st.error("User record is missing a password field.")
-            _register_failed_login_attempt()
+            _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
             return False, None, None
 
         pwd_bytes = password.encode("utf-8")
@@ -219,13 +255,13 @@ def auth_ui():
             # New-style bcrypt hash
             if not bcrypt.checkpw(pwd_bytes, stored_str.encode("utf-8")):
                 st.error("Incorrect password.")
-                _register_failed_login_attempt()
+                _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
                 return False, None, None
         else:
             # Legacy plain-text password in DB
             if stored_str != password:
                 st.error("Incorrect password.")
-                _register_failed_login_attempt()
+                _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
                 return False, None, None
 
             # Auto-migrate: convert legacy plain-text to bcrypt hash in Neon
@@ -254,20 +290,12 @@ def auth_ui():
             st.session_state["is_admin"] = bool(user.get("is_admin"))
 
         # Reset failed-attempt tracking on successful login
-        st.session_state.pop("failed_login_attempts", None)
-        st.session_state.pop("login_locked_until", None)
+        _clear_failed_login_attempts()
 
         # Remove the login form from the screen after successful login.
         login_placeholder.empty()
         # No success banner to keep the UI clean after login.
         return True, username, display_name
-
-    def _register_failed_login_attempt():
-        """Increment failed attempts and apply lockout if threshold exceeded."""
-        failed = st.session_state.get("failed_login_attempts", 0) + 1
-        st.session_state["failed_login_attempts"] = failed
-        if failed >= MAX_FAILED_ATTEMPTS:
-            st.session_state["login_locked_until"] = time.time() + LOCKOUT_SECONDS
 
     return False, None, None
 
