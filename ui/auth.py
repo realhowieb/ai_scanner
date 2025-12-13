@@ -101,6 +101,13 @@ def auth_ui():
 
             signup_card = st.container(border=True)
             with signup_card:
+                su_username = st.text_input(
+                    "👤 Username",
+                    key="signup_username",
+                    placeholder="e.g. chimera47",
+                    help="This will be your public display name. You can change it later."
+                )
+
                 su_email = st.text_input("✉️ Email", key="signup_email", placeholder="you@example.com")
                 su_pw1 = st.text_input("🔒 Password", type="password", key="signup_password_1", placeholder="At least 8 characters")
                 su_pw2 = st.text_input("🔒 Confirm Password", type="password", key="signup_password_2", placeholder="Re-enter password")
@@ -122,6 +129,15 @@ def auth_ui():
     # ----------------------
     if 'signup_clicked' in locals() and signup_clicked:
         email_raw = (su_email or "").strip().lower()
+        username_raw = (su_username or "").strip()
+
+        if not username_raw:
+            st.error("Please choose a username.")
+            return False, None, None
+
+        if "@" in username_raw or " " in username_raw:
+            st.error("Username cannot contain spaces or '@'.")
+            return False, None, None
 
         if not email_raw or not EMAIL_RE.match(email_raw):
             st.error("Please enter a valid email address.")
@@ -154,8 +170,8 @@ def auth_ui():
             st.error(f"Sign up failed while loading users: {e}")
             return False, None, None
 
-        if email_raw in users:
-            st.error("An account with this email already exists. Please log in instead.")
+        if email_raw in users or username_raw.lower() in users:
+            st.error("That email or username is already taken.")
             return False, None, None
 
         # Create bcrypt hash
@@ -174,7 +190,12 @@ def auth_ui():
         try:
             # Prefer a simple signature: (username/email, password_hash, tier/plan)
             try:
-                created_user = create_fn(email_raw, pw_hash, tier="basic")
+                created_user = create_fn(
+                    email=email_raw,
+                    password_hash=pw_hash,
+                    tier="basic",
+                    full_name=username_raw,
+                )
             except TypeError:
                 try:
                     created_user = create_fn(username=email_raw, password_hash=pw_hash, tier="basic")
@@ -193,8 +214,8 @@ def auth_ui():
 
         # Create session keys
         st.session_state["user_id"] = user_rec.get("id") or user_rec.get("user_id") or email_raw
-        st.session_state["username"] = email_raw
-        st.session_state["display_name"] = user_rec.get("display_name", email_raw)
+        st.session_state["username"] = email_raw  # login identifier
+        st.session_state["display_name"] = username_raw
         st.session_state["tier"] = user_rec.get("tier", "basic")
         st.session_state["plan"] = user_rec.get("plan", user_rec.get("tier", "basic"))
         st.session_state["is_admin"] = bool(user_rec.get("is_admin", False))
