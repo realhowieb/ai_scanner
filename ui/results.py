@@ -173,11 +173,65 @@ def render_results(
     if can_export_csv:
         st.dataframe(styled, use_container_width=True, height=420)
     else:
-        # Render a non-interactive table for Basic (no toolbar download).
+        # Basic: keep the pro styling but render as static HTML (no Streamlit dataframe toolbar/download).
+        # Mobile-safe: enable horizontal scroll + prevent vertical letter stacking.
         try:
-            st.table(df)
+            styled_basic = styled
+            try:
+                # pandas>=1.4
+                styled_basic = styled_basic.hide(axis="index")
+            except Exception:
+                pass
+
+            table_html = styled_basic.to_html()
+
+            st.markdown(
+                """
+<style>
+.basic-results-wrap {
+  max-height: 420px;
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1px solid rgba(49, 51, 63, 0.25);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+/* Prevent vertical letter stacking on mobile */
+.basic-results-wrap table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.basic-results-wrap th,
+.basic-results-wrap td {
+  white-space: nowrap;
+  padding: 6px 10px;
+}
+
+/* Sticky header */
+.basic-results-wrap th {
+  position: sticky;
+  top: 0;
+  background: rgba(15, 17, 22, 0.98);
+  z-index: 2;
+}
+</style>
+""",
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                f"<div class='basic-results-wrap'>{table_html}</div>",
+                unsafe_allow_html=True,
+            )
         except Exception:
-            st.markdown(df.to_html(index=False), unsafe_allow_html=True)
+            # Fallback: still non-interactive
+            try:
+                st.table(df)
+            except Exception:
+                st.markdown(df.to_html(index=False), unsafe_allow_html=True)
 
     # Export (tier-gated)
     if can_export_csv:
