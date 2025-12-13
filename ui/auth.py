@@ -127,11 +127,14 @@ def auth_ui():
             st.error("Please enter a valid email address.")
             return False, None, None
 
-        if not su_pw1 or len(su_pw1) < 8:
+        p1 = (su_pw1 or "").strip()
+        p2 = (su_pw2 or "").strip()
+
+        if not p1 or len(p1) < 8:
             st.error("Password must be at least 8 characters.")
             return False, None, None
 
-        if su_pw1 != su_pw2:
+        if p1 != p2:
             st.error("Passwords do not match.")
             return False, None, None
 
@@ -156,7 +159,7 @@ def auth_ui():
             return False, None, None
 
         # Create bcrypt hash
-        pw_hash = bcrypt.hashpw(su_pw1.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        pw_hash = bcrypt.hashpw(p1.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
         # Try to create the user in the DB via whichever helper exists.
         created_user = None
@@ -207,6 +210,10 @@ def auth_ui():
             st.experimental_rerun()
 
     if login_clicked:
+        # Normalize inputs (mobile keyboards often add whitespace/case)
+        username = (username or "").strip().lower()
+        password = (password or "").strip()
+
         if not username or not password:
             st.error("Please enter username and password.")
             # Do not count this as a brute-force attempt; user simply forgot fields.
@@ -279,7 +286,7 @@ def auth_ui():
         st.session_state["user_id"] = user.get("id") or user.get("user_id") or username
         st.session_state["username"] = username
 
-        display_name = user.get("display_name", username)
+        display_name = user.get("display_name") or user.get("full_name") or username
         st.session_state["display_name"] = display_name
 
         if "plan" in user:
