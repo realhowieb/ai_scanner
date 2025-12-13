@@ -156,6 +156,15 @@ def create_user_account(
     )
     conn.commit()
 
+    # Ensure auth sees the new user immediately (load_users is cached)
+    try:
+        load_users.clear()  # type: ignore[attr-defined]
+    except Exception:
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+
     # Fetch the record back (best-effort)
     cur.execute(
         """
@@ -192,7 +201,7 @@ def create_neon_user(*args, **kwargs) -> Dict[str, Any]:
     return create_user_account(*args, **kwargs)
 
 
-@st.cache_data(show_spinner=False, ttl=300)
+@st.cache_data(show_spinner=False, ttl=30)
 def load_users() -> Dict[str, Dict[str, Any]]:
     """
     Load users from Neon if available; otherwise fall back to the local USERS_DB.
