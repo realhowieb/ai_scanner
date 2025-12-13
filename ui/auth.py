@@ -90,7 +90,7 @@ def auth_ui():
             st.markdown("### 🔐 Login")
             card = st.container(border=True)
             with card:
-                username = st.text_input("Username", key="login_username")
+                username = st.text_input("Email or Username", key="login_username")
                 password = st.text_input("Password", type="password", key="login_password")
                 login_clicked = st.button("Login", key="login_button")
 
@@ -232,8 +232,10 @@ def auth_ui():
 
     if login_clicked:
         # Normalize inputs (mobile keyboards often add whitespace/case)
-        username = (username or "").strip().lower()
-        password = (password or "").strip()
+        username_input = (username or "").strip()
+        username = username_input.lower()
+        raw_password = (password or "")
+        password = raw_password.strip()
 
         if not username or not password:
             st.error("Please enter username and password.")
@@ -254,9 +256,25 @@ def auth_ui():
             st.error(f"Login failed while loading users: {e}")
             return False, None, None
 
+        # Primary lookup: email (stored as `username` in DB)
         user = users.get(username)
+        login_key = username
+
+        # Secondary lookup: allow login by display username (full_name/display_name)
+        if user is None and username:
+            uname_guess = username
+            for k, u in users.items():
+                try:
+                    dn = (u.get("display_name") or u.get("full_name") or "").strip().lower()
+                except Exception:
+                    dn = ""
+                if dn and dn == uname_guess:
+                    user = u
+                    login_key = k  # actual DB key (email)
+                    break
+
         if user is None:
-            st.error("User not found.")
+            st.error("User not found. Please use the email you signed up with, or your username.")
             _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
             return False, None, None
 
@@ -268,7 +286,6 @@ def auth_ui():
             _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
             return False, None, None
 
-        pwd_bytes = password.encode("utf-8")
         # Normalize stored password to a clean string (handles bytes from DB as well)
         if isinstance(stored_password, (bytes, bytearray)):
             stored_str = stored_password.decode("utf-8", errors="ignore")
@@ -281,22 +298,31 @@ def auth_ui():
 
         if _looks_bcrypt(stored_str):
             # New-style bcrypt hash
-            if not bcrypt.checkpw(pwd_bytes, stored_str.encode("utf-8")):
-                st.error("Incorrect password.")
-                _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
-                return False, None, None
+            if not bcrypt.checkpw(password.encode("utf-8"), stored_str.encode("utf-8")):
+                # Fallback: try raw input (older accounts may have accidental whitespace)
+                if not bcrypt.checkpw(raw_password.encode("utf-8"), stored_str.encode("utf-8")):
+                    st.error("Incorrect password.")
+                    _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
+                    return False, None, None
+                else:
+                    # Normalize forward: re-hash stripped password
+                    try:
+                        new_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+                        update_neon_user_password(login_key, new_hash)
+                        user["password"] = new_hash
+                    except Exception:
+                        pass
         else:
             # Legacy plain-text password in DB
-            if stored_str != password:
+            if stored_str != password and stored_str != raw_password:
                 st.error("Incorrect password.")
                 _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
                 return False, None, None
 
-            # Auto-migrate: convert legacy plain-text to bcrypt hash in Neon
+            # Auto-migrate: convert legacy plain-text to bcrypt hash in Neon (normalize to stripped password)
             try:
-                new_hash = bcrypt.hashpw(pwd_bytes, bcrypt.gensalt()).decode("utf-8")
-                update_neon_user_password(username, new_hash)
-                # Optionally update the in-memory user dict so future checks see the hash
+                new_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+                update_neon_user_password(login_key, new_hash)
                 user["password"] = new_hash
             except Exception:
                 # Migration failure should not block a valid login
@@ -304,10 +330,10 @@ def auth_ui():
 
         # Success → create session keys based on user record.
         # Use whatever fields exist in the user dict; fall back where needed.
-        st.session_state["user_id"] = user.get("id") or user.get("user_id") or username
-        st.session_state["username"] = username
+        st.session_state["user_id"] = user.get("id") or user.get("user_id") or login_key
+        st.session_state["username"] = login_key
 
-        display_name = user.get("display_name") or user.get("full_name") or username
+        display_name = user.get("display_name") or user.get("full_name") or login_key
         st.session_state["display_name"] = display_name
 
         if "plan" in user:
@@ -323,7 +349,7 @@ def auth_ui():
         # Remove the login form from the screen after successful login.
         login_placeholder.empty()
         # No success banner to keep the UI clean after login.
-        return True, username, display_name
+        return True, login_key, display_name
 
     return False, None, None
 
