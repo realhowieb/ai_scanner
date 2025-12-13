@@ -97,6 +97,40 @@ def update_neon_user_password(username: str, hashed_password: str) -> None:
         pass
 
 
+# Helper: update a user's display name (full_name) in Neon (best-effort, silent fail)
+def update_neon_user_full_name(username: str, full_name: str) -> None:
+    """Update a user's full_name in Neon. Best-effort: failures are ignored."""
+    try:
+        uname = (username or "").strip().lower()
+        name = (full_name or "").strip()
+        if not uname or not name:
+            return
+
+        conn = get_neon_conn()
+        if conn is None:
+            return
+
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE users SET full_name = %s WHERE username = %s",
+            (name, uname),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        # Clear cached users so login sees updated full_name immediately
+        try:
+            load_users.clear()  # type: ignore[attr-defined]
+        except Exception:
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def create_user_account(
     email: str,
     password_hash: str,
@@ -223,7 +257,7 @@ def find_username_by_display_name(display_name: str) -> str | None:
             SELECT username
             FROM users
             WHERE is_active = TRUE
-              AND LOWER(full_name) = LOWER(%s)
+              AND LOWER(TRIM(full_name)) = LOWER(TRIM(%s))
             ORDER BY created_at DESC NULLS LAST
             LIMIT 1
             """,
