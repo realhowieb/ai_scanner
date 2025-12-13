@@ -1,7 +1,21 @@
 import streamlit as st
 import bcrypt
 import time
+import re
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
+
+# Optional: account creation helpers may exist depending on your db.users implementation.
+try:
+    from db.users import create_user_account  # preferred name
+except Exception:
+    create_user_account = None
+
+try:
+    from db.users import create_neon_user  # alternate name
+except Exception:
+    create_neon_user = None
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def auth_ui():
@@ -30,21 +44,131 @@ def auth_ui():
             st.session_state.pop("login_locked_until", None)
             st.session_state.pop("failed_login_attempts", None)
 
-    def _register_failed_login_attempt():
-        """Increment failed attempts and apply lockout if threshold exceeded."""
-        failed = st.session_state.get("failed_login_attempts", 0) + 1
-        st.session_state["failed_login_attempts"] = failed
-        if failed >= MAX_FAILED_ATTEMPTS:
-            st.session_state["login_locked_until"] = time.time() + LOCKOUT_SECONDS
-
     login_placeholder = st.empty()
     with login_placeholder.container():
-        st.markdown("### 🔐 Login")
-        card = st.container(border=True)
-        with card:
-            username = st.text_input("Username", key="login_username")
-            password = st.text_input("Password", type="password", key="login_password")
-            login_clicked = st.button("Login", key="login_button")
+        tabs = st.tabs(["🔐 Log In", "🧠 Sign Up"])
+
+        # ---- Login tab ----
+        with tabs[0]:
+            st.markdown("### 🔐 Login")
+            card = st.container(border=True)
+            with card:
+                username = st.text_input("Username", key="login_username")
+                password = st.text_input("Password", type="password", key="login_password")
+                login_clicked = st.button("Login", key="login_button")
+
+        # ---- Sign Up tab ----
+        with tabs[1]:
+            st.markdown("### 🧠 Create Your Free Account")
+            st.caption("Start finding breakout opportunities in minutes.")
+
+            signup_card = st.container(border=True)
+            with signup_card:
+                su_email = st.text_input("✉️ Email", key="signup_email", placeholder="you@example.com")
+                su_pw1 = st.text_input("🔒 Password", type="password", key="signup_password_1", placeholder="At least 8 characters")
+                su_pw2 = st.text_input("🔒 Confirm Password", type="password", key="signup_password_2", placeholder="Re-enter password")
+                su_agree = st.checkbox("I agree to use this tool for educational/informational purposes only.", key="signup_agree")
+                signup_clicked = st.button("🟢 Create Free Account", key="signup_button")
+
+            with st.expander("✅ What you get with a free Basic account", expanded=True):
+                st.write("- ✔️ Access to curated breakout scans")
+                st.write("- ✔️ Breakout Score (technical setup quality)")
+                st.write("- ✔️ Interactive charts")
+                st.write("- ✔️ Mobile-friendly results")
+                st.write("- ✔️ No credit card required")
+                st.caption("Upgrade anytime to unlock advanced filters, AI-powered rankings, and export features.")
+
+            st.caption("🔐 Passwords are securely encrypted. We never store plain-text passwords.")
+
+    # ----------------------
+    # Sign Up handling
+    # ----------------------
+    if 'signup_clicked' in locals() and signup_clicked:
+        email_raw = (su_email or "").strip().lower()
+
+        if not email_raw or not EMAIL_RE.match(email_raw):
+            st.error("Please enter a valid email address.")
+            return False, None, None
+
+        if not su_pw1 or len(su_pw1) < 8:
+            st.error("Password must be at least 8 characters.")
+            return False, None, None
+
+        if su_pw1 != su_pw2:
+            st.error("Passwords do not match.")
+            return False, None, None
+
+        if not su_agree:
+            st.error("Please confirm the usage agreement to continue.")
+            return False, None, None
+
+        # Ensure Neon demo users are present; ignore failures.
+        try:
+            seed_neon_users_from_local()
+        except Exception:
+            pass
+
+        try:
+            users = load_users() or {}
+        except Exception as e:
+            st.error(f"Sign up failed while loading users: {e}")
+            return False, None, None
+
+        if email_raw in users:
+            st.error("An account with this email already exists. Please log in instead.")
+            return False, None, None
+
+        # Create bcrypt hash
+        pw_hash = bcrypt.hashpw(su_pw1.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+        # Try to create the user in the DB via whichever helper exists.
+        created_user = None
+        create_fn = create_user_account or create_neon_user
+        if create_fn is None:
+            st.error(
+                "Sign up is not enabled on this deployment yet (missing DB create_user function). "
+                "Ask an admin to enable account creation."
+            )
+            return False, None, None
+
+        try:
+            # Prefer a simple signature: (username/email, password_hash, tier/plan)
+            try:
+                created_user = create_fn(email_raw, pw_hash, tier="basic")
+            except TypeError:
+                try:
+                    created_user = create_fn(username=email_raw, password_hash=pw_hash, tier="basic")
+                except TypeError:
+                    try:
+                        created_user = create_fn(email=email_raw, password_hash=pw_hash, tier="basic")
+                    except TypeError:
+                        # Last-resort: just pass email + hash
+                        created_user = create_fn(email_raw, pw_hash)
+        except Exception as e:
+            st.error(f"Sign up failed: {e}")
+            return False, None, None
+
+        # If db returned nothing, still proceed to login with defaults.
+        user_rec = created_user if isinstance(created_user, dict) else {"password": pw_hash, "tier": "basic"}
+
+        # Create session keys
+        st.session_state["user_id"] = user_rec.get("id") or user_rec.get("user_id") or email_raw
+        st.session_state["username"] = email_raw
+        st.session_state["display_name"] = user_rec.get("display_name", email_raw)
+        st.session_state["tier"] = user_rec.get("tier", "basic")
+        st.session_state["plan"] = user_rec.get("plan", user_rec.get("tier", "basic"))
+        st.session_state["is_admin"] = bool(user_rec.get("is_admin", False))
+
+        # Clear any lockout counters
+        st.session_state.pop("failed_login_attempts", None)
+        st.session_state.pop("login_locked_until", None)
+
+        # Remove the auth UI and rerun into app
+        login_placeholder.empty()
+        if hasattr(st, "rerun"):
+            st.rerun()
+        else:
+            st.experimental_rerun()
 
     if login_clicked:
         if not username or not password:
@@ -137,6 +261,13 @@ def auth_ui():
         login_placeholder.empty()
         # No success banner to keep the UI clean after login.
         return True, username, display_name
+
+    def _register_failed_login_attempt():
+        """Increment failed attempts and apply lockout if threshold exceeded."""
+        failed = st.session_state.get("failed_login_attempts", 0) + 1
+        st.session_state["failed_login_attempts"] = failed
+        if failed >= MAX_FAILED_ATTEMPTS:
+            st.session_state["login_locked_until"] = time.time() + LOCKOUT_SECONDS
 
     return False, None, None
 

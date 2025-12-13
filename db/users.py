@@ -97,6 +97,104 @@ def update_neon_user_password(username: str, hashed_password: str) -> None:
         pass
 
 
+def create_user_account(
+    email: str,
+    password_hash: str,
+    tier: str = "basic",
+    full_name: str | None = None,
+) -> Dict[str, Any]:
+    """Create a new user in Neon (preferred) and return a user record.
+
+    This is used by the Sign Up flow. Users always start as `basic` unless an admin
+    later upgrades them.
+
+    Args:
+        email: Email/username (stored as `username` in DB)
+        password_hash: bcrypt hash string
+        tier: initial tier (defaults to 'basic')
+        full_name: optional display name
+
+    Returns:
+        dict with keys at least: username, display_name, tier, is_admin
+
+    Raises:
+        ValueError if email is invalid/empty or already exists.
+        RuntimeError if Neon is unavailable.
+    """
+    username = (email or "").strip().lower()
+    if not username:
+        raise ValueError("email is required")
+
+    # Normalize tier (defensive)
+    tier_key = (tier or "basic").strip().lower()
+    if tier_key not in {"basic", "pro", "premium", "admin"}:
+        tier_key = "basic"
+
+    display_name = (full_name or username).strip() or username
+
+    conn = get_neon_conn()
+    if conn is None:
+        raise RuntimeError("Neon DB is not available")
+
+    ensure_neon_users_schema(conn)
+    cur = conn.cursor()
+
+    # Ensure uniqueness
+    cur.execute("SELECT 1 FROM users WHERE username = %s", (username,))
+    if cur.fetchone() is not None:
+        cur.close()
+        conn.close()
+        raise ValueError("user already exists")
+
+    # Insert (created_at is handled by schema default if present)
+    cur.execute(
+        """
+        INSERT INTO users (username, full_name, password, tier, is_active)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (username, display_name, password_hash, tier_key, True),
+    )
+    conn.commit()
+
+    # Fetch the record back (best-effort)
+    cur.execute(
+        """
+        SELECT username, full_name, tier, is_active
+        FROM users
+        WHERE username = %s
+        """,
+        (username,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not row:
+        return {
+            "username": username,
+            "display_name": display_name,
+            "tier": tier_key,
+            "is_admin": tier_key == "admin",
+        }
+
+    # tuple-like fetch
+    u = row[0]
+    n = row[1]
+    t = (row[2] or "basic").strip().lower()
+
+    return {
+        "username": u,
+        "display_name": n or u,
+        "tier": t,
+        "is_admin": t == "admin",
+    }
+
+
+def create_neon_user(*args, **kwargs) -> Dict[str, Any]:
+    """Backward-compatible alias for older call sites."""
+    return create_user_account(*args, **kwargs)
+
+
 @st.cache_data(show_spinner=False, ttl=300)
 def load_users() -> Dict[str, Dict[str, Any]]:
     """
