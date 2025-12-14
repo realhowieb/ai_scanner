@@ -113,7 +113,7 @@ from ui.scans import render_scan_controls, render_three_step_scanner
 from ui.universe_panel import render_universe_panel, init_universe_state
 from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
-from auth.tiering_utils import derive_tier_flags
+## from auth.tiering_utils import derive_tier_flags
 from ui.header import render_header
 from ui.prebreakout_tab import render_prebreakout_tab
 from ui.footer import render_footer
@@ -180,6 +180,52 @@ def _tier_key(tier_obj: object | None) -> str:
         pass
 
     return _norm_lower(tier_obj) or "basic"
+
+
+# --------------- Entitlements (Centralized) ----------------
+# Define the minimum tier required for each feature.
+FEATURE_MIN_TIER: dict[str, str] = {
+    # scans
+    "can_scan_sp500": "basic",
+    "can_scan_nasdaq": "pro",
+
+    # results
+    "can_export_csv": "pro",
+    "can_ai_notes": "basic",
+
+    # pro features
+    "can_scan_history": "pro",
+
+    # premium-only
+    "can_early_breakout": "premium",
+    "can_full_universe": "premium",
+
+    # admin-only
+    "can_diagnostics": "admin",
+    "can_admin_panel": "admin",
+}
+
+
+def compute_entitlements(*, tier_obj: object | None, is_admin: bool) -> dict[str, bool]:
+    """Central, deterministic feature flags based on tier."""
+    flags: dict[str, bool] = {}
+
+    # Admin overrides everything
+    if bool(is_admin):
+        for k in FEATURE_MIN_TIER.keys():
+            flags[k] = True
+        return flags
+
+    for feature, min_tier in FEATURE_MIN_TIER.items():
+        if min_tier == "admin":
+            flags[feature] = False
+            continue
+        try:
+            flags[feature] = bool(has_min_tier(tier_obj, min_tier))
+        except Exception:
+            flags[feature] = False
+
+    return flags
 
 
 # Day 6: Upgrade CTA card for Basic users only
@@ -846,15 +892,15 @@ def main():
     is_admin = _is_admin_user(username, tier)
     tier_key = _tier_key(tier)
 
-    flags = derive_tier_flags(tier)
-    # Defensive clamp: CSV export is Pro/Premium only
-    flags["can_export_csv"] = bool(has_min_tier(tier, "pro"))
+    # Day 6 – Item 2: centralized entitlements
+    flags = compute_entitlements(tier_obj=tier, is_admin=is_admin)
     tier_name = "Admin" if is_admin else getattr(tier, "name", tier_key)
 
     # Persist tier + flags in session for downstream UI modules
     st.session_state["tier"] = tier
     st.session_state["tier_key"] = tier_key
     st.session_state["is_admin"] = bool(is_admin)
+    st.session_state["entitlements"] = dict(flags)
 
     render_onboarding_hint(username, tier_name=tier_name)
 
@@ -940,7 +986,7 @@ def main():
 
     # Pre-clamp diagnostics BEFORE filters render widgets.
     # Streamlit forbids mutating widget-bound session_state keys after widget creation.
-    if not bool(st.session_state.get("is_admin")):
+    if not flags.get("can_diagnostics"):
         st.session_state["show_diagnostics_ui"] = False
 
     # -------- Filters --------
@@ -960,7 +1006,7 @@ def main():
         apply_gap_filter,
     ) = render_filters(tier)
     # Enforce admin-only diagnostics (even if UI/modules accidentally expose it)
-    if not bool(st.session_state.get("is_admin")):
+    if not flags.get("can_diagnostics"):
         diagnostics = False
     render_active_filters_summary(
         tier=tier,
@@ -1044,23 +1090,23 @@ def main():
     df = get_results_df()
     rows = 0 if df is None else len(df)
 
-    # Build tabs dynamically based on tier:
+    # Build tabs dynamically based on entitlements:
     # - Basic: only Latest Results
-    # - Pro+ : Latest Results + Early Breakout Candidates + Scan History
-    if has_min_tier(tier, "pro"):
-        tab1, tab2, tab3 = st.tabs(
-            [
-                f"📊 Latest scan results ({rows} rows)",
-                "🔮 Early Breakout Candidates",
-                "📚 Scan History",
-            ]
-        )
+    # - Pro  : Latest Results + Scan History
+    # - Premium/Admin: Latest Results + Early Breakout Candidates + Scan History
+    if flags.get("can_scan_history") or flags.get("can_early_breakout"):
+        tab_names = [f"📊 Latest scan results ({rows} rows)"]
+        if flags.get("can_early_breakout"):
+            tab_names.append("🔮 Early Breakout Candidates")
+        if flags.get("can_scan_history"):
+            tab_names.append("📚 Scan History")
+
+        tabs = st.tabs(tab_names)
+        tab1 = tabs[0]
+        tab2 = tabs[1] if flags.get("can_early_breakout") else None
+        tab3 = tabs[-1] if flags.get("can_scan_history") else None
     else:
-        (tab1,) = st.tabs(
-            [
-                f"📊 Latest scan results ({rows} rows)",
-            ]
-        )
+        (tab1,) = st.tabs([f"📊 Latest scan results ({rows} rows)"])
         tab2 = None
         tab3 = None
 
@@ -1086,8 +1132,8 @@ def main():
 
     if tab2 is not None:
         with tab2:
-            # Pro+ only: Basic users cannot access Early Breakout Candidates
-            if require_min_tier(tier, "pro", "Early Breakout Candidates"):
+            # Premium-only: Basic/Pro users cannot access Early Breakout Candidates
+            if require_min_tier(tier, "premium", "Early Breakout Candidates"):
                 render_prebreakout_tab()
 
     if tab3 is not None:
@@ -1103,7 +1149,7 @@ def main():
     render_universe_panel()
 
     # -------- Admin Panel (Admin only) --------
-    if bool(st.session_state.get("is_admin")):
+    if flags.get("can_admin_panel"):
         render_admin_users_panel(username, ADMIN_USERS, db_status)
 
     # -------- Pricing (Load Last) --------
