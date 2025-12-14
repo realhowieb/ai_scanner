@@ -3,7 +3,7 @@
 from typing import Tuple
 
 import streamlit as st
-from auth.tiering import has_min_tier
+from auth.tiering import has_min_tier  # fallback only; entitlements are preferred
 
 
 def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool, bool, bool, float, bool, bool]:
@@ -27,6 +27,23 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         )
     """
     st.sidebar.markdown("## Filters")
+    # Centralized entitlements (preferred). Fallback to tier checks if missing.
+    ent = st.session_state.get("entitlements") or {}
+
+    def _entitled(feature: str, *, fallback_min_tier: str | None = None) -> bool:
+        v = ent.get(feature)
+        if v is not None:
+            return bool(v)
+        if fallback_min_tier is None:
+            return False
+        try:
+            return bool(has_min_tier(tier, fallback_min_tier))
+        except Exception:
+            return False
+
+    is_pro_plus = _entitled("can_scan_nasdaq", fallback_min_tier="pro")
+    is_premium_plus = _entitled("can_full_universe", fallback_min_tier="premium")
+    can_diagnostics = _entitled("can_diagnostics", fallback_min_tier=None)
     # Seed defaults from session_state if present (loaded from user_settings)
     default_min_gap = float(st.session_state.get("min_gap", 1.0))
     default_min_price = float(st.session_state.get("min_price", 1.0))
@@ -48,7 +65,6 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         st.session_state["min_gap"] = default_min_gap
 
     # Pro+ tiers get advanced filters (TA + Gap); Basic sees them disabled.
-    is_pro_plus = has_min_tier(tier, "pro")
 
     min_gap_disabled = (not is_pro_plus) or (not st.session_state.get("apply_gap_filter", False))
 
@@ -104,9 +120,9 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
 
     # Tier-based cap for how many NASDAQ tickers can be scanned
     # Basic: 1000, Pro: 4000, Premium+ (and higher): 6000
-    if has_min_tier(tier, "premium"):
+    if is_premium_plus:
         nasdaq_cap = 6000
-    elif has_min_tier(tier, "pro"):
+    elif is_pro_plus:
         nasdaq_cap = 4000
     else:
         nasdaq_cap = 1000
@@ -132,7 +148,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             current_max_nasdaq = 100
         st.session_state["max_nasdaq_scan"] = current_max_nasdaq
 
-    if getattr(tier, "key", "") == "basic":
+    if not is_pro_plus:
         max_nasdaq_scan = st.sidebar.number_input(
             "Max NASDAQ tickers to scan",
             min_value=100,
@@ -160,7 +176,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     if "max_combo_scan" not in st.session_state:
         st.session_state["max_combo_scan"] = default_max_combo_scan
 
-    if getattr(tier, "key", "") == "basic":
+    if not is_pro_plus:
         max_combo_scan = st.sidebar.number_input(
             "Max Combo tickers to scan",
             min_value=100,
@@ -288,7 +304,11 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     diagnostics = st.sidebar.checkbox(
         "Show diagnostics",
         key="show_diagnostics_ui",
+        disabled=not can_diagnostics,
     )
+    if not can_diagnostics:
+        st.sidebar.caption("🔒 Admin feature")
+        st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
     return (
         float(min_gap),

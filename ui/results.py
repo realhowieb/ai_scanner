@@ -41,6 +41,13 @@ def render_results(
         st.caption("Run a scan to see results.")
         return
 
+    # Centralized entitlements (preferred). If present, they override passed flags.
+    ent = st.session_state.get("entitlements") or {}
+    if ent:
+        can_export_csv = bool(ent.get("can_export_csv", can_export_csv))
+        # Treat AI Notes as Premium-only; fall back to passed flag if not present.
+        can_ai_notes = bool(ent.get("can_ai_notes", can_ai_notes))
+
     # Optional Live Mode: user-controlled auto-refresh every 10s for the results table
     if st_autorefresh is not None:
         live_results = st.checkbox(
@@ -244,7 +251,7 @@ def render_results(
             use_container_width=False,
         )
     else:
-        st.info("CSV export is available on Pro/Premium.")
+        st.info("🔒 Pro feature — export scan results to CSV")
 
     # Chart picker
     st.subheader("Charts")
@@ -258,7 +265,8 @@ def render_results(
 
     # AI notes (tier-gated)
     if can_ai_notes:
-        st.subheader("AI Notes (Premium)")
+        st.subheader("AI Notes")
+        st.caption("⭐ Premium feature")
         try:
             # Use the same ticker the user selected for the chart
             row = df[df["Ticker"] == pick].iloc[0]
@@ -272,4 +280,4 @@ def render_results(
         except Exception:
             st.caption("AI notes are unavailable for the selected row.")
     else:
-        st.caption("AI Notes are Premium-only.")
+        st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
