@@ -37,10 +37,22 @@ print(
 
 
 # ---------- DB helpers ----------
+
+def _normalize_db_url(url: str) -> str:
+    u = (url or "").strip()
+    if not u:
+        return u
+    # If sslmode is already present, keep it.
+    if "sslmode=" in u:
+        return u
+    # Append sslmode=require
+    if "?" in u:
+        return u + "&sslmode=require"
+    return u + "?sslmode=require"
 def _db_conn():
     if not DATABASE_URL:
         raise RuntimeError("Missing DATABASE_URL env var")
-    return psycopg2.connect(DATABASE_URL)
+    return psycopg2.connect(_normalize_db_url(DATABASE_URL), connect_timeout=8)
 
 
 def _set_user_plan_by_email(
@@ -85,16 +97,23 @@ def _set_user_plan_by_email(
 
 def _get_user_by_email(email: str) -> dict:
     email_key = (email or "").strip().lower()
-    with _db_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT username, tier, stripe_customer_id FROM users WHERE username = %s LIMIT 1",
-                (email_key,),
-            )
-            row = cur.fetchone()
-    if not row:
+    if not email_key:
         return {}
-    return {"username": row[0], "tier": row[1], "stripe_customer_id": row[2]}
+    try:
+        with _db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT username, tier, stripe_customer_id FROM users WHERE username = %s LIMIT 1",
+                    (email_key,),
+                )
+                row = cur.fetchone()
+        if not row:
+            return {}
+        return {"username": row[0], "tier": row[1], "stripe_customer_id": row[2]}
+    except Exception as e:
+        # DB issues should not block checkout creation.
+        print(f"[billing_service] DB lookup failed for {email_key}: {e}")
+        return {}
 
 
 def _price_to_plan(price_id: str) -> str:
@@ -109,6 +128,36 @@ def _price_to_plan(price_id: str) -> str:
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/debug/status")
+def debug_status():
+    # Do not return secrets; only whether they are set.
+    status = {
+        "ok": True,
+        "env": {
+            "STRIPE_SECRET_KEY": bool(STRIPE_SECRET_KEY),
+            "STRIPE_WEBHOOK_SECRET": bool(STRIPE_WEBHOOK_SECRET),
+            "STRIPE_PRICE_PRO": bool(STRIPE_PRICE_PRO),
+            "STRIPE_PRICE_PREMIUM": bool(STRIPE_PRICE_PREMIUM),
+            "APP_SUCCESS_URL": bool(APP_SUCCESS_URL),
+            "APP_CANCEL_URL": bool(APP_CANCEL_URL),
+            "DATABASE_URL": bool(DATABASE_URL),
+        },
+        "db": {"reachable": False, "error": None},
+    }
+
+    if DATABASE_URL:
+        try:
+            with _db_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                    cur.fetchone()
+            status["db"]["reachable"] = True
+        except Exception as e:
+            status["db"]["error"] = str(e)[:200]
+
+    return status
 
 
 @app.post("/create-checkout-session")
@@ -135,7 +184,7 @@ async def create_checkout_session(payload: dict):
     price_id = STRIPE_PRICE_PRO if plan == "pro" else STRIPE_PRICE_PREMIUM
 
     # Use existing customer if we have it
-    user = _get_user_by_email(email)
+    user = _get_user_by_email(email)  # safe: returns {} on DB failure
     customer_id = user.get("stripe_customer_id") if user else None
 
     try:
@@ -154,7 +203,9 @@ async def create_checkout_session(payload: dict):
         )
         return {"checkout_url": session.url}
     except Exception as e:
-        raise HTTPException(500, f"Stripe error: {e}")
+        # Surface the message so curl shows something useful.
+        print(f"[billing_service] create-checkout-session failed: {e}")
+        raise HTTPException(500, f"Create checkout session failed: {e}")
 
 
 @app.post("/create-portal-session")
