@@ -25,6 +25,15 @@ if not STRIPE_SECRET_KEY:
     raise RuntimeError("Missing STRIPE_SECRET_KEY env var")
 
 stripe.api_key = STRIPE_SECRET_KEY
+print(
+    "[billing_service] starting | "
+    f"prices: pro={'set' if bool(STRIPE_PRICE_PRO) else 'missing'}, "
+    f"premium={'set' if bool(STRIPE_PRICE_PREMIUM) else 'missing'} | "
+    f"db={'set' if bool(DATABASE_URL) else 'missing'} | "
+    f"success_url={'set' if bool(APP_SUCCESS_URL) else 'missing'} | "
+    f"cancel_url={'set' if bool(APP_CANCEL_URL) else 'missing'} | "
+    f"webhook_secret={'set' if bool(STRIPE_WEBHOOK_SECRET) else 'missing'}"
+)
 
 
 # ---------- DB helpers ----------
