@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 import streamlit as st
+from types import SimpleNamespace
 
 # Ensure project base directory importable
 BASE_DIR = Path(__file__).resolve().parent
@@ -935,22 +936,33 @@ def main():
         except Exception:
             # Last resort: keep computed tier
             pass
+
     is_admin = _is_admin_user(username, tier)
-    tier_key = _tier_key(tier)
+
+    # DB is source of truth for the tier key. If Enum conversion failed, still honor DB.
+    tier_key = (forced_tier_key or _tier_key(tier) or "basic").strip().lower()
 
     # If DB-forced tier differs from what was previously stored in session, drop cached flags.
-    # (This complements the earlier cache drop and covers first-time upgrades.)
     if forced_tier_key:
         prev_key = (st.session_state.get("tier_key") or "").strip().lower()
-        if prev_key and prev_key != forced_tier_key:
+        if prev_key and prev_key != tier_key:
             st.session_state.pop("entitlements", None)
 
+    # If the tier object doesn't reflect the DB tier key, build a tiny proxy for gating.
+    # This guarantees entitlements update immediately without requiring logout/login.
+    tier_for_flags = tier
+    try:
+        if forced_tier_key and _tier_key(tier) != tier_key:
+            tier_for_flags = SimpleNamespace(key=tier_key, name=tier_key.upper())
+    except Exception:
+        tier_for_flags = SimpleNamespace(key=tier_key, name=tier_key.upper())
+
     # Day 6 – Item 2: centralized entitlements
-    flags = compute_entitlements(tier_obj=tier, is_admin=is_admin)
-    tier_name = "Admin" if is_admin else getattr(tier, "name", tier_key)
+    flags = compute_entitlements(tier_obj=tier_for_flags, is_admin=is_admin)
+    tier_name = "Admin" if is_admin else tier_key.upper()
 
     # Persist tier + flags in session for downstream UI modules
-    st.session_state["tier"] = tier
+    st.session_state["tier"] = tier_for_flags
     st.session_state["tier_key"] = tier_key
     st.session_state["is_admin"] = bool(is_admin)
     st.session_state["entitlements"] = dict(flags)
@@ -1040,6 +1052,8 @@ def main():
     st.sidebar.markdown(
         f"**Plan:** `{ 'Admin' if bool(st.session_state.get('is_admin')) else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`"
     )
+    if bool(st.session_state.get("is_admin")):
+        st.sidebar.caption(f"debug: db_tier={forced_tier_key or '-'} session_tier_key={st.session_state.get('tier_key')}")
     # Day 6: Upgrade CTA card (Basic users only)
     render_sidebar_upgrade_card(tier)
 
