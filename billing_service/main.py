@@ -49,12 +49,9 @@ def _normalize_db_url(url: str) -> str:
     if "?" in u:
         return u + "&sslmode=require"
     return u + "?sslmode=require"
-def _db_conn():
-    if not DATABASE_URL:
-        raise RuntimeError("Missing DATABASE_URL env var")
-    return psycopg2.connect(_normalize_db_url(DATABASE_URL), connect_timeout=8)
 
-
+# NOTE: This assumes users.username == email (lowercase).
+# If you later decouple username/email, update this to match on a dedicated email column.
 def _set_user_plan_by_email(
     *,
     email: str,
@@ -92,7 +89,15 @@ def _set_user_plan_by_email(
                     email_key,
                 ),
             )
+            if cur.rowcount == 0:
+                print(f"[billing_service][WARN] No user row updated for email={email_key}")
         conn.commit()
+
+
+def _db_conn():
+    if not DATABASE_URL:
+        raise RuntimeError("Missing DATABASE_URL env var")
+    return psycopg2.connect(_normalize_db_url(DATABASE_URL), connect_timeout=8)
 
 
 def _get_user_by_email(email: str) -> dict:
@@ -251,7 +256,13 @@ async def stripe_webhook(request: Request):
 
     # 1) Initial checkout completion
     if etype == "checkout.session.completed":
-        email = (data.get("metadata", {}) or {}).get("user_email") or ""
+        email = (
+            (data.get("metadata", {}) or {}).get("user_email")
+            or (data.get("customer_details") or {}).get("email")
+            or data.get("customer_email")
+            or ""
+        )
+        email = email.strip().lower()
         customer_id = data.get("customer")
         subscription_id = data.get("subscription")
 
