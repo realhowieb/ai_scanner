@@ -866,6 +866,11 @@ def main():
         # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
 
+    # Normalize and persist username for downstream modules (billing/settings rely on this)
+    username = (username or "").strip().lower()
+    if username:
+        st.session_state["username"] = username
+
     # At this point, auth_ui has decided we're logged in.
     # The login form might still be in the DOM for this rerun, so hide it with CSS.
     st.markdown(
@@ -888,6 +893,30 @@ def main():
     render_header()
     # -------- Load Users + Tier --------
     users_map = load_users()
+
+    # Re-sync tier from DB (Stripe webhook updates DB; session may be stale until this runs)
+    try:
+        from db.users import get_user_by_username  # type: ignore
+
+        u = get_user_by_username(username)
+        db_tier = (u.get("tier") if isinstance(u, dict) else None)
+        if db_tier:
+            db_tier_key = str(db_tier).strip().lower()
+            if db_tier_key:
+                # Ensure users_map reflects latest tier so get_user_tier() resolves correctly.
+                if isinstance(users_map, dict):
+                    if username not in users_map:
+                        users_map[username] = {}
+                    if isinstance(users_map.get(username), dict):
+                        users_map[username]["tier"] = db_tier_key
+
+                # If the tier changed since last render, invalidate cached entitlements so UI unlocks immediately.
+                prev = (st.session_state.get("tier_key") or "").strip().lower()
+                if prev and prev != db_tier_key:
+                    st.session_state.pop("entitlements", None)
+    except Exception:
+        pass
+
     tier = get_user_tier(username, users_map)
     is_admin = _is_admin_user(username, tier)
     tier_key = _tier_key(tier)
