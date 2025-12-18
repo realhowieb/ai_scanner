@@ -1,4 +1,42 @@
+import os
 import streamlit as st
+import requests
+
+# Stripe billing backend (Render)
+BILLING_API_BASE = os.getenv("BILLING_API_BASE", "https://ai-scanner-h2c8.onrender.com").strip()
+
+
+def _logged_in_email() -> str:
+    # In this app, username is the email
+    return (st.session_state.get("username") or st.session_state.get("user") or "").strip().lower()
+
+
+def _create_checkout_url(*, email: str, plan: str) -> str:
+    r = requests.post(
+        f"{BILLING_API_BASE}/create-checkout-session",
+        json={"email": email, "plan": plan},
+        timeout=25,
+    )
+    r.raise_for_status()
+    data = r.json() or {}
+    url = (data.get("checkout_url") or "").strip()
+    if not url:
+        raise RuntimeError("Billing service did not return checkout_url")
+    return url
+
+
+def _create_portal_url(*, email: str) -> str:
+    r = requests.post(
+        f"{BILLING_API_BASE}/create-portal-session",
+        json={"email": email},
+        timeout=25,
+    )
+    r.raise_for_status()
+    data = r.json() or {}
+    url = (data.get("portal_url") or "").strip()
+    if not url:
+        raise RuntimeError("Billing service did not return portal_url")
+    return url
 
 
 def _current_plan_label(tier_key: str) -> str:
@@ -43,6 +81,22 @@ def _benefits_block() -> None:
 def _upgrade_buttons(current_tier: str) -> None:
     focus = (st.session_state.get("pricing_focus") or "").strip().lower()
 
+    email = _logged_in_email()
+    if not email or "@" not in email:
+        st.warning("Please sign in (create an account) before upgrading. Upgrades are tied to your account.")
+        return
+
+    # If we already created a checkout link in this session, show it.
+    checkout_url = (st.session_state.get("checkout_url") or "").strip()
+    if checkout_url:
+        st.success("Checkout created ✅")
+        st.link_button("➡️ Continue to Stripe Checkout", checkout_url, use_container_width=True)
+        st.caption("After payment, return to the app and refresh (or log out/in) to see your updated plan.")
+        if st.button("Clear checkout link", key="billing_clear_checkout", use_container_width=True):
+            st.session_state.pop("checkout_url", None)
+            st.rerun()
+        st.divider()
+
     col_pro, col_premium = st.columns(2)
 
     with col_pro:
@@ -51,10 +105,19 @@ def _upgrade_buttons(current_tier: str) -> None:
         if current_tier in ("pro", "premium", "admin"):
             st.success("You already have Pro (or higher).")
         else:
-            if st.button("Upgrade to Pro", key="billing_upgrade_pro", use_container_width=True, type="primary" if focus == "pro" else "secondary"):
-                # Day 6: UI only. Day 7+: wire to Stripe or upgrade codes.
-                st.session_state["upgrade_to"] = "pro"
-                st.toast("Pro upgrade flow coming next (billing wiring).", icon="💳")
+            if st.button(
+                "Upgrade to Pro",
+                key="billing_upgrade_pro",
+                use_container_width=True,
+                type="primary" if focus == "pro" else "secondary",
+            ):
+                try:
+                    st.session_state["pricing_focus"] = "pro"
+                    st.session_state["checkout_url"] = _create_checkout_url(email=email, plan="pro")
+                    st.toast("Checkout created — continue to Stripe.", icon="💳")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Could not start checkout: {e}")
 
     with col_premium:
         st.markdown("### ⭐ Premium")
@@ -62,10 +125,19 @@ def _upgrade_buttons(current_tier: str) -> None:
         if current_tier in ("premium", "admin"):
             st.success("You already have Premium (or Admin).")
         else:
-            if st.button("Upgrade to Premium", key="billing_upgrade_premium", use_container_width=True, type="primary" if focus == "premium" else "secondary"):
-                # Day 6: UI only. Day 7+: wire to Stripe or upgrade codes.
-                st.session_state["upgrade_to"] = "premium"
-                st.toast("Premium upgrade flow coming next (billing wiring).", icon="💳")
+            if st.button(
+                "Upgrade to Premium",
+                key="billing_upgrade_premium",
+                use_container_width=True,
+                type="primary" if focus == "premium" else "secondary",
+            ):
+                try:
+                    st.session_state["pricing_focus"] = "premium"
+                    st.session_state["checkout_url"] = _create_checkout_url(email=email, plan="premium")
+                    st.toast("Checkout created — continue to Stripe.", icon="💳")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Could not start checkout: {e}")
 
 
 def render_billing_page() -> None:
@@ -76,6 +148,15 @@ def render_billing_page() -> None:
     current_label = _current_plan_label(tier_key)
 
     st.info(f"You’re currently on **{current_label}**.")
+
+    email = _logged_in_email()
+    if email and current_label in ("Pro", "Premium"):
+        if st.button("Manage subscription", key="billing_manage", use_container_width=True):
+            try:
+                portal_url = _create_portal_url(email=email)
+                st.link_button("Open Stripe Customer Portal", portal_url, use_container_width=True)
+            except Exception as e:
+                st.error(f"Could not open billing portal: {e}")
 
     _pricing_table()
     _benefits_block()
@@ -88,6 +169,7 @@ def render_billing_page() -> None:
         # Clear pricing open flags so the sidebar doesn't keep showing the cue
         st.session_state.pop("show_pricing", None)
         st.session_state.pop("pricing_focus", None)
+        st.session_state.pop("checkout_url", None)
         st.switch_page("app.py")
 
 
