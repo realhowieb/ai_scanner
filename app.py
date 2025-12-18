@@ -894,6 +894,9 @@ def main():
     # -------- Load Users + Tier --------
     users_map = load_users()
 
+    # DB is the source of truth for tier (Stripe webhook updates DB; users_map can be stale)
+    forced_tier_key: str | None = None
+
     # Re-sync tier from DB (Stripe webhook updates DB; session may be stale until this runs)
     try:
         from db.users import get_user_by_username  # type: ignore
@@ -901,25 +904,46 @@ def main():
         u = get_user_by_username(username)
         db_tier = (u.get("tier") if isinstance(u, dict) else None)
         if db_tier:
-            db_tier_key = str(db_tier).strip().lower()
-            if db_tier_key:
-                # Ensure users_map reflects latest tier so get_user_tier() resolves correctly.
-                if isinstance(users_map, dict):
-                    if username not in users_map:
-                        users_map[username] = {}
-                    if isinstance(users_map.get(username), dict):
-                        users_map[username]["tier"] = db_tier_key
+            forced_tier_key = str(db_tier).strip().lower() or None
 
-                # If the tier changed since last render, invalidate cached entitlements so UI unlocks immediately.
-                prev = (st.session_state.get("tier_key") or "").strip().lower()
-                if prev and prev != db_tier_key:
-                    st.session_state.pop("entitlements", None)
+            # Keep users_map in sync for any legacy code paths that still read it
+            if forced_tier_key and isinstance(users_map, dict):
+                if username not in users_map:
+                    users_map[username] = {}
+                if isinstance(users_map.get(username), dict):
+                    users_map[username]["tier"] = forced_tier_key
+
+            # If the tier changed since last render, invalidate cached entitlements so UI unlocks immediately.
+            prev = (st.session_state.get("tier_key") or "").strip().lower()
+            if forced_tier_key and prev and prev != forced_tier_key:
+                st.session_state.pop("entitlements", None)
     except Exception:
-        pass
+        forced_tier_key = None
 
     tier = get_user_tier(username, users_map)
+
+    # IMPORTANT: Override tier object if DB says we are Pro/Premium/etc.
+    # This prevents stale users_map/tiering cache from requiring logout/login.
+    if forced_tier_key:
+        try:
+            # Prefer Enum member lookup (Tier.PRO, Tier.PREMIUM, etc.)
+            if hasattr(Tier, "__members__") and forced_tier_key.upper() in getattr(Tier, "__members__"):
+                tier = Tier[forced_tier_key.upper()]  # type: ignore[index]
+            else:
+                # Fallback: Enum values may be strings
+                tier = Tier(forced_tier_key)  # type: ignore[call-arg]
+        except Exception:
+            # Last resort: keep computed tier
+            pass
     is_admin = _is_admin_user(username, tier)
     tier_key = _tier_key(tier)
+
+    # If DB-forced tier differs from what was previously stored in session, drop cached flags.
+    # (This complements the earlier cache drop and covers first-time upgrades.)
+    if forced_tier_key:
+        prev_key = (st.session_state.get("tier_key") or "").strip().lower()
+        if prev_key and prev_key != forced_tier_key:
+            st.session_state.pop("entitlements", None)
 
     # Day 6 – Item 2: centralized entitlements
     flags = compute_entitlements(tier_obj=tier, is_admin=is_admin)
