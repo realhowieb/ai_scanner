@@ -180,7 +180,7 @@ def _upgrade_buttons(current_tier: str) -> None:
     if checkout_url:
         st.success("Checkout created ✅")
         st.link_button("➡️ Continue to Stripe Checkout", checkout_url, use_container_width=True)
-        st.caption("After payment, return to the app and refresh (or log out/in) to see your updated plan.")
+        st.caption("After payment, you’ll return here and your plan will sync automatically.")
         if st.button("Clear checkout link", key="billing_clear_checkout", use_container_width=True):
             st.session_state.pop("checkout_url", None)
             st.rerun()
@@ -248,10 +248,20 @@ def render_billing_page() -> None:
 
     st.info(f"Upgrading account: **{email}**")
 
-    # Auto-refresh plan after Stripe redirect (e.g., ?checkout=success)
+    # Stripe redirect status (e.g., ?checkout=success or ?checkout=cancel)
     checkout_status = (st.query_params.get("checkout") or "").strip().lower()
+
+    if checkout_status == "cancel":
+        st.info("Checkout canceled — no charges were made. You can upgrade anytime.")
+        # Clear param so the banner doesn't persist
+        try:
+            st.query_params.pop("checkout", None)
+        except Exception:
+            pass
+        st.divider()
+
     if checkout_status == "success":
-        st.success("Payment received ✅ Syncing your plan…")
+        st.success("🎉 Upgrade complete! Syncing your plan…")
 
         # Avoid infinite reruns if DB/webhook is still catching up
         if not st.session_state.get("post_checkout_refreshed"):
@@ -265,7 +275,7 @@ def render_billing_page() -> None:
                     pass
                 st.rerun()
             else:
-                st.info("Still syncing… If this persists, refresh in a few seconds or log out/in.")
+                st.info("Still syncing… If this persists, wait a few seconds and click ‘Refresh plan now’. ")
 
         # Give users a manual retry button as well
         if st.button("🔄 Refresh plan now", key="billing_refresh_plan", use_container_width=True):

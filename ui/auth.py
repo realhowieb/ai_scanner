@@ -118,6 +118,27 @@ def _lookup_email_by_display_username(display_username: str) -> str | None:
 
 
 def auth_ui():
+    # If Stripe redirects back with ?checkout=success but this Streamlit session isn't authenticated,
+    # it usually means the success/cancel URL is pointing at a different deployment (domain) than
+    # the one that initiated checkout, so session_state is empty here.
+    try:
+        checkout_flag = (st.query_params.get("checkout") or "").strip().lower()
+    except Exception:
+        checkout_flag = ""
+
+    if "username" not in st.session_state and checkout_flag in ("success", "cancel"):
+        if checkout_flag == "success":
+            st.info(
+                "Payment completed ✅ — please log in to unlock your upgraded plan. "
+                "If you keep landing here after checkout, update your billing service env vars "
+                "APP_SUCCESS_URL / APP_CANCEL_URL to THIS deployment’s URL so Stripe redirects back "
+                "to the same app instance."
+            )
+        else:
+            st.info(
+                "Checkout was cancelled. You can log in and try upgrading again anytime."
+            )
+
     if "username" in st.session_state:
         username = st.session_state["username"]
         display_name = st.session_state.get("display_name", username)
