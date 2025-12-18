@@ -7,8 +7,9 @@ BILLING_API_BASE = os.getenv("BILLING_API_BASE", "https://ai-scanner-h2c8.onrend
 
 
 def _logged_in_email() -> str:
-    # In this app, username is the email
-    return (st.session_state.get("username") or st.session_state.get("user") or "").strip().lower()
+    # Lock billing to the authenticated account. Do NOT fall back to any other session keys.
+    # In this app, username is the email.
+    return (st.session_state.get("username") or "").strip().lower()
 
 
 def _create_checkout_url(*, email: str, plan: str) -> str:
@@ -150,7 +151,13 @@ def render_billing_page() -> None:
     st.info(f"You’re currently on **{current_label}**.")
 
     email = _logged_in_email()
-    if email and current_label in ("Pro", "Premium"):
+    if not email or "@" not in email:
+        st.warning("Please sign in before upgrading. Upgrades are tied to your account.")
+        st.stop()
+
+    st.info(f"Upgrading account: **{email}**")
+
+    if current_label in ("Pro", "Premium"):
         if st.button("Manage subscription", key="billing_manage", use_container_width=True):
             try:
                 portal_url = _create_portal_url(email=email)
@@ -173,6 +180,5 @@ def render_billing_page() -> None:
         st.switch_page("app.py")
 
 
-# If this file is used as a Streamlit multipage app page, render immediately.
-if __name__ == "__main__" or st._is_running_with_streamlit:
-    render_billing_page()
+# Streamlit runs scripts top-to-bottom; render immediately.
+render_billing_page()
