@@ -2,7 +2,16 @@ import streamlit as st
 import bcrypt
 import time
 import re
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
+
+# Cookie-based persistent sessions (recommended)
+try:
+    from streamlit_cookies_manager import EncryptedCookieManager
+except Exception:
+    EncryptedCookieManager = None
 
 # Direct Neon lookup fallback for username -> email mapping
 try:
@@ -34,7 +43,143 @@ try:
 except Exception:
     create_neon_user = None
 
+
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+# -------------------- Cookie sessions (Neon-backed) --------------------
+COOKIE_PREFIX = os.environ.get("COOKIE_PREFIX", "ai_scanner")
+COOKIE_NAME = os.environ.get("COOKIE_NAME", f"{COOKIE_PREFIX}_sid")
+COOKIE_PASSWORD = os.environ.get("COOKIE_PASSWORD", "change-me")
+
+
+def _cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
+    """Return cookie manager if available+ready; otherwise show guidance and stop."""
+    if EncryptedCookieManager is None:
+        st.error(
+            "Cookie sessions are not available because `streamlit-cookies-manager` is not installed. "
+            "Add it to requirements.txt and redeploy."
+        )
+        return None
+
+    cookies = EncryptedCookieManager(prefix=COOKIE_PREFIX, password=COOKIE_PASSWORD)
+    if not cookies.ready():
+        # One rerun is needed to initialize cookies
+        st.stop()
+    return cookies
+
+
+def _ensure_auth_sessions_schema(conn) -> None:
+    """Create auth_sessions table if missing."""
+    cur = conn.cursor()
+    try:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+    except Exception:
+        # If extension isn't available, we'll rely on uuid generation elsewhere.
+        pass
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+          session_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          username text NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          expires_at timestamptz NOT NULL,
+          last_seen_at timestamptz NOT NULL DEFAULT now()
+        );
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_username ON auth_sessions(username);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);")
+    conn.commit()
+    cur.close()
+
+
+def _create_session(username: str, ttl_days: int = 14) -> Optional[str]:
+    """Create a new session row and return session_id as str."""
+    try:
+        if get_neon_conn is None:
+            return None
+        u = (username or "").strip().lower()
+        if not u:
+            return None
+        conn = get_neon_conn()
+        if conn is None:
+            return None
+        _ensure_auth_sessions_schema(conn)
+
+        expires = datetime.now(timezone.utc) + timedelta(days=int(ttl_days))
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO auth_sessions (username, expires_at)
+            VALUES (%s, %s)
+            RETURNING session_id;
+            """,
+            (u, expires),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        return str(row[0]) if row else None
+    except Exception:
+        return None
+
+
+def _get_username_for_session(session_id: str) -> Optional[str]:
+    """Return username for a valid (unexpired) session_id."""
+    try:
+        if get_neon_conn is None:
+            return None
+        sid = (session_id or "").strip()
+        if not sid:
+            return None
+        conn = get_neon_conn()
+        if conn is None:
+            return None
+        _ensure_auth_sessions_schema(conn)
+
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT username
+            FROM auth_sessions
+            WHERE session_id = %s
+              AND expires_at > now()
+            LIMIT 1;
+            """,
+            (sid,),
+        )
+        row = cur.fetchone()
+        if row:
+            cur.execute("UPDATE auth_sessions SET last_seen_at = now() WHERE session_id = %s;", (sid,))
+            conn.commit()
+        cur.close()
+        conn.close()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _delete_session(session_id: str) -> None:
+    try:
+        if get_neon_conn is None:
+            return
+        sid = (session_id or "").strip()
+        if not sid:
+            return
+        conn = get_neon_conn()
+        if conn is None:
+            return
+        _ensure_auth_sessions_schema(conn)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM auth_sessions WHERE session_id = %s;", (sid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        return
 
 
 # -------------------- Login lockout helpers --------------------
@@ -118,6 +263,18 @@ def _lookup_email_by_display_username(display_username: str) -> str | None:
 
 
 def auth_ui():
+    # --- Cookie session restore (persists login across refresh / Stripe redirects) ---
+    cookies = _cookies_ready_or_stop()
+    if cookies is not None and "username" not in st.session_state:
+        try:
+            sid = cookies.get(COOKIE_NAME)
+        except Exception:
+            sid = None
+        if sid:
+            u = _get_username_for_session(str(sid))
+            if u:
+                st.session_state["username"] = (u or "").strip().lower()
+
     # If Stripe redirects back with ?checkout=success but this Streamlit session isn't authenticated,
     # it usually means the success/cancel URL is pointing at a different deployment (domain) than
     # the one that initiated checkout, so session_state is empty here.
@@ -140,7 +297,8 @@ def auth_ui():
             )
 
     if "username" in st.session_state:
-        username = st.session_state["username"]
+        username = (st.session_state["username"] or "").strip().lower()
+        st.session_state["username"] = username
         display_name = st.session_state.get("display_name", username)
         return True, username, display_name
 
@@ -305,6 +463,16 @@ def auth_ui():
         st.session_state["tier"] = user_rec.get("tier", "basic")
         st.session_state["plan"] = user_rec.get("plan", user_rec.get("tier", "basic"))
         st.session_state["is_admin"] = bool(user_rec.get("is_admin", False))
+        # Persist login across refreshes using cookie session
+        try:
+            cookies2 = _cookies_ready_or_stop()
+            if cookies2 is not None:
+                sid = _create_session(email_raw)
+                if sid:
+                    cookies2[COOKIE_NAME] = sid
+                    cookies2.save()
+        except Exception:
+            pass
 
         # Clear any lockout counters
         _clear_failed_login_attempts()
@@ -444,6 +612,17 @@ def auth_ui():
         if "is_admin" in user:
             st.session_state["is_admin"] = bool(user.get("is_admin"))
 
+        # Persist login across refreshes using cookie session
+        try:
+            cookies2 = _cookies_ready_or_stop()
+            if cookies2 is not None:
+                sid = _create_session(login_key)
+                if sid:
+                    cookies2[COOKIE_NAME] = sid
+                    cookies2.save()
+        except Exception:
+            pass
+
         # Reset failed-attempt tracking on successful login
         _clear_failed_login_attempts()
 
@@ -460,6 +639,21 @@ def logout_and_reset_session() -> None:
     We avoid deleting *all* keys to prevent Streamlit from entering a weird state that
     can result in a blank screen. Instead, we clear the keys we know we own.
     """
+    # Clear cookie-backed session (best-effort)
+    try:
+        cookies = _cookies_ready_or_stop()
+        if cookies is not None:
+            sid = cookies.get(COOKIE_NAME)
+            if sid:
+                _delete_session(str(sid))
+            try:
+                cookies.pop(COOKIE_NAME, None)
+            except Exception:
+                pass
+            cookies.save()
+    except Exception:
+        pass
+
     auth_keys = [
         "user_id",
         "username",

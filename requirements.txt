@@ -24,3 +24,4 @@ xgboost
 scikit-learn
 joblib
 extra-streamlit-components
+streamlit-cookies-manager==0.2.0
