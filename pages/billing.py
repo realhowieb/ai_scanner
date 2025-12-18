@@ -1,10 +1,58 @@
 import os
 import streamlit as st
 import requests
+from requests import exceptions as req_exc
 
 # Stripe billing backend (Render)
 
 BILLING_API_BASE = os.getenv("BILLING_API_BASE", "https://ai-scanner-h2c8.onrender.com").strip()
+
+# Render free/idle services can cold-start. Do a quick preflight so we can show a friendly message.
+_HEALTH_TIMEOUT_S = float(os.getenv("BILLING_HEALTH_TIMEOUT", "3"))
+_POST_TIMEOUT_S = float(os.getenv("BILLING_POST_TIMEOUT", "45"))
+
+
+def _billing_healthcheck() -> bool:
+    """Return True if billing service is reachable quickly."""
+    try:
+        r = requests.get(f"{BILLING_API_BASE}/health", timeout=_HEALTH_TIMEOUT_S)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def _billing_post_json(path: str, payload: dict) -> dict:
+    """POST JSON to billing service with cold-start-friendly behavior."""
+    # Fast preflight: avoids waiting a long time on the POST when service is asleep.
+    if not _billing_healthcheck():
+        raise RuntimeError(
+            "Billing service is waking up (cold start). Please wait ~30 seconds and try again."
+        )
+
+    try:
+        r = requests.post(
+            f"{BILLING_API_BASE}{path}",
+            json=payload,
+            timeout=_POST_TIMEOUT_S,
+        )
+        r.raise_for_status()
+        return r.json() or {}
+    except req_exc.Timeout:
+        raise RuntimeError(
+            "Billing service is taking longer than usual (cold start). Please try again in a moment."
+        )
+    except req_exc.ConnectionError:
+        raise RuntimeError(
+            "Billing service is temporarily unavailable. Please try again in a moment."
+        )
+    except req_exc.HTTPError as e:
+        # Bubble up useful error details while keeping it user-friendly.
+        msg = str(e)
+        try:
+            msg = (r.text or msg).strip()  # type: ignore[name-defined]
+        except Exception:
+            pass
+        raise RuntimeError(f"Billing request failed: {msg}")
 
 
 def _refresh_tier_from_db(email: str) -> str | None:
@@ -59,13 +107,10 @@ def _logged_in_email() -> str:
 
 
 def _create_checkout_url(*, email: str, plan: str) -> str:
-    r = requests.post(
-        f"{BILLING_API_BASE}/create-checkout-session",
-        json={"email": email, "plan": plan},
-        timeout=25,
+    data = _billing_post_json(
+        "/create-checkout-session",
+        {"email": email, "plan": plan},
     )
-    r.raise_for_status()
-    data = r.json() or {}
     url = (data.get("checkout_url") or "").strip()
     if not url:
         raise RuntimeError("Billing service did not return checkout_url")
@@ -73,13 +118,10 @@ def _create_checkout_url(*, email: str, plan: str) -> str:
 
 
 def _create_portal_url(*, email: str) -> str:
-    r = requests.post(
-        f"{BILLING_API_BASE}/create-portal-session",
-        json={"email": email},
-        timeout=25,
+    data = _billing_post_json(
+        "/create-portal-session",
+        {"email": email},
     )
-    r.raise_for_status()
-    data = r.json() or {}
     url = (data.get("portal_url") or "").strip()
     if not url:
         raise RuntimeError("Billing service did not return portal_url")
@@ -164,7 +206,8 @@ def _upgrade_buttons(current_tier: str) -> None:
                     st.toast("Checkout created — continue to Stripe.", icon="💳")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Could not start checkout: {e}")
+                    st.error(str(e))
+                    st.caption("Tip: If this is your first billing action in a while, the service may need ~30 seconds to wake up.")
 
     with col_premium:
         st.markdown("### ⭐ Premium")
@@ -184,7 +227,8 @@ def _upgrade_buttons(current_tier: str) -> None:
                     st.toast("Checkout created — continue to Stripe.", icon="💳")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Could not start checkout: {e}")
+                    st.error(str(e))
+                    st.caption("Tip: If this is your first billing action in a while, the service may need ~30 seconds to wake up.")
 
 
 def render_billing_page() -> None:
@@ -243,7 +287,8 @@ def render_billing_page() -> None:
                 portal_url = _create_portal_url(email=email)
                 st.link_button("Open Stripe Customer Portal", portal_url, use_container_width=True)
             except Exception as e:
-                st.error(f"Could not open billing portal: {e}")
+                st.error(str(e))
+                st.caption("Tip: The billing service may be waking up. Try again in ~30 seconds.")
 
     _pricing_table()
     _benefits_block()
