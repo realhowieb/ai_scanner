@@ -191,7 +191,7 @@ FEATURE_MIN_TIER: dict[str, str] = {
 
     # results
     "can_export_csv": "pro",
-    "can_ai_notes": "basic",
+    "can_ai_notes": "premium",
 
     # pro features
     "can_scan_history": "pro",
@@ -901,6 +901,19 @@ def main():
     st.session_state["tier_key"] = tier_key
     st.session_state["is_admin"] = bool(is_admin)
     st.session_state["entitlements"] = dict(flags)
+
+    # Safety: if AI Notes are not allowed for this user, purge any cached notes
+    # so Basic/Pro accounts never see previously-generated Premium content.
+    if not bool(flags.get("can_ai_notes")):
+        for k in (
+            "ai_notes",
+            "ai_notes_text",
+            "ai_notes_cache",
+            "ai_notes_last",
+            "ai_notes_last_text",
+            "last_ai_notes",
+        ):
+            st.session_state.pop(k, None)
 
     render_onboarding_hint(username, tier_name=tier_name)
 
