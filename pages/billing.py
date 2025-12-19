@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 from requests import exceptions as req_exc
 
 
@@ -148,31 +149,47 @@ def _refresh_tier_from_db(email: str) -> str | None:
 
 def _open_checkout_same_tab(url: str) -> None:
     """Reliable Streamlit-friendly checkout open.
-    Programmatic redirects from Streamlit iframes can be blocked; use a user-click same-tab link button.
+
+    Streamlit Cloud can intercept plain <a target=_self> links, sometimes resulting in a blank
+    Streamlit loading screen. The most reliable approach is a USER CLICK inside a components
+    iframe that redirects the TOP window.
     """
     u = (url or "").strip()
     if not u:
         return
 
     st.success("Stripe Checkout is ready ✅")
-    st.caption("Click to open Stripe Checkout in the same tab (recommended).")
+    st.caption("Click the button below to open Stripe Checkout. If it doesn’t open, use the fallback link.")
 
-    # Same-tab open (user click) — avoids iframe redirect restrictions.
-    st.markdown(
+    # Primary: user-click button that redirects the TOP window.
+    components.html(
         f"""
-        <a href={u!r} target="_self" style="text-decoration:none;">
-          <button style="width:100%; padding:0.65rem 1rem; border-radius:0.6rem;
-                         border:1px solid rgba(255,255,255,0.18);
-                         background: rgba(255,255,255,0.06);
-                         color: inherit; font-size: 1rem; cursor: pointer;">
+        <div style="width:100%;">
+          <button id="stripeGo"
+            style="width:100%; padding:0.65rem 1rem; border-radius:0.6rem; border:1px solid rgba(255,255,255,0.18);
+                   background: rgba(255,255,255,0.06); color: inherit; font-size: 1rem; cursor: pointer;">
             💳 Open Stripe Checkout (same tab)
           </button>
-        </a>
+        </div>
+        <script>
+          (function() {{
+            var url = {u!r};
+            var btn = document.getElementById('stripeGo');
+            if (!btn) return;
+            btn.addEventListener('click', function() {{
+              try {{
+                window.top.location.href = url;
+              }} catch (e) {{
+                try {{ window.parent.location.href = url; }} catch (e2) {{ window.location.href = url; }}
+              }}
+            }});
+          }})();
+        </script>
         """,
-        unsafe_allow_html=True,
+        height=72,
     )
 
-    # Fallback if browser forces a new tab anyway
+    # Fallback if the browser still forces a new tab
     st.link_button("Open Stripe Checkout (fallback)", u, use_container_width=True)
     st.stop()
 
@@ -335,18 +352,31 @@ def render_billing_page() -> None:
             try:
                 portal_url = _create_portal_url(email=email)
                 # Prefer same-tab open
-                st.markdown(
+                components.html(
                     f"""
-                    <a href={portal_url!r} target="_self" style="text-decoration:none;">
-                      <button style="width:100%; padding:0.65rem 1rem; border-radius:0.6rem;
-                                     border:1px solid rgba(255,255,255,0.18);
-                                     background: rgba(255,255,255,0.06);
-                                     color: inherit; font-size: 1rem; cursor: pointer;">
+                    <div style=\"width:100%;\">
+                      <button id=\"portalGo\"
+                        style=\"width:100%; padding:0.65rem 1rem; border-radius:0.6rem; border:1px solid rgba(255,255,255,0.18);
+                               background: rgba(255,255,255,0.06); color: inherit; font-size: 1rem; cursor: pointer;\">
                         🔧 Open Stripe Customer Portal (same tab)
                       </button>
-                    </a>
+                    </div>
+                    <script>
+                      (function() {{
+                        var url = {portal_url!r};
+                        var btn = document.getElementById('portalGo');
+                        if (!btn) return;
+                        btn.addEventListener('click', function() {{
+                          try {{
+                            window.top.location.href = url;
+                          }} catch (e) {{
+                            try {{ window.parent.location.href = url; }} catch (e2) {{ window.location.href = url; }}
+                          }}
+                        }});
+                      }})();
+                    </script>
                     """,
-                    unsafe_allow_html=True,
+                    height=72,
                 )
                 st.link_button("Open Stripe Customer Portal (fallback)", portal_url, use_container_width=True)
             except Exception as e:
