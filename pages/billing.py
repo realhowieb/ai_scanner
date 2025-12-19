@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 from requests import exceptions as req_exc
 
@@ -53,6 +54,23 @@ def _billing_post_json(path: str, payload: dict) -> dict:
         except Exception:
             pass
         raise RuntimeError(f"Billing request failed: {msg}")
+
+
+def _redirect_same_tab(url: str) -> None:
+    """Redirect the browser to the given URL in the same tab."""
+    u = (url or "").strip()
+    if not u:
+        return
+    st.success("Redirecting to Stripe Checkout…")
+    components.html(
+        f"""
+        <script>
+          window.location.href = {u!r};
+        </script>
+        """,
+        height=0,
+    )
+    st.stop()
 
 
 def _refresh_tier_from_db(email: str) -> str | None:
@@ -175,16 +193,10 @@ def _upgrade_buttons(current_tier: str) -> None:
         st.warning("Please sign in (create an account) before upgrading. Upgrades are tied to your account.")
         return
 
-    # If we already created a checkout link in this session, show it.
+    # If we already created a checkout URL in this session, immediately redirect in the SAME tab.
     checkout_url = (st.session_state.get("checkout_url") or "").strip()
     if checkout_url:
-        st.success("Checkout created ✅")
-        st.link_button("➡️ Continue to Stripe Checkout", checkout_url, use_container_width=True)
-        st.caption("After payment, you’ll return here and your plan will sync automatically.")
-        if st.button("Clear checkout link", key="billing_clear_checkout", use_container_width=True):
-            st.session_state.pop("checkout_url", None)
-            st.rerun()
-        st.divider()
+        _redirect_same_tab(checkout_url)
 
     col_pro, col_premium = st.columns(2)
 
@@ -203,8 +215,7 @@ def _upgrade_buttons(current_tier: str) -> None:
                 try:
                     st.session_state["pricing_focus"] = "pro"
                     st.session_state["checkout_url"] = _create_checkout_url(email=email, plan="pro")
-                    st.toast("Checkout created — continue to Stripe.", icon="💳")
-                    st.rerun()
+                    _redirect_same_tab(st.session_state["checkout_url"])
                 except Exception as e:
                     st.error(str(e))
                     st.caption("Tip: If this is your first billing action in a while, the service may need ~30 seconds to wake up.")
@@ -224,8 +235,7 @@ def _upgrade_buttons(current_tier: str) -> None:
                 try:
                     st.session_state["pricing_focus"] = "premium"
                     st.session_state["checkout_url"] = _create_checkout_url(email=email, plan="premium")
-                    st.toast("Checkout created — continue to Stripe.", icon="💳")
-                    st.rerun()
+                    _redirect_same_tab(st.session_state["checkout_url"])
                 except Exception as e:
                     st.error(str(e))
                     st.caption("Tip: If this is your first billing action in a while, the service may need ~30 seconds to wake up.")
@@ -273,6 +283,7 @@ def render_billing_page() -> None:
                     st.query_params.pop("checkout", None)
                 except Exception:
                     pass
+                st.session_state.pop("checkout_url", None)
                 st.rerun()
             else:
                 st.info("Still syncing… If this persists, wait a few seconds and click ‘Refresh plan now’. ")
@@ -285,6 +296,7 @@ def render_billing_page() -> None:
                     st.query_params.pop("checkout", None)
                 except Exception:
                     pass
+                st.session_state.pop("checkout_url", None)
                 st.rerun()
             else:
                 st.warning("Plan not updated yet. Make sure the Stripe webhook delivered successfully.")
