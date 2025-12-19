@@ -57,15 +57,31 @@ def _billing_post_json(path: str, payload: dict) -> dict:
 
 
 def _redirect_same_tab(url: str) -> None:
-    """Redirect the browser to the given URL in the same tab."""
+    """Redirect the browser to the given URL in the same tab.
+
+    Streamlit components render inside an iframe. Redirecting `window.location` only
+    navigates the iframe and can leave users stuck on a blank panel. We must navigate
+    the TOP window.
+    """
     u = (url or "").strip()
     if not u:
         return
+
     st.success("Redirecting to Stripe Checkout…")
+    st.caption("If you are not redirected automatically, click the button below.")
+    st.link_button("Open Stripe Checkout", u, use_container_width=True)
+
     components.html(
         f"""
         <script>
-          window.location.href = {u!r};
+          (function() {{
+            var url = {u!r};
+            try {{
+              window.top.location.href = url;
+            }} catch (e) {{
+              try {{ window.parent.location.href = url; }} catch (e2) {{}}
+            }}
+          }})();
         </script>
         """,
         height=0,
