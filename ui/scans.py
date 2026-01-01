@@ -1281,17 +1281,26 @@ def render_scan_controls(
                         is_snapshot=False,
                     )
 
-                    # Earnings refresh: once per UTC day (not time-of-day gated)
+                    # Earnings refresh (best-effort): once per UTC day per universe label
+                    # IMPORTANT: do NOT time-gate this (it caused empty tables when scans run after noon UTC).
                     try:
                         from datetime import datetime, timezone
-                        from db.earnings import (
-                            populate_earnings_calendar,
-                            should_refresh_earnings_today,
-                            mark_earnings_refreshed_today,
-                        )
+                        # Prefer local module import; fall back to db.* for older layouts
+                        try:
+                            from earnings import (
+                                populate_earnings_calendar,
+                                should_refresh_earnings_today,
+                                mark_earnings_refreshed_today,
+                            )
+                        except Exception:
+                            from db.earnings import (  # type: ignore
+                                populate_earnings_calendar,
+                                should_refresh_earnings_today,
+                                mark_earnings_refreshed_today,
+                            )
 
                         now_utc = datetime.now(timezone.utc)
-                        refresh_key = f"earnings:{label}"  # once/day per universe label
+                        refresh_key = f"earnings:{label}"  # once/day per scan label (SP500/NASDAQ/Combo/Watchlist)
 
                         if should_refresh_earnings_today(refresh_key):
                             ok = False
@@ -1323,7 +1332,8 @@ def render_scan_controls(
                         # Earnings refresh is best-effort only
                         pass
 
-                    # Daily snapshot (keep your existing rule: approx. before noon server time)
+                    # Daily snapshot (keep existing rule if you want snapshots only before noon UTC)
+                    # NOTE: snapshot timing is unrelated to earnings refresh.
                     try:
                         from datetime import datetime, timezone
 
