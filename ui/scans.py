@@ -1285,6 +1285,16 @@ def render_scan_controls(
                     try:
                         current_hour = datetime.now().hour
                         if current_hour < 12:
+                            try:
+                                from db.earnings import populate_earnings_calendar  # lazy import
+
+                                # Populate earnings once per day for this universe
+                                populate_earnings_calendar(tickers)
+                                st.caption(f"📅 Earnings refresh ran for {len(tickers)} symbols")
+                            except Exception:
+                                # Earnings refresh is best-effort only; never block scans
+                                pass
+
                             save_daily_snapshot(label, results_json, username=username)
                     except Exception:
                         # Snapshot is best-effort only
