@@ -1284,7 +1284,7 @@ def render_scan_controls(
                     # Morning snapshot: one per day per label (approx. before noon server time)
                     try:
                         current_hour = datetime.now().hour
-                        if current_hour < 12:
+                        if True:
                             try:
                                 from db.earnings import populate_earnings_calendar  # lazy import
 
