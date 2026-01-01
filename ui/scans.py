@@ -1283,19 +1283,39 @@ def render_scan_controls(
 
                     # Morning snapshot: one per day per label (approx. before noon server time)
                     try:
-                        current_hour = datetime.now().hour
-                        if True:
+                        # Use UTC explicitly so the "before noon" rule is predictable on Render
+                        from datetime import datetime, timezone
+
+                        now_utc = datetime.now(timezone.utc)
+                        if now_utc.hour < 12:
+                            ok = False
+                            err = None
                             try:
                                 from db.earnings import populate_earnings_calendar  # lazy import
 
                                 # Populate earnings once per day for this universe
                                 populate_earnings_calendar(tickers)
-                                st.caption(f"📅 Earnings refresh ran for {len(tickers)} symbols")
+                                ok = True
+                            except Exception as e:
+                                err = str(e)
+
+                            # Debug banner (shows whether it ran, failed, or why)
+                            try:
+                                st.caption(
+                                    f"📅 Earnings refresh {'ran' if ok else 'failed'} for {len(tickers)} symbols "
+                                    f"(utc_hour={now_utc.hour})"
+                                    + (f" — {err}" if err else "")
+                                )
                             except Exception:
-                                # Earnings refresh is best-effort only; never block scans
                                 pass
 
                             save_daily_snapshot(label, results_json, username=username)
+                        else:
+                            # Helpful debug so you can see why it didn't run
+                            try:
+                                st.caption(f"📅 Earnings refresh skipped (utc_hour={now_utc.hour} ≥ 12)")
+                            except Exception:
+                                pass
                     except Exception:
                         # Snapshot is best-effort only
                         pass
