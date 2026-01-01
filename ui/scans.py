@@ -1281,41 +1281,55 @@ def render_scan_controls(
                         is_snapshot=False,
                     )
 
-                    # Morning snapshot: one per day per label (approx. before noon server time)
+                    # Earnings refresh: once per UTC day (not time-of-day gated)
                     try:
-                        # Use UTC explicitly so the "before noon" rule is predictable on Render
                         from datetime import datetime, timezone
+                        from db.earnings import (
+                            populate_earnings_calendar,
+                            should_refresh_earnings_today,
+                            mark_earnings_refreshed_today,
+                        )
 
                         now_utc = datetime.now(timezone.utc)
-                        if now_utc.hour < 12:
+                        refresh_key = f"earnings:{label}"  # once/day per universe label
+
+                        if should_refresh_earnings_today(refresh_key):
                             ok = False
                             err = None
                             try:
-                                from db.earnings import populate_earnings_calendar  # lazy import
-
-                                # Populate earnings once per day for this universe
                                 populate_earnings_calendar(tickers)
+                                mark_earnings_refreshed_today(refresh_key)
                                 ok = True
                             except Exception as e:
                                 err = str(e)
 
-                            # Debug banner (shows whether it ran, failed, or why)
                             try:
                                 st.caption(
                                     f"📅 Earnings refresh {'ran' if ok else 'failed'} for {len(tickers)} symbols "
-                                    f"(utc_hour={now_utc.hour})"
+                                    f"(utc_date={now_utc.date()})"
                                     + (f" — {err}" if err else "")
                                 )
                             except Exception:
                                 pass
-
-                            save_daily_snapshot(label, results_json, username=username)
                         else:
-                            # Helpful debug so you can see why it didn't run
                             try:
-                                st.caption(f"📅 Earnings refresh skipped (utc_hour={now_utc.hour} ≥ 12)")
+                                st.caption(
+                                    f"📅 Earnings refresh skipped (already refreshed today) "
+                                    f"(utc_date={now_utc.date()})"
+                                )
                             except Exception:
                                 pass
+                    except Exception:
+                        # Earnings refresh is best-effort only
+                        pass
+
+                    # Daily snapshot (keep your existing rule: approx. before noon server time)
+                    try:
+                        from datetime import datetime, timezone
+
+                        now_utc = datetime.now(timezone.utc)
+                        if now_utc.hour < 12:
+                            save_daily_snapshot(label, results_json, username=username)
                     except Exception:
                         # Snapshot is best-effort only
                         pass

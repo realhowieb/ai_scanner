@@ -16,7 +16,7 @@ Notes:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 import time
 from typing import Iterable, Optional, Dict, Tuple
 
@@ -227,3 +227,77 @@ def load_earnings_details_map(
         rows = cur.fetchall() or []
 
     return {str(s).upper(): (d, t) for (s, d, t) in rows}
+
+
+# -------------------------
+# Refresh log (once per day)
+# -------------------------
+
+CREATE_EARNINGS_REFRESH_LOG_SQL = """
+CREATE TABLE IF NOT EXISTS earnings_refresh_log (
+    refresh_key TEXT PRIMARY KEY,
+    refreshed_on DATE NOT NULL,
+    refreshed_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+"""
+
+UPSERT_EARNINGS_REFRESH_LOG_SQL = """
+INSERT INTO earnings_refresh_log (refresh_key, refreshed_on, refreshed_at)
+VALUES (%s, %s, NOW())
+ON CONFLICT (refresh_key) DO UPDATE SET
+  refreshed_on = EXCLUDED.refreshed_on,
+  refreshed_at = NOW();
+"""
+
+
+def ensure_earnings_refresh_log_table(conn=None) -> None:
+    c = _get_conn(conn)
+    with c.cursor() as cur:
+        cur.execute(CREATE_EARNINGS_REFRESH_LOG_SQL)
+    try:
+        c.commit()
+    except Exception:
+        pass
+
+
+def should_refresh_earnings_today(refresh_key: str, *, conn=None) -> bool:
+    """Return True if we have NOT refreshed for this refresh_key today (UTC date)."""
+    c = _get_conn(conn)
+    ensure_earnings_refresh_log_table(c)
+
+    key = (refresh_key or "").strip()
+    if not key:
+        return True
+
+    sql = "SELECT refreshed_on FROM earnings_refresh_log WHERE refresh_key = %s;"
+    with c.cursor() as cur:
+        cur.execute(sql, (key,))
+        row = cur.fetchone()
+
+    if not row or not row[0]:
+        return True
+
+    try:
+        # row[0] should be a date
+        utc_today = datetime.now(timezone.utc).date()
+        return row[0] != utc_today
+    except Exception:
+        return True
+
+
+def mark_earnings_refreshed_today(refresh_key: str, *, conn=None) -> None:
+    """Mark refresh_key as refreshed for today (UTC date)."""
+    c = _get_conn(conn)
+    ensure_earnings_refresh_log_table(c)
+
+    key = (refresh_key or "").strip()
+    if not key:
+        return
+
+    utc_today = datetime.now(timezone.utc).date()
+    with c.cursor() as cur:
+        cur.execute(UPSERT_EARNINGS_REFRESH_LOG_SQL, (key, utc_today))
+    try:
+        c.commit()
+    except Exception:
+        pass
