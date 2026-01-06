@@ -901,9 +901,9 @@ def main():
     db_user_debug: dict | None = None
 
     # Re-sync tier from DB (Stripe webhook updates DB; session may be stale until this runs)
-    # NOTE: Do NOT rely on helper function names inside db.users (they change). Instead, query Neon directly.
+    # Use the project's DB connection helper (avoids hard dependency on psycopg2/psycopg imports here).
     try:
-        import os
+        from db.core import get_conn  # type: ignore
 
         def _dict_from_cursor(cur, row):
             try:
@@ -913,58 +913,6 @@ def main():
                 return {}
 
         def _lookup_user_from_db(identifier: str) -> dict | None:
-            def _get_dsn() -> str | None:
-                # 1) Env var (Render, local)
-                v = os.getenv("DATABASE_URL")
-                if v:
-                    return str(v).strip()
-
-                # Some deployments may accidentally set a lowercase env var
-                v2 = os.getenv("database_url")
-                if v2:
-                    return str(v2).strip()
-
-                # 2) Common Streamlit secrets keys
-                for k in (
-                    "DATABASE_URL",
-                    "NEON_DATABASE_URL",
-                    "NEON_DSN",
-                    "POSTGRES_URL",
-                    "POSTGRESQL_URL",
-                    "database_url",
-                ):
-                    try:
-                        val = st.secrets[k]  # type: ignore[index]
-                        if val:
-                            return str(val).strip()
-                    except Exception:
-                        pass
-
-                # 3) Streamlit Connections-style config
-                # secrets.toml can contain:
-                # [connections.neon]
-                # url = "postgresql://..."
-                try:
-                    conns = st.secrets["connections"]  # type: ignore[index]
-                    if isinstance(conns, dict):
-                        neon = conns.get("neon") or conns.get("postgres") or conns.get("db")
-                        if isinstance(neon, dict):
-                            for kk in ("url", "dsn", "database_url", "DATABASE_URL"):
-                                vv = neon.get(kk)
-                                if vv:
-                                    return str(vv).strip()
-                except Exception:
-                    pass
-
-                return None
-
-            dsn = _get_dsn()
-            if not dsn:
-                raise RuntimeError(
-                    "DATABASE_URL is not set (env or Streamlit secrets). "
-                    "Set DATABASE_URL in your Streamlit app env/secrets, or provide [connections.neon].url"
-                )
-
             sql = (
                 "SELECT username, email, tier, stripe_customer_id, stripe_subscription_id "
                 "FROM users "
@@ -972,36 +920,13 @@ def main():
                 "LIMIT 1"
             )
 
-            # Try psycopg (v3) first, then psycopg2
-            try:
-                import psycopg  # type: ignore
-
-                with psycopg.connect(dsn) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(sql, (identifier, identifier))
-                        row = cur.fetchone()
-                        if not row:
-                            return None
-                        return _dict_from_cursor(cur, row)
-            except Exception:
-                try:
-                    import psycopg2  # type: ignore
-
-                    conn = psycopg2.connect(dsn)
-                    try:
-                        cur = conn.cursor()
-                        cur.execute(sql, (identifier, identifier))
-                        row = cur.fetchone()
-                        if not row:
-                            return None
-                        return _dict_from_cursor(cur, row)
-                    finally:
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
-                except Exception as e:
-                    raise e
+            conn = get_conn()
+            with conn.cursor() as cur:
+                cur.execute(sql, (identifier, identifier))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                return _dict_from_cursor(cur, row)
 
         u = _lookup_user_from_db(username)
 
@@ -1032,6 +957,7 @@ def main():
             prev = (st.session_state.get("tier_key") or "").strip().lower()
             if forced_tier_key and prev and prev != forced_tier_key:
                 st.session_state.pop("entitlements", None)
+
     except Exception as e:
         forced_tier_key = None
         db_tier_err = str(e)
@@ -1296,7 +1222,27 @@ def main():
 
                 try:
                     test_syms = ["AAPL", "MSFT", "TSLA"]
-                    populate_earnings_calendar(test_syms)
+
+                    # Prefer using the shared DB connection helper so this works on Render.
+                    from db.core import get_conn  # type: ignore
+                    import inspect
+
+                    conn = get_conn()
+
+                    # Call with conn= if supported; otherwise fall back to the old call.
+                    try:
+                        sig = inspect.signature(populate_earnings_calendar)
+                        if "conn" in sig.parameters:
+                            populate_earnings_calendar(test_syms, conn=conn)
+                        else:
+                            populate_earnings_calendar(test_syms)
+                    finally:
+                        # Be defensive: close only if the connection object supports it.
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+
                     st.success(f"Fetched earnings for {', '.join(test_syms)}")
                 except Exception as e:
                     st.error(f"Earnings test failed: {e}")
