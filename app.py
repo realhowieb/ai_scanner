@@ -82,6 +82,7 @@ def get_market_session(now: datetime | None = None) -> str:
     return "closed"
 
 # --------------- Tiering ----------------
+# --------------- Tiering ----------------
 try:
     from auth.tiering import (
         USERS_DB,
@@ -93,6 +94,16 @@ try:
     )
 except Exception:
     from auth.tiering_fallback import USERS_DB, ADMIN_USERS, get_user_tier, Tier
+
+# --- Normalize ADMIN_USERS to be username-only (no implicit premium/admin coercion) ---
+# Some legacy configs treat admin users as premium implicitly; we want DB tier to win.
+try:
+    if isinstance(ADMIN_USERS, (list, set, tuple)):
+        ADMIN_USERS = {str(u).strip().lower() for u in ADMIN_USERS}
+    elif isinstance(ADMIN_USERS, dict):
+        ADMIN_USERS = {str(u).strip().lower() for u in ADMIN_USERS.keys()}
+except Exception:
+    pass
 
 # --------------- DB modules & UI modules ----------------
 from db.users import seed_neon_users_from_local, load_users
@@ -192,7 +203,7 @@ def _norm_lower(v: object | None) -> str:
 
 def _is_admin_user(username: str | None, tier_obj: object | None) -> bool:
     """Admin check that is resilient to whitespace/case/enum differences."""
-    u = _norm_str(username)
+    u = _norm_lower(username)
     if u and u in ADMIN_USERS:
         return True
 
