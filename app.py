@@ -897,12 +897,26 @@ def main():
 
     # DB is the source of truth for tier (Stripe webhook updates DB; users_map can be stale)
     forced_tier_key: str | None = None
+    db_tier_err: str | None = None
+    db_user_debug: dict | None = None
 
     # Re-sync tier from DB (Stripe webhook updates DB; session may be stale until this runs)
     try:
         from db.users import get_user_by_username  # type: ignore
 
         u = get_user_by_username(username)
+        # Keep a small debug payload (only shown to admins)
+        if isinstance(u, dict):
+            db_user_debug = {
+                "username": u.get("username"),
+                "email": u.get("email"),
+                "tier": u.get("tier"),
+                "stripe_customer_id": u.get("stripe_customer_id"),
+                "stripe_subscription_id": u.get("stripe_subscription_id"),
+            }
+        else:
+            db_user_debug = {"raw": str(u)[:200]}
+
         db_tier = (u.get("tier") if isinstance(u, dict) else None)
         if db_tier:
             forced_tier_key = str(db_tier).strip().lower() or None
@@ -918,8 +932,10 @@ def main():
             prev = (st.session_state.get("tier_key") or "").strip().lower()
             if forced_tier_key and prev and prev != forced_tier_key:
                 st.session_state.pop("entitlements", None)
-    except Exception:
+    except Exception as e:
         forced_tier_key = None
+        db_tier_err = str(e)
+        db_user_debug = None
 
     tier = get_user_tier(username, users_map)
 
@@ -1053,7 +1069,13 @@ def main():
         f"**Plan:** `{ 'Admin' if bool(st.session_state.get('is_admin')) else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`"
     )
     if bool(st.session_state.get("is_admin")):
-        st.sidebar.caption(f"debug: db_tier={forced_tier_key or '-'} session_tier_key={st.session_state.get('tier_key')}")
+        st.sidebar.caption(
+            f"debug: db_tier={forced_tier_key or '-'} session_tier_key={st.session_state.get('tier_key')}"
+        )
+        if db_tier_err:
+            st.sidebar.error(f"DB tier lookup error: {db_tier_err}")
+        elif db_user_debug is not None:
+            st.sidebar.caption(f"DB user: {db_user_debug}")
     # Day 6: Upgrade CTA card (Basic users only)
     render_sidebar_upgrade_card(tier)
 
