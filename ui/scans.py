@@ -918,6 +918,35 @@ def render_scan_controls(
         )
         st.caption("Pro/Premium only.")
 
+    # --- Earnings Calendar Debug (admin-only) ---
+    # One-click test to verify Yahoo Finance -> DB writes without relying on scan timing or snapshot logic.
+    if bool(st.session_state.get("is_admin")):
+        with st.expander("🧪 Earnings Calendar Debug", expanded=False):
+            st.caption(
+                "Runs a small earnings refresh and shows the returned dates (best-effort)."
+            )
+            if st.button(
+                "Fetch earnings for AAPL / MSFT / TSLA",
+                key="btn_earnings_debug",
+                use_container_width=True,
+            ):
+                try:
+                    try:
+                        from earnings import populate_earnings_calendar  # type: ignore
+                    except Exception:
+                        from db.earnings import populate_earnings_calendar  # type: ignore
+
+                    with st.spinner("Fetching earnings via Yahoo Finance..."):
+                        result = populate_earnings_calendar(["AAPL", "MSFT", "TSLA"])
+
+                    st.success("Earnings fetch attempted.")
+                    st.write(result)
+                    st.caption(
+                        "If all dates are None, this is usually a network/VPN/captive-portal issue."
+                    )
+                except Exception as e:
+                    st.error(f"Earnings debug failed: {e}")
+
     # Watchlist actions (uses active_watchlist_tickers from session_state)
     st.markdown("### 📋 Watchlist Tools")
 
