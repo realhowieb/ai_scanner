@@ -68,8 +68,46 @@ def render_results(
         "If you see 0 results, try lowering Min Gap or turning off the Unusual Volume Filter."
     )
 
+    # --- UI polish: Earnings column (display-only) ---
+    earn_col = "📅 Earnings in X days"
+
+    # Move earnings column next to Ticker (if present)
+    if earn_col in df.columns and "Ticker" in df.columns:
+        try:
+            cols = list(df.columns)
+            cols.remove(earn_col)
+            ticker_idx = cols.index("Ticker")
+            cols.insert(ticker_idx + 1, earn_col)
+            df = df[cols]
+        except Exception:
+            pass
+
     # --- Pro styling for results table ---
     styled = df.style
+
+    # Format earnings column: None/NaN -> — ; ints shown as whole numbers
+    if "📅 Earnings in X days" in df.columns:
+        styled = styled.format(
+            {"📅 Earnings in X days": (lambda v: "—" if pd.isna(v) else int(float(v)))}
+        )
+
+        def _earnings_style(v):
+            try:
+                if pd.isna(v):
+                    return ""
+                d = int(float(v))
+            except Exception:
+                return ""
+
+            # Warning for earnings very soon
+            if 0 <= d <= 3:
+                return "background-color: #FFF3CD; color: #856404; font-weight: 700;"
+            # Soft info for 4-7 days
+            if 4 <= d <= 7:
+                return "background-color: #E8F4FD; color: #0C5460;"
+            return ""
+
+        styled = styled.applymap(_earnings_style, subset=["📅 Earnings in X days"])
 
     # Heatmap for BreakoutScore
     if "BreakoutScore" in df.columns:
