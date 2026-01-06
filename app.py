@@ -901,30 +901,69 @@ def main():
     db_user_debug: dict | None = None
 
     # Re-sync tier from DB (Stripe webhook updates DB; session may be stale until this runs)
+    # NOTE: Do NOT rely on helper function names inside db.users (they change). Instead, query Neon directly.
     try:
-        # db.users has changed names a few times across patches; support multiple function names.
-        import db.users as users_db  # type: ignore
+        import os
 
-        def _lookup_user(identifier: str):
-            """Return a user dict from db.users using any supported lookup function."""
-            for fn_name in (
-                "get_user_by_username",
-                "get_user_by_email",
-                "get_user",
-                "get_user_by_identifier",
-            ):
-                fn = getattr(users_db, fn_name, None)
-                if callable(fn):
-                    return fn(identifier)
-            raise ImportError(
-                "No supported user lookup function found in db.users. "
-                "Expected one of: get_user_by_username/get_user_by_email/get_user/get_user_by_identifier"
+        def _dict_from_cursor(cur, row):
+            try:
+                cols = [d[0] for d in (cur.description or [])]
+                return {cols[i]: row[i] for i in range(len(cols))}
+            except Exception:
+                return {}
+
+        def _lookup_user_from_db(identifier: str) -> dict | None:
+            dsn = os.getenv("DATABASE_URL")
+            if not dsn:
+                try:
+                    dsn = st.secrets.get("DATABASE_URL")  # type: ignore[attr-defined]
+                except Exception:
+                    dsn = None
+            if not dsn:
+                raise RuntimeError("DATABASE_URL is not set")
+
+            sql = (
+                "SELECT username, email, tier, stripe_customer_id, stripe_subscription_id "
+                "FROM users "
+                "WHERE lower(username) = lower(%s) OR lower(email) = lower(%s) "
+                "LIMIT 1"
             )
 
-        u = _lookup_user(username)
+            # Try psycopg (v3) first, then psycopg2
+            try:
+                import psycopg  # type: ignore
+
+                with psycopg.connect(dsn) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, (identifier, identifier))
+                        row = cur.fetchone()
+                        if not row:
+                            return None
+                        return _dict_from_cursor(cur, row)
+            except Exception:
+                try:
+                    import psycopg2  # type: ignore
+
+                    conn = psycopg2.connect(dsn)
+                    try:
+                        cur = conn.cursor()
+                        cur.execute(sql, (identifier, identifier))
+                        row = cur.fetchone()
+                        if not row:
+                            return None
+                        return _dict_from_cursor(cur, row)
+                    finally:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                except Exception as e:
+                    raise e
+
+        u = _lookup_user_from_db(username)
 
         # Keep a small debug payload (only shown to admins)
-        if isinstance(u, dict):
+        if isinstance(u, dict) and u:
             db_user_debug = {
                 "username": u.get("username"),
                 "email": u.get("email"),
@@ -933,7 +972,7 @@ def main():
                 "stripe_subscription_id": u.get("stripe_subscription_id"),
             }
         else:
-            db_user_debug = {"raw": str(u)[:200]}
+            db_user_debug = None
 
         db_tier = (u.get("tier") if isinstance(u, dict) else None)
         if db_tier:
