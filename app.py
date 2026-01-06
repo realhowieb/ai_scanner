@@ -902,9 +902,27 @@ def main():
 
     # Re-sync tier from DB (Stripe webhook updates DB; session may be stale until this runs)
     try:
-        from db.users import get_user_by_username  # type: ignore
+        # db.users has changed names a few times across patches; support multiple function names.
+        import db.users as users_db  # type: ignore
 
-        u = get_user_by_username(username)
+        def _lookup_user(identifier: str):
+            """Return a user dict from db.users using any supported lookup function."""
+            for fn_name in (
+                "get_user_by_username",
+                "get_user_by_email",
+                "get_user",
+                "get_user_by_identifier",
+            ):
+                fn = getattr(users_db, fn_name, None)
+                if callable(fn):
+                    return fn(identifier)
+            raise ImportError(
+                "No supported user lookup function found in db.users. "
+                "Expected one of: get_user_by_username/get_user_by_email/get_user/get_user_by_identifier"
+            )
+
+        u = _lookup_user(username)
+
         # Keep a small debug payload (only shown to admins)
         if isinstance(u, dict):
             db_user_debug = {
