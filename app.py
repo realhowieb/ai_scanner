@@ -122,6 +122,60 @@ from ui.watchlists import render_watchlists_panel
 
 from market_data import get_latest_quotes
 
+
+# --------------- DB connection helper (app.py only) ----------------
+# We intentionally do NOT depend on db/core.py (it may not exist in this repo).
+# Prefer psycopg (v3). Fall back to psycopg2 if present.
+
+def _get_database_url() -> str | None:
+    try:
+        # Env vars first
+        import os
+
+        v = os.getenv("DATABASE_URL") or os.getenv("database_url")
+        if v:
+            return str(v).strip()
+    except Exception:
+        pass
+
+    try:
+        # Streamlit secrets (case-sensitive)
+        if hasattr(st, "secrets"):
+            v = st.secrets.get("DATABASE_URL") or st.secrets.get("database_url")
+            if v:
+                return str(v).strip()
+    except Exception:
+        pass
+
+    return None
+
+
+def _get_db_conn_for_app():
+    """Return a DB connection using DATABASE_URL/database_url.
+
+    Uses psycopg (v3) if available; falls back to psycopg2.
+    Caller is responsible for closing.
+    """
+    dsn = _get_database_url()
+    if not dsn:
+        raise RuntimeError("DATABASE_URL is not set")
+
+    # Prefer psycopg (v3)
+    try:
+        import psycopg  # type: ignore
+
+        return psycopg.connect(dsn)
+    except Exception:
+        pass
+
+    # Fallback psycopg2
+    try:
+        import psycopg2  # type: ignore
+
+        return psycopg2.connect(dsn)
+    except Exception as e:
+        raise RuntimeError(f"No DB driver available (install psycopg or psycopg2). Last error: {e}")
+
 # --------------- Tier/Admin Helper Functions ----------------
 
 def _norm_str(v: object | None) -> str:
@@ -901,10 +955,8 @@ def main():
     db_user_debug: dict | None = None
 
     # Re-sync tier from DB (Stripe webhook updates DB; session may be stale until this runs)
-    # Use the project's DB connection helper (avoids hard dependency on psycopg2/psycopg imports here).
+    # app.py-only DB connector (no db/core.py dependency)
     try:
-        from db.core import get_conn  # type: ignore
-
         def _dict_from_cursor(cur, row):
             try:
                 cols = [d[0] for d in (cur.description or [])]
@@ -920,13 +972,19 @@ def main():
                 "LIMIT 1"
             )
 
-            conn = get_conn()
-            with conn.cursor() as cur:
-                cur.execute(sql, (identifier, identifier))
-                row = cur.fetchone()
-                if not row:
-                    return None
-                return _dict_from_cursor(cur, row)
+            conn = _get_db_conn_for_app()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (identifier, identifier))
+                    row = cur.fetchone()
+                    if not row:
+                        return None
+                    return _dict_from_cursor(cur, row)
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
         u = _lookup_user_from_db(username)
 
@@ -1223,11 +1281,9 @@ def main():
                 try:
                     test_syms = ["AAPL", "MSFT", "TSLA"]
 
-                    # Prefer using the shared DB connection helper so this works on Render.
-                    from db.core import get_conn  # type: ignore
+                    # Use app.py-only DB connector (no db/core.py dependency)
+                    conn = _get_db_conn_for_app()
                     import inspect
-
-                    conn = get_conn()
 
                     # Call with conn= if supported; otherwise fall back to the old call.
                     try:
