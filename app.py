@@ -1153,7 +1153,7 @@ def main():
         with st.sidebar.expander("🧪 Earnings Calendar Debug (One-click)", expanded=False):
             st.caption("Runs a forced earnings fetch for known symbols and verifies DB rows immediately.")
 
-            test_syms = ["AAPL", "MSFT", "TSLA"]
+            test_syms = ["AAPL", "MSFT", "TSLA", "META", "AMD", "INTC"]
 
             if st.button(
                 "Fetch earnings for AAPL / MSFT / TSLA",
