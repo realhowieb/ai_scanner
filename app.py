@@ -1162,6 +1162,23 @@ def main():
         username=username,
     )
 
+    # --- Admin-only: One-click Earnings Test (Option B) ---
+    if bool(st.session_state.get("is_admin")):
+        with st.expander("🧪 Earnings Calendar Debug (One-click)", expanded=False):
+            st.caption("Runs a forced earnings fetch for known symbols to verify Yahoo + DB writes.")
+            if st.button("Fetch earnings for AAPL / MSFT / TSLA", key="debug_earnings_one_click"):
+                try:
+                    from earnings import populate_earnings_calendar  # preferred
+                except Exception:
+                    from db.earnings import populate_earnings_calendar  # fallback
+
+                try:
+                    test_syms = ["AAPL", "MSFT", "TSLA"]
+                    populate_earnings_calendar(test_syms)
+                    st.success(f"Fetched earnings for {', '.join(test_syms)}")
+                except Exception as e:
+                    st.error(f"Earnings test failed: {e}")
+
     st.markdown("## 🚀 EZ 3-Step AI Scanner")
     render_three_step_scanner()
     st.markdown("---")
