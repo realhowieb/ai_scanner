@@ -68,6 +68,115 @@ def render_results(
         "If you see 0 results, try lowering Min Gap or turning off the Unusual Volume Filter."
     )
 
+    # --- Performance guard: Pandas Styler becomes very slow on large tables ---
+    MAX_STYLED_ROWS = 1500
+    MAX_STYLED_COLS = 25
+
+    fast_mode = (len(df) > MAX_STYLED_ROWS) or (df.shape[1] > MAX_STYLED_COLS)
+    if fast_mode:
+        st.caption(
+            f"⚡ Fast mode enabled (styling disabled) — {len(df):,} rows × {df.shape[1]} cols. "
+            f"Refine filters / lower Top N Results to re-enable styling."
+        )
+
+        # Render without Styler for speed
+        if can_export_csv:
+            st.dataframe(df, use_container_width=True, height=420)
+        else:
+            # Basic: keep non-interactive rendering. Use plain HTML (much faster than styled.to_html).
+            try:
+                table_html = df.to_html(index=False)
+
+                st.markdown(
+                    """
+<style>
+.basic-results-wrap {
+  max-height: 420px;
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1px solid rgba(49, 51, 63, 0.25);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+/* Prevent vertical letter stacking on mobile */
+.basic-results-wrap table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.basic-results-wrap th,
+.basic-results-wrap td {
+  white-space: nowrap;
+  padding: 6px 10px;
+}
+
+/* Sticky header */
+.basic-results-wrap th {
+  position: sticky;
+  top: 0;
+  background: rgba(15, 17, 22, 0.98);
+  z-index: 2;
+}
+</style>
+""",
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown(
+                    f"<div class='basic-results-wrap'>{table_html}</div>",
+                    unsafe_allow_html=True,
+                )
+            except Exception:
+                # Fallback: still non-interactive
+                try:
+                    st.table(df)
+                except Exception:
+                    st.markdown(df.to_html(index=False), unsafe_allow_html=True)
+
+        # Export (tier-gated) still available even in fast mode
+        if can_export_csv:
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Download CSV",
+                data=csv,
+                file_name="breakout_results.csv",
+                mime="text/csv",
+                use_container_width=False,
+            )
+        else:
+            st.info("🔒 Pro feature — export scan results to CSV")
+
+        # Continue with charts / AI notes
+        st.subheader("Charts")
+        tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+        if not tickers:
+            st.caption("No tickers available to chart.")
+            return
+
+        pick = st.selectbox("Select ticker to chart", tickers)
+        render_chart_for_ticker(pick)
+
+        if can_ai_notes:
+            st.subheader("AI Notes")
+            st.caption("⭐ Premium feature")
+            try:
+                row = df[df["Ticker"] == pick].iloc[0]
+                auto_note = generate_ai_note(row)
+                st.markdown(auto_note)
+                st.text_area(
+                    "Edit or copy these notes (Premium only):",
+                    value=auto_note,
+                    height=220,
+                )
+            except Exception:
+                st.caption("AI notes are unavailable for the selected row.")
+        else:
+            st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
+
+        return
+
     # --- UI polish: Earnings column (display-only) ---
     earn_col = "📅 Earnings in X days"
 
