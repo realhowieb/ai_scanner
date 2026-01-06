@@ -913,14 +913,51 @@ def main():
                 return {}
 
         def _lookup_user_from_db(identifier: str) -> dict | None:
-            dsn = os.getenv("DATABASE_URL")
-            if not dsn:
+            def _get_dsn() -> str | None:
+                # 1) Env var (Render, local)
+                v = os.getenv("DATABASE_URL")
+                if v:
+                    return str(v).strip()
+
+                # 2) Common Streamlit secrets keys
+                for k in (
+                    "DATABASE_URL",
+                    "NEON_DATABASE_URL",
+                    "NEON_DSN",
+                    "POSTGRES_URL",
+                    "POSTGRESQL_URL",
+                ):
+                    try:
+                        val = st.secrets[k]  # type: ignore[index]
+                        if val:
+                            return str(val).strip()
+                    except Exception:
+                        pass
+
+                # 3) Streamlit Connections-style config
+                # secrets.toml can contain:
+                # [connections.neon]
+                # url = "postgresql://..."
                 try:
-                    dsn = st.secrets.get("DATABASE_URL")  # type: ignore[attr-defined]
+                    conns = st.secrets["connections"]  # type: ignore[index]
+                    if isinstance(conns, dict):
+                        neon = conns.get("neon") or conns.get("postgres") or conns.get("db")
+                        if isinstance(neon, dict):
+                            for kk in ("url", "dsn", "database_url", "DATABASE_URL"):
+                                vv = neon.get(kk)
+                                if vv:
+                                    return str(vv).strip()
                 except Exception:
-                    dsn = None
+                    pass
+
+                return None
+
+            dsn = _get_dsn()
             if not dsn:
-                raise RuntimeError("DATABASE_URL is not set")
+                raise RuntimeError(
+                    "DATABASE_URL is not set (env or Streamlit secrets). "
+                    "Set DATABASE_URL in your Streamlit app env/secrets, or provide [connections.neon].url"
+                )
 
             sql = (
                 "SELECT username, email, tier, stripe_customer_id, stripe_subscription_id "
