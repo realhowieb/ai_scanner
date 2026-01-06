@@ -1156,7 +1156,7 @@ def main():
             test_syms = ["AAPL", "MSFT", "TSLA", "META", "AMD", "INTC"]
 
             if st.button(
-                "Fetch earnings for AAPL / MSFT / TSLA",
+                "Fetch earnings for AAPL / MSFT / TSLA / META / AMD / INTC",
                 key="btn_earnings_debug_sidebar",
                 use_container_width=True,
             ):
@@ -1168,9 +1168,28 @@ def main():
                         from db.earnings import populate_earnings_calendar  # type: ignore
 
                     with st.spinner("Fetching earnings via Yahoo Finance + writing to DB..."):
-                        _ = populate_earnings_calendar(test_syms)
+                        import inspect
 
-                    st.success("Fetched earnings for AAPL, MSFT, TSLA")
+                        sig = None
+                        try:
+                            sig = inspect.signature(populate_earnings_calendar)
+                        except Exception:
+                            sig = None
+
+                        # Prefer passing an explicit DB connection when supported
+                        if sig is not None and "conn" in sig.parameters:
+                            conn = _get_db_conn_for_app()
+                            try:
+                                _ = populate_earnings_calendar(test_syms, conn=conn)
+                            finally:
+                                try:
+                                    conn.close()
+                                except Exception:
+                                    pass
+                        else:
+                            _ = populate_earnings_calendar(test_syms)
+
+                    st.success("Fetched earnings for AAPL, MSFT, TSLA, META, AMD, INTC")
                 except Exception as e:
                     st.error(f"Earnings fetch failed: {e}")
 
@@ -1428,41 +1447,6 @@ def main():
         diagnostics=bool(diagnostics),
         username=username,
     )
-
-    # --- Admin-only: One-click Earnings Test (Option B) ---
-    if bool(st.session_state.get("is_admin")):
-        with st.expander("🧪 Earnings Calendar Debug (One-click)", expanded=False):
-            st.caption("Runs a forced earnings fetch for known symbols to verify Yahoo + DB writes.")
-            if st.button("Fetch earnings for AAPL / MSFT / TSLA", key="debug_earnings_one_click"):
-                try:
-                    from earnings import populate_earnings_calendar  # preferred
-                except Exception:
-                    from db.earnings import populate_earnings_calendar  # fallback
-
-                try:
-                    test_syms = ["AAPL", "MSFT", "TSLA"]
-
-                    # Use app.py-only DB connector (no db/core.py dependency)
-                    conn = _get_db_conn_for_app()
-                    import inspect
-
-                    # Call with conn= if supported; otherwise fall back to the old call.
-                    try:
-                        sig = inspect.signature(populate_earnings_calendar)
-                        if "conn" in sig.parameters:
-                            populate_earnings_calendar(test_syms, conn=conn)
-                        else:
-                            populate_earnings_calendar(test_syms)
-                    finally:
-                        # Be defensive: close only if the connection object supports it.
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
-
-                    st.success(f"Fetched earnings for {', '.join(test_syms)}")
-                except Exception as e:
-                    st.error(f"Earnings test failed: {e}")
 
     st.markdown("## 🚀 EZ 3-Step AI Scanner")
     render_three_step_scanner()
