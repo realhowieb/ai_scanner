@@ -957,29 +957,76 @@ def main():
     # Re-sync tier from DB (Stripe webhook updates DB; session may be stale until this runs)
     # app.py-only DB connector (no db/core.py dependency)
     try:
-        def _dict_from_cursor(cur, row):
-            try:
-                cols = [d[0] for d in (cur.description or [])]
-                return {cols[i]: row[i] for i in range(len(cols))}
-            except Exception:
-                return {}
-
         def _lookup_user_from_db(identifier: str) -> dict | None:
-            sql = (
-                "SELECT username, email, tier, stripe_customer_id, stripe_subscription_id "
-                "FROM users "
-                "WHERE lower(username) = lower(%s) OR lower(email) = lower(%s) "
-                "LIMIT 1"
-            )
-
+            # Build a SELECT that matches the *actual* users table schema.
+            # Some deployments don't have an `email` column, so we must adapt.
             conn = _get_db_conn_for_app()
             try:
+                # Discover available columns on `users`
+                cols: set[str] = set()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT column_name
+                            FROM information_schema.columns
+                            WHERE table_name = 'users'
+                            """
+                        )
+                        rows = cur.fetchall() or []
+                        for r in rows:
+                            try:
+                                cols.add(str(r[0]))
+                            except Exception:
+                                pass
+                except Exception:
+                    cols = set()
+
+                # Columns we *wish* to fetch (only include those that exist)
+                wanted = [
+                    "username",
+                    "email",
+                    "tier",
+                    "stripe_customer_id",
+                    "stripe_subscription_id",
+                ]
+                select_cols = [c for c in wanted if (not cols) or (c in cols)]
+                if not select_cols:
+                    # Absolute minimum
+                    select_cols = ["username", "tier"]
+
+                # WHERE clause: prefer matching username; also match email if it exists
+                where = "lower(username) = lower(%s)"
+                params = [identifier]
+                if (not cols) or ("email" in cols):
+                    where = f"({where} OR lower(email) = lower(%s))"
+                    params.append(identifier)
+
+                sql = (
+                    f"SELECT {', '.join(select_cols)} "
+                    f"FROM users "
+                    f"WHERE {where} "
+                    f"LIMIT 1"
+                )
+
                 with conn.cursor() as cur:
-                    cur.execute(sql, (identifier, identifier))
+                    cur.execute(sql, tuple(params))
                     row = cur.fetchone()
                     if not row:
                         return None
-                    return _dict_from_cursor(cur, row)
+
+                    # Build dict from whatever columns we selected
+                    try:
+                        desc = cur.description or []
+                        out = {str(desc[i][0]): row[i] for i in range(len(desc))}
+                    except Exception:
+                        out = {}
+
+                    # Ensure missing keys still exist for callers (debug/UI)
+                    for k in wanted:
+                        out.setdefault(k, None)
+
+                    return out
             finally:
                 try:
                     conn.close()
