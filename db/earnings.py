@@ -1,5 +1,3 @@
-
-
 """Earnings calendar support.
 
 Goal: populate a slow-moving earnings calendar once per day (or on-demand), then JOIN it
@@ -102,6 +100,11 @@ class EarningsInfo:
 def fetch_next_earnings(symbol: str) -> EarningsInfo:
     """Fetch next earnings date (best-effort) for a symbol using yfinance.
 
+    Strategy:
+    1) Prefer `Ticker.get_earnings_dates(limit=12)` when available; choose the next
+       earnings datetime >= now (UTC).
+    2) Fallback to `Ticker.calendar` (varies by ticker).
+
     Returns EarningsInfo with earnings_date=None if not available.
     """
     sym = (symbol or "").strip().upper()
@@ -110,16 +113,62 @@ def fetch_next_earnings(symbol: str) -> EarningsInfo:
 
     try:
         import yfinance as yf  # local import to avoid import cost when unused
+        import pandas as pd
 
         t = yf.Ticker(sym)
-        df = t.get_earnings_dates(limit=1)
-        if df is None or getattr(df, "empty", True):
-            return EarningsInfo(symbol=sym, earnings_date=None, earnings_time=None)
 
-        # yfinance returns a DataFrame indexed by Timestamp
-        ts = df.index[0]
-        ed = ts.date() if hasattr(ts, "date") else None
-        return EarningsInfo(symbol=sym, earnings_date=ed, earnings_time=None)
+        # ----------------------------
+        # 1) Preferred: get_earnings_dates
+        # ----------------------------
+        try:
+            df = t.get_earnings_dates(limit=12)
+            if df is not None and not getattr(df, "empty", True):
+                # yfinance often returns a DataFrame indexed by Timestamp
+                idx = getattr(df, "index", None)
+                if idx is not None and len(idx) > 0:
+                    dts = pd.to_datetime(list(idx), errors="coerce", utc=True)
+                    dts = [x for x in dts if pd.notna(x)]
+                    if dts:
+                        now = datetime.now(timezone.utc)
+                        future = sorted([x for x in dts if x.to_pydatetime() >= now])
+                        if future:
+                            dt0 = future[0].to_pydatetime()
+                            return EarningsInfo(symbol=sym, earnings_date=dt0.date(), earnings_time=None)
+
+                # Some variants include an explicit column
+                for col in ("Earnings Date", "earningsDate", "earnings_date"):
+                    if col in getattr(df, "columns", []):
+                        val = df[col].iloc[0]
+                        dt = pd.to_datetime(val, errors="coerce", utc=True)
+                        if pd.notna(dt):
+                            return EarningsInfo(symbol=sym, earnings_date=dt.to_pydatetime().date(), earnings_time=None)
+        except Exception:
+            pass
+
+        # ----------------------------
+        # 2) Fallback: calendar
+        # ----------------------------
+        try:
+            cal = getattr(t, "calendar", None)
+            if cal is not None and hasattr(cal, "empty") and not cal.empty:
+                # Typical pattern: index contains 'Earnings Date'
+                if hasattr(cal, "index") and "Earnings Date" in cal.index:
+                    val = cal.loc["Earnings Date"].values[0]
+                    dt = pd.to_datetime(val, errors="coerce", utc=True)
+                    if pd.notna(dt):
+                        return EarningsInfo(symbol=sym, earnings_date=dt.to_pydatetime().date(), earnings_time=None)
+
+                # Alternate pattern: columns contain 'Earnings Date'
+                if hasattr(cal, "columns") and "Earnings Date" in cal.columns:
+                    val = cal["Earnings Date"].values[0]
+                    dt = pd.to_datetime(val, errors="coerce", utc=True)
+                    if pd.notna(dt):
+                        return EarningsInfo(symbol=sym, earnings_date=dt.to_pydatetime().date(), earnings_time=None)
+        except Exception:
+            pass
+
+        return EarningsInfo(symbol=sym, earnings_date=None, earnings_time=None)
+
     except Exception:
         # Best-effort; do not raise
         return EarningsInfo(symbol=sym, earnings_date=None, earnings_time=None)
