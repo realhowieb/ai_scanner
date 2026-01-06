@@ -1129,6 +1129,109 @@ def main():
 
     render_onboarding_hint(username, tier_name=tier_name)
 
+    # ---------------- Admin-only: Build stamp + One-click Earnings Debug ----------------
+    # If you don't see this section after deploying, you're almost certainly not running the updated app.py.
+    if bool(st.session_state.get("is_admin")):
+        try:
+            build_mtime = datetime.utcfromtimestamp(Path(__file__).stat().st_mtime).isoformat() + "Z"
+        except Exception:
+            build_mtime = "unknown"
+
+        st.sidebar.caption(f"build: {build_mtime} | user: {username} | tier_key: {tier_key}")
+
+        with st.sidebar.expander("🧪 Earnings Calendar Debug (One-click)", expanded=False):
+            st.caption("Runs a forced earnings fetch for known symbols and verifies DB rows immediately.")
+
+            test_syms = ["AAPL", "MSFT", "TSLA"]
+
+            if st.button(
+                "Fetch earnings for AAPL / MSFT / TSLA",
+                key="btn_earnings_debug_sidebar",
+                use_container_width=True,
+            ):
+                # 1) Fetch + upsert
+                try:
+                    try:
+                        from earnings import populate_earnings_calendar  # type: ignore
+                    except Exception:
+                        from db.earnings import populate_earnings_calendar  # type: ignore
+
+                    with st.spinner("Fetching earnings via Yahoo Finance + writing to DB..."):
+                        _ = populate_earnings_calendar(test_syms)
+
+                    st.success("Fetched earnings for AAPL, MSFT, TSLA")
+                except Exception as e:
+                    st.error(f"Earnings fetch failed: {e}")
+
+                # 2) Verify DB writes
+                try:
+                    conn = _get_db_conn_for_app()
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("SELECT to_regclass('public.earnings_calendar')")
+                            reg = cur.fetchone()
+                            table_exists = bool(reg and reg[0])
+
+                        if not table_exists:
+                            st.error("DB verify: public.earnings_calendar not found")
+                        else:
+                            with conn.cursor() as cur:
+                                cur.execute("SELECT COUNT(*) FROM earnings_calendar")
+                                total = int((cur.fetchone() or [0])[0])
+
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    """
+                                    SELECT COUNT(*)
+                                    FROM earnings_calendar
+                                    WHERE upper(symbol) = ANY(%s)
+                                    """,
+                                    (test_syms,),
+                                )
+                                n_syms = int((cur.fetchone() or [0])[0])
+
+                            st.caption(
+                                f"DB verify: earnings_calendar total_rows={total}, rows_for_{','.join(test_syms)}={n_syms}"
+                            )
+
+                            try:
+                                with conn.cursor() as cur:
+                                    cur.execute(
+                                        """
+                                        SELECT *
+                                        FROM earnings_calendar
+                                        WHERE upper(symbol) = ANY(%s)
+                                        ORDER BY updated_at DESC NULLS LAST
+                                        LIMIT 20
+                                        """,
+                                        (test_syms,),
+                                    )
+                                    rows = cur.fetchall() or []
+                                    cols = [d[0] for d in (cur.description or [])]
+
+                                if rows and cols:
+                                    st.dataframe(pd.DataFrame(rows, columns=cols), use_container_width=True)
+                                else:
+                                    st.warning(
+                                        "DB verify: table exists but 0 rows for test symbols. "
+                                        "That means the upsert/insert did not run or wrote to a different DB."
+                                    )
+                            except Exception as e:
+                                st.caption(f"DB verify: sample row fetch failed: {e}")
+                    finally:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                except Exception as e:
+                    st.error(
+                        "DB verify failed: "
+                        + str(e)
+                        + "\n\nTip: ensure Streamlit secrets has DATABASE_URL or database_url, and psycopg/psycopg2 is installed."
+                    )
+
+            st.caption("If you still see 0 rows, check Render logs for earnings upsert/insert errors.")
+
     # -------- Load Saved User Settings (if available) --------
     if username and callable(get_user_settings):
         safe_username = (username or "").strip()
