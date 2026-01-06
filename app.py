@@ -919,6 +919,11 @@ def main():
                 if v:
                     return str(v).strip()
 
+                # Some deployments may accidentally set a lowercase env var
+                v2 = os.getenv("database_url")
+                if v2:
+                    return str(v2).strip()
+
                 # 2) Common Streamlit secrets keys
                 for k in (
                     "DATABASE_URL",
@@ -926,6 +931,7 @@ def main():
                     "NEON_DSN",
                     "POSTGRES_URL",
                     "POSTGRESQL_URL",
+                    "database_url",
                 ):
                     try:
                         val = st.secrets[k]  # type: ignore[index]
