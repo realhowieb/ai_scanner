@@ -1481,7 +1481,148 @@ def main():
                         + "\n\nTip: ensure Streamlit secrets has DATABASE_URL or database_url, and psycopg/psycopg2 is installed."
                     )
 
+
             st.caption("If you still see 0 rows, check Render logs for earnings upsert/insert errors.")
+
+        # ---------------- Admin-only: Run daily earnings refresh (batch) ----------------
+        with st.sidebar.expander("📅 Run daily earnings refresh (admin)", expanded=False):
+            st.caption(
+                "Runs a batch refresh and writes to `earnings_calendar`. "
+                "Use this to populate ‘Earnings in X days’ quickly without waiting for scans."
+            )
+
+            # Choose which universe to refresh
+            refresh_target = st.radio(
+                "Universe",
+                ["SP500", "NASDAQ (capped)", "Combo (SP500+NASDAQ capped)", "Active watchlist"],
+                horizontal=False,
+                key="earnings_refresh_target",
+            )
+
+            # Chunk size keeps requests + DB writes predictable
+            chunk_size = st.number_input(
+                "Chunk size",
+                min_value=50,
+                max_value=1000,
+                value=250,
+                step=50,
+                help="Smaller chunks are safer on cold starts / rate limits; larger chunks are faster.",
+                key="earnings_refresh_chunk_size",
+            )
+
+            max_symbols = st.number_input(
+                "Max symbols",
+                min_value=50,
+                max_value=5000,
+                value=1000,
+                step=50,
+                help="Safety cap so you can test without refreshing the entire market.",
+                key="earnings_refresh_max_symbols",
+            )
+
+            def _pick_refresh_symbols() -> list[str]:
+                try:
+                    if refresh_target == "SP500":
+                        syms = safe_call(load_sp500_universe, label="SP500 universe (earnings refresh)")
+                        syms = filter_universe(syms)
+                        return [str(s).strip().upper() for s in (syms or []) if str(s).strip()]
+
+                    if refresh_target == "NASDAQ (capped)":
+                        syms = safe_call(load_nasdaq_universe, label="NASDAQ universe (earnings refresh)")
+                        syms = filter_universe(syms)
+                        syms = (syms or [])[: int(st.session_state.get("max_nasdaq_scan", 1500))]
+                        return [str(s).strip().upper() for s in syms if str(s).strip()]
+
+                    if refresh_target == "Combo (SP500+NASDAQ capped)":
+                        sp500 = safe_call(load_sp500_universe, label="SP500 universe (earnings refresh)")
+                        nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe (earnings refresh)")
+                        sp500 = filter_universe(sp500)
+                        nasdaq = filter_universe(nasdaq)
+                        nasdaq = (nasdaq or [])[: int(st.session_state.get("max_nasdaq_scan", 1500))]
+                        combo = list(sp500 or []) + list(nasdaq or [])
+                        combo = filter_universe(combo)
+                        return [str(s).strip().upper() for s in combo if str(s).strip()]
+
+                    # Active watchlist
+                    watch = st.session_state.get("active_watchlist_tickers", []) or []
+                    return [str(s).strip().upper() for s in watch if str(s).strip()]
+                except Exception:
+                    return []
+
+            syms = _pick_refresh_symbols()
+            if max_symbols and syms:
+                syms = syms[: int(max_symbols)]
+
+            st.caption(f"Selected symbols: **{len(syms)}**")
+
+            run_refresh = st.button(
+                "Run refresh now",
+                key="btn_admin_run_earnings_refresh",
+                use_container_width=True,
+                disabled=(len(syms) == 0),
+            )
+
+            if run_refresh:
+                try:
+                    # Import refresh function
+                    try:
+                        from earnings import populate_earnings_calendar  # type: ignore
+                    except Exception:
+                        from db.earnings import populate_earnings_calendar  # type: ignore
+
+                    import inspect
+
+                    sig = None
+                    try:
+                        sig = inspect.signature(populate_earnings_calendar)
+                    except Exception:
+                        sig = None
+
+                    total = len(syms)
+                    wrote = 0
+                    progress = st.progress(0)
+                    status = st.empty()
+
+                    # Work in deterministic chunks
+                    for i in range(0, total, int(chunk_size)):
+                        batch = syms[i : i + int(chunk_size)]
+                        status.write(f"Refreshing earnings: {i + 1}–{min(i + len(batch), total)} / {total}…")
+
+                        if sig is not None and "conn" in getattr(sig, "parameters", {}):
+                            conn = _get_db_conn_for_app()
+                            try:
+                                populate_earnings_calendar(batch, conn=conn)
+                            finally:
+                                try:
+                                    conn.close()
+                                except Exception:
+                                    pass
+                        else:
+                            populate_earnings_calendar(batch)
+
+                        wrote = min(i + len(batch), total)
+                        progress.progress(int((wrote / max(total, 1)) * 100))
+
+                    # Quick DB count verify
+                    conn = _get_db_conn_for_app()
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("SELECT COUNT(*) FROM earnings_calendar")
+                            n = int((cur.fetchone() or [0])[0])
+                    finally:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+
+                    st.session_state["earnings_last_admin_refresh"] = datetime.utcnow().isoformat() + "Z"
+                    st.success(f"✅ Earnings refresh complete. Symbols processed: {total}. earnings_calendar rows: {n}.")
+                except Exception as e:
+                    st.error(f"Earnings refresh failed: {e}")
+
+            last = st.session_state.get("earnings_last_admin_refresh")
+            if last:
+                st.caption(f"Last admin refresh: {last}")
 
     # -------- Load Saved User Settings (if available) --------
     if username and callable(get_user_settings):
