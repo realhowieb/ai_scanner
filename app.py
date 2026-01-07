@@ -1259,6 +1259,121 @@ def main():
         with st.sidebar.expander("🧪 Earnings Calendar Debug (One-click)", expanded=False):
             st.caption("Runs a forced earnings fetch for known symbols and verifies DB rows immediately.")
 
+            # --- One-click: check a single ticker (DB-only or fetch+write+verify) ---
+            st.markdown("**Quick single-ticker check**")
+            _sym_in = st.text_input("Ticker", value="AAPL", key="earn_dbg_single_symbol")
+            _sym = (_sym_in or "").strip().upper()
+
+            c_a, c_b = st.columns(2)
+            with c_a:
+                run_db_only = st.button(
+                    "DB lookup",
+                    key="btn_earnings_db_lookup",
+                    use_container_width=True,
+                    disabled=not bool(_sym),
+                )
+            with c_b:
+                run_fetch_write = st.button(
+                    "Fetch + write + verify",
+                    key="btn_earnings_fetch_write_verify",
+                    use_container_width=True,
+                    disabled=not bool(_sym),
+                )
+
+            def _db_lookup_symbol(sym: str) -> dict | None:
+                conn = _get_db_conn_for_app()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT symbol, earnings_date, earnings_time, updated_at
+                            FROM earnings_calendar
+                            WHERE upper(symbol) = upper(%s)
+                            LIMIT 1
+                            """,
+                            (sym,),
+                        )
+                        row = cur.fetchone()
+                        if not row:
+                            return None
+                        return {
+                            "symbol": row[0],
+                            "earnings_date": row[1],
+                            "earnings_time": row[2],
+                            "updated_at": row[3],
+                        }
+                finally:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+            if run_fetch_write:
+                try:
+                    try:
+                        from earnings import populate_earnings_calendar  # type: ignore
+                    except Exception:
+                        from db.earnings import populate_earnings_calendar  # type: ignore
+
+                    with st.spinner(f"Fetching earnings for {_sym} + writing to DB..."):
+                        import inspect
+
+                        sig = None
+                        try:
+                            sig = inspect.signature(populate_earnings_calendar)
+                        except Exception:
+                            sig = None
+
+                        if sig is not None and "conn" in sig.parameters:
+                            conn = _get_db_conn_for_app()
+                            try:
+                                populate_earnings_calendar([_sym], conn=conn)
+                            finally:
+                                try:
+                                    conn.close()
+                                except Exception:
+                                    pass
+                        else:
+                            populate_earnings_calendar([_sym])
+
+                    st.success(f"Fetch complete for {_sym}")
+                except Exception as e:
+                    st.error(f"Fetch/write failed for {_sym}: {e}")
+
+            if run_db_only or run_fetch_write:
+                try:
+                    row = _db_lookup_symbol(_sym)
+                    if not row:
+                        st.warning(f"No DB row found for {_sym} (yet).")
+                    else:
+                        # Compute days-until (same logic as results column)
+                        _today = date.today()
+                        _ed = row.get("earnings_date")
+                        _days = None
+                        try:
+                            if _ed:
+                                _days = int((_ed - _today).days)
+                        except Exception:
+                            _days = None
+
+                        st.write(
+                            {
+                                "symbol": row.get("symbol"),
+                                "earnings_date": row.get("earnings_date"),
+                                "earnings_time": row.get("earnings_time"),
+                                "days_until_earnings": _days,
+                                "updated_at": row.get("updated_at"),
+                            }
+                        )
+                        if row.get("earnings_date") is None:
+                            st.caption(
+                                "Earnings date is NULL = provider returned TBA / not announced (still a valid row)."
+                            )
+                except Exception as e:
+                    st.error(f"DB lookup failed for {_sym}: {e}")
+
+            st.markdown("---")
+
             test_syms = ["AAPL", "MSFT", "TSLA", "META", "AMD", "INTC"]
 
             if st.button(
