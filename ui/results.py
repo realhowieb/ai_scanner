@@ -72,12 +72,30 @@ def render_results(
     MAX_STYLED_ROWS = 1500
     MAX_STYLED_COLS = 25
 
-    fast_mode = (len(df) > MAX_STYLED_ROWS) or (df.shape[1] > MAX_STYLED_COLS)
+    # "Fast mode" disables ALL pandas Styler work (df.style / applymap / gradients / to_html).
+    # Even medium-sized tables can feel slow on Streamlit Cloud, so we also provide a manual toggle.
+    auto_fast = (len(df) > MAX_STYLED_ROWS) or (df.shape[1] > MAX_STYLED_COLS)
+
+    # Default: disable styling when the table is moderately large (snappier UX)
+    default_enable_style = not (len(df) > 300 or df.shape[1] > 15)
+
+    enable_styling = st.checkbox(
+        "🎨 Enable table styling (slower)",
+        value=default_enable_style and (not auto_fast),
+        help="Styling can be slow on larger tables. Turn this off for faster results rendering.",
+        key="results_enable_styling",
+    )
+
+    fast_mode = auto_fast or (not enable_styling)
+
     if fast_mode:
-        st.caption(
-            f"⚡ Fast mode enabled (styling disabled) — {len(df):,} rows × {df.shape[1]} cols. "
-            f"Refine filters / lower Top N Results to re-enable styling."
-        )
+        if auto_fast:
+            st.caption(
+                f"⚡ Fast mode enabled (styling disabled) — {len(df):,} rows × {df.shape[1]} cols. "
+                f"Refine filters / lower Top N Results to re-enable styling."
+            )
+        else:
+            st.caption("⚡ Fast mode enabled (styling disabled) for faster rendering.")
 
         # Render without Styler for speed
         if can_export_csv:
