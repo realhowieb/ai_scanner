@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from datetime import datetime, time
+from datetime import datetime, time, date
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -161,6 +161,10 @@ def _get_database_url() -> str | None:
     return None
 
 
+# --------------- DB connection helper (app.py only) ----------------
+# We intentionally do NOT depend on db/core.py (it may not exist in this repo).
+# Prefer psycopg (v3). Fall back to psycopg2 if present.
+
 def _get_db_conn_for_app():
     """Return a DB connection using DATABASE_URL/database_url.
 
@@ -186,6 +190,108 @@ def _get_db_conn_for_app():
         return psycopg2.connect(dsn)
     except Exception as e:
         raise RuntimeError(f"No DB driver available (install psycopg or psycopg2). Last error: {e}")
+
+# --------------- Earnings Calendar Enrichment (app.py only) ----------------
+EARN_COL_DAYS = "📅 Earnings in X days"
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _fetch_earnings_dates_for_symbols(symbols: tuple[str, ...]) -> dict[str, date | None]:
+    """Fetch earnings_date for a batch of symbols in one DB query.
+
+    Returns dict: {"AAPL": date|None, ...}
+    """
+    if not symbols:
+        return {}
+
+    # Normalize
+    syms = tuple(sorted({str(s).strip().upper() for s in symbols if str(s).strip()}))
+    if not syms:
+        return {}
+
+    conn = _get_db_conn_for_app()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT upper(symbol) AS symbol, earnings_date
+                FROM earnings_calendar
+                WHERE upper(symbol) = ANY(%s)
+                """,
+                (list(syms),),
+            )
+            rows = cur.fetchall() or []
+
+        out: dict[str, date | None] = {}
+        for sym, ed in rows:
+            if sym:
+                out[str(sym).strip().upper()] = ed
+        # Ensure all requested symbols exist in dict (even if missing in DB)
+        for s in syms:
+            out.setdefault(s, None)
+        return out
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def add_earnings_days_column(results_df: pd.DataFrame) -> pd.DataFrame:
+    """Add a single computed column: 📅 Earnings in X days.
+
+    Uses ONE DB query for all symbols in the table.
+    """
+    if results_df is None or results_df.empty:
+        return results_df
+
+    if "Ticker" not in results_df.columns:
+        return results_df
+
+    tickers = (
+        results_df["Ticker"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+        .dropna()
+        .unique()
+        .tolist()
+    )
+    tickers = [t for t in tickers if t]
+    if not tickers:
+        out = results_df.copy()
+        if EARN_COL_DAYS not in out.columns:
+            out[EARN_COL_DAYS] = None
+        return out
+
+    earn_map = _fetch_earnings_dates_for_symbols(tuple(tickers))
+    today = date.today()
+
+    out = results_df.copy()
+
+    def _days_until(sym: object) -> int | None:
+        s = str(sym).strip().upper()
+        ed = earn_map.get(s)
+        if not ed:
+            return None
+        try:
+            return int((ed - today).days)
+        except Exception:
+            return None
+
+    out[EARN_COL_DAYS] = out["Ticker"].apply(_days_until)
+
+    # Move earnings column right after Ticker for usability
+    try:
+        cols = list(out.columns)
+        if "Ticker" in cols and EARN_COL_DAYS in cols:
+            cols.remove(EARN_COL_DAYS)
+            ticker_idx = cols.index("Ticker")
+            cols.insert(ticker_idx + 1, EARN_COL_DAYS)
+            out = out[cols]
+    except Exception:
+        pass
+
+    return out
 
 # --------------- Tier/Admin Helper Functions ----------------
 
@@ -1454,6 +1560,31 @@ def main():
 
     # -------- Results + Early Breakout Candidates + Scan History --------
     df = get_results_df()
+
+    # Enrich results with earnings-days column (ONE DB query) before display
+    if df is not None and not df.empty:
+        try:
+            df = add_earnings_days_column(df)
+        except Exception as _e:
+            # Admin-only hint if enrichment fails
+            if bool(st.session_state.get("is_admin")):
+                st.sidebar.caption(f"earnings enrich failed: {_e}")
+
+    # Earnings filters (apply before we build tabs / counts)
+    # - Exclude earnings in next 3 days
+    # - Only earnings within 7 days
+    if df is not None and not df.empty and EARN_COL_DAYS in df.columns:
+        with st.sidebar.expander("📅 Earnings Filters", expanded=False):
+            excl_3 = st.checkbox("Exclude earnings in next 3 days", value=False, key="earn_excl_3")
+            within_7 = st.checkbox("Only earnings within 7 days", value=False, key="earn_within_7")
+
+        s = pd.to_numeric(df[EARN_COL_DAYS], errors="coerce")
+        if excl_3:
+            df = df[s.isna() | (s > 3)]
+            s = pd.to_numeric(df[EARN_COL_DAYS], errors="coerce")
+        if within_7:
+            df = df[(s >= 0) & (s <= 7)]
+
     rows = 0 if df is None else len(df)
 
     # Build tabs dynamically based on entitlements:

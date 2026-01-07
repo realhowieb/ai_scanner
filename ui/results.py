@@ -116,6 +116,40 @@ def render_results(
         "If you see 0 results, try lowering Min Gap or turning off the Unusual Volume Filter."
     )
 
+    # ─────────────────────────────
+    # 📅 Earnings Filters (fast)
+    # Requires a precomputed column from app.py: "📅 Earnings in X days"
+    # ─────────────────────────────
+    earn_col = "📅 Earnings in X days"
+    if earn_col in df.columns:
+        with st.expander("📅 Earnings Filters", expanded=False):
+            excl_3 = st.checkbox(
+                "Exclude earnings in next 3 days",
+                value=False,
+                key="earn_excl_3_results",
+                help="Hides stocks with earnings 0–3 days away (keeps unknown earnings).",
+            )
+            within_7 = st.checkbox(
+                "Only earnings within 7 days",
+                value=False,
+                key="earn_within_7_results",
+                help="Shows only stocks with earnings 0–7 days away.",
+            )
+
+            s = pd.to_numeric(df[earn_col], errors="coerce")
+            before = len(df)
+
+            if excl_3:
+                df = df[s.isna() | (s > 3)]
+                s = pd.to_numeric(df[earn_col], errors="coerce")
+
+            if within_7:
+                df = df[(s >= 0) & (s <= 7)]
+
+            after = len(df)
+            if before != after:
+                st.caption(f"Filtered by earnings: {before} → {after} rows")
+
     # --- Performance guard: Pandas Styler becomes very slow on large tables ---
     MAX_STYLED_ROWS = 1500
     MAX_STYLED_COLS = 25
