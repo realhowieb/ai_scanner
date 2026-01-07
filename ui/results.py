@@ -2,6 +2,9 @@
 
 from typing import Callable, Optional
 
+import logging
+import re
+
 
 import pandas as pd
 import streamlit as st
@@ -11,6 +14,51 @@ try:
     from streamlit_autorefresh import st_autorefresh  # type: ignore
 except Exception:
     st_autorefresh = None
+
+# --- yfinance / Yahoo hard-fail guard ---
+# Yahoo sometimes returns 401 "Invalid Crumb" which can spam logs and stall UI.
+# When detected, we disable further yfinance calls for the current session.
+_YF_DISABLED_KEY = "yf_disabled"
+_YF_DISABLED_REASON_KEY = "yf_disabled_reason"
+_YF_WARNED_KEY = "yf_disabled_warned"
+
+# Reduce noisy library logging (won't hide exceptions, just prevents log spam).
+for _name in ("yfinance", "urllib3", "requests"):
+    try:
+        logging.getLogger(_name).setLevel(logging.ERROR)
+    except Exception:
+        pass
+
+
+def _is_yahoo_crumb_error(exc: Exception) -> bool:
+    msg = str(exc) or ""
+    msg_l = msg.lower()
+    # Common yfinance/Yahoo failure strings
+    if "invalid crumb" in msg_l:
+        return True
+    if "http error 401" in msg_l or "401" in msg_l and "unauthorized" in msg_l:
+        return True
+    return False
+
+
+def _disable_yfinance_for_session(reason: str) -> None:
+    try:
+        st.session_state[_YF_DISABLED_KEY] = True
+        st.session_state[_YF_DISABLED_REASON_KEY] = reason
+    except Exception:
+        pass
+
+
+def _warn_yfinance_disabled_once() -> None:
+    try:
+        if st.session_state.get(_YF_WARNED_KEY):
+            return
+        if st.session_state.get(_YF_DISABLED_KEY):
+            st.session_state[_YF_WARNED_KEY] = True
+            reason = st.session_state.get(_YF_DISABLED_REASON_KEY) or "Yahoo Finance blocked the request (401)."
+            st.caption(f"⚠️ Live quotes temporarily disabled this session: {reason}")
+    except Exception:
+        pass
 
 
 def get_results_df() -> Optional[pd.DataFrame]:
