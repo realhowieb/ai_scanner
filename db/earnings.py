@@ -68,8 +68,8 @@ UPSERT_EARNINGS_SQL = """
 INSERT INTO earnings_calendar (symbol, earnings_date, earnings_time, updated_at)
 VALUES (%s, %s, %s, NOW())
 ON CONFLICT (symbol) DO UPDATE SET
-  earnings_date = EXCLUDED.earnings_date,
-  earnings_time = EXCLUDED.earnings_time,
+  earnings_date = COALESCE(EXCLUDED.earnings_date, earnings_calendar.earnings_date),
+  earnings_time = COALESCE(EXCLUDED.earnings_time, earnings_calendar.earnings_time),
   updated_at = NOW();
 """
 
