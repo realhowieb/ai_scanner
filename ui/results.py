@@ -291,23 +291,54 @@ def render_results(
         selected_ticker = st.session_state.get("results_selected_ticker") or pick
         if selected_ticker:
             with st.expander(f"📌 {selected_ticker} details", expanded=False):
-                # Only render chart when user opens the detail panel
+                # Show a compact stats + earnings card (no extra network calls)
                 try:
-                    render_chart_for_ticker(str(selected_ticker))
+                    row_df = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()]
+                    r0 = row_df.iloc[0] if len(row_df) else None
                 except Exception:
-                    st.caption("Chart unavailable for this ticker.")
+                    r0 = None
 
-                # Show earnings context if present
-                if "📅 Earnings in X days" in df.columns:
+                if r0 is not None:
+                    c1, c2, c3, c4 = st.columns(4)
+
+                    def _as_float(v):
+                        try:
+                            if pd.isna(v):
+                                return None
+                            return float(v)
+                        except Exception:
+                            return None
+
+                    # Core stats
+                    bs = _as_float(r0.get("BreakoutScore"))
+                    last = _as_float(r0.get("Last"))
+                    gap = _as_float(r0.get("GapPct"))
+                    dv = _as_float(r0.get("DollarVol20"))
+
+                    c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
+                    c2.metric("Last", "—" if last is None else f"{last:.2f}")
+                    c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
+                    c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
+
+                    # Earnings context (if present)
+                    earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
+                    if earn_days is None:
+                        st.caption("📅 Earnings: —")
+                    else:
+                        st.caption(f"📅 Earnings in {int(earn_days)} days")
+
+                    # Optional: show a tiny raw row preview for debugging (collapsed)
+                    with st.expander("Show row fields", expanded=False):
+                        st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
+                else:
+                    st.caption("No row details available for this ticker.")
+
+                # Charts are optional and should not block details
+                with st.expander("📈 Chart (optional)", expanded=False):
                     try:
-                        r0 = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()].iloc[0]
-                        v = r0.get("📅 Earnings in X days")
-                        if pd.isna(v):
-                            st.caption("📅 Earnings: —")
-                        else:
-                            st.caption(f"📅 Earnings in {int(float(v))} days")
+                        render_chart_for_ticker(str(selected_ticker))
                     except Exception:
-                        pass
+                        st.caption("Chart unavailable for this ticker.")
 
         if can_ai_notes:
             st.subheader("AI Notes")
@@ -579,21 +610,50 @@ def render_results(
     selected_ticker = st.session_state.get("results_selected_ticker") or pick
     if selected_ticker:
         with st.expander(f"📌 {selected_ticker} details", expanded=False):
+            # Show a compact stats + earnings card (no extra network calls)
             try:
-                render_chart_for_ticker(str(selected_ticker))
+                row_df = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()]
+                r0 = row_df.iloc[0] if len(row_df) else None
             except Exception:
-                st.caption("Chart unavailable for this ticker.")
+                r0 = None
 
-            if "📅 Earnings in X days" in df.columns:
+            if r0 is not None:
+                c1, c2, c3, c4 = st.columns(4)
+
+                def _as_float(v):
+                    try:
+                        if pd.isna(v):
+                            return None
+                        return float(v)
+                    except Exception:
+                        return None
+
+                bs = _as_float(r0.get("BreakoutScore"))
+                last = _as_float(r0.get("Last"))
+                gap = _as_float(r0.get("GapPct"))
+                dv = _as_float(r0.get("DollarVol20"))
+
+                c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
+                c2.metric("Last", "—" if last is None else f"{last:.2f}")
+                c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
+                c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
+
+                earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
+                if earn_days is None:
+                    st.caption("📅 Earnings: —")
+                else:
+                    st.caption(f"📅 Earnings in {int(earn_days)} days")
+
+                with st.expander("Show row fields", expanded=False):
+                    st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
+            else:
+                st.caption("No row details available for this ticker.")
+
+            with st.expander("📈 Chart (optional)", expanded=False):
                 try:
-                    r0 = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()].iloc[0]
-                    v = r0.get("📅 Earnings in X days")
-                    if pd.isna(v):
-                        st.caption("📅 Earnings: —")
-                    else:
-                        st.caption(f"📅 Earnings in {int(float(v))} days")
+                    render_chart_for_ticker(str(selected_ticker))
                 except Exception:
-                    pass
+                    st.caption("Chart unavailable for this ticker.")
 
     # AI notes (tier-gated)
     if can_ai_notes:
