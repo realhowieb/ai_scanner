@@ -1817,8 +1817,19 @@ def main():
     # -------- Results + Early Breakout Candidates + Scan History --------
     df = get_results_df()
 
+    # -------- Optional: Earnings enrichment toggle --------
+    # Earnings enrichment does a DB batch lookup; let users disable it for faster results.
+    show_earnings = bool(st.session_state.get("enable_earnings_enrichment", False))
+    with st.sidebar.expander("📅 Earnings", expanded=False):
+        show_earnings = st.checkbox(
+            "Enable earnings enrichment (adds 📅 Earnings in X days)",
+            value=show_earnings,
+            key="enable_earnings_enrichment",
+            help="If enabled, the app will query the DB to add earnings timing to results and enable earnings filters.",
+        )
+
     # Enrich results with earnings-days column (ONE DB query) before display
-    if df is not None and not df.empty:
+    if show_earnings and df is not None and not df.empty:
         try:
             df = add_earnings_days_column(df)
         except Exception as _e:
@@ -1829,7 +1840,7 @@ def main():
     # Earnings filters (apply before we build tabs / counts)
     # - Exclude earnings in next 3 days
     # - Only earnings within 7 days
-    if df is not None and not df.empty and EARN_COL_DAYS in df.columns:
+    if show_earnings and df is not None and not df.empty and EARN_COL_DAYS in df.columns:
         with st.sidebar.expander("📅 Earnings Filters", expanded=False):
             excl_3 = st.checkbox("Exclude earnings in next 3 days", value=False, key="earn_excl_3")
             within_7 = st.checkbox("Only earnings within 7 days", value=False, key="earn_within_7")
