@@ -159,7 +159,7 @@ def render_results(
     # Requires a precomputed column from app.py: "📅 Earnings in X days"
     # ─────────────────────────────
     earn_col = "📅 Earnings in X days"
-    if earn_col in df.columns:
+    if earn_col in df.columns and (not is_basic):
         with st.expander("📅 Earnings Filters", expanded=False):
             excl_3 = st.checkbox(
                 "Exclude earnings in next 3 days",
@@ -187,6 +187,10 @@ def render_results(
             after = len(df)
             if before != after:
                 st.caption(f"Filtered by earnings: {before} → {after} rows")
+
+    # Show Basic upsell message for earnings filters, if earnings column exists and user is Basic
+    if earn_col in df.columns and is_basic:
+        st.info("🔒 Pro feature — earnings filters (exclude earnings soon / only within X days)")
 
     # --- Watchlist action (used in ticker details panel) ---
     def _render_watchlist_action(ticker: str) -> None:
