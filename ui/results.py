@@ -119,6 +119,18 @@ def render_results(
     # Option A: Basic = auto-details only, no selection
     is_basic = not can_export_csv
 
+    # 🔒 Basic hard-lock: clear any selection state so Basic cannot "inherit" Pro clicks
+    if is_basic:
+        for k in (
+            "results_selected_ticker",
+            "results_chart_picker",
+            "results_chart_picker_fast",
+            "results_table_fast",
+            "results_table_styled",
+            "results_enable_styling",
+        ):
+            st.session_state.pop(k, None)
+
     def _auto_details_ticker(_df: pd.DataFrame) -> str | None:
         try:
             if _df is None or _df.empty or "Ticker" not in _df.columns:
