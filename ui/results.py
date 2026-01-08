@@ -166,6 +166,7 @@ def render_results(
         active_id = st.session_state.get("active_watchlist_id")
         username = st.session_state.get("username") or st.session_state.get("user") or "anonymous"
 
+        # Session copy (best UX), but DB is source of truth if available
         current = st.session_state.get("active_watchlist_tickers", []) or []
         current_norm = {str(x).strip().upper() for x in current if str(x).strip()}
 
@@ -189,34 +190,73 @@ def render_results(
         if not clicked:
             return
 
-        # Best-effort DB persist if the functions exist in this runtime
-        try:
-            get_fn = globals().get("get_watchlist_tickers")
-            set_fn = globals().get("set_watchlist_tickers")
+        # Resolve DB functions (app may expose them via different module paths)
+        def _resolve_watchlist_fns():
+            # 1) If app.py injected them into globals() at import time
+            g_get = globals().get("get_watchlist_tickers")
+            g_set = globals().get("set_watchlist_tickers")
+            if callable(g_get) and callable(g_set):
+                return g_get, g_set
 
-            existing = []
-            if callable(get_fn):
+            # 2) Try common import locations
+            candidates = [
+                ("db.watchlists", "get_watchlist_tickers", "set_watchlist_tickers"),
+                ("db.watchlist", "get_watchlist_tickers", "set_watchlist_tickers"),
+                ("watchlists", "get_watchlist_tickers", "set_watchlist_tickers"),
+                ("watchlist", "get_watchlist_tickers", "set_watchlist_tickers"),
+            ]
+            for mod_name, get_name, set_name in candidates:
                 try:
-                    existing = get_fn(active_id, username) or []
+                    mod = __import__(mod_name, fromlist=[get_name, set_name])
+                    get_fn = getattr(mod, get_name, None)
+                    set_fn = getattr(mod, set_name, None)
+                    if callable(get_fn) and callable(set_fn):
+                        return get_fn, set_fn
                 except Exception:
-                    existing = current
-            else:
-                existing = current
+                    continue
 
-            norm_existing = {str(x).strip().upper() for x in existing if str(x).strip()}
-            updated = sorted(norm_existing | {t})
+            return None, None
 
-            if callable(set_fn):
-                try:
-                    set_fn(active_id, username, list(updated))
-                except Exception:
-                    # If DB write fails, still update session_state for UX
-                    pass
+        get_fn, set_fn = _resolve_watchlist_fns()
 
-            st.session_state["active_watchlist_tickers"] = list(updated)
-            st.success(f"Added **{t}** to your active watchlist.")
-        except Exception as e:
-            st.error(f"Failed to add {t} to watchlist: {e}")
+        # Always update session_state immediately for responsive UX
+        updated_norm = set(current_norm)
+        updated_norm.add(t)
+        st.session_state["active_watchlist_tickers"] = sorted(updated_norm)
+
+        # If DB functions exist, persist + verify
+        if callable(get_fn) and callable(set_fn):
+            try:
+                existing_db = get_fn(active_id, username) or []
+                existing_db_norm = {str(x).strip().upper() for x in existing_db if str(x).strip()}
+                new_db = sorted(existing_db_norm | {t})
+
+                set_fn(active_id, username, list(new_db))
+
+                # Verify (read-after-write) so we don't show a false success
+                verify_db = get_fn(active_id, username) or []
+                verify_norm = {str(x).strip().upper() for x in verify_db if str(x).strip()}
+                st.session_state["active_watchlist_tickers"] = sorted(verify_norm)
+
+                if t in verify_norm:
+                    st.success(f"Added **{t}** to your active watchlist.")
+                else:
+                    st.warning(
+                        f"Tried to add **{t}**, but it did not appear in the DB on verification. "
+                        "Your DB write may be failing or the watchlist is keyed differently."
+                    )
+            except Exception as e:
+                # Keep the session_state add (UX), but make DB failure visible
+                st.warning(
+                    f"Added **{t}** locally, but DB save failed: {e}. "
+                    "It may disappear after refresh if DB cannot be reached."
+                )
+        else:
+            # No DB integration available in this runtime
+            st.info(
+                "Added locally (no DB watchlist functions found). "
+                "If it disappears after refresh, wire get_watchlist_tickers/set_watchlist_tickers into this module."
+            )
 
     # --- Performance guard: Pandas Styler becomes very slow on large tables ---
     MAX_STYLED_ROWS = 1500
