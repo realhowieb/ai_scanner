@@ -333,13 +333,6 @@ def render_results(
                 else:
                     st.caption("No row details available for this ticker.")
 
-                # Charts are optional and should not block details
-                with st.expander("📈 Chart (optional)", expanded=False):
-                    try:
-                        render_chart_for_ticker(str(selected_ticker))
-                    except Exception:
-                        st.caption("Chart unavailable for this ticker.")
-
         if can_ai_notes:
             st.subheader("AI Notes")
             st.caption("⭐ Premium feature")
@@ -648,12 +641,6 @@ def render_results(
                     st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
             else:
                 st.caption("No row details available for this ticker.")
-
-            with st.expander("📈 Chart (optional)", expanded=False):
-                try:
-                    render_chart_for_ticker(str(selected_ticker))
-                except Exception:
-                    st.caption("Chart unavailable for this ticker.")
 
     # AI notes (tier-gated)
     if can_ai_notes:
