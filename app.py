@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timezone
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -1817,6 +1817,30 @@ def main():
     # -------- Results + Early Breakout Candidates + Scan History --------
     df = get_results_df()
 
+    # -------- Scan timestamp (UTC) --------
+    # Record a timestamp when a *new* results dataframe appears so users know freshness.
+    # We detect "new" results via a lightweight signature stored in session_state.
+    try:
+        if df is not None and not df.empty:
+            _rows = int(len(df))
+            _first = str(df.iloc[0].get("Ticker", "")).strip().upper() if _rows > 0 else ""
+            _last = str(df.iloc[-1].get("Ticker", "")).strip().upper() if _rows > 0 else ""
+            _sig = f"{_rows}|{_first}|{_last}"
+
+            prev_sig = str(st.session_state.get("results_signature") or "")
+            if _sig and _sig != prev_sig:
+                st.session_state["results_signature"] = _sig
+                st.session_state["scan_ran_at_utc"] = datetime.now(timezone.utc)
+
+        # If results cleared, clear the timestamp too (keeps UI honest)
+        if df is None or df.empty:
+            st.session_state.pop("results_signature", None)
+            st.session_state.pop("scan_ran_at_utc", None)
+    except Exception:
+        pass
+
+    scan_ran_at = st.session_state.get("scan_ran_at_utc")
+
     # -------- Optional: Earnings enrichment toggle --------
     # Earnings enrichment does a DB batch lookup; let users disable it for faster results.
     show_earnings = bool(st.session_state.get("enable_earnings_enrichment", False))
@@ -1875,6 +1899,11 @@ def main():
         tab3 = None
 
     with tab1:
+        if scan_ran_at:
+            try:
+                st.caption(f"🕒 Scan run at {scan_ran_at.strftime('%Y-%m-%d %H:%M UTC')}")
+            except Exception:
+                st.caption("🕒 Scan run time available")
         # Preserve existing latest results behavior
         if rows == 0:
             with st.expander(f"📊 Latest scan results ({rows} rows)", expanded=False):
