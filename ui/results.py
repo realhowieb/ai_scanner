@@ -9,11 +9,6 @@ import re
 import pandas as pd
 import streamlit as st
 
-# Optional auto-refresh for results-only live mode
-try:
-    from streamlit_autorefresh import st_autorefresh  # type: ignore
-except Exception:
-    st_autorefresh = None
 
 # --- yfinance / Yahoo hard-fail guard ---
 # Yahoo sometimes returns 401 "Invalid Crumb" which can spam logs and stall UI.
@@ -95,19 +90,6 @@ def render_results(
         can_export_csv = bool(ent.get("can_export_csv", can_export_csv))
         # Treat AI Notes as Premium-only; fall back to passed flag if not present.
         can_ai_notes = bool(ent.get("can_ai_notes", can_ai_notes))
-
-    # Optional Live Mode: user-controlled auto-refresh every 10s for the results table
-    if st_autorefresh is not None:
-        live_results = st.checkbox(
-            "🔁 Live results (10s refresh)",
-            value=False,
-            key="results_live_mode",
-            help="When enabled, the results table refreshes about every 10 seconds.",
-        )
-        if live_results:
-            st_autorefresh(interval=10_000, key="results_autorefresh")
-    else:
-        st.caption("Tip: install `streamlit-autorefresh` to enable live results refresh.")
 
     st.subheader("Results")
     st.caption(
