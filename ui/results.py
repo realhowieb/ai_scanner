@@ -411,7 +411,10 @@ def render_results(
             auto_t = _auto_details_ticker(df)
             if auto_t:
                 with st.expander(f"📌 {auto_t} details", expanded=False):
-                    st.caption("📌 Top breakout candidate (auto-selected). 🔒 Upgrade to Pro to explore other tickers.")
+                    st.caption(
+                        "📌 **Top breakout candidate (auto-selected)**  \n"
+                        "🔒 Upgrade to Pro to select tickers, view charts, and export CSV."
+                    )
                     try:
                         row_df = df[df["Ticker"].astype(str).str.upper() == str(auto_t).upper()]
                         r0 = row_df.iloc[0] if len(row_df) else None
@@ -784,7 +787,10 @@ def render_results(
         auto_t = _auto_details_ticker(df)
         if auto_t:
             with st.expander(f"📌 {auto_t} details", expanded=False):
-                st.caption("📌 Top breakout candidate (auto-selected). 🔒 Upgrade to Pro to explore other tickers.")
+                st.caption(
+                    "📌 **Top breakout candidate (auto-selected)**  \n"
+                    "🔒 Upgrade to Pro to select tickers, view charts, and export CSV."
+                )
                 try:
                     row_df = df[df["Ticker"].astype(str).str.upper() == str(auto_t).upper()]
                     r0 = row_df.iloc[0] if len(row_df) else None
