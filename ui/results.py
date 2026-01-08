@@ -116,6 +116,25 @@ def render_results(
         # Treat AI Notes as Premium-only; fall back to passed flag if not present.
         can_ai_notes = bool(ent.get("can_ai_notes", can_ai_notes))
 
+    # Option A: Basic = auto-details only, no selection
+    is_basic = not can_export_csv
+
+    def _auto_details_ticker(_df: pd.DataFrame) -> str | None:
+        try:
+            if _df is None or _df.empty or "Ticker" not in _df.columns:
+                return None
+            if "BreakoutScore" in _df.columns:
+                s = pd.to_numeric(_df["BreakoutScore"], errors="coerce")
+                if s.notna().any():
+                    i = int(s.fillna(-1e18).idxmax())
+                    t = str(_df.loc[i, "Ticker"]).strip().upper()
+                    return t or None
+            # fallback: first row
+            t = str(_df.iloc[0]["Ticker"]).strip().upper()
+            return t or None
+        except Exception:
+            return None
+
     st.subheader("Results")
     st.caption(
         f"Showing {len(df)} results. Increase 'Top N Results' in the sidebar to see more, "
@@ -374,7 +393,64 @@ def render_results(
         else:
             st.info("🔒 Pro feature — export scan results to CSV")
 
-        # Continue with charts / AI notes
+        # Continue with charts / details / AI notes
+        if is_basic:
+            # Basic: no interactive selection; show one auto-selected ticker details.
+            auto_t = _auto_details_ticker(df)
+            if auto_t:
+                with st.expander(f"📌 {auto_t} details", expanded=False):
+                    st.caption("📌 Top breakout candidate (auto-selected). 🔒 Upgrade to Pro to explore other tickers.")
+                    try:
+                        row_df = df[df["Ticker"].astype(str).str.upper() == str(auto_t).upper()]
+                        r0 = row_df.iloc[0] if len(row_df) else None
+                    except Exception:
+                        r0 = None
+
+                    if r0 is not None:
+                        c1, c2, c3, c4 = st.columns(4)
+
+                        def _as_float(v):
+                            try:
+                                if pd.isna(v):
+                                    return None
+                                return float(v)
+                            except Exception:
+                                return None
+
+                        bs = _as_float(r0.get("BreakoutScore"))
+                        last = _as_float(r0.get("Last"))
+                        gap = _as_float(r0.get("GapPct"))
+                        dv = _as_float(r0.get("DollarVol20"))
+
+                        c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
+                        c2.metric("Last", "—" if last is None else f"{last:.2f}")
+                        c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
+                        c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
+
+                        earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
+                        if earn_days is None:
+                            st.caption("📅 Earnings: —")
+                        else:
+                            st.caption(f"📅 Earnings in {int(earn_days)} days")
+
+                        with st.expander("Show row fields", expanded=False):
+                            st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
+                    else:
+                        st.caption("No row details available for this ticker.")
+            else:
+                st.caption("No ticker details available.")
+
+            # Basic: keep AI notes locked as before
+            if can_ai_notes:
+                st.subheader("AI Notes")
+                st.caption("⭐ Premium feature")
+                st.caption("AI notes require a selectable ticker; upgrade to Pro/Premium.")
+            else:
+                st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
+
+            return
+
+        # Pro/Premium: keep charts + interactive details
         with st.expander("📈 Charts", expanded=False):
             tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
             if not tickers:
@@ -691,63 +767,110 @@ def render_results(
     else:
         st.info("🔒 Pro feature — export scan results to CSV")
 
-    # Chart picker (deferred)
-    with st.expander("📈 Charts", expanded=False):
-        tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
-        if not tickers:
-            st.caption("No tickers available to chart.")
-            return
+    # Chart picker/details/AI notes: Option A logic for non-fast (styled) branch
+    if is_basic:
+        auto_t = _auto_details_ticker(df)
+        if auto_t:
+            with st.expander(f"📌 {auto_t} details", expanded=False):
+                st.caption("📌 Top breakout candidate (auto-selected). 🔒 Upgrade to Pro to explore other tickers.")
+                try:
+                    row_df = df[df["Ticker"].astype(str).str.upper() == str(auto_t).upper()]
+                    r0 = row_df.iloc[0] if len(row_df) else None
+                except Exception:
+                    r0 = None
 
-        pick = st.selectbox("Select ticker to chart", tickers, key="results_chart_picker")
-        render_chart_for_ticker(pick)
+                if r0 is not None:
+                    c1, c2, c3, c4 = st.columns(4)
 
-    pick = st.session_state.get("results_chart_picker")
-
-    # Detail panel (row-click driven)
-    selected_ticker = st.session_state.get("results_selected_ticker") or pick
-    if selected_ticker:
-        with st.expander(f"📌 {selected_ticker} details", expanded=False):
-            # Show a compact stats + earnings card (no extra network calls)
-            try:
-                row_df = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()]
-                r0 = row_df.iloc[0] if len(row_df) else None
-            except Exception:
-                r0 = None
-
-            if r0 is not None:
-                c1, c2, c3, c4 = st.columns(4)
-
-                def _as_float(v):
-                    try:
-                        if pd.isna(v):
+                    def _as_float(v):
+                        try:
+                            if pd.isna(v):
+                                return None
+                            return float(v)
+                        except Exception:
                             return None
-                        return float(v)
-                    except Exception:
-                        return None
 
-                bs = _as_float(r0.get("BreakoutScore"))
-                last = _as_float(r0.get("Last"))
-                gap = _as_float(r0.get("GapPct"))
-                dv = _as_float(r0.get("DollarVol20"))
+                    bs = _as_float(r0.get("BreakoutScore"))
+                    last = _as_float(r0.get("Last"))
+                    gap = _as_float(r0.get("GapPct"))
+                    dv = _as_float(r0.get("DollarVol20"))
 
-                c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
-                c2.metric("Last", "—" if last is None else f"{last:.2f}")
-                c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
-                c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
+                    c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
+                    c2.metric("Last", "—" if last is None else f"{last:.2f}")
+                    c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
+                    c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
 
-                earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
-                if earn_days is None:
-                    st.caption("📅 Earnings: —")
+                    earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
+                    if earn_days is None:
+                        st.caption("📅 Earnings: —")
+                    else:
+                        st.caption(f"📅 Earnings in {int(earn_days)} days")
+
+                    with st.expander("Show row fields", expanded=False):
+                        st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
                 else:
-                    st.caption(f"📅 Earnings in {int(earn_days)} days")
+                    st.caption("No row details available for this ticker.")
+        else:
+            st.caption("No ticker details available.")
+        # Do NOT render charts or watchlist action in Basic mode
+    else:
+        # Pro/Premium: keep existing Charts expander + details + watchlist action
+        with st.expander("📈 Charts", expanded=False):
+            tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+            if not tickers:
+                st.caption("No tickers available to chart.")
+                return
 
-                # ⭐ Add to watchlist action
-                _render_watchlist_action(str(selected_ticker))
+            pick = st.selectbox("Select ticker to chart", tickers, key="results_chart_picker")
+            render_chart_for_ticker(pick)
 
-                with st.expander("Show row fields", expanded=False):
-                    st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
-            else:
-                st.caption("No row details available for this ticker.")
+        pick = st.session_state.get("results_chart_picker")
+
+        # Detail panel (row-click driven)
+        selected_ticker = st.session_state.get("results_selected_ticker") or pick
+        if selected_ticker:
+            with st.expander(f"📌 {selected_ticker} details", expanded=False):
+                # Show a compact stats + earnings card (no extra network calls)
+                try:
+                    row_df = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()]
+                    r0 = row_df.iloc[0] if len(row_df) else None
+                except Exception:
+                    r0 = None
+
+                if r0 is not None:
+                    c1, c2, c3, c4 = st.columns(4)
+
+                    def _as_float(v):
+                        try:
+                            if pd.isna(v):
+                                return None
+                            return float(v)
+                        except Exception:
+                            return None
+
+                    bs = _as_float(r0.get("BreakoutScore"))
+                    last = _as_float(r0.get("Last"))
+                    gap = _as_float(r0.get("GapPct"))
+                    dv = _as_float(r0.get("DollarVol20"))
+
+                    c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
+                    c2.metric("Last", "—" if last is None else f"{last:.2f}")
+                    c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
+                    c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
+
+                    earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
+                    if earn_days is None:
+                        st.caption("📅 Earnings: —")
+                    else:
+                        st.caption(f"📅 Earnings in {int(earn_days)} days")
+
+                    # ⭐ Add to watchlist action
+                    _render_watchlist_action(str(selected_ticker))
+
+                    with st.expander("Show row fields", expanded=False):
+                        st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
+                else:
+                    st.caption("No row details available for this ticker.")
 
     # AI notes (tier-gated)
     if can_ai_notes:
@@ -755,6 +878,7 @@ def render_results(
         st.caption("⭐ Premium feature")
         try:
             # Use the same ticker the user selected for the chart
+            pick = st.session_state.get("results_chart_picker")
             row = df[df["Ticker"] == pick].iloc[0]
             auto_note = generate_ai_note(row)
             st.markdown(auto_note)
