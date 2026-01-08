@@ -824,7 +824,15 @@ def render_results(
                     st.caption("No row details available for this ticker.")
         else:
             st.caption("No ticker details available.")
-        # Do NOT render charts or watchlist action in Basic mode
+        # Basic: keep AI notes locked as before (and avoid any selection/charts paths)
+        if can_ai_notes:
+            st.subheader("AI Notes")
+            st.caption("⭐ Premium feature")
+            st.caption("AI notes require a selectable ticker; upgrade to Pro/Premium.")
+        else:
+            st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
+
+        return
     else:
         # Pro/Premium: keep existing Charts expander + details + watchlist action
         with st.expander("📈 Charts", expanded=False):
