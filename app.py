@@ -1520,40 +1520,93 @@ def main():
                 key="earnings_refresh_max_symbols",
             )
 
-            def _pick_refresh_symbols() -> list[str]:
+            def _norm_symbols(seq) -> list[str]:
+                out: list[str] = []
+                if not seq:
+                    return out
                 try:
+                    for s in seq:
+                        t = str(s).strip().upper()
+                        if not t:
+                            continue
+                        # light hygiene: skip obviously-bad tickers
+                        if any(ch.isspace() for ch in t):
+                            continue
+                        out.append(t)
+                except Exception:
+                    return []
+                # preserve order, de-dupe
+                return list(dict.fromkeys(out).keys())
+
+            def _get_state_list(*keys: str) -> list[str]:
+                for k in keys:
+                    v = st.session_state.get(k)
+                    if isinstance(v, (list, tuple)) and len(v) > 0:
+                        return _norm_symbols(v)
+                return []
+
+            def _pick_refresh_symbols() -> list[str]:
+                """Pick symbols for an admin earnings refresh.
+
+                IMPORTANT: app.py should not depend on helper functions that may not exist
+                in this repo. We rely on universe lists already loaded into session_state
+                by the universe panel / scan pipeline.
+                """
+                try:
+                    # Common universe keys (support multiple historical names)
+                    sp500 = _get_state_list(
+                        "sp500_universe",
+                        "sp500_symbols",
+                        "universe_sp500",
+                        "SP500_UNIVERSE",
+                    )
+                    nasdaq = _get_state_list(
+                        "nasdaq_universe",
+                        "nasdaq_symbols",
+                        "universe_nasdaq",
+                        "NASDAQ_UNIVERSE",
+                    )
+
+                    # Also allow using whatever is currently selected as the active universe
+                    active = _get_state_list(
+                        "universe_tickers",
+                        "active_universe_tickers",
+                        "universe_list",
+                    )
+
+                    # Watchlist (already used elsewhere)
+                    watch = _norm_symbols(st.session_state.get("active_watchlist_tickers", []) or [])
+
                     if refresh_target == "SP500":
-                        syms = safe_call(load_sp500_universe, label="SP500 universe (earnings refresh)")
-                        syms = filter_universe(syms)
-                        return [str(s).strip().upper() for s in (syms or []) if str(s).strip()]
+                        return sp500 or active
 
                     if refresh_target == "NASDAQ (capped)":
-                        syms = safe_call(load_nasdaq_universe, label="NASDAQ universe (earnings refresh)")
-                        syms = filter_universe(syms)
-                        syms = (syms or [])[: int(st.session_state.get("max_nasdaq_scan", 1500))]
-                        return [str(s).strip().upper() for s in syms if str(s).strip()]
+                        cap = int(st.session_state.get("max_nasdaq_scan", 1500) or 1500)
+                        base = nasdaq or active
+                        return base[:cap] if base else []
 
                     if refresh_target == "Combo (SP500+NASDAQ capped)":
-                        sp500 = safe_call(load_sp500_universe, label="SP500 universe (earnings refresh)")
-                        nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe (earnings refresh)")
-                        sp500 = filter_universe(sp500)
-                        nasdaq = filter_universe(nasdaq)
-                        nasdaq = (nasdaq or [])[: int(st.session_state.get("max_nasdaq_scan", 1500))]
-                        combo = list(sp500 or []) + list(nasdaq or [])
-                        combo = filter_universe(combo)
-                        return [str(s).strip().upper() for s in combo if str(s).strip()]
+                        cap = int(st.session_state.get("max_nasdaq_scan", 1500) or 1500)
+                        combo = (sp500 or []) + ((nasdaq or active)[:cap] if (nasdaq or active) else [])
+                        return list(dict.fromkeys(combo).keys())
 
                     # Active watchlist
-                    watch = st.session_state.get("active_watchlist_tickers", []) or []
-                    return [str(s).strip().upper() for s in watch if str(s).strip()]
+                    return watch
                 except Exception:
                     return []
 
             syms = _pick_refresh_symbols()
+            # Admin debug: show whether universes are present in session_state
+            has_sp500 = bool(st.session_state.get("sp500_universe") or st.session_state.get("sp500_symbols") or st.session_state.get("universe_sp500"))
+            has_nasdaq = bool(st.session_state.get("nasdaq_universe") or st.session_state.get("nasdaq_symbols") or st.session_state.get("universe_nasdaq"))
+            st.caption(
+                f"Refresh target: {refresh_target} | picked: {len(syms)} symbols | "
+                f"state: sp500={'yes' if has_sp500 else 'no'} nasdaq={'yes' if has_nasdaq else 'no'}"
+            )
             if max_symbols and syms:
                 syms = syms[: int(max_symbols)]
 
-            st.caption(f"Selected symbols: **{len(syms)}**")
+            st.caption(f"Selected symbols: **{len(syms)}** (after Max symbols cap)")
 
             run_refresh = st.button(
                 "Run refresh now",
