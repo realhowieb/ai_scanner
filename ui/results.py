@@ -259,14 +259,18 @@ def render_results(
             st.info("🔒 Pro feature — export scan results to CSV")
 
         # Continue with charts / AI notes
-        st.subheader("Charts")
-        tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
-        if not tickers:
-            st.caption("No tickers available to chart.")
-            return
+        with st.expander("📈 Charts", expanded=False):
+            tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+            if not tickers:
+                st.caption("No tickers available to chart.")
+                return
 
-        pick = st.selectbox("Select ticker to chart", tickers)
-        render_chart_for_ticker(pick)
+            pick = st.selectbox("Select ticker to chart", tickers, key="results_chart_picker_fast")
+
+            # Render chart ONLY when expander is opened
+            render_chart_for_ticker(pick)
+
+        pick = st.session_state.get("results_chart_picker_fast")
 
         if can_ai_notes:
             st.subheader("AI Notes")
@@ -510,15 +514,17 @@ def render_results(
     else:
         st.info("🔒 Pro feature — export scan results to CSV")
 
-    # Chart picker
-    st.subheader("Charts")
-    tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
-    if not tickers:
-        st.caption("No tickers available to chart.")
-        return
+    # Chart picker (deferred)
+    with st.expander("📈 Charts", expanded=False):
+        tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+        if not tickers:
+            st.caption("No tickers available to chart.")
+            return
 
-    pick = st.selectbox("Select ticker to chart", tickers)
-    render_chart_for_ticker(pick)
+        pick = st.selectbox("Select ticker to chart", tickers, key="results_chart_picker")
+        render_chart_for_ticker(pick)
+
+    pick = st.session_state.get("results_chart_picker")
 
     # AI notes (tier-gated)
     if can_ai_notes:
