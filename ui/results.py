@@ -157,6 +157,67 @@ def render_results(
             if before != after:
                 st.caption(f"Filtered by earnings: {before} → {after} rows")
 
+    # --- Watchlist action (used in ticker details panel) ---
+    def _render_watchlist_action(ticker: str) -> None:
+        t = (ticker or "").strip().upper()
+        if not t:
+            return
+
+        active_id = st.session_state.get("active_watchlist_id")
+        username = st.session_state.get("username") or st.session_state.get("user") or "anonymous"
+
+        current = st.session_state.get("active_watchlist_tickers", []) or []
+        current_norm = {str(x).strip().upper() for x in current if str(x).strip()}
+
+        if active_id is None:
+            st.caption("📋 Watchlist: select an active watchlist to add tickers.")
+            return
+
+        already = t in current_norm
+
+        cA, cB = st.columns([1, 2])
+        with cA:
+            clicked = st.button(
+                "⭐ Add to Watchlist" if not already else "✅ In Watchlist",
+                key=f"btn_details_add_watchlist_{t}",
+                disabled=already,
+                use_container_width=True,
+            )
+        with cB:
+            st.caption("Adds this ticker to your active watchlist.")
+
+        if not clicked:
+            return
+
+        # Best-effort DB persist if the functions exist in this runtime
+        try:
+            get_fn = globals().get("get_watchlist_tickers")
+            set_fn = globals().get("set_watchlist_tickers")
+
+            existing = []
+            if callable(get_fn):
+                try:
+                    existing = get_fn(active_id, username) or []
+                except Exception:
+                    existing = current
+            else:
+                existing = current
+
+            norm_existing = {str(x).strip().upper() for x in existing if str(x).strip()}
+            updated = sorted(norm_existing | {t})
+
+            if callable(set_fn):
+                try:
+                    set_fn(active_id, username, list(updated))
+                except Exception:
+                    # If DB write fails, still update session_state for UX
+                    pass
+
+            st.session_state["active_watchlist_tickers"] = list(updated)
+            st.success(f"Added **{t}** to your active watchlist.")
+        except Exception as e:
+            st.error(f"Failed to add {t} to watchlist: {e}")
+
     # --- Performance guard: Pandas Styler becomes very slow on large tables ---
     MAX_STYLED_ROWS = 1500
     MAX_STYLED_COLS = 25
@@ -326,6 +387,9 @@ def render_results(
                         st.caption("📅 Earnings: —")
                     else:
                         st.caption(f"📅 Earnings in {int(earn_days)} days")
+
+                    # ⭐ Add to watchlist action
+                    _render_watchlist_action(str(selected_ticker))
 
                     # Optional: show a tiny raw row preview for debugging (collapsed)
                     with st.expander("Show row fields", expanded=False):
@@ -636,6 +700,9 @@ def render_results(
                     st.caption("📅 Earnings: —")
                 else:
                     st.caption(f"📅 Earnings in {int(earn_days)} days")
+
+                # ⭐ Add to watchlist action
+                _render_watchlist_action(str(selected_ticker))
 
                 with st.expander("Show row fields", expanded=False):
                     st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
