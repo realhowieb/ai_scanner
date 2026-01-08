@@ -64,6 +64,31 @@ def get_results_df() -> Optional[pd.DataFrame]:
     return st.session_state.get("results_df")
 
 
+# Row selection helper for interactive tables
+def _sync_selected_ticker_from_table(selection_obj: object, df: pd.DataFrame, picker_key: str) -> None:
+    """If Streamlit dataframe selection is available, sync selected ticker into session_state.
+
+    This keeps row-click selection consistent with the existing chart picker keys.
+    """
+    try:
+        rows = getattr(getattr(selection_obj, "selection", None), "rows", None)
+        if not rows:
+            return
+        idx = int(rows[0])
+        if idx < 0 or idx >= len(df):
+            return
+        if "Ticker" not in df.columns:
+            return
+        t = str(df.iloc[idx]["Ticker"]).strip().upper()
+        if not t:
+            return
+        st.session_state["results_selected_ticker"] = t
+        # Also sync chart picker so existing chart/AI notes follow the click
+        st.session_state[picker_key] = t
+    except Exception:
+        return
+
+
 def render_results(
     df: Optional[pd.DataFrame],
     can_export_csv: bool,
@@ -173,7 +198,15 @@ def render_results(
 
         # Render without Styler for speed
         if can_export_csv:
-            st.dataframe(df, use_container_width=True, height=420)
+            _tbl = st.dataframe(
+                df,
+                use_container_width=True,
+                height=420,
+                selection_mode="single-row",
+                on_select="rerun",
+                key="results_table_fast",
+            )
+            _sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker_fast")
         else:
             # Basic: keep non-interactive rendering. Use plain HTML (much faster than styled.to_html).
             try:
@@ -253,6 +286,28 @@ def render_results(
             render_chart_for_ticker(pick)
 
         pick = st.session_state.get("results_chart_picker_fast")
+
+        # Detail panel (row-click driven)
+        selected_ticker = st.session_state.get("results_selected_ticker") or pick
+        if selected_ticker:
+            with st.expander(f"📌 {selected_ticker} details", expanded=False):
+                # Only render chart when user opens the detail panel
+                try:
+                    render_chart_for_ticker(str(selected_ticker))
+                except Exception:
+                    st.caption("Chart unavailable for this ticker.")
+
+                # Show earnings context if present
+                if "📅 Earnings in X days" in df.columns:
+                    try:
+                        r0 = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()].iloc[0]
+                        v = r0.get("📅 Earnings in X days")
+                        if pd.isna(v):
+                            st.caption("📅 Earnings: —")
+                        else:
+                            st.caption(f"📅 Earnings in {int(float(v))} days")
+                    except Exception:
+                        pass
 
         if can_ai_notes:
             st.subheader("AI Notes")
@@ -421,7 +476,19 @@ def render_results(
     # Results table: Basic users must not see the interactive dataframe toolbar (includes CSV download).
     # Pro/Premium can keep the interactive dataframe.
     if can_export_csv:
-        st.dataframe(styled, use_container_width=True, height=420)
+        try:
+            _tbl = st.dataframe(
+                styled,
+                use_container_width=True,
+                height=420,
+                selection_mode="single-row",
+                on_select="rerun",
+                key="results_table_styled",
+            )
+            _sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker")
+        except Exception:
+            # Fallback: keep styled rendering without selection
+            st.dataframe(styled, use_container_width=True, height=420)
     else:
         # Basic: keep the pro styling but render as static HTML (no Streamlit dataframe toolbar/download).
         # Mobile-safe: enable horizontal scroll + prevent vertical letter stacking.
@@ -507,6 +574,26 @@ def render_results(
         render_chart_for_ticker(pick)
 
     pick = st.session_state.get("results_chart_picker")
+
+    # Detail panel (row-click driven)
+    selected_ticker = st.session_state.get("results_selected_ticker") or pick
+    if selected_ticker:
+        with st.expander(f"📌 {selected_ticker} details", expanded=False):
+            try:
+                render_chart_for_ticker(str(selected_ticker))
+            except Exception:
+                st.caption("Chart unavailable for this ticker.")
+
+            if "📅 Earnings in X days" in df.columns:
+                try:
+                    r0 = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()].iloc[0]
+                    v = r0.get("📅 Earnings in X days")
+                    if pd.isna(v):
+                        st.caption("📅 Earnings: —")
+                    else:
+                        st.caption(f"📅 Earnings in {int(float(v))} days")
+                except Exception:
+                    pass
 
     # AI notes (tier-gated)
     if can_ai_notes:
