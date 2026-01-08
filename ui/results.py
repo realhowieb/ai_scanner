@@ -302,12 +302,16 @@ def render_results(
 
     default_enable_style = False
 
-    enable_styling = st.checkbox(
-        "🎨 Enable table styling (slower)",
-        value=default_enable_style and (not auto_fast),
-        help="Styling can be slow even on medium tables. Leave off for the fastest results.",
-        key="results_enable_styling",
-    )
+    # 🔒 Basic: hide styling toggle entirely (keeps Basic fast + avoids extra UI options)
+    if is_basic:
+        enable_styling = False
+    else:
+        enable_styling = st.checkbox(
+            "🎨 Enable table styling (slower)",
+            value=default_enable_style and (not auto_fast),
+            help="Styling can be slow even on medium tables. Leave off for the fastest results.",
+            key="results_enable_styling",
+        )
 
     # If user enables styling but the table is beyond the safe limit, force fast mode.
     if enable_styling and len(df) > STYLE_ROW_LIMIT:
