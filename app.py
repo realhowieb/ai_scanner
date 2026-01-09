@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 import streamlit as st
+# This file uses st.cache_data/st.cache_resource and avoids deprecated st.cache.
 from types import SimpleNamespace
 
 # Ensure project base directory importable
