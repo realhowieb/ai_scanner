@@ -24,4 +24,4 @@ scikit-learn
 joblib
 extra-streamlit-components
 streamlit-cookies-manager>=0.2.0
-psycopg2-binary>=2.9.9
+psycopg-binary>=3.2
