@@ -12,11 +12,10 @@ websockets
 pyppeteer
 mplfinance
 SQLAlchemy>=2.0
-psycopg[binary]
 apscheduler
 plotly
 requests
-streamlit-authenticator>=0.3.2
+streamlit-authenticator>=0.4.0
 bcrypt
 streamlit-autorefresh
 alpaca-py
@@ -24,5 +23,5 @@ xgboost
 scikit-learn
 joblib
 extra-streamlit-components
-streamlit-cookies-manager==0.2.0
+streamlit-cookies-manager>=0.2.0
 psycopg2-binary>=2.9.9
