@@ -8,7 +8,15 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 import streamlit as st
-# This file uses st.cache_data/st.cache_resource and avoids deprecated st.cache.
+
+# --- Compatibility: silence st.cache deprecation warnings ---
+# Some legacy code paths / third-party modules still reference `st.cache`.
+# Alias it to `st.cache_data` *early* (before other imports) to avoid noisy warnings.
+try:
+    st.cache = st.cache_data  # type: ignore[attr-defined]
+except Exception:
+    pass
+
 from types import SimpleNamespace
 
 # Ensure project base directory importable
