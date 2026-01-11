@@ -595,7 +595,7 @@ def render_results(
                 return "background-color: #E8F4FD; color: #0C5460;"
             return ""
 
-        styled = styled.applymap(_earnings_style, subset=["📅 Earnings in X days"])
+        styled = styled.map(_earnings_style, subset=["📅 Earnings in X days"])
 
     # Heatmap for BreakoutScore
     if "BreakoutScore" in df.columns:
@@ -674,7 +674,7 @@ def render_results(
 
         for col in ["Change", "% Change"]:
             if col in df.columns:
-                styled = styled.applymap(_change_style, subset=[col])
+                styled = styled.map(_change_style, subset=[col])
 
         # Color Last, Prev Close, Open, High, Low relative to Prev Close (green if above, red if below)
         if "Prev Close" in df.columns:
