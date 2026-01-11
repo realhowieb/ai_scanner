@@ -57,127 +57,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# --------------- Hide internal Stripe return pages from sidebar nav ----------------
-# Streamlit multi-page apps show every file in /pages in the sidebar.
-# We hide internal return/utility pages (e.g., checkout success/cancel) via CSS.
-def hide_internal_pages_in_sidebar_nav() -> None:
-    # 1) CSS attempt (works on many Streamlit builds)
-    st.markdown(
-        """
-        <style>
-        /* Hide internal checkout return pages (success/cancel) from the sidebar nav */
-        div[data-testid="stSidebarNav"] a[href*="checkout"] { display: none !important; }
-        div[data-testid="stSidebarNav"] a[href*="checkout_success"] { display: none !important; }
-        div[data-testid="stSidebarNav"] a[href*="checkout_cancel"]  { display: none !important; }
-        div[data-testid="stSidebarNav"] a[href*="billing_success"] { display: none !important; }
-        div[data-testid="stSidebarNav"] a[href*="billing_cancel"]  { display: none !important; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # 2) JS fallback (more reliable across Streamlit versions)
-    try:
-        import streamlit.components.v1 as components  # type: ignore
-
-        components.html(
-            """
-            <script>
-            (function() {
-              // We hide pages by *label text* primarily, because hrefs vary across Streamlit versions.
-              const BAD_LABELS = new Set([
-                'checkout success',
-                'checkout cancel',
-                'billing success',
-                'billing cancel',
-                'checkout',
-              ]);
-
-              const isBad = (a) => {
-                try {
-                  const href = (a.getAttribute('href') || '').toLowerCase();
-                  const txt = (a.innerText || '').toLowerCase().trim();
-
-                  // Primary: label-based
-                  if (BAD_LABELS.has(txt)) return true;
-                  if (txt.startsWith('checkout ') || txt.startsWith('billing ')) return true;
-
-                  // Secondary: href-based (best-effort)
-                  if (href.includes('checkout') || href.includes('billing')) {
-                    if (href.includes('success') || href.includes('cancel')) return true;
-                    // also hide generic checkout pages
-                    if (href.includes('checkout')) return true;
-                  }
-
-                  return false;
-                } catch (e) {
-                  return false;
-                }
-              };
-
-              const findNavRoots = () => {
-                const d = window.parent && window.parent.document ? window.parent.document : document;
-                const roots = [];
-
-                // Most common Streamlit sidebar nav container
-                const byTestId = d.querySelector('div[data-testid="stSidebarNav"]');
-                if (byTestId) roots.push(byTestId);
-
-                // Fallbacks across versions
-                d.querySelectorAll('nav[aria-label], section[data-testid="stSidebar"], aside').forEach((n) => {
-                  if (!n) return;
-                  // only include nodes that actually contain links
-                  if (n.querySelector && n.querySelector('a')) roots.push(n);
-                });
-
-                // De-dupe
-                return Array.from(new Set(roots));
-              };
-
-              const hideOnce = () => {
-                const roots = findNavRoots();
-                if (!roots.length) return;
-
-                roots.forEach((root) => {
-                  const links = root.querySelectorAll('a');
-                  links.forEach((a) => {
-                    if (!a) return;
-                    if (!isBad(a)) return;
-
-                    // Hide the row container if possible
-                    const row = a.closest('li') || a.closest('[role="listitem"]') || a.closest('div') || a;
-                    if (row && row.style) row.style.display = 'none';
-                  });
-                });
-              };
-
-              // Run now
-              hideOnce();
-
-              // Keep hiding on rerenders using a MutationObserver + a short interval safety net.
-              let observer = null;
-              try {
-                const d = window.parent && window.parent.document ? window.parent.document : document;
-                const sidebar = d.querySelector('section[data-testid="stSidebar"]') || d.body;
-                observer = new MutationObserver(() => hideOnce());
-                observer.observe(sidebar, { subtree: true, childList: true });
-              } catch (e) {
-                // ignore
-              }
-
-              let n = 0;
-              const t = window.setInterval(() => {
-                hideOnce();
-                n += 1;
-                if (n >= 120) window.clearInterval(t); // ~30s
-              }, 250);
-            })();
-            </script>
-            """,
-            height=0,
-        )
-    except Exception:
-        pass
 
 # --------------- Market session helper (US/Eastern) ----------------
 
@@ -1169,7 +1048,6 @@ def main():
     if not authed:
         # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
-    hide_internal_pages_in_sidebar_nav()
 
     # Normalize and persist username for downstream modules (billing/settings rely on this)
     username = (username or "").strip().lower()
