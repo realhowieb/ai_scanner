@@ -89,7 +89,7 @@ def render_admin_users_panel(username, ADMIN_USERS, db_status):
 
         desired_cols = ["id", "username", "full_name", "tier", "is_active", "created_at"]
         display_cols = [c for c in desired_cols if c in users_df.columns]
-        st.dataframe(users_df[display_cols], use_container_width=True, height=260)
+        st.dataframe(users_df[display_cols], width="stretch", height=260)
 
         usernames_list = users_df["username"].tolist()
         selected_user = st.selectbox("Select user to edit", usernames_list)

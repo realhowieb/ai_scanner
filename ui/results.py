@@ -1,4 +1,5 @@
 """Results, charts, and AI notes UI module."""
+from __future__ import annotations
 
 from typing import Callable, Optional
 
