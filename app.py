@@ -420,11 +420,11 @@ def render_sidebar_upgrade_card(tier_obj: object | None) -> None:
 
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("🚀 Upgrade to Pro", key="upgrade_to_pro", use_container_width=True):
+            if st.button("🚀 Upgrade to Pro", key="upgrade_to_pro", width="stretch"):
                 st.session_state["pricing_focus"] = "pro"
                 st.switch_page("pages/billing.py")
         with c2:
-            if st.button("⭐ Upgrade to Premium", key="upgrade_to_premium", use_container_width=True):
+            if st.button("⭐ Upgrade to Premium", key="upgrade_to_premium", width="stretch"):
                 st.session_state["pricing_focus"] = "premium"
                 st.switch_page("pages/billing.py")
 
@@ -1251,7 +1251,7 @@ def main():
     # If you don't see this section after deploying, you're almost certainly not running the updated app.py.
     if bool(st.session_state.get("is_admin")):
         try:
-            build_mtime = datetime.utcfromtimestamp(Path(__file__).stat().st_mtime).isoformat() + "Z"
+            build_mtime = datetime.fromtimestamp(Path(__file__).stat().st_mtime, tz=timezone.utc).isoformat()
         except Exception:
             build_mtime = "unknown"
 
@@ -1270,14 +1270,14 @@ def main():
                 run_db_only = st.button(
                     "DB lookup",
                     key="btn_earnings_db_lookup",
-                    use_container_width=True,
+                    width="stretch",
                     disabled=not bool(_sym),
                 )
             with c_b:
                 run_fetch_write = st.button(
                     "Fetch + write + verify",
                     key="btn_earnings_fetch_write_verify",
-                    use_container_width=True,
+                    width="stretch",
                     disabled=not bool(_sym),
                 )
 
@@ -1380,7 +1380,7 @@ def main():
             if st.button(
                 "Fetch earnings for AAPL / MSFT / TSLA / META / AMD / INTC",
                 key="btn_earnings_debug_sidebar",
-                use_container_width=True,
+                width="stretch",
             ):
                 # 1) Fetch + upsert
                 try:
@@ -1462,7 +1462,7 @@ def main():
                                     cols = [d[0] for d in (cur.description or [])]
 
                                 if rows and cols:
-                                    st.dataframe(pd.DataFrame(rows, columns=cols), use_container_width=True)
+                                    st.dataframe(pd.DataFrame(rows, columns=cols), width="stretch")
                                 else:
                                     st.warning(
                                         "DB verify: table exists but 0 rows for test symbols. "
@@ -1612,7 +1612,7 @@ def main():
             run_refresh = st.button(
                 "Run refresh now",
                 key="btn_admin_run_earnings_refresh",
-                use_container_width=True,
+                width="stretch",
                 disabled=(len(syms) == 0),
             )
 
