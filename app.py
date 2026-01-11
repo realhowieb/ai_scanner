@@ -1846,6 +1846,24 @@ def main():
     # -------- Market Snapshot --------
     render_market_snapshot()
 
+    # -------- Optional: Earnings enrichment toggle (MUST be BEFORE scans) --------
+    # This toggle must be defined before running scans so scan-time hooks can read it
+    # and skip earnings work entirely.
+    _earn_default = bool(st.session_state.get("enable_earnings_enrichment", False))
+    with st.sidebar.expander("📅 Earnings", expanded=False):
+        _earn_enabled = st.checkbox(
+            "Enable earnings enrichment (adds 📅 Earnings in X days)",
+            value=_earn_default,
+            key="enable_earnings_enrichment",
+            help=(
+                "If enabled, the app may query the DB / refresh earnings to add timing to results. "
+                "Turn this OFF for the fastest scans."
+            ),
+        )
+
+    # Alias for any scan-time code paths that expect a different flag name (safe even if unused)
+    st.session_state["enable_earnings_refresh"] = bool(_earn_enabled)
+
     # -------- Scan Controls --------
     render_scan_controls(
         can_scan_sp500=flags["can_scan_sp500"],
@@ -1895,16 +1913,9 @@ def main():
 
     scan_ran_at = st.session_state.get("scan_ran_at_utc")
 
-    # -------- Optional: Earnings enrichment toggle --------
-    # Earnings enrichment does a DB batch lookup; let users disable it for faster results.
+    # -------- Earnings toggle (read-only here; it is defined earlier before scans) --------
     show_earnings = bool(st.session_state.get("enable_earnings_enrichment", False))
-    with st.sidebar.expander("📅 Earnings", expanded=False):
-        show_earnings = st.checkbox(
-            "Enable earnings enrichment (adds 📅 Earnings in X days)",
-            value=show_earnings,
-            key="enable_earnings_enrichment",
-            help="If enabled, the app will query the DB to add earnings timing to results and enable earnings filters.",
-        )
+    show_earnings = bool(show_earnings)
 
     # Enrich results with earnings-days column (ONE DB query) before display
     if show_earnings and df is not None and not df.empty:
