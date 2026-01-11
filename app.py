@@ -1874,7 +1874,6 @@ def main():
         # even if it reads a different session_state key.
         st.session_state["earnings_enabled"] = bool(_earn_enabled)
         st.session_state["enable_earnings"] = bool(_earn_enabled)
-        st.session_state["enable_earnings_enrichment"] = bool(_earn_enabled)
         st.session_state["enable_earnings_refresh"] = bool(_earn_enabled)
 
     # -------- Scan Controls --------
