@@ -41,12 +41,31 @@ except Exception:
 
 # --------------- Page config ----------------
 
+
 st.set_page_config(
     page_title="Breakout Stock Scanner",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# --------------- Hide internal Stripe return pages from sidebar nav ----------------
+# Streamlit multi-page apps show every file in /pages in the sidebar.
+# We hide internal return/utility pages (e.g., checkout success/cancel) via CSS.
+def hide_internal_pages_in_sidebar_nav() -> None:
+    st.markdown(
+        """
+        <style>
+        /* Hide internal checkout return pages (success/cancel) from the sidebar nav */
+        div[data-testid="stSidebarNav"] a[href*="checkout"] { display: none !important; }
+        div[data-testid="stSidebarNav"] a[href*="checkout_success"] { display: none !important; }
+        div[data-testid="stSidebarNav"] a[href*="checkout_cancel"]  { display: none !important; }
+        div[data-testid="stSidebarNav"] a[href*="checkout=success"] { display: none !important; }
+        div[data-testid="stSidebarNav"] a[href*="checkout=cancel"]  { display: none !important; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # --------------- Market session helper (US/Eastern) ----------------
 
@@ -1038,6 +1057,7 @@ def main():
     if not authed:
         # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
+    hide_internal_pages_in_sidebar_nav()
 
     # Normalize and persist username for downstream modules (billing/settings rely on this)
     username = (username or "").strip().lower()
