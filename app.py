@@ -53,6 +53,7 @@ st.set_page_config(
 # Streamlit multi-page apps show every file in /pages in the sidebar.
 # We hide internal return/utility pages (e.g., checkout success/cancel) via CSS.
 def hide_internal_pages_in_sidebar_nav() -> None:
+    # 1) CSS attempt (works on many Streamlit builds)
     st.markdown(
         """
         <style>
@@ -60,12 +61,62 @@ def hide_internal_pages_in_sidebar_nav() -> None:
         div[data-testid="stSidebarNav"] a[href*="checkout"] { display: none !important; }
         div[data-testid="stSidebarNav"] a[href*="checkout_success"] { display: none !important; }
         div[data-testid="stSidebarNav"] a[href*="checkout_cancel"]  { display: none !important; }
-        div[data-testid="stSidebarNav"] a[href*="checkout=success"] { display: none !important; }
-        div[data-testid="stSidebarNav"] a[href*="checkout=cancel"]  { display: none !important; }
+        div[data-testid="stSidebarNav"] a[href*="billing_success"] { display: none !important; }
+        div[data-testid="stSidebarNav"] a[href*="billing_cancel"]  { display: none !important; }
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+    # 2) JS fallback (more reliable across Streamlit versions)
+    try:
+        import streamlit.components.v1 as components  # type: ignore
+
+        components.html(
+            """
+            <script>
+            (function() {
+              const shouldHide = (a) => {
+                const href = (a.getAttribute('href') || '').toLowerCase();
+                const txt = (a.innerText || '').toLowerCase().trim();
+                // Hide any page whose label or href indicates checkout/billing return pages
+                if (href.includes('checkout') || href.includes('billing')) {
+                  if (href.includes('success') || href.includes('cancel') || href.includes('checkout')) return true;
+                }
+                if (txt.includes('checkout') && (txt.includes('success') || txt.includes('cancel') || txt === 'checkout success' || txt === 'checkout cancel')) return true;
+                // extra safety: hide plain "checkout" pages
+                if (txt === 'checkout' || txt.startsWith('checkout ')) return true;
+                return false;
+              };
+
+              const hideLinks = () => {
+                const nav = window.parent.document.querySelector('div[data-testid="stSidebarNav"]');
+                if (!nav) return;
+                const links = nav.querySelectorAll('a');
+                links.forEach((a) => {
+                  if (!a) return;
+                  if (!shouldHide(a)) return;
+                  // Hide the clickable row container if possible
+                  const row = a.closest('li') || a.closest('div') || a;
+                  if (row && row.style) row.style.display = 'none';
+                });
+              };
+
+              // Run now and re-run briefly to catch rerenders
+              hideLinks();
+              let n = 0;
+              const t = window.setInterval(() => {
+                hideLinks();
+                n += 1;
+                if (n >= 40) window.clearInterval(t); // ~10s
+              }, 250);
+            })();
+            </script>
+            """,
+            height=0,
+        )
+    except Exception:
+        pass
 
 # --------------- Market session helper (US/Eastern) ----------------
 
@@ -1934,7 +1985,7 @@ def main():
     scan_ran_at = st.session_state.get("scan_ran_at_utc")
 
     # -------- Earnings toggle (read-only here; it is defined earlier before scans) --------
-    show_earnings = bool(st.session_state.get("enable_earnings_enrichment", False))
+    show_earnings = bool(st.session_state.get(" enable_earnings_enrichment", False))
     show_earnings = bool(show_earnings)
 
     # Enrich results with earnings-days column (ONE DB query) before display
