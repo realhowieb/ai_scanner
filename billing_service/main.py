@@ -4,6 +4,12 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import stripe
+# ---------- DB helpers ----------
+
+def _append_qp(url: str, key: str, value: str) -> str:
+    base = (url or "").strip() or "https://example.com"
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}{key}={value}"
 import psycopg2
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -201,7 +207,7 @@ async def create_checkout_session(payload: dict):
             if subs and subs.get("data"):
                 portal = stripe.billing_portal.Session.create(
                     customer=customer_id,
-                    return_url=(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com") + "?portal=return",
+                    return_url=_append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com", "portal", "return"),
                 )
                 return {"portal_url": portal.url, "mode": "portal"}
         except Exception as e:
@@ -215,8 +221,8 @@ async def create_checkout_session(payload: dict):
             customer_email=None if customer_id else email,
             line_items=[{"price": price_id, "quantity": 1}],
             allow_promotion_codes=True,
-            success_url=(APP_SUCCESS_URL or "https://example.com") + "?checkout=success",
-            cancel_url=(APP_CANCEL_URL or "https://example.com") + "?checkout=cancel",
+            success_url=_append_qp(APP_SUCCESS_URL or "https://example.com", "checkout", "success"),
+            cancel_url=_append_qp(APP_CANCEL_URL or "https://example.com", "checkout", "cancel"),
             metadata={
                 "user_email": email,
                 "requested_plan": plan,
@@ -247,7 +253,7 @@ async def create_portal_session(payload: dict):
     try:
         portal = stripe.billing_portal.Session.create(
             customer=customer_id,
-            return_url=(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com") + "?portal=return",
+            return_url=_append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com", "portal", "return"),
         )
         return {"portal_url": portal.url}
     except Exception as e:
