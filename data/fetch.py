@@ -82,7 +82,7 @@ def remove_delisted_tickers(tickers: Sequence[str]) -> List[str]:
     Otherwise we use a conservative fallback that:
       - strips a leading '$'
       - uppercases
-      - keeps only symbols matching ^[A-Z][A-Z0-9.\-]*$
+      - keeps only symbols matching ^[A-Z][A-Z0-9.-]*$
       - drops placeholders like *ZZT tickers (e.g., ZAZZT, ZBZZT)
       - drops obvious non-tickers seen in logs (FILE, FORL, FERA)
     """
