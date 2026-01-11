@@ -13,7 +13,6 @@ def render_header() -> None:
         )
         st.image(
             "assets/market_ai_logo_tighter.png",
-            use_container_width=False,
-            width=460,   # Bigger, but still compact & clean
+            width="content",  # replaces deprecated use_container_width=False
         )
         st.markdown("</div>", unsafe_allow_html=True)
