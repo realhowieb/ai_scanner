@@ -114,7 +114,7 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
 
             if pd is not None:
                 df = pd.DataFrame(rows)
-                st.dataframe(df, hide_index=True, use_container_width=True)
+                st.dataframe(df, hide_index=True, width="stretch")
             else:
                 # Fallback: simple text listing
                 for row in rows:

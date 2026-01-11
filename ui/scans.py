@@ -549,7 +549,7 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
         )
         try:
             st.caption("Raw history (tail):")
-            st.dataframe(hist.tail(), use_container_width=True)
+            st.dataframe(hist.tail(), width="stretch")
         except Exception:
             pass
         return
@@ -633,14 +633,14 @@ def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
         margin=dict(l=10, r=10, t=40, b=10),
     )
     try:
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     except Exception as e:
         st.warning(
             f"Failed to render chart for {sym} due to an internal plotting error: {e}"
         )
         try:
             st.caption("Raw Close-series data (tail):")
-            st.dataframe(price_series.to_frame(name="Close").tail(), use_container_width=True)
+            st.dataframe(price_series.to_frame(name="Close").tail(), width="stretch")
         except Exception:
             pass
 
@@ -903,17 +903,17 @@ def render_scan_controls(
     b1, b2, b3 = st.columns([1, 1, 2])
 
     with b1:
-        run_sp500_btn = st.button("Run SP500 Scan", use_container_width=True, disabled=not can_scan_sp500)
+        run_sp500_btn = st.button("Run SP500 Scan", width="stretch", disabled=not can_scan_sp500)
         st.caption("Runs SP500 regardless of sidebar universe.")
 
     with b2:
-        run_nasdaq_btn = st.button("Run NASDAQ Scan", use_container_width=True, disabled=not can_scan_nasdaq)
+        run_nasdaq_btn = st.button("Run NASDAQ Scan", width="stretch", disabled=not can_scan_nasdaq)
         st.caption("Runs NASDAQ regardless of sidebar universe.")
 
     with b3:
         run_combo_btn = st.button(
             "Run Combo Scan (SP500+NASDAQ)",
-            use_container_width=True,
+            width="stretch",
             disabled=not (can_scan_sp500 and can_scan_nasdaq),
         )
         st.caption("Pro/Premium only.")
@@ -928,7 +928,7 @@ def render_scan_controls(
             if st.button(
                 "Fetch earnings for AAPL / MSFT / TSLA",
                 key="btn_earnings_debug",
-                use_container_width=True,
+                    width="stretch",
             ):
                 try:
                     try:
@@ -959,14 +959,14 @@ def render_scan_controls(
         view_watchlist_btn = st.button(
             "View Watchlist",
             key="btn_view_watchlist",
-            use_container_width=True,
+            width="stretch",
             disabled=not has_watchlist,
         )
     with cw2:
         run_watchlist_btn = st.button(
             "Run Watchlist Scan",
             key="btn_scan_watchlist",
-            use_container_width=True,
+            width="stretch",
             disabled=not has_watchlist,
         )
     with cw3:
@@ -995,20 +995,20 @@ def render_scan_controls(
         add_watchlist_btn = st.button(
             "Add",
             key="btn_add_watchlist_symbol",
-            use_container_width=True,
+            width="stretch",
         )
     with aw3:
         remove_watchlist_btn = st.button(
             "Remove",
             key="btn_remove_watchlist_symbol",
-            use_container_width=True,
+            width="stretch",
         )
 
     # Bottom row: destructive action on its own line
     clear_watchlist_btn = st.button(
         "Clear Watchlist",
         key="btn_clear_watchlist",
-        use_container_width=True,
+        width="stretch",
         disabled=not has_watchlist,
     )
 
@@ -1031,7 +1031,7 @@ def render_scan_controls(
         show_chart_btn = st.button(
             "Show Chart 📈",
             key="single_show_chart_btn",
-            use_container_width=True,
+            width="stretch",
         )
 
     # Second row: watchlist toggle + scan button
@@ -1047,7 +1047,7 @@ def render_scan_controls(
         run_single_scan_btn = st.button(
             "Run Single-Ticker Scan 💸",
             key="single_search_scan_btn",
-            use_container_width=True,
+            width="stretch",
         )
 
     # Show a best-effort live quote under the search bar when a ticker is entered
@@ -1545,7 +1545,7 @@ def render_data_provider_diagnostics() -> None:
     if st.button(
         "Test Alpaca Market Data (AAPL)",
         key="btn_test_alpaca",
-        use_container_width=True,
+        width="stretch",
     ):
         headers = _get_alpaca_headers()
         if not headers:

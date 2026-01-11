@@ -218,7 +218,7 @@ def render_results(
                 "⭐ Add to Watchlist" if not already else "✅ In Watchlist",
                 key=f"btn_details_add_watchlist_{t}",
                 disabled=already,
-                use_container_width=True,
+                width="stretch",
             )
         with cB:
             st.caption("Adds this ticker to your active watchlist.")
@@ -341,7 +341,7 @@ def render_results(
         if can_export_csv:
             _tbl = st.dataframe(
                 df,
-                use_container_width=True,
+                width="stretch",
                 height=420,
                 selection_mode="single-row",
                 on_select="rerun",
@@ -707,7 +707,7 @@ def render_results(
         try:
             _tbl = st.dataframe(
                 styled,
-                use_container_width=True,
+                width="stretch",
                 height=420,
                 selection_mode="single-row",
                 on_select="rerun",
@@ -716,7 +716,7 @@ def render_results(
             _sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker")
         except Exception:
             # Fallback: keep styled rendering without selection
-            st.dataframe(styled, use_container_width=True, height=420)
+            st.dataframe(styled, width="stretch", height=420)
     else:
         # Basic: keep the pro styling but render as static HTML (no Streamlit dataframe toolbar/download).
         # Mobile-safe: enable horizontal scroll + prevent vertical letter stacking.

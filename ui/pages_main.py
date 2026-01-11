@@ -804,7 +804,7 @@ def _render_runs_table(max_rows: int = 200):
     if "elapsed_s" in view.columns:
         view["elapsed_s"] = pd.to_numeric(view["elapsed_s"], errors="coerce").round(2)
 
-    st.dataframe(view, use_container_width=True)
+    st.dataframe(view, width="stretch")
 
     # Details panel
     run_id: Optional[int] = None
@@ -817,7 +817,7 @@ def _render_runs_table(max_rows: int = 200):
             details = load_run_results(run_id)
             if isinstance(details, pd.DataFrame) and not details.empty:
                 st.markdown("### Results for selected run")
-                st.dataframe(details, use_container_width=True)
+                st.dataframe(details, width="stretch")
             else:
                 st.write("This run has no saved rows.")
         except Exception as e:
@@ -888,7 +888,7 @@ def _run_button(label: str, fn):
                         pass
 
                 if isinstance(df_to_show, pd.DataFrame) and not df_to_show.empty:
-                    st.dataframe(df_to_show.head(50), use_container_width=True)
+                    st.dataframe(df_to_show.head(50), width="stretch")
                 else:
                     st.write("No tabular results returned.")
             except Exception as e:  # pragma: no cover
@@ -927,7 +927,7 @@ def _render_market_heat():
             try:
                 df_hot = fetch_hot_stocks()
                 if isinstance(df_hot, pd.DataFrame) and not df_hot.empty:
-                    st.dataframe(df_hot, use_container_width=True)
+                    st.dataframe(df_hot, width="stretch")
                 else:
                     st.write("No data.")
             except Exception as e:
@@ -942,7 +942,7 @@ def _render_market_heat():
             try:
                 df_act = fetch_most_active_stocks()
                 if isinstance(df_act, pd.DataFrame) and not df_act.empty:
-                    st.dataframe(df_act, use_container_width=True)
+                    st.dataframe(df_act, width="stretch")
                 else:
                     st.write("No data.")
             except Exception as e:
@@ -957,7 +957,7 @@ def _render_market_heat():
             try:
                 df_tr = fetch_trending_stocks()
                 if isinstance(df_tr, pd.DataFrame) and not df_tr.empty:
-                    st.dataframe(df_tr, use_container_width=True)
+                    st.dataframe(df_tr, width="stretch")
                 else:
                     st.write("No data.")
             except Exception as e:

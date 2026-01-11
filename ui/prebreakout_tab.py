@@ -50,7 +50,7 @@ def render_prebreakout_tab() -> None:
                 st.warning("⚠️ No runs found in DB. Run SP500/NASDAQ/Combo scans first.")
             else:
                 st.success("✅ History loaded successfully!")
-                st.dataframe(df_debug.head(50), use_container_width=True)
+                st.dataframe(df_debug.head(50), width="stretch")
 
         # --- DEBUG: Check raw runs from db.runs.list_runs ---
         if st.button("🔎 Debug: Raw runs from DB"):
@@ -100,7 +100,7 @@ def render_prebreakout_tab() -> None:
                 "Train a new model using your historical runs."
             )
 
-        if st.button("🚀 Train / Refresh model from DB history", use_container_width=True):
+        if st.button("🚀 Train / Refresh model from DB history", width="stretch"):
             with st.spinner("Training pre-breakout model from DB history..."):
                 trained_bundle = train_prebreakout_model(
                     days_back=90,
@@ -215,4 +215,4 @@ def render_prebreakout_tab() -> None:
     else:
         display_df = filtered
 
-    st.dataframe(display_df, use_container_width=True)
+    st.dataframe(display_df, width="stretch")
