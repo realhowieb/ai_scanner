@@ -303,17 +303,13 @@ async def stripe_webhook(request: Request):
         except Exception as e:
             raise HTTPException(500, f"DB update failed: {e}")
 
-    # 2) Subscription updates (upgrade/downgrade, payment issues, etc.)
+    # 2) Subscription updates (upgrade/downgrade, cancellation scheduling, etc.)
     elif etype == "customer.subscription.updated":
         subscription_id = data.get("id")
         customer_id = data.get("customer")
-        price_id = None
-        try:
-            items = data.get("items", {}).get("data", [])
-            if items:
-                price_id = items[0].get("price", {}).get("id")
-        except Exception:
-            price_id = None
+
+        status = (data.get("status") or "").strip().lower()
+        cancel_at_period_end = bool(data.get("cancel_at_period_end"))
 
         # We need user_email; safest is to look it up from Stripe customer email
         try:
@@ -322,18 +318,47 @@ async def stripe_webhook(request: Request):
         except Exception:
             email = ""
 
-        if email:
-            plan = _price_to_plan(price_id or "")
+        if not email:
+            return JSONResponse({"received": True, "type": etype, "note": "missing customer email"})
+
+        # Immediate cancellation -> downgrade to basic now
+        if status == "canceled":
             try:
                 _set_user_plan_by_email(
                     email=email,
-                    tier=plan,
+                    tier="basic",
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=subscription_id,
-                    stripe_price_id=price_id,
+                    stripe_price_id=None,
                 )
             except Exception as e:
                 raise HTTPException(500, f"DB update failed: {e}")
+            return JSONResponse({"received": True, "type": etype, "action": "downgraded_basic_immediate_cancel"})
+
+        # Cancel scheduled at period end -> keep current tier until Stripe sends subscription.deleted
+        if cancel_at_period_end:
+            return JSONResponse({"received": True, "type": etype, "action": "cancel_scheduled_keep_tier"})
+
+        # Otherwise: active subscription update -> map price to plan
+        price_id = None
+        try:
+            items = data.get("items", {}).get("data", [])
+            if items:
+                price_id = items[0].get("price", {}).get("id")
+        except Exception:
+            price_id = None
+
+        plan = _price_to_plan(price_id or "")
+        try:
+            _set_user_plan_by_email(
+                email=email,
+                tier=plan,
+                stripe_customer_id=customer_id,
+                stripe_subscription_id=subscription_id,
+                stripe_price_id=price_id,
+            )
+        except Exception as e:
+            raise HTTPException(500, f"DB update failed: {e}")
 
     # 3) Subscription cancelled → downgrade to Basic (unless admin)
     elif etype == "customer.subscription.deleted":
