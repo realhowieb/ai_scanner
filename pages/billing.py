@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import time
 import requests
@@ -190,7 +192,7 @@ def _open_checkout_same_tab(url: str) -> None:
     )
 
     # Fallback if the browser still forces a new tab
-    st.link_button("Open Stripe Checkout (fallback)", u, use_container_width=True)
+    st.link_button("Open Stripe Checkout (fallback)", u, width="stretch")
     st.stop()
 
 
@@ -251,7 +253,7 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             if st.button(
                 "Upgrade to Pro",
                 key="billing_upgrade_pro",
-                use_container_width=True,
+                width="stretch",
                 type="primary" if focus == "pro" else "secondary",
             ):
                 try:
@@ -272,7 +274,7 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             if st.button(
                 "Upgrade to Premium",
                 key="billing_upgrade_premium",
-                use_container_width=True,
+                width="stretch",
                 type="primary" if focus == "premium" else "secondary",
             ):
                 try:
@@ -332,7 +334,7 @@ def render_billing_page() -> None:
             else:
                 st.info("Still syncing… wait a few seconds, then click ‘Refresh plan now’.")
 
-        if st.button("🔄 Refresh plan now", key="billing_refresh_plan", use_container_width=True):
+        if st.button("🔄 Refresh plan now", key="billing_refresh_plan", width="stretch"):
             new_tier = _refresh_tier_from_db(email)
             if new_tier:
                 try:
@@ -348,7 +350,7 @@ def render_billing_page() -> None:
 
     # Customer portal for paid tiers
     if current_label in ("Pro", "Premium"):
-        if st.button("Manage subscription", key="billing_manage", use_container_width=True):
+        if st.button("Manage subscription", key="billing_manage", width="stretch"):
             try:
                 portal_url = _create_portal_url(email=email)
                 # Prefer same-tab open
@@ -378,7 +380,7 @@ def render_billing_page() -> None:
                     """,
                     height=72,
                 )
-                st.link_button("Open Stripe Customer Portal (fallback)", portal_url, use_container_width=True)
+                st.link_button("Open Stripe Customer Portal (fallback)", portal_url, width="stretch")
             except Exception as e:
                 st.error(str(e))
                 st.caption("Tip: The billing service may be waking up. Try again in ~30 seconds.")
@@ -390,7 +392,7 @@ def render_billing_page() -> None:
     _upgrade_buttons(tier_key)
 
     st.divider()
-    if st.button("← Back to Scanner", key="billing_back", use_container_width=True):
+    if st.button("← Back to Scanner", key="billing_back", width="stretch"):
         st.session_state.pop("show_pricing", None)
         st.session_state.pop("pricing_focus", None)
         st.session_state.pop("checkout_url", None)
