@@ -20,6 +20,7 @@ STRIPE_PRICE_PREMIUM = os.getenv("STRIPE_PRICE_PREMIUM", "").strip()
 APP_SUCCESS_URL = os.getenv("APP_SUCCESS_URL", "").strip()  # e.g. https://yourapp.com
 APP_CANCEL_URL = os.getenv("APP_CANCEL_URL", "").strip()    # e.g. https://yourapp.com
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()        # Neon Postgres URL
+APP_PORTAL_RETURN_URL = os.getenv("APP_PORTAL_RETURN_URL", "").strip()  # e.g. https://hsf-beta.streamlit.app/billing
 
 if not STRIPE_SECRET_KEY:
     raise RuntimeError("Missing STRIPE_SECRET_KEY env var")
@@ -192,6 +193,21 @@ async def create_checkout_session(payload: dict):
     user = _get_user_by_email(email)  # safe: returns {} on DB failure
     customer_id = user.get("stripe_customer_id") if user else None
 
+    # If this customer already has an active subscription, DO NOT create a second subscription.
+    # Send them to Stripe Billing Portal to upgrade/downgrade/cancel on the existing subscription.
+    if customer_id:
+        try:
+            subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
+            if subs and subs.get("data"):
+                portal = stripe.billing_portal.Session.create(
+                    customer=customer_id,
+                    return_url=(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com") + "?portal=return",
+                )
+                return {"portal_url": portal.url, "mode": "portal"}
+        except Exception as e:
+            # If portal creation fails for any reason, fall back to Checkout (but only if needed)
+            print(f"[billing_service] portal redirect failed (falling back to checkout): {e}")
+
     try:
         session = stripe.checkout.Session.create(
             mode="subscription",
@@ -206,7 +222,7 @@ async def create_checkout_session(payload: dict):
                 "requested_plan": plan,
             },
         )
-        return {"checkout_url": session.url}
+        return {"checkout_url": session.url, "mode": "checkout"}
     except Exception as e:
         # Surface the message so curl shows something useful.
         print(f"[billing_service] create-checkout-session failed: {e}")
@@ -231,7 +247,7 @@ async def create_portal_session(payload: dict):
     try:
         portal = stripe.billing_portal.Session.create(
             customer=customer_id,
-            return_url=(APP_SUCCESS_URL or "https://example.com") + "?portal=return",
+            return_url=(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com") + "?portal=return",
         )
         return {"portal_url": portal.url}
     except Exception as e:

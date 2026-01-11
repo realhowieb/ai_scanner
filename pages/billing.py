@@ -76,12 +76,32 @@ def _billing_post_json(path: str, payload: dict) -> dict:
     ) from last_err
 
 
-def _create_checkout_url(*, email: str, plan: str) -> str:
+def _create_checkout_or_portal(*, email: str, plan: str) -> tuple[str, str]:
+    """Create a Stripe redirect for this plan.
+
+    Backend may return either:
+      - {checkout_url: ..., mode: "checkout"}
+      - {portal_url: ..., mode: "portal"}  (existing subscriber should manage upgrade in portal)
+    Returns (mode, url).
+    """
     data = _billing_post_json("/create-checkout-session", {"email": email, "plan": plan})
-    url = (data.get("checkout_url") or "").strip()
-    if not url:
-        raise RuntimeError("Billing service did not return checkout_url")
-    return url
+
+    portal_url = (data.get("portal_url") or "").strip()
+    checkout_url = (data.get("checkout_url") or "").strip()
+    mode = (data.get("mode") or "").strip().lower()
+
+    if portal_url:
+        return ("portal", portal_url)
+    if checkout_url:
+        return ("checkout", checkout_url)
+
+    # Fallback if mode is present but URL key differs
+    if mode == "portal" and portal_url:
+        return ("portal", portal_url)
+    if mode == "checkout" and checkout_url:
+        return ("checkout", checkout_url)
+
+    raise RuntimeError("Billing service did not return a checkout_url or portal_url")
 
 
 def _create_portal_url(*, email: str) -> str:
@@ -149,7 +169,7 @@ def _refresh_tier_from_db(email: str) -> str | None:
 # Stripe open helper (reliable)
 # =========================
 
-def _open_checkout_same_tab(url: str) -> None:
+def _open_checkout_same_tab(url: str, *, kind: str = "Checkout") -> None:
     """Reliable Streamlit-friendly checkout open.
 
     Streamlit Cloud can intercept plain <a target=_self> links, sometimes resulting in a blank
@@ -160,8 +180,8 @@ def _open_checkout_same_tab(url: str) -> None:
     if not u:
         return
 
-    st.success("Stripe Checkout is ready ✅")
-    st.caption("Click the button below to open Stripe Checkout. If it doesn’t open, use the fallback link.")
+    st.success(f"Stripe {kind} is ready ✅")
+    st.caption(f"Click the button below to open Stripe {kind}. If it doesn’t open, use the fallback link.")
 
     # Primary: user-click button that redirects the TOP window.
     components.html(
@@ -170,7 +190,7 @@ def _open_checkout_same_tab(url: str) -> None:
           <button id="stripeGo"
             style="width:100%; padding:0.65rem 1rem; border-radius:0.6rem; border:1px solid rgba(255,255,255,0.18);
                    background: rgba(255,255,255,0.06); color: inherit; font-size: 1rem; cursor: pointer;">
-            💳 Open Stripe Checkout (same tab)
+            💳 Open Stripe (same tab)
           </button>
         </div>
         <script>
@@ -192,7 +212,7 @@ def _open_checkout_same_tab(url: str) -> None:
     )
 
     # Fallback if the browser still forces a new tab
-    st.link_button("Open Stripe Checkout (fallback)", u, width="stretch")
+    st.link_button(f"Open Stripe {kind} (fallback)", u, width="stretch")
     st.stop()
 
 
@@ -236,10 +256,16 @@ def _upgrade_buttons(current_tier_key: str) -> None:
         st.warning("Please sign in before upgrading. Upgrades are tied to your account.")
         return
 
-    # If we already created a checkout URL in this session, show same-tab open UI
-    checkout_url = (st.session_state.get("checkout_url") or "").strip()
-    if checkout_url:
-        _open_checkout_same_tab(checkout_url)
+    # Back-compat cleanup: older sessions may have used checkout_url
+    if st.session_state.get("checkout_url"):
+        st.session_state["stripe_redirect_url"] = st.session_state.pop("checkout_url")
+        st.session_state.setdefault("stripe_redirect_kind", "Checkout")
+
+    # If we already created a Stripe redirect URL in this session, show same-tab open UI
+    stripe_url = (st.session_state.get("stripe_redirect_url") or "").strip()
+    stripe_kind = (st.session_state.get("stripe_redirect_kind") or "Checkout").strip() or "Checkout"
+    if stripe_url:
+        _open_checkout_same_tab(stripe_url, kind=stripe_kind)
 
     col_pro, col_premium = st.columns(2)
 
@@ -258,8 +284,10 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             ):
                 try:
                     st.session_state["pricing_focus"] = "pro"
-                    st.session_state["checkout_url"] = _create_checkout_url(email=email, plan="pro")
-                    _open_checkout_same_tab(st.session_state["checkout_url"])
+                    mode, url = _create_checkout_or_portal(email=email, plan="pro")
+                    st.session_state["stripe_redirect_kind"] = "Customer Portal" if mode == "portal" else "Checkout"
+                    st.session_state["stripe_redirect_url"] = url
+                    _open_checkout_same_tab(url, kind=st.session_state["stripe_redirect_kind"])
                 except Exception as e:
                     st.error(str(e))
                     st.caption("Tip: On free Render, billing may need ~30 seconds to wake up.")
@@ -279,8 +307,10 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             ):
                 try:
                     st.session_state["pricing_focus"] = "premium"
-                    st.session_state["checkout_url"] = _create_checkout_url(email=email, plan="premium")
-                    _open_checkout_same_tab(st.session_state["checkout_url"])
+                    mode, url = _create_checkout_or_portal(email=email, plan="premium")
+                    st.session_state["stripe_redirect_kind"] = "Customer Portal" if mode == "portal" else "Checkout"
+                    st.session_state["stripe_redirect_url"] = url
+                    _open_checkout_same_tab(url, kind=st.session_state["stripe_redirect_kind"])
                 except Exception as e:
                     st.error(str(e))
                     st.caption("Tip: On free Render, billing may need ~30 seconds to wake up.")
@@ -329,7 +359,7 @@ def render_billing_page() -> None:
                     st.query_params.pop("checkout", None)
                 except Exception:
                     pass
-                st.session_state.pop("checkout_url", None)
+                st.session_state.pop("stripe_redirect_url", None)
                 st.rerun()
             else:
                 st.info("Still syncing… wait a few seconds, then click ‘Refresh plan now’.")
@@ -341,7 +371,7 @@ def render_billing_page() -> None:
                     st.query_params.pop("checkout", None)
                 except Exception:
                     pass
-                st.session_state.pop("checkout_url", None)
+                st.session_state.pop("stripe_redirect_url", None)
                 st.rerun()
             else:
                 st.warning("Plan not updated yet. Confirm Stripe webhook delivered successfully.")
@@ -395,7 +425,8 @@ def render_billing_page() -> None:
     if st.button("← Back to Scanner", key="billing_back", width="stretch"):
         st.session_state.pop("show_pricing", None)
         st.session_state.pop("pricing_focus", None)
-        st.session_state.pop("checkout_url", None)
+        st.session_state.pop("stripe_redirect_url", None)
+        st.session_state.pop("stripe_redirect_kind", None)
         st.session_state.pop("post_checkout_refreshed", None)
         try:
             st.switch_page("app.py")
