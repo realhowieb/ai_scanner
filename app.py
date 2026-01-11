@@ -1870,9 +1870,12 @@ def main():
                 "Turn this OFF for the fastest scans."
             ),
         )
-
-    # Alias for any scan-time code paths that expect a different flag name (safe even if unused)
-    st.session_state["enable_earnings_refresh"] = bool(_earn_enabled)
+        # Provide a few backward-compatible aliases so scan/engine code can gate earnings work
+        # even if it reads a different session_state key.
+        st.session_state["earnings_enabled"] = bool(_earn_enabled)
+        st.session_state["enable_earnings"] = bool(_earn_enabled)
+        st.session_state["enable_earnings_enrichment"] = bool(_earn_enabled)
+        st.session_state["enable_earnings_refresh"] = bool(_earn_enabled)
 
     # -------- Scan Controls --------
     render_scan_controls(
@@ -1924,8 +1927,8 @@ def main():
     scan_ran_at = st.session_state.get("scan_ran_at_utc")
 
     # -------- Earnings toggle (read-only here; it is defined earlier before scans) --------
-    show_earnings = bool(st.session_state.get(" enable_earnings_enrichment", False))
-    show_earnings = bool(show_earnings)
+    # NOTE: key must match the checkbox key exactly (no leading/trailing spaces)
+    show_earnings = bool(st.session_state.get("enable_earnings_enrichment", False))
 
     # Enrich results with earnings-days column (ONE DB query) before display
     if show_earnings and df is not None and not df.empty:
