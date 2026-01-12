@@ -475,12 +475,34 @@ def render_results(
 
         # Pro/Premium: keep charts + interactive details
         with st.expander("📈 Charts", expanded=False):
-            tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+            # Support both scan results (Ticker) and watchlist/market tables (Symbol)
+            ticker_col = "Ticker" if "Ticker" in df.columns else ("Symbol" if "Symbol" in df.columns else None)
+            if not ticker_col:
+                st.caption("No tickers available to chart.")
+                return
+
+            tickers = (
+                df[ticker_col]
+                .astype(str)
+                .map(lambda x: x.strip().upper())
+                .tolist()
+            )
+            tickers = [t for t in tickers if t]
+            # de-dupe while preserving order
+            tickers = list(dict.fromkeys(tickers))
+
             if not tickers:
                 st.caption("No tickers available to chart.")
                 return
 
-            pick = st.selectbox("Select ticker to chart", tickers, key="results_chart_picker_fast")
+            picker_key = "results_chart_picker_fast"
+            preferred = (st.session_state.get("results_selected_ticker") or st.session_state.get(picker_key) or tickers[0])
+            try:
+                idx = tickers.index(str(preferred).strip().upper())
+            except Exception:
+                idx = 0
+
+            pick = st.selectbox("Select ticker to chart", tickers, index=idx, key=picker_key)
 
             # Render chart ONLY when expander is opened
             render_chart_for_ticker(pick)
@@ -846,12 +868,34 @@ def render_results(
     else:
         # Pro/Premium: keep existing Charts expander + details + watchlist action
         with st.expander("📈 Charts", expanded=False):
-            tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+            # Support both scan results (Ticker) and watchlist/market tables (Symbol)
+            ticker_col = "Ticker" if "Ticker" in df.columns else ("Symbol" if "Symbol" in df.columns else None)
+            if not ticker_col:
+                st.caption("No tickers available to chart.")
+                return
+
+            tickers = (
+                df[ticker_col]
+                .astype(str)
+                .map(lambda x: x.strip().upper())
+                .tolist()
+            )
+            tickers = [t for t in tickers if t]
+            # de-dupe while preserving order
+            tickers = list(dict.fromkeys(tickers))
+
             if not tickers:
                 st.caption("No tickers available to chart.")
                 return
 
-            pick = st.selectbox("Select ticker to chart", tickers, key="results_chart_picker")
+            picker_key = "results_chart_picker"
+            preferred = (st.session_state.get("results_selected_ticker") or st.session_state.get(picker_key) or tickers[0])
+            try:
+                idx = tickers.index(str(preferred).strip().upper())
+            except Exception:
+                idx = 0
+
+            pick = st.selectbox("Select ticker to chart", tickers, index=idx, key=picker_key)
             render_chart_for_ticker(pick)
 
         pick = st.session_state.get("results_chart_picker")
