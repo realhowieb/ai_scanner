@@ -1893,6 +1893,29 @@ def main():
     )
 
 
+    # -------- Market Snapshot (moved back up near the top) --------
+    # Render early so it appears above scans/results like before.
+    # It can render with or without a recent results_df.
+    _snapshot_df: pd.DataFrame | None = None
+    try:
+        _snapshot_df = get_results_df()
+        if _snapshot_df is not None and getattr(_snapshot_df, "empty", False):
+            _snapshot_df = None
+    except Exception:
+        _snapshot_df = None
+
+    try:
+        st.session_state["latest_results_df"] = _snapshot_df
+    except Exception:
+        pass
+
+    try:
+        render_market_snapshot(results_df=_snapshot_df)
+    except TypeError:
+        _render_market_snapshot_legacy()
+
+    st.markdown("---")
+
     # -------- Watchlists --------
     watch_id, watch_tickers = render_watchlists_panel(username)
     st.session_state["active_watchlist_id"] = watch_id
@@ -1951,21 +1974,6 @@ def main():
 
     # -------- Results + Early Breakout Candidates + Scan History --------
     df = get_results_df()
-
-    # -------- Market Snapshot (after results exist) --------
-    # Always render the legacy snapshot (it is self-contained and reliably shows metrics).
-    # The newer `ui.header.render_market_snapshot()` implementation can be blank if it
-    # depends on internal state that isn't populated in time.
-    try:
-        st.session_state["latest_results_df"] = df
-    except Exception:
-        pass
-
-    try:
-        render_market_snapshot(results_df=df)
-    except TypeError:
-        # Fallback to legacy snapshot if signature mismatches
-        _render_market_snapshot_legacy()
 
     # -------- Scan timestamp (UTC) --------
     # Record a timestamp when a *new* results dataframe appears so users know freshness.
