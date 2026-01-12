@@ -165,6 +165,7 @@ def _resolve_tier_state(username: str, users_map: dict) -> dict:
     # Legacy baseline
     tier_obj = get_user_tier(username, users_map)
     tier_key = (_tier_key(tier_obj) or "basic").strip().lower()
+
     state = {
         "tier_obj": tier_obj,
         "tier_key": tier_key,
@@ -173,52 +174,27 @@ def _resolve_tier_state(username: str, users_map: dict) -> dict:
         "db_tier_err": None,
     }
 
+    # If Tier Sync isn't available, keep legacy behavior
     if not callable(resolve_user_tier):
         return state
 
-    # Call Tier Sync with best-effort signature matching (so app.py doesn't break if signature changes)
     try:
-        import inspect
+        # Tier Sync should support this call contract
+        res = resolve_user_tier(
+            username=username,
+            users_map=users_map,
+            Tier=Tier,
+            get_user_tier=get_user_tier,
+            get_db_conn=_get_db_conn_for_app,
+            admin_users=ADMIN_USERS,
+        )
 
-        fn = resolve_user_tier
-        sig = None
-        try:
-            sig = inspect.signature(fn)
-        except Exception:
-            sig = None
-
-        kwargs: dict = {}
-        if sig is not None:
-            params = getattr(sig, "parameters", {})
-            if "username" in params:
-                kwargs["username"] = username
-            elif "user_id" in params:
-                kwargs["user_id"] = username
-
-            if "users_map" in params:
-                kwargs["users_map"] = users_map
-
-            if "Tier" in params:
-                kwargs["Tier"] = Tier
-            elif "tier_enum" in params:
-                kwargs["tier_enum"] = Tier
-
-            if "get_user_tier" in params:
-                kwargs["get_user_tier"] = get_user_tier
-
-            if "get_db_conn" in params:
-                kwargs["get_db_conn"] = _get_db_conn_for_app
-            elif "db_conn_fn" in params:
-                kwargs["db_conn_fn"] = _get_db_conn_for_app
-
-        # If we couldn't infer, at least pass the basics by position
-        res = fn(**kwargs) if kwargs else fn(username, users_map)  # type: ignore[misc]
-
-        # Normalize outputs (support dict or tuple)
+        # Normalize outputs (dict preferred)
         if isinstance(res, dict):
             forced = res.get("forced_tier_key") or res.get("forced_tier") or res.get("db_tier")
             if forced:
                 forced = str(forced).strip().lower()
+
             tier_obj2 = res.get("tier_obj") or res.get("tier") or tier_obj
             tier_key2 = res.get("tier_key") or (_tier_key(tier_obj2) if tier_obj2 is not None else None)
             tier_key2 = str(tier_key2 or tier_key).strip().lower()
@@ -230,12 +206,12 @@ def _resolve_tier_state(username: str, users_map: dict) -> dict:
             state["db_tier_err"] = res.get("db_tier_err") or res.get("error")
             return state
 
+        # Tuple/list fallback: (tier_obj, tier_key, optional_debug_dict)
         if isinstance(res, (tuple, list)):
-            # Allow: (tier_obj, tier_key) or (tier_obj, tier_key, debug)
-            if len(res) >= 1:
+            if len(res) >= 1 and res[0] is not None:
                 state["tier_obj"] = res[0]
-            if len(res) >= 2:
-                state["tier_key"] = str(res[1] or state["tier_key"]).strip().lower()
+            if len(res) >= 2 and res[1]:
+                state["tier_key"] = str(res[1]).strip().lower()
             if len(res) >= 3 and isinstance(res[2], dict):
                 dbg = res[2]
                 forced = dbg.get("forced_tier_key") or dbg.get("forced_tier") or dbg.get("db_tier")
@@ -245,11 +221,11 @@ def _resolve_tier_state(username: str, users_map: dict) -> dict:
                 state["db_tier_err"] = dbg.get("db_tier_err") or dbg.get("error")
             return state
 
+        return state
+
     except Exception as e:
         state["db_tier_err"] = str(e)
         return state
-
-    return state
 
 
 # --------------- DB connection helper (app.py only) ----------------
