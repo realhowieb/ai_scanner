@@ -506,38 +506,62 @@ def _persist_symbols_to_active_watchlist(symbols: list[str]) -> tuple[bool, str]
             cols_sql = ", ".join(insert_cols)
             vals_sql = ", ".join(values_expr)
 
-            # Try to use ON CONFLICT if a constraint exists on (wl_col, symbol_col)
-            # If it doesn't, Postgres will error; we'll catch and fall back.
-            on_conflict = f" ON CONFLICT ({wl_col}, {symbol_col}) DO NOTHING"
+            # Use a target-less ON CONFLICT so we don't depend on a specific unique constraint
+            on_conflict = " ON CONFLICT DO NOTHING"
 
             sql = f"INSERT INTO watchlist_items ({cols_sql}) VALUES ({vals_sql}){on_conflict}"
 
             # Attempt bulk insert first
             try:
+                # Use a savepoint so a bulk-insert failure doesn't poison the whole transaction
+                cur.execute("SAVEPOINT wl_bulk")
+
                 batch_params = []
                 for s in syms:
                     p = list(params_base)
                     p[1] = s
                     batch_params.append(tuple(p))
+
                 cur.executemany(sql, batch_params)
                 inserted_attempted = len(batch_params)
-            except Exception:
-                # Fallback: remove ON CONFLICT and insert row-by-row
-                sql2 = f"INSERT INTO watchlist_items ({cols_sql}) VALUES ({vals_sql})"
+
+                # Bulk insert succeeded
+                cur.execute("RELEASE SAVEPOINT wl_bulk")
+
+            except Exception as e_bulk:
+                # Roll back to the savepoint so we can keep using this transaction
+                try:
+                    cur.execute("ROLLBACK TO SAVEPOINT wl_bulk")
+                    cur.execute("RELEASE SAVEPOINT wl_bulk")
+                except Exception:
+                    pass
+
+                # Fallback: insert row-by-row, each protected by its own savepoint
+                sql2 = f"INSERT INTO watchlist_items ({cols_sql}) VALUES ({vals_sql}) ON CONFLICT DO NOTHING"
                 first_err = None
                 inserted_attempted = 0
+
                 for s in syms:
                     p = list(params_base)
                     p[1] = s
                     try:
+                        cur.execute("SAVEPOINT wl_row")
                         cur.execute(sql2, tuple(p))
+                        cur.execute("RELEASE SAVEPOINT wl_row")
                         inserted_attempted += 1
-                    except Exception as e:
+                    except Exception as e_row:
+                        try:
+                            cur.execute("ROLLBACK TO SAVEPOINT wl_row")
+                            cur.execute("RELEASE SAVEPOINT wl_row")
+                        except Exception:
+                            pass
                         if first_err is None:
-                            first_err = e
+                            first_err = e_row
                         continue
+
+                # If literally everything failed, surface the first error
                 if inserted_attempted == 0 and first_err is not None:
-                    return False, f"Failed to insert any symbols: {first_err}"
+                    return False, f"Failed to insert any symbols: {first_err} (bulk_err={e_bulk})"
 
         conn.commit()
 
