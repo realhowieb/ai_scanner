@@ -485,37 +485,40 @@ def render_results(
 
         # Pro/Premium: keep charts + interactive details
         with st.expander("📈 Charts", expanded=False):
-            # Support both scan results (Ticker) and watchlist/market tables (Symbol)
+            # Chart follows the clicked row (preferred). Fallback to last chart pick or first ticker.
             ticker_col = "Ticker" if "Ticker" in df.columns else ("Symbol" if "Symbol" in df.columns else None)
             if not ticker_col:
                 st.caption("No tickers available to chart.")
-                return
+            else:
+                tickers = (
+                    df[ticker_col]
+                    .astype(str)
+                    .map(lambda x: x.strip().upper())
+                    .tolist()
+                )
+                tickers = [t for t in tickers if t]
+                tickers = list(dict.fromkeys(tickers))
 
-            tickers = (
-                df[ticker_col]
-                .astype(str)
-                .map(lambda x: x.strip().upper())
-                .tolist()
-            )
-            tickers = [t for t in tickers if t]
-            # de-dupe while preserving order
-            tickers = list(dict.fromkeys(tickers))
+                if not tickers:
+                    st.caption("No tickers available to chart.")
+                else:
+                    picker_key = "results_chart_picker_fast"
+                    auto_pick = (st.session_state.get("results_selected_ticker") or st.session_state.get(picker_key) or tickers[0])
+                    auto_pick = str(auto_pick).strip().upper()
+                    if auto_pick not in tickers:
+                        auto_pick = tickers[0]
 
-            if not tickers:
-                st.caption("No tickers available to chart.")
-                return
+                    # Persist the current chart ticker so it survives reruns.
+                    st.session_state[picker_key] = auto_pick
 
-            picker_key = "results_chart_picker_fast"
-            preferred = (st.session_state.get("results_selected_ticker") or st.session_state.get(picker_key) or tickers[0])
-            try:
-                idx = tickers.index(str(preferred).strip().upper())
-            except Exception:
-                idx = 0
+                    st.caption(f"Charting: **{auto_pick}** — click a row in the table to change the chart.")
 
-            pick = st.selectbox("Select ticker to chart", tickers, index=idx, key=picker_key)
+                    # Optional manual override (kept but hidden by default)
+                    with st.expander("Change chart ticker", expanded=False):
+                        pick = st.selectbox("Ticker", tickers, index=tickers.index(auto_pick), key=f"{picker_key}_manual")
+                        st.session_state[picker_key] = str(pick).strip().upper()
 
-            # Render chart ONLY when expander is opened
-            render_chart_for_ticker(pick)
+                    render_chart_for_ticker(st.session_state[picker_key])
 
         pick = st.session_state.get("results_chart_picker_fast")
 
@@ -878,35 +881,39 @@ def render_results(
     else:
         # Pro/Premium: keep existing Charts expander + details + watchlist action
         with st.expander("📈 Charts", expanded=False):
-            # Support both scan results (Ticker) and watchlist/market tables (Symbol)
+            # Chart follows the clicked row (preferred). Fallback to last chart pick or first ticker.
             ticker_col = "Ticker" if "Ticker" in df.columns else ("Symbol" if "Symbol" in df.columns else None)
             if not ticker_col:
                 st.caption("No tickers available to chart.")
-                return
+            else:
+                tickers = (
+                    df[ticker_col]
+                    .astype(str)
+                    .map(lambda x: x.strip().upper())
+                    .tolist()
+                )
+                tickers = [t for t in tickers if t]
+                tickers = list(dict.fromkeys(tickers))
 
-            tickers = (
-                df[ticker_col]
-                .astype(str)
-                .map(lambda x: x.strip().upper())
-                .tolist()
-            )
-            tickers = [t for t in tickers if t]
-            # de-dupe while preserving order
-            tickers = list(dict.fromkeys(tickers))
+                if not tickers:
+                    st.caption("No tickers available to chart.")
+                else:
+                    picker_key = "results_chart_picker"
+                    auto_pick = (st.session_state.get("results_selected_ticker") or st.session_state.get(picker_key) or tickers[0])
+                    auto_pick = str(auto_pick).strip().upper()
+                    if auto_pick not in tickers:
+                        auto_pick = tickers[0]
 
-            if not tickers:
-                st.caption("No tickers available to chart.")
-                return
+                    st.session_state[picker_key] = auto_pick
 
-            picker_key = "results_chart_picker"
-            preferred = (st.session_state.get("results_selected_ticker") or st.session_state.get(picker_key) or tickers[0])
-            try:
-                idx = tickers.index(str(preferred).strip().upper())
-            except Exception:
-                idx = 0
+                    st.caption(f"Charting: **{auto_pick}** — click a row in the table to change the chart.")
 
-            pick = st.selectbox("Select ticker to chart", tickers, index=idx, key=picker_key)
-            render_chart_for_ticker(pick)
+                    # Optional manual override (kept but hidden by default)
+                    with st.expander("Change chart ticker", expanded=False):
+                        pick = st.selectbox("Ticker", tickers, index=tickers.index(auto_pick), key=f"{picker_key}_manual")
+                        st.session_state[picker_key] = str(pick).strip().upper()
+
+                    render_chart_for_ticker(st.session_state[picker_key])
 
         pick = st.session_state.get("results_chart_picker")
 
