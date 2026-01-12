@@ -120,6 +120,11 @@ def render_results(
     # Option A: Basic = auto-details only, no selection
     is_basic = not can_export_csv
 
+    # Earnings in-card display should only appear when enrichment is enabled (and never for Basic)
+    earn_col = "📅 Earnings in X days"
+    earn_enabled = bool(st.session_state.get("enable_earnings_enrichment", False))
+    show_earnings_in_cards = (not is_basic) and earn_enabled and (earn_col in df.columns)
+
     # 🔒 Basic hard-lock: clear any selection state so Basic cannot "inherit" Pro clicks
     if is_basic:
         for k in (
@@ -159,7 +164,6 @@ def render_results(
     # 📅 Earnings Filters (fast)
     # Requires a precomputed column from app.py: "📅 Earnings in X days"
     # ─────────────────────────────
-    earn_col = "📅 Earnings in X days"
     if earn_col in df.columns and (not is_basic):
         with st.expander("📅 Earnings Filters", expanded=False):
             excl_3 = st.checkbox(
@@ -450,12 +454,7 @@ def render_results(
                         c2.metric("Last", "—" if last is None else f"{last:.2f}")
                         c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
                         c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
-
-                        earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
-                        if earn_days is None:
-                            st.caption("📅 Earnings: —")
-                        else:
-                            st.caption(f"📅 Earnings in {int(earn_days)} days")
+                        # Basic: do not show earnings in the details card
 
                         with st.expander("Show row fields", expanded=False):
                             st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
@@ -521,12 +520,13 @@ def render_results(
                     c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
                     c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
 
-                    # Earnings context (if present)
-                    earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
-                    if earn_days is None:
-                        st.caption("📅 Earnings: —")
-                    else:
-                        st.caption(f"📅 Earnings in {int(earn_days)} days")
+                    # Earnings (only when enrichment is enabled)
+                    if show_earnings_in_cards:
+                        earn_days = _as_float(r0.get(earn_col))
+                        if earn_days is None:
+                            st.caption("📅 Earnings: TBA")
+                        else:
+                            st.caption(f"📅 Earnings in {int(earn_days)} days")
 
                     # ⭐ Add to watchlist action
                     _render_watchlist_action(str(selected_ticker))
@@ -557,7 +557,6 @@ def render_results(
         return
 
     # --- UI polish: Earnings column (display-only) ---
-    earn_col = "📅 Earnings in X days"
 
     # Move earnings column next to Ticker (if present)
     if earn_col in df.columns and "Ticker" in df.columns:
@@ -827,11 +826,7 @@ def render_results(
                     c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
                     c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
 
-                    earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
-                    if earn_days is None:
-                        st.caption("📅 Earnings: —")
-                    else:
-                        st.caption(f"📅 Earnings in {int(earn_days)} days")
+                    # Basic: do not show earnings in the details card
 
                     with st.expander("Show row fields", expanded=False):
                         st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
@@ -893,11 +888,13 @@ def render_results(
                     c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
                     c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
 
-                    earn_days = _as_float(r0.get("📅 Earnings in X days")) if "📅 Earnings in X days" in df.columns else None
-                    if earn_days is None:
-                        st.caption("📅 Earnings: —")
-                    else:
-                        st.caption(f"📅 Earnings in {int(earn_days)} days")
+                    # Earnings (only when enrichment is enabled)
+                    if show_earnings_in_cards:
+                        earn_days = _as_float(r0.get(earn_col))
+                        if earn_days is None:
+                            st.caption("📅 Earnings: TBA")
+                        else:
+                            st.caption(f"📅 Earnings in {int(earn_days)} days")
 
                     # ⭐ Add to watchlist action
                     _render_watchlist_action(str(selected_ticker))
