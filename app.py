@@ -485,6 +485,28 @@ def _persist_symbols_to_active_watchlist(symbols: list[str]) -> tuple[bool, str]
             has_created = "created_at" in cols
             has_added = "added_at" in cols
 
+            # --- Prevent duplicates even if the DB lacks a unique constraint ---
+            # Query existing symbols for this watchlist and drop them before inserting.
+            try:
+                cur.execute(
+                    f"""
+                    SELECT upper({symbol_col})
+                    FROM watchlist_items
+                    WHERE {wl_col} = %s
+                      AND upper({symbol_col}) = ANY(%s)
+                    """,
+                    (wl_id, [s.upper() for s in syms]),
+                )
+                existing = {str(r[0]).strip().upper() for r in (cur.fetchall() or []) if r and r[0]}
+            except Exception:
+                existing = set()
+
+            if existing:
+                syms = [s for s in syms if s.upper() not in existing]
+
+            if not syms:
+                return True, "No new symbols added — all selected symbols are already in this watchlist."
+
             # Build INSERT with only existing columns
             insert_cols = [wl_col, symbol_col]
             values_expr = ["%s", "%s"]
@@ -638,9 +660,30 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
     # --- Add earnings symbols to active watchlist ---
     symbols = dfw["symbol"].astype(str).str.upper().tolist()
 
+    # Hide already-added symbols by default (prevents accidental duplicates)
+    existing_syms = {
+        str(s).strip().upper()
+        for s in (st.session_state.get("active_watchlist_tickers", []) or [])
+        if str(s).strip()
+    }
+
+    show_existing = st.checkbox(
+        "Show symbols already in my watchlist",
+        value=False,
+        key="earnings_week_show_existing",
+        help="Off by default to prevent accidental duplicates.",
+    )
+
+    options = symbols if show_existing else [s for s in symbols if s not in existing_syms]
+
+    if not show_existing and existing_syms:
+        skipped = len([s for s in symbols if s in existing_syms])
+        if skipped:
+            st.caption(f"✅ {skipped} symbols already in your watchlist are hidden.")
+
     selected = st.multiselect(
         "Add symbols to active watchlist",
-        options=symbols,
+        options=options,
         key="earnings_week_watchlist_select",
     )
 
