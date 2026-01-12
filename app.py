@@ -411,6 +411,75 @@ def add_earnings_days_column(results_df: pd.DataFrame) -> pd.DataFrame:
 
     return out
 
+
+# --- Earnings This Week (DB-only) ---
+@st.cache_data(ttl=600, show_spinner=False)
+def _fetch_earnings_this_week(limit: int = 200) -> pd.DataFrame:
+    """Return a DataFrame of symbols with earnings in the next 7 days (DB-only).
+
+    Columns: symbol, earnings_date, earnings_time, days_until_earnings
+    """
+    conn = _get_db_conn_for_app()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                  symbol,
+                  earnings_date,
+                  earnings_time,
+                  (earnings_date - CURRENT_DATE) AS days_until_earnings
+                FROM earnings_calendar
+                WHERE earnings_date >= CURRENT_DATE
+                  AND earnings_date < CURRENT_DATE + INTERVAL '7 days'
+                ORDER BY earnings_date, symbol
+                LIMIT %s
+                """,
+                (int(limit),),
+            )
+            rows = cur.fetchall() or []
+            cols = [d[0] for d in (cur.description or [])]
+        return pd.DataFrame(rows, columns=cols)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
+    """Lightweight panel showing upcoming earnings (next 7 days)."""
+    st.markdown("### 📅 Earnings This Week")
+
+    if not bool(can_earnings):
+        st.caption("🔒 Earnings calendar is a Pro feature.")
+        return
+
+    limit = st.number_input(
+        "Max rows",
+        min_value=25,
+        max_value=500,
+        value=200,
+        step=25,
+        key="earnings_this_week_limit",
+        help="Shows companies with earnings dates in the next 7 days (DB-only).",
+    )
+
+    try:
+        dfw = _fetch_earnings_this_week(limit=int(limit))
+    except Exception as e:
+        if bool(st.session_state.get("is_admin")):
+            st.warning(f"Earnings lookup failed: {e}")
+        else:
+            st.info("Earnings lookup is temporarily unavailable.")
+        return
+
+    if dfw is None or dfw.empty:
+        st.info("No earnings scheduled in the next 7 days.")
+        return
+
+    st.dataframe(dfw, width="stretch", hide_index=True)
+
 # --------------- Tier/Admin Helper Functions ----------------
 
 def _norm_str(v: object | None) -> str:
@@ -1831,6 +1900,10 @@ def main():
 
     # -------- Market Snapshot --------
     render_market_snapshot()
+
+    # -------- Earnings this week (DB-only) --------
+    with st.expander("📅 Earnings this week", expanded=False):
+        render_earnings_this_week_panel(can_earnings=bool(flags.get("can_earnings")))
 
     # -------- Optional: Earnings enrichment toggle (MUST be BEFORE scans) --------
     # Earnings is a Pro+ feature. Basic should not see the toggle or run enrichment.
