@@ -1898,9 +1898,6 @@ def main():
     st.session_state["active_watchlist_id"] = watch_id
     st.session_state["active_watchlist_tickers"] = watch_tickers
 
-    # -------- Market Snapshot --------
-    render_market_snapshot()
-
     # -------- Earnings this week (DB-only) --------
     with st.expander("📅 Earnings this week", expanded=False):
         render_earnings_this_week_panel(can_earnings=bool(flags.get("can_earnings")))
@@ -1954,6 +1951,30 @@ def main():
 
     # -------- Results + Early Breakout Candidates + Scan History --------
     df = get_results_df()
+
+    # -------- Market Snapshot (after results exist) --------
+    # Make latest results available to the snapshot so Top Gainer / Most Active can compute.
+    try:
+        st.session_state["latest_results_df"] = df
+    except Exception:
+        pass
+
+    # Render snapshot AFTER df exists
+    try:
+        import inspect
+
+        sig = None
+        try:
+            sig = inspect.signature(render_market_snapshot)
+        except Exception:
+            sig = None
+
+        if sig and "df" in getattr(sig, "parameters", {}):
+            render_market_snapshot(df=df)  # type: ignore[arg-type]
+        else:
+            render_market_snapshot()
+    except Exception:
+        _render_market_snapshot_legacy()
 
     # -------- Scan timestamp (UTC) --------
     # Record a timestamp when a *new* results dataframe appears so users know freshness.
