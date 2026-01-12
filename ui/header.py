@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import streamlit as st
@@ -280,6 +279,14 @@ def render_market_snapshot(results_df=None) -> None:
     st.markdown("### 🔎 Today's Market Snapshot")
 
     df = results_df
+
+    # If caller didn't pass results_df, try to pull it from session_state (set by app after scan)
+    if df is None:
+        try:
+            df = st.session_state.get("latest_results_df")
+        except Exception:
+            df = None
+
     try:
         if df is not None and getattr(df, "empty", False) is True:
             df = None
@@ -308,15 +315,38 @@ def render_market_snapshot(results_df=None) -> None:
                 # Pick a best-effort numeric change column
                 lower_map = {col: str(col).lower() for col in df.columns}
                 metric_col = None
+
+                # Prefer explicit percent-change style columns
+                pct_keys = [
+                    "pct_change",
+                    "pct change",
+                    "change%",
+                    "change %",
+                    "% change",
+                    "%chg",
+                    "chg%",
+                    "return",
+                    "daily_change",
+                ]
                 for col, lower in lower_map.items():
-                    if any(k in lower for k in ["% change", "change %", "pct_change", "pct change", "chg", "change"]):
+                    if any(k in lower for k in pct_keys):
                         metric_col = col
                         break
+
+                # Fallback: generic change columns
+                if metric_col is None:
+                    for col, lower in lower_map.items():
+                        if any(k in lower for k in ["chg", "change"]):
+                            metric_col = col
+                            break
+
+                # Last fallback: gap columns
                 if metric_col is None:
                     for col, lower in lower_map.items():
                         if "gap" in lower:
                             metric_col = col
                             break
+
                 if metric_col is None:
                     st.metric("Top Gainer", "—", "—")
                 else:
@@ -326,8 +356,13 @@ def render_market_snapshot(results_df=None) -> None:
                         st.metric("Top Gainer", "—", "—")
                     else:
                         top = df.loc[idx]
-                        ticker = top.get("Ticker") if hasattr(top, "get") else None
-                        ticker = ticker or top.get("Symbol") if hasattr(top, "get") else None
+                        ticker = None
+                        if hasattr(top, "get"):
+                            for k in ["Ticker", "Symbol", "symbol", "ticker"]:
+                                v = top.get(k)
+                                if v:
+                                    ticker = v
+                                    break
                         ticker = ticker or "—"
                         raw_val = float(numeric_series.loc[idx])
                         st.metric("Top Gainer", ticker, f"{raw_val:+.2f}%")
@@ -340,10 +375,30 @@ def render_market_snapshot(results_df=None) -> None:
                 st.metric("Most Active", "—", "—")
             else:
                 vol_col = None
-                if "DollarVol20" in df.columns:
-                    vol_col = "DollarVol20"
-                elif "Volume" in df.columns:
-                    vol_col = "Volume"
+
+                # Prefer dollar volume / liquidity style columns
+                vol_candidates = [
+                    "DollarVol20",
+                    "DollarVol",
+                    "DollarVol20D",
+                    "DollarVol_20",
+                    "DollarVolume",
+                    "AvgDollarVol",
+                    "AvgDollarVol20",
+                    "MinDollarVol",
+                ]
+                for c in vol_candidates:
+                    if c in df.columns:
+                        vol_col = c
+                        break
+
+                # Fallback to share volume columns
+                if not vol_col:
+                    vol_candidates2 = ["Volume", "Vol", "AvgVol", "AvgVol20", "Vol20", "Volume20"]
+                    for c in vol_candidates2:
+                        if c in df.columns:
+                            vol_col = c
+                            break
 
                 if not vol_col:
                     st.metric("Most Active", "—", "—")
@@ -354,10 +409,16 @@ def render_market_snapshot(results_df=None) -> None:
                         st.metric("Most Active", "—", "—")
                     else:
                         row = df.loc[idx]
-                        ticker = row.get("Ticker") if hasattr(row, "get") else None
+                        ticker = None
+                        if hasattr(row, "get"):
+                            for k in ["Ticker", "Symbol", "symbol", "ticker"]:
+                                v = row.get(k)
+                                if v:
+                                    ticker = v
+                                    break
                         ticker = ticker or "—"
                         val_millions = float(numeric_vol.loc[idx]) / 1_000_000
-                        suffix = "M" if vol_col == "DollarVol20" else "M sh"
+                        suffix = "M" if vol_col in vol_candidates else "M sh"
                         st.metric("Most Active", ticker, f"{val_millions:.1f}{suffix}")
         except Exception:
             st.metric("Most Active", "—", "—")

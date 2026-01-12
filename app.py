@@ -1953,27 +1953,18 @@ def main():
     df = get_results_df()
 
     # -------- Market Snapshot (after results exist) --------
-    # Make latest results available to the snapshot so Top Gainer / Most Active can compute.
+    # Always render the legacy snapshot (it is self-contained and reliably shows metrics).
+    # The newer `ui.header.render_market_snapshot()` implementation can be blank if it
+    # depends on internal state that isn't populated in time.
     try:
         st.session_state["latest_results_df"] = df
     except Exception:
         pass
 
-    # Render snapshot AFTER df exists
     try:
-        import inspect
-
-        sig = None
-        try:
-            sig = inspect.signature(render_market_snapshot)
-        except Exception:
-            sig = None
-
-        if sig and "df" in getattr(sig, "parameters", {}):
-            render_market_snapshot(df=df)  # type: ignore[arg-type]
-        else:
-            render_market_snapshot()
-    except Exception:
+        render_market_snapshot(results_df=df)
+    except TypeError:
+        # Fallback to legacy snapshot if signature mismatches
         _render_market_snapshot_legacy()
 
     # -------- Scan timestamp (UTC) --------
