@@ -456,6 +456,22 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
 
     st.dataframe(dfw, width="stretch", hide_index=True)
 
+    # --- Add earnings symbols to active watchlist ---
+    symbols = dfw["symbol"].astype(str).str.upper().tolist()
+
+    selected = st.multiselect(
+        "Add symbols to active watchlist",
+        options=symbols,
+        key="earnings_week_watchlist_select",
+    )
+
+    if selected:
+        if st.button("➕ Add selected to watchlist", key="earnings_week_add_watchlist"):
+            current = st.session_state.get("active_watchlist_tickers", []) or []
+            merged = list(dict.fromkeys(current + selected).keys())
+            st.session_state["active_watchlist_tickers"] = merged
+            st.success(f"Added {len(selected)} symbols to active watchlist.")
+
 # --------------- Tier/Admin Helper Functions ----------------
 
 def _norm_str(v: object | None) -> str:
