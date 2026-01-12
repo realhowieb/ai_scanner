@@ -5,6 +5,20 @@ from typing import Optional, Dict, Any
 
 from .engine import get_neon_conn, get_db_status
 
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Enable verbose user_settings logging only when explicitly requested.
+# Set DEBUG_USER_SETTINGS=1 in your environment to turn this on.
+_DEBUG_USER_SETTINGS = os.getenv("DEBUG_USER_SETTINGS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _dbg(msg: str) -> None:
+    if _DEBUG_USER_SETTINGS:
+        logger.info(msg)
+
 
 def _ensure_user_settings_schema() -> None:
     """
@@ -88,8 +102,8 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
     Returns a dict with keys matching sidebar state, or None if not found.
     """
     conn = _get_conn()
-    print(f"[DEBUG user_settings] get_user_settings called with user_id={user_id!r}")
-    print(f"[DEBUG user_settings] db_status={get_db_status()!r}, conn_is_none={conn is None}")
+    _dbg(f"[DEBUG user_settings] get_user_settings called with user_id={user_id!r}")
+    _dbg(f"[DEBUG user_settings] db_status={get_db_status()!r}, conn_is_none={conn is None}")
     if conn is None:
         return None
 
@@ -118,7 +132,7 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
                 (user_id,),
             )
             row = cur.fetchone()
-            print(f"[DEBUG user_settings] primary lookup row for {user_id!r} = {row!r}")
+            _dbg(f"[DEBUG user_settings] primary lookup row for {user_id!r} = {row!r}")
 
             # Fallback: be tolerant of stray whitespace or case differences in user_id
             if not row:
@@ -145,7 +159,7 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
                     (user_id,),
                 )
                 row = cur.fetchone()
-                print(f"[DEBUG user_settings] fallback lookup row for {user_id!r} = {row!r}")
+                _dbg(f"[DEBUG user_settings] fallback lookup row for {user_id!r} = {row!r}")
 
     if not row:
         return None
