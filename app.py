@@ -423,6 +423,103 @@ def _fetch_earnings_this_week(limit: int = 200) -> pd.DataFrame:
             pass
 
 
+def _persist_symbols_to_active_watchlist(symbols: list[str]) -> tuple[bool, str]:
+    """Persist symbols into the active watchlist in DB (if possible).
+
+    Returns: (ok, message)
+    """
+    watchlist_id = st.session_state.get("active_watchlist_id")
+    if not watchlist_id:
+        return False, "No active watchlist selected. Create/select one first."
+
+    # Normalize + de-dupe
+    syms = [str(s).strip().upper() for s in (symbols or [])]
+    syms = [s for s in syms if s]
+    syms = list(dict.fromkeys(syms).keys())
+    if not syms:
+        return False, "No symbols to add."
+
+    conn = None
+    try:
+        conn = _get_db_conn_for_app()
+        with conn.cursor() as cur:
+            # Discover watchlist_items schema so we can insert safely even if columns differ.
+            cur.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'watchlist_items'
+                """
+            )
+            cols = {str(r[0]).strip().lower() for r in (cur.fetchall() or [])}
+
+            if not cols:
+                return False, "DB table public.watchlist_items not found (or not accessible)."
+
+            # Best-effort mapping for symbol column name
+            symbol_col = "symbol" if "symbol" in cols else ("ticker" if "ticker" in cols else None)
+            if symbol_col is None:
+                return False, "watchlist_items table missing a symbol/ticker column."
+
+            wl_col = "watchlist_id" if "watchlist_id" in cols else ("watchlist" if "watchlist" in cols else None)
+            if wl_col is None:
+                return False, "watchlist_items table missing a watchlist_id column."
+
+            has_created = "created_at" in cols
+            has_added = "added_at" in cols
+
+            # Build INSERT with the columns that exist.
+            insert_cols = [wl_col, symbol_col]
+            values_expr = ["%s", "%s"]
+            if has_created:
+                insert_cols.append("created_at")
+                values_expr.append("NOW()")
+            if has_added:
+                insert_cols.append("added_at")
+                values_expr.append("NOW()")
+
+            cols_sql = ", ".join(insert_cols)
+            vals_sql = ", ".join(values_expr)
+
+            # Use ON CONFLICT when possible (Postgres). If the unique constraint differs,
+            # we'll fall back to individual inserts.
+            on_conflict = ""
+            if wl_col in ("watchlist_id", "watchlist") and symbol_col in ("symbol", "ticker"):
+                on_conflict = f" ON CONFLICT ({wl_col}, {symbol_col}) DO NOTHING"
+
+            sql = f"INSERT INTO watchlist_items ({cols_sql}) VALUES ({vals_sql}){on_conflict}"
+
+            # Try executemany first
+            try:
+                cur.executemany(sql, [(watchlist_id, s) for s in syms])
+            except Exception:
+                # Fallback: insert one-by-one (works even if ON CONFLICT clause is incompatible)
+                inserted = 0
+                for s in syms:
+                    try:
+                        cur.execute(sql, (watchlist_id, s))
+                        inserted += 1
+                    except Exception:
+                        continue
+
+        conn.commit()
+        return True, f"Saved {len(syms)} symbols to watchlist in DB."
+
+    except Exception as e:
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception:
+            pass
+        return False, f"Failed to save to DB: {e}"
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+
 def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
     """Lightweight panel showing upcoming earnings (next 7 days)."""
     st.markdown("### 📅 Earnings This Week")
@@ -467,10 +564,19 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
 
     if selected:
         if st.button("➕ Add selected to watchlist", key="earnings_week_add_watchlist"):
+            # 1) Update in-memory list so the UI reflects changes immediately
             current = st.session_state.get("active_watchlist_tickers", []) or []
-            merged = list(dict.fromkeys(current + selected).keys())
+            merged = list(dict.fromkeys([*(current or []), *selected]).keys())
             st.session_state["active_watchlist_tickers"] = merged
-            st.success(f"Added {len(selected)} symbols to active watchlist.")
+
+            # 2) Persist to DB (watchlist_items) so it survives refresh/login
+            ok, msg = _persist_symbols_to_active_watchlist(selected)
+            if ok:
+                st.success(f"Added {len(selected)} symbols to active watchlist. {msg}")
+                # Rerun so the watchlists panel re-queries DB and stays in sync
+                st.rerun()
+            else:
+                st.warning(f"Added to this session only (not saved). {msg}")
 
 # --------------- Tier/Admin Helper Functions ----------------
 
