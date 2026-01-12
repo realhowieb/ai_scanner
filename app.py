@@ -136,7 +136,7 @@ from ui.universe_panel import render_universe_panel, init_universe_state
 from ui.filters import render_filters
 from ui.db_status import render_db_status_badge
 ## from auth.tiering_utils import derive_tier_flags
-from ui.header import render_header
+from ui.header import render_header, render_price_ticker, render_market_snapshot
 from ui.prebreakout_tab import render_prebreakout_tab
 from ui.footer import render_footer
 from ui.watchlists import render_watchlists_panel
@@ -515,7 +515,7 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
         return None, None
 
 
-def render_market_snapshot() -> None:
+def _render_market_snapshot_legacy() -> None:
     """Render a compact 4-metric market snapshot row.
 
     Shows SPY, QQQ, Top Gainer (from latest scan), and Most Active
@@ -810,7 +810,7 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
     return results
 
 
-def render_price_ticker():
+def _render_price_ticker_legacy():
     """Render a scrolling ticker just under the main header."""
     data = _fetch_ticker_quotes(TICKER_STRIP)
     if not data:
