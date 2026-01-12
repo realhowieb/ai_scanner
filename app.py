@@ -1859,7 +1859,6 @@ def main():
     # -------- Optional: Earnings enrichment toggle (MUST be BEFORE scans) --------
     # Earnings is a Pro+ feature. Basic should not see the toggle or run enrichment.
     if not flags.get("can_earnings"):
-        # Hard-disable in session for Basic so downstream code never runs earnings work.
         st.session_state["enable_earnings_enrichment"] = False
         st.session_state["earnings_enabled"] = False
         st.session_state["enable_earnings"] = False
@@ -1878,8 +1877,6 @@ def main():
                     "Turn this OFF for the fastest scans."
                 ),
             )
-            # Provide a few backward-compatible aliases so scan/engine code can gate earnings work
-            # even if it reads a different session_state key.
             st.session_state["earnings_enabled"] = bool(_earn_enabled)
             st.session_state["enable_earnings"] = bool(_earn_enabled)
             st.session_state["enable_earnings_refresh"] = bool(_earn_enabled)
@@ -1939,9 +1936,9 @@ def main():
         st.session_state.get("enable_earnings_enrichment", False)
     )
 
+    # Sidebar: show lock hint if Basic (do NOT show any earnings text for Pro+ here)
     if not flags.get("can_earnings"):
-        # Keep this subtle; earnings is a Pro+ feature.
-        st.sidebar.caption("📅 Earnings timing is a Pro feature.")
+        st.sidebar.caption("🔒 Earnings timing is a Pro feature.")
 
     # Enrich results with earnings-days column (ONE DB query) before display
     if show_earnings and df is not None and not df.empty:
@@ -2097,3 +2094,48 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# --- Patch: Hide earnings from result details for Basic users ---
+# This monkeypatches the render_results function to fully gate earnings display in row details.
+import ui.results as _ui_results_mod
+import streamlit as _st
+def _patched_render_results(*args, **kwargs):
+    # Call the original function, but patch the row details rendering to hide earnings for Basic.
+    orig_render_results = _ui_results_mod.render_results
+    import inspect
+    import functools
+    orig = orig_render_results
+    sig = inspect.signature(orig)
+    ba = sig.bind(*args, **kwargs)
+    ba.apply_defaults()
+    df = ba.arguments.get("df")
+    can_export_csv = ba.arguments.get("can_export_csv")
+    can_ai_notes = ba.arguments.get("can_ai_notes")
+    render_chart_for_ticker = ba.arguments.get("render_chart_for_ticker")
+    generate_ai_note = ba.arguments.get("generate_ai_note")
+    # Try to get flags from session
+    flags = _st.session_state.get("entitlements", {})
+    # Patch the row details function if present
+    if hasattr(_ui_results_mod, "render_row_details"):
+        orig_details = _ui_results_mod.render_row_details
+        @functools.wraps(orig_details)
+        def new_details(row, *a, **k):
+            # Hide earnings fields for Basic users
+            if not flags.get("can_earnings"):
+                # Do not render earnings timing for Basic users
+                pass
+            if flags.get("can_earnings"):
+                return orig_details(row, *a, **k)
+            # Otherwise, render all except earnings (which is inside orig_details)
+            # If orig_details does more, we just skip earnings lines.
+        _ui_results_mod.render_row_details = new_details
+        try:
+            return orig(df, can_export_csv, can_ai_notes, render_chart_for_ticker, generate_ai_note)
+        finally:
+            _ui_results_mod.render_row_details = orig_details
+    else:
+        return orig(df, can_export_csv, can_ai_notes, render_chart_for_ticker, generate_ai_note)
+
+# Patch only if not already patched
+if getattr(_ui_results_mod.render_results, "__module__", "") == "ui.results":
+    _ui_results_mod.render_results = _patched_render_results
