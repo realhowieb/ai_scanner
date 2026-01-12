@@ -373,6 +373,7 @@ FEATURE_MIN_TIER: dict[str, str] = {
 
     # results
     "can_export_csv": "pro",
+    "can_earnings": "pro",
     "can_ai_notes": "premium",
 
     # pro features
@@ -1856,24 +1857,32 @@ def main():
     render_market_snapshot()
 
     # -------- Optional: Earnings enrichment toggle (MUST be BEFORE scans) --------
-    # This toggle must be defined before running scans so scan-time hooks can read it
-    # and skip earnings work entirely.
-    _earn_default = bool(st.session_state.get("enable_earnings_enrichment", False))
-    with st.sidebar.expander("📅 Earnings", expanded=False):
-        _earn_enabled = st.checkbox(
-            "Enable earnings enrichment (adds 📅 Earnings in X days)",
-            value=_earn_default,
-            key="enable_earnings_enrichment",
-            help=(
-                "If enabled, the app may query the DB / refresh earnings to add timing to results. "
-                "Turn this OFF for the fastest scans."
-            ),
-        )
-        # Provide a few backward-compatible aliases so scan/engine code can gate earnings work
-        # even if it reads a different session_state key.
-        st.session_state["earnings_enabled"] = bool(_earn_enabled)
-        st.session_state["enable_earnings"] = bool(_earn_enabled)
-        st.session_state["enable_earnings_refresh"] = bool(_earn_enabled)
+    # Earnings is a Pro+ feature. Basic should not see the toggle or run enrichment.
+    if not flags.get("can_earnings"):
+        # Hard-disable in session for Basic so downstream code never runs earnings work.
+        st.session_state["enable_earnings_enrichment"] = False
+        st.session_state["earnings_enabled"] = False
+        st.session_state["enable_earnings"] = False
+        st.session_state["enable_earnings_refresh"] = False
+    else:
+        # This toggle must be defined before running scans so scan-time hooks can read it
+        # and skip earnings work entirely.
+        _earn_default = bool(st.session_state.get("enable_earnings_enrichment", False))
+        with st.sidebar.expander("📅 Earnings", expanded=False):
+            _earn_enabled = st.checkbox(
+                "Enable earnings enrichment (adds 📅 Earnings in X days)",
+                value=_earn_default,
+                key="enable_earnings_enrichment",
+                help=(
+                    "If enabled, the app may query the DB / refresh earnings to add timing to results. "
+                    "Turn this OFF for the fastest scans."
+                ),
+            )
+            # Provide a few backward-compatible aliases so scan/engine code can gate earnings work
+            # even if it reads a different session_state key.
+            st.session_state["earnings_enabled"] = bool(_earn_enabled)
+            st.session_state["enable_earnings"] = bool(_earn_enabled)
+            st.session_state["enable_earnings_refresh"] = bool(_earn_enabled)
 
     # -------- Scan Controls --------
     render_scan_controls(
@@ -1926,7 +1935,13 @@ def main():
 
     # -------- Earnings toggle (read-only here; it is defined earlier before scans) --------
     # NOTE: key must match the checkbox key exactly (no leading/trailing spaces)
-    show_earnings = bool(st.session_state.get("enable_earnings_enrichment", False))
+    show_earnings = bool(flags.get("can_earnings")) and bool(
+        st.session_state.get("enable_earnings_enrichment", False)
+    )
+
+    if not flags.get("can_earnings"):
+        # Keep this subtle; earnings is a Pro+ feature.
+        st.sidebar.caption("📅 Earnings timing is a Pro feature.")
 
     # Enrich results with earnings-days column (ONE DB query) before display
     if show_earnings and df is not None and not df.empty:
