@@ -69,6 +69,7 @@ def get_results_df() -> Optional[pd.DataFrame]:
 def _sync_selected_ticker_from_table(selection_obj: object, df: pd.DataFrame, picker_key: str) -> None:
     """If Streamlit dataframe selection is available, sync selected ticker into session_state.
 
+    Works for both scan results tables (Ticker column) and market/watchlist tables (Symbol column).
     This keeps row-click selection consistent with the existing chart picker keys.
     """
     try:
@@ -78,13 +79,22 @@ def _sync_selected_ticker_from_table(selection_obj: object, df: pd.DataFrame, pi
         idx = int(rows[0])
         if idx < 0 or idx >= len(df):
             return
-        if "Ticker" not in df.columns:
+
+        # Support both schema variants
+        col = None
+        if "Ticker" in df.columns:
+            col = "Ticker"
+        elif "Symbol" in df.columns:
+            col = "Symbol"
+        if not col:
             return
-        t = str(df.iloc[idx]["Ticker"]).strip().upper()
+
+        t = str(df.iloc[idx][col]).strip().upper()
         if not t:
             return
+
         st.session_state["results_selected_ticker"] = t
-        # Also sync chart picker so existing chart/AI notes follow the click
+        # Also sync chart picker so the Charts expander follows the click
         st.session_state[picker_key] = t
     except Exception:
         return
