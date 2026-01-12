@@ -100,6 +100,39 @@ def _sync_selected_ticker_from_table(selection_obj: object, df: pd.DataFrame, pi
         return
 
 
+# --- Helper: find a row for a ticker (supports Ticker or Symbol column) ---
+def _find_row_for_ticker(df: Optional[pd.DataFrame], ticker: str) -> Optional[pd.Series]:
+    """Find the first row in df matching ticker.
+
+    Supports both schema variants:
+      - scan results tables (Ticker column)
+      - market/watchlist tables (Symbol column)
+
+    Returns the first matching row as a Series, or None.
+    """
+    try:
+        if df is None or df.empty or not ticker:
+            return None
+        t = str(ticker).strip().upper()
+        if not t:
+            return None
+
+        col = None
+        if "Ticker" in df.columns:
+            col = "Ticker"
+        elif "Symbol" in df.columns:
+            col = "Symbol"
+        if not col:
+            return None
+
+        m = df[col].astype(str).str.strip().str.upper() == t
+        if m.any():
+            return df[m].iloc[0]
+        return None
+    except Exception:
+        return None
+
+
 def render_results(
     df: Optional[pd.DataFrame],
     can_export_csv: bool,
@@ -438,12 +471,7 @@ def render_results(
                         "📌 **Top breakout candidate (auto-selected)**  \n"
                         "🔒 Upgrade to Pro to select tickers, view charts, and export CSV."
                     )
-                    try:
-                        row_df = df[df["Ticker"].astype(str).str.upper() == str(auto_t).upper()]
-                        r0 = row_df.iloc[0] if len(row_df) else None
-                    except Exception:
-                        r0 = None
-
+                    r0 = _find_row_for_ticker(df, auto_t)
                     if r0 is not None:
                         c1, c2, c3, c4 = st.columns(4)
 
@@ -527,12 +555,7 @@ def render_results(
         if selected_ticker:
             with st.expander(f"📌 {selected_ticker} details", expanded=False):
                 # Show a compact stats + earnings card (no extra network calls)
-                try:
-                    row_df = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()]
-                    r0 = row_df.iloc[0] if len(row_df) else None
-                except Exception:
-                    r0 = None
-
+                r0 = _find_row_for_ticker(df, selected_ticker)
                 if r0 is not None:
                     c1, c2, c3, c4 = st.columns(4)
 
@@ -576,7 +599,9 @@ def render_results(
             st.subheader("AI Notes")
             st.caption("⭐ Premium feature")
             try:
-                row = df[df["Ticker"] == pick].iloc[0]
+                row = _find_row_for_ticker(df, pick)
+                if row is None:
+                    raise ValueError("No matching row for selected ticker")
                 auto_note = generate_ai_note(row)
                 st.markdown(auto_note)
                 st.text_area(
@@ -834,12 +859,7 @@ def render_results(
                     "📌 **Top breakout candidate (auto-selected)**  \n"
                     "🔒 Upgrade to Pro to select tickers, view charts, and export CSV."
                 )
-                try:
-                    row_df = df[df["Ticker"].astype(str).str.upper() == str(auto_t).upper()]
-                    r0 = row_df.iloc[0] if len(row_df) else None
-                except Exception:
-                    r0 = None
-
+                r0 = _find_row_for_ticker(df, auto_t)
                 if r0 is not None:
                     c1, c2, c3, c4 = st.columns(4)
 
@@ -922,12 +942,7 @@ def render_results(
         if selected_ticker:
             with st.expander(f"📌 {selected_ticker} details", expanded=False):
                 # Show a compact stats + earnings card (no extra network calls)
-                try:
-                    row_df = df[df["Ticker"].astype(str).str.upper() == str(selected_ticker).upper()]
-                    r0 = row_df.iloc[0] if len(row_df) else None
-                except Exception:
-                    r0 = None
-
+                r0 = _find_row_for_ticker(df, selected_ticker)
                 if r0 is not None:
                     c1, c2, c3, c4 = st.columns(4)
 
@@ -972,7 +987,9 @@ def render_results(
         try:
             # Use the same ticker the user selected for the chart
             pick = st.session_state.get("results_chart_picker")
-            row = df[df["Ticker"] == pick].iloc[0]
+            row = _find_row_for_ticker(df, pick)
+            if row is None:
+                raise ValueError("No matching row for selected ticker")
             auto_note = generate_ai_note(row)
             st.markdown(auto_note)
             st.text_area(
