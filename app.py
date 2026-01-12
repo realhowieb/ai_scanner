@@ -2134,6 +2134,14 @@ def main():
     except Exception:
         pass
 
+    # 🔄 Clear stale selection state after a new scan
+    for k in (
+        "results_selected_ticker",
+        "results_chart_picker",
+        "results_chart_picker_fast",
+    ):
+        st.session_state.pop(k, None)
+
     try:
         render_market_snapshot(results_df=_snapshot_df)
     except TypeError:
