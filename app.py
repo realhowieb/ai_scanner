@@ -141,7 +141,115 @@ from ui.prebreakout_tab import render_prebreakout_tab
 from ui.footer import render_footer
 from ui.watchlists import render_watchlists_panel
 
+
 from market_data import get_latest_quotes
+
+# --------------- Tier Sync (DB-first tier resolver) ----------------
+# Uses DB as source-of-truth (Stripe webhooks write to DB), with safe fallback to legacy behavior.
+try:
+    from tier_sync import resolve_user_tier  # type: ignore
+except Exception:
+    resolve_user_tier = None  # type: ignore
+
+
+def _resolve_tier_state(username: str, users_map: dict) -> dict:
+    """Resolve tier + debug info.
+
+    Priority:
+      1) tier_sync.resolve_user_tier (DB-first)
+      2) legacy get_user_tier(username, users_map)
+
+    Returns dict keys:
+      tier_obj, tier_key, forced_tier_key, db_user_debug, db_tier_err
+    """
+    # Legacy baseline
+    tier_obj = get_user_tier(username, users_map)
+    tier_key = (_tier_key(tier_obj) or "basic").strip().lower()
+    state = {
+        "tier_obj": tier_obj,
+        "tier_key": tier_key,
+        "forced_tier_key": None,
+        "db_user_debug": None,
+        "db_tier_err": None,
+    }
+
+    if not callable(resolve_user_tier):
+        return state
+
+    # Call Tier Sync with best-effort signature matching (so app.py doesn't break if signature changes)
+    try:
+        import inspect
+
+        fn = resolve_user_tier
+        sig = None
+        try:
+            sig = inspect.signature(fn)
+        except Exception:
+            sig = None
+
+        kwargs: dict = {}
+        if sig is not None:
+            params = getattr(sig, "parameters", {})
+            if "username" in params:
+                kwargs["username"] = username
+            elif "user_id" in params:
+                kwargs["user_id"] = username
+
+            if "users_map" in params:
+                kwargs["users_map"] = users_map
+
+            if "Tier" in params:
+                kwargs["Tier"] = Tier
+            elif "tier_enum" in params:
+                kwargs["tier_enum"] = Tier
+
+            if "get_user_tier" in params:
+                kwargs["get_user_tier"] = get_user_tier
+
+            if "get_db_conn" in params:
+                kwargs["get_db_conn"] = _get_db_conn_for_app
+            elif "db_conn_fn" in params:
+                kwargs["db_conn_fn"] = _get_db_conn_for_app
+
+        # If we couldn't infer, at least pass the basics by position
+        res = fn(**kwargs) if kwargs else fn(username, users_map)  # type: ignore[misc]
+
+        # Normalize outputs (support dict or tuple)
+        if isinstance(res, dict):
+            forced = res.get("forced_tier_key") or res.get("forced_tier") or res.get("db_tier")
+            if forced:
+                forced = str(forced).strip().lower()
+            tier_obj2 = res.get("tier_obj") or res.get("tier") or tier_obj
+            tier_key2 = res.get("tier_key") or (_tier_key(tier_obj2) if tier_obj2 is not None else None)
+            tier_key2 = str(tier_key2 or tier_key).strip().lower()
+
+            state["tier_obj"] = tier_obj2
+            state["tier_key"] = tier_key2
+            state["forced_tier_key"] = forced
+            state["db_user_debug"] = res.get("db_user_debug") or res.get("db_user")
+            state["db_tier_err"] = res.get("db_tier_err") or res.get("error")
+            return state
+
+        if isinstance(res, (tuple, list)):
+            # Allow: (tier_obj, tier_key) or (tier_obj, tier_key, debug)
+            if len(res) >= 1:
+                state["tier_obj"] = res[0]
+            if len(res) >= 2:
+                state["tier_key"] = str(res[1] or state["tier_key"]).strip().lower()
+            if len(res) >= 3 and isinstance(res[2], dict):
+                dbg = res[2]
+                forced = dbg.get("forced_tier_key") or dbg.get("forced_tier") or dbg.get("db_tier")
+                if forced:
+                    state["forced_tier_key"] = str(forced).strip().lower()
+                state["db_user_debug"] = dbg.get("db_user_debug") or dbg.get("db_user")
+                state["db_tier_err"] = dbg.get("db_tier_err") or dbg.get("error")
+            return state
+
+    except Exception as e:
+        state["db_tier_err"] = str(e)
+        return state
+
+    return state
 
 
 # --------------- DB connection helper (app.py only) ----------------
@@ -1074,160 +1182,29 @@ def main():
     # Show ticker above the header (layout option B)
     render_price_ticker()
     render_header()
-    # -------- Load Users + Tier --------
+    # -------- Load Users + Tier (DB-first via Tier Sync) --------
     users_map = load_users()
 
-    # DB is the source of truth for tier (Stripe webhook updates DB; users_map can be stale)
-    forced_tier_key: str | None = None
-    db_tier_err: str | None = None
-    db_user_debug: dict | None = None
+    # Resolve tier using Tier Sync (DB-first), with legacy fallback
+    tier_state = _resolve_tier_state(username, users_map)
+    tier = tier_state["tier_obj"]
+    forced_tier_key = tier_state.get("forced_tier_key")
+    db_tier_err = tier_state.get("db_tier_err")
+    db_user_debug = tier_state.get("db_user_debug")
 
-    # Re-sync tier from DB (Stripe webhook updates DB; session may be stale until this runs)
-    # app.py-only DB connector (no db/core.py dependency)
-    try:
-        def _lookup_user_from_db(identifier: str) -> dict | None:
-            # Build a SELECT that matches the *actual* users table schema.
-            # Some deployments don't have an `email` column, so we must adapt.
-            conn = _get_db_conn_for_app()
-            try:
-                # Discover available columns on `users`
-                cols: set[str] = set()
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            SELECT column_name
-                            FROM information_schema.columns
-                            WHERE table_name = 'users'
-                            """
-                        )
-                        rows = cur.fetchall() or []
-                        for r in rows:
-                            try:
-                                cols.add(str(r[0]))
-                            except Exception:
-                                pass
-                except Exception:
-                    cols = set()
-
-                # Columns we *wish* to fetch (only include those that exist)
-                wanted = [
-                    "username",
-                    "email",
-                    "tier",
-                    "stripe_customer_id",
-                    "stripe_subscription_id",
-                ]
-                select_cols = [c for c in wanted if (not cols) or (c in cols)]
-                if not select_cols:
-                    # Absolute minimum
-                    select_cols = ["username", "tier"]
-
-                # WHERE clause: prefer matching username; also match email if it exists
-                where = "lower(username) = lower(%s)"
-                params = [identifier]
-                if (not cols) or ("email" in cols):
-                    where = f"({where} OR lower(email) = lower(%s))"
-                    params.append(identifier)
-
-                sql = (
-                    f"SELECT {', '.join(select_cols)} "
-                    f"FROM users "
-                    f"WHERE {where} "
-                    f"LIMIT 1"
-                )
-
-                with conn.cursor() as cur:
-                    cur.execute(sql, tuple(params))
-                    row = cur.fetchone()
-                    if not row:
-                        return None
-
-                    # Build dict from whatever columns we selected
-                    try:
-                        desc = cur.description or []
-                        out = {str(desc[i][0]): row[i] for i in range(len(desc))}
-                    except Exception:
-                        out = {}
-
-                    # Ensure missing keys still exist for callers (debug/UI)
-                    for k in wanted:
-                        out.setdefault(k, None)
-
-                    return out
-            finally:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-
-        u = _lookup_user_from_db(username)
-
-        # Keep a small debug payload (only shown to admins)
-        if isinstance(u, dict) and u:
-            db_user_debug = {
-                "username": u.get("username"),
-                "email": u.get("email"),
-                "tier": u.get("tier"),
-                "stripe_customer_id": u.get("stripe_customer_id"),
-                "stripe_subscription_id": u.get("stripe_subscription_id"),
-            }
-        else:
-            db_user_debug = None
-
-        db_tier = (u.get("tier") if isinstance(u, dict) else None)
-        if db_tier:
-            forced_tier_key = str(db_tier).strip().lower() or None
-
-            # Keep users_map in sync for any legacy code paths that still read it
-            if forced_tier_key and isinstance(users_map, dict):
-                if username not in users_map:
-                    users_map[username] = {}
-                if isinstance(users_map.get(username), dict):
-                    users_map[username]["tier"] = forced_tier_key
-
-            # If the tier changed since last render, invalidate cached entitlements so UI unlocks immediately.
-            prev = (st.session_state.get("tier_key") or "").strip().lower()
-            if forced_tier_key and prev and prev != forced_tier_key:
-                st.session_state.pop("entitlements", None)
-
-    except Exception as e:
-        forced_tier_key = None
-        db_tier_err = str(e)
-        db_user_debug = None
-
-    tier = get_user_tier(username, users_map)
-
-    # IMPORTANT: Override tier object if DB says we are Pro/Premium/etc.
-    # This prevents stale users_map/tiering cache from requiring logout/login.
-    if forced_tier_key:
-        try:
-            # Prefer Enum member lookup (Tier.PRO, Tier.PREMIUM, etc.)
-            if hasattr(Tier, "__members__") and forced_tier_key.upper() in getattr(Tier, "__members__"):
-                tier = Tier[forced_tier_key.upper()]  # type: ignore[index]
-            else:
-                # Fallback: Enum values may be strings
-                tier = Tier(forced_tier_key)  # type: ignore[call-arg]
-        except Exception:
-            # Last resort: keep computed tier
-            pass
-
+    # Admin + tier key
     is_admin = _is_admin_user(username, tier)
+    tier_key = (tier_state.get("tier_key") or "basic").strip().lower()
 
-    # DB is source of truth for the tier key. If Enum conversion failed, still honor DB.
-    tier_key = (forced_tier_key or _tier_key(tier) or "basic").strip().lower()
+    # If the tier changed since last render, invalidate cached entitlements so UI unlocks immediately.
+    prev_key = (st.session_state.get("tier_key") or "").strip().lower()
+    if prev_key and prev_key != tier_key:
+        st.session_state.pop("entitlements", None)
 
-    # If DB-forced tier differs from what was previously stored in session, drop cached flags.
-    if forced_tier_key:
-        prev_key = (st.session_state.get("tier_key") or "").strip().lower()
-        if prev_key and prev_key != tier_key:
-            st.session_state.pop("entitlements", None)
-
-    # If the tier object doesn't reflect the DB tier key, build a tiny proxy for gating.
-    # This guarantees entitlements update immediately without requiring logout/login.
+    # If the tier object doesn't reflect the resolved key, build a tiny proxy for gating.
     tier_for_flags = tier
     try:
-        if forced_tier_key and _tier_key(tier) != tier_key:
+        if _tier_key(tier) != tier_key:
             tier_for_flags = SimpleNamespace(key=tier_key, name=tier_key.upper())
     except Exception:
         tier_for_flags = SimpleNamespace(key=tier_key, name=tier_key.upper())
@@ -1699,7 +1676,6 @@ def main():
                 saved = get_user_settings(safe_username)
             except Exception:
                 saved = None
-
 
             if saved:
                 # Seed session_state from saved settings when available.
