@@ -439,9 +439,14 @@ def _persist_symbols_to_active_watchlist(symbols: list[str]) -> tuple[bool, str]
     if not syms:
         return False, "No symbols to add."
 
+    # Keep watchlist_id stable for DB (uuid/int/text all OK as string)
+    wl_id = watchlist_id
+
     conn = None
     try:
         conn = _get_db_conn_for_app()
+        inserted_attempted = 0
+
         with conn.cursor() as cur:
             # Discover watchlist_items schema so we can insert safely even if columns differ.
             cur.execute(
@@ -462,19 +467,38 @@ def _persist_symbols_to_active_watchlist(symbols: list[str]) -> tuple[bool, str]
             if symbol_col is None:
                 return False, "watchlist_items table missing a symbol/ticker column."
 
-            wl_col = "watchlist_id" if "watchlist_id" in cols else ("watchlist" if "watchlist" in cols else None)
+            wl_col = "watchlist_id" if "watchlist_id" in cols else (
+                "watchlist" if "watchlist" in cols else (
+                    "watchlist_uuid" if "watchlist_uuid" in cols else None
+                )
+            )
             if wl_col is None:
-                return False, "watchlist_items table missing a watchlist_id column."
+                return False, "watchlist_items table missing a watchlist_id/watchlist column."
 
+            # Some schemas also require user_id
+            needs_user = "user_id" in cols
+            user_val = (st.session_state.get("username") or st.session_state.get("user") or "").strip().lower()
+            if needs_user and not user_val:
+                return False, "watchlist_items requires user_id but username is not set in session."
+
+            # Optional timestamp columns
             has_created = "created_at" in cols
             has_added = "added_at" in cols
 
-            # Build INSERT with the columns that exist.
+            # Build INSERT with only existing columns
             insert_cols = [wl_col, symbol_col]
             values_expr = ["%s", "%s"]
+            params_base = [wl_id, None]  # symbol filled per-row
+
+            if needs_user:
+                insert_cols.append("user_id")
+                values_expr.append("%s")
+                params_base.append(user_val)
+
             if has_created:
                 insert_cols.append("created_at")
                 values_expr.append("NOW()")
+
             if has_added:
                 insert_cols.append("added_at")
                 values_expr.append("NOW()")
@@ -482,29 +506,63 @@ def _persist_symbols_to_active_watchlist(symbols: list[str]) -> tuple[bool, str]
             cols_sql = ", ".join(insert_cols)
             vals_sql = ", ".join(values_expr)
 
-            # Use ON CONFLICT when possible (Postgres). If the unique constraint differs,
-            # we'll fall back to individual inserts.
-            on_conflict = ""
-            if wl_col in ("watchlist_id", "watchlist") and symbol_col in ("symbol", "ticker"):
-                on_conflict = f" ON CONFLICT ({wl_col}, {symbol_col}) DO NOTHING"
+            # Try to use ON CONFLICT if a constraint exists on (wl_col, symbol_col)
+            # If it doesn't, Postgres will error; we'll catch and fall back.
+            on_conflict = f" ON CONFLICT ({wl_col}, {symbol_col}) DO NOTHING"
 
             sql = f"INSERT INTO watchlist_items ({cols_sql}) VALUES ({vals_sql}){on_conflict}"
 
-            # Try executemany first
+            # Attempt bulk insert first
             try:
-                cur.executemany(sql, [(watchlist_id, s) for s in syms])
-            except Exception:
-                # Fallback: insert one-by-one (works even if ON CONFLICT clause is incompatible)
-                inserted = 0
+                batch_params = []
                 for s in syms:
+                    p = list(params_base)
+                    p[1] = s
+                    batch_params.append(tuple(p))
+                cur.executemany(sql, batch_params)
+                inserted_attempted = len(batch_params)
+            except Exception:
+                # Fallback: remove ON CONFLICT and insert row-by-row
+                sql2 = f"INSERT INTO watchlist_items ({cols_sql}) VALUES ({vals_sql})"
+                first_err = None
+                inserted_attempted = 0
+                for s in syms:
+                    p = list(params_base)
+                    p[1] = s
                     try:
-                        cur.execute(sql, (watchlist_id, s))
-                        inserted += 1
-                    except Exception:
+                        cur.execute(sql2, tuple(p))
+                        inserted_attempted += 1
+                    except Exception as e:
+                        if first_err is None:
+                            first_err = e
                         continue
+                if inserted_attempted == 0 and first_err is not None:
+                    return False, f"Failed to insert any symbols: {first_err}"
 
         conn.commit()
-        return True, f"Saved {len(syms)} symbols to watchlist in DB."
+
+        # Verify persistence (don’t claim success unless DB shows rows)
+        verified = 0
+        try:
+            with conn.cursor() as cur:
+                # Build a safe verify query
+                cur.execute(
+                    f"""
+                    SELECT COUNT(*)
+                    FROM watchlist_items
+                    WHERE {wl_col} = %s
+                      AND upper({symbol_col}) = ANY(%s)
+                    """,
+                    (wl_id, [s.upper() for s in syms]),
+                )
+                verified = int((cur.fetchone() or [0])[0])
+        except Exception:
+            verified = 0
+
+        if verified <= 0:
+            return False, "Added to this session only — DB insert did not verify (schema mismatch or constraint)."
+
+        return True, f"Saved {verified}/{len(syms)} symbols to watchlist in DB."
 
     except Exception as e:
         try:
@@ -573,7 +631,9 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
             ok, msg = _persist_symbols_to_active_watchlist(selected)
             if ok:
                 st.success(f"Added {len(selected)} symbols to active watchlist. {msg}")
-                # Rerun so the watchlists panel re-queries DB and stays in sync
+                # Force watchlists panel to refresh from DB on rerun
+                st.session_state.pop("watchlists_cache", None)
+                st.session_state.pop("active_watchlist_tickers", None)
                 st.rerun()
             else:
                 st.warning(f"Added to this session only (not saved). {msg}")
