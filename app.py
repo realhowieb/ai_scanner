@@ -128,7 +128,6 @@ except Exception:
     upsert_user_settings = None
 
 from ui.auth import auth_ui, logout_and_reset_session
-from ui.pricing import pricing_sidebar
 from ui.admin_users import render_admin_users_panel
 from ui.history import render_history_expander
 from ui.results import render_results, get_results_df
@@ -2022,8 +2021,6 @@ def main():
     if flags.get("can_admin_panel"):
         render_admin_users_panel(username, ADMIN_USERS, db_status)
 
-    # -------- Pricing (Load Last) --------
-    pricing_sidebar(username, users_map)
 
     # --- Debug: yfinance status (Admin only) ---
     if bool(st.session_state.get("is_admin")):
