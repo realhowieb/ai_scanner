@@ -2086,6 +2086,19 @@ def main():
         # --- Earnings enrichment runs AFTER results render (so results appear immediately) ---
         if show_earnings and df is not None and not df.empty:
             try:
+                # Patch 1: ensure a canonical `symbol` column exists for earnings logic
+                # (results tables often use `Ticker`, while earnings repos expect `symbol`).
+                df_for_earnings = df.copy()
+                if "symbol" not in df_for_earnings.columns:
+                    if "Ticker" in df_for_earnings.columns:
+                        df_for_earnings["symbol"] = (
+                            df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
+                        )
+                    elif "ticker" in df_for_earnings.columns:
+                        df_for_earnings["symbol"] = (
+                            df_for_earnings["ticker"].astype(str).str.strip().str.upper()
+                        )
+
                 _sig_for_cache = str(st.session_state.get("results_signature") or "")
                 _cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
 
@@ -2105,11 +2118,11 @@ def main():
 
                         # If helper supports a refresh/allow_refresh flag, force it off.
                         if sig is not None and "refresh" in getattr(sig, "parameters", {}):
-                            df_enriched = add_earnings_days_column(df.copy(), refresh=False)
+                            df_enriched = add_earnings_days_column(df_for_earnings, refresh=False)
                         elif sig is not None and "allow_refresh" in getattr(sig, "parameters", {}):
-                            df_enriched = add_earnings_days_column(df.copy(), allow_refresh=False)
+                            df_enriched = add_earnings_days_column(df_for_earnings, allow_refresh=False)
                         else:
-                            df_enriched = add_earnings_days_column(df.copy())
+                            df_enriched = add_earnings_days_column(df_for_earnings)
 
                     # Cache enriched results for this run; next rerun will show columns + filters.
                     st.session_state["earnings_enriched_df"] = df_enriched
