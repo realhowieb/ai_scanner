@@ -7,7 +7,110 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
+
 import streamlit as st
+
+# --- Compatibility: map deprecated `use_container_width` -> `width` (Streamlit >= 1.49) ---
+# Streamlit now prefers width='stretch'/'content'. Older code and some modules still pass
+# use_container_width=True/False which generates noisy warnings.
+
+import contextlib
+import io
+
+def _patch_use_container_width() -> None:
+    def _wrap(fn):
+        def _inner(*args, **kwargs):
+            # Translate deprecated kwarg if present
+            if "use_container_width" in kwargs:
+                ucw = kwargs.pop("use_container_width")
+                # Only set width if caller didn't already specify it
+                if "width" not in kwargs:
+                    kwargs["width"] = "stretch" if bool(ucw) else "content"
+            return fn(*args, **kwargs)
+        return _inner
+
+    # Patch the most common APIs that historically accepted use_container_width
+    for _name in (
+        "dataframe",
+        "table",
+        "data_editor",
+        "plotly_chart",
+        "altair_chart",
+        "pyplot",
+        "line_chart",
+        "bar_chart",
+        "area_chart",
+        "scatter_chart",
+    ):
+        try:
+            _fn = getattr(st, _name, None)
+            if callable(_fn):
+                setattr(st, _name, _wrap(_fn))
+        except Exception:
+            pass
+
+
+class _FilteredStderr(io.TextIOBase):
+    """Drop known noisy yfinance messages from stderr to keep logs readable."""
+
+    def __init__(self, underlying: io.TextIOBase):
+        self._u = underlying
+
+    def write(self, s: str) -> int:
+        try:
+            txt = str(s)
+        except Exception:
+            return 0
+
+        # Filter patterns we know are benign/noisy in production
+        noisy = (
+            "HTTP Error 401",
+            "Invalid Crumb",
+            "quoteSummary",
+            "No fundamentals data found",
+            "HTTP Error 404",
+            "No earnings dates found, symbol may be delisted",
+        )
+        if any(p in txt for p in noisy):
+            return len(txt)
+
+        try:
+            return self._u.write(txt)
+        except Exception:
+            return len(txt)
+
+    def flush(self) -> None:
+        try:
+            self._u.flush()
+        except Exception:
+            pass
+
+
+@contextlib.contextmanager
+def _quiet_external_calls():
+    """Silence stdout/stderr for noisy third-party libs (yfinance/Yahoo)."""
+    buf_out = io.StringIO()
+    buf_err = io.StringIO()
+    # Also filter underlying stderr so non-Python prints don't flood logs
+    try:
+        old_err = sys.stderr
+    except Exception:
+        old_err = None
+
+    try:
+        if old_err is not None:
+            sys.stderr = _FilteredStderr(old_err)  # type: ignore
+        with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
+            yield
+    finally:
+        if old_err is not None:
+            try:
+                sys.stderr = old_err  # type: ignore
+            except Exception:
+                pass
+
+# Apply the shim immediately
+_patch_use_container_width()
 
 # --- Compatibility: silence st.cache deprecation warnings ---
 # Some legacy code paths / third-party modules still reference `st.cache`.
@@ -505,13 +608,14 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
 
     hist = None
     try:
-        hist = yf.download(
-            symbol,
-            period="2d",
-            auto_adjust=False,
-            progress=False,
-            threads=False,
-        )
+        with _quiet_external_calls():
+            hist = yf.download(
+                symbol,
+                period="2d",
+                auto_adjust=False,
+                progress=False,
+                threads=False,
+            )
     except Exception:
         hist = None
 
@@ -528,8 +632,9 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
 
     # --- Fallback: legacy Ticker().history() ---
     try:
-        t = yf.Ticker(symbol)
-        hist_single = t.history(period="2d")
+        with _quiet_external_calls():
+            t = yf.Ticker(symbol)
+            hist_single = t.history(period="2d")
         if hist_single is None or hist_single.empty or "Close" not in hist_single.columns:
             return None, None
         closes = hist_single["Close"].dropna().tolist()
@@ -761,14 +866,15 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
 
     hist = None
     try:
-        hist = yf.download(
-            symbols,
-            period="2d",
-            group_by="ticker",
-            auto_adjust=False,
-            progress=False,
-            threads=False,
-        )
+        with _quiet_external_calls():
+            hist = yf.download(
+                symbols,
+                period="2d",
+                group_by="ticker",
+                auto_adjust=False,
+                progress=False,
+                threads=False,
+            )
     except Exception:
         hist = None
 
@@ -810,8 +916,9 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
     # --- Final fallback: legacy per-symbol calls ---
     for sym in symbols:
         try:
-            t = yf.Ticker(sym)
-            hist_single = t.history(period="2d")
+            with _quiet_external_calls():
+                t = yf.Ticker(sym)
+                hist_single = t.history(period="2d")
             if hist_single is None or hist_single.empty or "Close" not in hist_single.columns:
                 continue
             closes = hist_single["Close"].dropna().tolist()
