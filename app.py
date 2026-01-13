@@ -165,14 +165,28 @@ except Exception:
         )
     except Exception:
         # DB-only fallback: keep the app alive even if UI earnings module is missing.
-        from db.earnings import (
-            EARN_COL_DAYS,
-            add_earnings_days_column,
-            fetch_earnings_this_week,
-        )
+        # IMPORTANT: import lazily to avoid app startup failures when db deps are missing.
+        EARN_COL_DAYS = "earnings_in_days"
+
+        def add_earnings_days_column(df: pd.DataFrame) -> pd.DataFrame:
+            try:
+                from db.earnings import add_earnings_days_column as _impl  # type: ignore
+                return _impl(df)
+            except Exception:
+                # No-op fallback: return df unchanged
+                return df
+
+        def fetch_earnings_this_week(*args, **kwargs):
+            try:
+                from db.earnings import fetch_earnings_this_week as _impl  # type: ignore
+                return _impl(*args, **kwargs)
+            except Exception:
+                return []
 
         def render_earnings_this_week_panel(*args, **kwargs):
-            st.info("Earnings panel not available (ui/earnings.py missing).")
+            st.info(
+                "Earnings panel not available (earnings module unavailable or DB not configured)."
+            )
 
 # --------------- Tier Sync (DB-first tier resolver) ----------------
 # Uses DB as source-of-truth (Stripe webhooks write to DB), with safe fallback to legacy behavior.
