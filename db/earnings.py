@@ -334,6 +334,7 @@ def should_refresh_earnings_today(refresh_key: str, *, conn=None) -> bool:
         return True
 
 
+
 def mark_earnings_refreshed_today(refresh_key: str, *, conn=None) -> None:
     """Mark refresh_key as refreshed for today (UTC date)."""
     c = _get_conn(conn)
@@ -350,3 +351,73 @@ def mark_earnings_refreshed_today(refresh_key: str, *, conn=None) -> None:
         c.commit()
     except Exception:
         pass
+
+
+# -------------------------
+# UI helpers (read-only)
+# -------------------------
+
+def fetch_earnings_this_week(*, conn=None, days_ahead: int = 7):
+    """Return upcoming earnings rows for the next N days (inclusive).
+
+    This is DB-only (no Yahoo calls). Intended for UI panels.
+
+    Returns: list[dict] with keys: symbol, earnings_date, earnings_time, updated_at
+    """
+    c = _get_conn(conn)
+    ensure_earnings_table(c)
+
+    utc_today = datetime.now(timezone.utc).date()
+    end_day = utc_today.fromordinal(utc_today.toordinal() + max(0, int(days_ahead)))
+
+    sql = """
+        SELECT symbol, earnings_date, earnings_time, updated_at
+        FROM earnings_calendar
+        WHERE earnings_date IS NOT NULL
+          AND earnings_date >= %s
+          AND earnings_date <= %s
+        ORDER BY earnings_date ASC, symbol ASC
+        LIMIT 5000;
+    """
+
+    with c.cursor() as cur:
+        cur.execute(sql, (utc_today, end_day))
+        rows = cur.fetchall() or []
+
+    out = []
+    for (sym, d, t, upd) in rows:
+        out.append(
+            {
+                "symbol": str(sym).upper() if sym is not None else None,
+                "earnings_date": d,
+                "earnings_time": t,
+                "updated_at": upd,
+            }
+        )
+    return out
+
+
+def add_earnings_days_column(df, *, date_col: str = "earnings_date", out_col: str = "earnings_in_days"):
+    """Add a computed 'days until earnings' column to a DataFrame.
+
+    - df: pandas DataFrame
+    - date_col: column containing a date/datetime/str
+    - out_col: output column name
+
+    Returns df (same object) for convenience.
+    """
+    try:
+        import pandas as pd
+
+        if df is None or getattr(df, "empty", True):
+            return df
+        if date_col not in df.columns:
+            return df
+
+        today_ts = pd.Timestamp(date.today())
+        earn_ts = pd.to_datetime(df[date_col], errors="coerce")
+        df[out_col] = (earn_ts - today_ts).dt.days
+        return df
+    except Exception:
+        # Best-effort: never break scans/UI
+        return df

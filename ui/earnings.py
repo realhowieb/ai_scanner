@@ -6,7 +6,6 @@ import pandas as pd
 import streamlit as st
 from datetime import date
 
-from app import fetch_earnings_this_week, add_earnings_days_column
 from db.earnings import (
     fetch_earnings_this_week,
     add_earnings_days_column,
