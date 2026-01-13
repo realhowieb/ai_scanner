@@ -1991,6 +1991,9 @@ def main():
             if _sig and _sig != prev_sig:
                 st.session_state["results_signature"] = _sig
                 st.session_state["scan_ran_at_utc"] = datetime.now(timezone.utc)
+                # Clear any cached earnings enrichment for prior results
+                st.session_state.pop("earnings_enriched_df", None)
+                st.session_state.pop("earnings_enriched_signature", None)
 
         # If results cleared, clear the timestamp too (keeps UI honest)
         if df is None or df.empty:
@@ -2011,45 +2014,16 @@ def main():
     if not flags.get("can_earnings"):
         st.sidebar.caption("🔒 Earnings timing is a Pro feature.")
 
-    # Enrich results with earnings-days column (DB-only) before display
-    if show_earnings and df is not None and not df.empty:
-        try:
-            # Never refresh/fetch earnings during scan render.
-            # Refresh should be a separate explicit action (admin job / button), not implicit.
-            st.session_state["enable_earnings_refresh"] = False
+    # --- Earnings enrichment should NOT block first render ---
+    # If we already enriched this exact result-set in this session, reuse the cached enriched df.
+    _sig_for_cache = str(st.session_state.get("results_signature") or "")
+    _cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
+    _cached_df = st.session_state.get("earnings_enriched_df")
 
-            # Some implementations print "No earnings dates found..." a LOT.
-            # Silence stdout/stderr so it can't spam logs or slow the UI.
-            import io
-            import contextlib
-            import inspect
+    if show_earnings and _sig_for_cache and _cached_sig == _sig_for_cache and isinstance(_cached_df, pd.DataFrame):
+        df = _cached_df
 
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                sig = None
-                try:
-                    sig = inspect.signature(add_earnings_days_column)
-                except Exception:
-                    sig = None
-
-                # If your helper supports a "refresh"/"allow_refresh" flag, force it off.
-                if sig is not None and "refresh" in getattr(sig, "parameters", {}):
-                    df = add_earnings_days_column(df, refresh=False)
-                elif sig is not None and "allow_refresh" in getattr(sig, "parameters", {}):
-                    df = add_earnings_days_column(df, allow_refresh=False)
-                else:
-                    # Fallback: call as-is (but still silenced + refresh flag disabled above)
-                    df = add_earnings_days_column(df)
-
-        except Exception as _e:
-            # If enrichment fails, do NOT block results rendering.
-            # Just show results without earnings.
-            st.session_state["enable_earnings_enrichment"] = False
-            if bool(st.session_state.get("is_admin")):
-                st.sidebar.caption(f"earnings enrich skipped: {_e}")
-
-    # Earnings filters (apply before we build tabs / counts)
-    # - Exclude earnings in next 3 days
-    # - Only earnings within 7 days
+    # Earnings filters (apply only when earnings column exists)
     if show_earnings and df is not None and not df.empty and EARN_COL_DAYS in df.columns:
         with st.sidebar.expander("📅 Earnings Filters", expanded=False):
             excl_3 = st.checkbox("Exclude earnings in next 3 days", value=False, key="earn_excl_3")
@@ -2108,6 +2082,45 @@ def main():
                 render_chart_for_ticker,
                 generate_ai_note,
             )
+
+        # --- Earnings enrichment runs AFTER results render (so results appear immediately) ---
+        if show_earnings and df is not None and not df.empty:
+            try:
+                _sig_for_cache = str(st.session_state.get("results_signature") or "")
+                _cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
+
+                # Only enrich once per unique result-set signature
+                if _sig_for_cache and _cached_sig != _sig_for_cache:
+                    # Never refresh/fetch earnings during render; DB-only enrichment.
+                    st.session_state["enable_earnings_refresh"] = False
+
+                    import inspect
+
+                    with _quiet_external_calls():
+                        sig = None
+                        try:
+                            sig = inspect.signature(add_earnings_days_column)
+                        except Exception:
+                            sig = None
+
+                        # If helper supports a refresh/allow_refresh flag, force it off.
+                        if sig is not None and "refresh" in getattr(sig, "parameters", {}):
+                            df_enriched = add_earnings_days_column(df.copy(), refresh=False)
+                        elif sig is not None and "allow_refresh" in getattr(sig, "parameters", {}):
+                            df_enriched = add_earnings_days_column(df.copy(), allow_refresh=False)
+                        else:
+                            df_enriched = add_earnings_days_column(df.copy())
+
+                    # Cache enriched results for this run; next rerun will show columns + filters.
+                    st.session_state["earnings_enriched_df"] = df_enriched
+                    st.session_state["earnings_enriched_signature"] = _sig_for_cache
+
+                    # Trigger a rerun so the table refreshes with the new earnings columns.
+                    st.rerun()
+            except Exception as _e:
+                # If enrichment fails, do NOT block results.
+                if bool(st.session_state.get("is_admin")):
+                    st.sidebar.caption(f"earnings enrich skipped: {_e}")
 
     if tab2 is not None:
         with tab2:
