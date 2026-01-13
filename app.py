@@ -144,21 +144,35 @@ from ui.watchlists import render_watchlists_panel
 
 from market_data import get_latest_quotes
 # --------------- Earnings (shared implementation) ----------------
-# Use shared earnings logic to keep app.py thin
+# Prefer UI-layer earnings helpers; fall back to repo-only DB helpers.
+# NOTE: db.earnings is DB/repo logic and may not include UI render functions.
 try:
-    from earnings import (
+    # Primary (recommended): UI module provides render + helpers
+    from ui.earnings import (
         EARN_COL_DAYS,
         add_earnings_days_column,
         fetch_earnings_this_week,
         render_earnings_this_week_panel,
     )
 except Exception:
-    from db.earnings import (  # fallback
-        EARN_COL_DAYS,
-        add_earnings_days_column,
-        fetch_earnings_this_week,
-        render_earnings_this_week_panel,
-    )
+    try:
+        # Legacy single-module implementation (older builds)
+        from earnings import (
+            EARN_COL_DAYS,
+            add_earnings_days_column,
+            fetch_earnings_this_week,
+            render_earnings_this_week_panel,
+        )
+    except Exception:
+        # DB-only fallback: keep the app alive even if UI earnings module is missing.
+        from db.earnings import (
+            EARN_COL_DAYS,
+            add_earnings_days_column,
+            fetch_earnings_this_week,
+        )
+
+        def render_earnings_this_week_panel(*args, **kwargs):
+            st.info("Earnings panel not available (ui/earnings.py missing).")
 
 # --------------- Tier Sync (DB-first tier resolver) ----------------
 # Uses DB as source-of-truth (Stripe webhooks write to DB), with safe fallback to legacy behavior.
