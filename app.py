@@ -19,6 +19,10 @@ import io
 
 def _patch_use_container_width() -> None:
     def _wrap(fn):
+        # Avoid double-wrapping
+        if getattr(fn, "_ucw_patched", False):
+            return fn
+
         def _inner(*args, **kwargs):
             # Translate deprecated kwarg if present
             if "use_container_width" in kwargs:
@@ -27,6 +31,8 @@ def _patch_use_container_width() -> None:
                 if "width" not in kwargs:
                     kwargs["width"] = "stretch" if bool(ucw) else "content"
             return fn(*args, **kwargs)
+
+        setattr(_inner, "_ucw_patched", True)
         return _inner
 
     # Patch the most common APIs that historically accepted use_container_width
@@ -48,6 +54,31 @@ def _patch_use_container_width() -> None:
                 setattr(st, _name, _wrap(_fn))
         except Exception:
             pass
+
+    # Patch DeltaGenerator methods as well (covers st.sidebar.*, st.container(), columns, etc.)
+    try:
+        from streamlit.delta_generator import DeltaGenerator  # type: ignore
+
+        for _name in (
+            "dataframe",
+            "table",
+            "data_editor",
+            "plotly_chart",
+            "altair_chart",
+            "pyplot",
+            "line_chart",
+            "bar_chart",
+            "area_chart",
+            "scatter_chart",
+        ):
+            try:
+                _meth = getattr(DeltaGenerator, _name, None)
+                if callable(_meth):
+                    setattr(DeltaGenerator, _name, _wrap(_meth))
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 class _FilteredStderr(io.TextIOBase):
@@ -85,29 +116,24 @@ class _FilteredStderr(io.TextIOBase):
         except Exception:
             pass
 
+# --- Global stderr filter (drops known noisy yfinance/Yahoo lines everywhere) ---
+# NOTE: We only filter very specific, known-benign patterns to avoid hiding real errors.
+try:
+    if not isinstance(sys.stderr, _FilteredStderr):
+        sys.stderr = _FilteredStderr(sys.stderr)  # type: ignore
+except Exception:
+    pass
+
 
 @contextlib.contextmanager
 def _quiet_external_calls():
     """Silence stdout/stderr for noisy third-party libs (yfinance/Yahoo)."""
+    # stderr is globally filtered above; here we additionally suppress all output
+    # from chatty libraries to avoid log spam and UI slowdowns.
     buf_out = io.StringIO()
     buf_err = io.StringIO()
-    # Also filter underlying stderr so non-Python prints don't flood logs
-    try:
-        old_err = sys.stderr
-    except Exception:
-        old_err = None
-
-    try:
-        if old_err is not None:
-            sys.stderr = _FilteredStderr(old_err)  # type: ignore
-        with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
-            yield
-    finally:
-        if old_err is not None:
-            try:
-                sys.stderr = old_err  # type: ignore
-            except Exception:
-                pass
+    with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
+        yield
 
 # Apply the shim immediately
 _patch_use_container_width()
