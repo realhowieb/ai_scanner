@@ -1867,14 +1867,41 @@ def main():
     if not flags.get("can_earnings"):
         st.sidebar.caption("🔒 Earnings timing is a Pro feature.")
 
-    # Enrich results with earnings-days column (ONE DB query) before display
+    # Enrich results with earnings-days column (DB-only) before display
     if show_earnings and df is not None and not df.empty:
         try:
-            df = add_earnings_days_column(df)
+            # Never refresh/fetch earnings during scan render.
+            # Refresh should be a separate explicit action (admin job / button), not implicit.
+            st.session_state["enable_earnings_refresh"] = False
+
+            # Some implementations print "No earnings dates found..." a LOT.
+            # Silence stdout/stderr so it can't spam logs or slow the UI.
+            import io
+            import contextlib
+            import inspect
+
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                sig = None
+                try:
+                    sig = inspect.signature(add_earnings_days_column)
+                except Exception:
+                    sig = None
+
+                # If your helper supports a "refresh"/"allow_refresh" flag, force it off.
+                if sig is not None and "refresh" in getattr(sig, "parameters", {}):
+                    df = add_earnings_days_column(df, refresh=False)
+                elif sig is not None and "allow_refresh" in getattr(sig, "parameters", {}):
+                    df = add_earnings_days_column(df, allow_refresh=False)
+                else:
+                    # Fallback: call as-is (but still silenced + refresh flag disabled above)
+                    df = add_earnings_days_column(df)
+
         except Exception as _e:
-            # Admin-only hint if enrichment fails
+            # If enrichment fails, do NOT block results rendering.
+            # Just show results without earnings.
+            st.session_state["enable_earnings_enrichment"] = False
             if bool(st.session_state.get("is_admin")):
-                st.sidebar.caption(f"earnings enrich failed: {_e}")
+                st.sidebar.caption(f"earnings enrich skipped: {_e}")
 
     # Earnings filters (apply before we build tabs / counts)
     # - Exclude earnings in next 3 days
