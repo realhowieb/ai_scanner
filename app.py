@@ -1897,6 +1897,9 @@ def main():
         st.session_state["earnings_enabled"] = False
         st.session_state["enable_earnings"] = False
         st.session_state["enable_earnings_refresh"] = False
+        for _k in list(st.session_state.keys()):
+            if str(_k).startswith("earnings_refresh") or str(_k).startswith("earn_refresh"):
+                st.session_state.pop(_k, None)
     else:
         # This toggle must be defined before running scans so scan-time hooks can read it
         # and skip earnings work entirely.
@@ -1911,9 +1914,17 @@ def main():
                     "Turn this OFF for the fastest scans."
                 ),
             )
+            # Enrichment controls whether we DISPLAY earnings timing in results.
+            # Refresh is a separate admin-only action; never run refresh during scans.
             st.session_state["earnings_enabled"] = bool(_earn_enabled)
             st.session_state["enable_earnings"] = bool(_earn_enabled)
-            st.session_state["enable_earnings_refresh"] = bool(_earn_enabled)
+            st.session_state["enable_earnings_refresh"] = False
+
+            # Also clear any stale refresh status/messages when enrichment is off
+            if not bool(_earn_enabled):
+                for _k in list(st.session_state.keys()):
+                    if str(_k).startswith("earnings_refresh") or str(_k).startswith("earn_refresh"):
+                        st.session_state.pop(_k, None)
 
     # -------- Scan Controls --------
     render_scan_controls(
