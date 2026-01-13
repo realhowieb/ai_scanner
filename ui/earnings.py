@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 from datetime import date
 
+from app import fetch_earnings_this_week, add_earnings_days_column
 from db.earnings import (
     fetch_earnings_this_week,
     add_earnings_days_column,
@@ -34,26 +35,34 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
         st.info("No upcoming earnings found for this week.")
         return
 
+    # rows may be a list[dict] or list[tuple]/list[list]
     df = pd.DataFrame(rows)
 
-    # Normalize column names defensively
-    df.columns = [c.lower() for c in df.columns]
+    # Normalize column names defensively (handles SQLAlchemy Row/tuples too)
+    df.columns = [str(c).lower() for c in df.columns]
+
+    # Some parts of the app use `ticker` (preferred) while older code uses `symbol`
+    if "symbol" in df.columns and "ticker" not in df.columns:
+        df = df.rename(columns={"symbol": "ticker"})
 
     if "earnings_date" in df.columns:
-        today = date.today()
-        df[EARN_COL_DAYS] = (
-            pd.to_datetime(df["earnings_date"], errors="coerce").dt.date - today
-        ).dt.days
+        today_ts = pd.Timestamp(date.today())
+        # Use timestamps (not .dt.date) so subtraction stays vectorized
+        earn_ts = pd.to_datetime(df["earnings_date"], errors="coerce")
+        df[EARN_COL_DAYS] = (earn_ts - today_ts).dt.days
 
-    # Friendly ordering
     cols = []
-    for c in ["symbol", "earnings_date", "earnings_time", EARN_COL_DAYS]:
+    for c in ["ticker", "earnings_date", "earnings_time", EARN_COL_DAYS]:
         if c in df.columns:
             cols.append(c)
 
+    view = df[cols]
+    if EARN_COL_DAYS in view.columns:
+        view = view.sort_values(EARN_COL_DAYS, na_position="last")
+
     st.dataframe(
-        df[cols].sort_values(EARN_COL_DAYS, na_position="last"),
-        width="stretch",
+        view,
+        use_container_width=True,
         hide_index=True,
     )
 
