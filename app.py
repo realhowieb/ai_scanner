@@ -2095,27 +2095,29 @@ def main():
             )
 
         # --- Earnings enrichment runs AFTER results render (so results appear immediately) ---
+        # DB-only enrichment once per scan-signature, then rerun to show the new column.
+        # Must NEVER block first paint of results.
         if show_earnings and df is not None and not df.empty:
             try:
-                # Patch 1: ensure a canonical `symbol` column exists for earnings logic
-                # (results tables often use `Ticker`, while earnings repos expect `symbol`).
-                df_for_earnings = df.copy()
-                if "symbol" not in df_for_earnings.columns:
-                    if "Ticker" in df_for_earnings.columns:
-                        df_for_earnings["symbol"] = (
-                            df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
-                        )
-                    elif "ticker" in df_for_earnings.columns:
-                        df_for_earnings["symbol"] = (
-                            df_for_earnings["ticker"].astype(str).str.strip().str.upper()
-                        )
-
-                _sig_for_cache = str(st.session_state.get("results_signature") or "")
-                _cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
+                results_sig = str(st.session_state.get("results_signature") or "")
+                cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
 
                 # Only enrich once per unique result-set signature
-                if _sig_for_cache and _cached_sig != _sig_for_cache:
-                    # Never refresh/fetch earnings during render; DB-only enrichment.
+                if results_sig and cached_sig != results_sig:
+                    df_for_earnings = df.copy()
+
+                    # Ensure canonical `symbol` column exists for earnings logic
+                    if "symbol" not in df_for_earnings.columns:
+                        if "Ticker" in df_for_earnings.columns:
+                            df_for_earnings["symbol"] = (
+                                df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
+                            )
+                        elif "ticker" in df_for_earnings.columns:
+                            df_for_earnings["symbol"] = (
+                                df_for_earnings["ticker"].astype(str).str.strip().str.upper()
+                            )
+
+                    # Never refresh/fetch earnings during render; enrichment is DB-only.
                     st.session_state["enable_earnings_refresh"] = False
 
                     import inspect
@@ -2142,16 +2144,20 @@ def main():
                             if k in params:
                                 call_kwargs[k] = False
 
-                        # Some implementations accept a DB connection; we do NOT pass one here
-                        # because this enrichment must be lightweight and DB-only.
+                        enriched = add_earnings_days_column(df_for_earnings, **call_kwargs)
 
-                        df_enriched = add_earnings_days_column(df_for_earnings, **call_kwargs)
+                    st.session_state["earnings_enriched_df"] = enriched
+                    st.session_state["earnings_enriched_signature"] = results_sig
 
-                    # Cache enriched df for this specific results signature and rerun once so UI updates.
-                    st.session_state["earnings_enriched_df"] = df_enriched
-                    st.session_state["earnings_enriched_signature"] = _sig_for_cache
                     try:
                         st.toast("📅 Earnings column added", icon="📅")
                     except Exception:
                         pass
+
+                    # Rerun once so the displayed df swaps to the enriched version.
                     st.rerun()
+
+            except Exception as e:
+                # Non-blocking: only show in diagnostics
+                if bool(st.session_state.get("show_diagnostics_ui", False)):
+                    st.caption(f"Earnings enrichment error (non-blocking): {e}")
