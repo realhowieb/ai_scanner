@@ -1967,50 +1967,55 @@ def main():
 
     # -------- Optional: Earnings enrichment toggle (MUST be BEFORE scans) --------
     # Earnings is a Pro+ feature. Basic should not see the toggle or run enrichment.
-    if not flags.get("can_earnings"):
-        st.session_state["enable_earnings_enrichment"] = False
-        st.session_state["earnings_enabled"] = False
-        st.session_state["enable_earnings"] = False
-        st.session_state["enable_earnings_refresh"] = False
+    if not bool(flags.get("can_earnings")):
+        # Hard-disable all earnings knobs for Basic so nothing downstream can accidentally run.
+        for k, v in {
+            "enable_earnings_enrichment": False,
+            "earnings_enabled": False,
+            "enable_earnings": False,
+            "enable_earnings_refresh": False,
+        }.items():
+            try:
+                st.session_state[k] = v
+            except Exception:
+                pass
+
+        # Clear any old refresh UI state
         for _k in list(st.session_state.keys()):
             if str(_k).startswith("earnings_refresh") or str(_k).startswith("earn_refresh"):
                 st.session_state.pop(_k, None)
+
     else:
-        # This toggle must be defined before running scans so scan-time hooks can read it
-        # and skip earnings work entirely.
-        _earn_default = bool(st.session_state.get("enable_earnings_enrichment", False))
+        # Toggle must exist BEFORE scans/results so scan-time code can skip earnings entirely.
         with st.sidebar.expander("📅 Earnings", expanded=False):
             _earn_enabled = st.checkbox(
                 "Enable earnings enrichment (adds 📅 Earnings in X days)",
-                value=_earn_default,
+                value=bool(st.session_state.get("enable_earnings_enrichment", False)),
                 key="enable_earnings_enrichment",
                 help=(
-                    "If enabled, the app may query the DB to add timing to results. "
+                    "If enabled, the app will add timing from the DB to results. "
                     "Turn this OFF for the fastest scans."
                 ),
             )
 
-            # Track toggle changes so UI updates immediately.
-            _prev = st.session_state.get("_prev_enable_earnings_enrichment")
-            st.session_state["_prev_enable_earnings_enrichment"] = bool(_earn_enabled)
+            # Derived flags (do NOT write to the checkbox key again)
+            try:
+                st.session_state["earnings_enabled"] = bool(_earn_enabled)
+                st.session_state["enable_earnings"] = bool(_earn_enabled)
+                # Never auto-refresh during scans/results; refresh is admin-only.
+                st.session_state["enable_earnings_refresh"] = False
+            except Exception:
+                pass
 
-            # Enrichment controls whether we DISPLAY earnings timing in results.
-            # Refresh is a separate admin-only action; never run refresh during scans.
-            st.session_state["earnings_enabled"] = bool(_earn_enabled)
-            st.session_state["enable_earnings"] = bool(_earn_enabled)
-            st.session_state["enable_earnings_refresh"] = False
-
-            # Clear any stale refresh status/messages when enrichment is off
+            # If turned off, clear any stale enrichment cache so results render instantly.
             if not bool(_earn_enabled):
+                st.session_state.pop("earnings_enriched_df", None)
+                st.session_state.pop("earnings_enriched_signature", None)
+                st.session_state.pop("earnings_enrichment_rerun_sig", None)
+
                 for _k in list(st.session_state.keys()):
                     if str(_k).startswith("earnings_refresh") or str(_k).startswith("earn_refresh"):
                         st.session_state.pop(_k, None)
-
-            # If the toggle changed, invalidate cached enrichment and rerun once so the table updates.
-            if _prev is not None and bool(_prev) != bool(_earn_enabled):
-                st.session_state.pop("earnings_enriched_df", None)
-                st.session_state.pop("earnings_enriched_signature", None)
-                st.rerun()
 
     # -------- Scan Controls --------
     render_scan_controls(
