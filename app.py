@@ -1994,9 +1994,34 @@ def main():
     try:
         if df is not None and not df.empty:
             _rows = int(len(df))
-            _first = str(df.iloc[0].get("Ticker", "")).strip().upper() if _rows > 0 else ""
-            _last = str(df.iloc[-1].get("Ticker", "")).strip().upper() if _rows > 0 else ""
-            _sig = f"{_rows}|{_first}|{_last}"
+
+            # Stable signature: do NOT depend on row order (first/last can jitter).
+            # Use a deterministic hash of the unique tickers present.
+            _ticker_col = None
+            for _c in ("Ticker", "ticker", "Symbol", "symbol"):
+                if _c in df.columns:
+                    _ticker_col = _c
+                    break
+
+            _sig = None
+            if _ticker_col is not None:
+                try:
+                    _tickers = (
+                        df[_ticker_col]
+                        .astype(str)
+                        .str.strip()
+                        .str.upper()
+                        .replace({"": None})
+                        .dropna()
+                        .unique()
+                        .tolist()
+                    )
+                    _tickers.sort()
+                    _sig = f"{_rows}|{hash(tuple(_tickers))}"
+                except Exception:
+                    _sig = f"{_rows}|fallback"
+            else:
+                _sig = f"{_rows}|no_ticker_col"
 
             prev_sig = str(st.session_state.get("results_signature") or "")
             if _sig and _sig != prev_sig:
@@ -2005,11 +2030,15 @@ def main():
                 # Clear any cached earnings enrichment for prior results
                 st.session_state.pop("earnings_enriched_df", None)
                 st.session_state.pop("earnings_enriched_signature", None)
+                st.session_state.pop("earnings_enrichment_rerun_sig", None)
 
         # If results cleared, clear the timestamp too (keeps UI honest)
         if df is None or df.empty:
             st.session_state.pop("results_signature", None)
             st.session_state.pop("scan_ran_at_utc", None)
+            st.session_state.pop("earnings_enriched_df", None)
+            st.session_state.pop("earnings_enriched_signature", None)
+            st.session_state.pop("earnings_enrichment_rerun_sig", None)
     except Exception:
         pass
 
@@ -2102,8 +2131,10 @@ def main():
                 results_sig = str(st.session_state.get("results_signature") or "")
                 cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
 
-                # Only enrich once per unique result-set signature
-                if results_sig and cached_sig != results_sig:
+                rerun_sig = str(st.session_state.get("earnings_enrichment_rerun_sig") or "")
+
+                # Only enrich once per unique result-set signature, and only trigger one rerun per signature.
+                if results_sig and cached_sig != results_sig and rerun_sig != results_sig:
                     df_for_earnings = df.copy()
 
                     # Ensure canonical `symbol` column exists for earnings logic
@@ -2154,6 +2185,7 @@ def main():
                     except Exception:
                         pass
 
+                    st.session_state["earnings_enrichment_rerun_sig"] = results_sig
                     # Rerun once so the displayed df swaps to the enriched version.
                     st.rerun()
 
