@@ -246,32 +246,72 @@ except Exception:
     pass
 
 # --------------- DB modules & UI modules ----------------
-from db.users import seed_neon_users_from_local, load_users
-from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
+# IMPORTANT: Keep auth import reliable so the login UI can render even if other modules break.
+_IMPORT_ERROR: str | None = None
 
-# User settings (per-user defaults) – optional Neon-backed feature
 try:
-    from db.user_settings import get_user_settings, upsert_user_settings
-except Exception:
+    from db.users import seed_neon_users_from_local, load_users
+    from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
+
+    # User settings (per-user defaults) – optional Neon-backed feature
+    try:
+        from db.user_settings import get_user_settings, upsert_user_settings
+    except Exception:
+        get_user_settings = None
+        upsert_user_settings = None
+
+    from ui.admin_users import render_admin_users_panel
+    from ui.history import render_history_expander
+    from ui.results import render_results, get_results_df
+    from ui.scans import render_scan_controls, render_three_step_scanner
+    from ui.universe_panel import render_universe_panel, init_universe_state
+    from ui.filters import render_filters
+    from ui.db_status import render_db_status_badge
+    from ui.header import render_header, render_price_ticker, render_market_snapshot
+    from ui.prebreakout_tab import render_prebreakout_tab
+    from ui.footer import render_footer
+    from ui.watchlists import render_watchlists_panel
+
+    from market_data import get_latest_quotes
+
+except Exception as _e:
+    # Capture the error and provide minimal placeholders so the module loads.
+    _IMPORT_ERROR = f"{type(_e).__name__}: {_e}"
+
+    seed_neon_users_from_local = None  # type: ignore
+    load_users = lambda: {}  # type: ignore
+    save_run = save_daily_snapshot = list_runs = load_run_results = None  # type: ignore
+
     get_user_settings = None
     upsert_user_settings = None
 
-from ui.auth import auth_ui, logout_and_reset_session
-from ui.admin_users import render_admin_users_panel
-from ui.history import render_history_expander
-from ui.results import render_results, get_results_df
-from ui.scans import render_scan_controls, render_three_step_scanner
-from ui.universe_panel import render_universe_panel, init_universe_state
-from ui.filters import render_filters
-from ui.db_status import render_db_status_badge
-## from auth.tiering_utils import derive_tier_flags
-from ui.header import render_header, render_price_ticker, render_market_snapshot
-from ui.prebreakout_tab import render_prebreakout_tab
-from ui.footer import render_footer
-from ui.watchlists import render_watchlists_panel
+    def _missing(*args, **kwargs):
+        st.error(
+            "A required module failed to import. "
+            "Login is available, but the app cannot run until imports are fixed.\n\n"
+            f"Import error: {_IMPORT_ERROR}"
+        )
+        st.stop()
 
+    render_admin_users_panel = _missing  # type: ignore
+    render_history_expander = _missing  # type: ignore
+    render_results = _missing  # type: ignore
+    get_results_df = lambda: None  # type: ignore
+    render_scan_controls = _missing  # type: ignore
+    render_three_step_scanner = _missing  # type: ignore
+    render_universe_panel = _missing  # type: ignore
+    init_universe_state = _missing  # type: ignore
+    render_filters = _missing  # type: ignore
+    render_db_status_badge = lambda *a, **k: None  # type: ignore
+    render_header = _missing  # type: ignore
+    render_price_ticker = lambda *a, **k: None  # type: ignore
+    render_market_snapshot = _missing  # type: ignore
+    render_prebreakout_tab = _missing  # type: ignore
+    render_footer = lambda *a, **k: None  # type: ignore
+    render_watchlists_panel = _missing  # type: ignore
 
-from market_data import get_latest_quotes
+    def get_latest_quotes(*args, **kwargs):
+        return {}
 # --------------- Earnings (shared implementation) ----------------
 # Prefer UI-layer earnings helpers; fall back to repo-only DB helpers.
 # NOTE: db.earnings is DB/repo logic and may not include UI render functions.
@@ -1207,6 +1247,15 @@ def main():
     authed, username, display_name = auth_ui()
     if not authed:
         # Not logged in: show only the login card (auth_ui handles it)
+        st.stop()
+
+    # If non-auth modules failed to import, surface the error after login.
+    # This ensures users can still log in and we get a visible failure reason.
+    if _IMPORT_ERROR:
+        st.error(
+            "Login succeeded, but the app failed to initialize due to an import error.\n\n"
+            f"Import error: {_IMPORT_ERROR}"
+        )
         st.stop()
 
     # Normalize and persist username for downstream modules (billing/settings rely on this)
