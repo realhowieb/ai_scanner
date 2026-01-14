@@ -1936,21 +1936,32 @@ def main():
                 value=_earn_default,
                 key="enable_earnings_enrichment",
                 help=(
-                    "If enabled, the app may query the DB / refresh earnings to add timing to results. "
+                    "If enabled, the app may query the DB to add timing to results. "
                     "Turn this OFF for the fastest scans."
                 ),
             )
+
+            # Track toggle changes so UI updates immediately.
+            _prev = st.session_state.get("_prev_enable_earnings_enrichment")
+            st.session_state["_prev_enable_earnings_enrichment"] = bool(_earn_enabled)
+
             # Enrichment controls whether we DISPLAY earnings timing in results.
             # Refresh is a separate admin-only action; never run refresh during scans.
             st.session_state["earnings_enabled"] = bool(_earn_enabled)
             st.session_state["enable_earnings"] = bool(_earn_enabled)
             st.session_state["enable_earnings_refresh"] = False
 
-            # Also clear any stale refresh status/messages when enrichment is off
+            # Clear any stale refresh status/messages when enrichment is off
             if not bool(_earn_enabled):
                 for _k in list(st.session_state.keys()):
                     if str(_k).startswith("earnings_refresh") or str(_k).startswith("earn_refresh"):
                         st.session_state.pop(_k, None)
+
+            # If the toggle changed, invalidate cached enrichment and rerun once so the table updates.
+            if _prev is not None and bool(_prev) != bool(_earn_enabled):
+                st.session_state.pop("earnings_enriched_df", None)
+                st.session_state.pop("earnings_enriched_signature", None)
+                st.rerun()
 
     # -------- Scan Controls --------
     render_scan_controls(
@@ -2116,105 +2127,31 @@ def main():
                         except Exception:
                             sig = None
 
-                        # If helper supports a refresh/allow_refresh flag, force it off.
-                        if sig is not None and "refresh" in getattr(sig, "parameters", {}):
-                            df_enriched = add_earnings_days_column(df_for_earnings, refresh=False)
-                        elif sig is not None and "allow_refresh" in getattr(sig, "parameters", {}):
-                            df_enriched = add_earnings_days_column(df_for_earnings, allow_refresh=False)
-                        else:
-                            df_enriched = add_earnings_days_column(df_for_earnings)
+                        params = set(getattr(sig, "parameters", {}).keys()) if sig is not None else set()
+                        call_kwargs: dict = {}
 
-                    # Cache enriched results for this run; next rerun will show columns + filters.
+                        # Force ALL known refresh-style flags off (never block scans/results with network refresh)
+                        for k in (
+                            "refresh",
+                            "allow_refresh",
+                            "enable_refresh",
+                            "do_refresh",
+                            "refresh_db",
+                            "refresh_earnings",
+                        ):
+                            if k in params:
+                                call_kwargs[k] = False
+
+                        # Some implementations accept a DB connection; we do NOT pass one here
+                        # because this enrichment must be lightweight and DB-only.
+
+                        df_enriched = add_earnings_days_column(df_for_earnings, **call_kwargs)
+
+                    # Cache enriched df for this specific results signature and rerun once so UI updates.
                     st.session_state["earnings_enriched_df"] = df_enriched
                     st.session_state["earnings_enriched_signature"] = _sig_for_cache
-
-                    # Trigger a rerun so the table refreshes with the new earnings columns.
-                    st.rerun()
-            except Exception as _e:
-                # If enrichment fails, do NOT block results.
-                if bool(st.session_state.get("is_admin")):
-                    st.sidebar.caption(f"earnings enrich skipped: {_e}")
-
-    if tab2 is not None:
-        with tab2:
-            # Premium-only: Basic/Pro users cannot access Early Breakout Candidates
-            if require_min_tier(tier, "premium", "Early Breakout Candidates"):
-                render_prebreakout_tab()
-
-    if tab3 is not None:
-        with tab3:
-            # Pro+ only: Basic users cannot access Scan History
-            if require_min_tier(tier, "pro", "Scan History"):
-                render_history_expander(db_status)
-
-    st.markdown("---")
-
-    # -------- Universe State --------
-    init_universe_state()
-    render_universe_panel()
-
-    # -------- Admin Panel (Admin only) --------
-    if flags.get("can_admin_panel"):
-        render_admin_users_panel(username, ADMIN_USERS, db_status)
-
-
-    # --- Debug: yfinance status (Admin only) ---
-    if bool(st.session_state.get("is_admin")):
-        with st.expander("🔧 Debug: Data Status", expanded=False):
-            try:
-                from data.prices import debug_yfinance_status  # type: ignore
-
-                if st.button("Run yfinance self-test", key="debug_yf_status"):
-                    status = debug_yfinance_status("AAPL")
-                    st.write(status)
-
-                    if not status.get("available"):
-                        st.warning(
-                            "yfinance is not importable. Make sure 'yfinance' is installed."
-                        )
-                    elif status.get("test_error"):
-                        st.error(
-                            "yfinance imported but test download failed "
-                            "(network or rate-limit issue)."
-                        )
-                    elif status.get("test_rows", 0) == 0:
-                        st.warning(
-                            "yfinance returned 0 rows for AAPL (Yahoo throttling likely)."
-                        )
-                    else:
-                        st.success(
-                            f"yfinance healthy. Rows returned: {status.get('test_rows')}"
-                        )
-
-                if st.button(
-                    "Test price data batch (AAPL, MSFT, NVDA)",
-                    key="debug_price_batch",
-                ):
                     try:
-                        from data.prices import fetch_price_data_batch  # type: ignore
-
-                        price_data, skipped = fetch_price_data_batch(
-                            ["AAPL", "MSFT", "NVDA"]
-                        )
-                        st.write(
-                            {
-                                "price_data_len": len(price_data),
-                                "skipped": skipped[:10],
-                            }
-                        )
-
-                        for sym, df in price_data.items():
-                            st.write(f"Symbol: {sym}")
-                            st.dataframe(df.tail(), width="stretch")
-
-                    except Exception as e:
-                        st.error(f"price data batch debug failed: {e}")
-
-            except Exception as e:
-                st.caption(f"(yfinance debug not available: {e})")
-
-    # -------- Footer --------
-    render_footer()
-
-if __name__ == "__main__":
-    main()
+                        st.toast("📅 Earnings column added", icon="📅")
+                    except Exception:
+                        pass
+                    st.rerun()
