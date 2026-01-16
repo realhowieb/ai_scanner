@@ -1922,21 +1922,37 @@ def main():
                                     st.caption(f"{type(e).__name__}: {e}")
                                 run_df = None
 
-                            if run_df is None or (hasattr(run_df, "empty") and run_df.empty):
+                            # --- Robust rendering: load_run_results may return DataFrame, list/dict, or a serialized string ---
+                            if run_df is None:
                                 st.info("No results found for this run.")
-                            else:
+
+                            elif isinstance(run_df, pd.DataFrame):
+                                if run_df.empty:
+                                    st.info("No results found for this run.")
+                                else:
+                                    st.markdown("### Results for selected run")
+                                    try:
+                                        render_results(
+                                            run_df,
+                                            flags.get("can_export_csv", False),
+                                            flags.get("can_ai_notes", False),
+                                            render_chart_for_ticker,
+                                            generate_ai_note,
+                                        )
+                                    except Exception:
+                                        st.dataframe(run_df, width="stretch")
+
+                            elif isinstance(run_df, (list, dict)):
                                 st.markdown("### Results for selected run")
-                                # Reuse the normal results renderer when possible
                                 try:
-                                    render_results(
-                                        run_df,
-                                        flags.get("can_export_csv", False),
-                                        flags.get("can_ai_notes", False),
-                                        render_chart_for_ticker,
-                                        generate_ai_note,
-                                    )
+                                    st.dataframe(pd.DataFrame(run_df), width="stretch")
                                 except Exception:
-                                    st.dataframe(run_df, width="stretch")
+                                    st.write(run_df)
+
+                            else:
+                                # Handle legacy serialized results (string) without crashing the app
+                                st.warning("Scan history data is not in a supported tabular format.")
+                                st.code(str(run_df))
 
             # Optional: existing expander-based renderer (kept for backward compatibility)
             try:
