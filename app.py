@@ -1858,14 +1858,15 @@ def main():
 #                     APP ENTRYPOINT
 # ============================================================
 
-# Streamlit executes this script top-to-bottom. If we forget to call main(),
-# the app will render a blank page.
-try:
-    main()
-except Exception as e:
-    st.error("App failed during startup.")
+# Streamlit executes this script top-to-bottom.
+# Ensure main() is always called and errors are surfaced in the UI.
+if __name__ == "__main__":
     try:
-        st.exception(e)
-    except Exception:
-        st.caption(f"Startup error: {type(e).__name__}: {e}")
-    st.stop()
+        main()
+    except Exception as e:
+        st.error("❌ App failed during startup.")
+        try:
+            st.exception(e)
+        except Exception:
+            st.write(f"{type(e).__name__}: {e}")
+        st.stop()
