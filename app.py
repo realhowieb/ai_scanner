@@ -1980,34 +1980,6 @@ def main():
                                     st.warning("Scan history data could not be parsed into a table.")
                                     st.code(str(run_df))
 
-            # Optional: existing expander-based renderer (kept for backward compatibility)
-            # IMPORTANT: render the expander only once. Some legacy implementations raise a
-            # TypeError due to signature differences; handle that inside the expander to
-            # avoid duplicating the UI.
-            if callable(render_history_expander):
-                with st.expander("Advanced history (legacy)", expanded=False):
-                    try:
-                        import inspect
-
-                        sig = None
-                        try:
-                            sig = inspect.signature(render_history_expander)
-                        except Exception:
-                            sig = None
-
-                        # Only pass `username` if the function actually accepts it.
-                        if sig is not None and "username" in sig.parameters:
-                            render_history_expander(username=username)
-                        else:
-                            render_history_expander()
-
-                    except Exception as e:
-                        st.error("Advanced history failed to render.")
-                        try:
-                            st.exception(e)
-                        except Exception:
-                            st.caption(f"{type(e).__name__}: {e}")
-
 # ============================================================
 #                     APP ENTRYPOINT
 # ============================================================
