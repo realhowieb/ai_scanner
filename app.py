@@ -245,6 +245,23 @@ try:
 except Exception:
     pass
 
+# --------------- AUTH (must load even if other modules fail) ----------------
+_AUTH_IMPORT_ERROR: str | None = None
+try:
+    from ui.auth import auth_ui, logout_and_reset_session  # type: ignore
+except Exception as _e:
+    _AUTH_IMPORT_ERROR = f"{type(_e).__name__}: {_e}"
+
+    def auth_ui():
+        st.error("Auth module failed to import. Cannot render login.")
+        st.code(_AUTH_IMPORT_ERROR or "unknown auth import error")
+        return (False, None, None)
+
+    def logout_and_reset_session():
+        # Safe fallback so logout actions do not crash the app
+        for k in list(st.session_state.keys()):
+            st.session_state.pop(k, None)
+        st.rerun()
 # --------------- DB modules & UI modules ----------------
 # IMPORTANT: Keep auth import reliable so the login UI can render even if other modules break.
 _IMPORT_ERROR: str | None = None
@@ -1244,7 +1261,22 @@ Tip: turn on **Apply Gap Filter** to enforce **Min Gap %**.
 
 def main():
     # -------- AUTH FIRST (NOW FIRST) --------
-    authed, username, display_name = auth_ui()
+    # If auth import failed, show a clear error instead of a blank screen.
+    if _AUTH_IMPORT_ERROR:
+        st.error("Auth failed to load; cannot continue.")
+        st.code(_AUTH_IMPORT_ERROR)
+        st.stop()
+
+    try:
+        authed, username, display_name = auth_ui()
+    except Exception as e:
+        st.error("Login failed to render due to an auth error.")
+        try:
+            st.exception(e)
+        except Exception:
+            st.caption(f"Auth error: {type(e).__name__}: {e}")
+        st.stop()
+
     if not authed:
         # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
