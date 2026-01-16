@@ -1981,18 +1981,22 @@ def main():
                                     st.code(str(run_df))
 
             # Optional: existing expander-based renderer (kept for backward compatibility)
-            try:
-                if callable(render_history_expander):
-                    with st.expander("Advanced history (legacy)", expanded=False):
+            # IMPORTANT: render the expander only once. Some legacy implementations raise a
+            # TypeError due to signature differences; handle that inside the expander to
+            # avoid duplicating the UI.
+            if callable(render_history_expander):
+                with st.expander("Advanced history (legacy)", expanded=False):
+                    try:
                         render_history_expander(username=username)
-            except TypeError:
-                try:
-                    with st.expander("Advanced history (legacy)", expanded=False):
+                    except TypeError:
+                        # Back-compat: older versions accept no args
                         render_history_expander()
-                except Exception:
-                    pass
-            except Exception:
-                pass
+                    except Exception as e:
+                        st.error("Advanced history failed to render.")
+                        try:
+                            st.exception(e)
+                        except Exception:
+                            st.caption(f"{type(e).__name__}: {e}")
 
 # ============================================================
 #                     APP ENTRYPOINT
