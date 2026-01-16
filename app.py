@@ -1787,6 +1787,18 @@ def main():
         st.session_state.get("enable_earnings_enrichment", False)
     )
 
+    # Ensure the results table has an earnings column immediately when enabled.
+    # We fill it with NaN first (fast), then later replace via enrichment.
+    if show_earnings and df is not None and not df.empty:
+        try:
+            if EARN_COL_DAYS not in df.columns:
+                df[EARN_COL_DAYS] = np.nan
+            # Also add a friendly alias that any table view is likely to show
+            if "Earnings" not in df.columns:
+                df["Earnings"] = df[EARN_COL_DAYS]
+        except Exception:
+            pass
+
     # Sidebar: show lock hint if Basic (do NOT show any earnings text for Pro+ here)
     if not flags.get("can_earnings"):
         st.sidebar.caption("🔒 Earnings timing is a Pro feature.")
@@ -1868,16 +1880,34 @@ def main():
             if results_sig and cached_sig != results_sig and rerun_sig != results_sig:
                 df_for_earnings = df.copy()
 
-                if "symbol" not in df_for_earnings.columns:
-                    if "Ticker" in df_for_earnings.columns:
-                        df_for_earnings["symbol"] = (
-                            df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
-                        )
+                # Provide consistent symbol/ticker columns for earnings enrichment
+                try:
+                    if "symbol" not in df_for_earnings.columns:
+                        if "Ticker" in df_for_earnings.columns:
+                            df_for_earnings["symbol"] = df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
+                        elif "ticker" in df_for_earnings.columns:
+                            df_for_earnings["symbol"] = df_for_earnings["ticker"].astype(str).str.strip().str.upper()
+
+                    if "ticker" not in df_for_earnings.columns:
+                        if "Ticker" in df_for_earnings.columns:
+                            df_for_earnings["ticker"] = df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
+                        elif "symbol" in df_for_earnings.columns:
+                            df_for_earnings["ticker"] = df_for_earnings["symbol"].astype(str).str.strip().str.upper()
+                except Exception:
+                    pass
 
                 st.session_state["enable_earnings_refresh"] = False
 
                 with _quiet_external_calls():
                     enriched = add_earnings_days_column(df_for_earnings)
+
+                # Add a friendly alias column so the UI table reliably shows it
+                try:
+                    if isinstance(enriched, pd.DataFrame) and EARN_COL_DAYS in enriched.columns:
+                        if "Earnings" not in enriched.columns:
+                            enriched["Earnings"] = enriched[EARN_COL_DAYS]
+                except Exception:
+                    pass
 
                 st.session_state["earnings_enriched_df"] = enriched
                 st.session_state["earnings_enriched_signature"] = results_sig
