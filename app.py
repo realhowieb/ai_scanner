@@ -1827,6 +1827,131 @@ def main():
                 st.toast("📅 Earnings column added", icon="📅")
                 st.rerun()
 
+    # -------- Early Breakout Candidates tab --------
+    if tab2 is not None:
+        with tab2:
+            try:
+                render_prebreakout_tab()
+            except TypeError:
+                # Backward-compatible fallback if the tab renderer expects args
+                try:
+                    render_prebreakout_tab(username=username)
+                except Exception:
+                    st.info("Early Breakout Candidates panel is not available in this build.")
+            except Exception as e:
+                st.error("Early Breakout Candidates failed to render.")
+                try:
+                    st.exception(e)
+                except Exception:
+                    st.caption(f"{type(e).__name__}: {e}")
+
+    # -------- Scan History tab --------
+    if tab3 is not None:
+        with tab3:
+            st.markdown("## 📚 Scan History")
+
+            if not callable(list_runs) or not callable(load_run_results):
+                st.info("Scan history is not available (DB runs module not configured).")
+            else:
+                # Try to fetch runs for this user (prefer username-scoped), but remain compatible
+                runs = None
+                try:
+                    runs = list_runs(username=username)
+                except TypeError:
+                    try:
+                        runs = list_runs(user_id=username)
+                    except TypeError:
+                        runs = list_runs()
+                except Exception as e:
+                    st.error("Failed to load scan history.")
+                    try:
+                        st.exception(e)
+                    except Exception:
+                        st.caption(f"{type(e).__name__}: {e}")
+                    runs = None
+
+                if not runs:
+                    st.info("No saved scans yet. Run a scan and make sure it saves to history.")
+                else:
+                    # Normalize runs into a table
+                    try:
+                        runs_df = pd.DataFrame(runs)
+                    except Exception:
+                        runs_df = pd.DataFrame([{ "run": r } for r in runs])
+
+                    # Try to determine a primary key/id column
+                    id_col = None
+                    for c in ("run_id", "id", "runId", "uuid"):
+                        if c in runs_df.columns:
+                            id_col = c
+                            break
+
+                    # Show the history table
+                    st.dataframe(runs_df, width="stretch")
+
+                    if id_col is None:
+                        st.caption("Scan history loaded, but no run id column was found to load details.")
+                    else:
+                        # Pick a run and load its results
+                        try:
+                            options = runs_df[id_col].astype(str).tolist()
+                        except Exception:
+                            options = [str(x) for x in runs_df[id_col].tolist()]
+
+                        picked = st.selectbox(
+                            "Select a run to view",
+                            options,
+                            index=0,
+                            key="scan_history_pick_run",
+                        )
+
+                        if picked:
+                            run_df = None
+                            try:
+                                run_df = load_run_results(picked)
+                            except TypeError:
+                                try:
+                                    run_df = load_run_results(run_id=picked)
+                                except TypeError:
+                                    run_df = load_run_results(str(picked))
+                            except Exception as e:
+                                st.error("Failed to load results for the selected run.")
+                                try:
+                                    st.exception(e)
+                                except Exception:
+                                    st.caption(f"{type(e).__name__}: {e}")
+                                run_df = None
+
+                            if run_df is None or (hasattr(run_df, "empty") and run_df.empty):
+                                st.info("No results found for this run.")
+                            else:
+                                st.markdown("### Results for selected run")
+                                # Reuse the normal results renderer when possible
+                                try:
+                                    render_results(
+                                        run_df,
+                                        flags.get("can_export_csv", False),
+                                        flags.get("can_ai_notes", False),
+                                        render_chart_for_ticker,
+                                        generate_ai_note,
+                                    )
+                                except Exception:
+                                    st.dataframe(run_df, width="stretch")
+
+            # Optional: existing expander-based renderer (kept for backward compatibility)
+            try:
+                if callable(render_history_expander):
+                    with st.expander("Advanced history (legacy)", expanded=False):
+                        render_history_expander(username=username)
+            except TypeError:
+                try:
+                    with st.expander("Advanced history (legacy)", expanded=False):
+                        render_history_expander()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
 # ============================================================
 #                     APP ENTRYPOINT
 # ============================================================
