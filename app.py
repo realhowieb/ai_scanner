@@ -1179,6 +1179,48 @@ def render_user_settings_footer(
     elif session_username:
         ...
 
+def _normalize_results_to_df(obj: object) -> pd.DataFrame | None:
+    """Normalize load_run_results output to a DataFrame (or None).
+
+    Historical rows may store results as:
+      - pandas.DataFrame
+      - list[dict]
+      - dict
+      - JSON-serialized string
+    """
+    if obj is None:
+        return None
+
+    if isinstance(obj, pd.DataFrame):
+        return None if obj.empty else obj
+
+    if isinstance(obj, list):
+        try:
+            df = pd.DataFrame(obj)
+            return None if df.empty else df
+        except Exception:
+            return None
+
+    if isinstance(obj, dict):
+        try:
+            df = pd.DataFrame([obj])
+            return None if df.empty else df
+        except Exception:
+            return None
+
+    if isinstance(obj, str):
+        s = obj.strip()
+        if not s:
+            return None
+        try:
+            import json
+            parsed = json.loads(s)
+        except Exception:
+            return None
+        return _normalize_results_to_df(parsed)
+
+    return None
+
 # --------------- UX Helpers ----------------
 
 def render_active_filters_summary(
@@ -1923,62 +1965,25 @@ def main():
                                     st.caption(f"{type(e).__name__}: {e}")
                                 run_df = None
 
-                            # --- Robust rendering: load_run_results may return DataFrame, list/dict, or a serialized string ---
-                            if run_df is None:
-                                st.info("No results found for this run.")
+                            # --- Robust rendering: normalize whatever load_run_results returns ---
+                            run_df_norm = _normalize_results_to_df(run_df)
 
-                            elif isinstance(run_df, pd.DataFrame):
-                                if run_df.empty:
-                                    st.info("No results found for this run.")
-                                else:
-                                    st.markdown("### Results for selected run")
-                                    try:
-                                        render_results(
-                                            run_df,
-                                            flags.get("can_export_csv", False),
-                                            flags.get("can_ai_notes", False),
-                                            render_chart_for_ticker,
-                                            generate_ai_note,
-                                        )
-                                    except Exception:
-                                        st.dataframe(run_df, width="stretch")
-
-                            elif isinstance(run_df, (list, dict)):
+                            if run_df_norm is None:
+                                st.info("No results found for this run (or could not parse results).")
+                                if bool(st.session_state.get("show_diagnostics_ui", False)):
+                                    st.caption(f"run_df_raw type: {type(run_df).__name__}")
+                            else:
                                 st.markdown("### Results for selected run")
                                 try:
-                                    st.dataframe(pd.DataFrame(run_df), width="stretch")
+                                    render_results(
+                                        run_df_norm,
+                                        flags.get("can_export_csv", False),
+                                        flags.get("can_ai_notes", False),
+                                        render_chart_for_ticker,
+                                        generate_ai_note,
+                                    )
                                 except Exception:
-                                    st.write(run_df)
-
-                            else:
-                                # Attempt to deserialize legacy JSON/string results into a DataFrame
-                                parsed_df = None
-                                try:
-                                    import json
-                                    if isinstance(run_df, str):
-                                        obj = json.loads(run_df)
-                                        if isinstance(obj, list):
-                                            parsed_df = pd.DataFrame(obj)
-                                        elif isinstance(obj, dict):
-                                            parsed_df = pd.DataFrame([obj])
-                                except Exception:
-                                    parsed_df = None
-
-                                if isinstance(parsed_df, pd.DataFrame) and not parsed_df.empty:
-                                    st.markdown("### Results for selected run")
-                                    try:
-                                        render_results(
-                                            parsed_df,
-                                            flags.get("can_export_csv", False),
-                                            flags.get("can_ai_notes", False),
-                                            render_chart_for_ticker,
-                                            generate_ai_note,
-                                        )
-                                    except Exception:
-                                        st.dataframe(parsed_df, width="stretch")
-                                else:
-                                    st.warning("Scan history data could not be parsed into a table.")
-                                    st.code(str(run_df))
+                                    st.dataframe(run_df_norm, width="stretch")
 
 # ============================================================
 #                     APP ENTRYPOINT
