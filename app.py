@@ -187,20 +187,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Hide Streamlit's built-in multipage navigation in the sidebar.
-# When a page script under /pages has an import error, Streamlit renders noisy red
-# "TypeError: Importing a module script failed." boxes in the sidebar *even if the
-# user never clicks that page*. We hide the built-in nav and rely on our in-app
-# navigation (e.g., billing buttons) instead.
-st.markdown(
-    """
-    <style>
-      [data-testid="stSidebarNav"] { display: none !important; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 
 # --------------- Market session helper (US/Eastern) ----------------
 
