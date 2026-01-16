@@ -1987,10 +1987,20 @@ def main():
             if callable(render_history_expander):
                 with st.expander("Advanced history (legacy)", expanded=False):
                     try:
-                        render_history_expander(username=username)
-                    except TypeError:
-                        # Back-compat: older versions accept no args
-                        render_history_expander()
+                        import inspect
+
+                        sig = None
+                        try:
+                            sig = inspect.signature(render_history_expander)
+                        except Exception:
+                            sig = None
+
+                        # Only pass `username` if the function actually accepts it.
+                        if sig is not None and "username" in sig.parameters:
+                            render_history_expander(username=username)
+                        else:
+                            render_history_expander()
+
                     except Exception as e:
                         st.error("Advanced history failed to render.")
                         try:
