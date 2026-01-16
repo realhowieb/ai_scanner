@@ -1646,6 +1646,19 @@ def main():
         username=username,
     )
 
+    # ✅ Force results refresh after a scan completes (prevents blank / stale results)
+    if st.session_state.pop("force_results_refresh", False):
+        # Best effort: clear only results cache if available
+        try:
+            get_results_df.clear()  # works if get_results_df is @st.cache_data
+        except Exception:
+            # Fallback: clear all cache_data (safe but broader)
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
+        st.rerun()
+
     st.markdown("## 🚀 EZ 3-Step AI Scanner")
     render_three_step_scanner()
     st.markdown("---")
