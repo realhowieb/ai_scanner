@@ -20,8 +20,18 @@ from typing import Iterable, Optional, Dict, Tuple
 
 
 def _norm_symbol(sym: str) -> str:
-    """Normalize symbols for consistent DB keys."""
-    return (sym or "").strip().upper()
+    """
+    Normalize symbols for consistent DB keys and joins.
+    - Uppercase
+    - Trim whitespace
+    - Strip common exchange suffixes (e.g. .US, .TO)
+    """
+    if not sym:
+        return ""
+    s = str(sym).strip().upper()
+    if "." in s:
+        s = s.split(".")[0]
+    return s
 
 
 def _norm_symbols(symbols: Iterable[str]) -> list[str]:
@@ -108,6 +118,16 @@ def ensure_earnings_table(conn=None) -> None:
                 WHERE e.symbol = n.orig
                   AND e.symbol <> n.norm
                   AND n.norm NOT IN (SELECT norm FROM conflicts);
+                """
+            )
+        except Exception:
+            pass
+        try:
+            cur.execute(
+                """
+                UPDATE earnings_calendar
+                SET symbol = UPPER(TRIM(symbol))
+                WHERE symbol <> UPPER(TRIM(symbol));
                 """
             )
         except Exception:
@@ -240,7 +260,12 @@ def populate_earnings_calendar(
             info = fetch_next_earnings(sym)
             out[sym] = info
             sym_key = _norm_symbol(info.symbol or sym)
-            cur.execute(UPSERT_EARNINGS_SQL, (sym_key, info.earnings_date, info.earnings_time))
+            if not sym_key:
+                continue
+            cur.execute(
+                UPSERT_EARNINGS_SQL,
+                (sym_key, info.earnings_date, info.earnings_time),
+            )
 
             if progress_cb:
                 try:
@@ -284,9 +309,9 @@ def load_earnings_map(
 
     # Using = ANY(%s) requires a Python list for psycopg2
     sql = """
-        SELECT UPPER(TRIM(symbol)) AS sym_key, earnings_date
+        SELECT symbol AS sym_key, earnings_date
         FROM earnings_calendar
-        WHERE UPPER(TRIM(symbol)) = ANY(%s);
+        WHERE symbol = ANY(%s);
     """
     with c.cursor() as cur:
         cur.execute(sql, (syms,))
@@ -309,9 +334,9 @@ def load_earnings_details_map(
         return {}
 
     sql = """
-        SELECT UPPER(TRIM(symbol)) AS sym_key, earnings_date, earnings_time
+        SELECT symbol AS sym_key, earnings_date, earnings_time
         FROM earnings_calendar
-        WHERE UPPER(TRIM(symbol)) = ANY(%s);
+        WHERE symbol = ANY(%s);
     """
     with c.cursor() as cur:
         cur.execute(sql, (syms,))
