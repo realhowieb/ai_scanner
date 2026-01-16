@@ -19,6 +19,15 @@ import time
 from typing import Iterable, Optional, Dict, Tuple
 
 
+def _norm_symbol(sym: str) -> str:
+    """Normalize symbols for consistent DB keys."""
+    return (sym or "").strip().upper()
+
+
+def _norm_symbols(symbols: Iterable[str]) -> list[str]:
+    return [s for s in (_norm_symbol(str(x)) for x in symbols) if s]
+
+
 # -------------------------
 # DB connection helpers
 # -------------------------
@@ -79,6 +88,30 @@ def ensure_earnings_table(conn=None) -> None:
     # Support both context-managed and plain connections
     with c.cursor() as cur:
         cur.execute(CREATE_EARNINGS_TABLE_SQL)
+        # Best-effort cleanup: normalize existing symbols (avoid PK collisions)
+        try:
+            cur.execute(
+                """
+                WITH norm AS (
+                    SELECT symbol AS orig, UPPER(TRIM(symbol)) AS norm
+                    FROM earnings_calendar
+                ),
+                conflicts AS (
+                    SELECT norm
+                    FROM norm
+                    GROUP BY norm
+                    HAVING COUNT(*) > 1
+                )
+                UPDATE earnings_calendar e
+                SET symbol = n.norm
+                FROM norm n
+                WHERE e.symbol = n.orig
+                  AND e.symbol <> n.norm
+                  AND n.norm NOT IN (SELECT norm FROM conflicts);
+                """
+            )
+        except Exception:
+            pass
     try:
         c.commit()
     except Exception:
@@ -107,7 +140,7 @@ def fetch_next_earnings(symbol: str) -> EarningsInfo:
 
     Returns EarningsInfo with earnings_date=None if not available.
     """
-    sym = (symbol or "").strip().upper()
+    sym = _norm_symbol(symbol)
     if not sym:
         return EarningsInfo(symbol=sym, earnings_date=None, earnings_time=None)
 
@@ -198,7 +231,7 @@ def populate_earnings_calendar(
     c = _get_conn(conn)
     ensure_earnings_table(c)
 
-    syms = [str(s).strip().upper() for s in symbols if str(s).strip()]
+    syms = _norm_symbols(symbols)
     total = len(syms)
     out: Dict[str, EarningsInfo] = {}
 
@@ -206,7 +239,8 @@ def populate_earnings_calendar(
         for i, sym in enumerate(syms, start=1):
             info = fetch_next_earnings(sym)
             out[sym] = info
-            cur.execute(UPSERT_EARNINGS_SQL, (info.symbol, info.earnings_date, info.earnings_time))
+            sym_key = _norm_symbol(info.symbol or sym)
+            cur.execute(UPSERT_EARNINGS_SQL, (sym_key, info.earnings_date, info.earnings_time))
 
             if progress_cb:
                 try:
@@ -244,17 +278,21 @@ def load_earnings_map(
     c = _get_conn(conn)
     ensure_earnings_table(c)
 
-    syms = [str(s).strip().upper() for s in symbols if str(s).strip()]
+    syms = _norm_symbols(symbols)
     if not syms:
         return {}
 
     # Using = ANY(%s) requires a Python list for psycopg2
-    sql = "SELECT symbol, earnings_date FROM earnings_calendar WHERE symbol = ANY(%s);"
+    sql = """
+        SELECT UPPER(TRIM(symbol)) AS sym_key, earnings_date
+        FROM earnings_calendar
+        WHERE UPPER(TRIM(symbol)) = ANY(%s);
+    """
     with c.cursor() as cur:
         cur.execute(sql, (syms,))
         rows = cur.fetchall() or []
 
-    return {str(s).upper(): d for (s, d) in rows}
+    return {str(s).strip().upper(): d for (s, d) in rows}
 
 
 def load_earnings_details_map(
@@ -266,16 +304,20 @@ def load_earnings_details_map(
     c = _get_conn(conn)
     ensure_earnings_table(c)
 
-    syms = [str(s).strip().upper() for s in symbols if str(s).strip()]
+    syms = _norm_symbols(symbols)
     if not syms:
         return {}
 
-    sql = "SELECT symbol, earnings_date, earnings_time FROM earnings_calendar WHERE symbol = ANY(%s);"
+    sql = """
+        SELECT UPPER(TRIM(symbol)) AS sym_key, earnings_date, earnings_time
+        FROM earnings_calendar
+        WHERE UPPER(TRIM(symbol)) = ANY(%s);
+    """
     with c.cursor() as cur:
         cur.execute(sql, (syms,))
         rows = cur.fetchall() or []
 
-    return {str(s).upper(): (d, t) for (s, d, t) in rows}
+    return {str(s).strip().upper(): (d, t) for (s, d, t) in rows}
 
 
 # -------------------------
@@ -388,7 +430,7 @@ def fetch_earnings_this_week(*, conn=None, days_ahead: int = 7):
     for (sym, d, t, upd) in rows:
         out.append(
             {
-                "symbol": str(sym).upper() if sym is not None else None,
+                "symbol": _norm_symbol(str(sym)) if sym is not None else None,
                 "earnings_date": d,
                 "earnings_time": t,
                 "updated_at": upd,
