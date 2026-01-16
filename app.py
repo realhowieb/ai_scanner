@@ -1788,71 +1788,31 @@ def main():
                 generate_ai_note,
             )
 
-        # --- Earnings enrichment runs AFTER results render (so results appear immediately) ---
-        # DB-only enrichment once per scan-signature, then rerun to show the new column.
-        # Must NEVER block first paint of results.
         if show_earnings and df is not None and not df.empty:
-            try:
-                results_sig = str(st.session_state.get("results_signature") or "")
-                cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
+            results_sig = str(st.session_state.get("results_signature") or "")
+            cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
+            rerun_sig = str(st.session_state.get("earnings_enrichment_rerun_sig") or "")
 
-                rerun_sig = str(st.session_state.get("earnings_enrichment_rerun_sig") or "")
+            if results_sig and cached_sig != results_sig and rerun_sig != results_sig:
+                df_for_earnings = df.copy()
 
-                # Only enrich once per unique result-set signature, and only trigger one rerun per signature.
-                if results_sig and cached_sig != results_sig and rerun_sig != results_sig:
-                    df_for_earnings = df.copy()
+                if "symbol" not in df_for_earnings.columns:
+                    if "Ticker" in df_for_earnings.columns:
+                        df_for_earnings["symbol"] = (
+                            df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
+                        )
 
-                    # Ensure canonical `symbol` column exists for earnings logic
-                    if "symbol" not in df_for_earnings.columns:
-                        if "Ticker" in df_for_earnings.columns:
-                            df_for_earnings["symbol"] = (
-                                df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
-                            )
-                        elif "ticker" in df_for_earnings.columns:
-                            df_for_earnings["symbol"] = (
-                                df_for_earnings["ticker"].astype(str).str.strip().str.upper()
-                            )
+                st.session_state["enable_earnings_refresh"] = False
 
-                    # Never refresh/fetch earnings during render; enrichment is DB-only.
-                    st.session_state["enable_earnings_refresh"] = False
+                with _quiet_external_calls():
+                    enriched = add_earnings_days_column(df_for_earnings)
 
-                    import inspect
+                st.session_state["earnings_enriched_df"] = enriched
+                st.session_state["earnings_enriched_signature"] = results_sig
+                st.session_state["earnings_enrichment_rerun_sig"] = results_sig
 
-                    with _quiet_external_calls():
-                        sig = None
-                        try:
-                            sig = inspect.signature(add_earnings_days_column)
-                        except Exception:
-                            sig = None
-
-                        params = set(getattr(sig, "parameters", {}).keys()) if sig is not None else set()
-                        call_kwargs: dict = {}
-
-                        # Force ALL known refresh-style flags off (never block scans/results with network refresh)
-                        for k in (
-                            "refresh",
-                            "allow_refresh",
-                            "enable_refresh",
-                            "do_refresh",
-                            "refresh_db",
-                            "refresh_earnings",
-                        ):
-                            if k in params:
-                                call_kwargs[k] = False
-
-                        enriched = add_earnings_days_column(df_for_earnings, **call_kwargs)
-
-                    st.session_state["earnings_enriched_df"] = enriched
-                    st.session_state["earnings_enriched_signature"] = results_sig
-
-                    try:
-                        st.toast("📅 Earnings column added", icon="📅")
-                    except Exception:
-                        pass
-
-                    st.session_state["earnings_enrichment_rerun_sig"] = results_sig
-                    # Rerun once so the displayed df swaps to the enriched version.
-                    st.rerun()
+                st.toast("📅 Earnings column added", icon="📅")
+                st.rerun()
 
 # ============================================================
 #                     APP ENTRYPOINT
