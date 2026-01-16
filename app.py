@@ -1881,18 +1881,36 @@ def main():
                 df_for_earnings = df.copy()
 
                 # Provide consistent symbol/ticker columns for earnings enrichment
+                # IMPORTANT: results tables may use `Symbol` instead of `Ticker`.
                 try:
-                    if "symbol" not in df_for_earnings.columns:
-                        if "Ticker" in df_for_earnings.columns:
-                            df_for_earnings["symbol"] = df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
-                        elif "ticker" in df_for_earnings.columns:
-                            df_for_earnings["symbol"] = df_for_earnings["ticker"].astype(str).str.strip().str.upper()
+                    def _pick_series(*candidates: str):
+                        for c in candidates:
+                            if c in df_for_earnings.columns:
+                                return df_for_earnings[c]
+                        return None
 
-                    if "ticker" not in df_for_earnings.columns:
-                        if "Ticker" in df_for_earnings.columns:
-                            df_for_earnings["ticker"] = df_for_earnings["Ticker"].astype(str).str.strip().str.upper()
-                        elif "symbol" in df_for_earnings.columns:
-                            df_for_earnings["ticker"] = df_for_earnings["symbol"].astype(str).str.strip().str.upper()
+                    base = _pick_series("symbol", "Symbol", "Ticker", "ticker")
+                    if base is not None:
+                        norm = (
+                            base.astype(str)
+                            .str.strip()
+                            .str.upper()
+                            .replace({"": None, "NONE": None, "NAN": None})
+                        )
+                        if "symbol" not in df_for_earnings.columns:
+                            df_for_earnings["symbol"] = norm
+                        else:
+                            # Even if present, normalize it
+                            df_for_earnings["symbol"] = (
+                                df_for_earnings["symbol"].astype(str).str.strip().str.upper().replace({"": None, "NONE": None, "NAN": None})
+                            )
+
+                        if "ticker" not in df_for_earnings.columns:
+                            df_for_earnings["ticker"] = norm
+                        else:
+                            df_for_earnings["ticker"] = (
+                                df_for_earnings["ticker"].astype(str).str.strip().str.upper().replace({"": None, "NONE": None, "NAN": None})
+                            )
                 except Exception:
                     pass
 
