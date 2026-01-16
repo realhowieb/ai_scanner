@@ -1282,6 +1282,9 @@ def render_scan_controls(
 
                 dt = time.time() - t0
                 st.session_state.results_df = df
+                # Force the main app to re-render results immediately after a scan completes.
+                # This avoids cases where Streamlit doesn't refresh the results table until a manual rerun.
+                st.session_state["force_results_refresh"] = True
 
                 # If a Watchlist scan returns 0 rows, show a hint about relaxing filters.
                 if (str(label).startswith("Watchlist")) and (df is None or df.empty):
@@ -1404,6 +1407,8 @@ def render_scan_controls(
         else:
             df_view = build_watchlist_df(tickers)
             st.session_state.results_df = df_view
+            # Ensure the results panel refreshes immediately after switching to the watchlist view.
+            st.session_state["force_results_refresh"] = True
             _banner(
                 f"Showing active watchlist with {len(tickers)} tickers (with prices & daily change).",
                 "info",
