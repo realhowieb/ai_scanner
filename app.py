@@ -1811,6 +1811,55 @@ def main():
     _cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
     _cached_df = st.session_state.get("earnings_enriched_df")
 
+    # 🔎 HARD FALLBACK: if earnings are enabled but all values are None,
+    # force a direct DB enrichment pass to avoid silent mismatches.
+    if (
+        show_earnings
+        and isinstance(df, pd.DataFrame)
+        and not df.empty
+        and EARN_COL_DAYS in df.columns
+        and df[EARN_COL_DAYS].isna().all()
+    ):
+        try:
+            df_fallback = df.copy()
+
+            # Normalize symbols again (defensive)
+            sym_col = None
+            for c in ("symbol", "Symbol", "Ticker", "ticker"):
+                if c in df_fallback.columns:
+                    sym_col = c
+                    break
+
+            if sym_col:
+                norm = (
+                    df_fallback[sym_col]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    .replace({"": None, "NONE": None, "NAN": None})
+                )
+                df_fallback["symbol"] = norm
+                df_fallback["ticker"] = norm
+                df_fallback["Symbol"] = norm
+                df_fallback["Ticker"] = norm
+
+            with _quiet_external_calls():
+                df_fallback = add_earnings_days_column(df_fallback)
+
+            # Ensure columns exist
+            if EARN_COL_DAYS not in df_fallback.columns:
+                df_fallback[EARN_COL_DAYS] = np.nan
+            if "Earnings" not in df_fallback.columns:
+                df_fallback["Earnings"] = df_fallback[EARN_COL_DAYS]
+
+            # Accept fallback result if it improved coverage
+            if not df_fallback[EARN_COL_DAYS].isna().all():
+                df = df_fallback
+                st.session_state["earnings_enriched_df"] = df_fallback
+                st.session_state["earnings_enriched_signature"] = _sig_for_cache
+        except Exception:
+            pass
+
     if show_earnings and _sig_for_cache and _cached_sig == _sig_for_cache and isinstance(_cached_df, pd.DataFrame):
         df = _cached_df
 
