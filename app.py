@@ -1854,7 +1854,18 @@ def main():
                     # Rerun once so the displayed df swaps to the enriched version.
                     st.rerun()
 
-            except Exception as e:
-                # Non-blocking: only show in diagnostics
-                if bool(st.session_state.get("show_diagnostics_ui", False)):
-                    st.caption(f"Earnings enrichment error (non-blocking): {e}")
+# ============================================================
+#                     APP ENTRYPOINT
+# ============================================================
+
+# Streamlit executes this script top-to-bottom. If we forget to call main(),
+# the app will render a blank page.
+try:
+    main()
+except Exception as e:
+    st.error("App failed during startup.")
+    try:
+        st.exception(e)
+    except Exception:
+        st.caption(f"Startup error: {type(e).__name__}: {e}")
+    st.stop()
