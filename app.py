@@ -1789,139 +1789,136 @@ def main():
         st.session_state.get("enable_earnings_enrichment", False)
     )
 
-    # Ensure the results table has an earnings column immediately when enabled.
-    # We fill it with NaN first (fast), then later replace via enrichment.
-    if show_earnings and df is not None and not df.empty:
+    # Ensure the results table has earnings columns immediately when enabled.
+    # We fill with NaN first (fast), then replace via enrichment.
+    if show_earnings and isinstance(df, pd.DataFrame) and not df.empty:
         try:
             if EARN_COL_DAYS not in df.columns:
                 df[EARN_COL_DAYS] = np.nan
-            # Also add a friendly alias that any table view is likely to show
             if "Earnings" not in df.columns:
-                df["Earnings"] = df[EARN_COL_DAYS]
+                df["Earnings"] = np.nan
         except Exception:
             pass
 
-    # Sidebar: show lock hint if Basic (do NOT show any earnings text for Pro+ here)
+    # Sidebar: show lock hint if Basic
     if not flags.get("can_earnings"):
         st.sidebar.caption("🔒 Earnings timing is a Pro feature.")
 
     # --- Earnings enrichment should NOT block first render ---
-    # If we already enriched this exact result-set in this session, reuse the cached enriched df.
+    # Cache by the current results signature so we only enrich once per result-set.
     _sig_for_cache = str(st.session_state.get("results_signature") or "")
     _cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
     _cached_df = st.session_state.get("earnings_enriched_df")
 
-    # 🔎 HARD FALLBACK: if earnings are enabled but all values are None,
-    # force a direct DB enrichment pass to avoid silent mismatches.
-    if (
-        show_earnings
-        and isinstance(df, pd.DataFrame)
-        and not df.empty
-        and EARN_COL_DAYS in df.columns
-        and df[EARN_COL_DAYS].isna().all()
-    ):
+    def _canonical_symbol_series(_df: pd.DataFrame) -> pd.Series | None:
+        """Return a normalized, uppercase symbol series from common columns."""
+        base_col = None
+        for c in ("symbol", "Symbol", "Ticker", "ticker"):
+            if c in _df.columns:
+                base_col = c
+                break
+        if base_col is None:
+            return None
+        s = (
+            _df[base_col]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace({"": None, "NONE": None, "NAN": None})
+        )
+        return s
+
+    def _apply_earnings_enrichment(_df: pd.DataFrame) -> pd.DataFrame:
+        """Run DB enrichment on a copy and merge ONLY the earnings columns back."""
         try:
-            df_fallback = df.copy()
+            work = _df.copy()
 
-            # Normalize symbols again (defensive)
-            sym_col = None
-            for c in ("symbol", "Symbol", "Ticker", "ticker"):
-                if c in df_fallback.columns:
-                    sym_col = c
-                    break
+            sym = _canonical_symbol_series(work)
+            if sym is not None:
+                # Ensure a single canonical join key exists for DB matching.
+                # IMPORTANT: Do not add duplicate casing columns (Ticker/Symbol/ticker) here.
+                work["symbol"] = sym
 
-            if sym_col:
-                norm = (
-                    df_fallback[sym_col]
-                    .astype(str)
-                    .str.strip()
-                    .str.upper()
-                    .replace({"": None, "NONE": None, "NAN": None})
-                )
-                df_fallback["symbol"] = norm
-                df_fallback["ticker"] = norm
-                df_fallback["Symbol"] = norm
-                df_fallback["Ticker"] = norm
+            # Never allow refresh loops / external calls from earnings enrichment
+            st.session_state["enable_earnings_refresh"] = False
 
             with _quiet_external_calls():
-                df_fallback = add_earnings_days_column(df_fallback)
+                enriched = add_earnings_days_column(work)
 
-            # Ensure columns exist
-            if EARN_COL_DAYS not in df_fallback.columns:
-                df_fallback[EARN_COL_DAYS] = np.nan
-            if "Earnings" not in df_fallback.columns:
-                df_fallback["Earnings"] = df_fallback[EARN_COL_DAYS]
+            # If the implementation returned something unexpected, keep original.
+            if not isinstance(enriched, pd.DataFrame):
+                enriched = work
 
-            # Accept fallback result if it improved coverage
-            if not df_fallback[EARN_COL_DAYS].isna().all():
-                df = df_fallback
-                st.session_state["earnings_enriched_df"] = df_fallback
-                st.session_state["earnings_enriched_signature"] = _sig_for_cache
+            # Extract the earnings column safely
+            earn_series = None
+            if EARN_COL_DAYS in enriched.columns:
+                earn_series = enriched[EARN_COL_DAYS]
+            elif "earnings_in_days" in enriched.columns:
+                earn_series = enriched["earnings_in_days"]
+
+            out = _df.copy()
+            if earn_series is not None:
+                out[EARN_COL_DAYS] = pd.to_numeric(earn_series, errors="coerce")
+                out["Earnings"] = out[EARN_COL_DAYS]
+            else:
+                # Guarantee columns exist even if enrichment produced none
+                if EARN_COL_DAYS not in out.columns:
+                    out[EARN_COL_DAYS] = np.nan
+                out["Earnings"] = out.get("Earnings") if "Earnings" in out.columns else np.nan
+
+            return out
         except Exception:
-            pass
+            # Never let earnings break rendering
+            out = _df.copy()
+            try:
+                if EARN_COL_DAYS not in out.columns:
+                    out[EARN_COL_DAYS] = np.nan
+                if "Earnings" not in out.columns:
+                    out["Earnings"] = np.nan
+            except Exception:
+                pass
+            return out
 
-    if show_earnings and _sig_for_cache and _cached_sig == _sig_for_cache and isinstance(_cached_df, pd.DataFrame):
+    # Use cached enrichment if available for this exact result-set
+    if (
+        show_earnings
+        and _sig_for_cache
+        and _cached_sig == _sig_for_cache
+        and isinstance(_cached_df, pd.DataFrame)
+    ):
         df = _cached_df
 
     # If earnings are enabled and we don't have an enriched version for this exact result-set yet,
     # enrich now and USE the enriched df for rendering.
     if (
         show_earnings
-        and df is not None
+        and isinstance(df, pd.DataFrame)
         and not df.empty
         and _sig_for_cache
         and _cached_sig != _sig_for_cache
     ):
-        df_for_earnings = df.copy()
-
-        # Normalize / provide multiple symbol columns so the DB enrichment can match regardless of naming.
-        try:
-            base_col = None
-            for c in ("symbol", "Symbol", "Ticker", "ticker"):
-                if c in df_for_earnings.columns:
-                    base_col = c
-                    break
-
-            if base_col is not None:
-                norm = (
-                    df_for_earnings[base_col]
-                    .astype(str)
-                    .str.strip()
-                    .str.upper()
-                    .replace({"": None, "NONE": None, "NAN": None})
-                )
-
-                # Provide both common casings
-                df_for_earnings["symbol"] = norm
-                df_for_earnings["ticker"] = norm
-                df_for_earnings["Symbol"] = norm
-                df_for_earnings["Ticker"] = norm
-        except Exception:
-            pass
-
-        # Never allow refresh loops / external calls from earnings enrichment
-        st.session_state["enable_earnings_refresh"] = False
-
-        try:
-            with _quiet_external_calls():
-                enriched = add_earnings_days_column(df_for_earnings)
-        except Exception:
-            enriched = df_for_earnings
-
-        # Ensure expected columns exist and that a friendly alias is present
-        try:
-            if isinstance(enriched, pd.DataFrame):
-                if EARN_COL_DAYS not in enriched.columns:
-                    enriched[EARN_COL_DAYS] = np.nan
-                if "Earnings" not in enriched.columns:
-                    enriched["Earnings"] = enriched[EARN_COL_DAYS]
-        except Exception:
-            pass
-
-        # Cache and use for this render
-        st.session_state["earnings_enriched_df"] = enriched
+        enriched_df = _apply_earnings_enrichment(df)
+        st.session_state["earnings_enriched_df"] = enriched_df
         st.session_state["earnings_enriched_signature"] = _sig_for_cache
-        df = enriched
+        df = enriched_df
+
+    # If earnings are enabled but still all missing, run ONE more forced pass (guards mismatched keys)
+    if (
+        show_earnings
+        and isinstance(df, pd.DataFrame)
+        and not df.empty
+        and EARN_COL_DAYS in df.columns
+        and pd.to_numeric(df[EARN_COL_DAYS], errors="coerce").isna().all()
+    ):
+        enriched_df = _apply_earnings_enrichment(df)
+        # Accept if it improves coverage
+        try:
+            if not pd.to_numeric(enriched_df[EARN_COL_DAYS], errors="coerce").isna().all():
+                st.session_state["earnings_enriched_df"] = enriched_df
+                st.session_state["earnings_enriched_signature"] = _sig_for_cache
+                df = enriched_df
+        except Exception:
+            pass
 
     # Earnings filters (apply only when earnings column exists)
     if show_earnings and df is not None and not df.empty and EARN_COL_DAYS in df.columns:
