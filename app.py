@@ -179,11 +179,26 @@ except Exception:
 # --------------- Page config ----------------
 
 
+
 st.set_page_config(
     page_title="Breakout Stock Scanner",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
+)
+
+# Hide Streamlit's built-in multipage navigation in the sidebar.
+# When a page script under /pages has an import error, Streamlit renders noisy red
+# "TypeError: Importing a module script failed." boxes in the sidebar *even if the
+# user never clicks that page*. We hide the built-in nav and rely on our in-app
+# navigation (e.g., billing buttons) instead.
+st.markdown(
+    """
+    <style>
+      [data-testid="stSidebarNav"] { display: none !important; }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -1950,9 +1965,34 @@ def main():
                                     st.write(run_df)
 
                             else:
-                                # Handle legacy serialized results (string) without crashing the app
-                                st.warning("Scan history data is not in a supported tabular format.")
-                                st.code(str(run_df))
+                                # Attempt to deserialize legacy JSON/string results into a DataFrame
+                                parsed_df = None
+                                try:
+                                    import json
+                                    if isinstance(run_df, str):
+                                        obj = json.loads(run_df)
+                                        if isinstance(obj, list):
+                                            parsed_df = pd.DataFrame(obj)
+                                        elif isinstance(obj, dict):
+                                            parsed_df = pd.DataFrame([obj])
+                                except Exception:
+                                    parsed_df = None
+
+                                if isinstance(parsed_df, pd.DataFrame) and not parsed_df.empty:
+                                    st.markdown("### Results for selected run")
+                                    try:
+                                        render_results(
+                                            parsed_df,
+                                            flags.get("can_export_csv", False),
+                                            flags.get("can_ai_notes", False),
+                                            render_chart_for_ticker,
+                                            generate_ai_note,
+                                        )
+                                    except Exception:
+                                        st.dataframe(parsed_df, width="stretch")
+                                else:
+                                    st.warning("Scan history data could not be parsed into a table.")
+                                    st.code(str(run_df))
 
             # Optional: existing expander-based renderer (kept for backward compatibility)
             try:
