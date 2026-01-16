@@ -1743,6 +1743,7 @@ def main():
             _sig = None
             if _ticker_col is not None:
                 try:
+                    import hashlib
                     _tickers = (
                         df[_ticker_col]
                         .astype(str)
@@ -1754,7 +1755,8 @@ def main():
                         .tolist()
                     )
                     _tickers.sort()
-                    _sig = f"{_rows}|{hash(tuple(_tickers))}"
+                    _payload = "|".join(_tickers).encode("utf-8", errors="ignore")
+                    _sig = f"{_rows}|{hashlib.md5(_payload).hexdigest()}"
                 except Exception:
                     _sig = f"{_rows}|fallback"
             else:
@@ -1811,6 +1813,66 @@ def main():
 
     if show_earnings and _sig_for_cache and _cached_sig == _sig_for_cache and isinstance(_cached_df, pd.DataFrame):
         df = _cached_df
+
+    # If earnings are enabled and we don't have an enriched version for this exact result-set yet,
+    # enrich now and USE the enriched df for rendering.
+    if (
+        show_earnings
+        and df is not None
+        and not df.empty
+        and _sig_for_cache
+        and _cached_sig != _sig_for_cache
+    ):
+        df_for_earnings = df.copy()
+
+        # Normalize / provide multiple symbol columns so the DB enrichment can match regardless of naming.
+        try:
+            base_col = None
+            for c in ("symbol", "Symbol", "Ticker", "ticker"):
+                if c in df_for_earnings.columns:
+                    base_col = c
+                    break
+
+            if base_col is not None:
+                norm = (
+                    df_for_earnings[base_col]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    .replace({"": None, "NONE": None, "NAN": None})
+                )
+
+                # Provide both common casings
+                df_for_earnings["symbol"] = norm
+                df_for_earnings["ticker"] = norm
+                df_for_earnings["Symbol"] = norm
+                df_for_earnings["Ticker"] = norm
+        except Exception:
+            pass
+
+        # Never allow refresh loops / external calls from earnings enrichment
+        st.session_state["enable_earnings_refresh"] = False
+
+        try:
+            with _quiet_external_calls():
+                enriched = add_earnings_days_column(df_for_earnings)
+        except Exception:
+            enriched = df_for_earnings
+
+        # Ensure expected columns exist and that a friendly alias is present
+        try:
+            if isinstance(enriched, pd.DataFrame):
+                if EARN_COL_DAYS not in enriched.columns:
+                    enriched[EARN_COL_DAYS] = np.nan
+                if "Earnings" not in enriched.columns:
+                    enriched["Earnings"] = enriched[EARN_COL_DAYS]
+        except Exception:
+            pass
+
+        # Cache and use for this render
+        st.session_state["earnings_enriched_df"] = enriched
+        st.session_state["earnings_enriched_signature"] = _sig_for_cache
+        df = enriched
 
     # Earnings filters (apply only when earnings column exists)
     if show_earnings and df is not None and not df.empty and EARN_COL_DAYS in df.columns:
@@ -1871,68 +1933,6 @@ def main():
                 render_chart_for_ticker,
                 generate_ai_note,
             )
-
-        if show_earnings and df is not None and not df.empty:
-            results_sig = str(st.session_state.get("results_signature") or "")
-            cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
-            rerun_sig = str(st.session_state.get("earnings_enrichment_rerun_sig") or "")
-
-            if results_sig and cached_sig != results_sig and rerun_sig != results_sig:
-                df_for_earnings = df.copy()
-
-                # Provide consistent symbol/ticker columns for earnings enrichment
-                # IMPORTANT: results tables may use `Symbol` instead of `Ticker`.
-                try:
-                    def _pick_series(*candidates: str):
-                        for c in candidates:
-                            if c in df_for_earnings.columns:
-                                return df_for_earnings[c]
-                        return None
-
-                    base = _pick_series("symbol", "Symbol", "Ticker", "ticker")
-                    if base is not None:
-                        norm = (
-                            base.astype(str)
-                            .str.strip()
-                            .str.upper()
-                            .replace({"": None, "NONE": None, "NAN": None})
-                        )
-                        if "symbol" not in df_for_earnings.columns:
-                            df_for_earnings["symbol"] = norm
-                        else:
-                            # Even if present, normalize it
-                            df_for_earnings["symbol"] = (
-                                df_for_earnings["symbol"].astype(str).str.strip().str.upper().replace({"": None, "NONE": None, "NAN": None})
-                            )
-
-                        if "ticker" not in df_for_earnings.columns:
-                            df_for_earnings["ticker"] = norm
-                        else:
-                            df_for_earnings["ticker"] = (
-                                df_for_earnings["ticker"].astype(str).str.strip().str.upper().replace({"": None, "NONE": None, "NAN": None})
-                            )
-                except Exception:
-                    pass
-
-                st.session_state["enable_earnings_refresh"] = False
-
-                with _quiet_external_calls():
-                    enriched = add_earnings_days_column(df_for_earnings)
-
-                # Add a friendly alias column so the UI table reliably shows it
-                try:
-                    if isinstance(enriched, pd.DataFrame) and EARN_COL_DAYS in enriched.columns:
-                        if "Earnings" not in enriched.columns:
-                            enriched["Earnings"] = enriched[EARN_COL_DAYS]
-                except Exception:
-                    pass
-
-                st.session_state["earnings_enriched_df"] = enriched
-                st.session_state["earnings_enriched_signature"] = results_sig
-                st.session_state["earnings_enrichment_rerun_sig"] = results_sig
-
-                st.toast("📅 Earnings column added", icon="📅")
-                st.rerun()
 
     # -------- Early Breakout Candidates tab --------
     if tab2 is not None:
