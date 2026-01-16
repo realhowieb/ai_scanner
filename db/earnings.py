@@ -20,22 +20,56 @@ from typing import Iterable, Optional, Dict, Tuple
 
 
 def _norm_symbol(sym: str) -> str:
-    """
-    Normalize symbols for consistent DB keys and joins.
+    """Normalize symbols for consistent DB keys and joins.
+
+    Rules:
     - Uppercase
     - Trim whitespace
     - Strip common exchange suffixes (e.g. .US, .TO)
+    - Remove leading '^' (e.g. ^GSPC -> GSPC)
+    - Remove common non-alphanumeric separators (e.g. BRK.B -> BRKB, RDS-A -> RDSA)
+
+    NOTE: This is intentionally conservative; it only aims to make joins stable.
     """
     if not sym:
         return ""
+
     s = str(sym).strip().upper()
+
+    # Yahoo/finance index symbols
+    if s.startswith("^"):
+        s = s[1:]
+
+    # Exchange suffixes
     if "." in s:
-        s = s.split(".")[0]
+        s = s.split(".", 1)[0]
+
+    # Normalize common separators used across feeds
+    # Examples: BRK.B -> BRKB, RDS-A -> RDSA, BF.B -> BFB
+    for ch in ("-", "_", " ", "/"):
+        s = s.replace(ch, "")
+
     return s
 
 
 def _norm_symbols(symbols: Iterable[str]) -> list[str]:
     return [s for s in (_norm_symbol(str(x)) for x in symbols) if s]
+
+
+def _expand_join_keys(original: str) -> set[str]:
+    """Generate a small set of equivalent keys for robust joins."""
+    raw = str(original) if original is not None else ""
+    raw_strip = raw.strip()
+    norm = _norm_symbol(raw_strip)
+
+    keys: set[str] = set()
+    if raw_strip:
+        keys.add(raw_strip)
+        keys.add(raw_strip.upper())
+    if norm:
+        keys.add(norm)
+        keys.add(norm.upper())
+    return keys
 
 
 # -------------------------
@@ -317,7 +351,20 @@ def load_earnings_map(
         cur.execute(sql, (syms,))
         rows = cur.fetchall() or []
 
-    return {str(s).strip().upper(): d for (s, d) in rows}
+    # Base map from DB (normalized)
+    base = {_norm_symbol(str(s)): d for (s, d) in rows if s is not None}
+
+    # Expand keys so callers can join using either raw or normalized symbols
+    out: Dict[str, Optional[date]] = {}
+    for orig in symbols:
+        for k in _expand_join_keys(str(orig)):
+            nk = _norm_symbol(k)
+            if nk and nk in base:
+                out[k] = base[nk]
+
+    # Always include normalized keys too
+    out.update(base)
+    return out
 
 
 def load_earnings_details_map(
@@ -342,7 +389,17 @@ def load_earnings_details_map(
         cur.execute(sql, (syms,))
         rows = cur.fetchall() or []
 
-    return {str(s).strip().upper(): (d, t) for (s, d, t) in rows}
+    base = {_norm_symbol(str(s)): (d, t) for (s, d, t) in rows if s is not None}
+
+    out: Dict[str, Tuple[Optional[date], Optional[str]]] = {}
+    for orig in symbols:
+        for k in _expand_join_keys(str(orig)):
+            nk = _norm_symbol(k)
+            if nk and nk in base:
+                out[k] = base[nk]
+
+    out.update(base)
+    return out
 
 
 # -------------------------
