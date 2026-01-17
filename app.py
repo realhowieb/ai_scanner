@@ -1941,24 +1941,43 @@ def main():
     # Build tabs dynamically based on entitlements:
     # - Basic: only Latest Results
     # - Pro  : Latest Results + Scan History
-    # - Premium/Admin: Latest Results + Early Breakout Candidates + Scan History
-    if flags.get("can_scan_history") or flags.get("can_early_breakout"):
+    # - Premium: Latest Results + Early Breakout Candidates + Scan History
+    # - Admin: add Admin tab
+    if flags.get("can_scan_history") or flags.get("can_early_breakout") or flags.get("can_admin_panel"):
         tab_names = [f"📊 Latest scan results ({rows} rows)"]
+
         if flags.get("can_early_breakout"):
             tab_names.append("🔮 Early Breakout Candidates")
         if flags.get("can_scan_history"):
             tab_names.append("📚 Scan History")
+        if flags.get("can_admin_panel"):
+            tab_names.append("🛠 Admin")
 
         tabs = st.tabs(tab_names)
-        tab1 = tabs[0]
-        tab2 = tabs[1] if flags.get("can_early_breakout") else None
-        tab3 = tabs[-1] if flags.get("can_scan_history") else None
-    else:
-        (tab1,) = st.tabs([f"📊 Latest scan results ({rows} rows)"])
-        tab2 = None
-        tab3 = None
 
-    with tab1:
+        tab_latest = tabs[0]
+        idx = 1
+
+        tab_early = None
+        if flags.get("can_early_breakout"):
+            tab_early = tabs[idx]
+            idx += 1
+
+        tab_history = None
+        if flags.get("can_scan_history"):
+            tab_history = tabs[idx]
+            idx += 1
+
+        tab_admin = None
+        if flags.get("can_admin_panel"):
+            tab_admin = tabs[idx]
+    else:
+        (tab_latest,) = st.tabs([f"📊 Latest scan results ({rows} rows)"])
+        tab_early = None
+        tab_history = None
+        tab_admin = None
+
+    with tab_latest:
         if scan_ran_at:
             try:
                 st.caption(f"🕒 Scan run at {scan_ran_at.strftime('%Y-%m-%d %H:%M UTC')}")
@@ -1984,8 +2003,8 @@ def main():
             )
 
     # -------- Early Breakout Candidates tab --------
-    if tab2 is not None:
-        with tab2:
+    if tab_early is not None:
+        with tab_early:
             try:
                 render_prebreakout_tab()
             except TypeError:
@@ -2002,8 +2021,8 @@ def main():
                     st.caption(f"{type(e).__name__}: {e}")
 
     # -------- Scan History tab --------
-    if tab3 is not None:
-        with tab3:
+    if tab_history is not None:
+        with tab_history:
             st.markdown("## 📚 Scan History")
 
             if not callable(list_runs) or not callable(load_run_results):
@@ -2097,6 +2116,20 @@ def main():
                                     )
                                 except Exception:
                                     st.dataframe(run_df_norm, width="stretch")
+
+
+    # -------- Admin tab --------
+    if tab_admin is not None:
+        with tab_admin:
+            st.markdown("## 🛠 Admin Panel")
+            try:
+                render_admin_users_panel()
+            except Exception as e:
+                st.error("Admin panel failed to render.")
+                try:
+                    st.exception(e)
+                except Exception:
+                    st.caption(f"{type(e).__name__}: {e}")
 
 # ============================================================
 #                     APP ENTRYPOINT
