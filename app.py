@@ -2268,6 +2268,7 @@ def main():
                                 bad_symbol_count = None
                                 try:
                                     with conn.cursor() as cur:
+                                        # Does the earnings table exist?
                                         cur.execute(
                                             """
                                             SELECT COUNT(*)
@@ -2276,42 +2277,44 @@ def main():
                                             """
                                         )
                                         exists = (cur.fetchone() or [0])[0]
-                                    if not exists:
-                                        issues.append("earnings_calendar table is missing.")
-                                    else:
-                                        with conn.cursor() as cur:
+
+                                        if not exists:
+                                            issues.append("earnings_calendar table is missing.")
+                                        else:
+                                            # Row count
                                             cur.execute("SELECT COUNT(*) FROM earnings_calendar;")
                                             earnings_count = (cur.fetchone() or [0])[0]
 
-                                        # Symbol hygiene: ensure symbols are TRIM/UPPER
-                                        cur.execute(
-                                            """
-                                            SELECT COUNT(*)
-                                            FROM earnings_calendar
-                                            WHERE symbol IS NULL
-                                               OR symbol <> UPPER(TRIM(symbol))
-                                               OR symbol = '';
-                                            """
-                                        )
-                                        bad_symbol_count = (cur.fetchone() or [0])[0]
+                                            # Symbol hygiene: ensure symbols are TRIM/UPPER
+                                            cur.execute(
+                                                """
+                                                SELECT COUNT(*)
+                                                FROM earnings_calendar
+                                                WHERE symbol IS NULL
+                                                   OR symbol <> UPPER(TRIM(symbol))
+                                                   OR symbol = '';
+                                                """
+                                            )
+                                            bad_symbol_count = (cur.fetchone() or [0])[0]
 
-                                        # Optional: auto-fix normalization issues
-                                        if bad_symbol_count and int(bad_symbol_count) > 0:
-                                            try:
-                                                from db.earnings import ensure_earnings_table  # type: ignore
-                                                ensure_earnings_table(conn)
-                                                issues.append(
-                                                    f"Found {bad_symbol_count} non-normalized symbols; ran normalization UPDATE."
-                                                )
-                                            except Exception:
-                                                issues.append(
-                                                    f"Found {bad_symbol_count} non-normalized symbols; normalization function unavailable."
-                                                )
+                                    # Optional: auto-fix normalization issues (run outside the cursor context)
+                                    if bad_symbol_count and int(bad_symbol_count) > 0:
+                                        try:
+                                            from db.earnings import ensure_earnings_table  # type: ignore
+                                            ensure_earnings_table(conn)
+                                            issues.append(
+                                                f"Found {bad_symbol_count} non-normalized symbols; ran normalization UPDATE."
+                                            )
+                                        except Exception:
+                                            issues.append(
+                                                f"Found {bad_symbol_count} non-normalized symbols; normalization function unavailable."
+                                            )
                                 except Exception as e:
                                     issues.append(f"Earnings table checks failed: {type(e).__name__}: {e}")
 
                                 try:
-                                    conn.close()
+                                    if conn is not None:
+                                        conn.close()
                                 except Exception:
                                     pass
 
