@@ -1314,54 +1314,39 @@ def render_scan_controls(
                     )
 
                     # Earnings refresh (best-effort): once per UTC day per universe label
-                    # IMPORTANT: do NOT time-gate this (it caused empty tables when scans run after noon UTC).
+                    # IMPORTANT: earnings must NEVER block scans or basic-tier users.
                     try:
                         from datetime import datetime, timezone
-                        # Prefer local module import; fall back to db.* for older layouts
-                        try:
-                            from earnings import (
-                                populate_earnings_calendar,
-                                should_refresh_earnings_today,
-                                mark_earnings_refreshed_today,
-                            )
-                        except Exception:
-                            from db.earnings import (  # type: ignore
-                                populate_earnings_calendar,
-                                should_refresh_earnings_today,
-                                mark_earnings_refreshed_today,
-                            )
 
-                        now_utc = datetime.now(timezone.utc)
-                        refresh_key = f"earnings:{label}"  # once/day per scan label (SP500/NASDAQ/Combo/Watchlist)
+                        tier = (st.session_state.get("tier") or "").strip().lower()
+                        is_admin = bool(st.session_state.get("is_admin", False))
+                        earn_enabled = bool(st.session_state.get("enable_earnings_enrichment", False))
 
-                        if should_refresh_earnings_today(refresh_key):
-                            ok = False
-                            err = None
+                        # Only Pro/Premium/Admin AND explicitly enabled
+                        if is_admin or (tier in ("pro", "premium") and earn_enabled):
                             try:
-                                populate_earnings_calendar(tickers)
-                                mark_earnings_refreshed_today(refresh_key)
-                                ok = True
-                            except Exception as e:
-                                err = str(e)
-
-                            try:
-                                st.caption(
-                                    f"📅 Earnings refresh {'ran' if ok else 'failed'} for {len(tickers)} symbols "
-                                    f"(utc_date={now_utc.date()})"
-                                    + (f" — {err}" if err else "")
+                                from earnings import (
+                                    populate_earnings_calendar,
+                                    should_refresh_earnings_today,
+                                    mark_earnings_refreshed_today,
                                 )
                             except Exception:
-                                pass
-                        else:
-                            try:
-                                st.caption(
-                                    f"📅 Earnings refresh skipped (already refreshed today) "
-                                    f"(utc_date={now_utc.date()})"
+                                from db.earnings import (  # type: ignore
+                                    populate_earnings_calendar,
+                                    should_refresh_earnings_today,
+                                    mark_earnings_refreshed_today,
                                 )
-                            except Exception:
-                                pass
+
+                            now_utc = datetime.now(timezone.utc)
+                            refresh_key = f"earnings:{label}"
+
+                            if should_refresh_earnings_today(refresh_key):
+                                try:
+                                    populate_earnings_calendar(tickers)
+                                    mark_earnings_refreshed_today(refresh_key)
+                                except Exception:
+                                    pass
                     except Exception:
-                        # Earnings refresh is best-effort only
                         pass
 
                     # Daily snapshot (keep existing rule if you want snapshots only before noon UTC)
