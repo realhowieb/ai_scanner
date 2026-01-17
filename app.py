@@ -2165,56 +2165,87 @@ def main():
                 with c2:
                     if st.button("📅 Refresh earnings now", key="admin_refresh_earnings", width="stretch"):
                         with st.spinner("Refreshing earnings calendar (admin)…"):
+                            conn = None
+                            refreshed = 0
                             try:
+                                # Fetch upstream earnings first (so DB issues don't hide upstream issues)
+                                earnings_list = []
+                                try:
+                                    earnings_list = fetch_earnings_this_week() or []
+                                except Exception:
+                                    earnings_list = []
+
+                                if not earnings_list:
+                                    st.info(
+                                        "Earnings refresh completed, but the upstream source returned 0 items. "
+                                        "(This can happen on weekends/holidays or if the provider is unavailable.)"
+                                    )
+                                    # Still clear caches so the UI is consistent.
+                                    st.session_state.pop("earnings_enriched_df", None)
+                                    st.session_state.pop("earnings_enriched_signature", None)
+                                    st.session_state.pop("earnings_enrichment_rerun_sig", None)
+                                    st.stop()
+
+                                # Open DB connection (best-effort) and ensure table exists
                                 conn = _get_db_conn_for_app()
                                 try:
-                                    # Ensure table exists + normalize stored symbols
                                     from db.earnings import ensure_earnings_table  # type: ignore
                                     ensure_earnings_table(conn)
                                 except Exception:
                                     pass
 
-                                # Try to fetch + upsert earnings for the current week
-                                refreshed = 0
+                                # Upsert earnings rows (support multiple function signatures)
                                 try:
-                                    from db.earnings import populate_earnings_calendar  # type: ignore
+                                    import db.earnings as _earn_mod  # type: ignore
+                                    populate = getattr(_earn_mod, "populate_earnings_calendar", None)
+                                    if not callable(populate):
+                                        raise TypeError("populate_earnings_calendar is not callable")
 
-                                    # Prefer the shared fetch helper (ui/earnings or legacy earnings)
-                                    earnings_list = []
+                                    # Preferred signature: (conn, earnings_list)
                                     try:
-                                        earnings_list = fetch_earnings_this_week() or []
-                                    except Exception:
-                                        earnings_list = []
+                                        populate(conn, earnings_list)
+                                    except TypeError:
+                                        # Alternate signature: (earnings_list)
+                                        try:
+                                            populate(earnings_list)
+                                        except TypeError:
+                                            # Keyword fallbacks (covers different param names)
+                                            try:
+                                                populate(conn=conn, earnings_info_list=earnings_list)
+                                            except TypeError:
+                                                populate(conn=conn, earnings_list=earnings_list)
 
-                                    if earnings_list:
-                                        populate_earnings_calendar(conn, earnings_list)
-                                        refreshed = len(earnings_list)
+                                    refreshed = len(earnings_list)
                                 except Exception as e:
-                                    st.warning(f"Earnings refresh ran, but upsert failed: {type(e).__name__}: {e}")
-
-                                try:
-                                    conn.close()
-                                except Exception:
-                                    pass
+                                    st.warning(
+                                        f"Earnings refresh ran, but upsert failed: {type(e).__name__}: {e}"
+                                    )
 
                                 if refreshed > 0:
-                                    st.success(f"✅ Earnings refreshed: upserted {refreshed} symbols.")
+                                    st.success(f"✅ Earnings refreshed: upsert attempted for {refreshed} symbols.")
                                 else:
                                     st.info(
                                         "Earnings refresh completed, but no rows were upserted. "
-                                        "(This can happen if the upstream source returned 0 items or the helper is unavailable.)"
+                                        "(This can happen if the DB helper is unavailable or rejected all symbols.)"
                                     )
 
                                 # Clear any cached earnings enrichment so results can pick up updates
                                 st.session_state.pop("earnings_enriched_df", None)
                                 st.session_state.pop("earnings_enriched_signature", None)
                                 st.session_state.pop("earnings_enrichment_rerun_sig", None)
+
                             except Exception as e:
                                 st.error("❌ Earnings refresh failed.")
                                 try:
                                     st.exception(e)
                                 except Exception:
                                     st.caption(f"{type(e).__name__}: {e}")
+                            finally:
+                                try:
+                                    if conn is not None:
+                                        conn.close()
+                                except Exception:
+                                    pass
 
                 # 3) DB integrity / earnings sanity checks
                 with c3:
