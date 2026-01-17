@@ -1616,24 +1616,27 @@ def main():
     st.session_state["active_watchlist_tickers"] = watch_tickers
 
     # -------- Earnings this week --------
-    with st.expander("📅 Earnings this week", expanded=False):
-        can_earn = bool(flags.get("can_earnings"))
-        earn_enabled = bool(st.session_state.get("enable_earnings_enrichment", False))
-        is_admin = bool(st.session_state.get("is_admin", False))
+    # Pro+ only: Basic users should not see the Earnings panel at all.
+    if bool(flags.get("can_earnings")):
+        with st.expander("📅 Earnings this week", expanded=False):
+            can_earn = bool(flags.get("can_earnings"))
+            earn_enabled = bool(st.session_state.get("enable_earnings_enrichment", False))
+            is_admin = bool(st.session_state.get("is_admin", False))
 
-        # Hard safety: never allow refresh loops from this panel.
-        # Any refresh must be an explicit admin-only action inside the earnings module.
-        st.session_state["enable_earnings_refresh"] = False
+            # Hard safety: never allow refresh loops from this panel.
+            # Any refresh must be an explicit admin-only action inside the earnings module.
+            st.session_state["enable_earnings_refresh"] = False
 
-        if not can_earn:
-            st.info("🔒 Earnings is a Pro feature.")
-        elif not earn_enabled and not is_admin:
-            st.caption(
-                "Earnings enrichment is OFF. Enable it in the sidebar to load earnings data."
-            )
-        else:
-            # Only call the earnings UI when allowed; prevents any earnings work when OFF.
-            render_earnings_this_week_panel(can_earnings=True)
+            if not can_earn:
+                # Should never happen because the expander is gated, but keep for safety.
+                st.info("🔒 Earnings is a Pro feature.")
+            elif not earn_enabled and not is_admin:
+                st.caption(
+                    "Earnings enrichment is OFF. Enable it in the sidebar to load earnings data."
+                )
+            else:
+                # Only call the earnings UI when allowed; prevents any earnings work when OFF.
+                render_earnings_this_week_panel(can_earnings=True)
 
     # -------- Optional: Earnings enrichment toggle (MUST be BEFORE scans) --------
     # Earnings is a Pro+ feature. Basic should not see the toggle or run enrichment.
