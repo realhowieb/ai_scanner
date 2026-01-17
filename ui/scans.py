@@ -166,9 +166,8 @@ def run_scan_engine(
     _mx_nq = int(st.session_state.get("max_nasdaq_scan", 2000))
     _mx_cb = int(st.session_state.get("max_combo_scan", 4000))
     _mx_nq, _mx_cb, top_n = _admin_override_caps(_mx_nq, _mx_cb, top_n)
-    st.session_state["max_nasdaq_scan"] = _mx_nq
-    st.session_state["max_combo_scan"] = _mx_cb
-    st.session_state["top_n"] = top_n
+    # IMPORTANT: do not write back to st.session_state keys that may be bound to widgets
+    # (Streamlit raises if we mutate a widget-bound key after instantiation).
 
     # Profile-based defaults
     if profile == "aggressive":
@@ -1151,36 +1150,6 @@ def render_scan_controls(
         st.session_state["combo_capped"] = combo_capped
 
         return combo_capped
-
-    # --- NASDAQ and Combo universe cap controls ---
-    # These should appear before the scan buttons, but after admin caption.
-    # (If these are rendered elsewhere, move the logic accordingly.)
-    # NASDAQ cap input
-    max_nasdaq_upper = 20000 if is_admin else 6000
-    max_nasdaq_scan = st.number_input(
-        "Max NASDAQ tickers to scan",
-        min_value=100,
-        max_value=max_nasdaq_upper,
-        value=int(st.session_state.get("max_nasdaq_scan", 1200)),
-        key="max_nasdaq_scan_ui",
-    )
-    st.session_state["max_nasdaq_scan"] = int(st.session_state["max_nasdaq_scan_ui"])
-    # Only show plan cap caption if NOT admin
-    if not is_admin:
-        st.caption("Your plan caps NASDAQ scans at 6,000 tickers (Pro/Premium).")
-
-    # Combo cap input
-    max_combo_upper = 30000 if is_admin else 8000
-    max_combo_scan = st.number_input(
-        "Max Combo tickers to scan",
-        min_value=100,
-        max_value=max_combo_upper,
-        value=int(st.session_state.get("max_combo_scan", 1000)),
-        key="max_combo_scan_ui",
-    )
-    st.session_state["max_combo_scan"] = int(st.session_state["max_combo_scan_ui"])
-    if not is_admin:
-        st.caption("Your plan caps Combo scans at 8,000 tickers (Pro/Premium).")
 
     # --- Post-filter helpers for strategy scans (operate on breakout results) ---
     def _pf_gap_up(df: pd.DataFrame) -> pd.DataFrame:
