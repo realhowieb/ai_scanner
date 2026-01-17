@@ -1578,6 +1578,19 @@ def main():
         diagnostics=bool(diagnostics) if diagnostics is not None else None,
     )
 
+    # -------- Admin: allow larger scans / full universe --------
+    # Keep this override in app.py so admin can test at scale even if UI defaults are capped.
+    if bool(st.session_state.get("is_admin")):
+        # Use very large caps instead of None so downstream scan code that expects ints doesn't break.
+        # (We can later switch to None-unlimited once ui/scans.py fully supports it.)
+        _ADMIN_SCAN_CAP = 100_000
+        _ADMIN_TOP_N = 10_000
+        try:
+            max_nasdaq_scan = _ADMIN_SCAN_CAP
+            max_combo_scan = _ADMIN_SCAN_CAP
+            top_n = _ADMIN_TOP_N
+        except Exception:
+            pass
 
     # -------- Market Snapshot (moved back up near the top) --------
     # Render early so it appears above scans/results like before.
@@ -1694,13 +1707,13 @@ def main():
     render_scan_controls(
         can_scan_sp500=flags["can_scan_sp500"],
         can_scan_nasdaq=flags["can_scan_nasdaq"],
-        max_nasdaq_scan=int(max_nasdaq_scan),
-        max_combo_scan=int(max_combo_scan),
+        max_nasdaq_scan=int(max_nasdaq_scan) if max_nasdaq_scan is not None else 0,
+        max_combo_scan=int(max_combo_scan) if max_combo_scan is not None else 0,
         min_gap=float(min_gap),
         apply_gap_filter=bool(apply_gap_filter),
         min_price=float(min_price),
         max_price=float(max_price),
-        top_n=int(top_n),
+        top_n=int(top_n) if top_n is not None else 0,
         premarket=bool(premarket),
         afterhours=bool(afterhours),
         unusual_vol=bool(unusual_vol),

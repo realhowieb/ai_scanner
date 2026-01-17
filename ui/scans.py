@@ -20,6 +20,24 @@ from scan.engine import safe_call, run_breakout_scan
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
 
+# --- Admin helpers for scan caps ---
+def _is_admin() -> bool:
+    return bool(st.session_state.get("is_admin"))
+
+
+def _admin_override_caps(max_nasdaq_scan: int, max_combo_scan: int, top_n: int) -> tuple[int, int, int]:
+    """Admin can scan bigger universes. Keep defaults for non-admin."""
+    if not _is_admin():
+        return max_nasdaq_scan, max_combo_scan, top_n
+
+    # Allow "full universe" style scans in admin without touching tier caps.
+    # These values are intentionally high but still bounded.
+    max_nasdaq_scan = max(int(max_nasdaq_scan), 100_000)
+    max_combo_scan = max(int(max_combo_scan), 150_000)
+    top_n = max(int(top_n), 10_000)
+    return max_nasdaq_scan, max_combo_scan, top_n
+
+
 # Universe loaders (imported here so this module is self-contained)
 try:
     from ui.universe import (
@@ -103,6 +121,9 @@ def run_scan_engine(
             st.session_state["nasdaq_universe"] = nasdaq
         if not nasdaq_capped:
             max_nasdaq_scan = int(st.session_state.get("max_nasdaq_scan", 2000))
+            # Admin can scan more (or all) tickers
+            if _is_admin():
+                max_nasdaq_scan = max(max_nasdaq_scan, len(nasdaq or []))
             nasdaq_capped = (nasdaq or [])[:max_nasdaq_scan]
             st.session_state["nasdaq_capped"] = nasdaq_capped
         return nasdaq_capped or []
@@ -115,6 +136,9 @@ def run_scan_engine(
         base_nq = _ensure_nasdaq()
         max_combo_scan = int(st.session_state.get("max_combo_scan", 4000))
         universe = (base_sp or []) + (base_nq or [])
+        # Admin can scan more (or all) combined tickers
+        if _is_admin():
+            max_combo_scan = max(max_combo_scan, len(universe))
         combo_capped_local = universe[:max_combo_scan]
         st.session_state["combo_capped"] = combo_capped_local
         combo_capped = combo_capped_local
@@ -137,6 +161,14 @@ def run_scan_engine(
     top_n = int(st.session_state.get("top_n", 150))
     premarket = bool(st.session_state.get("premarket", False))
     afterhours = bool(st.session_state.get("afterhours", False))
+
+    # Admin override: allow larger scans/results when requested
+    _mx_nq = int(st.session_state.get("max_nasdaq_scan", 2000))
+    _mx_cb = int(st.session_state.get("max_combo_scan", 4000))
+    _mx_nq, _mx_cb, top_n = _admin_override_caps(_mx_nq, _mx_cb, top_n)
+    st.session_state["max_nasdaq_scan"] = _mx_nq
+    st.session_state["max_combo_scan"] = _mx_cb
+    st.session_state["top_n"] = top_n
 
     # Profile-based defaults
     if profile == "aggressive":
@@ -883,6 +915,11 @@ def render_scan_controls(
     and also updates the universe-related keys used elsewhere in the app.
     """
 
+    # Admin override: allow larger universe caps + result caps inside this module
+    max_nasdaq_scan, max_combo_scan, top_n = _admin_override_caps(
+        int(max_nasdaq_scan), int(max_combo_scan), int(top_n)
+    )
+
     # Scan profile selector (Regular / Aggressive / Conservative)
     profile_label = st.radio(
         "Scan profile",
@@ -1070,7 +1107,11 @@ def render_scan_controls(
         nasdaq = safe_call(load_nasdaq_universe, label=f"NASDAQ universe ({universe_label})")
         sp500 = filter_universe(sp500)
         nasdaq = filter_universe(nasdaq)
-        nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
+        # Admin can scan more (or all) tickers
+        if _is_admin():
+            nasdaq_capped = nasdaq
+        else:
+            nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
         combo_universe = sp500 + nasdaq_capped
 
         # Liquidity filter: reuse the same min_price / min_dollar_vol logic as main Combo
@@ -1385,7 +1426,8 @@ def render_scan_controls(
     if run_nasdaq_btn:
         nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
         nasdaq = filter_universe(nasdaq)
-        nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
+        # Admin can scan more (or all) tickers
+        nasdaq_capped = nasdaq if _is_admin() else nasdaq[: int(max_nasdaq_scan)]
         st.session_state["nasdaq_universe"] = nasdaq
         st.session_state["nasdaq_capped"] = nasdaq_capped
         do_scan(nasdaq_capped, "NASDAQ")
