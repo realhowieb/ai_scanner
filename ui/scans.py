@@ -1162,8 +1162,9 @@ def render_scan_controls(
         min_value=100,
         max_value=max_nasdaq_upper,
         value=int(st.session_state.get("max_nasdaq_scan", 1200)),
-        key="max_nasdaq_scan",
+        key="max_nasdaq_scan_ui",
     )
+    st.session_state["max_nasdaq_scan"] = int(st.session_state["max_nasdaq_scan_ui"])
     # Only show plan cap caption if NOT admin
     if not is_admin:
         st.caption("Your plan caps NASDAQ scans at 6,000 tickers (Pro/Premium).")
@@ -1175,8 +1176,9 @@ def render_scan_controls(
         min_value=100,
         max_value=max_combo_upper,
         value=int(st.session_state.get("max_combo_scan", 1000)),
-        key="max_combo_scan",
+        key="max_combo_scan_ui",
     )
+    st.session_state["max_combo_scan"] = int(st.session_state["max_combo_scan_ui"])
     if not is_admin:
         st.caption("Your plan caps Combo scans at 8,000 tickers (Pro/Premium).")
 
