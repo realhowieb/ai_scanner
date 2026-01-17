@@ -1313,42 +1313,6 @@ def render_scan_controls(
                         is_snapshot=False,
                     )
 
-                    # Earnings refresh (best-effort): once per UTC day per universe label
-                    # IMPORTANT: earnings must NEVER block scans or basic-tier users.
-                    try:
-                        from datetime import datetime, timezone
-
-                        tier = (st.session_state.get("tier") or "").strip().lower()
-                        is_admin = bool(st.session_state.get("is_admin", False))
-                        earn_enabled = bool(st.session_state.get("enable_earnings_enrichment", False))
-
-                        # Only Pro/Premium/Admin AND explicitly enabled
-                        if is_admin or (tier in ("pro", "premium") and earn_enabled):
-                            try:
-                                from earnings import (
-                                    populate_earnings_calendar,
-                                    should_refresh_earnings_today,
-                                    mark_earnings_refreshed_today,
-                                )
-                            except Exception:
-                                from db.earnings import (  # type: ignore
-                                    populate_earnings_calendar,
-                                    should_refresh_earnings_today,
-                                    mark_earnings_refreshed_today,
-                                )
-
-                            now_utc = datetime.now(timezone.utc)
-                            refresh_key = f"earnings:{label}"
-
-                            if should_refresh_earnings_today(refresh_key):
-                                try:
-                                    populate_earnings_calendar(tickers)
-                                    mark_earnings_refreshed_today(refresh_key)
-                                except Exception:
-                                    pass
-                    except Exception:
-                        pass
-
                     # Daily snapshot (keep existing rule if you want snapshots only before noon UTC)
                     # NOTE: snapshot timing is unrelated to earnings refresh.
                     try:
