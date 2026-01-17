@@ -1100,6 +1100,13 @@ def render_scan_controls(
     if "results_df" not in st.session_state:
         st.session_state.results_df = pd.DataFrame()
 
+    # --- Admin role check and universe cap overrides ---
+    is_admin = bool(st.session_state.get("is_admin", False))
+
+    # Admin is a ROLE, not a tier. Admins bypass plan caps in UI + scan limits.
+    if is_admin:
+        st.caption("🛠️ Admin override: universe caps are disabled.")
+
     # --- Helper to build a combo (SP500 + NASDAQ) capped universe with liquidity filter ---
     def _build_combo_capped(universe_label: str) -> List[str]:
         """Build a Combo universe (SP500 + capped NASDAQ) with a liquidity filter applied."""
@@ -1144,6 +1151,34 @@ def render_scan_controls(
         st.session_state["combo_capped"] = combo_capped
 
         return combo_capped
+
+    # --- NASDAQ and Combo universe cap controls ---
+    # These should appear before the scan buttons, but after admin caption.
+    # (If these are rendered elsewhere, move the logic accordingly.)
+    # NASDAQ cap input
+    max_nasdaq_upper = 20000 if is_admin else 6000
+    max_nasdaq_scan = st.number_input(
+        "Max NASDAQ tickers to scan",
+        min_value=100,
+        max_value=max_nasdaq_upper,
+        value=int(st.session_state.get("max_nasdaq_scan", 1200)),
+        key="max_nasdaq_scan",
+    )
+    # Only show plan cap caption if NOT admin
+    if not is_admin:
+        st.caption("Your plan caps NASDAQ scans at 6,000 tickers (Pro/Premium).")
+
+    # Combo cap input
+    max_combo_upper = 30000 if is_admin else 8000
+    max_combo_scan = st.number_input(
+        "Max Combo tickers to scan",
+        min_value=100,
+        max_value=max_combo_upper,
+        value=int(st.session_state.get("max_combo_scan", 1000)),
+        key="max_combo_scan",
+    )
+    if not is_admin:
+        st.caption("Your plan caps Combo scans at 8,000 tickers (Pro/Premium).")
 
     # --- Post-filter helpers for strategy scans (operate on breakout results) ---
     def _pf_gap_up(df: pd.DataFrame) -> pd.DataFrame:
