@@ -2122,6 +2122,8 @@ def main():
     if tab_admin is not None:
         with tab_admin:
             st.markdown("## 🛠 Admin Panel")
+
+            # Admin-only tools should never crash the app; wrap everything defensively.
             try:
                 render_admin_users_panel(
                     username=username,
@@ -2134,6 +2136,178 @@ def main():
                     st.exception(e)
                 except Exception:
                     st.caption(f"{type(e).__name__}: {e}")
+
+            st.markdown("---")
+            st.markdown("### 🧰 Admin Tools")
+
+            # Hard gate: only admins can execute these actions
+            if not bool(st.session_state.get("is_admin")):
+                st.info("🔒 Admin tools are only available to admin users.")
+            else:
+                c1, c2, c3 = st.columns(3)
+
+                # 1) Force tier resync (session-level)
+                with c1:
+                    if st.button("🔄 Force tier resync", key="admin_force_tier_resync", width="stretch"):
+                        # Clear tier/entitlements caches so gating recomputes immediately.
+                        for k in (
+                            "entitlements",
+                            "tier",
+                            "tier_key",
+                            "profile_loaded_for_user",
+                            "pricing_focus",
+                        ):
+                            st.session_state.pop(k, None)
+                        st.success("Tier resync requested (session caches cleared). Reloading…")
+                        st.rerun()
+
+                # 2) Admin-only earnings refresh (explicit action)
+                with c2:
+                    if st.button("📅 Refresh earnings now", key="admin_refresh_earnings", width="stretch"):
+                        with st.spinner("Refreshing earnings calendar (admin)…"):
+                            try:
+                                conn = _get_db_conn_for_app()
+                                try:
+                                    # Ensure table exists + normalize stored symbols
+                                    from db.earnings import ensure_earnings_table  # type: ignore
+                                    ensure_earnings_table(conn)
+                                except Exception:
+                                    pass
+
+                                # Try to fetch + upsert earnings for the current week
+                                refreshed = 0
+                                try:
+                                    from db.earnings import populate_earnings_calendar  # type: ignore
+
+                                    # Prefer the shared fetch helper (ui/earnings or legacy earnings)
+                                    earnings_list = []
+                                    try:
+                                        earnings_list = fetch_earnings_this_week() or []
+                                    except Exception:
+                                        earnings_list = []
+
+                                    if earnings_list:
+                                        populate_earnings_calendar(conn, earnings_list)
+                                        refreshed = len(earnings_list)
+                                except Exception as e:
+                                    st.warning(f"Earnings refresh ran, but upsert failed: {type(e).__name__}: {e}")
+
+                                try:
+                                    conn.close()
+                                except Exception:
+                                    pass
+
+                                if refreshed > 0:
+                                    st.success(f"✅ Earnings refreshed: upserted {refreshed} symbols.")
+                                else:
+                                    st.info(
+                                        "Earnings refresh completed, but no rows were upserted. "
+                                        "(This can happen if the upstream source returned 0 items or the helper is unavailable.)"
+                                    )
+
+                                # Clear any cached earnings enrichment so results can pick up updates
+                                st.session_state.pop("earnings_enriched_df", None)
+                                st.session_state.pop("earnings_enriched_signature", None)
+                                st.session_state.pop("earnings_enrichment_rerun_sig", None)
+                            except Exception as e:
+                                st.error("❌ Earnings refresh failed.")
+                                try:
+                                    st.exception(e)
+                                except Exception:
+                                    st.caption(f"{type(e).__name__}: {e}")
+
+                # 3) DB integrity / earnings sanity checks
+                with c3:
+                    if st.button("🧪 DB integrity checks", key="admin_db_integrity", width="stretch"):
+                        with st.spinner("Running DB checks…"):
+                            try:
+                                conn = _get_db_conn_for_app()
+                                issues: list[str] = []
+
+                                # Basic connectivity
+                                try:
+                                    with conn.cursor() as cur:
+                                        cur.execute("SELECT 1;")
+                                        _ = cur.fetchone()
+                                except Exception as e:
+                                    issues.append(f"DB connectivity failed: {type(e).__name__}: {e}")
+
+                                # Earnings table existence + counts
+                                earnings_count = None
+                                bad_symbol_count = None
+                                try:
+                                    with conn.cursor() as cur:
+                                        cur.execute(
+                                            """
+                                            SELECT COUNT(*)
+                                            FROM information_schema.tables
+                                            WHERE table_name = 'earnings_calendar';
+                                            """
+                                        )
+                                        exists = (cur.fetchone() or [0])[0]
+                                    if not exists:
+                                        issues.append("earnings_calendar table is missing.")
+                                    else:
+                                        with conn.cursor() as cur:
+                                            cur.execute("SELECT COUNT(*) FROM earnings_calendar;")
+                                            earnings_count = (cur.fetchone() or [0])[0]
+
+                                        # Symbol hygiene: ensure symbols are TRIM/UPPER
+                                        cur.execute(
+                                            """
+                                            SELECT COUNT(*)
+                                            FROM earnings_calendar
+                                            WHERE symbol IS NULL
+                                               OR symbol <> UPPER(TRIM(symbol))
+                                               OR symbol = '';
+                                            """
+                                        )
+                                        bad_symbol_count = (cur.fetchone() or [0])[0]
+
+                                        # Optional: auto-fix normalization issues
+                                        if bad_symbol_count and int(bad_symbol_count) > 0:
+                                            try:
+                                                from db.earnings import ensure_earnings_table  # type: ignore
+                                                ensure_earnings_table(conn)
+                                                issues.append(
+                                                    f"Found {bad_symbol_count} non-normalized symbols; ran normalization UPDATE."
+                                                )
+                                            except Exception:
+                                                issues.append(
+                                                    f"Found {bad_symbol_count} non-normalized symbols; normalization function unavailable."
+                                                )
+                                except Exception as e:
+                                    issues.append(f"Earnings table checks failed: {type(e).__name__}: {e}")
+
+                                try:
+                                    conn.close()
+                                except Exception:
+                                    pass
+
+                                # Render report
+                                st.markdown("#### ✅ DB Check Report")
+                                if earnings_count is not None:
+                                    st.write(f"Earnings rows: **{int(earnings_count)}**")
+                                if bad_symbol_count is not None:
+                                    st.write(f"Symbol hygiene issues: **{int(bad_symbol_count)}**")
+
+                                if issues:
+                                    st.warning("Issues / notes:")
+                                    for msg in issues:
+                                        st.write(f"- {msg}")
+                                else:
+                                    st.success("All checks passed.")
+
+                            except Exception as e:
+                                st.error("❌ DB checks failed.")
+                                try:
+                                    st.exception(e)
+                                except Exception:
+                                    st.caption(f"{type(e).__name__}: {e}")
+
+            st.caption(
+                "Tip: Earnings refresh is intentionally admin-only and never runs automatically during scans."
+            )
 
 # ============================================================
 #                     APP ENTRYPOINT
