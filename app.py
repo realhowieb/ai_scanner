@@ -2123,7 +2123,11 @@ def main():
         with tab_admin:
             st.markdown("## 🛠 Admin Panel")
             try:
-                render_admin_users_panel()
+                render_admin_users_panel(
+                    username=username,
+                    ADMIN_USERS=ADMIN_USERS,
+                    db_status=db_status,
+                )
             except Exception as e:
                 st.error("Admin panel failed to render.")
                 try:
