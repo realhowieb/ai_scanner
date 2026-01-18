@@ -25,11 +25,26 @@ import re
 
 _BAD_SYMBOL_RE = re.compile(r"\s+")
 
+# Accept common Yahoo-style symbols:
+# - letters/numbers
+# - dot for class shares (BRK.B)
+# - dash for class shares / tickers (BRK-B)
+_VALID_SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]*$")
+
+# Common SPAC/unit/warrant/right suffixes that often appear in raw lists but
+# frequently fail on Yahoo Finance / yfinance.
+_DROP_SUFFIXES = (
+    "-U", "-W", "-WS", "-WT", "-R", "-RT", "-CV", "-CL",
+)
+
 def sanitize_universe_symbols(symbols: List[str]) -> List[str]:
     """Normalize and filter symbols so yfinance doesn't spam logs.
 
-    Drops symbols with '$' (preferred/warrant encodings from some lists) and whitespace,
-    uppercases/strips, and de-dupes while preserving order.
+    - Uppercases/strips
+    - Drops symbols with '$' or whitespace
+    - Drops common unit/warrant/right suffixes (e.g. AAM-U, ACHR-W)
+    - Drops anything not matching a conservative Yahoo symbol regex
+    - De-dupes while preserving order
     """
     out: List[str] = []
     seen = set()
@@ -37,9 +52,16 @@ def sanitize_universe_symbols(symbols: List[str]) -> List[str]:
         sym = str(s or "").strip().upper()
         if not sym:
             continue
+        # Raw lists sometimes include $PREF$A or leading '$' encodings
         if "$" in sym:
             continue
         if _BAD_SYMBOL_RE.search(sym):
+            continue
+        # Drop common SPAC encodings that yfinance frequently can't resolve
+        if sym.endswith(_DROP_SUFFIXES):
+            continue
+        # Conservative allow-list for symbols
+        if not _VALID_SYMBOL_RE.match(sym):
             continue
         if sym in seen:
             continue
@@ -1160,6 +1182,9 @@ def render_scan_controls(
             nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
         combo_universe = sp500 + nasdaq_capped
 
+        # Safety net: ensure combined universe is sanitized/deduped.
+        combo_universe = sanitize_universe_symbols(combo_universe)
+
         # Liquidity filter: reuse the same min_price / min_dollar_vol logic as main Combo
         min_dollar_vol = st.session_state.get("min_dollar_vol")
         if min_dollar_vol is None:
@@ -1254,6 +1279,8 @@ def render_scan_controls(
         profile_override: Optional[str] = None,
         post_filter: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None,
     ):
+        # Final safety net: regardless of caller, sanitize tickers before scanning.
+        tickers = sanitize_universe_symbols(tickers)
         def _run_scan_body():
             n_input = len(tickers)
             t0 = time.time()
