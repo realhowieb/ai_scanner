@@ -17,7 +17,35 @@ from auth.tiering import require_min_tier
 from db.runs import save_run, save_daily_snapshot, list_runs
 from ml_prebreakout import score_prebreakout
 from scan.engine import safe_call, run_breakout_scan
+
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
+
+# --- Symbol sanitation (avoid non-Yahoo encodings like $PREF$A, units/warrants, etc.) ---
+import re
+
+_BAD_SYMBOL_RE = re.compile(r"\s+")
+
+def sanitize_universe_symbols(symbols: List[str]) -> List[str]:
+    """Normalize and filter symbols so yfinance doesn't spam logs.
+
+    Drops symbols with '$' (preferred/warrant encodings from some lists) and whitespace,
+    uppercases/strips, and de-dupes while preserving order.
+    """
+    out: List[str] = []
+    seen = set()
+    for s in symbols or []:
+        sym = str(s or "").strip().upper()
+        if not sym:
+            continue
+        if "$" in sym:
+            continue
+        if _BAD_SYMBOL_RE.search(sym):
+            continue
+        if sym in seen:
+            continue
+        seen.add(sym)
+        out.append(sym)
+    return out
 
 
 # --- Admin helpers for scan caps ---
@@ -109,7 +137,7 @@ def run_scan_engine(
         nonlocal sp500
         if not sp500:
             base = safe_call(load_sp500_universe, label="SP500 universe (3-step)")
-            sp500 = filter_universe(base)
+            sp500 = sanitize_universe_symbols(filter_universe(base))
             st.session_state["sp500_universe"] = sp500
         return sp500 or []
 
@@ -117,7 +145,7 @@ def run_scan_engine(
         nonlocal nasdaq, nasdaq_capped
         if not nasdaq:
             base = safe_call(load_nasdaq_universe, label="NASDAQ universe (3-step)")
-            nasdaq = filter_universe(base)
+            nasdaq = sanitize_universe_symbols(filter_universe(base))
             st.session_state["nasdaq_universe"] = nasdaq
         if not nasdaq_capped:
             max_nasdaq_scan = int(st.session_state.get("max_nasdaq_scan", 2000))
@@ -919,6 +947,9 @@ def render_scan_controls(
         int(max_nasdaq_scan), int(max_combo_scan), int(top_n)
     )
 
+    # Admin is a ROLE, not a tier: bypass plan-based button disabling.
+    is_admin = _is_admin()
+
     # Scan profile selector (Regular / Aggressive / Conservative)
     profile_label = st.radio(
         "Scan profile",
@@ -939,20 +970,31 @@ def render_scan_controls(
     b1, b2, b3 = st.columns([1, 1, 2])
 
     with b1:
-        run_sp500_btn = st.button("Run SP500 Scan", width="stretch", disabled=not can_scan_sp500)
+        run_sp500_btn = st.button(
+            "Run SP500 Scan",
+            width="stretch",
+            disabled=(not can_scan_sp500 and not is_admin),
+        )
         st.caption("Runs SP500 regardless of sidebar universe.")
 
     with b2:
-        run_nasdaq_btn = st.button("Run NASDAQ Scan", width="stretch", disabled=not can_scan_nasdaq)
+        run_nasdaq_btn = st.button(
+            "Run NASDAQ Scan",
+            width="stretch",
+            disabled=(not can_scan_nasdaq and not is_admin),
+        )
         st.caption("Runs NASDAQ regardless of sidebar universe.")
 
     with b3:
         run_combo_btn = st.button(
             "Run Combo Scan (SP500+NASDAQ)",
             width="stretch",
-            disabled=not (can_scan_sp500 and can_scan_nasdaq),
+            disabled=(not (can_scan_sp500 and can_scan_nasdaq) and not is_admin),
         )
-        st.caption("Pro/Premium only.")
+        if is_admin:
+            st.caption("Runs Combo regardless of plan caps (admin override).")
+        else:
+            st.caption("Pro/Premium only.")
 
     # --- Earnings Calendar Debug (admin-only) ---
     # One-click test to verify Yahoo Finance -> DB writes without relying on scan timing or snapshot logic.
@@ -1100,8 +1142,6 @@ def render_scan_controls(
         st.session_state.results_df = pd.DataFrame()
 
     # --- Admin role check and universe cap overrides ---
-    is_admin = bool(st.session_state.get("is_admin", False))
-
     # Admin is a ROLE, not a tier. Admins bypass plan caps in UI + scan limits.
     if is_admin:
         st.caption("🛠️ Admin override: universe caps are disabled.")
@@ -1111,8 +1151,8 @@ def render_scan_controls(
         """Build a Combo universe (SP500 + capped NASDAQ) with a liquidity filter applied."""
         sp500 = safe_call(load_sp500_universe, label=f"SP500 universe ({universe_label})")
         nasdaq = safe_call(load_nasdaq_universe, label=f"NASDAQ universe ({universe_label})")
-        sp500 = filter_universe(sp500)
-        nasdaq = filter_universe(nasdaq)
+        sp500 = sanitize_universe_symbols(filter_universe(sp500))
+        nasdaq = sanitize_universe_symbols(filter_universe(nasdaq))
         # Admin can scan more (or all) tickers
         if _is_admin():
             nasdaq_capped = nasdaq
@@ -1425,13 +1465,13 @@ def render_scan_controls(
 
     if run_sp500_btn:
         sp500 = safe_call(load_sp500_universe, label="SP500 universe")
-        sp500 = filter_universe(sp500)
+        sp500 = sanitize_universe_symbols(filter_universe(sp500))
         st.session_state["sp500_universe"] = sp500
         do_scan(sp500, "SP500")
 
     if run_nasdaq_btn:
         nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
-        nasdaq = filter_universe(nasdaq)
+        nasdaq = sanitize_universe_symbols(filter_universe(nasdaq))
         # Admin can scan more (or all) tickers
         nasdaq_capped = nasdaq if _is_admin() else nasdaq[: int(max_nasdaq_scan)]
         st.session_state["nasdaq_universe"] = nasdaq
