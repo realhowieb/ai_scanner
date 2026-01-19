@@ -186,6 +186,13 @@ def run_breakout_scan(
     items = list(price_data.items())
     total = len(items)
 
+    # Kick off progress immediately so UI can show 1/N even before work starts
+    if progress_cb:
+        try:
+            progress_cb(0, total, "starting")
+        except Exception:
+            pass
+
     for i, (symbol, raw_df) in enumerate(items, start=1):
         attempted += 1
 
@@ -373,5 +380,12 @@ def run_breakout_scan(
     except Exception:
         # As a fallback, just limit the number of rows.
         df_out = df_out.head(top_n)
+
+    # Final safe progress call so UI can reliably flip to complete
+    if progress_cb:
+        try:
+            progress_cb(total, total, "done")
+        except Exception:
+            pass
 
     return df_out
