@@ -180,6 +180,9 @@ def run_breakout_scan(
     skipped_gap = 0
     skipped_invalid = 0
 
+    # Accumulate per-symbol result rows
+    rows: List[Dict[str, Any]] = []
+
     items = list(price_data.items())
     total = len(items)
 
