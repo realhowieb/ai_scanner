@@ -7,9 +7,23 @@ import time
 
 T = TypeVar("T")
 
-# --- Snapshot pricing support types ---
-SnapshotLoader = Callable[[str], Dict[str, pd.DataFrame]]
-SnapshotSaver = Callable[[str, Dict[str, pd.DataFrame]], None]
+def _is_admin_context() -> bool:
+    """Best-effort admin role check.
+
+    Admin is a role (not a tier). We use session_state flags when present.
+    This must be safe in non-Streamlit contexts.
+    """
+    try:
+        ss = getattr(st, "session_state", None)
+        if not ss:
+            return False
+        if bool(ss.get("is_admin", False)):
+            return True
+        # Common alternative keys
+        role = (ss.get("role") or ss.get("user_role") or ss.get("account_role") or "").strip().lower()
+        return role == "admin"
+    except Exception:
+        return False
 
 SCAN_PROFILES: dict[str, dict[str, float | bool]] = {
     "regular": {
@@ -221,23 +235,18 @@ def run_breakout_scan(
     tickers_plus_spy = sorted(set(list(tickers) + ["SPY"]))
 
     total_requested = len(tickers_plus_spy)
+
     # Large universes benefit from progress UI; small scans stay fast.
     show_progress = bool(st.session_state.get("show_scan_progress", True))
-    large_scan = total_requested >= 800
-
-    # Prefer the parallel fetcher for small scans; for large scans, do a
-    # chunked batch fetch so we can show real progress in the UI.
-    parallel_error = None
-    batch_error = None
 
     # ✅ ALWAYS initialize so later `if not price_data:` checks are safe.
     price_data: dict[str, pd.DataFrame] = {}
 
-    # --- Snapshot pricing (admin-only wiring happens in UI) ---
-    # If a snapshot loader is provided, prefer loading prices from the snapshot
-    # instead of fetching from Yahoo. This makes full-universe admin scans faster
-    # and more stable.
-    if snapshot_id and snapshot_loader:
+    # --- Snapshot pricing (admin only) ---
+    # Admin can load cached prices (DB snapshot) to speed up/stabilize full-universe scans.
+    # Non-admin users never load/save snapshots.
+    allow_snapshot = bool(snapshot_id) and _is_admin_context()
+    if allow_snapshot and snapshot_id and snapshot_loader:
         try:
             loaded = snapshot_loader(str(snapshot_id))
             if isinstance(loaded, dict) and loaded:
@@ -248,11 +257,29 @@ def run_breakout_scan(
                     except Exception:
                         pass
         except Exception:
-            # If snapshot load fails, fall back to normal fetching.
+            # Snapshot load must never break scans.
             price_data = {}
 
+    # Only fetch what we're missing (especially important for admin snapshot runs)
+    tickers_to_fetch = [t for t in tickers_plus_spy if t not in price_data]
+    fetch_total = len(tickers_to_fetch)
+    large_scan = fetch_total >= 800
+
+    if not tickers_to_fetch:
+        # All requested symbols were satisfied from the snapshot.
+        if diagnostics:
+            try:
+                st.caption("✅ All pricing satisfied from snapshot; no Yahoo fetch needed")
+            except Exception:
+                pass
+
+    # Prefer the parallel fetcher for small scans; for large scans, do a
+    # chunked batch fetch so we can show real progress in the UI.
+    parallel_error = None
+    batch_error = None
+
     if large_scan and show_progress:
-        tick, done = _make_progress_ui(total_requested, title="Fetching prices")
+        tick, done = _make_progress_ui(fetch_total, title="Fetching prices")
         try:
             from data.prices import fetch_price_data_batch  # type: ignore
 
@@ -262,8 +289,8 @@ def run_breakout_scan(
 
             tick(0, note=f"chunk_size={chunk_size}")
             processed = 0
-            for i in range(0, total_requested, chunk_size):
-                chunk = tickers_plus_spy[i : i + chunk_size]
+            for i in range(0, fetch_total, chunk_size):
+                chunk = tickers_to_fetch[i : i + chunk_size]
                 # Keep the inner call isolated so one bad chunk doesn't kill the whole run.
                 try:
                     chunk_data, _skipped = fetch_price_data_batch(chunk)
@@ -273,7 +300,7 @@ def run_breakout_scan(
                     # Swallow chunk failures; we still want the scan to proceed.
                     pass
 
-                processed = min(total_requested, i + len(chunk))
+                processed = min(fetch_total, i + len(chunk))
                 tick(processed)
 
             done(note=f"symbols_with_data={len(price_data)}")
@@ -295,14 +322,16 @@ def run_breakout_scan(
             price_data = {}
 
     # --- Fast path: parallel fetch for smaller scans ---
-    if not price_data:
+    if not price_data and tickers_to_fetch:
         try:
             from data.prices import fetch_price_data_parallel  # type: ignore
 
-            price_data, _skipped = fetch_price_data_parallel(
-                tickers_plus_spy,
+            price_data_new, _skipped = fetch_price_data_parallel(
+                tickers_to_fetch,
                 use_cache=use_cache,
             )
+            if price_data_new:
+                price_data.update(price_data_new)
             if not price_data:
                 raise RuntimeError("parallel price fetch returned no data")
         except Exception as e:
@@ -320,11 +349,13 @@ def run_breakout_scan(
             price_data = {}
 
     # --- Fallback: single-shot batch fetch ---
-    if not price_data:
+    if not price_data and tickers_to_fetch:
         try:
             from data.prices import fetch_price_data_batch  # type: ignore
 
-            price_data, _skipped = fetch_price_data_batch(tickers_plus_spy)
+            price_data_new, _skipped = fetch_price_data_batch(tickers_to_fetch)
+            if price_data_new:
+                price_data.update(price_data_new)
             if not price_data:
                 raise RuntimeError("batch price fetch returned no data")
         except Exception as e:
@@ -342,7 +373,7 @@ def run_breakout_scan(
             price_data = {}
 
     # If we fetched prices and a snapshot_saver is provided, persist the snapshot.
-    if snapshot_id and snapshot_saver and price_data:
+    if allow_snapshot and snapshot_id and snapshot_saver and price_data:
         try:
             snapshot_saver(str(snapshot_id), price_data)
             if diagnostics:
