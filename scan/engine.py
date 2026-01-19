@@ -5,7 +5,13 @@ import pandas as pd
 import streamlit as st
 import time
 
+
 T = TypeVar("T")
+
+# Optional snapshot hooks used by ui/scans.py.
+# We keep these as simple callables to avoid hard dependencies in the engine.
+SnapshotLoader = Callable[[str], Dict[str, pd.DataFrame]]
+SnapshotSaver = Callable[[str, Dict[str, pd.DataFrame]], None]
 
 def _is_admin_context() -> bool:
     """Best-effort admin role check.
@@ -237,7 +243,10 @@ def run_breakout_scan(
     total_requested = len(tickers_plus_spy)
 
     # Large universes benefit from progress UI; small scans stay fast.
-    show_progress = bool(st.session_state.get("show_scan_progress", True))
+    try:
+        show_progress = bool(st.session_state.get("show_scan_progress", True))
+    except Exception:
+        show_progress = True
 
     # ✅ ALWAYS initialize so later `if not price_data:` checks are safe.
     price_data: dict[str, pd.DataFrame] = {}
@@ -301,7 +310,7 @@ def run_breakout_scan(
                     pass
 
                 processed = min(fetch_total, i + len(chunk))
-                tick(processed)
+                tick(processed, note=f"{chunk[-1]}" if chunk else "")
 
             done(note=f"symbols_with_data={len(price_data)}")
 
