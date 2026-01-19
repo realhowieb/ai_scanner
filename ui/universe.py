@@ -335,13 +335,14 @@ def _fetch_wikipedia_table(url: str, col: str) -> List[str]:
 
 
 def _fetch_nasdaq_official_listings() -> List[str]:
-    """Fetch NASDAQ-listed tickers from NASDAQ Trader official symbol directory."""
+    """Fetch NASDAQ-listed tickers from NASDAQ Trader official symbol directory (nasdaqlisted.txt only)."""
     if requests is None:
         raise RuntimeError("requests not available")
 
+    # NASDAQ universe should be NASDAQ-listed only.
+    # Do NOT include otherlisted.txt here (NYSE/AMEX/etc + preferred/warrants/units -> yfinance spam/timeouts)
     urls = [
         "https://nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt",
-        "https://nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
     ]
 
     tickers: List[str] = []
