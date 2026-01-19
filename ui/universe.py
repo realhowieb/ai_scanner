@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+import datetime as _dt
 import time
-from typing import List
+from typing import List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -12,11 +13,12 @@ try:
 except Exception:
     requests = None
 
+# Liquidity filter (repo-local import first; packaged import fallback)
 try:
-    from ai_scanner.scan.liquidity import apply_liquidity_filter_batch as _core_liquidity_filter
+    from scan.liquidity import apply_liquidity_filter_batch as _core_liquidity_filter
 except Exception:
     try:
-        from scan.liquidity import apply_liquidity_filter_batch as _core_liquidity_filter
+        from ai_scanner.scan.liquidity import apply_liquidity_filter_batch as _core_liquidity_filter
     except Exception:
         _core_liquidity_filter = None  # type: ignore
 
@@ -28,6 +30,215 @@ def _try_import(path: str, attr: str | None = None):
         return getattr(mod, attr) if attr else mod
     except Exception:
         return None
+
+
+# ---------- Optional DB-backed universe cache ----------
+# These helpers are defensive: if DB isn't configured/available, we fall back to web/Wikipedia.
+
+def _get_db_conn():
+    """Return a live DB connection if available, otherwise None.
+
+    Tries common helpers used in this repo (db.engine / db.core). Works with psycopg.
+    """
+    # Preferred: db.engine.get_neon_conn / get_sqlite_conn
+    for mod_path in ("db.engine", "ai_scanner.db.engine", "db.core", "ai_scanner.db.core"):
+        mod = _try_import(mod_path)
+        if not mod:
+            continue
+        for fn_name in ("get_neon_conn", "get_sqlite_conn", "get_conn", "get_connection"):
+            fn = getattr(mod, fn_name, None)
+            if callable(fn):
+                try:
+                    conn = fn()
+                    if conn is not None:
+                        return conn
+                except Exception:
+                    continue
+    return None
+
+
+def _db_get_universe(
+    universe: str,
+    *,
+    max_age_hours: float = 24.0,
+) -> Tuple[Optional[List[str]], Optional[dict]]:
+    """Fetch universe from DB if refreshed recently.
+
+    Returns (tickers, meta). meta may include refreshed_utc_date, ticker_count, source.
+    """
+    conn = _get_db_conn()
+    if conn is None:
+        return None, None
+
+    try:
+        with conn.cursor() as cur:
+            # Check refresh metadata first
+            cur.execute(
+                """
+                SELECT universe, source, refreshed_utc_date, ticker_count, updated_at
+                FROM universe_refresh_log
+                WHERE universe = %s
+                """,
+                (universe,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None, None
+
+            _univ, source, refreshed_utc_date, ticker_count, updated_at = row
+            # Decide freshness
+            now_utc = _dt.datetime.now(_dt.timezone.utc)
+            if isinstance(updated_at, _dt.date) and not isinstance(updated_at, _dt.datetime):
+                # very defensive, shouldn't happen
+                updated_at_dt = _dt.datetime.combine(updated_at, _dt.time(0, 0), tzinfo=_dt.timezone.utc)
+            else:
+                updated_at_dt = updated_at
+                if updated_at_dt is not None and updated_at_dt.tzinfo is None:
+                    updated_at_dt = updated_at_dt.replace(tzinfo=_dt.timezone.utc)
+
+            if updated_at_dt is None:
+                return None, None
+
+            age_hours = (now_utc - updated_at_dt).total_seconds() / 3600.0
+            if age_hours > max_age_hours:
+                return None, None
+
+            # Load active tickers
+            cur.execute(
+                """
+                SELECT ticker
+                FROM universe_symbols
+                WHERE universe = %s AND is_active = TRUE
+                ORDER BY ticker
+                """,
+                (universe,),
+            )
+            tickers = [r[0] for r in cur.fetchall() if r and r[0]]
+
+        meta = {
+            "universe": universe,
+            "source": source,
+            "refreshed_utc_date": refreshed_utc_date,
+            "ticker_count": ticker_count,
+            "updated_at": updated_at_dt,
+        }
+        if tickers:
+            return tickers, meta
+        return None, meta
+    except Exception:
+        return None, None
+
+
+def _db_upsert_universe(
+    universe: str,
+    tickers: List[str],
+    *,
+    source: str,
+) -> bool:
+    """Upsert tickers + refresh metadata into DB. Returns True on success."""
+    conn = _get_db_conn()
+    if conn is None:
+        return False
+
+    # Normalize input
+    tickers = [t.strip().upper() for t in tickers if isinstance(t, str) and t.strip()]
+    # De-dupe while preserving order
+    seen = set()
+    deduped: List[str] = []
+    for t in tickers:
+        if t not in seen:
+            seen.add(t)
+            deduped.append(t)
+
+    try:
+        utc_date = _dt.datetime.now(_dt.timezone.utc).date()
+        with conn.cursor() as cur:
+            # Ensure tables exist (safe, idempotent)
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS universe_symbols (
+                  universe TEXT NOT NULL,
+                  ticker TEXT NOT NULL,
+                  raw_ticker TEXT,
+                  source TEXT NOT NULL DEFAULT 'nasdaqtrader',
+                  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                  PRIMARY KEY (universe, ticker)
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS universe_refresh_log (
+                  universe TEXT PRIMARY KEY,
+                  source TEXT NOT NULL,
+                  refreshed_utc_date DATE NOT NULL,
+                  ticker_count INT NOT NULL,
+                  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_universe_symbols_universe_active
+                ON universe_symbols(universe, is_active)
+                """
+            )
+
+            # Mark all existing symbols inactive first (we'll reactivate what we have)
+            cur.execute(
+                """
+                UPDATE universe_symbols
+                SET is_active = FALSE, updated_at = NOW()
+                WHERE universe = %s
+                """,
+                (universe,),
+            )
+
+            # Upsert all tickers as active
+            # Use executemany for performance.
+            rows = [(universe, t, t, source) for t in deduped]
+            cur.executemany(
+                """
+                INSERT INTO universe_symbols (universe, ticker, raw_ticker, source, is_active)
+                VALUES (%s, %s, %s, %s, TRUE)
+                ON CONFLICT (universe, ticker)
+                DO UPDATE SET
+                    is_active = TRUE,
+                    source = EXCLUDED.source,
+                    raw_ticker = EXCLUDED.raw_ticker,
+                    updated_at = NOW()
+                """,
+                rows,
+            )
+
+            cur.execute(
+                """
+                INSERT INTO universe_refresh_log (universe, source, refreshed_utc_date, ticker_count, updated_at)
+                VALUES (%s, %s, %s, %s, NOW())
+                ON CONFLICT (universe)
+                DO UPDATE SET
+                    source = EXCLUDED.source,
+                    refreshed_utc_date = EXCLUDED.refreshed_utc_date,
+                    ticker_count = EXCLUDED.ticker_count,
+                    updated_at = NOW()
+                """,
+                (universe, source, utc_date, len(deduped)),
+            )
+
+        try:
+            conn.commit()
+        except Exception:
+            # Some connection helpers may autocommit
+            pass
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
 
 
 # ---------- Universe loaders ----------
@@ -156,17 +367,25 @@ def _fetch_nasdaq_official_listings() -> List[str]:
             if test_issue == "Y":
                 continue
 
-            sym = row.get("Symbol") or row.get("ACT Symbol")
-            if sym:
-                # NASDAQ Trader uses "$" to denote preferred/special series (e.g., "AGM$D").
-                # yfinance (and most downstream tooling) expects these as "-" (e.g., "AGM-D").
-                sym = (
-                    sym.strip()
-                    .replace(".", "-")
-                    .replace("$", "-")
-                )
+            sym_raw = row.get("Symbol") or row.get("ACT Symbol")
+            if sym_raw:
+                sym_raw = sym_raw.strip()
 
-                # Basic sanity: must start with an alnum and contain only common ticker chars.
+                # Skip preferred/special series that NASDAQ denotes with "$" (e.g., "AGM$D").
+                # These spam yfinance with "no data" and slow scans.
+                if "$" in sym_raw:
+                    continue
+
+                # Skip obvious non-common-equity instruments by name when available
+                sec_name = (row.get("Security Name") or row.get("SecurityName") or "").strip().lower()
+                if sec_name:
+                    if any(k in sec_name for k in ("warrant", "unit", "right", "preferred")):
+                        continue
+
+                # Normalize: dot class shares -> dash
+                sym = sym_raw.replace(".", "-")
+
+                # Basic sanity: must start with an alnum
                 if sym and sym[0].isalnum():
                     tickers.append(sym)
 
@@ -253,32 +472,61 @@ def load_sp500_universe() -> List[str]:
 
 @st.cache_data(show_spinner=False, ttl=24 * 3600)
 def load_nasdaq_universe() -> List[str]:
-    if callable(_load_nasdaq):
-        return list(_load_nasdaq())
+    """NASDAQ universe loader.
 
-    # ✅ Official NASDAQ Trader listings (NASDAQ Composite universe)
+    Order:
+      1) DB cache (if refreshed recently)
+      2) Your local/custom loader (if present)
+      3) NASDAQ Trader official listings (cleaned)
+      4) Yahoo (Nasdaq-100) / Wikipedia fallbacks
+
+    If we fetch from the network, we attempt to persist back into DB.
+    """
+    # 1) DB-first
+    db_tickers, meta = _db_get_universe("nasdaq", max_age_hours=24.0)
+    if db_tickers and len(db_tickers) >= 500:
+        # Optional tiny caption for diagnostics (won't spam once cached)
+        st.caption(f"Loaded NASDAQ universe from DB ({len(db_tickers)} tickers).")
+        return filter_universe(db_tickers)
+
+    # 2) Prefer your local/custom loader if it exists
+    if callable(_load_nasdaq):
+        try:
+            local = list(_load_nasdaq())
+            if local and len(local) >= 100:
+                # Best-effort persist
+                _db_upsert_universe("nasdaq", local, source="local_loader")
+                return filter_universe(local)
+        except Exception as e:
+            st.caption(f"Local NASDAQ universe loader failed: {e}. Falling back.")
+
+    # 3) Official NASDAQ Trader listings (NASDAQ Composite-ish universe)
     try:
         tickers = _fetch_nasdaq_official_listings()
         if tickers:
-            return tickers
+            # Persist cleaned list
+            _db_upsert_universe("nasdaq", tickers, source="nasdaqtrader")
+            return filter_universe(tickers)
     except Exception as e:
         st.caption(f"Official NASDAQ listings fallback failed: {e}")
 
-    # Yahoo Finance predefined screener fallback (Nasdaq 100)
+    # 4) Yahoo Finance predefined screener fallback (Nasdaq 100)
     try:
         tickers = _fetch_yahoo_universe("nasdaq100", count=120)
         if tickers:
-            return tickers
+            _db_upsert_universe("nasdaq", tickers, source="yahoo_nasdaq100")
+            return filter_universe(tickers)
     except Exception as e:
         _note_yahoo_fail("NASDAQ", e)
 
-    # Wikipedia fallback (Nasdaq-100)
+    # 5) Wikipedia fallback (Nasdaq-100)
     wiki = _fetch_wikipedia_table(
         "https://en.wikipedia.org/wiki/Nasdaq-100",
         col="Ticker",
     )
     if wiki:
-        return wiki
+        _db_upsert_universe("nasdaq", wiki, source="wikipedia_nasdaq100")
+        return filter_universe(wiki)
 
     return ["TSLA", "PLTR", "AMD", "SOFI", "SNOW", "CRWD"]
 
@@ -289,13 +537,17 @@ def filter_universe(tickers: List[str]) -> List[str]:
     for t in tickers:
         if not isinstance(t, str):
             continue
-        sym = t.strip().upper().replace("$", "-")
-        if not sym:
+        sym = t.strip().upper()
+        if "$" in sym:
             continue
         # Ignore symbols that contain spaces or obvious non-equity prefixes
         if " " in sym:
             continue
         if sym.startswith("^"):
+            continue
+        # Common NASDAQ/NYSE suffixes that are often not regular common shares
+        # (Units/Warrants/Rights). These frequently fail provider lookups.
+        if sym.endswith("-W") or sym.endswith("-WS") or sym.endswith("-U") or sym.endswith("-R"):
             continue
         # Drop symbols with characters that frequently cause provider lookups to fail
         # (after normalization above).
