@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from typing import List, Callable, TypeVar, Any
+from typing import List, Callable, TypeVar, Any, Optional, Dict
 import pandas as pd
 import streamlit as st
 import time
 
 T = TypeVar("T")
+
+# --- Snapshot pricing support types ---
+SnapshotLoader = Callable[[str], Dict[str, pd.DataFrame]]
+SnapshotSaver = Callable[[str, Dict[str, pd.DataFrame]], None]
 
 SCAN_PROFILES: dict[str, dict[str, float | bool]] = {
     "regular": {
@@ -136,6 +140,9 @@ def cached_real_scan(
     profile: str = "regular",
     diagnostics: bool = False,
     use_cache: bool = True,
+    snapshot_id: str | None = None,
+    snapshot_loader: SnapshotLoader | None = None,
+    snapshot_saver: SnapshotSaver | None = None,
 ) -> pd.DataFrame:
     """Cached wrapper around the real breakout scan.
 
@@ -157,6 +164,9 @@ def cached_real_scan(
         profile=profile,
         diagnostics=diagnostics,
         use_cache=use_cache,
+        snapshot_id=snapshot_id,
+        snapshot_loader=snapshot_loader,
+        snapshot_saver=snapshot_saver,
     )
 
 def run_breakout_scan(
@@ -172,6 +182,9 @@ def run_breakout_scan(
     profile: str = "regular",
     diagnostics: bool = False,
     use_cache: bool = True,
+    snapshot_id: str | None = None,
+    snapshot_loader: SnapshotLoader | None = None,
+    snapshot_saver: SnapshotSaver | None = None,
 ) -> pd.DataFrame:
     """Public entry point for breakout scans.
 
@@ -219,6 +232,24 @@ def run_breakout_scan(
 
     # ✅ ALWAYS initialize so later `if not price_data:` checks are safe.
     price_data: dict[str, pd.DataFrame] = {}
+
+    # --- Snapshot pricing (admin-only wiring happens in UI) ---
+    # If a snapshot loader is provided, prefer loading prices from the snapshot
+    # instead of fetching from Yahoo. This makes full-universe admin scans faster
+    # and more stable.
+    if snapshot_id and snapshot_loader:
+        try:
+            loaded = snapshot_loader(str(snapshot_id))
+            if isinstance(loaded, dict) and loaded:
+                price_data = loaded
+                if diagnostics:
+                    try:
+                        st.caption(f"📦 Loaded pricing snapshot: {snapshot_id} ({len(price_data)} symbols)")
+                    except Exception:
+                        pass
+        except Exception:
+            # If snapshot load fails, fall back to normal fetching.
+            price_data = {}
 
     if large_scan and show_progress:
         tick, done = _make_progress_ui(total_requested, title="Fetching prices")
@@ -309,6 +340,19 @@ def run_breakout_scan(
             else:
                 print("fetch_price_data_batch failed:", batch_error)
             price_data = {}
+
+    # If we fetched prices and a snapshot_saver is provided, persist the snapshot.
+    if snapshot_id and snapshot_saver and price_data:
+        try:
+            snapshot_saver(str(snapshot_id), price_data)
+            if diagnostics:
+                try:
+                    st.caption(f"💾 Saved pricing snapshot: {snapshot_id} ({len(price_data)} symbols)")
+                except Exception:
+                    pass
+        except Exception:
+            # Snapshot persistence should never break a scan.
+            pass
 
     # Heartbeat before the breakout stage so users don't think the app froze.
     try:
