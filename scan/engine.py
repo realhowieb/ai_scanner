@@ -10,8 +10,147 @@ T = TypeVar("T")
 
 # Optional snapshot hooks used by ui/scans.py.
 # We keep these as simple callables to avoid hard dependencies in the engine.
+
 SnapshotLoader = Callable[[str], Dict[str, pd.DataFrame]]
 SnapshotSaver = Callable[[str, Dict[str, pd.DataFrame]], None]
+
+
+# --- DB cache helpers for admin full-universe scans ---
+def _db_cache_allowed_for_run(*, tickers_count: int, diagnostics: bool) -> bool:
+    """Admin-only DB cache for full-universe scans.
+
+    This is intentionally conservative:
+    - only enabled for admin contexts
+    - only enabled for large universes (to prevent adding DB overhead to small scans)
+    - safe if DB module/functions are missing
+    """
+    if not _is_admin_context():
+        return False
+    # Only worth it for big runs
+    if int(tickers_count) < 800:
+        return False
+    try:
+        ss = getattr(st, "session_state", None)
+        if ss and ss.get("disable_db_price_cache", False):
+            if diagnostics:
+                try:
+                    st.caption("🧱 DB price cache disabled by session_state (disable_db_price_cache=True)")
+                except Exception:
+                    pass
+            return False
+    except Exception:
+        pass
+    return True
+
+
+def _db_load_price_cache(
+    symbols: list[str],
+    *,
+    max_age_minutes: int = 30,
+    diagnostics: bool = False,
+) -> tuple[dict[str, pd.DataFrame], set[str]]:
+    """Best-effort: load cached OHLCV for symbols from DB.
+
+    Returns (cached_data, stale_symbols).
+
+    NOTE: We support multiple function names in db/prices.py so this engine stays
+    backward-compatible while you iterate.
+    """
+    cached: dict[str, pd.DataFrame] = {}
+    stale: set[str] = set(symbols)
+
+    try:
+        from db import prices as db_prices  # type: ignore
+
+        # Preferred API
+        fn = getattr(db_prices, "get_price_data_snapshot", None)
+        if callable(fn):
+            out = fn(symbols, max_age_minutes=max_age_minutes)
+            if isinstance(out, tuple) and len(out) == 2:
+                data, stale_list = out
+                if isinstance(data, dict):
+                    cached = {k: v for k, v in data.items() if isinstance(v, pd.DataFrame)}
+                if isinstance(stale_list, (list, set, tuple)):
+                    stale = set(str(x) for x in stale_list)
+                else:
+                    stale = set(symbols) - set(cached.keys())
+            else:
+                # If function returns only a dict
+                if isinstance(out, dict):
+                    cached = {k: v for k, v in out.items() if isinstance(v, pd.DataFrame)}
+                    stale = set(symbols) - set(cached.keys())
+
+            if diagnostics:
+                try:
+                    st.caption(
+                        f"🧱 DB cache hit: {len(cached):,}/{len(symbols):,} symbols (stale={len(stale):,}, max_age={max_age_minutes}m)"
+                    )
+                except Exception:
+                    pass
+            return cached, stale
+
+        # Back-compat API: only returns dict
+        fn2 = getattr(db_prices, "get_price_data", None)
+        if callable(fn2):
+            out2 = fn2(symbols)
+            if isinstance(out2, dict):
+                cached = {k: v for k, v in out2.items() if isinstance(v, pd.DataFrame)}
+                stale = set(symbols) - set(cached.keys())
+            if diagnostics:
+                try:
+                    st.caption(f"🧱 DB cache hit: {len(cached):,}/{len(symbols):,} symbols (no staleness API)"
+                              )
+                except Exception:
+                    pass
+            return cached, stale
+
+    except Exception as e:
+        if diagnostics:
+            try:
+                st.caption(f"🧱 DB cache load skipped: {e}")
+            except Exception:
+                pass
+
+    return cached, stale
+
+
+def _db_save_price_cache(
+    data: dict[str, pd.DataFrame],
+    *,
+    diagnostics: bool = False,
+) -> None:
+    """Best-effort: persist OHLCV data to DB for reuse."""
+    if not data:
+        return
+    try:
+        from db import prices as db_prices  # type: ignore
+
+        fn = getattr(db_prices, "upsert_price_data_snapshot", None)
+        if callable(fn):
+            fn(data)
+            if diagnostics:
+                try:
+                    st.caption(f"💾 DB cache saved: {len(data):,} symbols")
+                except Exception:
+                    pass
+            return
+
+        fn2 = getattr(db_prices, "upsert_price_data", None)
+        if callable(fn2):
+            fn2(data)
+            if diagnostics:
+                try:
+                    st.caption(f"💾 DB cache saved: {len(data):,} symbols")
+                except Exception:
+                    pass
+            return
+
+    except Exception as e:
+        if diagnostics:
+            try:
+                st.caption(f"💾 DB cache save skipped: {e}")
+            except Exception:
+                pass
 
 def _is_admin_context() -> bool:
     """Best-effort admin role check.
@@ -251,26 +390,45 @@ def run_breakout_scan(
     # ✅ ALWAYS initialize so later `if not price_data:` checks are safe.
     price_data: dict[str, pd.DataFrame] = {}
 
-    # --- Snapshot pricing (admin only) ---
-    # Admin can load cached prices (DB snapshot) to speed up/stabilize full-universe scans.
-    # Non-admin users never load/save snapshots.
+    # --- DB-first pricing path (admin only, full-universe) ---
+    # This is independent of the file-based snapshot_id hooks.
+    use_db_cache = _db_cache_allowed_for_run(tickers_count=total_requested, diagnostics=diagnostics)
+    if use_db_cache:
+        cached, stale = _db_load_price_cache(
+            tickers_plus_spy,
+            max_age_minutes=int(getattr(st.session_state, "get", lambda *_a, **_k: 30)("db_price_cache_max_age_minutes", 30)),
+            diagnostics=diagnostics,
+        )
+        if cached:
+            price_data.update(cached)
+
+    # --- Optional snapshot hooks (admin only) ---
+    # These are secondary: they can override/augment DB cache if you pass a snapshot_id.
     allow_snapshot = bool(snapshot_id) and _is_admin_context()
     if allow_snapshot and snapshot_id and snapshot_loader:
         try:
             loaded = snapshot_loader(str(snapshot_id))
             if isinstance(loaded, dict) and loaded:
-                price_data = loaded
+                price_data.update({k: v for k, v in loaded.items() if isinstance(v, pd.DataFrame)})
                 if diagnostics:
                     try:
-                        st.caption(f"📦 Loaded pricing snapshot: {snapshot_id} ({len(price_data)} symbols)")
+                        st.caption(f"📦 Loaded pricing snapshot: {snapshot_id} ({len(loaded)} symbols)")
                     except Exception:
                         pass
         except Exception:
             # Snapshot load must never break scans.
-            price_data = {}
+            pass
 
     # Only fetch what we're missing (especially important for admin snapshot runs)
     tickers_to_fetch = [t for t in tickers_plus_spy if t not in price_data]
+    # If we loaded a DB cache and it supports staleness, prefer the stale set.
+    # This prevents us from skipping symbols that exist in DB but are too old.
+    if use_db_cache:
+        try:
+            # 'stale' is defined only when use_db_cache=True; keep this guarded.
+            tickers_to_fetch = [t for t in tickers_to_fetch if t in stale or t not in price_data]
+        except Exception:
+            pass
     fetch_total = len(tickers_to_fetch)
     large_scan = fetch_total >= 800
 
@@ -392,6 +550,14 @@ def run_breakout_scan(
                     pass
         except Exception:
             # Snapshot persistence should never break a scan.
+            pass
+
+    # Persist DB cache for admin full-universe runs so subsequent runs reuse data.
+    # This must never block scans.
+    if use_db_cache and price_data:
+        try:
+            _db_save_price_cache(price_data, diagnostics=diagnostics)
+        except Exception:
             pass
 
     # Heartbeat before the breakout stage so users don't think the app froze.
