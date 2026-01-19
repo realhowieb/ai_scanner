@@ -67,7 +67,7 @@ def get_price_snapshots(
             """
             SELECT symbol, price
             FROM price_snapshots
-            WHERE symbol = ANY(:symbols::text[])
+            WHERE symbol = ANY(:symbols)
             """
         ),
         {"symbols": symbols},
@@ -96,7 +96,7 @@ def get_stale_symbols(
             """
             SELECT symbol
             FROM price_snapshots
-            WHERE symbol = ANY(:symbols::text[])
+            WHERE symbol = ANY(:symbols)
               AND as_of >= NOW() - (:mins * INTERVAL '1 minute')
             """
         ),
