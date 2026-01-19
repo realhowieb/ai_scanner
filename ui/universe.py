@@ -149,9 +149,24 @@ def _fetch_nasdaq_official_listings() -> List[str]:
             if len(parts) != len(header):
                 continue
             row = dict(zip(header, parts))
+
+            # Skip known non-tradable / test issues when the column exists
+            # (nasdaqlisted.txt includes "Test Issue"; otherlisted.txt may not).
+            test_issue = (row.get("Test Issue") or "").strip().upper()
+            if test_issue == "Y":
+                continue
+
             sym = row.get("Symbol") or row.get("ACT Symbol")
             if sym:
-                sym = sym.strip().replace(".", "-")
+                # NASDAQ Trader uses "$" to denote preferred/special series (e.g., "AGM$D").
+                # yfinance (and most downstream tooling) expects these as "-" (e.g., "AGM-D").
+                sym = (
+                    sym.strip()
+                    .replace(".", "-")
+                    .replace("$", "-")
+                )
+
+                # Basic sanity: must start with an alnum and contain only common ticker chars.
                 if sym and sym[0].isalnum():
                     tickers.append(sym)
 
@@ -274,13 +289,17 @@ def filter_universe(tickers: List[str]) -> List[str]:
     for t in tickers:
         if not isinstance(t, str):
             continue
-        sym = t.strip().upper()
+        sym = t.strip().upper().replace("$", "-")
         if not sym:
             continue
         # Ignore symbols that contain spaces or obvious non-equity prefixes
         if " " in sym:
             continue
         if sym.startswith("^"):
+            continue
+        # Drop symbols with characters that frequently cause provider lookups to fail
+        # (after normalization above).
+        if any(ch in sym for ch in ["/", "\\", ":", "="]):
             continue
         if len(sym) > 10:
             continue
