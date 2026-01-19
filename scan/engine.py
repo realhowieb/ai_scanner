@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Callable, TypeVar, Any
 import pandas as pd
 import streamlit as st
+import time
 
 T = TypeVar("T")
 
@@ -72,6 +73,54 @@ def safe_call(
 
         # Re-raise so Streamlit shows the red error box with the traceback
         raise
+
+def _make_progress_ui(total: int, *, title: str) -> tuple[callable, callable]:
+    """Create lightweight progress + heartbeat UI.
+
+    Returns (tick, done) callables.
+
+    - tick(i, note): updates bar/caption (throttled)
+    - done(note): completes bar and final message
+
+    Safe to call even when Streamlit UI is unavailable.
+    """
+    total = max(1, int(total))
+    last = {"t": 0.0}
+
+    try:
+        bar = st.progress(0.0)
+        line = st.empty()
+        started = time.time()
+
+        def tick(i: int, note: str = "") -> None:
+            now = time.time()
+            if now - last["t"] < 0.25:
+                return
+            last["t"] = now
+            pct = min(1.0, max(0.0, float(i) / float(total)))
+            try:
+                bar.progress(pct)
+                elapsed = now - started
+                suffix = f" • {note}" if note else ""
+                line.caption(f"{title}: {i:,}/{total:,} ({pct*100:.1f}%) • {elapsed:.1f}s{suffix}")
+            except Exception:
+                pass
+
+        def done(note: str = "") -> None:
+            try:
+                bar.progress(1.0)
+                suffix = f" • {note}" if note else ""
+                line.caption(f"{title}: done{suffix}")
+            except Exception:
+                pass
+
+        return tick, done
+    except Exception:
+        # Non-UI context (background runs/tests)
+        def _noop(*_a: Any, **_k: Any) -> None:
+            return None
+
+        return _noop, _noop
 
 @st.cache_data(show_spinner=False)
 def cached_real_scan(
@@ -152,42 +201,86 @@ def run_breakout_scan(
     # Ensure SPY is included for RS calculations.
     tickers_plus_spy = sorted(set(list(tickers) + ["SPY"]))
 
-    price_data: dict[str, pd.DataFrame] = {}
-    spy_df: pd.DataFrame | None = None
+    total_requested = len(tickers_plus_spy)
+    # Large universes benefit from progress UI; small scans stay fast.
+    show_progress = bool(st.session_state.get("show_scan_progress", True))
+    large_scan = total_requested >= 800
 
-    # Prefer the parallel fetcher, but fall back to the batch implementation
-    # if it returns no data or raises. While debugging, we explicitly surface
-    # any exceptions so we can see why price_data is empty.
+    # Prefer the parallel fetcher for small scans; for large scans, do a
+    # chunked batch fetch so we can show real progress in the UI.
     parallel_error = None
     batch_error = None
 
-    # --- Parallel fetch attempt ---
-    try:
-        from data.prices import fetch_price_data_parallel  # type: ignore
+    if large_scan and show_progress:
+        tick, done = _make_progress_ui(total_requested, title="Fetching prices")
+        try:
+            from data.prices import fetch_price_data_batch  # type: ignore
 
-        price_data, _skipped = fetch_price_data_parallel(
-            tickers_plus_spy,
-            use_cache=use_cache,
-        )
-        if not price_data:
-            raise RuntimeError("parallel price fetch returned no data")
-    except Exception as e:
-        import traceback
+            price_data = {}
+            # Chunk size tuned to keep UI responsive without hammering Yahoo.
+            chunk_size = int(st.session_state.get("price_fetch_chunk_size", 150))
+            chunk_size = max(25, min(400, chunk_size))
 
-        parallel_error = traceback.format_exc()
-        if diagnostics:
-            try:
-                st.error(f"❌ fetch_price_data_parallel failed: {e}")
-                st.code(parallel_error, language="python")
-            except Exception:
-                # Fall back to console logging if Streamlit is not available
+            tick(0, note=f"chunk_size={chunk_size}")
+            processed = 0
+            for i in range(0, total_requested, chunk_size):
+                chunk = tickers_plus_spy[i : i + chunk_size]
+                # Keep the inner call isolated so one bad chunk doesn't kill the whole run.
+                try:
+                    chunk_data, _skipped = fetch_price_data_batch(chunk)
+                    if chunk_data:
+                        price_data.update(chunk_data)
+                except Exception:
+                    # Swallow chunk failures; we still want the scan to proceed.
+                    pass
+
+                processed = min(total_requested, i + len(chunk))
+                tick(processed)
+
+            done(note=f"symbols_with_data={len(price_data)}")
+
+            if not price_data:
+                raise RuntimeError("batch (chunked) price fetch returned no data")
+        except Exception as e:
+            import traceback
+
+            batch_error = traceback.format_exc()
+            if diagnostics:
+                try:
+                    st.error(f"❌ chunked fetch_price_data_batch failed: {e}")
+                    st.code(batch_error, language="python")
+                except Exception:
+                    print("chunked fetch_price_data_batch failed:", batch_error)
+            else:
+                print("chunked fetch_price_data_batch failed:", batch_error)
+            price_data = {}
+
+    # --- Fast path: parallel fetch for smaller scans ---
+    if not price_data:
+        try:
+            from data.prices import fetch_price_data_parallel  # type: ignore
+
+            price_data, _skipped = fetch_price_data_parallel(
+                tickers_plus_spy,
+                use_cache=use_cache,
+            )
+            if not price_data:
+                raise RuntimeError("parallel price fetch returned no data")
+        except Exception as e:
+            import traceback
+
+            parallel_error = traceback.format_exc()
+            if diagnostics:
+                try:
+                    st.error(f"❌ fetch_price_data_parallel failed: {e}")
+                    st.code(parallel_error, language="python")
+                except Exception:
+                    print("fetch_price_data_parallel failed:", parallel_error)
+            else:
                 print("fetch_price_data_parallel failed:", parallel_error)
-        else:
-            # In non-diagnostic mode, suppress UI noise and log only to console
-            print("fetch_price_data_parallel failed:", parallel_error)
-        price_data = {}
+            price_data = {}
 
-    # --- Batch fetch attempt (only if parallel failed or returned nothing) ---
+    # --- Fallback: single-shot batch fetch ---
     if not price_data:
         try:
             from data.prices import fetch_price_data_batch  # type: ignore
@@ -204,31 +297,17 @@ def run_breakout_scan(
                     st.error(f"❌ fetch_price_data_batch failed: {e}")
                     st.code(batch_error, language="python")
                 except Exception:
-                    # Fall back to console logging if Streamlit is not available
                     print("fetch_price_data_batch failed:", batch_error)
             else:
-                # In non-diagnostic mode, suppress UI noise and log only to console
                 print("fetch_price_data_batch failed:", batch_error)
             price_data = {}
 
-    # If both attempts failed, bail out with an empty DataFrame but only after
-    # surfacing the underlying errors above.
-    if not price_data:
-        try:
-            st.error("❌ Price fetch failed: no data returned from either parallel or batch.")
-        except Exception:
-            pass
-        return pd.DataFrame()
-
-    # Diagnostics: show what the fetch layer actually returned
-    if diagnostics:
-        try:
-            st.caption(
-                f"🧩 engine.run_breakout_scan: fetched price_data for "
-                f"{len(price_data)} symbols; sample keys: {list(price_data.keys())[:10]}"
-            )
-        except Exception:
-            pass
+    # Heartbeat before the breakout stage so users don't think the app froze.
+    try:
+        if show_progress:
+            st.caption(f"🧠 Running breakout calculations on {max(0, len(price_data) - (1 if 'SPY' in price_data else 0)):,} symbols…")
+    except Exception:
+        pass
 
     spy_df = price_data.get("SPY")
     if "SPY" in price_data:
