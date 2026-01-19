@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Callable, Optional
 
 import pandas as pd
 
@@ -127,6 +127,8 @@ def run_breakout_scan(
     max_price,
     top_n,
     diagnostics,
+    progress_cb: Optional[Callable[[int, int, str], Any]] = None,
+    heartbeat_every: int = 25,
 ):
     """Breakout scan with richer metrics.
 
@@ -171,8 +173,6 @@ def run_breakout_scan(
         except Exception:
             pass
 
-    rows: List[Dict[str, Any]] = []
-
     attempted = 0
     added = 0
     skipped_price = 0
@@ -180,8 +180,18 @@ def run_breakout_scan(
     skipped_gap = 0
     skipped_invalid = 0
 
-    for symbol, raw_df in price_data.items():
+    items = list(price_data.items())
+    total = len(items)
+
+    for i, (symbol, raw_df) in enumerate(items, start=1):
         attempted += 1
+
+        # Optional heartbeat/progress callback (safe: never raises)
+        if progress_cb and (i == 1 or i % heartbeat_every == 0 or i == total):
+            try:
+                progress_cb(i, total, str(symbol))
+            except Exception:
+                pass
 
         df = _prep_symbol_df(raw_df)
         if df.empty:
