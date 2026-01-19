@@ -230,20 +230,41 @@ def run_scan_engine(
         min_gap = float(st.session_state.get("min_gap_pct", 1.0))
         unusual_volume = bool(st.session_state.get("unusual_vol", True))
 
-    # 3) Run the core breakout engine (no diagnostics for clean UI)
-    df = run_breakout_scan(
-        tickers=list(tickers),
-        premarket=premarket,
-        afterhours=afterhours,
-        unusual_volume=unusual_volume,
-        min_gap=min_gap,
-        min_price=min_price,
-        max_price=max_price,
-        top_n=top_n,
-        profile=profile or "regular",
-        diagnostics=False,
-        use_cache=not live_mode,
-    )
+    # Optional: price snapshot reuse (admin-only). If the engine supports it, we pass it.
+    snapshot_id = None
+    if _is_admin():
+        snapshot_id = st.session_state.get("price_snapshot_id") or st.session_state.get("snapshot_id")
+
+    try:
+        df = run_breakout_scan(
+            tickers=list(tickers),
+            premarket=premarket,
+            afterhours=afterhours,
+            unusual_volume=unusual_volume,
+            min_gap=min_gap,
+            min_price=min_price,
+            max_price=max_price,
+            top_n=top_n,
+            profile=profile or "regular",
+            diagnostics=False,
+            use_cache=not live_mode,
+            snapshot_id=snapshot_id,
+        )
+    except TypeError:
+        # Older engine signature: ignore snapshot_id
+        df = run_breakout_scan(
+            tickers=list(tickers),
+            premarket=premarket,
+            afterhours=afterhours,
+            unusual_volume=unusual_volume,
+            min_gap=min_gap,
+            min_price=min_price,
+            max_price=max_price,
+            top_n=top_n,
+            profile=profile or "regular",
+            diagnostics=False,
+            use_cache=not live_mode,
+        )
 
     if df is None or df.empty:
         return pd.DataFrame()
@@ -1390,6 +1411,11 @@ def render_scan_controls(
                 # For a clean UI, always disable engine-level diagnostics here
                 engine_diagnostics = False
 
+                # Optional: price snapshot reuse (admin-only). If the engine supports it, we pass it.
+                snapshot_id = None
+                if _is_admin():
+                    snapshot_id = st.session_state.get("price_snapshot_id") or st.session_state.get("snapshot_id")
+
                 # Prefer progress-enabled engine call; fall back if the engine signature doesn't accept it.
                 try:
                     df = run_breakout_scan(
@@ -1404,20 +1430,38 @@ def render_scan_controls(
                         profile=effective_profile,
                         diagnostics=engine_diagnostics,
                         progress_cb=progress_cb,
+                        snapshot_id=snapshot_id,
                     )
                 except TypeError:
-                    df = run_breakout_scan(
-                        tickers=list(tickers),
-                        premarket=premarket,
-                        afterhours=afterhours,
-                        unusual_volume=unusual_vol,
-                        min_gap=min_gap,
-                        min_price=min_price,
-                        max_price=max_price,
-                        top_n=top_n,
-                        profile=effective_profile,
-                        diagnostics=engine_diagnostics,
-                    )
+                    # Either the engine doesn't support progress_cb or snapshot_id (or both).
+                    # Try without progress_cb but keep snapshot_id; if that still fails, drop snapshot_id too.
+                    try:
+                        df = run_breakout_scan(
+                            tickers=list(tickers),
+                            premarket=premarket,
+                            afterhours=afterhours,
+                            unusual_volume=unusual_vol,
+                            min_gap=min_gap,
+                            min_price=min_price,
+                            max_price=max_price,
+                            top_n=top_n,
+                            profile=effective_profile,
+                            diagnostics=engine_diagnostics,
+                            snapshot_id=snapshot_id,
+                        )
+                    except TypeError:
+                        df = run_breakout_scan(
+                            tickers=list(tickers),
+                            premarket=premarket,
+                            afterhours=afterhours,
+                            unusual_volume=unusual_vol,
+                            min_gap=min_gap,
+                            min_price=min_price,
+                            max_price=max_price,
+                            top_n=top_n,
+                            profile=effective_profile,
+                            diagnostics=engine_diagnostics,
+                        )
 
                 progress.progress(92)
 
