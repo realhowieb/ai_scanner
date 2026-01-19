@@ -533,30 +533,79 @@ def load_nasdaq_universe() -> List[str]:
 
 
 def filter_universe(tickers: List[str]) -> List[str]:
-    """Basic cleaning for ticker universes (remove obvious junk)."""
-    cleaned = []
+    """Basic cleaning for ticker universes (remove obvious junk + preferred/warrant noise).
+
+    This is provider-oriented cleaning (yfinance/quotes). We aggressively drop
+    instruments that frequently fail lookups (preferred series, units, warrants),
+    while preserving a small set of well-known class-share tickers.
+    """
+
+    # Bases that legitimately have common-share class suffixes like "-A"/"-B"
+    # (avoid accidentally dropping BF-B, BRK-B, etc.)
+    CLASS_SHARE_BASES = {
+        "BF",   # BF.A / BF.B
+        "BRK",  # BRK.A / BRK.B
+        "HEI",  # HEI.A
+        "LEN",  # LEN.B
+        "LBRD", "LBRK",  # Liberty tracking stocks
+    }
+
+    cleaned: List[str] = []
+
+    # Pre-pass: normalize + strip obvious prefix noise
+    normalized: List[str] = []
     for t in tickers:
         if not isinstance(t, str):
             continue
         sym = t.strip().upper()
+        if not sym:
+            continue
+
+        # Some feeds/logging include a leading "$" (e.g., "$ADC-A"). Strip it.
+        # If the symbol still contains "$" after this, treat it as non-common.
+        sym = sym.lstrip("$")
+
+        normalized.append(sym)
+
+    # Build a base set for preferred-series heuristics
+    bases = {s.split("-", 1)[0] for s in normalized if s and "-" in s}
+    bases |= {s for s in normalized if s and "-" not in s}
+
+    for sym in normalized:
+        # Drop any remaining "$" (preferred series often encoded with "$")
         if "$" in sym:
             continue
+
         # Ignore symbols that contain spaces or obvious non-equity prefixes
         if " " in sym:
             continue
         if sym.startswith("^"):
             continue
+
+        # Drop symbols with characters that frequently cause provider lookups to fail
+        if any(ch in sym for ch in ["/", "\\", ":", "="]):
+            continue
+
         # Common NASDAQ/NYSE suffixes that are often not regular common shares
         # (Units/Warrants/Rights). These frequently fail provider lookups.
         if sym.endswith("-W") or sym.endswith("-WS") or sym.endswith("-U") or sym.endswith("-R"):
             continue
-        # Drop symbols with characters that frequently cause provider lookups to fail
-        # (after normalization above).
-        if any(ch in sym for ch in ["/", "\\", ":", "="]):
-            continue
+
+        # Preferred-series / odd-lot heuristic:
+        # If we see BASE-SUFFIX where suffix is a single letter and BASE also exists,
+        # it's often a preferred series (e.g., ADC-A, AGM-D, etc.).
+        # Keep only for a few known common-share class bases.
+        if "-" in sym:
+            base, suf = sym.split("-", 1)
+            if base and suf and len(suf) == 1 and base in bases:
+                if base not in CLASS_SHARE_BASES:
+                    continue
+
         if len(sym) > 10:
             continue
+
         cleaned.append(sym)
+
     # De-dupe while preserving order
     seen = set()
     out: List[str] = []
