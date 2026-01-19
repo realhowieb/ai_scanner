@@ -173,6 +173,19 @@ def run_breakout_scan(
     diagnostics: bool = False,
     use_cache: bool = True,
 ) -> pd.DataFrame:
+    """Public entry point for breakout scans.
+
+    This function is responsible for:
+    - Extending the ticker list with SPY for relative-strength style metrics.
+    - Fetching OHLCV price data for the requested universe.
+    - Delegating to `scan.breakout.run_breakout_scan`, which expects a
+      mapping of symbol -> DataFrame and an optional SPY DataFrame.
+
+    IMPORTANT: `price_data` must be defined on all code paths. Some scan modes
+    (e.g., small SP500 scans) skip the large-scan branch; without a default
+    initialization, referencing `price_data` would raise UnboundLocalError.
+    """
+
     if diagnostics:
         try:
             st.caption(
@@ -182,14 +195,7 @@ def run_breakout_scan(
         except Exception:
             # If the UI is not available (e.g., during background runs), just ignore.
             pass
-    """Public entry point for breakout scans.
 
-    This function is responsible for:
-    - Extending the ticker list with SPY for relative-strength style metrics.
-    - Fetching OHLCV price data for the requested universe.
-    - Delegating to `scan.breakout.run_breakout_scan`, which expects a
-      mapping of symbol -> DataFrame and an optional SPY DataFrame.
-    """
     effective_min_gap, effective_unusual_volume = _apply_scan_profile(
         profile,
         min_gap=min_gap,
@@ -211,12 +217,14 @@ def run_breakout_scan(
     parallel_error = None
     batch_error = None
 
+    # ✅ ALWAYS initialize so later `if not price_data:` checks are safe.
+    price_data: dict[str, pd.DataFrame] = {}
+
     if large_scan and show_progress:
         tick, done = _make_progress_ui(total_requested, title="Fetching prices")
         try:
             from data.prices import fetch_price_data_batch  # type: ignore
 
-            price_data = {}
             # Chunk size tuned to keep UI responsive without hammering Yahoo.
             chunk_size = int(st.session_state.get("price_fetch_chunk_size", 150))
             chunk_size = max(25, min(400, chunk_size))
@@ -305,7 +313,11 @@ def run_breakout_scan(
     # Heartbeat before the breakout stage so users don't think the app froze.
     try:
         if show_progress:
-            st.caption(f"🧠 Running breakout calculations on {max(0, len(price_data) - (1 if 'SPY' in price_data else 0)):,} symbols…")
+            st.caption(
+                f"🧠 Running breakout calculations on "
+                f"{max(0, len(price_data) - (1 if 'SPY' in price_data else 0)):,}/"
+                f"{max(0, total_requested - 1):,} symbols…"
+            )
     except Exception:
         pass
 
