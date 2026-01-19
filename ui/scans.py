@@ -5,7 +5,7 @@ that runs the breakout scan and persists results to the runs DB.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Any
 import time
 import traceback
 
@@ -1328,6 +1328,58 @@ def render_scan_controls(
                 f"estimated ~{est_seconds:.1f}s"
             )
 
+            # Live progress callback from the scan engine
+            # Expected shapes:
+            #   progress_cb(i, n, symbol, stage="download"|"score"|"done"|..., msg=str)
+            # We keep it permissive so it works with different engine signatures.
+            last_ui_ts = 0.0
+
+            def progress_cb(i: Any = None, n: Any = None, symbol: Any = None, **kw: Any) -> None:
+                nonlocal last_ui_ts
+                try:
+                    now = time.time()
+                    # Throttle UI updates to avoid slowing the scan
+                    if now - last_ui_ts < 0.15:
+                        return
+                    last_ui_ts = now
+
+                    # Normalize inputs
+                    ii = int(i) if i is not None else None
+                    nn = int(n) if n is not None else None
+                    sym = (str(symbol).strip().upper() if symbol is not None else "")
+                    stage = str(kw.get("stage") or kw.get("phase") or "").strip()
+                    msg = str(kw.get("msg") or kw.get("message") or "").strip()
+
+                    # Compute progress: reserve 20% for preflight, 70% for engine, 10% for post
+                    if ii is not None and nn is not None and nn > 0:
+                        frac = min(max(ii / float(nn), 0.0), 1.0)
+                        pct = 20 + int(frac * 70)
+                        progress.progress(pct)
+                        if sym:
+                            status.write(
+                                f"🔄 {label}: {ii}/{nn} • {sym} "
+                                + (f"• {stage}" if stage else "")
+                                + (f" — {msg}" if msg else "")
+                            )
+                        else:
+                            status.write(
+                                f"🔄 {label}: {ii}/{nn} "
+                                + (f"• {stage}" if stage else "")
+                                + (f" — {msg}" if msg else "")
+                            )
+                    else:
+                        # If engine doesn't provide counts, still show heartbeat
+                        if sym or stage or msg:
+                            status.write(
+                                f"🔄 {label}: "
+                                + (f"{sym} " if sym else "")
+                                + (f"• {stage}" if stage else "")
+                                + (f" — {msg}" if msg else "")
+                            )
+                except Exception:
+                    # Never allow progress UI to break the scan
+                    return
+
             try:
                 # Phase 1: pre-flight / parameters (0–20%)
                 progress.progress(20)
@@ -1338,20 +1390,36 @@ def render_scan_controls(
                 # For a clean UI, always disable engine-level diagnostics here
                 engine_diagnostics = False
 
-                df = run_breakout_scan(
-                    tickers=list(tickers),
-                    premarket=premarket,
-                    afterhours=afterhours,
-                    unusual_volume=unusual_vol,
-                    min_gap=min_gap,
-                    min_price=min_price,
-                    max_price=max_price,
-                    top_n=top_n,
-                    profile=effective_profile,
-                    diagnostics=engine_diagnostics,
-                )
+                # Prefer progress-enabled engine call; fall back if the engine signature doesn't accept it.
+                try:
+                    df = run_breakout_scan(
+                        tickers=list(tickers),
+                        premarket=premarket,
+                        afterhours=afterhours,
+                        unusual_volume=unusual_vol,
+                        min_gap=min_gap,
+                        min_price=min_price,
+                        max_price=max_price,
+                        top_n=top_n,
+                        profile=effective_profile,
+                        diagnostics=engine_diagnostics,
+                        progress_cb=progress_cb,
+                    )
+                except TypeError:
+                    df = run_breakout_scan(
+                        tickers=list(tickers),
+                        premarket=premarket,
+                        afterhours=afterhours,
+                        unusual_volume=unusual_vol,
+                        min_gap=min_gap,
+                        min_price=min_price,
+                        max_price=max_price,
+                        top_n=top_n,
+                        profile=effective_profile,
+                        diagnostics=engine_diagnostics,
+                    )
 
-                progress.progress(70)
+                progress.progress(92)
 
                 # Phase 2.5: enforce GapPct >= min_gap only when Apply Gap Filter is enabled (gap-UP only)
                 if apply_gap_filter and df is not None and not df.empty:
@@ -1383,7 +1451,7 @@ def render_scan_controls(
                         # If Alpaca is not configured or returns nothing, this is a no-op.
                         df = _apply_alpaca_extended_prices(df)
 
-                progress.progress(95)
+                progress.progress(97)
 
                 filtered_count = len(df) if df is not None else 0
                 if diagnostics:
