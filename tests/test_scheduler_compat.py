@@ -73,6 +73,12 @@ class ScannerEntrypointSourceTests(unittest.TestCase):
         self.assertIn("def breakout_scanner", source)
         self.assertIn("return run_breakout_scan(", source)
 
+    def test_scan_ui_uses_eastern_time_for_market_diagnostics(self) -> None:
+        source = (ROOT / "ui" / "scans.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("utcnow()", source)
+        self.assertIn('ZoneInfo("America/New_York")', source)
+
 
 if __name__ == "__main__":
     unittest.main()

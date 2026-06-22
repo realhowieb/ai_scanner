@@ -6,6 +6,7 @@ that runs the breakout scan and persists results to the runs DB.
 
 from datetime import datetime, timedelta
 from typing import List, Optional, Callable, Any
+from zoneinfo import ZoneInfo
 import time
 import traceback
 
@@ -1742,11 +1743,10 @@ def render_data_provider_diagnostics() -> None:
             if price is not None:
                 st.success(f"✅ Alpaca Market Data OK. AAPL extended price: ${price:.2f}")
             else:
-                import datetime
-                now = datetime.datetime.utcnow()
+                now_et = datetime.now(ZoneInfo("America/New_York"))
 
                 # Weekend-aware messaging
-                if now.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+                if now_et.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
                     st.info(
                         "🟦 Market is closed (weekend). "
                         "Extended-hours data is usually unavailable."
