@@ -40,6 +40,17 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def get_live_quote", single_source)
         self.assertIn("def render_single_symbol_chart", single_source)
 
+    def test_watchlist_scan_tools_are_extracted_from_scan_ui(self):
+        scans_source = (ROOT / "ui" / "scans.py").read_text()
+        watchlist_source = (ROOT / "ui" / "watchlists.py").read_text()
+
+        self.assertIn("render_active_watchlist_tools", scans_source)
+        self.assertIn("handle_active_watchlist_actions", scans_source)
+        self.assertNotIn("def build_watchlist_df", scans_source)
+        self.assertIn("def build_watchlist_df", watchlist_source)
+        self.assertIn("def render_active_watchlist_tools", watchlist_source)
+        self.assertIn("def handle_active_watchlist_actions", watchlist_source)
+
 
 if __name__ == "__main__":
     unittest.main()

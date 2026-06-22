@@ -32,8 +32,7 @@ from scan.options import (
 from scan.strategies import apply_strategy_filter
 from scan.universe_selection import resolve_scan_universe
 from ui.single_ticker import handle_single_ticker_actions, render_single_ticker_panel
-
-from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
+from ui.watchlists import handle_active_watchlist_actions, render_active_watchlist_tools
 
 # --- Symbol sanitation (avoid non-Yahoo encodings like $PREF$A, units/warrants, etc.) ---
 import re
@@ -576,94 +575,6 @@ def _apply_alpaca_extended_prices(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# --- Watchlist DataFrame builder for View Watchlist ---
-def build_watchlist_df(tickers: List[str]) -> pd.DataFrame:
-    """Build a rich watchlist DataFrame for the center 'View Watchlist' table."""
-    try:
-        import yfinance as yf  # type: ignore
-    except Exception:
-        # If yfinance is unavailable, just return a minimal frame with symbols only.
-        return pd.DataFrame(
-            [
-                {
-                    "Symbol": str(sym).strip().upper(),
-                    "Name": None,
-                    "Last": None,
-                    "Change": None,
-                    "% Change": None,
-                    "Prev Close": None,
-                    "Open": None,
-                    "High": None,
-                    "Low": None,
-                }
-                for sym in tickers
-            ]
-        )
-
-    rows = []
-    for sym in tickers:
-        sym = str(sym).strip().upper()
-        last = prev_close = open_ = high = low = None
-        name = None
-
-        try:
-            t = yf.Ticker(sym)
-            fast = getattr(t, "fast_info", None)
-
-            if fast is not None:
-                # Try several common fast_info fields for current/regular price
-                last = (
-                    getattr(fast, "last_price", None)
-                    or getattr(fast, "regular_market_price", None)
-                )
-                prev_close = getattr(fast, "previous_close", None)
-                open_ = getattr(fast, "open", None)
-                high = getattr(fast, "day_high", None)
-                low = getattr(fast, "day_low", None)
-
-            # Fallback with history if needed
-            if last is None or prev_close is None:
-                hist = t.history(period="2d")
-                if not hist.empty and "Close" in hist.columns:
-                    closes = hist["Close"].tolist()
-                    if len(closes) >= 1 and last is None:
-                        last = float(closes[-1])
-                    if len(closes) >= 2 and prev_close is None:
-                        prev_close = float(closes[-2])
-
-            # Try to get a readable name
-            try:
-                info = t.get_info() if hasattr(t, "get_info") else getattr(t, "info", {})
-            except Exception:
-                info = {}
-            name = info.get("shortName") or info.get("longName") or ""
-        except Exception:
-            # Leave values as None on failure
-            pass
-
-        change = None
-        change_pct = None
-        if last is not None and prev_close not in (None, 0):
-            change = float(last) - float(prev_close)
-            change_pct = (change / float(prev_close)) * 100.0
-
-        rows.append(
-            {
-                "Symbol": sym,
-                "Name": name,
-                "Last": last,
-                "Change": change,
-                "% Change": change_pct,
-                "Prev Close": prev_close,
-                "Open": open_,
-                "High": high,
-                "Low": low,
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
 def render_scan_controls(
     can_scan_sp500: bool,
     can_scan_nasdaq: bool,
@@ -772,69 +683,14 @@ def render_scan_controls(
     # Watchlist actions (uses active_watchlist_tickers from session_state)
     st.markdown("### 📋 Watchlist Tools")
 
-    watchlist_tickers = st.session_state.get("active_watchlist_tickers", []) or []
-    has_watchlist = isinstance(watchlist_tickers, list) and len(watchlist_tickers) > 0
-
-    # Top row: view / scan / export
-    cw1, cw2, cw3 = st.columns([1, 1, 1])
-    with cw1:
-        view_watchlist_btn = st.button(
-            "View Watchlist",
-            key="btn_view_watchlist",
-            width="stretch",
-            disabled=not has_watchlist,
-        )
-    with cw2:
-        run_watchlist_btn = st.button(
-            "Run Watchlist Scan",
-            key="btn_scan_watchlist",
-            width="stretch",
-            disabled=not has_watchlist,
-        )
-    with cw3:
-        export_csv_data = None
-        if has_watchlist:
-            export_csv_data = pd.DataFrame({"Symbol": watchlist_tickers}).to_csv(index=False)
-        export_watchlist_btn = st.download_button(
-            "Export CSV",
-            data=export_csv_data if export_csv_data is not None else "",
-            file_name=f"watchlist_{len(watchlist_tickers) or 0}.csv",
-            mime="text/csv",
-            key="btn_export_watchlist",
-            disabled=not has_watchlist,
-        )
-
-    # Middle row: add/remove ticker controls
-    aw1, aw2, aw3 = st.columns([3, 1, 1])
-    with aw1:
-        watchlist_add_symbol = st.text_input(
-            "Add or remove ticker",
-            key="watchlist_add_symbol",
-            placeholder="AAPL",
-            label_visibility="collapsed",
-        )
-    with aw2:
-        add_watchlist_btn = st.button(
-            "Add",
-            key="btn_add_watchlist_symbol",
-            width="stretch",
-        )
-    with aw3:
-        remove_watchlist_btn = st.button(
-            "Remove",
-            key="btn_remove_watchlist_symbol",
-            width="stretch",
-        )
-
-    # Bottom row: destructive action on its own line
-    clear_watchlist_btn = st.button(
-        "Clear Watchlist",
-        key="btn_clear_watchlist",
-        width="stretch",
-        disabled=not has_watchlist,
-    )
-
-    st.caption("Use your active watchlist for viewing, scanning, and managing symbols.")
+    (
+        view_watchlist_btn,
+        run_watchlist_btn,
+        clear_watchlist_btn,
+        add_watchlist_btn,
+        remove_watchlist_btn,
+        watchlist_add_symbol,
+    ) = render_active_watchlist_tools()
 
     single_ticker, show_chart_btn, run_single_scan_btn = render_single_ticker_panel()
 
@@ -1099,37 +955,17 @@ def render_scan_controls(
         # Run the scan with our custom progress bar UI (no extra spinner wrapper)
         _run_scan_body()
 
-    if "view_watchlist_btn" in locals() and view_watchlist_btn:
-        # Normalize and validate tickers from the active watchlist
-        tickers = [
-            str(t).strip().upper()
-            for t in (st.session_state.get("active_watchlist_tickers") or [])
-            if str(t).strip()
-        ]
-        if not tickers:
-            _banner("Active watchlist has no tickers to view.", "warning")
-        else:
-            df_view = build_watchlist_df(tickers)
-            st.session_state.results_df = df_view
-            # Ensure the results panel refreshes immediately after switching to the watchlist view.
-            st.session_state["force_results_refresh"] = True
-            _banner(
-                f"Showing active watchlist with {len(tickers)} tickers (with prices & daily change).",
-                "info",
-            )
-
-    if run_watchlist_btn:
-        # Normalize and validate tickers from the active watchlist
-        tickers = [
-            str(t).strip().upper()
-            for t in (st.session_state.get("active_watchlist_tickers") or [])
-            if str(t).strip()
-        ]
-        if not tickers:
-            _banner("Active watchlist has no tickers to scan.", "warning")
-        else:
-            label = f"Watchlist ({len(tickers)} tickers)"
-            do_scan(tickers, label)
+    handle_active_watchlist_actions(
+        view_watchlist=view_watchlist_btn,
+        run_watchlist=run_watchlist_btn,
+        clear_watchlist=clear_watchlist_btn,
+        add_symbol=add_watchlist_btn,
+        remove_symbol=remove_watchlist_btn,
+        symbol=watchlist_add_symbol,
+        username=username,
+        do_scan=do_scan,
+        banner=_banner,
+    )
 
     if run_sp500_btn:
         do_scan(_resolve_manual_universe("SP500"), "SP500")
@@ -1139,63 +975,6 @@ def render_scan_controls(
 
     if run_combo_btn:
         do_scan(_resolve_manual_universe("COMBO"), "Combo")
-
-    # Manage watchlist symbols from the Watchlist Tools controls
-    if "clear_watchlist_btn" in locals() and clear_watchlist_btn:
-        active_watchlist_id = st.session_state.get("active_watchlist_id")
-        if active_watchlist_id is not None:
-            try:
-                set_watchlist_tickers(active_watchlist_id, username, [])
-                st.session_state["active_watchlist_tickers"] = []
-                _banner("Cleared all tickers from the active watchlist.", "success")
-            except Exception:
-                _banner("Failed to clear active watchlist (database unavailable).", "error")
-        else:
-            _banner("No active watchlist selected to clear.", "warning")
-
-    if "add_watchlist_btn" in locals() and add_watchlist_btn:
-        sym = (watchlist_add_symbol or "").strip().upper()
-        if not sym:
-            _banner("Please enter a ticker to add.", "warning")
-        else:
-            active_watchlist_id = st.session_state.get("active_watchlist_id")
-            if active_watchlist_id is None:
-                _banner("No active watchlist selected to add to.", "warning")
-            else:
-                try:
-                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
-                    norm_existing = {str(t).strip().upper() for t in existing}
-                    if sym not in norm_existing:
-                        updated = sorted(norm_existing | {sym})
-                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
-                        st.session_state["active_watchlist_tickers"] = list(updated)
-                        _banner(f"Added {sym} to the active watchlist.", "success")
-                    else:
-                        _banner(f"{sym} is already in the active watchlist.", "info")
-                except Exception:
-                    _banner("Failed to update active watchlist (database unavailable).", "error")
-
-    if "remove_watchlist_btn" in locals() and remove_watchlist_btn:
-        sym = (watchlist_add_symbol or "").strip().upper()
-        if not sym:
-            _banner("Please enter a ticker to remove.", "warning")
-        else:
-            active_watchlist_id = st.session_state.get("active_watchlist_id")
-            if active_watchlist_id is None:
-                _banner("No active watchlist selected to remove from.", "warning")
-            else:
-                try:
-                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
-                    norm_existing = {str(t).strip().upper() for t in existing}
-                    if sym in norm_existing:
-                        updated = sorted(norm_existing - {sym})
-                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
-                        st.session_state["active_watchlist_tickers"] = list(updated)
-                        _banner(f"Removed {sym} from the active watchlist.", "success")
-                    else:
-                        _banner(f"{sym} is not in the active watchlist.", "info")
-                except Exception:
-                    _banner("Failed to update active watchlist (database unavailable).", "error")
 
     handle_single_ticker_actions(
         ticker=single_ticker,

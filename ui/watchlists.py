@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import streamlit as st
 
@@ -16,6 +16,10 @@ from db.watchlists import (
     get_watchlist_tickers,
     set_watchlist_tickers,
 )
+
+
+BannerFn = Callable[[str, str], None]
+ScanFn = Callable[[List[str], str], None]
 
 
 def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
@@ -163,3 +167,253 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
             st.caption("Create a watchlist to add tickers.")
 
     return active_id, active_tickers
+
+
+def build_watchlist_df(tickers: List[str]):
+    """Build a rich watchlist DataFrame for the center 'View Watchlist' table."""
+    frame_mod = pd
+    if frame_mod is None:
+        import pandas as frame_mod  # type: ignore
+
+    try:
+        import yfinance as yf  # type: ignore
+    except Exception:
+        return frame_mod.DataFrame(
+            [
+                {
+                    "Symbol": str(sym).strip().upper(),
+                    "Name": None,
+                    "Last": None,
+                    "Change": None,
+                    "% Change": None,
+                    "Prev Close": None,
+                    "Open": None,
+                    "High": None,
+                    "Low": None,
+                }
+                for sym in tickers
+            ]
+        )
+
+    rows = []
+    for sym in tickers:
+        sym = str(sym).strip().upper()
+        last = prev_close = open_ = high = low = None
+        name = None
+
+        try:
+            t = yf.Ticker(sym)
+            fast = getattr(t, "fast_info", None)
+
+            if fast is not None:
+                last = (
+                    getattr(fast, "last_price", None)
+                    or getattr(fast, "regular_market_price", None)
+                )
+                prev_close = getattr(fast, "previous_close", None)
+                open_ = getattr(fast, "open", None)
+                high = getattr(fast, "day_high", None)
+                low = getattr(fast, "day_low", None)
+
+            if last is None or prev_close is None:
+                hist = t.history(period="2d")
+                if not hist.empty and "Close" in hist.columns:
+                    closes = hist["Close"].tolist()
+                    if len(closes) >= 1 and last is None:
+                        last = float(closes[-1])
+                    if len(closes) >= 2 and prev_close is None:
+                        prev_close = float(closes[-2])
+
+            try:
+                info = t.get_info() if hasattr(t, "get_info") else getattr(t, "info", {})
+            except Exception:
+                info = {}
+            name = info.get("shortName") or info.get("longName") or ""
+        except Exception:
+            pass
+
+        change = None
+        change_pct = None
+        if last is not None and prev_close not in (None, 0):
+            change = float(last) - float(prev_close)
+            change_pct = (change / float(prev_close)) * 100.0
+
+        rows.append(
+            {
+                "Symbol": sym,
+                "Name": name,
+                "Last": last,
+                "Change": change,
+                "% Change": change_pct,
+                "Prev Close": prev_close,
+                "Open": open_,
+                "High": high,
+                "Low": low,
+            }
+        )
+
+    return frame_mod.DataFrame(rows)
+
+
+def _active_watchlist_tickers() -> List[str]:
+    tickers = st.session_state.get("active_watchlist_tickers", []) or []
+    return [str(t).strip().upper() for t in tickers if str(t).strip()]
+
+
+def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
+    """Render center-panel watchlist controls used by the scan page."""
+    watchlist_tickers = st.session_state.get("active_watchlist_tickers", []) or []
+    has_watchlist = isinstance(watchlist_tickers, list) and len(watchlist_tickers) > 0
+
+    cw1, cw2, cw3 = st.columns([1, 1, 1])
+    with cw1:
+        view_watchlist_btn = st.button(
+            "View Watchlist",
+            key="btn_view_watchlist",
+            width="stretch",
+            disabled=not has_watchlist,
+        )
+    with cw2:
+        run_watchlist_btn = st.button(
+            "Run Watchlist Scan",
+            key="btn_scan_watchlist",
+            width="stretch",
+            disabled=not has_watchlist,
+        )
+    with cw3:
+        export_csv_data = None
+        if has_watchlist:
+            frame_mod = pd
+            if frame_mod is None:
+                import pandas as frame_mod  # type: ignore
+            export_csv_data = frame_mod.DataFrame({"Symbol": watchlist_tickers}).to_csv(index=False)
+        st.download_button(
+            "Export CSV",
+            data=export_csv_data if export_csv_data is not None else "",
+            file_name=f"watchlist_{len(watchlist_tickers) or 0}.csv",
+            mime="text/csv",
+            key="btn_export_watchlist",
+            disabled=not has_watchlist,
+        )
+
+    aw1, aw2, aw3 = st.columns([3, 1, 1])
+    with aw1:
+        watchlist_symbol = st.text_input(
+            "Add or remove ticker",
+            key="watchlist_add_symbol",
+            placeholder="AAPL",
+            label_visibility="collapsed",
+        )
+    with aw2:
+        add_watchlist_btn = st.button("Add", key="btn_add_watchlist_symbol", width="stretch")
+    with aw3:
+        remove_watchlist_btn = st.button(
+            "Remove",
+            key="btn_remove_watchlist_symbol",
+            width="stretch",
+        )
+
+    clear_watchlist_btn = st.button(
+        "Clear Watchlist",
+        key="btn_clear_watchlist",
+        width="stretch",
+        disabled=not has_watchlist,
+    )
+
+    st.caption("Use your active watchlist for viewing, scanning, and managing symbols.")
+    return (
+        bool(view_watchlist_btn),
+        bool(run_watchlist_btn),
+        bool(clear_watchlist_btn),
+        bool(add_watchlist_btn),
+        bool(remove_watchlist_btn),
+        str(watchlist_symbol or ""),
+    )
+
+
+def handle_active_watchlist_actions(
+    *,
+    view_watchlist: bool,
+    run_watchlist: bool,
+    clear_watchlist: bool,
+    add_symbol: bool,
+    remove_symbol: bool,
+    symbol: str,
+    username: str,
+    do_scan: ScanFn,
+    banner: BannerFn,
+) -> None:
+    """Handle center-panel watchlist actions used by the scan page."""
+    if view_watchlist:
+        tickers = _active_watchlist_tickers()
+        if not tickers:
+            banner("Active watchlist has no tickers to view.", "warning")
+        else:
+            st.session_state.results_df = build_watchlist_df(tickers)
+            st.session_state["force_results_refresh"] = True
+            banner(
+                f"Showing active watchlist with {len(tickers)} tickers (with prices & daily change).",
+                "info",
+            )
+
+    if run_watchlist:
+        tickers = _active_watchlist_tickers()
+        if not tickers:
+            banner("Active watchlist has no tickers to scan.", "warning")
+        else:
+            do_scan(tickers, f"Watchlist ({len(tickers)} tickers)")
+
+    if clear_watchlist:
+        active_watchlist_id = st.session_state.get("active_watchlist_id")
+        if active_watchlist_id is None:
+            banner("No active watchlist selected to clear.", "warning")
+        else:
+            try:
+                set_watchlist_tickers(active_watchlist_id, username, [])
+                st.session_state["active_watchlist_tickers"] = []
+                banner("Cleared all tickers from the active watchlist.", "success")
+            except Exception:
+                banner("Failed to clear active watchlist (database unavailable).", "error")
+
+    sym = str(symbol or "").strip().upper()
+    if add_symbol:
+        if not sym:
+            banner("Please enter a ticker to add.", "warning")
+        else:
+            active_watchlist_id = st.session_state.get("active_watchlist_id")
+            if active_watchlist_id is None:
+                banner("No active watchlist selected to add to.", "warning")
+            else:
+                try:
+                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
+                    norm_existing = {str(t).strip().upper() for t in existing}
+                    if sym not in norm_existing:
+                        updated = sorted(norm_existing | {sym})
+                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
+                        st.session_state["active_watchlist_tickers"] = list(updated)
+                        banner(f"Added {sym} to the active watchlist.", "success")
+                    else:
+                        banner(f"{sym} is already in the active watchlist.", "info")
+                except Exception:
+                    banner("Failed to update active watchlist (database unavailable).", "error")
+
+    if remove_symbol:
+        if not sym:
+            banner("Please enter a ticker to remove.", "warning")
+        else:
+            active_watchlist_id = st.session_state.get("active_watchlist_id")
+            if active_watchlist_id is None:
+                banner("No active watchlist selected to remove from.", "warning")
+            else:
+                try:
+                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
+                    norm_existing = {str(t).strip().upper() for t in existing}
+                    if sym in norm_existing:
+                        updated = sorted(norm_existing - {sym})
+                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
+                        st.session_state["active_watchlist_tickers"] = list(updated)
+                        banner(f"Removed {sym} from the active watchlist.", "success")
+                    else:
+                        banner(f"{sym} is not in the active watchlist.", "info")
+                except Exception:
+                    banner("Failed to update active watchlist (database unavailable).", "error")
