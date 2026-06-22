@@ -2,8 +2,25 @@
 from pathlib import Path
 import os
 import sqlite3
-import psycopg
-import streamlit as st
+
+try:
+    import streamlit as st
+except Exception:  # pragma: no cover - depends on optional UI dependency
+    class _StreamlitShim:
+        secrets: dict = {}
+
+        @staticmethod
+        def caption(*_args, **_kwargs):
+            return None
+
+        @staticmethod
+        def cache_data(*_args, **_kwargs):
+            def _decorator(fn):
+                return fn
+
+            return _decorator
+
+    st = _StreamlitShim()  # type: ignore[assignment]
 
 DB_PATH = Path(__file__).resolve().parent.parent / "scanner.sqlite"
 
@@ -54,8 +71,16 @@ def get_neon_conn():
         return None
 
     try:
+        import psycopg
+
         conn = psycopg.connect(url, row_factory=psycopg.rows.dict_row)
         return conn
+    except ImportError as e:
+        try:
+            st.caption(f"⚠️ Neon driver unavailable (psycopg): {e}")
+        except Exception:
+            pass
+        return None
     except Exception as e:
         # Surface a gentle hint in the UI, but don't crash callers.
         try:

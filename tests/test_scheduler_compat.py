@@ -141,5 +141,24 @@ class ConfigCompatTests(unittest.TestCase):
         self.assertIn('st.secrets["neon"]["database_url"]', source)
 
 
+class DbImportSafetyTests(unittest.TestCase):
+    def test_db_package_import_is_lightweight(self) -> None:
+        import db
+
+        self.assertIn("get_db_status", db.__all__)
+
+    def test_db_engine_import_does_not_require_psycopg(self) -> None:
+        import db.engine as engine
+
+        self.assertTrue(callable(engine.get_neon_conn))
+
+    def test_db_engine_missing_psycopg_returns_no_neon_connection(self) -> None:
+        with patch.dict(os.environ, {"NEON_DATABASE_URL": "postgresql://example/db"}, clear=False):
+            with patch.dict("sys.modules", {"psycopg": None}):
+                import db.engine as engine
+
+                self.assertIsNone(engine.get_neon_conn())
+
+
 if __name__ == "__main__":
     unittest.main()
