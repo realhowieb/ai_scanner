@@ -56,7 +56,19 @@ def _results_to_json(results) -> str:
     return json.dumps(results, default=str)
 
 
-def run_and_save(universe: str, username: str = "cron") -> bool:
+def run_and_save(
+    universe: str,
+    username: str = "cron",
+    *,
+    premarket: bool = False,
+    afterhours: bool = False,
+    unusual_volume: bool = False,
+    min_gap: float | None = None,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    top_n: int | None = None,
+    profile: str | None = None,
+) -> bool:
     """Run one universe scan and save results to the configured database."""
     from db.runs import save_run
     from scan.engine import run_breakout_scan
@@ -70,14 +82,14 @@ def run_and_save(universe: str, username: str = "cron") -> bool:
         started = time.perf_counter()
         results = run_breakout_scan(
             tickers,
-            premarket=False,
-            afterhours=False,
-            unusual_volume=False,
-            min_gap=float(os.getenv("CRON_MIN_GAP", "0")),
-            min_price=float(os.getenv("CRON_MIN_PRICE", "1")),
-            max_price=float(os.getenv("CRON_MAX_PRICE", "1000")),
-            top_n=int(os.getenv("CRON_TOP_N", "100")),
-            profile=os.getenv("CRON_PROFILE", "regular"),
+            premarket=premarket,
+            afterhours=afterhours,
+            unusual_volume=unusual_volume,
+            min_gap=min_gap if min_gap is not None else float(os.getenv("CRON_MIN_GAP", "0")),
+            min_price=min_price if min_price is not None else float(os.getenv("CRON_MIN_PRICE", "1")),
+            max_price=max_price if max_price is not None else float(os.getenv("CRON_MAX_PRICE", "1000")),
+            top_n=top_n if top_n is not None else int(os.getenv("CRON_TOP_N", "100")),
+            profile=profile or os.getenv("CRON_PROFILE", "regular"),
             diagnostics=False,
             use_cache=True,
         )

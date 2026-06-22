@@ -1,197 +1,115 @@
-from ..db.runs import save_run
-from ..data import fetch, prices, filters
-from ..scan.breakout import breakout_scanner
-from ..data.symbols import get_spy_history
+"""Compatibility entrypoints for manual and scheduled scanner jobs."""
 
-import time
-from datetime import datetime, timezone
+from __future__ import annotations
+
+from typing import Any
+
+from .cron_runner import run_and_save
 
 
-def run_postmarket(settings) -> int:
-    """
-    Headless post-market job.
-    Pure function: no Streamlit calls. Returns the saved run_id (or -1 on failure).
+_UNIVERSE_ALIASES = {
+    "S&P 500": "SP500",
+    "SP500": "SP500",
+    "SP 500": "SP500",
+    "NASDAQ": "NASDAQ",
+    "NASDAQ100": "NASDAQ",
+    "NASDAQ 100": "NASDAQ",
+    "COMBO": "COMBO",
+}
 
-    Expected settings keys (with safe defaults):
-      - universe_name: str (e.g., "sp500", "nasdaq", "custom")
-      - min_price: float
-      - max_price: float or None
-      - include_ta: bool
-      - fetch_period: str (e.g., "60d")
-      - fetch_interval: str (e.g., "1d")
-      - headless_max_workers: int
-      - chunk_size: int
-      - filter_min_vol: int or None
-      - filter_min_avg_vol: int or None
-      - filter_min_market_cap: float or None
-      - symbols: list[str] (optional override)
-    """
-    t0 = time.perf_counter()
 
-    # ---------- 1) Resolve universe ----------
+def _normalize_universe(value: str | None, default: str) -> str:
+    if not value:
+        return default
+    key = str(value).strip().upper()
+    return _UNIVERSE_ALIASES.get(key, key)
+
+
+def _coerce_positive_int(value: Any, default: int | None = None) -> int | None:
     try:
-        universe_name = settings.get("universe_name", "sp500")
-        symbols_override = settings.get("symbols")
-        if symbols_override:
-            symbols = list(dict.fromkeys([s.strip().upper() for s in symbols_override if s]))
-        else:
-            # Try common universe providers in order
-            symbols = None
-            if hasattr(universe, "get_universe"):
-                symbols = universe.get_universe(universe_name)  # type: ignore[attr-defined]
-            if symbols is None and hasattr(universe, "sp500"):
-                symbols = universe.sp500() if universe_name.lower() == "sp500" else None  # type: ignore[attr-defined]
-            if symbols is None and hasattr(universe, "nasdaq100"):
-                if universe_name.lower() in {"nasdaq", "nasdaq100", "ndx"}:
-                    symbols = universe.nasdaq100()  # type: ignore[attr-defined]
-            if symbols is None and hasattr(universe, "all_equities"):
-                symbols = universe.all_equities()  # type: ignore[attr-defined]
-            if symbols is None:
-                symbols = []
-        total_before = len(symbols)
-    except Exception:
-        # If we cannot resolve, fail fast but safely
-        return -1
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
 
-    if total_before == 0:
-        return -1
 
-    # ---------- 2) Fetch price data (headless-friendly) ----------
-    fetch_period = settings.get("fetch_period", "60d")
-    fetch_interval = settings.get("fetch_interval", "1d")
-    headless_workers = settings.get("headless_max_workers", 4)
-    chunk_size = settings.get("chunk_size", 70)
+def _run_now(
+    universe: str,
+    *,
+    username: str = "scheduler",
+    profile: str = "regular",
+    premarket: bool = False,
+    afterhours: bool = False,
+    unusual_volume: bool = False,
+    min_gap: float | None = None,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    top_n: int | None = None,
+    **_: Any,
+) -> int:
+    """Run a headless scan and return 0 on success, -1 on failure."""
+    ok = run_and_save(
+        _normalize_universe(universe, "SP500"),
+        username=username,
+        premarket=premarket,
+        afterhours=afterhours,
+        unusual_volume=unusual_volume,
+        min_gap=min_gap,
+        min_price=min_price,
+        max_price=max_price,
+        top_n=_coerce_positive_int(top_n),
+        profile=profile,
+    )
+    return 0 if ok else -1
 
-    # Pick fetch function that exists in data.fetch
-    price_data = {}
-    skipped = []
 
-    try:
-        # If there is a unified batch fetcher, prefer it
-        if hasattr(fetch, "fetch_price_data_batch"):
-            price_data, skipped = fetch.fetch_price_data_batch(
-                symbols,
-                period=fetch_period,
-                interval=fetch_interval,
-                batch_size=chunk_size,
-                headless=True,
-                logger=None,
-            )
-        elif hasattr(fetch, "fetch_price_data_parallel"):
-            price_data, skipped = fetch.fetch_price_data_parallel(
-                symbols,
-                period=fetch_period,
-                interval=fetch_interval,
-                chunk_size=chunk_size,
-                max_workers=headless_workers,
-                headless=True,
-                logger=None,
-            )
-        else:
-            # Last resort: try a per-symbol function if available
-            if hasattr(fetch, "fetch_price_data"):
-                for s in symbols:
-                    try:
-                        df = fetch.fetch_price_data(s, period=fetch_period, interval=fetch_interval)
-                        if df is not None and not df.empty:
-                            price_data[s] = df
-                        else:
-                            skipped.append(s)
-                    except Exception:
-                        skipped.append(s)
-            else:
-                return -1
-    except Exception:
-        # fetching blew up
-        return -1
+def run_sp500_now(**kwargs: Any) -> int:
+    return _run_now("SP500", **kwargs)
 
-    if not price_data:
-        # Nothing fetched, nothing to do
-        elapsed_s = round(time.perf_counter() - t0, 3)
-        meta = {
-            "run_kind": "postmarket",
-            "universe_name": universe_name,
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "elapsed_s": elapsed_s,
-            "total_before": total_before,
-            "fetched": 0,
-            "skipped": len(skipped),
-        }
-        try:
-            run_id = save_run(
-                run_type="postmarket",
-                universe_name=universe_name,
-                rows_df=None,
-                meta=meta,
-            )
-            return int(run_id) if run_id is not None else -1
-        except Exception:
-            return -1
 
-    # ---------- 3) Optional pre-filtering (price/volume/cap) ----------
-    try:
-        filtered = price_data
-        if hasattr(filters, "prefilter"):
-            filtered = filters.prefilter(
-                price_data,
-                min_price=settings.get("min_price"),
-                max_price=settings.get("max_price"),
-                min_vol=settings.get("filter_min_vol"),
-                min_avg_vol=settings.get("filter_min_avg_vol"),
-                min_market_cap=settings.get("filter_min_market_cap"),
-            )
-        elif hasattr(filters, "filter_price_volume_cap"):
-            filtered = filters.filter_price_volume_cap(
-                price_data,
-                min_price=settings.get("min_price"),
-                max_price=settings.get("max_price"),
-                min_vol=settings.get("filter_min_vol"),
-                min_avg_vol=settings.get("filter_min_avg_vol"),
-                min_market_cap=settings.get("filter_min_market_cap"),
-            )
-    except Exception:
-        filtered = price_data
+def run_nasdaq_now(**kwargs: Any) -> int:
+    return _run_now("NASDAQ", **kwargs)
 
-    # ---------- 4) Load SPY history for RS calculations ----------
-    try:
-        spy_df = get_spy_history(period=fetch_period, interval=fetch_interval)
-    except Exception:
-        spy_df = None
 
-    # ---------- 5) Run breakout scan ----------
-    try:
-        min_price = settings.get("min_price", 1.0)
-        max_price = settings.get("max_price")
-        include_ta = settings.get("include_ta", True)
-        results_df = breakout_scanner(
-            filtered,
-            min_price=min_price,
-            max_price=max_price,
-            include_ta=include_ta,
-            spy_df=spy_df,
-        )
-    except Exception:
-        results_df = None
+def run_premarket_now(universe: str = "SP500", **kwargs: Any) -> int:
+    return _run_now(
+        _normalize_universe(universe, "SP500"),
+        profile="premarket",
+        premarket=True,
+        **kwargs,
+    )
 
-    # ---------- 6) Save results to DB ----------
-    elapsed_s = round(time.perf_counter() - t0, 3)
-    meta = {
-        "run_kind": "postmarket",
-        "universe_name": universe_name,
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "elapsed_s": elapsed_s,
-        "total_before": total_before,
-        "fetched": len(price_data),
-        "skipped": len(skipped),
-    }
 
-    try:
-        run_id = save_run(
-            run_type="postmarket",
-            universe_name=universe_name,
-            rows_df=results_df,
-            meta=meta,
-        )
-        return int(run_id) if run_id is not None else -1
-    except Exception:
-        return -1
+def run_postmarket_now(universe: str = "SP500", **kwargs: Any) -> int:
+    return _run_now(
+        _normalize_universe(universe, "SP500"),
+        profile="postmarket",
+        afterhours=True,
+        **kwargs,
+    )
+
+
+def run_premarket(settings: dict[str, Any] | None = None) -> int:
+    settings = dict(settings or {})
+    universe = _normalize_universe(settings.pop("universe_name", None), "SP500")
+    settings.pop("profile", None)
+    settings.pop("premarket", None)
+    return run_premarket_now(universe=universe, **settings)
+
+
+def run_postmarket(settings: dict[str, Any] | None = None) -> int:
+    settings = dict(settings or {})
+    universe = _normalize_universe(settings.pop("universe_name", None), "SP500")
+    settings.pop("profile", None)
+    settings.pop("afterhours", None)
+    return run_postmarket_now(universe=universe, **settings)
+
+
+__all__ = [
+    "run_sp500_now",
+    "run_nasdaq_now",
+    "run_premarket_now",
+    "run_postmarket_now",
+    "run_premarket",
+    "run_postmarket",
+]
