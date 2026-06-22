@@ -61,6 +61,22 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def render_active_watchlist_tools", watchlist_source)
         self.assertIn("def handle_active_watchlist_actions", watchlist_source)
 
+    def test_scan_provider_helpers_are_extracted_from_scan_ui(self):
+        scans_source = (ROOT / "ui" / "scans.py").read_text()
+        provider_source = (ROOT / "ui" / "scan_providers.py").read_text()
+
+        self.assertIn("from ui.scan_providers import", scans_source)
+        self.assertIn("apply_alpaca_extended_prices", scans_source)
+        self.assertIn("fetch_alpaca_snapshot_debug", scans_source)
+        self.assertNotIn("import requests", scans_source)
+        self.assertNotIn("ALPACA_MAX_SNAPSHOT_BATCH", scans_source)
+        self.assertNotIn("def _get_alpaca_headers", scans_source)
+        self.assertNotIn("def _get_alpaca_extended_last_prices", scans_source)
+        self.assertNotIn("def _apply_alpaca_extended_prices", scans_source)
+        self.assertIn("def sanitize_universe_symbols", provider_source)
+        self.assertIn("def get_alpaca_extended_last_prices", provider_source)
+        self.assertIn("except (ValueError, requests_exc.RequestException)", provider_source)
+
     def test_app_boot_helpers_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()
         boot_source = (ROOT / "ui" / "app_boot.py").read_text()

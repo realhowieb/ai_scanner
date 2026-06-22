@@ -12,7 +12,6 @@ import traceback
 
 import pandas as pd
 import streamlit as st
-import requests  # NEW
 from auth.tiering import require_min_tier
 
 from db.runs import save_run, save_daily_snapshot, list_runs
@@ -31,57 +30,15 @@ from scan.options import (
 )
 from scan.strategies import apply_strategy_filter
 from scan.universe_selection import resolve_scan_universe
+from ui.scan_providers import (
+    apply_alpaca_extended_prices,
+    fetch_alpaca_snapshot_debug,
+    get_alpaca_extended_last_prices,
+    get_alpaca_headers,
+    sanitize_universe_symbols,
+)
 from ui.single_ticker import handle_single_ticker_actions, render_single_ticker_panel
 from ui.watchlists import handle_active_watchlist_actions, render_active_watchlist_tools
-
-# --- Symbol sanitation (avoid non-Yahoo encodings like $PREF$A, units/warrants, etc.) ---
-import re
-
-_BAD_SYMBOL_RE = re.compile(r"\s+")
-
-# Accept common Yahoo-style symbols:
-# - letters/numbers
-# - dot for class shares (BRK.B)
-# - dash for class shares / tickers (BRK-B)
-_VALID_SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]*$")
-
-# Common SPAC/unit/warrant/right suffixes that often appear in raw lists but
-# frequently fail on Yahoo Finance / yfinance.
-_DROP_SUFFIXES = (
-    "-U", "-W", "-WS", "-WT", "-R", "-RT", "-CV", "-CL",
-)
-
-def sanitize_universe_symbols(symbols: List[str]) -> List[str]:
-    """Normalize and filter symbols so yfinance doesn't spam logs.
-
-    - Uppercases/strips
-    - Drops symbols with '$' or whitespace
-    - Drops common unit/warrant/right suffixes (e.g. AAM-U, ACHR-W)
-    - Drops anything not matching a conservative Yahoo symbol regex
-    - De-dupes while preserving order
-    """
-    out: List[str] = []
-    seen = set()
-    for s in symbols or []:
-        sym = str(s or "").strip().upper()
-        if not sym:
-            continue
-        # Raw lists sometimes include $PREF$A or leading '$' encodings
-        if "$" in sym:
-            continue
-        if _BAD_SYMBOL_RE.search(sym):
-            continue
-        # Drop common SPAC encodings that yfinance frequently can't resolve
-        if sym.endswith(_DROP_SUFFIXES):
-            continue
-        # Conservative allow-list for symbols
-        if not _VALID_SYMBOL_RE.match(sym):
-            continue
-        if sym in seen:
-            continue
-        seen.add(sym)
-        out.append(sym)
-    return out
 
 
 # --- Admin helpers for scan caps ---
@@ -447,134 +404,6 @@ def _banner(msg: str, level: str = "info") -> None:
         st.info(msg)
 
 
-# --- Alpaca extended-hours helpers ---
-
-ALPACA_MAX_SNAPSHOT_BATCH = 50  # keep batches small for free tier
-
-
-def _get_alpaca_headers() -> Optional[dict]:
-    """Return Alpaca auth headers from Streamlit secrets or None if not configured."""
-    try:
-        key = st.secrets["ALPACA_API_KEY_ID"]
-        secret = st.secrets["ALPACA_API_SECRET_KEY"]
-    except Exception:
-        return None
-
-    if not key or not secret:
-        return None
-
-    return {
-        "APCA-API-KEY-ID": key,
-        "APCA-API-SECRET-KEY": secret,
-    }
-
-
-def _get_alpaca_extended_last_prices(symbols: List[str]) -> dict[str, float]:
-    """
-    Fetch extended-hours latest prices using Alpaca snapshots.
-
-    Uses the free IEX feed; data is delayed but includes premarket / after-hours
-    trades when available. If Alpaca is not configured or the request fails,
-    returns an empty dict.
-    """
-    headers = _get_alpaca_headers()
-    if not headers:
-        return {}
-
-    symbols = [str(s).strip().upper() for s in symbols if s]
-    if not symbols:
-        return {}
-
-    out: dict[str, float] = {}
-    base_url = "https://data.alpaca.markets/v2/stocks/snapshots"
-
-    for i in range(0, len(symbols), ALPACA_MAX_SNAPSHOT_BATCH):
-        batch = symbols[i : i + ALPACA_MAX_SNAPSHOT_BATCH]
-        params = {
-            "symbols": ",".join(batch),
-            "feed": "iex",  # free tier feed
-        }
-        try:
-            resp = requests.get(base_url, headers=headers, params=params, timeout=5)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception:
-            # If Alpaca is unavailable or misconfigured, skip this batch
-            continue
-
-        # Alpaca may return either:
-        # 1) {"snapshots": {"AAPL": {...}, "TSLA": {...}}}
-        # 2) {"AAPL": {...}, "TSLA": {...}}
-        raw_snaps = data.get("snapshots")
-        if isinstance(raw_snaps, dict) and raw_snaps:
-            snapshots = raw_snaps
-        elif isinstance(data, dict):
-            snapshots = data
-        else:
-            snapshots = {}
-
-        for sym in batch:
-            snap = snapshots.get(sym)
-            if not snap:
-                continue
-
-            last_trade = snap.get("latestTrade") or {}
-            price = last_trade.get("p")
-
-            # Fallback to minute bar close if needed
-            if price is None:
-                minute = snap.get("minuteBar") or {}
-                c = minute.get("c")
-                if c is not None:
-                    price = c
-
-            if price is not None:
-                out[sym] = float(price)
-
-    return out
-
-
-def _apply_alpaca_extended_prices(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Override the 'Last' (or similar) price column using Alpaca extended-hours prices.
-
-    If Alpaca is not configured or returns no data, the original DataFrame is returned.
-    """
-    if df is None or df.empty:
-        return df
-
-    # Detect symbol column
-    symbol_col = None
-    for cand in ("Ticker", "Symbol", "symbol"):
-        if cand in df.columns:
-            symbol_col = cand
-            break
-
-    if symbol_col is None:
-        return df
-
-    symbols = df[symbol_col].astype(str).tolist()
-    quotes = _get_alpaca_extended_last_prices(symbols)
-    if not quotes:
-        return df
-
-    # Decide which price column to override; prefer 'Last'
-    price_cols = ["Last", "Price", "Close"]
-    target_col = next((c for c in price_cols if c in df.columns), None)
-    if target_col is None:
-        target_col = "Last"
-        if target_col not in df.columns:
-            df[target_col] = None
-
-    def _apply_row(row):
-        sym = str(row[symbol_col]).strip().upper()
-        new_price = quotes.get(sym)
-        return float(new_price) if new_price is not None else row[target_col]
-
-    df[target_col] = df.apply(_apply_row, axis=1)
-    return df
-
-
 def render_scan_controls(
     can_scan_sp500: bool,
     can_scan_nasdaq: bool,
@@ -875,7 +704,7 @@ def render_scan_controls(
                     diagnostics=engine_diagnostics,
                     progress_cb=progress_cb,
                     snapshot_id=snapshot_id,
-                    extended_price_transform=_apply_alpaca_extended_prices,
+                    extended_price_transform=apply_alpaca_extended_prices,
                 )
 
                 progress.progress(92)
@@ -1000,7 +829,7 @@ def render_data_provider_diagnostics() -> None:
         key="btn_test_alpaca",
         width="stretch",
     ):
-        headers = _get_alpaca_headers()
+        headers = get_alpaca_headers()
         if not headers:
             _banner(
                 "Alpaca API keys are not configured in Streamlit secrets. "
@@ -1009,7 +838,7 @@ def render_data_provider_diagnostics() -> None:
             )
         else:
             with st.spinner("Contacting Alpaca for AAPL snapshot..."):
-                quotes = _get_alpaca_extended_last_prices(["AAPL"])
+                quotes = get_alpaca_extended_last_prices(["AAPL"])
             price = quotes.get("AAPL")
             if price is not None:
                 st.success(f"✅ Alpaca Market Data OK. AAPL extended price: ${price:.2f}")
@@ -1031,18 +860,11 @@ def render_data_provider_diagnostics() -> None:
                     "warning",
                 )
 
-                debug_url = "https://data.alpaca.markets/v2/stocks/snapshots"
-                debug_params = {
-                    "symbols": "AAPL",
-                    "feed": st.secrets.get("ALPACA_FEED", "iex"),
-                }
                 try:
-                    debug_resp = requests.get(
-                        debug_url, headers=headers, params=debug_params, timeout=5
-                    )
-                    st.write("Alpaca debug HTTP status:", debug_resp.status_code)
-                    try:
-                        debug_json = debug_resp.json() or {}
+                    status_code, debug_payload = fetch_alpaca_snapshot_debug("AAPL")
+                    st.write("Alpaca debug HTTP status:", status_code)
+                    if isinstance(debug_payload, dict):
+                        debug_json = debug_payload
                         st.write("Alpaca debug top-level keys:", list(debug_json.keys()))
 
                         raw_snaps = debug_json.get("snapshots")
@@ -1070,10 +892,10 @@ def render_data_provider_diagnostics() -> None:
                             value=str(debug_json)[:1200],
                             height=200,
                         )
-                    except Exception:
+                    else:
                         st.text_area(
                             "Raw Alpaca response (non-JSON, truncated)",
-                            value=(debug_resp.text or "")[:1200],
+                            value=str(debug_payload)[:1200],
                             height=200,
                         )
                 except Exception as e:
