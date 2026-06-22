@@ -5,7 +5,7 @@ that runs the breakout scan and persists results to the runs DB.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional, Callable, Any
+from typing import List, Optional, Any
 from zoneinfo import ZoneInfo
 import time
 import traceback
@@ -18,6 +18,7 @@ from auth.tiering import require_min_tier
 from db.runs import save_run, save_daily_snapshot, list_runs
 from ml_prebreakout import score_prebreakout
 from scan.engine import safe_call, run_breakout_scan
+from scan.execution import run_manual_scan_execution
 from scan.options import (
     DEFAULT_MARKET,
     DEFAULT_PROFILE,
@@ -1111,68 +1112,10 @@ def render_scan_controls(
             combo_cache_key=combo_cache_key if market == "COMBO" else None,
         )
 
-    # --- Post-filter helpers for strategy scans (operate on breakout results) ---
-    def _pf_gap_up(df: pd.DataFrame) -> pd.DataFrame:
-        if "GapPct" not in df.columns:
-            st.caption("⚠️ Gap-Up Scan: no 'GapPct' column in results.")
-            return df.head(0)
-        return df[df["GapPct"] > 0].sort_values("GapPct", ascending=False)
-
-    def _pf_gap_down(df: pd.DataFrame) -> pd.DataFrame:
-        if "GapPct" not in df.columns:
-            st.caption("⚠️ Gap-Down Scan: no 'GapPct' column in results.")
-            return df.head(0)
-        return df[df["GapPct"] < 0].sort_values("GapPct", ascending=True)
-
-    def _pf_most_active(df: pd.DataFrame) -> pd.DataFrame:
-        col = None
-        if "DollarVol20" in df.columns:
-            col = "DollarVol20"
-        elif "Volume" in df.columns:
-            col = "Volume"
-        if col is None:
-            st.caption("⚠️ Most Active Scan: no 'DollarVol20' or 'Volume' column in results.")
-            return df.head(0)
-        return df.sort_values(col, ascending=False)
-
-    def _pf_top_gainers(df: pd.DataFrame) -> pd.DataFrame:
-        col = None
-        if "Trend10D%" in df.columns:
-            col = "Trend10D%"
-        elif "GapPct" in df.columns:
-            col = "GapPct"
-        if col is None:
-            st.caption("⚠️ Top Gainers Scan: no 'Trend10D%' or 'GapPct' column in results.")
-            return df.head(0)
-        return df.sort_values(col, ascending=False)
-
-    def _pf_unusual_volume(df: pd.DataFrame) -> pd.DataFrame:
-        if "VolRel20" not in df.columns:
-            st.caption("⚠️ Unusual Volume Scan: no 'VolRel20' column in results.")
-            return df.head(0)
-        return df[df["VolRel20"] >= 2].sort_values("VolRel20", ascending=False)
-
-    def _pf_momentum(df: pd.DataFrame) -> pd.DataFrame:
-        if "Trend20D%" not in df.columns or "Trend10D%" not in df.columns:
-            st.caption("⚠️ Momentum Scan: missing 'Trend20D%' or 'Trend10D%' columns.")
-            return df.head(0)
-        mask = (df["Trend20D%"] > 0) & (df["Trend10D%"] > 0)
-        return df[mask].sort_values("Trend20D%", ascending=False)
-
-    def _pf_breakout_only(df: pd.DataFrame) -> pd.DataFrame:
-        if "IsBreakout" not in df.columns:
-            st.caption("⚠️ Breakout-Only Scan: no 'IsBreakout' column in results.")
-            return df.head(0)
-        base = df[df["IsBreakout"] == True]
-        if "BreakoutScore" in base.columns:
-            return base.sort_values("BreakoutScore", ascending=False)
-        return base
-
     def do_scan(
         tickers: List[str],
         label: str,
         profile_override: Optional[str] = None,
-        post_filter: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None,
     ):
         # Final safety net: regardless of caller, sanitize tickers before scanning.
         tickers = sanitize_universe_symbols(tickers)
@@ -1290,84 +1233,25 @@ def render_scan_controls(
                 if _is_admin():
                     snapshot_id = st.session_state.get("price_snapshot_id") or st.session_state.get("snapshot_id")
 
-                # Prefer progress-enabled engine call; fall back if the engine signature doesn't accept it.
-                try:
-                    df = run_breakout_scan(
-                        tickers=list(tickers),
-                        premarket=premarket,
-                        afterhours=afterhours,
-                        unusual_volume=unusual_vol,
-                        min_gap=min_gap,
-                        min_price=min_price,
-                        max_price=max_price,
-                        top_n=top_n,
-                        profile=effective_profile,
-                        diagnostics=engine_diagnostics,
-                        progress_cb=progress_cb,
-                        snapshot_id=snapshot_id,
-                    )
-                except TypeError:
-                    # Either the engine doesn't support progress_cb or snapshot_id (or both).
-                    # Try without progress_cb but keep snapshot_id; if that still fails, drop snapshot_id too.
-                    try:
-                        df = run_breakout_scan(
-                            tickers=list(tickers),
-                            premarket=premarket,
-                            afterhours=afterhours,
-                            unusual_volume=unusual_vol,
-                            min_gap=min_gap,
-                            min_price=min_price,
-                            max_price=max_price,
-                            top_n=top_n,
-                            profile=effective_profile,
-                            diagnostics=engine_diagnostics,
-                            snapshot_id=snapshot_id,
-                        )
-                    except TypeError:
-                        df = run_breakout_scan(
-                            tickers=list(tickers),
-                            premarket=premarket,
-                            afterhours=afterhours,
-                            unusual_volume=unusual_vol,
-                            min_gap=min_gap,
-                            min_price=min_price,
-                            max_price=max_price,
-                            top_n=top_n,
-                            profile=effective_profile,
-                            diagnostics=engine_diagnostics,
-                        )
+                df = run_manual_scan_execution(
+                    runner=run_breakout_scan,
+                    tickers=list(tickers),
+                    premarket=premarket,
+                    afterhours=afterhours,
+                    unusual_volume=unusual_vol,
+                    min_gap=min_gap,
+                    min_price=min_price,
+                    max_price=max_price,
+                    top_n=top_n,
+                    profile=effective_profile,
+                    apply_gap_filter=apply_gap_filter,
+                    diagnostics=engine_diagnostics,
+                    progress_cb=progress_cb,
+                    snapshot_id=snapshot_id,
+                    extended_price_transform=_apply_alpaca_extended_prices,
+                )
 
                 progress.progress(92)
-
-                # Phase 2.5: enforce GapPct >= min_gap only when Apply Gap Filter is enabled (gap-UP only)
-                if apply_gap_filter and df is not None and not df.empty:
-                    try:
-                        if "GapPct" in df.columns:
-                            df["GapPct"] = pd.to_numeric(df["GapPct"], errors="coerce").fillna(0.0)
-                            df = df[df["GapPct"] >= float(min_gap)]
-                        else:
-                            # If the engine didn't provide GapPct, the gap filter can't be applied
-                            df = df.head(0)
-                    except Exception as gap_exc:
-                        if diagnostics:
-                            st.caption(f"⚠️ Gap filter failed for {label}: {gap_exc}")
-
-                # Phase 3: apply any strategy-specific post-filter (e.g., gap-up / most active)
-                if df is not None and not df.empty and post_filter is not None:
-                    try:
-                        df = post_filter(df)
-                    except Exception as pf_exc:
-                        if diagnostics:
-                            st.caption(f"⚠️ Post-filter for {label} failed: {pf_exc}")
-
-                # Phase 4: cap to Top N + extended-hours price override (70–95%)
-                if df is not None and not df.empty:
-                    df = df.head(top_n).reset_index(drop=True)
-
-                    if premarket or afterhours:
-                        # Use Alpaca Market Data for extended-hours prices.
-                        # If Alpaca is not configured or returns nothing, this is a no-op.
-                        df = _apply_alpaca_extended_prices(df)
 
                 progress.progress(97)
 
