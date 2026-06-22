@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import importlib
+import importlib.util
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -115,6 +116,29 @@ class ConfigCompatTests(unittest.TestCase):
             reloaded = importlib.reload(config)
 
         self.assertEqual(reloaded.SETTINGS.db_url, "postgresql://neon/db")
+
+    def test_db_core_url_prefers_neon_database_url_env(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "NEON_DATABASE_URL": "postgresql://core-neon/db",
+                "DATABASE_URL": "postgresql://core-generic/db",
+            },
+            clear=False,
+        ):
+            spec = importlib.util.spec_from_file_location("db_core_under_test", ROOT / "db" / "core.py")
+            self.assertIsNotNone(spec)
+            self.assertIsNotNone(spec.loader if spec else None)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)  # type: ignore[union-attr]
+
+            self.assertEqual(module._get_database_url(), "postgresql://core-neon/db")
+
+    def test_app_db_helper_mentions_neon_database_url(self) -> None:
+        source = (ROOT / "app.py").read_text(encoding="utf-8")
+
+        self.assertIn("NEON_DATABASE_URL", source)
+        self.assertIn('st.secrets["neon"]["database_url"]', source)
 
 
 if __name__ == "__main__":

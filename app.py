@@ -468,16 +468,30 @@ def _get_database_url() -> str | None:
         # Env vars first
         import os
 
-        v = os.getenv("DATABASE_URL") or os.getenv("database_url")
+        v = os.getenv("NEON_DATABASE_URL") or os.getenv("DATABASE_URL") or os.getenv("database_url")
         if v:
             return str(v).strip()
     except Exception:
         pass
 
     try:
+        # Streamlit nested Neon secret
+        if hasattr(st, "secrets"):
+            v = st.secrets["neon"]["database_url"]
+            if v:
+                return str(v).strip()
+    except Exception:
+        pass
+
+    try:
         # Streamlit secrets (case-sensitive)
         if hasattr(st, "secrets"):
-            v = st.secrets.get("DATABASE_URL") or st.secrets.get("database_url")
+            v = (
+                st.secrets.get("NEON_DATABASE_URL")
+                or st.secrets.get("DATABASE_URL")
+                or st.secrets.get("neon_database_url")
+                or st.secrets.get("database_url")
+            )
             if v:
                 return str(v).strip()
     except Exception:
@@ -491,14 +505,14 @@ def _get_database_url() -> str | None:
 # Prefer psycopg (v3). Fall back to psycopg2 if present.
 
 def _get_db_conn_for_app():
-    """Return a DB connection using DATABASE_URL/database_url.
+    """Return a DB connection using the configured Neon/Postgres URL.
 
     Uses psycopg (v3) if available; falls back to psycopg2.
     Caller is responsible for closing.
     """
     dsn = _get_database_url()
     if not dsn:
-        raise RuntimeError("DATABASE_URL is not set")
+        raise RuntimeError("Database URL is not set")
 
     # Prefer psycopg (v3)
     try:

@@ -9,12 +9,38 @@ from typing import Optional
 
 def _get_database_url() -> str:
     """
-    Return DATABASE_URL from env or Streamlit secrets.
-    Supports both uppercase and lowercase keys.
+    Return the configured Postgres URL from env or Streamlit secrets.
+
+    Keep this in sync with db.engine/config.py so every DB path recognizes the
+    same Neon deployment settings.
     """
-    dsn = os.getenv("DATABASE_URL") or os.getenv("database_url")
+    dsn = (
+        os.getenv("NEON_DATABASE_URL")
+        or os.getenv("DATABASE_URL")
+        or os.getenv("database_url")
+    )
     if not dsn:
-        raise RuntimeError("DATABASE_URL is not set (checked DATABASE_URL and database_url)")
+        try:
+            import streamlit as st  # type: ignore
+
+            dsn = st.secrets["neon"]["database_url"]  # type: ignore[index]
+        except Exception:
+            dsn = None
+    if not dsn:
+        try:
+            import streamlit as st  # type: ignore
+
+            for key in ("NEON_DATABASE_URL", "DATABASE_URL", "neon_database_url", "database_url"):
+                candidate = st.secrets[key]  # type: ignore[index]
+                if candidate:
+                    dsn = candidate
+                    break
+        except Exception:
+            pass
+    if not dsn:
+        raise RuntimeError(
+            "Database URL is not set (checked NEON_DATABASE_URL, DATABASE_URL, and database_url)"
+        )
     return dsn.strip()
 
 
