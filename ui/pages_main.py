@@ -193,10 +193,7 @@ _run_sp500 = _run_nasdaq = _run_premarket = _run_postmarket = None
 # --- Expanded discovery for S&P 500 runner ---
 for _module_name, _attr_name in (
     ("scheduler.jobs", "run_sp500_now"),
-    ("scan.breakout", "run_sp500_scan"),
-    ("scan.breakout", "run_sp500"),
     ("ai_scanner.scheduler.jobs", "run_sp500_now"),
-    ("ai_scanner.scan.breakout", "run_sp500_scan"),
 ):
     if _run_sp500 is None:
         _run_sp500 = _optional_attr(_module_name, _attr_name)
@@ -204,10 +201,7 @@ for _module_name, _attr_name in (
 # --- Expanded discovery for Nasdaq runner ---
 for _module_name, _attr_name in (
     ("scheduler.jobs", "run_nasdaq_now"),
-    ("scan.breakout", "run_nasdaq_scan"),
-    ("scan.breakout", "run_nasdaq"),
     ("ai_scanner.scheduler.jobs", "run_nasdaq_now"),
-    ("ai_scanner.scan.breakout", "run_nasdaq_scan"),
 ):
     if _run_nasdaq is None:
         _run_nasdaq = _optional_attr(_module_name, _attr_name)

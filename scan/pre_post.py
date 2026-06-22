@@ -1,21 +1,60 @@
-# ai_scanner/scan/pre_post.py
+"""Headless pre/post-market scan helpers."""
+
 from __future__ import annotations
+
+import json
 import time
+from pathlib import Path
+
 import pandas as pd
-from ai_scanner.data.universe import load_sp600_tickers, load_sp500_tickers, fetch_and_save_sp500
-from ai_scanner.data.prices import fetch_price_data_parallel, fetch_price_data_batch
-from ai_scanner.data.filters import filter_us_tickers, filter_problem_tickers, filter_tickers_by_price, filter_by_dollar_volume
-from ai_scanner.scan.breakout import breakout_scanner
-from ai_scanner.db.runs import save_run
+
+from data.fetch import fetch_and_save_sp500, load_sp500_tickers, load_sp600_tickers
+from data.filters import (
+    filter_by_dollar_volume,
+    filter_problem_tickers,
+    filter_tickers_by_price,
+    filter_us_tickers,
+)
+from data.prices import fetch_price_data_batch, fetch_price_data_parallel
+from db.runs import save_run
+from scan.breakout import run_breakout_scan
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _read_symbols(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    return [
+        line.strip().upper()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
+def _load_sp500() -> list[str]:
+    try:
+        symbols = load_sp500_tickers()
+    except Exception:
+        symbols = []
+    return list(symbols or _read_symbols(ROOT / "sp500.txt"))
+
+
+def _load_sp600_or_sp500() -> list[str]:
+    try:
+        symbols = load_sp600_tickers()
+    except Exception:
+        symbols = []
+    return list(symbols or _load_sp500())
 
 try:
-    from ai_scanner.scan.gap_unusual import gap_unusual_volume_scanner  # type: ignore
+    from scan.gap_unusual import gap_unusual_volume_scanner  # type: ignore
 except Exception:
     def gap_unusual_volume_scanner(*args, **kwargs):  # type: ignore
         return None
 
 try:
-    from ai_scanner.scan.spy import get_spy_history  # type: ignore
+    from scan.spy import get_spy_history  # type: ignore
 except Exception:
     def get_spy_history(*args, **kwargs):  # type: ignore
         return None
@@ -60,7 +99,7 @@ def run_scan(
     session_label: str | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     if universe is None:
-        universe = load_sp600_tickers()
+        universe = _load_sp600_or_sp500()
     if us_only:
         universe = filter_us_tickers(universe)
     universe = filter_problem_tickers(universe)
@@ -86,7 +125,18 @@ def run_scan(
             pass
 
     try:
-        breakout_df = breakout_scanner(filtered_data, min_price, max_price, include_ta=include_ta, spy_df=spy_df)
+        breakout_df = run_breakout_scan(
+            price_data=filtered_data,
+            spy_df=spy_df,
+            premarket=session_label == "premarket",
+            afterhours=session_label == "postmarket",
+            unusual_volume=False,
+            min_gap=0.0,
+            min_price=min_price,
+            max_price=max_price,
+            top_n=100,
+            diagnostics=False,
+        )
     except Exception:
         breakout_df = pd.DataFrame()
 
@@ -116,8 +166,18 @@ def run_and_save(run_type: str, universe: list[str] | None, **kwargs) -> int:
             to_save = df.sort_values("Breakout %", ascending=False).reset_index(drop=True)
         else:
             to_save = df.reset_index(drop=True) if isinstance(df, pd.DataFrame) else pd.DataFrame()
-        run_id = save_run(run_type, meta, to_save)
-        return int(run_id)
+        results_json = to_save.to_json(orient="records", date_format="iso")
+        save_run(
+            name=f"{run_type} | {len(to_save)} results",
+            label=run_type,
+            username="scheduler",
+            row_count=len(to_save),
+            duration_sec=float(meta.get("elapsed_s", 0.0)),
+            results_json=results_json or json.dumps([]),
+            is_snapshot=False,
+            allow_sqlite_fallback=False,
+        )
+        return 0
     except Exception:
         return -1
 
@@ -129,9 +189,9 @@ def run_postmarket_headless() -> int:
 
 def run_sp500_headless(session_label: str = "regular") -> int:
     try:
-        uni = load_sp500_tickers() or fetch_and_save_sp500()
+        uni = _load_sp500() or fetch_and_save_sp500()
     except Exception:
-        uni = load_sp500_tickers()
+        uni = _load_sp500()
     uni = uni or []
     uni = filter_problem_tickers(uni)
     return run_and_save("sp500", uni, session_label=session_label)

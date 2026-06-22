@@ -389,3 +389,39 @@ def run_breakout_scan(
             pass
 
     return df_out
+
+
+def breakout_scanner(
+    price_data,
+    min_price: float = 5.0,
+    max_price: float = 1000.0,
+    *,
+    include_ta: bool = False,
+    spy_df=None,
+    premarket: bool = False,
+    afterhours: bool = False,
+    unusual_volume: bool = False,
+    min_gap: float = 0.0,
+    top_n: int = 100,
+    diagnostics: bool = False,
+    progress_cb: Optional[Callable[[int, int, str], Any]] = None,
+):
+    """Backward-compatible wrapper around :func:`run_breakout_scan`.
+
+    Older headless scan modules used ``breakout_scanner(price_data, min_price,
+    max_price, include_ta=..., spy_df=...)``. Keep that path working while the
+    app standardizes on ``run_breakout_scan``.
+    """
+    return run_breakout_scan(
+        price_data=price_data,
+        spy_df=spy_df,
+        premarket=premarket,
+        afterhours=afterhours,
+        unusual_volume=unusual_volume,
+        min_gap=min_gap,
+        min_price=min_price,
+        max_price=max_price,
+        top_n=top_n,
+        diagnostics=diagnostics,
+        progress_cb=progress_cb,
+    )
