@@ -1,33 +1,8 @@
-streamlit==1.49.1
-pandas>=2.0
-numpy>=1.23
-yfinance>=0.2.27
-pytz>=2025.2
-lxml
-html5lib
-beautifulsoup4
-yahoo_fin
-matplotlib
-websockets
-pyppeteer
-mplfinance
-SQLAlchemy>=2.0
-apscheduler
-plotly
-requests
-streamlit-authenticator>=0.4.0
-bcrypt
-streamlit-autorefresh
-alpaca-py
-xgboost
-scikit-learn
-joblib
-extra-streamlit-components
-streamlit-cookies-manager>=0.2.0
-psycopg[binary]>=3.2
-
-# Deployment note:
-# Streamlit Cloud installs this file for the full app. Heavy/optional packages
-# such as pyppeteer, xgboost, scikit-learn, and alpaca-py are kept here because
-# existing UI paths can import them, but CI now has a dependency import smoke job
-# so missing binary wheels or import failures surface before deploy.
+# Full Streamlit deployment dependencies.
+#
+# Streamlit Cloud and normal production deploys should continue installing this
+# file. It delegates to smaller groups so CI can test the lean scanner runtime
+# separately from heavier optional features.
+-r requirements-core.txt
+-r requirements-ml.txt
+-r requirements-extended.txt

@@ -12,6 +12,7 @@ class DeploymentDocsTests(unittest.TestCase):
         self.assertIn("requirements.txt", text)
         self.assertIn("dependency import", text)
         self.assertIn("requirements-core.txt", text)
+        self.assertIn("requirements-extended.txt", text)
 
 
 if __name__ == "__main__":

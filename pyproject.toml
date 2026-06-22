@@ -10,31 +10,35 @@ dependencies = [
     "numpy>=1.23",
     "yfinance>=0.2.27",
     "pytz>=2025.2",
+    "requests",
     "lxml",
     "html5lib",
     "beautifulsoup4",
     "yahoo_fin",
     "matplotlib",
-    "websockets",
-    "pyppeteer",
     "mplfinance",
     "SQLAlchemy>=2.0",
     "apscheduler",
     "plotly",
-    "requests",
     "streamlit-authenticator>=0.4.0",
     "bcrypt",
     "streamlit-autorefresh",
-    "alpaca-py",
-    "xgboost",
-    "scikit-learn",
-    "joblib",
     "extra-streamlit-components",
     "streamlit-cookies-manager>=0.2.0",
     "psycopg[binary]>=3.2"
 ]
 
 [project.optional-dependencies]
+ml = [
+    "xgboost",
+    "scikit-learn",
+    "joblib"
+]
+extended = [
+    "alpaca-py",
+    "pyppeteer",
+    "websockets"
+]
 billing = [
     "fastapi==0.115.6",
     "uvicorn[standard]==0.32.1",

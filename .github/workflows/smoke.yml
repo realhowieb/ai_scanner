@@ -33,7 +33,7 @@ jobs:
       - name: Run unit smoke tests
         run: python -m unittest discover -s tests -v
 
-  dependency-import-smoke:
+  core-dependency-import-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -46,14 +46,14 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements-core.txt
 
-      - name: Install app dependencies
+      - name: Install core scanner dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --prefer-binary -r requirements.txt
+          python -m pip install --prefer-binary -r requirements-core.txt
 
-      - name: Import app modules
+      - name: Import core scanner modules
         run: |
           python -c "import data.provider_diagnostics"
           python -c "import data.prices"
@@ -62,3 +62,38 @@ jobs:
           python -c "import scan.engine"
           python -c "import db.runs"
           python -c "import ui.scans"
+
+  full-dependency-import-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-core.txt
+            requirements-ml.txt
+            requirements-extended.txt
+
+      - name: Install full app dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements.txt
+
+      - name: Import full app modules
+        run: |
+          python -c "import data.provider_diagnostics"
+          python -c "import data.prices"
+          python -c "import data.fetch"
+          python -c "import scan.breakout"
+          python -c "import scan.engine"
+          python -c "import db.runs"
+          python -c "import ui.scans"
+          python -c "import ml_prebreakout"

@@ -22,7 +22,9 @@ class CleanupSourceChecks(unittest.TestCase):
     def test_ci_has_dependency_import_smoke_job(self):
         source = (ROOT / ".github" / "workflows" / "smoke.yml").read_text()
 
-        self.assertIn("dependency-import-smoke", source)
+        self.assertIn("core-dependency-import-smoke", source)
+        self.assertIn("full-dependency-import-smoke", source)
+        self.assertIn("python -m pip install --prefer-binary -r requirements-core.txt", source)
         self.assertIn("python -m pip install --prefer-binary -r requirements.txt", source)
         self.assertIn("import scan.engine", source)
 
