@@ -8,6 +8,7 @@ import os
 import time
 from pathlib import Path
 from typing import Iterable
+from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,21 @@ def _results_to_json(results) -> str:
     if hasattr(results, "to_json"):
         return results.to_json(orient="records", date_format="iso")
     return json.dumps(results, default=str)
+
+
+def _skip_reason(now_utc: dt.datetime | None = None) -> str | None:
+    """Return a reason to skip scheduled scans, or None when scans may run."""
+    if now_utc is None:
+        now_utc = dt.datetime.now(dt.timezone.utc)
+    elif now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=dt.timezone.utc)
+
+    now_et = now_utc.astimezone(ZoneInfo("America/New_York"))
+    if now_et.weekday() >= 5:
+        return "Weekend detected - skipping scans."
+    if now_et.hour < 6:
+        return "Too early (premarket) - skipping scans."
+    return None
 
 
 def run_and_save(
@@ -120,16 +136,9 @@ def run_and_save(
 def main():
     print("=== cron_runner started ===")
 
-    # Optional: block weekends
-    today = dt.datetime.now(dt.timezone.utc).weekday()  # Monday=0, Sunday=6
-    if today >= 5:  # Saturday/Sunday
-        print("Weekend detected — skipping scans.")
-        return
-
-    # Optional: block early premarket
-    now_et_hour = dt.datetime.now(dt.timezone.utc).hour - 5  # convert UTC to ET, roughly.
-    if now_et_hour < 6:
-        print("Too early (premarket) — skipping scans.")
+    skip_reason = _skip_reason()
+    if skip_reason:
+        print(skip_reason)
         return
 
     # --- Run the scans ---

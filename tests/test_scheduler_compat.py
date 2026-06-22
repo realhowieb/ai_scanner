@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from scheduler.cron_runner import _load_universe
+from scheduler.cron_runner import _load_universe, _skip_reason
 from scheduler import jobs
 
 
@@ -42,6 +43,20 @@ class SchedulerCompatTests(unittest.TestCase):
     def test_manual_job_failure_returns_negative_one(self) -> None:
         with patch.object(jobs, "run_and_save", return_value=False):
             self.assertEqual(jobs.run_sp500_now(), -1)
+
+    def test_market_time_gate_uses_new_york_dst(self) -> None:
+        # June is EDT (UTC-4). A fixed UTC-5 conversion would incorrectly
+        # treat this as 5 AM ET and skip.
+        june_six_am_et = datetime(2026, 6, 22, 10, 0, tzinfo=timezone.utc)
+        self.assertIsNone(_skip_reason(june_six_am_et))
+
+    def test_market_time_gate_skips_weekends(self) -> None:
+        saturday_midday_et = datetime(2026, 6, 20, 16, 0, tzinfo=timezone.utc)
+        self.assertIn("Weekend", _skip_reason(saturday_midday_et) or "")
+
+    def test_market_time_gate_skips_before_six_eastern(self) -> None:
+        pre_six_am_et = datetime(2026, 6, 22, 9, 30, tzinfo=timezone.utc)
+        self.assertIn("Too early", _skip_reason(pre_six_am_et) or "")
 
 
 class ScannerEntrypointSourceTests(unittest.TestCase):
