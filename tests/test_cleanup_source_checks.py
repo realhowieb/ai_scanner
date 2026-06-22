@@ -116,6 +116,21 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def prepare_results_with_earnings", earnings_source)
         self.assertIn("def _apply_earnings_enrichment", earnings_source)
 
+    def test_market_header_helpers_are_not_duplicated_in_app(self):
+        app_source = (ROOT / "app.py").read_text()
+        header_source = (ROOT / "ui" / "header.py").read_text()
+
+        self.assertIn("from ui.header import render_header, render_price_ticker, render_market_snapshot", app_source)
+        self.assertIn("render_price_ticker()", app_source)
+        self.assertIn("render_market_snapshot(results_df=_snapshot_df)", app_source)
+        self.assertNotIn("def _fetch_index_snapshot", app_source)
+        self.assertNotIn("def _render_market_snapshot_legacy", app_source)
+        self.assertNotIn("def _fetch_ticker_quotes", app_source)
+        self.assertNotIn("def _render_price_ticker_legacy", app_source)
+        self.assertIn("def _fetch_index_snapshot", header_source)
+        self.assertIn("def render_market_snapshot", header_source)
+        self.assertIn("def render_price_ticker", header_source)
+
 
 if __name__ == "__main__":
     unittest.main()
