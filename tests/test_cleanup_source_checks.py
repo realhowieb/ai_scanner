@@ -25,6 +25,7 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("core-dependency-import-smoke", source)
         self.assertIn("full-dependency-import-smoke", source)
         self.assertIn("python -m pip install --prefer-binary -r requirements-core.txt", source)
+        self.assertIn("Run dependency-backed unit tests", source)
         self.assertIn("python -m pip install --prefer-binary -r requirements.txt", source)
         self.assertIn("import scan.engine", source)
 

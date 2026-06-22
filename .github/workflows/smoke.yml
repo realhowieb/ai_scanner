@@ -63,6 +63,9 @@ jobs:
           python -c "import db.runs"
           python -c "import ui.scans"
 
+      - name: Run dependency-backed unit tests
+        run: python -m unittest discover -s tests -v
+
   full-dependency-import-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20
