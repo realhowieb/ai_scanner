@@ -63,9 +63,16 @@ def resolve_scan_universe(
     load_nasdaq_universe: SymbolLoader,
     filter_universe: SymbolTransform,
     sanitize_symbols: SymbolTransform,
+    label_suffix: str = "3-step",
+    combo_universe_transform: SymbolTransform | None = None,
+    combo_cache_key: object = None,
 ) -> list[str]:
-    """Resolve the selected three-step scanner universe and update state caches."""
+    """Resolve a scanner universe and update the related state caches."""
     market_name = normalize_market(market)
+    label_suffix = str(label_suffix or "").strip()
+
+    def label(base: str) -> str:
+        return f"{base} ({label_suffix})" if label_suffix else base
 
     sp500 = _state_list(state, "sp500_universe")
     nasdaq = _state_list(state, "nasdaq_universe")
@@ -76,7 +83,7 @@ def resolve_scan_universe(
         nonlocal sp500
         if not sp500:
             sp500 = _load_filtered_universe(
-                label="SP500 universe (3-step)",
+                label=label("SP500 universe"),
                 loader=load_sp500_universe,
                 safe_call=safe_call,
                 filter_universe=filter_universe,
@@ -89,7 +96,7 @@ def resolve_scan_universe(
         nonlocal nasdaq, nasdaq_capped
         if not nasdaq:
             nasdaq = _load_filtered_universe(
-                label="NASDAQ universe (3-step)",
+                label=label("NASDAQ universe"),
                 loader=load_nasdaq_universe,
                 safe_call=safe_call,
                 filter_universe=filter_universe,
@@ -111,23 +118,30 @@ def resolve_scan_universe(
         nonlocal combo_capped
         base_sp = ensure_sp500()
         base_nq = ensure_nasdaq()
-        universe = list(base_sp or []) + list(base_nq or [])
+        universe = sanitize_symbols(list(base_sp or []) + list(base_nq or []))
+        if combo_universe_transform is not None:
+            transformed = combo_universe_transform(universe)
+            if transformed:
+                universe = sanitize_symbols(transformed)
         configured_limit = int(state.get("max_combo_scan", 4000))
         effective_limit = max(configured_limit, len(universe)) if is_admin else configured_limit
         cached_limit = _state_int(state, "combo_capped_limit")
         cached_admin = _state_bool(state, "combo_capped_admin")
         cached_source_count = _state_int(state, "combo_capped_source_count")
+        cached_transform_key = state.get("combo_capped_transform_key")
         if (
             not combo_capped
             or cached_limit != effective_limit
             or cached_admin != is_admin
             or cached_source_count != len(universe)
+            or cached_transform_key != combo_cache_key
         ):
             combo_capped = universe[:effective_limit]
             state["combo_capped"] = combo_capped
             state["combo_capped_limit"] = effective_limit
             state["combo_capped_admin"] = is_admin
             state["combo_capped_source_count"] = len(universe)
+            state["combo_capped_transform_key"] = combo_cache_key
         return combo_capped
 
     if market_name == "SP500":

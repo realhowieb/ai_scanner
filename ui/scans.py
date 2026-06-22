@@ -1075,53 +1075,41 @@ def render_scan_controls(
     if is_admin:
         st.caption("🛠️ Admin override: universe caps are disabled.")
 
-    # --- Helper to build a combo (SP500 + NASDAQ) capped universe with liquidity filter ---
-    def _build_combo_capped(universe_label: str) -> List[str]:
-        """Build a Combo universe (SP500 + capped NASDAQ) with a liquidity filter applied."""
-        sp500 = safe_call(load_sp500_universe, label=f"SP500 universe ({universe_label})")
-        nasdaq = safe_call(load_nasdaq_universe, label=f"NASDAQ universe ({universe_label})")
-        sp500 = sanitize_universe_symbols(filter_universe(sp500))
-        nasdaq = sanitize_universe_symbols(filter_universe(nasdaq))
-        # Admin can scan more (or all) tickers
-        if _is_admin():
-            nasdaq_capped = nasdaq
-        else:
-            nasdaq_capped = nasdaq[: int(max_nasdaq_scan)]
-        combo_universe = sp500 + nasdaq_capped
-
-        # Safety net: ensure combined universe is sanitized/deduped.
-        combo_universe = sanitize_universe_symbols(combo_universe)
-
-        # Liquidity filter: reuse the same min_price / min_dollar_vol logic as main Combo
+    def _manual_combo_liquidity_filter(symbols: List[str]) -> List[str]:
         min_dollar_vol = st.session_state.get("min_dollar_vol")
         if min_dollar_vol is None:
             min_dollar_vol = 0.0
-
         try:
             combo_liquid = apply_liquidity_filter_batch(
-                combo_universe,
+                symbols,
                 min_price=min_price,
                 min_avg_dollar_vol=min_dollar_vol,
             )
         except Exception as e:
-            _banner(
-                f"⚠️ {universe_label} liquidity filter failed: {e}",
-                "warning",
-            )
-            combo_liquid = combo_universe
-
+            _banner(f"⚠️ Combo liquidity filter failed: {e}", "warning")
+            return symbols
         if combo_liquid is None or len(combo_liquid) == 0:
-            combo_liquid = combo_universe
+            return symbols
+        return list(combo_liquid)
 
-        combo_capped = combo_liquid[: int(max_combo_scan)]
-
-        # Persist universes in session_state for downstream use
-        st.session_state["sp500_universe"] = sp500
-        st.session_state["nasdaq_universe"] = nasdaq
-        st.session_state["nasdaq_capped"] = nasdaq_capped
-        st.session_state["combo_capped"] = combo_capped
-
-        return combo_capped
+    def _resolve_manual_universe(market: str) -> List[str]:
+        min_dollar_vol = st.session_state.get("min_dollar_vol")
+        if min_dollar_vol is None:
+            min_dollar_vol = 0.0
+        combo_cache_key = ("manual_combo_liquidity", float(min_price), float(min_dollar_vol))
+        return resolve_scan_universe(
+            market,
+            st.session_state,
+            is_admin=_is_admin(),
+            safe_call=safe_call,
+            load_sp500_universe=load_sp500_universe,
+            load_nasdaq_universe=load_nasdaq_universe,
+            filter_universe=filter_universe,
+            sanitize_symbols=sanitize_universe_symbols,
+            label_suffix=market,
+            combo_universe_transform=_manual_combo_liquidity_filter if market == "COMBO" else None,
+            combo_cache_key=combo_cache_key if market == "COMBO" else None,
+        )
 
     # --- Post-filter helpers for strategy scans (operate on breakout results) ---
     def _pf_gap_up(df: pd.DataFrame) -> pd.DataFrame:
@@ -1489,23 +1477,13 @@ def render_scan_controls(
             do_scan(tickers, label)
 
     if run_sp500_btn:
-        sp500 = safe_call(load_sp500_universe, label="SP500 universe")
-        sp500 = sanitize_universe_symbols(filter_universe(sp500))
-        st.session_state["sp500_universe"] = sp500
-        do_scan(sp500, "SP500")
+        do_scan(_resolve_manual_universe("SP500"), "SP500")
 
     if run_nasdaq_btn:
-        nasdaq = safe_call(load_nasdaq_universe, label="NASDAQ universe")
-        nasdaq = sanitize_universe_symbols(filter_universe(nasdaq))
-        # Admin can scan more (or all) tickers
-        nasdaq_capped = nasdaq if _is_admin() else nasdaq[: int(max_nasdaq_scan)]
-        st.session_state["nasdaq_universe"] = nasdaq
-        st.session_state["nasdaq_capped"] = nasdaq_capped
-        do_scan(nasdaq_capped, "NASDAQ")
+        do_scan(_resolve_manual_universe("NASDAQ"), "NASDAQ")
 
     if run_combo_btn:
-        combo_capped = _build_combo_capped("Combo")
-        do_scan(combo_capped, "Combo")
+        do_scan(_resolve_manual_universe("COMBO"), "Combo")
 
     # Manage watchlist symbols from the Watchlist Tools controls
     if "clear_watchlist_btn" in locals() and clear_watchlist_btn:

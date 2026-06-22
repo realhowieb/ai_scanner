@@ -159,6 +159,54 @@ class UniverseSelectionTests(unittest.TestCase):
         self.assertEqual(second, ["SPY", "A", "B", "C"])
         self.assertEqual(state["combo_capped_limit"], 4)
 
+    def test_combo_transform_runs_before_final_combo_cap(self):
+        state = {"max_nasdaq_scan": 3, "max_combo_scan": 2}
+
+        result = resolve_scan_universe(
+            "COMBO",
+            state,
+            is_admin=False,
+            safe_call=_safe_call,
+            load_sp500_universe=lambda: ["spy"],
+            load_nasdaq_universe=lambda: ["a", "b", "c"],
+            filter_universe=_identity,
+            sanitize_symbols=_sanitize,
+            combo_universe_transform=lambda symbols: [sym for sym in symbols if sym != "SPY"],
+            combo_cache_key=("liquidity", 1),
+        )
+
+        self.assertEqual(result, ["A", "B"])
+
+    def test_combo_transform_cache_key_refreshes_cached_cap(self):
+        state = {"max_nasdaq_scan": 3, "max_combo_scan": 2}
+        kwargs = {
+            "is_admin": False,
+            "safe_call": _safe_call,
+            "load_sp500_universe": lambda: ["spy"],
+            "load_nasdaq_universe": lambda: ["a", "b", "c"],
+            "filter_universe": _identity,
+            "sanitize_symbols": _sanitize,
+        }
+
+        first = resolve_scan_universe(
+            "COMBO",
+            state,
+            combo_universe_transform=lambda symbols: symbols,
+            combo_cache_key=("liquidity", 1),
+            **kwargs,
+        )
+        second = resolve_scan_universe(
+            "COMBO",
+            state,
+            combo_universe_transform=lambda symbols: [sym for sym in symbols if sym != "SPY"],
+            combo_cache_key=("liquidity", 2),
+            **kwargs,
+        )
+
+        self.assertEqual(first, ["SPY", "A"])
+        self.assertEqual(second, ["A", "B"])
+        self.assertEqual(state["combo_capped_transform_key"], ("liquidity", 2))
+
 
 if __name__ == "__main__":
     unittest.main()
