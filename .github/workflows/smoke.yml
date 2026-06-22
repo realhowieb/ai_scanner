@@ -29,3 +29,6 @@ jobs:
           python -c "import config"
           python -c "import scheduler.cron_runner"
           python -c "from scheduler.cron_runner import _load_universe; assert _load_universe('SP500')"
+
+      - name: Run unit smoke tests
+        run: python -m unittest discover -s tests -v
