@@ -29,6 +29,7 @@ from scan.options import (
     normalize_strategy,
 )
 from scan.strategies import apply_strategy_filter
+from scan.universe_selection import resolve_scan_universe
 
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
@@ -147,58 +148,16 @@ def run_scan_engine(
     profile = normalize_profile(profile)
     strategy = normalize_strategy(strategy)
 
-    # Prefer existing universes stored in session_state (set by legacy scans)
-    sp500: Optional[List[str]] = st.session_state.get("sp500_universe")
-    nasdaq: Optional[List[str]] = st.session_state.get("nasdaq_universe")
-    nasdaq_capped: Optional[List[str]] = st.session_state.get("nasdaq_capped")
-    combo_capped: Optional[List[str]] = st.session_state.get("combo_capped")
-
-    # Helper to safely load + filter a universe if not already cached
-    def _ensure_sp500() -> List[str]:
-        nonlocal sp500
-        if not sp500:
-            base = safe_call(load_sp500_universe, label="SP500 universe (3-step)")
-            sp500 = sanitize_universe_symbols(filter_universe(base))
-            st.session_state["sp500_universe"] = sp500
-        return sp500 or []
-
-    def _ensure_nasdaq() -> List[str]:
-        nonlocal nasdaq, nasdaq_capped
-        if not nasdaq:
-            base = safe_call(load_nasdaq_universe, label="NASDAQ universe (3-step)")
-            nasdaq = sanitize_universe_symbols(filter_universe(base))
-            st.session_state["nasdaq_universe"] = nasdaq
-        if not nasdaq_capped:
-            max_nasdaq_scan = int(st.session_state.get("max_nasdaq_scan", 2000))
-            # Admin can scan more (or all) tickers
-            if _is_admin():
-                max_nasdaq_scan = max(max_nasdaq_scan, len(nasdaq or []))
-            nasdaq_capped = (nasdaq or [])[:max_nasdaq_scan]
-            st.session_state["nasdaq_capped"] = nasdaq_capped
-        return nasdaq_capped or []
-
-    def _ensure_combo() -> List[str]:
-        nonlocal combo_capped
-        if combo_capped:
-            return combo_capped
-        base_sp = _ensure_sp500()
-        base_nq = _ensure_nasdaq()
-        max_combo_scan = int(st.session_state.get("max_combo_scan", 4000))
-        universe = (base_sp or []) + (base_nq or [])
-        # Admin can scan more (or all) combined tickers
-        if _is_admin():
-            max_combo_scan = max(max_combo_scan, len(universe))
-        combo_capped_local = universe[:max_combo_scan]
-        st.session_state["combo_capped"] = combo_capped_local
-        combo_capped = combo_capped_local
-        return combo_capped or []
-
-    if market == "SP500":
-        tickers = _ensure_sp500()
-    elif market == "NASDAQ":
-        tickers = _ensure_nasdaq()
-    else:  # "COMBO" or anything else
-        tickers = _ensure_combo()
+    tickers = resolve_scan_universe(
+        market,
+        st.session_state,
+        is_admin=_is_admin(),
+        safe_call=safe_call,
+        load_sp500_universe=load_sp500_universe,
+        load_nasdaq_universe=load_nasdaq_universe,
+        filter_universe=filter_universe,
+        sanitize_symbols=sanitize_universe_symbols,
+    )
 
     if not tickers:
         return pd.DataFrame()
