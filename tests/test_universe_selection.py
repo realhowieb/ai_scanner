@@ -121,6 +121,44 @@ class UniverseSelectionTests(unittest.TestCase):
 
         self.assertEqual(result, ["CACHED"])
 
+    def test_nasdaq_cap_change_refreshes_cached_cap(self):
+        state = {"max_nasdaq_scan": 1}
+        kwargs = {
+            "is_admin": False,
+            "safe_call": _safe_call,
+            "load_sp500_universe": lambda: [],
+            "load_nasdaq_universe": lambda: ["a", "b", "c"],
+            "filter_universe": _identity,
+            "sanitize_symbols": _sanitize,
+        }
+
+        first = resolve_scan_universe("NASDAQ", state, **kwargs)
+        state["max_nasdaq_scan"] = 3
+        second = resolve_scan_universe("NASDAQ", state, **kwargs)
+
+        self.assertEqual(first, ["A"])
+        self.assertEqual(second, ["A", "B", "C"])
+        self.assertEqual(state["nasdaq_capped_limit"], 3)
+
+    def test_combo_cap_change_refreshes_cached_cap(self):
+        state = {"max_nasdaq_scan": 3, "max_combo_scan": 2}
+        kwargs = {
+            "is_admin": False,
+            "safe_call": _safe_call,
+            "load_sp500_universe": lambda: ["spy"],
+            "load_nasdaq_universe": lambda: ["a", "b", "c"],
+            "filter_universe": _identity,
+            "sanitize_symbols": _sanitize,
+        }
+
+        first = resolve_scan_universe("COMBO", state, **kwargs)
+        state["max_combo_scan"] = 4
+        second = resolve_scan_universe("COMBO", state, **kwargs)
+
+        self.assertEqual(first, ["SPY", "A"])
+        self.assertEqual(second, ["SPY", "A", "B", "C"])
+        self.assertEqual(state["combo_capped_limit"], 4)
+
 
 if __name__ == "__main__":
     unittest.main()

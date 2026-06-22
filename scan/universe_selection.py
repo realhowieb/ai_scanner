@@ -16,6 +16,23 @@ SymbolTransform = Callable[[Sequence[str]], list[str]]
 SafeCall = Callable[..., Any]
 
 
+def _state_bool(state: MutableMapping[str, Any], key: str) -> bool | None:
+    value = state.get(key)
+    if value is None:
+        return None
+    return bool(value)
+
+
+def _state_int(state: MutableMapping[str, Any], key: str) -> int | None:
+    value = state.get(key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _state_list(state: MutableMapping[str, Any], key: str) -> list[str]:
     value = state.get(key)
     if not value:
@@ -79,26 +96,38 @@ def resolve_scan_universe(
                 sanitize_symbols=sanitize_symbols,
             )
             state["nasdaq_universe"] = nasdaq
-        if not nasdaq_capped:
-            max_nasdaq_scan = int(state.get("max_nasdaq_scan", 2000))
-            if is_admin:
-                max_nasdaq_scan = max(max_nasdaq_scan, len(nasdaq))
-            nasdaq_capped = nasdaq[:max_nasdaq_scan]
+        configured_limit = int(state.get("max_nasdaq_scan", 2000))
+        effective_limit = max(configured_limit, len(nasdaq)) if is_admin else configured_limit
+        cached_limit = _state_int(state, "nasdaq_capped_limit")
+        cached_admin = _state_bool(state, "nasdaq_capped_admin")
+        if not nasdaq_capped or cached_limit != effective_limit or cached_admin != is_admin:
+            nasdaq_capped = nasdaq[:effective_limit]
             state["nasdaq_capped"] = nasdaq_capped
+            state["nasdaq_capped_limit"] = effective_limit
+            state["nasdaq_capped_admin"] = is_admin
         return nasdaq_capped
 
     def ensure_combo() -> list[str]:
         nonlocal combo_capped
-        if combo_capped:
-            return combo_capped
         base_sp = ensure_sp500()
         base_nq = ensure_nasdaq()
         universe = list(base_sp or []) + list(base_nq or [])
-        max_combo_scan = int(state.get("max_combo_scan", 4000))
-        if is_admin:
-            max_combo_scan = max(max_combo_scan, len(universe))
-        combo_capped = universe[:max_combo_scan]
-        state["combo_capped"] = combo_capped
+        configured_limit = int(state.get("max_combo_scan", 4000))
+        effective_limit = max(configured_limit, len(universe)) if is_admin else configured_limit
+        cached_limit = _state_int(state, "combo_capped_limit")
+        cached_admin = _state_bool(state, "combo_capped_admin")
+        cached_source_count = _state_int(state, "combo_capped_source_count")
+        if (
+            not combo_capped
+            or cached_limit != effective_limit
+            or cached_admin != is_admin
+            or cached_source_count != len(universe)
+        ):
+            combo_capped = universe[:effective_limit]
+            state["combo_capped"] = combo_capped
+            state["combo_capped_limit"] = effective_limit
+            state["combo_capped_admin"] = is_admin
+            state["combo_capped_source_count"] = len(universe)
         return combo_capped
 
     if market_name == "SP500":
