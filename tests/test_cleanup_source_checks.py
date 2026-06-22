@@ -76,6 +76,18 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def is_admin_user", session_source)
         self.assertIn("def compute_entitlements", session_source)
 
+    def test_results_tabs_are_extracted_from_app(self):
+        app_source = (ROOT / "app.py").read_text()
+        tabs_source = (ROOT / "ui" / "results_tabs.py").read_text()
+
+        self.assertIn("from ui.results_tabs import render_results_tabs", app_source)
+        self.assertIn("render_results_tabs(", app_source)
+        self.assertNotIn("tab_names = [f\"📊 Latest scan results", app_source)
+        self.assertNotIn("def _render_admin_tab", app_source)
+        self.assertIn("def render_results_tabs", tabs_source)
+        self.assertIn("def _render_scan_history_tab", tabs_source)
+        self.assertIn("def _render_admin_tab", tabs_source)
+
 
 if __name__ == "__main__":
     unittest.main()
