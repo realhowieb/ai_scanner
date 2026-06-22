@@ -1,0 +1,31 @@
+name: Smoke Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile Python files
+        run: python -m compileall -q .
+
+      - name: Import smoke checks
+        run: |
+          python -c "import config"
+          python -c "import scheduler.cron_runner"
+          python -c "from scheduler.cron_runner import _load_universe; assert _load_universe('SP500')"

@@ -5,24 +5,67 @@ description = "AI-powered stock market scanner with Streamlit, PostgreSQL, and s
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "streamlit>=1.20.0",
-    "pandas>=1.5.0",
-    "sqlalchemy>=2.0.0",
-    "psycopg2-binary>=2.9.0",
-    "apscheduler>=3.9.0",
-    "yfinance>=0.2.20",
-    "numpy>=1.24.0",
-    "pytz>=2023.3",
-    "requests>=2.31.0",
-    "python-dateutil>=2.8.2",
-    "plotly>=5.15.0",
-    "matplotlib>=3.7.0"
+    "streamlit==1.49.1",
+    "pandas>=2.0",
+    "numpy>=1.23",
+    "yfinance>=0.2.27",
+    "pytz>=2025.2",
+    "lxml",
+    "html5lib",
+    "beautifulsoup4",
+    "yahoo_fin",
+    "matplotlib",
+    "websockets",
+    "pyppeteer",
+    "mplfinance",
+    "SQLAlchemy>=2.0",
+    "apscheduler",
+    "plotly",
+    "requests",
+    "streamlit-authenticator>=0.4.0",
+    "bcrypt",
+    "streamlit-autorefresh",
+    "alpaca-py",
+    "xgboost",
+    "scikit-learn",
+    "joblib",
+    "extra-streamlit-components",
+    "streamlit-cookies-manager>=0.2.0",
+    "psycopg[binary]>=3.2"
+]
+
+[project.optional-dependencies]
+billing = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.32.1",
+    "stripe==11.1.1",
+    "psycopg2-binary==2.9.10",
+    "python-dotenv==1.0.1"
 ]
 
 [build-system]
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["ai_scanner*"]
+[tool.setuptools]
+packages = [
+    "assets",
+    "auth",
+    "billing_service",
+    "data",
+    "db",
+    "jobs",
+    "pages",
+    "scan",
+    "scheduler",
+    "ui",
+    "utils"
+]
+py-modules = [
+    "app",
+    "config",
+    "logger",
+    "market_data",
+    "ml_prebreakout",
+    "telemetry"
+]
