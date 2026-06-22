@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import joblib
 from sklearn.model_selection import train_test_split
@@ -10,6 +10,23 @@ from db.runs import list_runs, load_run_results
 
 
 MODEL_PATH = "prebreakout_model.pkl"
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _normalize_datetime(value) -> datetime | None:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
@@ -31,18 +48,13 @@ def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
         return pd.DataFrame()
 
     records: list[dict] = []
-    cutoff = datetime.utcnow() - timedelta(days=days_back)
+    cutoff = _utc_now() - timedelta(days=days_back)
 
     for run in runs:
         run_id = run.get("id")
         created_at = run.get("created_at") or run.get("timestamp")
 
-        # Normalize created_at to a datetime
-        if isinstance(created_at, str):
-            try:
-                created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-            except Exception:
-                created_at = None
+        created_at = _normalize_datetime(created_at)
 
         if created_at is None or created_at < cutoff:
             continue
@@ -241,7 +253,7 @@ def train_prebreakout_model(
     bundle = {
         "model": clf,
         "features": list(X.columns),
-        "trained_at": datetime.utcnow().isoformat() + "Z",
+        "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
         "auc": float(auc),
     }
     joblib.dump(bundle, model_path)

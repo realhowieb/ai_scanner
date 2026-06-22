@@ -11,7 +11,7 @@ This module centralizes:
 
 from dataclasses import dataclass
 from typing import Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Load tier configuration from config.py
 from config import TIERS_CONFIG
@@ -20,6 +20,10 @@ from config import TIERS_CONFIG
 # ------------------------------
 # Local fallback user store
 # ------------------------------
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 USERS_DB: Dict[str, Dict[str, str]] = {
     "demo_basic": {
         "username": "demo_basic",
@@ -27,7 +31,7 @@ USERS_DB: Dict[str, Dict[str, str]] = {
         "tier": "basic",
         "is_active": True,
         "hashed_password": "",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": _utc_now_iso(),
     },
     "demo_pro": {
         "username": "demo_pro",
@@ -35,7 +39,7 @@ USERS_DB: Dict[str, Dict[str, str]] = {
         "tier": "pro",
         "is_active": True,
         "hashed_password": "",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": _utc_now_iso(),
     },
     "demo_premium": {
         "username": "demo_premium",
@@ -43,7 +47,7 @@ USERS_DB: Dict[str, Dict[str, str]] = {
         "tier": "premium",
         "is_active": True,
         "hashed_password": "",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": _utc_now_iso(),
     },
 }
 

@@ -79,6 +79,14 @@ class ScannerEntrypointSourceTests(unittest.TestCase):
         self.assertNotIn("utcnow()", source)
         self.assertIn('ZoneInfo("America/New_York")', source)
 
+    def test_project_uses_timezone_aware_utc_datetimes(self) -> None:
+        forbidden = "datetime." + "utcnow()"
+        for path in ROOT.rglob("*.py"):
+            if any(part in {"__pycache__", ".venv", "venv"} for part in path.parts):
+                continue
+            source = path.read_text(encoding="utf-8")
+            self.assertNotIn(forbidden, source, str(path.relative_to(ROOT)))
+
 
 if __name__ == "__main__":
     unittest.main()
