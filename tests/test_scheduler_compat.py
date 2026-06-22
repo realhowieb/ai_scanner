@@ -76,6 +76,15 @@ class ScannerEntrypointSourceTests(unittest.TestCase):
         self.assertIn("def breakout_scanner", source)
         self.assertIn("return run_breakout_scan(", source)
 
+    def test_scan_engine_reports_nonfatal_diagnostics(self) -> None:
+        source = (ROOT / "scan" / "engine.py").read_text(encoding="utf-8")
+
+        self.assertIn("def _diag_exception", source)
+        self.assertIn("Snapshot load skipped", source)
+        self.assertIn("Snapshot save skipped", source)
+        self.assertIn("DB cache stale-symbol filtering skipped", source)
+        self.assertIn("Price fetch chunk skipped", source)
+
     def test_scan_ui_uses_eastern_time_for_market_diagnostics(self) -> None:
         source = (ROOT / "ui" / "scans.py").read_text(encoding="utf-8")
 

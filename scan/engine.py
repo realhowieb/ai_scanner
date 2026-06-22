@@ -15,6 +15,21 @@ SnapshotLoader = Callable[[str], Dict[str, pd.DataFrame]]
 SnapshotSaver = Callable[[str, Dict[str, pd.DataFrame]], None]
 
 
+def _diag_caption(diagnostics: bool, message: str) -> None:
+    """Best-effort diagnostic caption that is safe outside Streamlit."""
+    if not diagnostics:
+        return
+    try:
+        st.caption(message)
+    except Exception:
+        print(message)
+
+
+def _diag_exception(diagnostics: bool, context: str, exc: BaseException) -> None:
+    """Surface non-fatal scan issues when diagnostics are enabled."""
+    _diag_caption(diagnostics, f"⚠️ {context}: {exc}")
+
+
 # --- DB cache helpers for admin full-universe scans ---
 def _db_cache_allowed_for_run(*, tickers_count: int, diagnostics: bool) -> bool:
     """Admin-only DB cache for full-universe scans.
@@ -32,14 +47,10 @@ def _db_cache_allowed_for_run(*, tickers_count: int, diagnostics: bool) -> bool:
     try:
         ss = getattr(st, "session_state", None)
         if ss and ss.get("disable_db_price_cache", False):
-            if diagnostics:
-                try:
-                    st.caption("🧱 DB price cache disabled by session_state (disable_db_price_cache=True)")
-                except Exception:
-                    pass
+            _diag_caption(diagnostics, "🧱 DB price cache disabled by session_state (disable_db_price_cache=True)")
             return False
-    except Exception:
-        pass
+    except Exception as e:
+        _diag_exception(diagnostics, "DB price cache admin/session check skipped", e)
     return True
 
 
@@ -81,12 +92,10 @@ def _db_load_price_cache(
                     stale = set(symbols) - set(cached.keys())
 
             if diagnostics:
-                try:
-                    st.caption(
-                        f"🧱 DB cache hit: {len(cached):,}/{len(symbols):,} symbols (stale={len(stale):,}, max_age={max_age_minutes}m)"
-                    )
-                except Exception:
-                    pass
+                _diag_caption(
+                    diagnostics,
+                    f"🧱 DB cache hit: {len(cached):,}/{len(symbols):,} symbols (stale={len(stale):,}, max_age={max_age_minutes}m)",
+                )
             return cached, stale
 
         # Back-compat API: only returns dict
@@ -97,19 +106,11 @@ def _db_load_price_cache(
                 cached = {k: v for k, v in out2.items() if isinstance(v, pd.DataFrame)}
                 stale = set(symbols) - set(cached.keys())
             if diagnostics:
-                try:
-                    st.caption(f"🧱 DB cache hit: {len(cached):,}/{len(symbols):,} symbols (no staleness API)"
-                              )
-                except Exception:
-                    pass
+                _diag_caption(diagnostics, f"🧱 DB cache hit: {len(cached):,}/{len(symbols):,} symbols (no staleness API)")
             return cached, stale
 
     except Exception as e:
-        if diagnostics:
-            try:
-                st.caption(f"🧱 DB cache load skipped: {e}")
-            except Exception:
-                pass
+        _diag_exception(diagnostics, "DB cache load skipped", e)
 
     return cached, stale
 
@@ -128,29 +129,17 @@ def _db_save_price_cache(
         fn = getattr(db_prices, "upsert_price_data_snapshot", None)
         if callable(fn):
             fn(data)
-            if diagnostics:
-                try:
-                    st.caption(f"💾 DB cache saved: {len(data):,} symbols")
-                except Exception:
-                    pass
+            _diag_caption(diagnostics, f"💾 DB cache saved: {len(data):,} symbols")
             return
 
         fn2 = getattr(db_prices, "upsert_price_data", None)
         if callable(fn2):
             fn2(data)
-            if diagnostics:
-                try:
-                    st.caption(f"💾 DB cache saved: {len(data):,} symbols")
-                except Exception:
-                    pass
+            _diag_caption(diagnostics, f"💾 DB cache saved: {len(data):,} symbols")
             return
 
     except Exception as e:
-        if diagnostics:
-            try:
-                st.caption(f"💾 DB cache save skipped: {e}")
-            except Exception:
-                pass
+        _diag_exception(diagnostics, "DB cache save skipped", e)
 
 def _is_admin_context() -> bool:
     """Best-effort admin role check.
@@ -359,14 +348,11 @@ def run_breakout_scan(
     """
 
     if diagnostics:
-        try:
-            st.caption(
-                f"🚀 run_breakout_scan called with {len(tickers)} tickers "
-                f"(use_cache={use_cache}, profile={profile!r})"
-            )
-        except Exception:
-            # If the UI is not available (e.g., during background runs), just ignore.
-            pass
+        _diag_caption(
+            diagnostics,
+            f"🚀 run_breakout_scan called with {len(tickers)} tickers "
+            f"(use_cache={use_cache}, profile={profile!r})",
+        )
 
     effective_min_gap, effective_unusual_volume = _apply_scan_profile(
         profile,
@@ -411,13 +397,10 @@ def run_breakout_scan(
             if isinstance(loaded, dict) and loaded:
                 price_data.update({k: v for k, v in loaded.items() if isinstance(v, pd.DataFrame)})
                 if diagnostics:
-                    try:
-                        st.caption(f"📦 Loaded pricing snapshot: {snapshot_id} ({len(loaded)} symbols)")
-                    except Exception:
-                        pass
-        except Exception:
+                    _diag_caption(diagnostics, f"📦 Loaded pricing snapshot: {snapshot_id} ({len(loaded)} symbols)")
+        except Exception as e:
             # Snapshot load must never break scans.
-            pass
+            _diag_exception(diagnostics, f"Snapshot load skipped for {snapshot_id}", e)
 
     # Only fetch what we're missing (especially important for admin snapshot runs)
     tickers_to_fetch = [t for t in tickers_plus_spy if t not in price_data]
@@ -427,8 +410,8 @@ def run_breakout_scan(
         try:
             # 'stale' is defined only when use_db_cache=True; keep this guarded.
             tickers_to_fetch = [t for t in tickers_to_fetch if t in stale or t not in price_data]
-        except Exception:
-            pass
+        except Exception as e:
+            _diag_exception(diagnostics, "DB cache stale-symbol filtering skipped", e)
     fetch_total = len(tickers_to_fetch)
     large_scan = fetch_total >= 800
 
@@ -463,9 +446,13 @@ def run_breakout_scan(
                     chunk_data, _skipped = fetch_price_data_batch(chunk)
                     if chunk_data:
                         price_data.update(chunk_data)
-                except Exception:
+                except Exception as e:
                     # Swallow chunk failures; we still want the scan to proceed.
-                    pass
+                    _diag_exception(
+                        diagnostics,
+                        f"Price fetch chunk skipped ({chunk[0] if chunk else '?'}-{chunk[-1] if chunk else '?'})",
+                        e,
+                    )
 
                 processed = min(fetch_total, i + len(chunk))
                 tick(processed, note=f"{chunk[-1]}" if chunk else "")
@@ -544,21 +531,18 @@ def run_breakout_scan(
         try:
             snapshot_saver(str(snapshot_id), price_data)
             if diagnostics:
-                try:
-                    st.caption(f"💾 Saved pricing snapshot: {snapshot_id} ({len(price_data)} symbols)")
-                except Exception:
-                    pass
-        except Exception:
+                _diag_caption(diagnostics, f"💾 Saved pricing snapshot: {snapshot_id} ({len(price_data)} symbols)")
+        except Exception as e:
             # Snapshot persistence should never break a scan.
-            pass
+            _diag_exception(diagnostics, f"Snapshot save skipped for {snapshot_id}", e)
 
     # Persist DB cache for admin full-universe runs so subsequent runs reuse data.
     # This must never block scans.
     if use_db_cache and price_data:
         try:
             _db_save_price_cache(price_data, diagnostics=diagnostics)
-        except Exception:
-            pass
+        except Exception as e:
+            _diag_exception(diagnostics, "DB cache save wrapper skipped", e)
 
     # Heartbeat before the breakout stage so users don't think the app froze.
     try:
