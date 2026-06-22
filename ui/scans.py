@@ -31,6 +31,7 @@ from scan.options import (
 )
 from scan.strategies import apply_strategy_filter
 from scan.universe_selection import resolve_scan_universe
+from ui.single_ticker import handle_single_ticker_actions, render_single_ticker_panel
 
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
@@ -447,193 +448,6 @@ def _banner(msg: str, level: str = "info") -> None:
         st.info(msg)
 
 
-
-@st.cache_data(ttl=60)
-def _get_live_quote(ticker: str) -> Optional[float]:
-    """Best-effort live quote lookup for a single ticker.
-
-    Uses yfinance if available. Returns a float price or None on failure.
-    Cached briefly so repeated reruns don't hammer the API.
-    """
-    if not ticker:
-        return None
-    try:
-        import yfinance as yf  # type: ignore
-    except Exception:
-        return None
-
-    try:
-        t = yf.Ticker(ticker)
-        # Prefer fast_info if available
-        fast_info = getattr(t, "fast_info", None)
-        last_price = None
-        if fast_info is not None:
-            last_price = getattr(fast_info, "last_price", None)
-        if last_price is not None:
-            return float(last_price)
-
-        # Fallback: use last close from 1d history
-        hist = t.history(period="1d")
-        if not hist.empty and "Close" in hist.columns:
-            return float(hist["Close"].iloc[-1])
-    except Exception:
-        return None
-
-    return None
-
-
-# --- Mini chart for single symbol (used in single-ticker scan panel) ---
-def _render_single_symbol_chart(symbol: str, days: int = 90) -> None:
-    """Render a small price chart for a single symbol, reusing the same pattern
-    as the other scans: use yfinance.Ticker().history and plot Close + MAs.
-
-    We deliberately keep this simple and robust:
-    - Use Ticker().history(period="6mo") so we get a sane daily history like the
-      rest of the app.
-    - Plot a Close line with optional MA20 / MA50.
-    - If OHLC is available, we can add a light candlestick-style backbone later,
-      but Close+MAs are the primary view.
-    """
-    if not symbol:
-        return
-
-    # Local imports so this file doesn't hard-depend on these libs at import time
-    try:
-        import yfinance as yf  # type: ignore
-        import plotly.graph_objects as go  # type: ignore
-    except Exception:
-        st.info("Charting libraries (yfinance/plotly) are not available.")
-        return
-
-    sym = str(symbol).strip().upper()
-    if not sym:
-        return
-
-    try:
-        t = yf.Ticker(sym)
-        # Use history(period="6mo") to match other parts of the app that use daily charts
-        hist = t.history(period="6mo", interval="1d")
-    except Exception as e:
-        st.error(f"Failed to load price history for {sym}: {e}")
-        return
-
-    if hist is None or hist.empty:
-        st.warning(
-            f"No price history returned for {sym} over the last 6 months. "
-            "Market data may be unavailable for this symbol."
-        )
-        return
-
-    # Prefer Close; fall back to Adj Close if needed
-    price_series = None
-    if "Close" in hist.columns:
-        price_series = hist["Close"].dropna()
-    elif "Adj Close" in hist.columns:
-        price_series = hist["Adj Close"].dropna()
-
-    if price_series is None or price_series.empty:
-        st.warning(
-            f"Downloaded history for {sym} has no usable Close/Adj Close prices; "
-            "cannot render chart."
-        )
-        try:
-            st.caption("Raw history (tail):")
-            st.dataframe(hist.tail(), width="stretch")
-        except Exception:
-            pass
-        return
-
-    # Optionally trim to the requested number of recent trading days
-    if days is not None and days > 0 and price_series.shape[0] > days:
-        price_series = price_series.iloc[-days:]
-
-    # Build the figure: candlestick + MA20 / MA50 similar to the main scanner charts.
-    # If OHLC is missing or fails, fall back to a simple Close line.
-    fig = go.Figure()
-    added_candles = False
-
-    # Try to build a candlestick chart using OHLC columns aligned to the trimmed index.
-    try:
-        required_ohlc = {"Open", "High", "Low", "Close"}
-        if required_ohlc.issubset(set(hist.columns)):
-            # Align OHLC data to the same index as the trimmed price_series
-            ohlc = hist.loc[price_series.index]
-            ohlc = ohlc.dropna(subset=["Open", "High", "Low", "Close"], how="any")
-            if not ohlc.empty:
-                fig.add_trace(
-                    go.Candlestick(
-                        x=ohlc.index,
-                        open=ohlc["Open"],
-                        high=ohlc["High"],
-                        low=ohlc["Low"],
-                        close=ohlc["Close"],
-                        name="Price",
-                    )
-                )
-                added_candles = True
-    except Exception:
-        # If anything goes wrong, we'll fall back to a Close line below.
-        added_candles = False
-
-    # Fallback: simple Close line if we couldn't add a candlestick
-    if not added_candles:
-        fig.add_trace(
-            go.Scatter(
-                x=price_series.index,
-                y=price_series.values,
-                mode="lines",
-                name="Price",
-            )
-        )
-
-    # Moving averages (based on Close) if we have enough points
-    try:
-        ma20 = price_series.rolling(window=20).mean()
-        ma50 = price_series.rolling(window=50).mean()
-
-        if ma20.dropna().shape[0] >= 5:
-            fig.add_trace(
-                go.Scatter(
-                    x=ma20.index,
-                    y=ma20.values,
-                    mode="lines",
-                    name="MA20",
-                )
-            )
-        if ma50.dropna().shape[0] >= 5:
-            fig.add_trace(
-                go.Scatter(
-                    x=ma50.index,
-                    y=ma50.values,
-                    mode="lines",
-                    name="MA50",
-                )
-            )
-    except Exception:
-        # If MA calculation fails, we still show the main price line
-        pass
-
-    fig.update_layout(
-        title=f"{sym} — last {min(days, price_series.shape[0])} trading days",
-        xaxis_title="Date",
-        yaxis_title="Price",
-        xaxis_rangeslider_visible=False,
-        height=350,
-        margin=dict(l=10, r=10, t=40, b=10),
-    )
-    try:
-        st.plotly_chart(fig, width="stretch")
-    except Exception as e:
-        st.warning(
-            f"Failed to render chart for {sym} due to an internal plotting error: {e}"
-        )
-        try:
-            st.caption("Raw Close-series data (tail):")
-            st.dataframe(price_series.to_frame(name="Close").tail(), width="stretch")
-        except Exception:
-            pass
-
-
 # --- Alpaca extended-hours helpers ---
 
 ALPACA_MAX_SNAPSHOT_BATCH = 50  # keep batches small for free tier
@@ -1022,50 +836,7 @@ def render_scan_controls(
 
     st.caption("Use your active watchlist for viewing, scanning, and managing symbols.")
 
-    # --- Single-ticker search, chart, and scan ---
-    st.markdown("### 🔍 Search & Scan Single Ticker")
-    st.caption("Enter a symbol, view its chart, and optionally run a focused breakout scan.")
-
-    # Top row: ticker + chart search button
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        search_ticker = st.text_input(
-            "Ticker symbol",
-            key="single_search_ticker",
-            placeholder="AAPL",
-            label_visibility="collapsed",
-        )
-    with c2:
-        show_chart_btn = st.button(
-            "Show Chart 📈",
-            key="single_show_chart_btn",
-            width="stretch",
-        )
-
-    # Second row: watchlist toggle + scan button
-    c3, c4 = st.columns([2, 2])
-    with c3:
-        add_single_to_watchlist = st.checkbox(
-            "Add to active watchlist",
-            value=False,
-            key="single_search_add_to_watchlist",
-            help="If enabled, the searched ticker is added to your active watchlist when you run a scan.",
-        )
-    with c4:
-        run_single_scan_btn = st.button(
-            "Run Single-Ticker Scan 💸",
-            key="single_search_scan_btn",
-            width="stretch",
-        )
-
-    # Show a best-effort live quote under the search bar when a ticker is entered
-    normalized_ticker = (search_ticker or "").strip().upper()
-    if normalized_ticker:
-        quote = _get_live_quote(normalized_ticker)
-        if quote is not None:
-            st.caption(f"{normalized_ticker} ~ ${quote:.2f}")
-        else:
-            st.caption(f"{normalized_ticker}: live quote unavailable.")
+    single_ticker, show_chart_btn, run_single_scan_btn = render_single_ticker_panel()
 
     # Ensure results DataFrame exists in session state
     if "results_df" not in st.session_state:
@@ -1426,40 +1197,14 @@ def render_scan_controls(
                 except Exception:
                     _banner("Failed to update active watchlist (database unavailable).", "error")
 
-    # Handle chart-only search
-    if "show_chart_btn" in locals() and show_chart_btn:
-        ticker = (search_ticker or "").strip().upper()
-        if not ticker:
-            _banner("Please enter a ticker symbol to chart.", "warning")
-        else:
-            st.markdown("### 📈 Price chart")
-            _render_single_symbol_chart(ticker)
-
-    # Handle single-ticker scan (optionally adding to active watchlist)
-    if "run_single_scan_btn" in locals() and run_single_scan_btn:
-        ticker = (search_ticker or "").strip().upper()
-        if not ticker:
-            _banner("Please enter a ticker symbol to scan.", "warning")
-        else:
-            # Respect toggle: auto-add this ticker to the active watchlist only if enabled
-            add_to_watchlist = st.session_state.get("single_search_add_to_watchlist", True)
-            if add_to_watchlist:
-                active_watchlist_id = st.session_state.get("active_watchlist_id")
-                if active_watchlist_id is not None:
-                    try:
-                        # Fetch current tickers for the active watchlist
-                        existing = get_watchlist_tickers(active_watchlist_id, username) or []
-                        norm_existing = {str(t).strip().upper() for t in existing}
-                        if ticker not in norm_existing:
-                            updated = sorted(norm_existing | {ticker})
-                            set_watchlist_tickers(active_watchlist_id, username, list(updated))
-                            st.caption(f"Added {ticker} to your active watchlist.")
-                    except Exception:
-                        # Never break the UI if Neon/watchlists are unavailable
-                        pass
-
-            # Run the same breakout engine but on a single stock
-            do_scan([ticker], f"Search: {ticker}")
+    handle_single_ticker_actions(
+        ticker=single_ticker,
+        show_chart=show_chart_btn,
+        run_scan=run_single_scan_btn,
+        username=username,
+        do_scan=do_scan,
+        banner=_banner,
+    )
 
 
 # --- Data Provider Diagnostics (moved from render_scan_controls) ---

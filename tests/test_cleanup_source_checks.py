@@ -29,6 +29,17 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("python -m pip install --prefer-binary -r requirements.txt", source)
         self.assertIn("import scan.engine", source)
 
+    def test_single_ticker_tools_are_extracted_from_scan_ui(self):
+        scans_source = (ROOT / "ui" / "scans.py").read_text()
+        single_source = (ROOT / "ui" / "single_ticker.py").read_text()
+
+        self.assertIn("render_single_ticker_panel", scans_source)
+        self.assertIn("handle_single_ticker_actions", scans_source)
+        self.assertNotIn("def _get_live_quote", scans_source)
+        self.assertNotIn("def _render_single_symbol_chart", scans_source)
+        self.assertIn("def get_live_quote", single_source)
+        self.assertIn("def render_single_symbol_chart", single_source)
+
 
 if __name__ == "__main__":
     unittest.main()
