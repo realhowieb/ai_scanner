@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from datetime import datetime, time, date, timezone
+from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
-import numpy as np
 import pandas as pd
 
 import streamlit as st
@@ -157,6 +156,7 @@ try:
     from ui.header import render_header, render_price_ticker, render_market_snapshot
     from ui.prebreakout_tab import render_prebreakout_tab
     from ui.results_tabs import render_results_tabs
+    from ui.earnings_results import prepare_results_with_earnings, render_earnings_controls
     from ui.footer import render_footer
     from ui.watchlists import render_watchlists_panel
     from ui.user_settings import render_user_settings_footer
@@ -197,6 +197,8 @@ except Exception as _e:
     render_market_snapshot = _missing  # type: ignore
     render_prebreakout_tab = _missing  # type: ignore
     render_results_tabs = _missing  # type: ignore
+    prepare_results_with_earnings = _missing  # type: ignore
+    render_earnings_controls = _missing  # type: ignore
     render_footer = lambda *a, **k: None  # type: ignore
     render_watchlists_panel = _missing  # type: ignore
     render_user_settings_footer = _missing  # type: ignore
@@ -1262,80 +1264,10 @@ def main():
     st.session_state["active_watchlist_id"] = watch_id
     st.session_state["active_watchlist_tickers"] = watch_tickers
 
-    # -------- Earnings this week --------
-    # Pro+ only: Basic users should not see the Earnings panel at all.
-    if bool(flags.get("can_earnings")):
-        with st.expander("📅 Earnings this week", expanded=False):
-            can_earn = bool(flags.get("can_earnings"))
-            earn_enabled = bool(st.session_state.get("enable_earnings_enrichment", False))
-            is_admin = bool(st.session_state.get("is_admin", False))
-
-            # Hard safety: never allow refresh loops from this panel.
-            # Any refresh must be an explicit admin-only action inside the earnings module.
-            st.session_state["enable_earnings_refresh"] = False
-
-            if not can_earn:
-                # Should never happen because the expander is gated, but keep for safety.
-                st.info("🔒 Earnings is a Pro feature.")
-            elif not earn_enabled and not is_admin:
-                st.caption(
-                    "Earnings enrichment is OFF. Enable it in the sidebar to load earnings data."
-                )
-            else:
-                # Only call the earnings UI when allowed; prevents any earnings work when OFF.
-                render_earnings_this_week_panel(can_earnings=True)
-
-    # -------- Optional: Earnings enrichment toggle (MUST be BEFORE scans) --------
-    # Earnings is a Pro+ feature. Basic should not see the toggle or run enrichment.
-    if not bool(flags.get("can_earnings")):
-        # Hard-disable all earnings knobs for Basic so nothing downstream can accidentally run.
-        for k, v in {
-            "enable_earnings_enrichment": False,
-            "earnings_enabled": False,
-            "enable_earnings": False,
-            "enable_earnings_refresh": False,
-        }.items():
-            try:
-                st.session_state[k] = v
-            except Exception:
-                pass
-
-        # Clear any old refresh UI state
-        for _k in list(st.session_state.keys()):
-            if str(_k).startswith("earnings_refresh") or str(_k).startswith("earn_refresh"):
-                st.session_state.pop(_k, None)
-
-    else:
-        # Toggle must exist BEFORE scans/results so scan-time code can skip earnings entirely.
-        with st.sidebar.expander("📅 Earnings", expanded=False):
-            _earn_enabled = st.checkbox(
-                "Enable earnings enrichment (adds 📅 Earnings in X days)",
-                value=bool(st.session_state.get("enable_earnings_enrichment", False)),
-                key="enable_earnings_enrichment",
-                help=(
-                    "If enabled, the app will add timing from the DB to results. "
-                    "Turn this OFF for the fastest scans."
-                ),
-            )
-
-            # Derived flags (do NOT write to the checkbox key again)
-            try:
-                st.session_state["earnings_enabled"] = bool(_earn_enabled)
-                st.session_state["enable_earnings"] = bool(_earn_enabled)
-                # Never auto-refresh during scans/results; refresh is admin-only.
-                st.session_state["enable_earnings_refresh"] = False
-            except Exception:
-                pass
-
-            # If turned off, clear any stale enrichment cache so results render instantly.
-            if not bool(_earn_enabled):
-                st.session_state.pop("earnings_enriched_df", None)
-                st.session_state.pop("earnings_enriched_signature", None)
-                st.session_state.pop("earnings_enrichment_rerun_sig", None)
-
-                for _k in list(st.session_state.keys()):
-                    if str(_k).startswith("earnings_refresh") or str(_k).startswith("earn_refresh"):
-                        st.session_state.pop(_k, None)
+    render_earnings_controls(
+        flags=flags,
+        render_earnings_this_week_panel=render_earnings_this_week_panel,
+    )
 
     # -------- Scan Controls --------
     render_scan_controls(
@@ -1372,216 +1304,14 @@ def main():
     render_three_step_scanner()
     st.markdown("---")
 
-    # -------- Results + Early Breakout Candidates + Scan History --------
     df = get_results_df()
-
-    # -------- Scan timestamp (UTC) --------
-    # Record a timestamp when a *new* results dataframe appears so users know freshness.
-    # We detect "new" results via a lightweight signature stored in session_state.
-    try:
-        if df is not None and not df.empty:
-            _rows = int(len(df))
-
-            # Stable signature: do NOT depend on row order (first/last can jitter).
-            # Use a deterministic hash of the unique tickers present.
-            _ticker_col = None
-            for _c in ("Ticker", "ticker", "Symbol", "symbol"):
-                if _c in df.columns:
-                    _ticker_col = _c
-                    break
-
-            _sig = None
-            if _ticker_col is not None:
-                try:
-                    import hashlib
-                    _tickers = (
-                        df[_ticker_col]
-                        .astype(str)
-                        .str.strip()
-                        .str.upper()
-                        .replace({"": None})
-                        .dropna()
-                        .unique()
-                        .tolist()
-                    )
-                    _tickers.sort()
-                    _payload = "|".join(_tickers).encode("utf-8", errors="ignore")
-                    _sig = f"{_rows}|{hashlib.md5(_payload).hexdigest()}"
-                except Exception:
-                    _sig = f"{_rows}|fallback"
-            else:
-                _sig = f"{_rows}|no_ticker_col"
-
-            prev_sig = str(st.session_state.get("results_signature") or "")
-            if _sig and _sig != prev_sig:
-                st.session_state["results_signature"] = _sig
-                st.session_state["scan_ran_at_utc"] = datetime.now(timezone.utc)
-                # Clear any cached earnings enrichment for prior results
-                st.session_state.pop("earnings_enriched_df", None)
-                st.session_state.pop("earnings_enriched_signature", None)
-                st.session_state.pop("earnings_enrichment_rerun_sig", None)
-
-        # If results cleared, clear the timestamp too (keeps UI honest)
-        if df is None or df.empty:
-            st.session_state.pop("results_signature", None)
-            st.session_state.pop("scan_ran_at_utc", None)
-            st.session_state.pop("earnings_enriched_df", None)
-            st.session_state.pop("earnings_enriched_signature", None)
-            st.session_state.pop("earnings_enrichment_rerun_sig", None)
-    except Exception:
-        pass
-
-    scan_ran_at = st.session_state.get("scan_ran_at_utc")
-
-    # -------- Earnings toggle (read-only here; it is defined earlier before scans) --------
-    # NOTE: key must match the checkbox key exactly (no leading/trailing spaces)
-    show_earnings = bool(flags.get("can_earnings")) and bool(
-        st.session_state.get("enable_earnings_enrichment", False)
+    df, scan_ran_at = prepare_results_with_earnings(
+        df,
+        flags=flags,
+        earn_col_days=EARN_COL_DAYS,
+        add_earnings_days_column=add_earnings_days_column,
+        quiet_external_calls=_quiet_external_calls,
     )
-
-    # Ensure the results table has earnings columns immediately when enabled.
-    # We fill with NaN first (fast), then replace via enrichment.
-    if show_earnings and isinstance(df, pd.DataFrame) and not df.empty:
-        try:
-            if EARN_COL_DAYS not in df.columns:
-                df[EARN_COL_DAYS] = np.nan
-            if "Earnings" not in df.columns:
-                df["Earnings"] = np.nan
-        except Exception:
-            pass
-
-    # Sidebar: show lock hint if Basic
-    if not flags.get("can_earnings"):
-        st.sidebar.caption("🔒 Earnings timing is a Pro feature.")
-
-    # --- Earnings enrichment should NOT block first render ---
-    # Cache by the current results signature so we only enrich once per result-set.
-    _sig_for_cache = str(st.session_state.get("results_signature") or "")
-    _cached_sig = str(st.session_state.get("earnings_enriched_signature") or "")
-    _cached_df = st.session_state.get("earnings_enriched_df")
-
-    def _canonical_symbol_series(_df: pd.DataFrame) -> pd.Series | None:
-        """Return a normalized, uppercase symbol series from common columns."""
-        base_col = None
-        for c in ("symbol", "Symbol", "Ticker", "ticker"):
-            if c in _df.columns:
-                base_col = c
-                break
-        if base_col is None:
-            return None
-        s = (
-            _df[base_col]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .replace({"": None, "NONE": None, "NAN": None})
-        )
-        return s
-
-    def _apply_earnings_enrichment(_df: pd.DataFrame) -> pd.DataFrame:
-        """Run DB enrichment on a copy and merge ONLY the earnings columns back."""
-        try:
-            work = _df.copy()
-
-            sym = _canonical_symbol_series(work)
-            if sym is not None:
-                # Ensure a single canonical join key exists for DB matching.
-                # IMPORTANT: Do not add duplicate casing columns (Ticker/Symbol/ticker) here.
-                work["symbol"] = sym
-
-            # Never allow refresh loops / external calls from earnings enrichment
-            st.session_state["enable_earnings_refresh"] = False
-
-            with _quiet_external_calls():
-                enriched = add_earnings_days_column(work)
-
-            # If the implementation returned something unexpected, keep original.
-            if not isinstance(enriched, pd.DataFrame):
-                enriched = work
-
-            # Extract the earnings column safely
-            earn_series = None
-            if EARN_COL_DAYS in enriched.columns:
-                earn_series = enriched[EARN_COL_DAYS]
-            elif "earnings_in_days" in enriched.columns:
-                earn_series = enriched["earnings_in_days"]
-
-            out = _df.copy()
-            if earn_series is not None:
-                out[EARN_COL_DAYS] = pd.to_numeric(earn_series, errors="coerce")
-                out["Earnings"] = out[EARN_COL_DAYS]
-            else:
-                # Guarantee columns exist even if enrichment produced none
-                if EARN_COL_DAYS not in out.columns:
-                    out[EARN_COL_DAYS] = np.nan
-                out["Earnings"] = out.get("Earnings") if "Earnings" in out.columns else np.nan
-
-            return out
-        except Exception:
-            # Never let earnings break rendering
-            out = _df.copy()
-            try:
-                if EARN_COL_DAYS not in out.columns:
-                    out[EARN_COL_DAYS] = np.nan
-                if "Earnings" not in out.columns:
-                    out["Earnings"] = np.nan
-            except Exception:
-                pass
-            return out
-
-    # Use cached enrichment if available for this exact result-set
-    if (
-        show_earnings
-        and _sig_for_cache
-        and _cached_sig == _sig_for_cache
-        and isinstance(_cached_df, pd.DataFrame)
-    ):
-        df = _cached_df
-
-    # If earnings are enabled and we don't have an enriched version for this exact result-set yet,
-    # enrich now and USE the enriched df for rendering.
-    if (
-        show_earnings
-        and isinstance(df, pd.DataFrame)
-        and not df.empty
-        and _sig_for_cache
-        and _cached_sig != _sig_for_cache
-    ):
-        enriched_df = _apply_earnings_enrichment(df)
-        st.session_state["earnings_enriched_df"] = enriched_df
-        st.session_state["earnings_enriched_signature"] = _sig_for_cache
-        df = enriched_df
-
-    # If earnings are enabled but still all missing, run ONE more forced pass (guards mismatched keys)
-    if (
-        show_earnings
-        and isinstance(df, pd.DataFrame)
-        and not df.empty
-        and EARN_COL_DAYS in df.columns
-        and pd.to_numeric(df[EARN_COL_DAYS], errors="coerce").isna().all()
-    ):
-        enriched_df = _apply_earnings_enrichment(df)
-        # Accept if it improves coverage
-        try:
-            if not pd.to_numeric(enriched_df[EARN_COL_DAYS], errors="coerce").isna().all():
-                st.session_state["earnings_enriched_df"] = enriched_df
-                st.session_state["earnings_enriched_signature"] = _sig_for_cache
-                df = enriched_df
-        except Exception:
-            pass
-
-    # Earnings filters (apply only when earnings column exists)
-    if show_earnings and df is not None and not df.empty and EARN_COL_DAYS in df.columns:
-        with st.sidebar.expander("📅 Earnings Filters", expanded=False):
-            excl_3 = st.checkbox("Exclude earnings in next 3 days", value=False, key="earn_excl_3")
-            within_7 = st.checkbox("Only earnings within 7 days", value=False, key="earn_within_7")
-
-        s = pd.to_numeric(df[EARN_COL_DAYS], errors="coerce")
-        if excl_3:
-            df = df[s.isna() | (s > 3)]
-            s = pd.to_numeric(df[EARN_COL_DAYS], errors="coerce")
-        if within_7:
-            df = df[(s >= 0) & (s <= 7)]
 
     render_results_tabs(
         df=df,
