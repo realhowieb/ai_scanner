@@ -157,6 +157,31 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def render_market_snapshot", header_source)
         self.assertIn("def render_price_ticker", header_source)
 
+    def test_result_helpers_are_extracted_from_results_ui(self):
+        results_path = ROOT / "ui" / "results.py"
+        results_source = results_path.read_text()
+        helper_source = (ROOT / "ui" / "result_helpers.py").read_text()
+        table_source = (ROOT / "ui" / "result_tables.py").read_text()
+        watchlist_source = (ROOT / "ui" / "result_watchlist.py").read_text()
+
+        self.assertLess(len(results_source.splitlines()), 700)
+        self.assertIn("from ui.result_helpers import", results_source)
+        self.assertIn("from ui.result_tables import render_static_results_table", results_source)
+        self.assertIn("from ui.result_watchlist import render_watchlist_action", results_source)
+        self.assertNotIn("def _sync_selected_ticker_from_table", results_source)
+        self.assertNotIn("def _find_row_for_ticker", results_source)
+        self.assertNotIn("def _render_watchlist_action", results_source)
+        self.assertNotIn(".basic-results-wrap {", results_source)
+        self.assertNotIn("except Exception:\n                styles.append", results_source)
+        self.assertIn("def sync_selected_ticker_from_table", helper_source)
+        self.assertIn("def find_row_for_ticker", helper_source)
+        self.assertIn("except (TypeError, ValueError, IndexError)", helper_source)
+        self.assertIn("def render_static_results_table", table_source)
+        self.assertIn("BASIC_RESULTS_TABLE_CSS", table_source)
+        self.assertIn("def render_watchlist_action", watchlist_source)
+        self.assertIn("except ImportError", watchlist_source)
+        self.assertIn("except (RuntimeError, TypeError, ValueError, OSError)", watchlist_source)
+
 
 if __name__ == "__main__":
     unittest.main()

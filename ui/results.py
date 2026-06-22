@@ -2,135 +2,28 @@
 from __future__ import annotations
 
 from typing import Callable, Optional
-
-import logging
 import re
 
 
 import pandas as pd
 import streamlit as st
+from ui.result_helpers import (
+    as_optional_float,
+    auto_details_ticker,
+    disable_yfinance_for_session as _disable_yfinance_for_session,
+    find_row_for_ticker,
+    get_results_df,
+    is_yahoo_crumb_error as _is_yahoo_crumb_error,
+    quiet_provider_loggers,
+    row_to_jsonable_dict,
+    sync_selected_ticker_from_table,
+    warn_yfinance_disabled_once as _warn_yfinance_disabled_once,
+)
+from ui.result_tables import render_static_results_table
+from ui.result_watchlist import render_watchlist_action
 
 
-# --- yfinance / Yahoo hard-fail guard ---
-# Yahoo sometimes returns 401 "Invalid Crumb" which can spam logs and stall UI.
-# When detected, we disable further yfinance calls for the current session.
-_YF_DISABLED_KEY = "yf_disabled"
-_YF_DISABLED_REASON_KEY = "yf_disabled_reason"
-_YF_WARNED_KEY = "yf_disabled_warned"
-
-# Reduce noisy library logging (won't hide exceptions, just prevents log spam).
-for _name in ("yfinance", "urllib3", "requests"):
-    try:
-        logging.getLogger(_name).setLevel(logging.ERROR)
-    except Exception:
-        pass
-
-
-def _is_yahoo_crumb_error(exc: Exception) -> bool:
-    msg = str(exc) or ""
-    msg_l = msg.lower()
-    # Common yfinance/Yahoo failure strings
-    if "invalid crumb" in msg_l:
-        return True
-    if "http error 401" in msg_l or "401" in msg_l and "unauthorized" in msg_l:
-        return True
-    return False
-
-
-def _disable_yfinance_for_session(reason: str) -> None:
-    try:
-        st.session_state[_YF_DISABLED_KEY] = True
-        st.session_state[_YF_DISABLED_REASON_KEY] = reason
-    except Exception:
-        pass
-
-
-def _warn_yfinance_disabled_once() -> None:
-    try:
-        if st.session_state.get(_YF_WARNED_KEY):
-            return
-        if st.session_state.get(_YF_DISABLED_KEY):
-            st.session_state[_YF_WARNED_KEY] = True
-            reason = st.session_state.get(_YF_DISABLED_REASON_KEY) or "Yahoo Finance blocked the request (401)."
-            st.caption(f"⚠️ Live quotes temporarily disabled this session: {reason}")
-    except Exception:
-        pass
-
-
-def get_results_df() -> Optional[pd.DataFrame]:
-    """Return the current results DataFrame from session_state.
-
-    If none exists yet, return None.
-    """
-    return st.session_state.get("results_df")
-
-
-# Row selection helper for interactive tables
-def _sync_selected_ticker_from_table(selection_obj: object, df: pd.DataFrame, picker_key: str) -> None:
-    """If Streamlit dataframe selection is available, sync selected ticker into session_state.
-
-    Works for both scan results tables (Ticker column) and market/watchlist tables (Symbol column).
-    This keeps row-click selection consistent with the existing chart picker keys.
-    """
-    try:
-        rows = getattr(getattr(selection_obj, "selection", None), "rows", None)
-        if not rows:
-            return
-        idx = int(rows[0])
-        if idx < 0 or idx >= len(df):
-            return
-
-        # Support both schema variants
-        col = None
-        if "Ticker" in df.columns:
-            col = "Ticker"
-        elif "Symbol" in df.columns:
-            col = "Symbol"
-        if not col:
-            return
-
-        t = str(df.iloc[idx][col]).strip().upper()
-        if not t:
-            return
-
-        st.session_state["results_selected_ticker"] = t
-        # Also sync chart picker so the Charts expander follows the click
-        st.session_state[picker_key] = t
-    except Exception:
-        return
-
-
-# --- Helper: find a row for a ticker (supports Ticker or Symbol column) ---
-def _find_row_for_ticker(df: Optional[pd.DataFrame], ticker: str) -> Optional[pd.Series]:
-    """Find the first row in df matching ticker.
-
-    Supports both schema variants:
-      - scan results tables (Ticker column)
-      - market/watchlist tables (Symbol column)
-
-    Returns the first matching row as a Series, or None.
-    """
-    try:
-        if df is None or df.empty or not ticker:
-            return None
-        t = str(ticker).strip().upper()
-        if not t:
-            return None
-
-        col = None
-        if "Ticker" in df.columns:
-            col = "Ticker"
-        elif "Symbol" in df.columns:
-            col = "Symbol"
-        if not col:
-            return None
-
-        m = df[col].astype(str).str.strip().str.upper() == t
-        if m.any():
-            return df[m].iloc[0]
-        return None
-    except Exception:
-        return None
+quiet_provider_loggers()
 
 
 def render_results(
@@ -180,22 +73,6 @@ def render_results(
         ):
             st.session_state.pop(k, None)
 
-    def _auto_details_ticker(_df: pd.DataFrame) -> str | None:
-        try:
-            if _df is None or _df.empty or "Ticker" not in _df.columns:
-                return None
-            if "BreakoutScore" in _df.columns:
-                s = pd.to_numeric(_df["BreakoutScore"], errors="coerce")
-                if s.notna().any():
-                    i = int(s.fillna(-1e18).idxmax())
-                    t = str(_df.loc[i, "Ticker"]).strip().upper()
-                    return t or None
-            # fallback: first row
-            t = str(_df.iloc[0]["Ticker"]).strip().upper()
-            return t or None
-        except Exception:
-            return None
-
     st.subheader("Results")
     st.caption(
         f"Showing {len(df)} results. Increase 'Top N Results' in the sidebar to see more, "
@@ -239,107 +116,6 @@ def render_results(
     # Show Basic upsell message for earnings filters, if earnings column exists and user is Basic
     if earn_col in df.columns and is_basic:
         st.info("🔒 Pro feature — earnings filters (exclude earnings soon / only within X days)")
-
-    # --- Watchlist action (used in ticker details panel) ---
-    def _render_watchlist_action(ticker: str) -> None:
-        t = (ticker or "").strip().upper()
-        if not t:
-            return
-
-        active_id = st.session_state.get("active_watchlist_id")
-        username = st.session_state.get("username") or st.session_state.get("user") or "anonymous"
-
-        # Session copy (best UX), but DB is source of truth if available
-        current = st.session_state.get("active_watchlist_tickers", []) or []
-        current_norm = {str(x).strip().upper() for x in current if str(x).strip()}
-
-        if active_id is None:
-            st.caption("📋 Watchlist: select an active watchlist to add tickers.")
-            return
-
-        already = t in current_norm
-
-        cA, cB = st.columns([1, 2])
-        with cA:
-            clicked = st.button(
-                "⭐ Add to Watchlist" if not already else "✅ In Watchlist",
-                key=f"btn_details_add_watchlist_{t}",
-                disabled=already,
-                width="stretch",
-            )
-        with cB:
-            st.caption("Adds this ticker to your active watchlist.")
-
-        if not clicked:
-            return
-
-        # Resolve DB functions (app may expose them via different module paths)
-        def _resolve_watchlist_fns():
-            # 1) If app.py injected them into globals() at import time
-            g_get = globals().get("get_watchlist_tickers")
-            g_set = globals().get("set_watchlist_tickers")
-            if callable(g_get) and callable(g_set):
-                return g_get, g_set
-
-            # 2) Try common import locations
-            candidates = [
-                ("db.watchlists", "get_watchlist_tickers", "set_watchlist_tickers"),
-                ("db.watchlist", "get_watchlist_tickers", "set_watchlist_tickers"),
-                ("watchlists", "get_watchlist_tickers", "set_watchlist_tickers"),
-                ("watchlist", "get_watchlist_tickers", "set_watchlist_tickers"),
-            ]
-            for mod_name, get_name, set_name in candidates:
-                try:
-                    mod = __import__(mod_name, fromlist=[get_name, set_name])
-                    get_fn = getattr(mod, get_name, None)
-                    set_fn = getattr(mod, set_name, None)
-                    if callable(get_fn) and callable(set_fn):
-                        return get_fn, set_fn
-                except Exception:
-                    continue
-
-            return None, None
-
-        get_fn, set_fn = _resolve_watchlist_fns()
-
-        # Always update session_state immediately for responsive UX
-        updated_norm = set(current_norm)
-        updated_norm.add(t)
-        st.session_state["active_watchlist_tickers"] = sorted(updated_norm)
-
-        # If DB functions exist, persist + verify
-        if callable(get_fn) and callable(set_fn):
-            try:
-                existing_db = get_fn(active_id, username) or []
-                existing_db_norm = {str(x).strip().upper() for x in existing_db if str(x).strip()}
-                new_db = sorted(existing_db_norm | {t})
-
-                set_fn(active_id, username, list(new_db))
-
-                # Verify (read-after-write) so we don't show a false success
-                verify_db = get_fn(active_id, username) or []
-                verify_norm = {str(x).strip().upper() for x in verify_db if str(x).strip()}
-                st.session_state["active_watchlist_tickers"] = sorted(verify_norm)
-
-                if t in verify_norm:
-                    st.success(f"Added **{t}** to your active watchlist.")
-                else:
-                    st.warning(
-                        f"Tried to add **{t}**, but it did not appear in the DB on verification. "
-                        "Your DB write may be failing or the watchlist is keyed differently."
-                    )
-            except Exception as e:
-                # Keep the session_state add (UX), but make DB failure visible
-                st.warning(
-                    f"Added **{t}** locally, but DB save failed: {e}. "
-                    "It may disappear after refresh if DB cannot be reached."
-                )
-        else:
-            # No DB integration available in this runtime
-            st.info(
-                "Added locally (no DB watchlist functions found). "
-                "If it disappears after refresh, wire get_watchlist_tickers/set_watchlist_tickers into this module."
-            )
 
     # --- Performance guard: Pandas Styler becomes very slow on large tables ---
     MAX_STYLED_ROWS = 1500
@@ -394,59 +170,10 @@ def render_results(
                 on_select="rerun",
                 key="results_table_fast",
             )
-            _sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker_fast")
+            sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker_fast")
         else:
             # Basic: keep non-interactive rendering. Use plain HTML (much faster than styled.to_html).
-            try:
-                table_html = df.to_html(index=False)
-
-                st.markdown(
-                    """
-<style>
-.basic-results-wrap {
-  max-height: 420px;
-  overflow-x: auto;
-  overflow-y: auto;
-  border: 1px solid rgba(49, 51, 63, 0.25);
-  border-radius: 10px;
-  padding: 6px;
-}
-
-/* Prevent vertical letter stacking on mobile */
-.basic-results-wrap table {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: collapse;
-}
-
-.basic-results-wrap th,
-.basic-results-wrap td {
-  white-space: nowrap;
-  padding: 6px 10px;
-}
-
-/* Sticky header */
-.basic-results-wrap th {
-  position: sticky;
-  top: 0;
-  background: rgba(15, 17, 22, 0.98);
-  z-index: 2;
-}
-</style>
-""",
-                    unsafe_allow_html=True,
-                )
-
-                st.markdown(
-                    f"<div class='basic-results-wrap'>{table_html}</div>",
-                    unsafe_allow_html=True,
-                )
-            except Exception:
-                # Fallback: still non-interactive
-                try:
-                    st.table(df)
-                except Exception:
-                    st.markdown(df.to_html(index=False), unsafe_allow_html=True)
+            render_static_results_table(df, fallback_df=df)
 
         # Export (tier-gated) still available even in fast mode
         if can_export_csv:
@@ -464,29 +191,21 @@ def render_results(
         # Continue with charts / details / AI notes
         if is_basic:
             # Basic: no interactive selection; show one auto-selected ticker details.
-            auto_t = _auto_details_ticker(df)
+            auto_t = auto_details_ticker(df)
             if auto_t:
                 with st.expander(f"📌 {auto_t} details", expanded=False):
                     st.caption(
                         "📌 **Top breakout candidate (auto-selected)**  \n"
                         "🔒 Upgrade to Pro to select tickers, view charts, and export CSV."
                     )
-                    r0 = _find_row_for_ticker(df, auto_t)
+                    r0 = find_row_for_ticker(df, auto_t)
                     if r0 is not None:
                         c1, c2, c3, c4 = st.columns(4)
 
-                        def _as_float(v):
-                            try:
-                                if pd.isna(v):
-                                    return None
-                                return float(v)
-                            except Exception:
-                                return None
-
-                        bs = _as_float(r0.get("BreakoutScore"))
-                        last = _as_float(r0.get("Last"))
-                        gap = _as_float(r0.get("GapPct"))
-                        dv = _as_float(r0.get("DollarVol20"))
+                        bs = as_optional_float(r0.get("BreakoutScore"))
+                        last = as_optional_float(r0.get("Last"))
+                        gap = as_optional_float(r0.get("GapPct"))
+                        dv = as_optional_float(r0.get("DollarVol20"))
 
                         c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
                         c2.metric("Last", "—" if last is None else f"{last:.2f}")
@@ -495,7 +214,7 @@ def render_results(
                         # Basic: do not show earnings in the details card
 
                         with st.expander("Show row fields", expanded=False):
-                            st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
+                            st.json(row_to_jsonable_dict(r0))
                     else:
                         st.caption("No row details available for this ticker.")
             else:
@@ -555,23 +274,15 @@ def render_results(
         if selected_ticker:
             with st.expander(f"📌 {selected_ticker} details", expanded=False):
                 # Show a compact stats + earnings card (no extra network calls)
-                r0 = _find_row_for_ticker(df, selected_ticker)
+                r0 = find_row_for_ticker(df, selected_ticker)
                 if r0 is not None:
                     c1, c2, c3, c4 = st.columns(4)
 
-                    def _as_float(v):
-                        try:
-                            if pd.isna(v):
-                                return None
-                            return float(v)
-                        except Exception:
-                            return None
-
                     # Core stats
-                    bs = _as_float(r0.get("BreakoutScore"))
-                    last = _as_float(r0.get("Last"))
-                    gap = _as_float(r0.get("GapPct"))
-                    dv = _as_float(r0.get("DollarVol20"))
+                    bs = as_optional_float(r0.get("BreakoutScore"))
+                    last = as_optional_float(r0.get("Last"))
+                    gap = as_optional_float(r0.get("GapPct"))
+                    dv = as_optional_float(r0.get("DollarVol20"))
 
                     c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
                     c2.metric("Last", "—" if last is None else f"{last:.2f}")
@@ -580,18 +291,18 @@ def render_results(
 
                     # Earnings (only when enrichment is enabled)
                     if show_earnings_in_cards:
-                        earn_days = _as_float(r0.get(earn_col))
+                        earn_days = as_optional_float(r0.get(earn_col))
                         if earn_days is None:
                             st.caption("📅 Earnings: TBA")
                         else:
                             st.caption(f"📅 Earnings in {int(earn_days)} days")
 
                     # ⭐ Add to watchlist action
-                    _render_watchlist_action(str(selected_ticker))
+                    render_watchlist_action(str(selected_ticker))
 
                     # Optional: show a tiny raw row preview for debugging (collapsed)
                     with st.expander("Show row fields", expanded=False):
-                        st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
+                        st.json(row_to_jsonable_dict(r0))
                 else:
                     st.caption("No row details available for this ticker.")
 
@@ -599,7 +310,7 @@ def render_results(
             st.subheader("AI Notes")
             st.caption("⭐ Premium feature")
             try:
-                row = _find_row_for_ticker(df, pick)
+                row = find_row_for_ticker(df, pick)
                 if row is None:
                     raise ValueError("No matching row for selected ticker")
                 auto_note = generate_ai_note(row)
@@ -643,7 +354,7 @@ def render_results(
                 if pd.isna(v):
                     return ""
                 d = int(float(v))
-            except Exception:
+            except (TypeError, ValueError, KeyError):
                 return ""
 
             # Warning for earnings very soon
@@ -670,7 +381,7 @@ def render_results(
         for v in series:
             try:
                 val = float(v)
-            except Exception:
+            except (TypeError, ValueError):
                 styles.append("")
                 continue
             if val >= 20:
@@ -693,19 +404,19 @@ def render_results(
         def _fmt_price(x):
             try:
                 return f"{float(x):.2f}"
-            except Exception:
+            except (TypeError, ValueError):
                 return x
 
         def _fmt_change(x):
             try:
                 return f"{float(x):+,.2f}"
-            except Exception:
+            except (TypeError, ValueError):
                 return x
 
         def _fmt_pct(x):
             try:
                 return f"{float(x):+,.2f}%"
-            except Exception:
+            except (TypeError, ValueError):
                 return x
 
         fmt: dict[str, object] = {}
@@ -723,7 +434,7 @@ def render_results(
         def _change_style(v):
             try:
                 val = float(v)
-            except Exception:
+            except (TypeError, ValueError):
                 return ""
             if val > 0:
                 return "color: #00C853; font-weight: 600;"  # green
@@ -741,7 +452,7 @@ def render_results(
                 try:
                     val = float(v)
                     pc = float(prev_close)
-                except Exception:
+                except (TypeError, ValueError):
                     return ""
                 if val > pc:
                     return "color: #00C853; font-weight: 500;"
@@ -772,70 +483,14 @@ def render_results(
                 on_select="rerun",
                 key="results_table_styled",
             )
-            _sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker")
+            sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker")
         except Exception:
             # Fallback: keep styled rendering without selection
             st.dataframe(styled, width="stretch", height=420)
     else:
         # Basic: keep the pro styling but render as static HTML (no Streamlit dataframe toolbar/download).
         # Mobile-safe: enable horizontal scroll + prevent vertical letter stacking.
-        try:
-            styled_basic = styled
-            try:
-                # pandas>=1.4
-                styled_basic = styled_basic.hide(axis="index")
-            except Exception:
-                pass
-
-            table_html = styled_basic.to_html()
-
-            st.markdown(
-                """
-<style>
-.basic-results-wrap {
-  max-height: 420px;
-  overflow-x: auto;
-  overflow-y: auto;
-  border: 1px solid rgba(49, 51, 63, 0.25);
-  border-radius: 10px;
-  padding: 6px;
-}
-
-/* Prevent vertical letter stacking on mobile */
-.basic-results-wrap table {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: collapse;
-}
-
-.basic-results-wrap th,
-.basic-results-wrap td {
-  white-space: nowrap;
-  padding: 6px 10px;
-}
-
-/* Sticky header */
-.basic-results-wrap th {
-  position: sticky;
-  top: 0;
-  background: rgba(15, 17, 22, 0.98);
-  z-index: 2;
-}
-</style>
-""",
-                unsafe_allow_html=True,
-            )
-
-            st.markdown(
-                f"<div class='basic-results-wrap'>{table_html}</div>",
-                unsafe_allow_html=True,
-            )
-        except Exception:
-            # Fallback: still non-interactive
-            try:
-                st.table(df)
-            except Exception:
-                st.markdown(df.to_html(index=False), unsafe_allow_html=True)
+        render_static_results_table(styled, fallback_df=df)
 
     # Export (tier-gated)
     if can_export_csv:
@@ -852,29 +507,21 @@ def render_results(
 
     # Chart picker/details/AI notes: Option A logic for non-fast (styled) branch
     if is_basic:
-        auto_t = _auto_details_ticker(df)
+        auto_t = auto_details_ticker(df)
         if auto_t:
             with st.expander(f"📌 {auto_t} details", expanded=False):
                 st.caption(
                     "📌 **Top breakout candidate (auto-selected)**  \n"
                     "🔒 Upgrade to Pro to select tickers, view charts, and export CSV."
                 )
-                r0 = _find_row_for_ticker(df, auto_t)
+                r0 = find_row_for_ticker(df, auto_t)
                 if r0 is not None:
                     c1, c2, c3, c4 = st.columns(4)
 
-                    def _as_float(v):
-                        try:
-                            if pd.isna(v):
-                                return None
-                            return float(v)
-                        except Exception:
-                            return None
-
-                    bs = _as_float(r0.get("BreakoutScore"))
-                    last = _as_float(r0.get("Last"))
-                    gap = _as_float(r0.get("GapPct"))
-                    dv = _as_float(r0.get("DollarVol20"))
+                    bs = as_optional_float(r0.get("BreakoutScore"))
+                    last = as_optional_float(r0.get("Last"))
+                    gap = as_optional_float(r0.get("GapPct"))
+                    dv = as_optional_float(r0.get("DollarVol20"))
 
                     c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
                     c2.metric("Last", "—" if last is None else f"{last:.2f}")
@@ -884,7 +531,7 @@ def render_results(
                     # Basic: do not show earnings in the details card
 
                     with st.expander("Show row fields", expanded=False):
-                        st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
+                        st.json(row_to_jsonable_dict(r0))
                 else:
                     st.caption("No row details available for this ticker.")
         else:
@@ -942,22 +589,14 @@ def render_results(
         if selected_ticker:
             with st.expander(f"📌 {selected_ticker} details", expanded=False):
                 # Show a compact stats + earnings card (no extra network calls)
-                r0 = _find_row_for_ticker(df, selected_ticker)
+                r0 = find_row_for_ticker(df, selected_ticker)
                 if r0 is not None:
                     c1, c2, c3, c4 = st.columns(4)
 
-                    def _as_float(v):
-                        try:
-                            if pd.isna(v):
-                                return None
-                            return float(v)
-                        except Exception:
-                            return None
-
-                    bs = _as_float(r0.get("BreakoutScore"))
-                    last = _as_float(r0.get("Last"))
-                    gap = _as_float(r0.get("GapPct"))
-                    dv = _as_float(r0.get("DollarVol20"))
+                    bs = as_optional_float(r0.get("BreakoutScore"))
+                    last = as_optional_float(r0.get("Last"))
+                    gap = as_optional_float(r0.get("GapPct"))
+                    dv = as_optional_float(r0.get("DollarVol20"))
 
                     c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
                     c2.metric("Last", "—" if last is None else f"{last:.2f}")
@@ -966,17 +605,17 @@ def render_results(
 
                     # Earnings (only when enrichment is enabled)
                     if show_earnings_in_cards:
-                        earn_days = _as_float(r0.get(earn_col))
+                        earn_days = as_optional_float(r0.get(earn_col))
                         if earn_days is None:
                             st.caption("📅 Earnings: TBA")
                         else:
                             st.caption(f"📅 Earnings in {int(earn_days)} days")
 
                     # ⭐ Add to watchlist action
-                    _render_watchlist_action(str(selected_ticker))
+                    render_watchlist_action(str(selected_ticker))
 
                     with st.expander("Show row fields", expanded=False):
-                        st.json({k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in r0.to_dict().items()})
+                        st.json(row_to_jsonable_dict(r0))
                 else:
                     st.caption("No row details available for this ticker.")
 
@@ -987,7 +626,7 @@ def render_results(
         try:
             # Use the same ticker the user selected for the chart
             pick = st.session_state.get("results_chart_picker")
-            row = _find_row_for_ticker(df, pick)
+            row = find_row_for_ticker(df, pick)
             if row is None:
                 raise ValueError("No matching row for selected ticker")
             auto_note = generate_ai_note(row)
