@@ -28,6 +28,7 @@ from scan.options import (
     normalize_profile,
     normalize_strategy,
 )
+from scan.strategies import apply_strategy_filter
 
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
@@ -244,59 +245,11 @@ def run_scan_engine(
         return pd.DataFrame()
 
     # 4) Strategy-specific post-filters (operate on the breakout results)
-    def _strategy_gap_up(frame: pd.DataFrame) -> pd.DataFrame:
-        if "GapPct" not in frame.columns:
-            return frame.head(0)
-        return frame[frame["GapPct"] > 0].sort_values("GapPct", ascending=False)
-
-    def _strategy_gap_down(frame: pd.DataFrame) -> pd.DataFrame:
-        if "GapPct" not in frame.columns:
-            return frame.head(0)
-        return frame[frame["GapPct"] < 0].sort_values("GapPct", ascending=True)
-
-    def _strategy_most_active(frame: pd.DataFrame) -> pd.DataFrame:
-        col = "DollarVol20" if "DollarVol20" in frame.columns else (
-            "Volume" if "Volume" in frame.columns else None
-        )
-        if col is None:
-            return frame.head(0)
-        return frame.sort_values(col, ascending=False)
-
-    def _strategy_unusual_vol(frame: pd.DataFrame) -> pd.DataFrame:
-        if "VolRel20" not in frame.columns:
-            return frame.head(0)
-        return frame[frame["VolRel20"] >= 2].sort_values("VolRel20", ascending=False)
-
-    def _strategy_momentum(frame: pd.DataFrame) -> pd.DataFrame:
-        if "Trend20D%" not in frame.columns or "Trend10D%" not in frame.columns:
-            return frame.head(0)
-        mask = (frame["Trend20D%"] > 0) & (frame["Trend10D%"] > 0)
-        return frame[mask].sort_values("Trend20D%", ascending=False)
-
-    def _strategy_breakout_only(frame: pd.DataFrame) -> pd.DataFrame:
-        if "IsBreakout" not in frame.columns:
-            return frame.head(0)
-        base = frame[frame["IsBreakout"] == True]
-        if "BreakoutScore" in base.columns:
-            return base.sort_values("BreakoutScore", ascending=False)
-        return base
-
-    strategy_map = {
-        "gap_up": _strategy_gap_up,
-        "gap_down": _strategy_gap_down,
-        "most_active": _strategy_most_active,
-        "unusual_vol": _strategy_unusual_vol,
-        "momentum": _strategy_momentum,
-        "breakout_only": _strategy_breakout_only,
-    }
-
-    post = strategy_map.get(strategy)
-    if post is not None:
-        try:
-            df = post(df)
-        except Exception:
-            # On any filter error, just return the unfiltered results (capped below)
-            pass
+    try:
+        df = apply_strategy_filter(strategy, df)
+    except Exception:
+        # On any filter error, just return the unfiltered results (capped below)
+        pass
 
     # 5) Cap to Top N and return
     df = df.head(opts.top_n).reset_index(drop=True)
