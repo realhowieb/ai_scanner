@@ -14,7 +14,6 @@ dependencies = [
     "lxml",
     "html5lib",
     "beautifulsoup4",
-    "yahoo_fin",
     "matplotlib",
     "mplfinance",
     "SQLAlchemy>=2.0",
@@ -35,9 +34,7 @@ ml = [
     "joblib"
 ]
 extended = [
-    "alpaca-py",
-    "pyppeteer",
-    "websockets"
+    "alpaca-py"
 ]
 billing = [
     "fastapi==0.115.6",

@@ -45,17 +45,24 @@ class RequirementsLayoutTests(unittest.TestCase):
         core = set(_read_lines("requirements-core.txt"))
         optional = set(_read_lines("requirements-ml.txt")) | set(_read_lines("requirements-extended.txt"))
 
-        for dep in {"xgboost", "scikit-learn", "joblib", "pyppeteer", "alpaca-py"}:
+        for dep in {"xgboost", "scikit-learn", "joblib", "alpaca-py"}:
             self.assertNotIn(dep, core)
             self.assertIn(dep, optional)
+
+        for conflicting_dep in {"pyppeteer", "yahoo_fin"}:
+            self.assertNotIn(conflicting_dep, core)
+            self.assertNotIn(conflicting_dep, optional)
 
     def test_pyproject_keeps_heavy_deps_optional(self):
         text = (ROOT / "pyproject.toml").read_text()
         dependencies_block = text.split("[project.optional-dependencies]", 1)[0]
 
-        for dep in {"xgboost", "scikit-learn", "joblib", "pyppeteer", "alpaca-py"}:
+        for dep in {"xgboost", "scikit-learn", "joblib", "alpaca-py"}:
             self.assertNotIn(f'"{dep}"', dependencies_block)
             self.assertIn(f'"{dep}"', text)
+
+        for conflicting_dep in {"pyppeteer", "yahoo_fin"}:
+            self.assertNotIn(f'"{conflicting_dep}"', text)
 
     def test_ml_module_keeps_optional_imports_guarded(self):
         text = (ROOT / "ml_prebreakout.py").read_text()

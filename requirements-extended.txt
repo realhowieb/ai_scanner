@@ -1,4 +1,2 @@
-# Optional integrations/reporting dependencies kept in the full deploy profile.
+# Optional integrations kept in the full deploy profile.
 alpaca-py
-pyppeteer
-websockets
