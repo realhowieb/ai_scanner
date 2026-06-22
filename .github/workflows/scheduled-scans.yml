@@ -38,7 +38,8 @@ jobs:
         env:
           # 🔑 Add these in GitHub → Settings → Secrets and variables → Actions
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           # Add any other env vars your app expects here
-        run: python cron_runner.py
+        run: python -m scheduler.cron_runner

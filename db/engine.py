@@ -11,8 +11,9 @@ def get_neon_conn():
     """Return a new Neon PostgreSQL connection.
 
     We try, in order:
-    - NEON_DATABASE_URL env var
+    - NEON_DATABASE_URL or DATABASE_URL env var
     - st.secrets["neon"]["database_url"]
+    - st.secrets["DATABASE_URL"]
     - st.secrets["neon_database_url"]
     - st.secrets["database_url"]
 
@@ -22,7 +23,11 @@ def get_neon_conn():
     url = None
 
     # 1) Environment variable (useful in many deployment setups)
-    env_url = os.environ.get("NEON_DATABASE_URL")
+    env_url = (
+        os.environ.get("NEON_DATABASE_URL")
+        or os.environ.get("DATABASE_URL")
+        or os.environ.get("database_url")
+    )
     if env_url:
         url = env_url
 
@@ -35,7 +40,7 @@ def get_neon_conn():
 
     # 3) Streamlit secrets flat keys
     if url is None:
-        for key in ("neon_database_url", "database_url"):
+        for key in ("NEON_DATABASE_URL", "DATABASE_URL", "neon_database_url", "database_url"):
             try:
                 candidate = st.secrets[key]  # type: ignore[index]
                 if candidate:

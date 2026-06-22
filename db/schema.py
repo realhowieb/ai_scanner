@@ -66,11 +66,19 @@ def ensure_neon_users_schema(conn):
             full_name TEXT NOT NULL,
             password TEXT NOT NULL,
             tier TEXT DEFAULT 'basic',
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT,
+            stripe_price_id TEXT,
+            plan_updated_at TIMESTAMPTZ,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """
     )
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_price_id TEXT")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_updated_at TIMESTAMPTZ")
     conn.commit()
     cur.close()
 
@@ -86,11 +94,25 @@ def ensure_sqlite_users_schema(conn):
             full_name TEXT NOT NULL,
             password TEXT NOT NULL,
             tier TEXT DEFAULT 'basic',
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT,
+            stripe_price_id TEXT,
+            plan_updated_at TIMESTAMP,
             is_active INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """
     )
+    cur.execute("PRAGMA table_info(users)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "stripe_customer_id" not in cols:
+        cur.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+    if "stripe_subscription_id" not in cols:
+        cur.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT")
+    if "stripe_price_id" not in cols:
+        cur.execute("ALTER TABLE users ADD COLUMN stripe_price_id TEXT")
+    if "plan_updated_at" not in cols:
+        cur.execute("ALTER TABLE users ADD COLUMN plan_updated_at TIMESTAMP")
     conn.commit()
     cur.close()
 

@@ -17,9 +17,10 @@ def save_run(
     row_count: Optional[int] = None,
     duration_sec: Optional[float] = None,
     is_snapshot: bool = False,
+    allow_sqlite_fallback: bool = True,
 ) -> None:
     """
-    Save a run (scan results) to Neon if available, otherwise SQLite.
+    Save a run to Neon/Postgres if available, optionally falling back to SQLite.
     """
 
     # Try Neon first
@@ -53,7 +54,12 @@ def save_run(
             conn.close()
             return
     except Exception as e:
+        if not allow_sqlite_fallback:
+            raise RuntimeError(f"Neon DB write failed and SQLite fallback is disabled: {e}") from e
         st.caption(f"⚠️ Neon DB write failed, falling back to SQLite: {e}")
+
+    if not allow_sqlite_fallback:
+        raise RuntimeError("Neon DB is not configured or unavailable; SQLite fallback is disabled")
 
     # --- SQLite fallback ---
     try:
