@@ -64,6 +64,18 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def patch_use_container_width", boot_source)
         self.assertIn("def configure_page", boot_source)
 
+    def test_app_session_helpers_are_extracted_from_app(self):
+        app_source = (ROOT / "app.py").read_text()
+        session_source = (ROOT / "ui" / "app_session.py").read_text()
+
+        self.assertIn("from ui.app_session import", app_source)
+        self.assertIn("normalize_admin_users", app_source)
+        self.assertNotIn("def _norm_str", app_source)
+        self.assertNotIn("FEATURE_MIN_TIER: dict", app_source)
+        self.assertIn("def normalize_admin_users", session_source)
+        self.assertIn("def is_admin_user", session_source)
+        self.assertIn("def compute_entitlements", session_source)
+
 
 if __name__ == "__main__":
     unittest.main()

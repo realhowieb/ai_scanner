@@ -15,6 +15,12 @@ from ui.app_boot import (
     install_streamlit_compat,
     quiet_external_calls as _quiet_external_calls,
 )
+from ui.app_session import (
+    compute_entitlements,
+    is_admin_user,
+    normalize_admin_users,
+    tier_key as _tier_key,
+)
 
 install_streamlit_compat()
 
@@ -102,13 +108,7 @@ except Exception:
 
 # --- Normalize ADMIN_USERS to be username-only (no implicit premium/admin coercion) ---
 # Some legacy configs treat admin users as premium implicitly; we want DB tier to win.
-try:
-    if isinstance(ADMIN_USERS, (list, set, tuple)):
-        ADMIN_USERS = {str(u).strip().lower() for u in ADMIN_USERS}
-    elif isinstance(ADMIN_USERS, dict):
-        ADMIN_USERS = {str(u).strip().lower() for u in ADMIN_USERS.keys()}
-except Exception:
-    pass
+ADMIN_USERS = normalize_admin_users(ADMIN_USERS)
 
 # --------------- AUTH (must load even if other modules fail) ----------------
 _AUTH_IMPORT_ERROR: str | None = None
@@ -395,112 +395,8 @@ def _get_db_conn_for_app():
         raise RuntimeError(f"No DB driver available (install psycopg or psycopg2). Last error: {e}")
 
 
-# --------------- Tier/Admin Helper Functions ----------------
-
-def _norm_str(v: object | None) -> str:
-    """Normalize user-provided / DB-provided strings to a safe canonical form."""
-    try:
-        return str(v or "").strip()
-    except Exception:
-        return ""
-
-
-def _norm_lower(v: object | None) -> str:
-    return _norm_str(v).lower()
-
-
 def _is_admin_user(username: str | None, tier_obj: object | None) -> bool:
-    """Admin check that is resilient to whitespace/case/enum differences."""
-    u = _norm_lower(username)
-    if u and u in ADMIN_USERS:
-        return True
-
-    # Tier objects may expose `.key` (preferred) or `.name`.
-    try:
-        key = getattr(tier_obj, "key", None)
-        if _norm_lower(key) == "admin":
-            return True
-    except Exception:
-        pass
-
-    try:
-        name = getattr(tier_obj, "name", None)
-        if _norm_lower(name) == "admin":
-            return True
-    except Exception:
-        pass
-
-    # Last resort: string form
-    if _norm_lower(tier_obj) == "admin":
-        return True
-
-    return False
-
-
-def _tier_key(tier_obj: object | None) -> str:
-    """Return a stable tier key string for logging/comparisons/UI."""
-    try:
-        key = getattr(tier_obj, "key", None)
-        if key is not None:
-            return _norm_lower(key)
-    except Exception:
-        pass
-
-    try:
-        name = getattr(tier_obj, "name", None)
-        if name is not None:
-            return _norm_lower(name)
-    except Exception:
-        pass
-
-    return _norm_lower(tier_obj) or "basic"
-
-
-# --------------- Entitlements (Centralized) ----------------
-# Define the minimum tier required for each feature.
-FEATURE_MIN_TIER: dict[str, str] = {
-    # scans
-    "can_scan_sp500": "basic",
-    "can_scan_nasdaq": "pro",
-
-    # results
-    "can_export_csv": "pro",
-    "can_earnings": "pro",
-    "can_ai_notes": "premium",
-
-    # pro features
-    "can_scan_history": "pro",
-
-    # premium-only
-    "can_early_breakout": "premium",
-    "can_full_universe": "premium",
-
-    # admin-only
-    "can_diagnostics": "admin",
-    "can_admin_panel": "admin",
-}
-
-
-def compute_entitlements(*, tier_obj: object | None, is_admin: bool) -> dict[str, bool]:
-    """Central, deterministic feature flags based on tier."""
-    flags: dict[str, bool] = {}
-
-    # Admin overrides everything
-    if bool(is_admin):
-        for k in FEATURE_MIN_TIER.keys():
-            flags[k] = True
-        return flags
-
-    for feature, min_tier in FEATURE_MIN_TIER.items():
-        if min_tier == "admin":
-            flags[feature] = False
-            continue
-        try:
-            flags[feature] = bool(has_min_tier(tier_obj, min_tier))
-        except Exception:
-            flags[feature] = False
-
-    return flags
+    return is_admin_user(username, tier_obj, admin_users=ADMIN_USERS)
 
 
 # Day 6: Upgrade CTA card for Basic users only
