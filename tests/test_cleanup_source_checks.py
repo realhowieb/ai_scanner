@@ -28,6 +28,16 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("Run dependency-backed unit tests", source)
         self.assertIn("python -m pip install --prefer-binary -r requirements.txt", source)
         self.assertIn("import scan.engine", source)
+        self.assertIn("Live Streamlit startup smoke", source)
+        self.assertIn("python scripts/streamlit_smoke.py --timeout 60", source)
+
+    def test_streamlit_smoke_script_starts_live_server(self):
+        source = (ROOT / "scripts" / "streamlit_smoke.py").read_text()
+
+        self.assertIn("streamlit", source)
+        self.assertIn("_stcore/health", source)
+        self.assertIn("subprocess.Popen", source)
+        self.assertIn("STREAMLIT_SERVER_HEADLESS", source)
 
     def test_single_ticker_tools_are_extracted_from_scan_ui(self):
         scans_source = (ROOT / "ui" / "scans.py").read_text()

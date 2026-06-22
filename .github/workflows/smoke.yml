@@ -66,6 +66,9 @@ jobs:
       - name: Run dependency-backed unit tests
         run: python -m unittest discover -s tests -v
 
+      - name: Live Streamlit startup smoke
+        run: python scripts/streamlit_smoke.py --timeout 60
+
   full-dependency-import-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20
