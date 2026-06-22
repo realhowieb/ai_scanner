@@ -18,6 +18,18 @@ streamlit run app.py
 
 The app defaults to local development settings when no secrets are configured. Production deployments should provide database, market-data, cookie, and billing secrets through the host environment or Streamlit secrets.
 
+Required production auth setting:
+
+- `COOKIE_PASSWORD`
+
+Optional demo-user settings for local/test deployments:
+
+- `ENABLE_DEMO_USERS=1`
+- `DEMO_BASIC_PASSWORD`
+- `DEMO_PRO_PASSWORD`
+- `DEMO_PREMIUM_PASSWORD`
+- `DEMO_ADMIN_PASSWORD`
+
 ## Scheduled Scans
 
 Scheduled scans run through:

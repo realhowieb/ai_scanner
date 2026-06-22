@@ -50,7 +50,28 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # -------------------- Cookie sessions (Neon-backed) --------------------
 COOKIE_PREFIX = os.environ.get("COOKIE_PREFIX", "ai_scanner")
 COOKIE_NAME = os.environ.get("COOKIE_NAME", f"{COOKIE_PREFIX}_sid")
-COOKIE_PASSWORD = os.environ.get("COOKIE_PASSWORD", "change-me")
+
+
+def _get_secret(name: str) -> str | None:
+    value = os.environ.get(name)
+    if value:
+        return value
+    try:
+        value = st.secrets.get(name)
+        if value:
+            return str(value)
+    except Exception:
+        pass
+    return None
+
+
+def _profile() -> str:
+    return (os.environ.get("PROFILE") or os.environ.get("ENV") or "dev").strip().lower()
+
+
+COOKIE_PASSWORD = _get_secret("COOKIE_PASSWORD")
+if not COOKIE_PASSWORD and _profile() in {"dev", "local", "test"}:
+    COOKIE_PASSWORD = "dev-only-cookie-password"
 
 
 def _cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
@@ -60,6 +81,9 @@ def _cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
             "Cookie sessions are not available because `streamlit-cookies-manager` is not installed. "
             "Add it to requirements.txt and redeploy."
         )
+        return None
+    if not COOKIE_PASSWORD:
+        st.error("Cookie sessions require COOKIE_PASSWORD to be configured.")
         return None
 
     cookies = EncryptedCookieManager(prefix=COOKIE_PREFIX, password=COOKIE_PASSWORD)

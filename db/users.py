@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Dict, Any
 
 import pandas as pd
@@ -20,12 +21,36 @@ try:
 except Exception:
     SAHasher = None
 
+try:
+    import bcrypt
+except Exception:
+    bcrypt = None
+
+
+def _demo_users_enabled() -> bool:
+    return os.getenv("ENABLE_DEMO_USERS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _demo_password(name: str) -> str | None:
+    value = os.getenv(name)
+    if value:
+        return value
+    try:
+        value = st.secrets.get(name)
+        if value:
+            return str(value)
+    except Exception:
+        pass
+    return None
+
 
 def seed_neon_users_from_local() -> None:
     """
-    If Neon.users is empty, seed it using the hard-coded USERS_DB.
+    If Neon.users is empty, seed it using the opt-in demo USERS_DB.
     This runs once, then never again unless Neon is wiped.
     """
+    if not _demo_users_enabled():
+        return
     try:
         conn = get_neon_conn()
         if conn is None:
@@ -51,9 +76,11 @@ def seed_neon_users_from_local() -> None:
                     elif stauth is not None and hasattr(stauth, "Hasher"):
                         # Legacy stauth.Hasher if available
                         hashed_pwd = stauth.Hasher([raw_pwd]).generate()[0]
+                    elif bcrypt is not None:
+                        hashed_pwd = bcrypt.hashpw(raw_pwd.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
                 except Exception:
-                    # Fallback to raw password if hashing fails; not ideal, but avoids seeding failure
-                    hashed_pwd = raw_pwd
+                    # Never seed a plain-text fallback password.
+                    continue
 
                 cur.execute(
                     """
@@ -397,7 +424,11 @@ def fetch_all_users() -> pd.DataFrame:
         return pd.DataFrame(data)
     except Exception as e:
         st.error(f"Failed to fetch users from Neon: {e}")
-        # Final fallback: static USERS_DB snapshot
+        if not _demo_users_enabled():
+            return pd.DataFrame(
+                columns=["username", "full_name", "tier", "is_active", "created_at"]
+            )
+        # Final fallback: opt-in static demo users.
         data = [
             {
                 "username": uname,
@@ -409,27 +440,23 @@ def fetch_all_users() -> pd.DataFrame:
             for uname, cfg in USERS_DB.items()
         ]
         return pd.DataFrame(data)
-# Local fallback user config (used if Neon is unavailable or empty)
-# username -> { "name": full_name, "password": plain_text_demo, "tier": "basic|pro|premium|admin" }
-USERS_DB = {
-    "basic1": {
-        "name": "Basic Demo User",
-        "password": "basic123",
-        "tier": "basic",
-    },
-    "pro1": {
-        "name": "Pro Demo User",
-        "password": "pro123",
-        "tier": "pro",
-    },
-    "premium1": {
-        "name": "Premium Demo User",
-        "password": "premium123",
-        "tier": "premium",
-    },
-    "admin1": {
-        "name": "Admin Demo User",
-        "password": "admin123",
-        "tier": "premium",
-    },
-}
+def _build_demo_users() -> Dict[str, Dict[str, str]]:
+    if not _demo_users_enabled():
+        return {}
+
+    configured = {
+        "basic1": ("Basic Demo User", _demo_password("DEMO_BASIC_PASSWORD"), "basic"),
+        "pro1": ("Pro Demo User", _demo_password("DEMO_PRO_PASSWORD"), "pro"),
+        "premium1": ("Premium Demo User", _demo_password("DEMO_PREMIUM_PASSWORD"), "premium"),
+        "admin1": ("Admin Demo User", _demo_password("DEMO_ADMIN_PASSWORD"), "admin"),
+    }
+    return {
+        username: {"name": name, "password": password, "tier": tier}
+        for username, (name, password, tier) in configured.items()
+        if password
+    }
+
+
+# Optional local fallback user config. Disabled unless ENABLE_DEMO_USERS=1 and
+# passwords are supplied through DEMO_*_PASSWORD env vars or Streamlit secrets.
+USERS_DB = _build_demo_users()
