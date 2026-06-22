@@ -88,6 +88,20 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def _render_scan_history_tab", tabs_source)
         self.assertIn("def _render_admin_tab", tabs_source)
 
+    def test_db_and_user_settings_helpers_are_extracted_from_app(self):
+        app_source = (ROOT / "app.py").read_text()
+        db_source = (ROOT / "db" / "core.py").read_text()
+        settings_source = (ROOT / "ui" / "user_settings.py").read_text()
+
+        self.assertIn("from db.core import get_conn as _get_db_conn_for_app", app_source)
+        self.assertIn("from ui.user_settings import render_user_settings_footer", app_source)
+        self.assertNotIn("def _get_database_url", app_source)
+        self.assertNotIn("def _get_db_conn_for_app", app_source)
+        self.assertNotIn("def render_user_settings_footer", app_source)
+        self.assertIn("def _get_database_url", db_source)
+        self.assertIn("NEON_DATABASE_URL", db_source)
+        self.assertIn("def render_user_settings_footer", settings_source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -143,8 +143,8 @@ class ConfigCompatTests(unittest.TestCase):
 
             self.assertEqual(module._get_database_url(), "postgresql://core-neon/db")
 
-    def test_app_db_helper_mentions_neon_database_url(self) -> None:
-        source = (ROOT / "app.py").read_text(encoding="utf-8")
+    def test_shared_db_helper_mentions_neon_database_url(self) -> None:
+        source = (ROOT / "db" / "core.py").read_text(encoding="utf-8")
 
         self.assertIn("NEON_DATABASE_URL", source)
         self.assertIn('st.secrets["neon"]["database_url"]', source)

@@ -31,6 +31,11 @@ BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+try:
+    from db.core import get_conn as _get_db_conn_for_app
+except Exception:
+    _get_db_conn_for_app = None  # type: ignore[assignment]
+
 # --------------- Charts import fallback ----------------
 try:
     from charts import render_chart_for_ticker
@@ -154,6 +159,7 @@ try:
     from ui.results_tabs import render_results_tabs
     from ui.footer import render_footer
     from ui.watchlists import render_watchlists_panel
+    from ui.user_settings import render_user_settings_footer
 
     from market_data import get_latest_quotes
 
@@ -193,6 +199,7 @@ except Exception as _e:
     render_results_tabs = _missing  # type: ignore
     render_footer = lambda *a, **k: None  # type: ignore
     render_watchlists_panel = _missing  # type: ignore
+    render_user_settings_footer = _missing  # type: ignore
 
     def get_latest_quotes(*args, **kwargs):
         return {}
@@ -323,78 +330,6 @@ def _resolve_tier_state(username: str, users_map: dict) -> dict:
     except Exception as e:
         state["db_tier_err"] = str(e)
         return state
-
-
-# --------------- DB connection helper (app.py only) ----------------
-# We intentionally do NOT depend on db/core.py (it may not exist in this repo).
-# Prefer psycopg (v3). Fall back to psycopg2 if present.
-
-def _get_database_url() -> str | None:
-    try:
-        # Env vars first
-        import os
-
-        v = os.getenv("NEON_DATABASE_URL") or os.getenv("DATABASE_URL") or os.getenv("database_url")
-        if v:
-            return str(v).strip()
-    except Exception:
-        pass
-
-    try:
-        # Streamlit nested Neon secret
-        if hasattr(st, "secrets"):
-            v = st.secrets["neon"]["database_url"]
-            if v:
-                return str(v).strip()
-    except Exception:
-        pass
-
-    try:
-        # Streamlit secrets (case-sensitive)
-        if hasattr(st, "secrets"):
-            v = (
-                st.secrets.get("NEON_DATABASE_URL")
-                or st.secrets.get("DATABASE_URL")
-                or st.secrets.get("neon_database_url")
-                or st.secrets.get("database_url")
-            )
-            if v:
-                return str(v).strip()
-    except Exception:
-        pass
-
-    return None
-
-
-# --------------- DB connection helper (app.py only) ----------------
-# We intentionally do NOT depend on db/core.py (it may not exist in this repo).
-# Prefer psycopg (v3). Fall back to psycopg2 if present.
-
-def _get_db_conn_for_app():
-    """Return a DB connection using the configured Neon/Postgres URL.
-
-    Uses psycopg (v3) if available; falls back to psycopg2.
-    Caller is responsible for closing.
-    """
-    dsn = _get_database_url()
-    if not dsn:
-        raise RuntimeError("Database URL is not set")
-
-    # Prefer psycopg (v3)
-    try:
-        import psycopg  # type: ignore
-
-        return psycopg.connect(dsn)
-    except Exception:
-        pass
-
-    # Fallback psycopg2
-    try:
-        import psycopg2  # type: ignore
-
-        return psycopg2.connect(dsn)
-    except Exception as e:
-        raise RuntimeError(f"No DB driver available (install psycopg or psycopg2). Last error: {e}")
 
 
 def _is_admin_user(username: str | None, tier_obj: object | None) -> bool:
@@ -876,85 +811,6 @@ def _render_price_ticker_legacy():
         unsafe_allow_html=True,
     )
 
-# --------------- User Settings Footer (Save Defaults) ----------------
-def render_user_settings_footer(
-    username: str | None,
-    *,
-    min_price: float | None = None,
-    max_price: float | None = None,
-    diagnostics: bool | None = None,
-) -> None:
-    """
-    Render a small footer in the sidebar that shows user/settings status
-    and exposes a 'Save as my default settings' button when storage is wired.
-    """
-    # Normalize / persist username in session for downstream use
-    session_username = (
-        username
-        or st.session_state.get("username")
-        or st.session_state.get("user")
-    )
-    if session_username:
-        st.session_state["username"] = session_username
-
-    # Diagnostics caption so we always know why the button is or isn't visible
-    st.sidebar.caption(
-        f"User settings status — user: {session_username or 'not set'}, "
-        f"storage: {'available' if callable(upsert_user_settings) else 'unavailable'}"
-    )
-
-    # Pull current filter values, preferring explicit args over session_state
-    universe_val = st.session_state.get("universe")
-    min_gap_val = st.session_state.get("min_gap")
-    top_n_val = st.session_state.get("top_n")
-    max_nasdaq_scan_val = st.session_state.get("max_nasdaq_scan")
-    max_combo_scan_val = st.session_state.get("max_combo_scan")
-    premarket_val = st.session_state.get("premarket")
-    afterhours_val = st.session_state.get("afterhours")
-    unusual_vol_val = st.session_state.get("unusual_vol")
-
-    min_price_val = min_price if min_price is not None else st.session_state.get("min_price")
-    max_price_val = max_price if max_price is not None else st.session_state.get("max_price")
-    min_dollar_vol_val = st.session_state.get("min_dollar_vol")
-    include_ta_val = st.session_state.get("include_ta")
-    apply_gap_filter_val = st.session_state.get("apply_gap_filter")
-    show_diag_val = diagnostics if diagnostics is not None else st.session_state.get("show_diagnostics_ui")
-
-    if session_username and callable(upsert_user_settings):
-        st.sidebar.caption(f"Signed in as: {session_username}")
-        if st.sidebar.button("💾 Save as my default settings"):
-            try:
-                upsert_user_settings(
-                    user_id=session_username,
-                    universe=universe_val,
-                    min_price=min_price_val,
-                    max_price=max_price_val,
-                    min_dollar_vol=min_dollar_vol_val,
-                    include_ta=include_ta_val,
-                    apply_gap_filter=apply_gap_filter_val,
-                    show_diagnostics_ui=show_diag_val,
-                    min_gap=min_gap_val,
-                    top_n=top_n_val,
-                    max_nasdaq_scan=max_nasdaq_scan_val,
-                    max_combo_scan=max_combo_scan_val,
-                    premarket=premarket_val,
-                    afterhours=afterhours_val,
-                    unusual_vol=unusual_vol_val,
-                )
-                st.sidebar.success("Default scan settings saved for your account.")
-            except Exception as e:
-                st.sidebar.error(f"Failed to save default settings: {e}")
-
-        # 🔄 Reset filters back to the saved profile from Neon
-        if callable(get_user_settings) and st.sidebar.button("🔄 Reset to saved profile"):
-            # Clear the loaded-profile marker so main() will reload from Neon
-            st.session_state["profile_loaded_for_user"] = None
-            st.sidebar.info("Reloading your saved profile...")
-            st.rerun()
-
-    elif session_username:
-        ...
-
 def _normalize_results_to_df(obj: object) -> pd.DataFrame | None:
     """Normalize load_run_results output to a DataFrame (or None).
 
@@ -1352,6 +1208,8 @@ def main():
         min_price=float(min_price) if min_price is not None else None,
         max_price=float(max_price) if max_price is not None else None,
         diagnostics=bool(diagnostics) if diagnostics is not None else None,
+        get_user_settings=get_user_settings,
+        upsert_user_settings=upsert_user_settings,
     )
 
     # -------- Admin: allow larger scans / full universe --------
