@@ -10,141 +10,13 @@ import pandas as pd
 
 import streamlit as st
 
-# --- Compatibility: map deprecated `use_container_width` -> `width` (Streamlit >= 1.49) ---
-# Streamlit now prefers width='stretch'/'content'. Older code and some modules still pass
-# use_container_width=True/False which generates noisy warnings.
+from ui.app_boot import (
+    configure_page,
+    install_streamlit_compat,
+    quiet_external_calls as _quiet_external_calls,
+)
 
-import contextlib
-import io
-
-def _patch_use_container_width() -> None:
-    def _wrap(fn):
-        # Avoid double-wrapping
-        if getattr(fn, "_ucw_patched", False):
-            return fn
-
-        def _inner(*args, **kwargs):
-            # Translate deprecated kwarg if present
-            if "use_container_width" in kwargs:
-                ucw = kwargs.pop("use_container_width")
-                # Only set width if caller didn't already specify it
-                if "width" not in kwargs:
-                    kwargs["width"] = "stretch" if bool(ucw) else "content"
-            return fn(*args, **kwargs)
-
-        setattr(_inner, "_ucw_patched", True)
-        return _inner
-
-    # Patch the most common APIs that historically accepted use_container_width
-    for _name in (
-        "dataframe",
-        "table",
-        "data_editor",
-        "plotly_chart",
-        "altair_chart",
-        "pyplot",
-        "line_chart",
-        "bar_chart",
-        "area_chart",
-        "scatter_chart",
-    ):
-        try:
-            _fn = getattr(st, _name, None)
-            if callable(_fn):
-                setattr(st, _name, _wrap(_fn))
-        except Exception:
-            pass
-
-    # Patch DeltaGenerator methods as well (covers st.sidebar.*, st.container(), columns, etc.)
-    try:
-        from streamlit.delta_generator import DeltaGenerator  # type: ignore
-
-        for _name in (
-            "dataframe",
-            "table",
-            "data_editor",
-            "plotly_chart",
-            "altair_chart",
-            "pyplot",
-            "line_chart",
-            "bar_chart",
-            "area_chart",
-            "scatter_chart",
-        ):
-            try:
-                _meth = getattr(DeltaGenerator, _name, None)
-                if callable(_meth):
-                    setattr(DeltaGenerator, _name, _wrap(_meth))
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-
-class _FilteredStderr(io.TextIOBase):
-    """Drop known noisy yfinance messages from stderr to keep logs readable."""
-
-    def __init__(self, underlying: io.TextIOBase):
-        self._u = underlying
-
-    def write(self, s: str) -> int:
-        try:
-            txt = str(s)
-        except Exception:
-            return 0
-
-        # Filter patterns we know are benign/noisy in production
-        noisy = (
-            "HTTP Error 401",
-            "Invalid Crumb",
-            "quoteSummary",
-            "No fundamentals data found",
-            "HTTP Error 404",
-            "No earnings dates found, symbol may be delisted",
-        )
-        if any(p in txt for p in noisy):
-            return len(txt)
-
-        try:
-            return self._u.write(txt)
-        except Exception:
-            return len(txt)
-
-    def flush(self) -> None:
-        try:
-            self._u.flush()
-        except Exception:
-            pass
-
-# --- Global stderr filter (drops known noisy yfinance/Yahoo lines everywhere) ---
-# NOTE: We only filter very specific, known-benign patterns to avoid hiding real errors.
-try:
-    if not isinstance(sys.stderr, _FilteredStderr):
-        sys.stderr = _FilteredStderr(sys.stderr)  # type: ignore
-except Exception:
-    pass
-
-
-@contextlib.contextmanager
-def _quiet_external_calls():
-    """Silence stdout/stderr for noisy third-party libs (yfinance/Yahoo)."""
-    # stderr is globally filtered above; here we additionally suppress all output
-    # from chatty libraries to avoid log spam and UI slowdowns.
-    buf_out = io.StringIO()
-    buf_err = io.StringIO()
-    with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
-        yield
-
-# Apply the shim immediately
-_patch_use_container_width()
-
-# --- Compatibility: silence st.cache deprecation warnings ---
-# Some legacy code paths / third-party modules still reference `st.cache`.
-# Alias it to `st.cache_data` *early* (before other imports) to avoid noisy warnings.
-try:
-    st.cache = st.cache_data  # type: ignore[attr-defined]
-except Exception:
-    pass
+install_streamlit_compat()
 
 from types import SimpleNamespace
 
@@ -177,15 +49,7 @@ except Exception:
 
 
 # --------------- Page config ----------------
-
-
-
-st.set_page_config(
-    page_title="Breakout Stock Scanner",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+configure_page()
 
 
 # --------------- Market session helper (US/Eastern) ----------------

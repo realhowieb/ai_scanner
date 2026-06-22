@@ -51,6 +51,19 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def render_active_watchlist_tools", watchlist_source)
         self.assertIn("def handle_active_watchlist_actions", watchlist_source)
 
+    def test_app_boot_helpers_are_extracted_from_app(self):
+        app_source = (ROOT / "app.py").read_text()
+        boot_source = (ROOT / "ui" / "app_boot.py").read_text()
+
+        self.assertIn("install_streamlit_compat", app_source)
+        self.assertIn("configure_page()", app_source)
+        self.assertIn("quiet_external_calls as _quiet_external_calls", app_source)
+        self.assertNotIn("class _FilteredStderr", app_source)
+        self.assertNotIn("def _patch_use_container_width", app_source)
+        self.assertIn("class FilteredStderr", boot_source)
+        self.assertIn("def patch_use_container_width", boot_source)
+        self.assertIn("def configure_page", boot_source)
+
 
 if __name__ == "__main__":
     unittest.main()
