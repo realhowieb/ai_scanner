@@ -178,183 +178,61 @@ except Exception:  # pragma: no cover
     list_runs = None  # type: ignore
     load_run_results = None  # type: ignore
 
- # Try to import on-demand run helpers (may not exist in all installs)
+def _optional_attr(module_name: str, attr_name: str):
+    """Return an optional attribute from a module without failing page import."""
+    try:
+        module = __import__(module_name, fromlist=[attr_name])
+        return getattr(module, attr_name)
+    except Exception:
+        return None
+
+
+# Try to import on-demand run helpers (may not exist in all installs)
 _run_sp500 = _run_nasdaq = _run_premarket = _run_postmarket = None
-try:
-    # Prefer explicit job functions if you created them
-    from scheduler.jobs import run_sp500_now as _run_sp500  # type: ignore
-except Exception:
-    pass
+
 # --- Expanded discovery for S&P 500 runner ---
-if _run_sp500 is None:
-    try:
-        from ai_scanner.scheduler.jobs import run_sp500_now as _run_sp500  # type: ignore
-    except Exception:
-        pass
-if _run_sp500 is None:
-    try:
-        from ai_scanner.scan.breakout import run_sp500_scan as _run_sp500  # type: ignore
-    except Exception:
-        pass
-if _run_sp500 is None:
-    try:
-        from ai_scanner.scans.breakout import run_sp500_scan as _run_sp500  # type: ignore
-    except Exception:
-        pass
-if _run_sp500 is None:
-    try:
-        from scans.breakout import run_sp500_scan as _run_sp500  # type: ignore
-    except Exception:
-        pass
-if _run_sp500 is None:
-    try:
-        from breakout import run_sp500_scan as _run_sp500  # type: ignore
-    except Exception:
-        pass
-if _run_sp500 is None:
-    try:
-        from scan.breakout import run_sp500 as _run_sp500  # type: ignore
-    except Exception:
-        pass
+for _module_name, _attr_name in (
+    ("scheduler.jobs", "run_sp500_now"),
+    ("scan.breakout", "run_sp500_scan"),
+    ("scan.breakout", "run_sp500"),
+    ("ai_scanner.scheduler.jobs", "run_sp500_now"),
+    ("ai_scanner.scan.breakout", "run_sp500_scan"),
+):
+    if _run_sp500 is None:
+        _run_sp500 = _optional_attr(_module_name, _attr_name)
 
-# Support older/newer APIs that expose a generic `breakout_scanner`
-if _run_sp500 is None:
-    try:
-        from ai_scanner.scan.breakout import breakout_scanner as _bk_scanner  # type: ignore
-        def _run_sp500(*, index: str = "SP500", min_price: float | None = None,
-                       max_price: float | None = None, min_dollar_vol: float | None = None, **kwargs):
-            """Adapter around breakout_scanner to behave like run_sp500_scan."""
-            params = {"index": index}
-            if min_price is not None:
-                params["min_price"] = float(min_price)
-            if max_price is not None and max_price > 0:
-                params["max_price"] = float(max_price)
-            if min_dollar_vol is not None:
-                # Try common aliases
-                for k in ("min_dollar_vol", "min_dollar_volume", "dollar_volume_min"):
-                    params.setdefault(k, float(min_dollar_vol))
-            res = _bk_scanner(**params)
-            return res
-    except Exception:
-        pass
-if _run_sp500 is None:
-    try:
-        from ai_scanner.scans.breakout import breakout_scanner as _bk_scanner  # type: ignore
-        def _run_sp500(*, index: str = "SP500", min_price: float | None = None,
-                       max_price: float | None = None, min_dollar_vol: float | None = None, **kwargs):
-            params = {"index": index}
-            if min_price is not None:
-                params["min_price"] = float(min_price)
-            if max_price is not None and max_price > 0:
-                params["max_price"] = float(max_price)
-            if min_dollar_vol is not None:
-                for k in ("min_dollar_vol", "min_dollar_volume", "dollar_volume_min"):
-                    params.setdefault(k, float(min_dollar_vol))
-            return _bk_scanner(**params)
-    except Exception:
-        pass
-if _run_sp500 is None:
-    try:
-        from scans.breakout import breakout_scanner as _bk_scanner  # type: ignore
-        def _run_sp500(*, index: str = "SP500", min_price: float | None = None,
-                       max_price: float | None = None, min_dollar_vol: float | None = None, **kwargs):
-            params = {"index": index}
-            if min_price is not None:
-                params["min_price"] = float(min_price)
-            if max_price is not None and max_price > 0:
-                params["max_price"] = float(max_price)
-            if min_dollar_vol is not None:
-                for k in ("min_dollar_vol", "min_dollar_volume", "dollar_volume_min"):
-                    params.setdefault(k, float(min_dollar_vol))
-            return _bk_scanner(**params)
-    except Exception:
-        pass
-
-try:
-    from scheduler.jobs import run_nasdaq_now as _run_nasdaq  # type: ignore
-except Exception:
-    pass
 # --- Expanded discovery for Nasdaq runner ---
-if _run_nasdaq is None:
-    try:
-        from ai_scanner.scheduler.jobs import run_nasdaq_now as _run_nasdaq  # type: ignore
-    except Exception:
-        pass
-if _run_nasdaq is None:
-    try:
-        from ai_scanner.scan.breakout import run_nasdaq_scan as _run_nasdaq  # type: ignore
-    except Exception:
-        pass
-if _run_nasdaq is None:
-    try:
-        from ai_scanner.scans.breakout import run_nasdaq_scan as _run_nasdaq  # type: ignore
-    except Exception:
-        pass
-if _run_nasdaq is None:
-    try:
-        from scans.breakout import run_nasdaq_scan as _run_nasdaq  # type: ignore
-    except Exception:
-        pass
-if _run_nasdaq is None:
-    try:
-        from breakout import run_nasdaq_scan as _run_nasdaq  # type: ignore
-    except Exception:
-        pass
-if _run_nasdaq is None:
-    try:
-        from scan.breakout import run_nasdaq as _run_nasdaq  # type: ignore
-    except Exception:
-        pass
+for _module_name, _attr_name in (
+    ("scheduler.jobs", "run_nasdaq_now"),
+    ("scan.breakout", "run_nasdaq_scan"),
+    ("scan.breakout", "run_nasdaq"),
+    ("ai_scanner.scheduler.jobs", "run_nasdaq_now"),
+    ("ai_scanner.scan.breakout", "run_nasdaq_scan"),
+):
+    if _run_nasdaq is None:
+        _run_nasdaq = _optional_attr(_module_name, _attr_name)
 
-try:
-    from ai_scanner.pre_post_scans import run_premarket_scan as _run_premarket  # type: ignore
-except Exception:
-    pass
 # --- Expanded discovery for Pre-market runner ---
-if _run_premarket is None:
-    try:
-        from scheduler.jobs import run_premarket_now as _run_premarket  # type: ignore
-    except Exception:
-        pass
-if _run_premarket is None:
-    try:
-        from ai_scanner.scheduler.jobs import run_premarket_now as _run_premarket  # type: ignore
-    except Exception:
-        pass
-if _run_premarket is None:
-    try:
-        from ai_scanner.scan.pre_post import run_premarket_headless as _run_premarket  # type: ignore
-    except Exception:
-        pass
-if _run_premarket is None:
-    try:
-        from pre_post_scans import run_premarket_scan as _run_premarket  # type: ignore
-    except Exception:
-        pass
+for _module_name, _attr_name in (
+    ("scheduler.jobs", "run_premarket_now"),
+    ("scan.pre_post", "run_premarket_headless"),
+    ("ai_scanner.scheduler.jobs", "run_premarket_now"),
+    ("ai_scanner.scan.pre_post", "run_premarket_headless"),
+):
+    if _run_premarket is None:
+        _run_premarket = _optional_attr(_module_name, _attr_name)
 
-try:
-    from scheduler.jobs import run_postmarket_now as _run_postmarket  # type: ignore
-except Exception:
-    pass
 # --- Expanded discovery for Post-market runner ---
-if _run_postmarket is None:
-    try:
-        from ai_scanner.scheduler.jobs import run_postmarket_now as _run_postmarket  # type: ignore
-    except Exception:
-        pass
-if _run_postmarket is None:
-    try:
-        from ai_scanner.pre_post_scans import run_postmarket_scan as _run_postmarket  # type: ignore
-    except Exception:
-        pass
-if _run_postmarket is None:
-    try:
-        from pre_post_scans import run_postmarket_scan as _run_postmarket  # type: ignore
-    except Exception:
-        pass
+for _module_name, _attr_name in (
+    ("scheduler.jobs", "run_postmarket_now"),
+    ("scan.pre_post", "run_postmarket_headless"),
+    ("ai_scanner.scheduler.jobs", "run_postmarket_now"),
+    ("ai_scanner.scan.pre_post", "run_postmarket_headless"),
+):
+    if _run_postmarket is None:
+        _run_postmarket = _optional_attr(_module_name, _attr_name)
 
-# Fallbacks: call into legacy functions if available
-# (All previous fallbacks are kept in the expanded discovery above.)
+# Fallbacks: keep manual run buttons usable even when no scanner runner is importable.
 
 # Final local fallbacks so manual run buttons always work
 if _run_sp500 is None:
