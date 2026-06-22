@@ -2,11 +2,24 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta, timezone
 import json
-import joblib
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score
-from xgboost import XGBClassifier
 from db.runs import list_runs, load_run_results
+
+try:
+    import joblib
+except Exception:  # pragma: no cover - optional ML dependency
+    joblib = None  # type: ignore
+
+try:
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import roc_auc_score
+except Exception:  # pragma: no cover - optional ML dependency
+    train_test_split = None  # type: ignore
+    roc_auc_score = None  # type: ignore
+
+try:
+    from xgboost import XGBClassifier
+except Exception:  # pragma: no cover - optional ML dependency
+    XGBClassifier = None  # type: ignore
 
 
 MODEL_PATH = "prebreakout_model.pkl"
@@ -169,6 +182,8 @@ def load_prebreakout_model(model_path: str = MODEL_PATH):
     """
     Load model bundle with model, features, trained_at, auc.
     """
+    if joblib is None:
+        return None
     try:
         return joblib.load(model_path)
     except Exception:
@@ -212,6 +227,13 @@ def train_prebreakout_model(
     Train an XGBoost model to predict future breakout likelihood.
     Saves a bundle containing model, features, trained_at, and auc.
     """
+    if joblib is None or train_test_split is None or roc_auc_score is None or XGBClassifier is None:
+        print(
+            "[ml_prebreakout] ML dependencies are not installed. "
+            "Install requirements-ml.txt to train the prebreakout model."
+        )
+        return {}
+
     df = load_run_history(days_back=days_back)
     if df.empty:
         print("[ml_prebreakout] No history data found.")

@@ -57,6 +57,13 @@ class RequirementsLayoutTests(unittest.TestCase):
             self.assertNotIn(f'"{dep}"', dependencies_block)
             self.assertIn(f'"{dep}"', text)
 
+    def test_ml_module_keeps_optional_imports_guarded(self):
+        text = (ROOT / "ml_prebreakout.py").read_text()
+
+        self.assertIn("joblib = None", text)
+        self.assertIn("XGBClassifier = None", text)
+        self.assertIn("Install requirements-ml.txt", text)
+
 
 if __name__ == "__main__":
     unittest.main()
