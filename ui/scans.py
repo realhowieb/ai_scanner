@@ -18,6 +18,16 @@ from auth.tiering import require_min_tier
 from db.runs import save_run, save_daily_snapshot, list_runs
 from ml_prebreakout import score_prebreakout
 from scan.engine import safe_call, run_breakout_scan
+from scan.options import (
+    DEFAULT_MARKET,
+    DEFAULT_PROFILE,
+    DEFAULT_STRATEGY,
+    apply_admin_caps,
+    build_scan_run_options,
+    normalize_market,
+    normalize_profile,
+    normalize_strategy,
+)
 
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
@@ -78,15 +88,7 @@ def _is_admin() -> bool:
 
 def _admin_override_caps(max_nasdaq_scan: int, max_combo_scan: int, top_n: int) -> tuple[int, int, int]:
     """Admin can scan bigger universes. Keep defaults for non-admin."""
-    if not _is_admin():
-        return max_nasdaq_scan, max_combo_scan, top_n
-
-    # Allow "full universe" style scans in admin without touching tier caps.
-    # These values are intentionally high but still bounded.
-    max_nasdaq_scan = max(int(max_nasdaq_scan), 100_000)
-    max_combo_scan = max(int(max_combo_scan), 150_000)
-    top_n = max(int(top_n), 10_000)
-    return max_nasdaq_scan, max_combo_scan, top_n
+    return apply_admin_caps(max_nasdaq_scan, max_combo_scan, top_n, is_admin=_is_admin())
 
 
 # Universe loaders (imported here so this module is self-contained)
@@ -107,11 +109,6 @@ except ModuleNotFoundError:
 
 
 # --- Three-step scanner session helpers (universe / strategy / profile) ---
-
-DEFAULT_MARKET = "SP500"
-DEFAULT_STRATEGY = "gap_up"
-DEFAULT_PROFILE = "aggressive"
-
 
 def _init_scan_session_state() -> None:
     """Ensure we have default selections in session_state for the 3-step scanner layout.
@@ -145,9 +142,9 @@ def run_scan_engine(
     user's selections.
     """
     # 1) Resolve universe for the selected market
-    market = (market or "").upper().strip()
-    profile = (profile or "").lower().strip()
-    strategy = (strategy or "").lower().strip()
+    market = normalize_market(market)
+    profile = normalize_profile(profile)
+    strategy = normalize_strategy(strategy)
 
     # Prefer existing universes stored in session_state (set by legacy scans)
     sp500: Optional[List[str]] = st.session_state.get("sp500_universe")
@@ -205,31 +202,7 @@ def run_scan_engine(
     if not tickers:
         return pd.DataFrame()
 
-    # 2) Derive basic scan parameters from profile + sidebar settings (if present)
-    # Pull existing sidebar config where available, otherwise fall back to sane defaults.
-    min_price = float(st.session_state.get("min_price", 1.0))
-    max_price = float(st.session_state.get("max_price", 1000.0))
-    top_n = int(st.session_state.get("top_n", 150))
-    premarket = bool(st.session_state.get("premarket", False))
-    afterhours = bool(st.session_state.get("afterhours", False))
-
-    # Admin override: allow larger scans/results when requested
-    _mx_nq = int(st.session_state.get("max_nasdaq_scan", 2000))
-    _mx_cb = int(st.session_state.get("max_combo_scan", 4000))
-    _mx_nq, _mx_cb, top_n = _admin_override_caps(_mx_nq, _mx_cb, top_n)
-    # IMPORTANT: do not write back to st.session_state keys that may be bound to widgets
-    # (Streamlit raises if we mutate a widget-bound key after instantiation).
-
-    # Profile-based defaults
-    if profile == "aggressive":
-        min_gap = float(st.session_state.get("min_gap_pct_aggressive", 0.0))
-        unusual_volume = bool(st.session_state.get("unusual_vol_aggressive", False))
-    elif profile == "conservative":
-        min_gap = float(st.session_state.get("min_gap_pct_conservative", 3.0))
-        unusual_volume = bool(st.session_state.get("unusual_vol_conservative", True))
-    else:  # "regular" or unknown
-        min_gap = float(st.session_state.get("min_gap_pct", 1.0))
-        unusual_volume = bool(st.session_state.get("unusual_vol", True))
+    opts = build_scan_run_options(profile, st.session_state, is_admin=_is_admin())
 
     # Optional: price snapshot reuse (admin-only). If the engine supports it, we pass it.
     snapshot_id = None
@@ -239,13 +212,13 @@ def run_scan_engine(
     try:
         df = run_breakout_scan(
             tickers=list(tickers),
-            premarket=premarket,
-            afterhours=afterhours,
-            unusual_volume=unusual_volume,
-            min_gap=min_gap,
-            min_price=min_price,
-            max_price=max_price,
-            top_n=top_n,
+            premarket=opts.premarket,
+            afterhours=opts.afterhours,
+            unusual_volume=opts.unusual_volume,
+            min_gap=opts.min_gap,
+            min_price=opts.min_price,
+            max_price=opts.max_price,
+            top_n=opts.top_n,
             profile=profile or "regular",
             diagnostics=False,
             use_cache=not live_mode,
@@ -255,13 +228,13 @@ def run_scan_engine(
         # Older engine signature: ignore snapshot_id
         df = run_breakout_scan(
             tickers=list(tickers),
-            premarket=premarket,
-            afterhours=afterhours,
-            unusual_volume=unusual_volume,
-            min_gap=min_gap,
-            min_price=min_price,
-            max_price=max_price,
-            top_n=top_n,
+            premarket=opts.premarket,
+            afterhours=opts.afterhours,
+            unusual_volume=opts.unusual_volume,
+            min_gap=opts.min_gap,
+            min_price=opts.min_price,
+            max_price=opts.max_price,
+            top_n=opts.top_n,
             profile=profile or "regular",
             diagnostics=False,
             use_cache=not live_mode,
@@ -326,7 +299,7 @@ def run_scan_engine(
             pass
 
     # 5) Cap to Top N and return
-    df = df.head(top_n).reset_index(drop=True)
+    df = df.head(opts.top_n).reset_index(drop=True)
 
     # 6) Optional: score pre-breakout probabilities
     try:
