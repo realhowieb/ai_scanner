@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+
 def _get(name: str, default: str|None=None):
     # 1) Streamlit secrets if present, 2) env, 3) default
     try:
@@ -15,10 +16,36 @@ def _get(name: str, default: str|None=None):
         pass
     return os.getenv(name, default)
 
+
+def _get_any(names: tuple[str, ...], default: str | None = None):
+    for name in names:
+        val = _get(name)
+        if val:
+            return val
+    return default
+
+
+def _get_db_url() -> str:
+    try:
+        import streamlit as st
+        nested = st.secrets["neon"]["database_url"]  # type: ignore[index]
+        if nested:
+            return str(nested)
+    except Exception:
+        pass
+
+    return str(
+        _get_any(
+            ("NEON_DATABASE_URL", "DATABASE_URL", "database_url", "DB_URL"),
+            "sqlite:///scanner.sqlite",
+        )
+    )
+
+
 @dataclass(frozen=True)
 class Settings:
     profile: str = _get("PROFILE", "dev")
-    db_url: str = _get("DB_URL", "sqlite:///scanner.sqlite")
+    db_url: str = _get_db_url()
     tz: str = _get("TZ", "America/New_York")
     max_workers: int = int(_get("MAX_WORKERS", "4"))
     chunk_size: int = int(_get("CHUNK_SIZE", "70"))

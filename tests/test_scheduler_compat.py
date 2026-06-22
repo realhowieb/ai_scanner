@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+import importlib
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -86,6 +88,33 @@ class ScannerEntrypointSourceTests(unittest.TestCase):
                 continue
             source = path.read_text(encoding="utf-8")
             self.assertNotIn(forbidden, source, str(path.relative_to(ROOT)))
+
+
+class ConfigCompatTests(unittest.TestCase):
+    def test_config_db_url_matches_database_url_env(self) -> None:
+        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://example/db"}, clear=False):
+            os.environ.pop("NEON_DATABASE_URL", None)
+            os.environ.pop("DB_URL", None)
+            import config
+
+            reloaded = importlib.reload(config)
+
+        self.assertEqual(reloaded.SETTINGS.db_url, "postgresql://example/db")
+
+    def test_config_db_url_prefers_neon_database_url_env(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "NEON_DATABASE_URL": "postgresql://neon/db",
+                "DATABASE_URL": "postgresql://generic/db",
+            },
+            clear=False,
+        ):
+            import config
+
+            reloaded = importlib.reload(config)
+
+        self.assertEqual(reloaded.SETTINGS.db_url, "postgresql://neon/db")
 
 
 if __name__ == "__main__":
