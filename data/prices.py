@@ -23,6 +23,11 @@ import hashlib as _hashlib
 import numpy as _np
 import pandas as _pd
 
+try:
+    from .provider_diagnostics import summarize_provider_skips
+except Exception:  # pragma: no cover - keep import resilient in legacy paths
+    summarize_provider_skips = None  # type: ignore
+
 # --- In-memory price DataFrame cache ---
 # We keep a short TTL so repeated scans within a few seconds can reuse
 # results, but fresh data is fetched on subsequent runs.
@@ -60,6 +65,7 @@ __all__ = [
     "fetch_price_data_parallel",
     "fetch_price_data_batch",
     "fetch_price_data_streaming",
+    "debug_yfinance_status",
     "clear_price_cache",
 ]
 
@@ -95,7 +101,7 @@ def debug_yfinance_status(symbol: str = "AAPL") -> dict:
     """
     status: dict[str, object] = {
         "available": bool(_yf is not None),
-        "import_error": str(_YF_IMPORT_ERROR) if "._YF_IMPORT_ERROR".split(".")[-1] in globals() and _YF_IMPORT_ERROR else None,
+        "import_error": str(_YF_IMPORT_ERROR) if _YF_IMPORT_ERROR else None,
         "test_symbol": symbol,
         "test_rows": None,
         "test_error": None,
@@ -105,7 +111,14 @@ def debug_yfinance_status(symbol: str = "AAPL") -> dict:
         return status
 
     try:
-        df = _yf.download(symbol, period="60d", interval="1d", progress=False)
+        df = _yf.download(
+            symbol,
+            period="60d",
+            interval="1d",
+            progress=False,
+            threads=False,
+            timeout=10,
+        )
         status["test_rows"] = int(len(df))
     except Exception as e:  # pragma: no cover - depends on network
         status["test_error"] = str(e)
@@ -895,6 +908,17 @@ def fetch_price_data_parallel(
                 _PRICE_CACHE[key] = (df.copy(deep=True), _time.time())
             except Exception:
                 _PRICE_CACHE[key] = (df, _time.time())
+
+    if summarize_provider_skips is not None:
+        try:
+            summary = summarize_provider_skips(
+                requested=len(tickers),
+                returned=len(deduped_price_data),
+                skipped=skipped,
+            )
+            _log(logger, f"[prices] {summary.message}")
+        except Exception:
+            pass
 
     return deduped_price_data, skipped
 

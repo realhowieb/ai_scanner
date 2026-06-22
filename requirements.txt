@@ -25,3 +25,9 @@ joblib
 extra-streamlit-components
 streamlit-cookies-manager>=0.2.0
 psycopg[binary]>=3.2
+
+# Deployment note:
+# Streamlit Cloud installs this file for the full app. Heavy/optional packages
+# such as pyppeteer, xgboost, scikit-learn, and alpaca-py are kept here because
+# existing UI paths can import them, but CI now has a dependency import smoke job
+# so missing binary wheels or import failures surface before deploy.

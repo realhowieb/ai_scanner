@@ -427,6 +427,7 @@ def run_breakout_scan(
     # chunked batch fetch so we can show real progress in the UI.
     parallel_error = None
     batch_error = None
+    provider_skipped: list[tuple[str, str]] = []
 
     if large_scan and show_progress:
         tick, done = _make_progress_ui(fetch_total, title="Fetching prices")
@@ -444,6 +445,7 @@ def run_breakout_scan(
                 # Keep the inner call isolated so one bad chunk doesn't kill the whole run.
                 try:
                     chunk_data, _skipped = fetch_price_data_batch(chunk)
+                    provider_skipped.extend(_skipped or [])
                     if chunk_data:
                         price_data.update(chunk_data)
                 except Exception as e:
@@ -484,6 +486,7 @@ def run_breakout_scan(
                 tickers_to_fetch,
                 use_cache=use_cache,
             )
+            provider_skipped.extend(_skipped or [])
             if price_data_new:
                 price_data.update(price_data_new)
             if not price_data:
@@ -508,6 +511,7 @@ def run_breakout_scan(
             from data.prices import fetch_price_data_batch  # type: ignore
 
             price_data_new, _skipped = fetch_price_data_batch(tickers_to_fetch)
+            provider_skipped.extend(_skipped or [])
             if price_data_new:
                 price_data.update(price_data_new)
             if not price_data:
@@ -525,6 +529,29 @@ def run_breakout_scan(
             else:
                 print("fetch_price_data_batch failed:", batch_error)
             price_data = {}
+
+    if tickers_to_fetch and provider_skipped:
+        try:
+            from data.provider_diagnostics import format_skip_examples, summarize_provider_skips
+
+            fetched_count = len([t for t in tickers_to_fetch if t in price_data])
+            provider_summary = summarize_provider_skips(
+                requested=len(tickers_to_fetch),
+                returned=fetched_count,
+                skipped=provider_skipped,
+            )
+            if diagnostics:
+                if provider_summary.severe:
+                    st.warning(provider_summary.message)
+                else:
+                    st.caption(f"⚠️ {provider_summary.message}")
+                examples = format_skip_examples(provider_skipped, limit=6)
+                if examples:
+                    st.caption(f"Provider skip sample: {examples}")
+            elif provider_summary.severe:
+                print(f"Price provider warning: {provider_summary.message}")
+        except Exception as e:
+            _diag_exception(diagnostics, "Provider diagnostics skipped", e)
 
     # If we fetched prices and a snapshot_saver is provided, persist the snapshot.
     if allow_snapshot and snapshot_id and snapshot_saver and price_data:
