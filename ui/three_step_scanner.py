@@ -6,6 +6,8 @@ stay focused on the legacy manual scan controls.
 
 from __future__ import annotations
 
+import time
+
 import pandas as pd
 import streamlit as st
 from auth.tiering import require_min_tier
@@ -151,7 +153,7 @@ def _step_label(active_step: int, step_num: int, title: str, done_map: dict[int,
     return f"{icons[status]} {step_num} {title}"
 
 
-def _persist_three_step_run(df: pd.DataFrame | None) -> None:
+def _persist_three_step_run(df: pd.DataFrame | None, duration_sec: float) -> None:
     """Keep latest results and run history synced without breaking the UI."""
     try:
         st.session_state.results_df = df if df is not None else pd.DataFrame()
@@ -171,7 +173,7 @@ def _persist_three_step_run(df: pd.DataFrame | None) -> None:
             label=run_label,
             username=st.session_state.get("username", "anonymous"),
             row_count=filtered_count,
-            duration_sec=0.0,
+            duration_sec=round(float(duration_sec), 2),
             is_snapshot=False,
         )
 
@@ -268,6 +270,7 @@ def render_three_step_scanner() -> None:
         results_placeholder = st.empty()
 
     if run_clicked:
+        started_at = time.perf_counter()
         with st.spinner("Scanning Markets"):
             df = run_scan_engine(
                 market=st.session_state.scan_market,
@@ -275,10 +278,11 @@ def render_three_step_scanner() -> None:
                 profile=st.session_state.scan_profile,
                 live_mode=st.session_state.scan_live_mode,
             )
+        duration_sec = time.perf_counter() - started_at
 
         num_rows = 0 if df is None else len(df)
         status_placeholder.success(
-            f"Scan complete. Returned **{num_rows}** rows "
+            f"Scan complete in **{duration_sec:.1f}s**. Returned **{num_rows}** rows "
             f"for **{st.session_state.scan_market}** - "
             f"Strategy **{st.session_state.scan_strategy.replace('_', ' ').title()}** - "
             f"Profile **{st.session_state.scan_profile.title()}**."
@@ -294,7 +298,7 @@ def render_three_step_scanner() -> None:
                 "Try lowering the minimum gap %, price, or volume filters."
             )
 
-        _persist_three_step_run(df)
+        _persist_three_step_run(df, duration_sec=duration_sec)
         st.session_state.scan_active_step = 3
     else:
         status_placeholder.info(
