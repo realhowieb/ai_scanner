@@ -332,6 +332,11 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def _fetch_index_snapshot", header_source)
         self.assertIn("def render_market_snapshot", header_source)
         self.assertIn("def render_price_ticker", header_source)
+        self.assertIn("from market_data import get_latest_quotes", header_source)
+        self.assertIn("Header rendering must never call yfinance directly", header_source)
+        self.assertNotIn("import yfinance", header_source)
+        self.assertNotIn("yf.download", header_source)
+        self.assertNotIn("yf.Ticker", header_source)
 
     def test_result_helpers_are_extracted_from_results_ui(self):
         results_path = ROOT / "ui" / "results.py"
