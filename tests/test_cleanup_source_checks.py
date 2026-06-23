@@ -94,6 +94,10 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("LOGIN_MARKERS", source)
         self.assertIn("AI_SCANNER_SMOKE_TEST", source)
         self.assertIn("page.goto", source)
+        self.assertIn("def _wait_for_app_markers", source)
+        self.assertIn("page.wait_for_function", source)
+        self.assertIn("def _stop_streamlit", source)
+        self.assertIn("proc.communicate(timeout=10)", source)
         self.assertIn("python scripts/streamlit_browser_flow.py --timeout 60", readme_source)
 
     def test_deployment_doctor_exists(self):
@@ -319,14 +323,28 @@ class CleanupSourceChecks(unittest.TestCase):
     def test_auth_lockout_helpers_are_extracted_from_auth_ui(self):
         auth_source = (ROOT / "ui" / "auth.py").read_text()
         lockout_source = (ROOT / "ui" / "auth_lockout.py").read_text()
+        sessions_source = (ROOT / "ui" / "auth_sessions.py").read_text()
 
-        self.assertLess(len(auth_source.splitlines()), 700)
+        self.assertLess(len(auth_source.splitlines()), 600)
         self.assertIn("from ui.auth_lockout import", auth_source)
+        self.assertIn("from ui.auth_sessions import", auth_source)
         self.assertNotIn("def _is_login_locked", auth_source)
         self.assertNotIn("def _register_failed_login_attempt", auth_source)
+        self.assertNotIn("def _cookies_ready_or_stop", auth_source)
+        self.assertNotIn("def _create_session", auth_source)
+        self.assertNotIn("def _get_username_for_session", auth_source)
+        self.assertNotIn("def _delete_session", auth_source)
+        self.assertNotIn("COOKIE_PASSWORD", auth_source)
+        self.assertNotIn("except Exception", auth_source)
         self.assertIn("def is_login_locked", lockout_source)
         self.assertIn("def register_failed_login_attempt", lockout_source)
         self.assertIn("except (TypeError, ValueError)", lockout_source)
+        self.assertIn("def cookies_ready_or_stop", sessions_source)
+        self.assertIn("def create_session", sessions_source)
+        self.assertIn("def get_username_for_session", sessions_source)
+        self.assertIn("def delete_session", sessions_source)
+        self.assertIn("COOKIE_PASSWORD", sessions_source)
+        self.assertNotIn("except Exception", sessions_source)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,6 @@
 import streamlit as st
 import bcrypt
 import re
-import os
-from datetime import datetime, timedelta, timezone
-from typing import Optional
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
 from ui.auth_lockout import (
     clear_failed_login_attempts as _clear_failed_login_attempts,
@@ -11,204 +8,47 @@ from ui.auth_lockout import (
     lockout_remaining_seconds as _lockout_remaining_seconds,
     register_failed_login_attempt as _register_failed_login_attempt,
 )
-
-# Cookie-based persistent sessions (recommended)
-try:
-    from streamlit_cookies_manager import EncryptedCookieManager
-except Exception:
-    EncryptedCookieManager = None
+from ui.auth_sessions import (
+    COOKIE_NAME,
+    cookies_ready_or_stop as _cookies_ready_or_stop,
+    create_session as _create_session,
+    delete_session as _delete_session,
+    get_username_for_session as _get_username_for_session,
+)
 
 # Direct Neon lookup fallback for username -> email mapping
 try:
     from db.engine import get_neon_conn
     from db.schema import ensure_neon_users_schema
-except Exception:
+except ImportError:
     get_neon_conn = None
     ensure_neon_users_schema = None
 
 # Optional helpers for username-login and persisting display names
 try:
     from db.users import find_username_by_display_name
-except Exception:
+except ImportError:
     find_username_by_display_name = None
 
 try:
     from db.users import update_neon_user_full_name
-except Exception:
+except ImportError:
     update_neon_user_full_name = None
 
 # Optional: account creation helpers may exist depending on your db.users implementation.
 try:
     from db.users import create_user_account  # preferred name
-except Exception:
+except ImportError:
     create_user_account = None
 
 try:
     from db.users import create_neon_user  # alternate name
-except Exception:
+except ImportError:
     create_neon_user = None
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
-# -------------------- Cookie sessions (Neon-backed) --------------------
-COOKIE_PREFIX = os.environ.get("COOKIE_PREFIX", "ai_scanner")
-COOKIE_NAME = os.environ.get("COOKIE_NAME", f"{COOKIE_PREFIX}_sid")
-
-
-def _get_secret(name: str) -> str | None:
-    value = os.environ.get(name)
-    if value:
-        return value
-    try:
-        value = st.secrets.get(name)
-        if value:
-            return str(value)
-    except Exception:
-        pass
-    return None
-
-
-def _profile() -> str:
-    return (os.environ.get("PROFILE") or os.environ.get("ENV") or "dev").strip().lower()
-
-
-COOKIE_PASSWORD = _get_secret("COOKIE_PASSWORD")
-if not COOKIE_PASSWORD and _profile() in {"dev", "local", "test"}:
-    COOKIE_PASSWORD = "dev-only-cookie-password"
-
-
-def _cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
-    """Return cookie manager if available+ready; otherwise show guidance and stop."""
-    if EncryptedCookieManager is None:
-        st.error(
-            "Cookie sessions are not available because `streamlit-cookies-manager` is not installed. "
-            "Add it to requirements.txt and redeploy."
-        )
-        return None
-    if not COOKIE_PASSWORD:
-        st.error("Cookie sessions require COOKIE_PASSWORD to be configured.")
-        return None
-
-    cookies = EncryptedCookieManager(prefix=COOKIE_PREFIX, password=COOKIE_PASSWORD)
-    if not cookies.ready():
-        # One rerun is needed to initialize cookies
-        st.stop()
-    return cookies
-
-
-def _ensure_auth_sessions_schema(conn) -> None:
-    """Create auth_sessions table if missing."""
-    cur = conn.cursor()
-    try:
-        cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
-    except Exception:
-        # If extension isn't available, we'll rely on uuid generation elsewhere.
-        pass
-
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS auth_sessions (
-          session_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-          username text NOT NULL,
-          created_at timestamptz NOT NULL DEFAULT now(),
-          expires_at timestamptz NOT NULL,
-          last_seen_at timestamptz NOT NULL DEFAULT now()
-        );
-        """
-    )
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_username ON auth_sessions(username);")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);")
-    conn.commit()
-    cur.close()
-
-
-def _create_session(username: str, ttl_days: int = 14) -> Optional[str]:
-    """Create a new session row and return session_id as str."""
-    try:
-        if get_neon_conn is None:
-            return None
-        u = (username or "").strip().lower()
-        if not u:
-            return None
-        conn = get_neon_conn()
-        if conn is None:
-            return None
-        _ensure_auth_sessions_schema(conn)
-
-        expires = datetime.now(timezone.utc) + timedelta(days=int(ttl_days))
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO auth_sessions (username, expires_at)
-            VALUES (%s, %s)
-            RETURNING session_id;
-            """,
-            (u, expires),
-        )
-        row = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
-        return str(row[0]) if row else None
-    except Exception:
-        return None
-
-
-def _get_username_for_session(session_id: str) -> Optional[str]:
-    """Return username for a valid (unexpired) session_id."""
-    try:
-        if get_neon_conn is None:
-            return None
-        sid = (session_id or "").strip()
-        if not sid:
-            return None
-        conn = get_neon_conn()
-        if conn is None:
-            return None
-        _ensure_auth_sessions_schema(conn)
-
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT username
-            FROM auth_sessions
-            WHERE session_id = %s
-              AND expires_at > now()
-            LIMIT 1;
-            """,
-            (sid,),
-        )
-        row = cur.fetchone()
-        if row:
-            cur.execute("UPDATE auth_sessions SET last_seen_at = now() WHERE session_id = %s;", (sid,))
-            conn.commit()
-        cur.close()
-        conn.close()
-        return row[0] if row else None
-    except Exception:
-        return None
-
-
-def _delete_session(session_id: str) -> None:
-    try:
-        if get_neon_conn is None:
-            return
-        sid = (session_id or "").strip()
-        if not sid:
-            return
-        conn = get_neon_conn()
-        if conn is None:
-            return
-        _ensure_auth_sessions_schema(conn)
-        cur = conn.cursor()
-        cur.execute("DELETE FROM auth_sessions WHERE session_id = %s;", (sid,))
-        conn.commit()
-        cur.close()
-        conn.close()
-    except Exception:
-        return
+_AUTH_BACKEND_ERRORS = (RuntimeError, OSError, TypeError, ValueError, KeyError, AttributeError)
 
 
 # --- Fallback: direct Neon query for display username -> email mapping ---
@@ -246,7 +86,7 @@ def _lookup_email_by_display_username(display_username: str) -> str | None:
         if not row:
             return None
         return row[0] if isinstance(row, tuple) else row.get("username")
-    except Exception:
+    except _AUTH_BACKEND_ERRORS:
         return None
 
 
@@ -256,7 +96,7 @@ def auth_ui():
     if cookies is not None and "username" not in st.session_state:
         try:
             sid = cookies.get(COOKIE_NAME)
-        except Exception:
+        except _AUTH_BACKEND_ERRORS:
             sid = None
         if sid:
             u = _get_username_for_session(str(sid))
@@ -268,7 +108,7 @@ def auth_ui():
     # the one that initiated checkout, so session_state is empty here.
     try:
         checkout_flag = (st.query_params.get("checkout") or "").strip().lower()
-    except Exception:
+    except _AUTH_BACKEND_ERRORS:
         checkout_flag = ""
 
     if "username" not in st.session_state and checkout_flag in ("success", "cancel"):
@@ -386,12 +226,12 @@ def auth_ui():
         # Ensure Neon demo users are present; ignore failures.
         try:
             seed_neon_users_from_local()
-        except Exception:
+        except _AUTH_BACKEND_ERRORS:
             pass
 
         try:
             users = load_users() or {}
-        except Exception as e:
+        except _AUTH_BACKEND_ERRORS as e:
             st.error(f"Sign up failed while loading users: {e}")
             return False, None, None
 
@@ -430,7 +270,7 @@ def auth_ui():
                     except TypeError:
                         # Last-resort: just pass email + hash
                         created_user = create_fn(email_raw, pw_hash)
-        except Exception as e:
+        except _AUTH_BACKEND_ERRORS as e:
             st.error(f"Sign up failed: {e}")
             return False, None, None
 
@@ -438,7 +278,7 @@ def auth_ui():
         try:
             if update_neon_user_full_name is not None:
                 update_neon_user_full_name(email_raw, username_raw)
-        except Exception:
+        except _AUTH_BACKEND_ERRORS:
             pass
 
         # If db returned nothing, still proceed to login with defaults.
@@ -459,7 +299,7 @@ def auth_ui():
                 if sid:
                     cookies2[COOKIE_NAME] = sid
                     cookies2.save()
-        except Exception:
+        except _AUTH_BACKEND_ERRORS:
             pass
 
         # Clear any lockout counters
@@ -492,7 +332,7 @@ def auth_ui():
             if find_username_by_display_name is not None:
                 try:
                     mapped = find_username_by_display_name(username_input)
-                except Exception:
+                except _AUTH_BACKEND_ERRORS:
                     mapped = None
             # Fallback: direct Neon query
             if not mapped:
@@ -504,13 +344,13 @@ def auth_ui():
         # If this fails, we still fall back to local USERS_DB via load_users().
         try:
             seed_neon_users_from_local()
-        except Exception:
+        except _AUTH_BACKEND_ERRORS:
             # Don't hard-fail login just because seeding didn't work.
             pass
 
         try:
             users = load_users() or {}
-        except Exception as e:
+        except _AUTH_BACKEND_ERRORS as e:
             st.error(f"Login failed while loading users: {e}")
             return False, None, None
 
@@ -523,7 +363,7 @@ def auth_ui():
             for k, u in users.items():
                 try:
                     dn = (u.get("display_name") or u.get("full_name") or u.get("name") or "").strip().lower()
-                except Exception:
+                except _AUTH_BACKEND_ERRORS:
                     dn = ""
                 if dn and dn == uname_guess:
                     user = u
@@ -567,7 +407,7 @@ def auth_ui():
                         new_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
                         update_neon_user_password(login_key, new_hash)
                         user["password"] = new_hash
-                    except Exception:
+                    except _AUTH_BACKEND_ERRORS:
                         pass
         else:
             # Legacy plain-text password in DB
@@ -581,7 +421,7 @@ def auth_ui():
                 new_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
                 update_neon_user_password(login_key, new_hash)
                 user["password"] = new_hash
-            except Exception:
+            except _AUTH_BACKEND_ERRORS:
                 # Migration failure should not block a valid login
                 pass
 
@@ -608,7 +448,7 @@ def auth_ui():
                 if sid:
                     cookies2[COOKIE_NAME] = sid
                     cookies2.save()
-        except Exception:
+        except _AUTH_BACKEND_ERRORS:
             pass
 
         # Reset failed-attempt tracking on successful login
@@ -636,10 +476,10 @@ def logout_and_reset_session() -> None:
                 _delete_session(str(sid))
             try:
                 cookies.pop(COOKIE_NAME, None)
-            except Exception:
+            except _AUTH_BACKEND_ERRORS:
                 pass
             cookies.save()
-    except Exception:
+    except _AUTH_BACKEND_ERRORS:
         pass
 
     auth_keys = [
@@ -678,7 +518,7 @@ def logout_and_reset_session() -> None:
         for key in auth_keys:
             if key in st.session_state:
                 st.session_state.pop(key, None)
-    except Exception:
+    except _AUTH_BACKEND_ERRORS:
         # Best-effort cleanup; ignore any issues here.
         pass
 
