@@ -6,14 +6,17 @@ from datetime import date
 
 try:
     import pandas as pd
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     pd = None  # type: ignore
 
 # Optional (Alpaca / custom) quote provider; safe to be missing
 try:
     from market_data import get_latest_quotes  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     get_latest_quotes = None
+
+
+HEADER_PROVIDER_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, TypeError, ValueError)
 
 
 def render_header() -> None:
@@ -29,7 +32,7 @@ def render_header() -> None:
         )
         st.image(
             "assets/market_ai_logo_tighter.png",
-            use_container_width=False,
+            width="content",
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -42,8 +45,8 @@ TICKER_STRIP = ["SPY", "QQQ", "IWM", "DIA", "VIX", "AAPL", "MSFT", "NVDA", "TSLA
 def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
     """Fetch {symbol,last,change_pct} for a list of tickers.
 
-    - Prefers `get_latest_quotes` if available.
-    - Falls back to yfinance.
+    Uses the centralized quote provider, which is Alpaca/custom-provider backed
+    and cached. Header rendering must never call yfinance directly.
     """
     if not symbols:
         return []
@@ -60,7 +63,7 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
     if callable(get_latest_quotes):
         try:
             quotes = get_latest_quotes(symbols) or {}
-        except Exception:
+        except HEADER_PROVIDER_ERRORS:
             quotes = {}
 
     if quotes:
@@ -77,72 +80,8 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
                 prev_f = float(prev) if prev is not None else last_f
                 change_pct = 0.0 if not prev_f else ((last_f - prev_f) / prev_f) * 100.0
                 results.append({"symbol": sym, "last": last_f, "change_pct": change_pct})
-            except Exception:
+            except HEADER_PROVIDER_ERRORS:
                 continue
-
-    if results:
-        return results
-
-    # yfinance fallback
-    try:
-        import yfinance as yf  # type: ignore
-    except Exception:
-        return []
-
-    hist = None
-    try:
-        hist = yf.download(
-            symbols,
-            period="2d",
-            group_by="ticker",
-            auto_adjust=False,
-            progress=False,
-            threads=False,
-        )
-    except Exception:
-        hist = None
-
-    if hist is not None and getattr(hist, "empty", True) is False:
-        for sym in symbols:
-            try:
-                if pd is not None and isinstance(hist.columns, pd.MultiIndex):
-                    if ("Close", sym) not in hist.columns:
-                        continue
-                    closes = hist[("Close", sym)].dropna()
-                else:
-                    if "Close" not in getattr(hist, "columns", []):
-                        continue
-                    closes = hist["Close"].dropna()
-
-                if closes is None or len(closes) == 0:
-                    continue
-
-                last = float(closes.iloc[-1])
-                prev = float(closes.iloc[-2]) if len(closes) > 1 else last
-                change_pct = 0.0 if not prev else ((last - prev) / prev) * 100.0
-                results.append({"symbol": sym, "last": last, "change_pct": change_pct})
-            except Exception:
-                continue
-
-        if results:
-            return results
-
-    # slow fallback per ticker
-    for sym in symbols:
-        try:
-            t = yf.Ticker(sym)
-            h = t.history(period="2d")
-            if h is None or getattr(h, "empty", True) is True or "Close" not in h.columns:
-                continue
-            closes = h["Close"].dropna().tolist()
-            if not closes:
-                continue
-            last = float(closes[-1])
-            prev = float(closes[-2]) if len(closes) > 1 else last
-            change_pct = 0.0 if not prev else ((last - prev) / prev) * 100.0
-            results.append({"symbol": sym, "last": last, "change_pct": change_pct})
-        except Exception:
-            continue
 
     return results
 
@@ -220,7 +159,7 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
     if callable(get_latest_quotes):
         try:
             quotes = get_latest_quotes([symbol]) or {}
-        except Exception:
+        except HEADER_PROVIDER_ERRORS:
             quotes = {}
 
     if quotes:
@@ -233,42 +172,10 @@ def _fetch_index_snapshot(symbol: str) -> tuple[float | None, float | None]:
                     last_f = float(last)
                     prev_f = float(prev) if prev is not None else last_f
                     return last_f, prev_f
-            except Exception:
+            except HEADER_PROVIDER_ERRORS:
                 pass
 
-    try:
-        import yfinance as yf  # type: ignore
-    except Exception:
-        return None, None
-
-    try:
-        hist = yf.download(symbol, period="2d", auto_adjust=False, progress=False, threads=False)
-    except Exception:
-        hist = None
-
-    if hist is not None and getattr(hist, "empty", True) is False and "Close" in hist.columns:
-        close_block = hist["Close"]
-        if pd is not None and isinstance(close_block, pd.DataFrame):
-            close_block = close_block.iloc[:, 0]
-        closes = close_block.dropna().to_list()
-        if closes:
-            last = float(closes[-1])
-            prev = float(closes[-2]) if len(closes) > 1 else last
-            return last, prev
-
-    try:
-        t = yf.Ticker(symbol)
-        h = t.history(period="2d")
-        if h is None or getattr(h, "empty", True) is True or "Close" not in h.columns:
-            return None, None
-        closes = h["Close"].dropna().tolist()
-        if not closes:
-            return None, None
-        last = float(closes[-1])
-        prev = float(closes[-2]) if len(closes) > 1 else last
-        return last, prev
-    except Exception:
-        return None, None
+    return None, None
 
 
 def render_market_snapshot(results_df=None) -> None:

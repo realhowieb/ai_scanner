@@ -61,7 +61,7 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
 
     st.dataframe(
         view,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 

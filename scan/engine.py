@@ -8,6 +8,19 @@ import time
 
 T = TypeVar("T")
 
+_STREAMLIT_UI_ERRORS = (RuntimeError, TypeError, ValueError, AttributeError)
+_ENGINE_BOUNDARY_ERRORS = (
+    RuntimeError,
+    TimeoutError,
+    ConnectionError,
+    OSError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    KeyError,
+    ImportError,
+)
+
 # Optional snapshot hooks used by ui/scans.py.
 # We keep these as simple callables to avoid hard dependencies in the engine.
 
@@ -21,7 +34,7 @@ def _diag_caption(diagnostics: bool, message: str) -> None:
         return
     try:
         st.caption(message)
-    except Exception:
+    except _STREAMLIT_UI_ERRORS:
         print(message)
 
 
@@ -49,7 +62,7 @@ def _db_cache_allowed_for_run(*, tickers_count: int, diagnostics: bool) -> bool:
         if ss and ss.get("disable_db_price_cache", False):
             _diag_caption(diagnostics, "🧱 DB price cache disabled by session_state (disable_db_price_cache=True)")
             return False
-    except Exception as e:
+    except _ENGINE_BOUNDARY_ERRORS as e:
         _diag_exception(diagnostics, "DB price cache admin/session check skipped", e)
     return True
 
@@ -109,7 +122,7 @@ def _db_load_price_cache(
                 _diag_caption(diagnostics, f"🧱 DB cache hit: {len(cached):,}/{len(symbols):,} symbols (no staleness API)")
             return cached, stale
 
-    except Exception as e:
+    except _ENGINE_BOUNDARY_ERRORS as e:
         _diag_exception(diagnostics, "DB cache load skipped", e)
 
     return cached, stale
@@ -138,8 +151,9 @@ def _db_save_price_cache(
             _diag_caption(diagnostics, f"💾 DB cache saved: {len(data):,} symbols")
             return
 
-    except Exception as e:
+    except _ENGINE_BOUNDARY_ERRORS as e:
         _diag_exception(diagnostics, "DB cache save skipped", e)
+
 
 def _is_admin_context() -> bool:
     """Best-effort admin role check.
@@ -156,7 +170,7 @@ def _is_admin_context() -> bool:
         # Common alternative keys
         role = (ss.get("role") or ss.get("user_role") or ss.get("account_role") or "").strip().lower()
         return role == "admin"
-    except Exception:
+    except _ENGINE_BOUNDARY_ERRORS:
         return False
 
 SCAN_PROFILES: dict[str, dict[str, float | bool]] = {
@@ -219,7 +233,7 @@ def safe_call(
         try:
             st.error(f"❌ {msg_label} crashed: {e}")
             st.code(tb, language="python")
-        except Exception:
+        except _STREAMLIT_UI_ERRORS:
             # Fallback to console log if Streamlit UI is not available
             print(f"{msg_label} crashed: {e}\n{tb}")
 
@@ -255,7 +269,7 @@ def _make_progress_ui(total: int, *, title: str) -> tuple[callable, callable]:
                 elapsed = now - started
                 suffix = f" • {note}" if note else ""
                 line.caption(f"{title}: {i:,}/{total:,} ({pct*100:.1f}%) • {elapsed:.1f}s{suffix}")
-            except Exception:
+            except _STREAMLIT_UI_ERRORS:
                 pass
 
         def done(note: str = "") -> None:
@@ -263,11 +277,11 @@ def _make_progress_ui(total: int, *, title: str) -> tuple[callable, callable]:
                 bar.progress(1.0)
                 suffix = f" • {note}" if note else ""
                 line.caption(f"{title}: done{suffix}")
-            except Exception:
+            except _STREAMLIT_UI_ERRORS:
                 pass
 
         return tick, done
-    except Exception:
+    except _STREAMLIT_UI_ERRORS:
         # Non-UI context (background runs/tests)
         def _noop(*_a: Any, **_k: Any) -> None:
             return None
@@ -370,7 +384,7 @@ def run_breakout_scan(
     # Large universes benefit from progress UI; small scans stay fast.
     try:
         show_progress = bool(st.session_state.get("show_scan_progress", True))
-    except Exception:
+    except _STREAMLIT_UI_ERRORS:
         show_progress = True
 
     # ✅ ALWAYS initialize so later `if not price_data:` checks are safe.
@@ -398,7 +412,7 @@ def run_breakout_scan(
                 price_data.update({k: v for k, v in loaded.items() if isinstance(v, pd.DataFrame)})
                 if diagnostics:
                     _diag_caption(diagnostics, f"📦 Loaded pricing snapshot: {snapshot_id} ({len(loaded)} symbols)")
-        except Exception as e:
+        except _ENGINE_BOUNDARY_ERRORS as e:
             # Snapshot load must never break scans.
             _diag_exception(diagnostics, f"Snapshot load skipped for {snapshot_id}", e)
 
@@ -410,7 +424,7 @@ def run_breakout_scan(
         try:
             # 'stale' is defined only when use_db_cache=True; keep this guarded.
             tickers_to_fetch = [t for t in tickers_to_fetch if t in stale or t not in price_data]
-        except Exception as e:
+        except _ENGINE_BOUNDARY_ERRORS as e:
             _diag_exception(diagnostics, "DB cache stale-symbol filtering skipped", e)
     fetch_total = len(tickers_to_fetch)
     large_scan = fetch_total >= 800
@@ -420,7 +434,7 @@ def run_breakout_scan(
         if diagnostics:
             try:
                 st.caption("✅ All pricing satisfied from snapshot; no Yahoo fetch needed")
-            except Exception:
+            except _STREAMLIT_UI_ERRORS:
                 pass
 
     # Prefer the parallel fetcher for small scans; for large scans, do a
@@ -448,7 +462,7 @@ def run_breakout_scan(
                     provider_skipped.extend(_skipped or [])
                     if chunk_data:
                         price_data.update(chunk_data)
-                except Exception as e:
+                except _ENGINE_BOUNDARY_ERRORS as e:
                     # Swallow chunk failures; we still want the scan to proceed.
                     _diag_exception(
                         diagnostics,
@@ -463,7 +477,7 @@ def run_breakout_scan(
 
             if not price_data:
                 raise RuntimeError("batch (chunked) price fetch returned no data")
-        except Exception as e:
+        except _ENGINE_BOUNDARY_ERRORS as e:
             import traceback
 
             batch_error = traceback.format_exc()
@@ -471,7 +485,7 @@ def run_breakout_scan(
                 try:
                     st.error(f"❌ chunked fetch_price_data_batch failed: {e}")
                     st.code(batch_error, language="python")
-                except Exception:
+                except _STREAMLIT_UI_ERRORS:
                     print("chunked fetch_price_data_batch failed:", batch_error)
             else:
                 print("chunked fetch_price_data_batch failed:", batch_error)
@@ -491,7 +505,7 @@ def run_breakout_scan(
                 price_data.update(price_data_new)
             if not price_data:
                 raise RuntimeError("parallel price fetch returned no data")
-        except Exception as e:
+        except _ENGINE_BOUNDARY_ERRORS as e:
             import traceback
 
             parallel_error = traceback.format_exc()
@@ -499,7 +513,7 @@ def run_breakout_scan(
                 try:
                     st.error(f"❌ fetch_price_data_parallel failed: {e}")
                     st.code(parallel_error, language="python")
-                except Exception:
+                except _STREAMLIT_UI_ERRORS:
                     print("fetch_price_data_parallel failed:", parallel_error)
             else:
                 print("fetch_price_data_parallel failed:", parallel_error)
@@ -516,7 +530,7 @@ def run_breakout_scan(
                 price_data.update(price_data_new)
             if not price_data:
                 raise RuntimeError("batch price fetch returned no data")
-        except Exception as e:
+        except _ENGINE_BOUNDARY_ERRORS as e:
             import traceback
 
             batch_error = traceback.format_exc()
@@ -524,7 +538,7 @@ def run_breakout_scan(
                 try:
                     st.error(f"❌ fetch_price_data_batch failed: {e}")
                     st.code(batch_error, language="python")
-                except Exception:
+                except _STREAMLIT_UI_ERRORS:
                     print("fetch_price_data_batch failed:", batch_error)
             else:
                 print("fetch_price_data_batch failed:", batch_error)
@@ -550,7 +564,7 @@ def run_breakout_scan(
                     st.caption(f"Provider skip sample: {examples}")
             elif provider_summary.severe:
                 print(f"Price provider warning: {provider_summary.message}")
-        except Exception as e:
+        except _ENGINE_BOUNDARY_ERRORS as e:
             _diag_exception(diagnostics, "Provider diagnostics skipped", e)
 
     # If we fetched prices and a snapshot_saver is provided, persist the snapshot.
@@ -559,7 +573,7 @@ def run_breakout_scan(
             snapshot_saver(str(snapshot_id), price_data)
             if diagnostics:
                 _diag_caption(diagnostics, f"💾 Saved pricing snapshot: {snapshot_id} ({len(price_data)} symbols)")
-        except Exception as e:
+        except _ENGINE_BOUNDARY_ERRORS as e:
             # Snapshot persistence should never break a scan.
             _diag_exception(diagnostics, f"Snapshot save skipped for {snapshot_id}", e)
 
@@ -568,7 +582,7 @@ def run_breakout_scan(
     if use_db_cache and price_data:
         try:
             _db_save_price_cache(price_data, diagnostics=diagnostics)
-        except Exception as e:
+        except _ENGINE_BOUNDARY_ERRORS as e:
             _diag_exception(diagnostics, "DB cache save wrapper skipped", e)
 
     # Heartbeat before the breakout stage so users don't think the app froze.
@@ -579,7 +593,7 @@ def run_breakout_scan(
                 f"{max(0, len(price_data) - (1 if 'SPY' in price_data else 0)):,}/"
                 f"{max(0, total_requested - 1):,} symbols…"
             )
-    except Exception:
+    except _STREAMLIT_UI_ERRORS:
         pass
 
     spy_df = price_data.get("SPY")
@@ -596,7 +610,7 @@ def run_breakout_scan(
                 f"effective_unusual_volume={effective_unusual_volume}; "
                 f"calling breakout with {len(price_data_no_spy)} symbols (excluding SPY)"
             )
-        except Exception:
+        except _STREAMLIT_UI_ERRORS:
             pass
 
     df = legacy_breakout.run_breakout_scan(
@@ -618,7 +632,7 @@ def run_breakout_scan(
                 f"⬅️ engine.run_breakout_scan: breakout returned "
                 f"{0 if df is None else len(df)} rows"
             )
-        except Exception:
+        except _STREAMLIT_UI_ERRORS:
             pass
 
     return df

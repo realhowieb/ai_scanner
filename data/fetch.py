@@ -41,8 +41,32 @@ import re
 
 try:
     import yfinance as yf
-except Exception:  # pragma: no cover - allow the module to import without yfinance during linting
+    from yfinance import exceptions as yf_exceptions
+except ImportError:  # pragma: no cover - allow the module to import without yfinance during linting
     yf = None  # type: ignore
+    yf_exceptions = None  # type: ignore
+
+
+_YFINANCE_BASE_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, ValueError)
+_YAHOO_HTTP_ERRORS = (requests.RequestException, ValueError, KeyError, TypeError)
+
+
+def _build_yfinance_errors() -> tuple[type[Exception], ...]:
+    extra_names = (
+        "YFException",
+        "YFRateLimitError",
+        "YFPricesMissingError",
+        "YFTzMissingError",
+    )
+    extra_types = []
+    for name in extra_names:
+        cls = getattr(yf_exceptions, name, None)
+        if isinstance(cls, type) and issubclass(cls, Exception):
+            extra_types.append(cls)
+    return _YFINANCE_BASE_ERRORS + tuple(extra_types)
+
+
+_YFINANCE_ERRORS = _build_yfinance_errors()
 
 
 # -----------------------------
@@ -71,7 +95,7 @@ def _is_rate_limited(err: Exception) -> bool:
 # Prefer the canonical implementation in data.filters if present.
 try:
     from .filters import remove_delisted_tickers as _remove_delisted_tickers  # type: ignore
-except Exception:
+except ImportError:
     _remove_delisted_tickers = None  # type: ignore
 
 def remove_delisted_tickers(tickers: Sequence[str]) -> List[str]:
@@ -144,7 +168,7 @@ def _download_batch_yf(
             prepost=False,
             repair=False,
         )
-    except Exception as e:
+    except _YFINANCE_ERRORS as e:
         # If the whole batch error'd, nothing to return
         log(f"[download] batch failed ({len(symbols)} symbols): {e}")
         return {}
@@ -188,7 +212,7 @@ def _coerce_ohlcv_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     if not isinstance(df.index, pd.DatetimeIndex):
         try:
             df.index = pd.to_datetime(df.index)
-        except Exception:
+        except (TypeError, ValueError):
             pass
     df = df.sort_index()
     return df
@@ -267,7 +291,7 @@ def fetch_price_data_parallel(
             batch_syms = future_map[fut]
             try:
                 got = fut.result()
-            except Exception as e:
+            except _YFINANCE_ERRORS as e:
                 log(f"[error] batch {batch_syms[:3]}… failed: {e}")
                 got = {}
 
@@ -354,7 +378,7 @@ def fetch_price_data_streaming(
         for fut in as_completed(future_map):
             try:
                 got = fut.result()
-            except Exception as e:
+            except _YFINANCE_ERRORS as e:
                 log(f"[stream error] {e}")
                 got = {}
             for sym, df in got.items():
@@ -414,7 +438,7 @@ def fetch_hot_stocks(
             symbols = [q.get("symbol") for q in quotes if q.get("symbol")]
             out[cat] = symbols
             log(f"[hot] {cat}: fetched {len(symbols)} tickers")
-        except Exception as e:
+        except _YAHOO_HTTP_ERRORS as e:
             log(f"[hot] failed {cat}: {e}")
             out[cat] = []
 
@@ -466,7 +490,7 @@ def fetch_top_losers(count: int = 50, region: str = "US", logger: LogFn = None) 
 try:
     # Prefer the canonical implementation in data.universe if present
     from .prices import fetch_and_save_nasdaq as _fetch_and_save_nasdaq  # type: ignore
-except Exception:
+except ImportError:
     _fetch_and_save_nasdaq = None  # type: ignore
 
 
@@ -494,7 +518,7 @@ def fetch_and_save_nasdaq(*args, **kwargs):
 # ---------------------------------------------
 try:
     from .prices import fetch_and_save_sp500 as _fetch_and_save_sp500  # type: ignore
-except Exception:
+except ImportError:
     _fetch_and_save_sp500 = None  # type: ignore
 
 
@@ -522,28 +546,28 @@ def fetch_and_save_sp500(*args, **kwargs):
 # ---------------------------------------------
 try:
     from .prices import load_sp500_tickers as _load_sp500_tickers  # type: ignore
-except Exception:
+except ImportError:
     _load_sp500_tickers = None  # type: ignore
 
 try:
     from .prices import load_nasdaq_tickers as _load_nasdaq_tickers  # type: ignore
-except Exception:
+except ImportError:
     _load_nasdaq_tickers = None  # type: ignore
 
 # Optional additional universes (back-compat shims)
 try:
     from .prices import load_sp400_tickers as _load_sp400_tickers  # type: ignore
-except Exception:
+except ImportError:
     _load_sp400_tickers = None  # type: ignore
 
 try:
     from .prices import load_sp600_tickers as _load_sp600_tickers  # type: ignore
-except Exception:
+except ImportError:
     _load_sp600_tickers = None  # type: ignore
 
 try:
     from .prices import fetch_and_save_sp600 as _fetch_and_save_sp600  # type: ignore
-except Exception:
+except ImportError:
     _fetch_and_save_sp600 = None  # type: ignore
 
 def load_sp500_tickers(*args, **kwargs):

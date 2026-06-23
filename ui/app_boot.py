@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import io
 import sys
+import warnings
 from collections.abc import Iterator
 
 import streamlit as st
@@ -79,6 +80,9 @@ class FilteredStderr(io.TextIOBase):
             "No fundamentals data found",
             "HTTP Error 404",
             "No earnings dates found, symbol may be delisted",
+            "`st.cache` is deprecated",
+            "Please use one of Streamlit's new",
+            "The behavior of `st.cache` was updated",
         )
         if any(pattern in text for pattern in noisy_patterns):
             return len(text)
@@ -104,6 +108,16 @@ def install_stderr_filter() -> None:
         pass
 
 
+def install_warning_filters() -> None:
+    """Suppress known third-party warning spam without hiding app warnings."""
+    warnings.filterwarnings(
+        "ignore",
+        message=r"The 'generic' unit for NumPy timedelta is deprecated.*",
+        category=DeprecationWarning,
+        module=r"yfinance\.utils",
+    )
+
+
 @contextlib.contextmanager
 def quiet_external_calls() -> Iterator[None]:
     """Silence stdout/stderr for noisy third-party libraries."""
@@ -115,6 +129,7 @@ def quiet_external_calls() -> Iterator[None]:
 
 def install_streamlit_compat() -> None:
     """Install Streamlit compatibility shims and warning suppression."""
+    install_warning_filters()
     install_stderr_filter()
     patch_use_container_width()
 

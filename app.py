@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from datetime import datetime, timezone
+
+# Ensure project base directory is importable before local package imports.
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 import pandas as pd
 
@@ -26,15 +30,18 @@ from ui.app_runtime import (
     render_onboarding_hint,
     render_sidebar_upgrade_card,
 )
+from ui.app_user_profile import (
+    apply_admin_scan_caps,
+    load_latest_results_snapshot,
+    load_saved_user_settings,
+    render_account_sidebar,
+    render_admin_build_stamp,
+    set_latest_results_snapshot,
+)
 
 install_streamlit_compat()
 
 from types import SimpleNamespace
-
-# Ensure project base directory importable
-BASE_DIR = Path(__file__).resolve().parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
 
 try:
     from db.core import get_conn as _get_db_conn_for_app
@@ -428,98 +435,28 @@ def main():
 
     render_onboarding_hint(username, tier_name=tier_name)
 
-    # ---------------- Admin-only: Build stamp (lightweight) ----------------
-    # Keep this tiny so admin diagnostics never interfere with scan execution.
-    if bool(st.session_state.get("is_admin")):
-        try:
-            build_mtime = datetime.fromtimestamp(Path(__file__).stat().st_mtime, tz=timezone.utc).isoformat()
-        except Exception:
-            build_mtime = "unknown"
-
-        st.sidebar.caption(f"build: {build_mtime} | user: {username} | tier_key: {tier_key}")
+    render_admin_build_stamp(app_file=__file__, username=username, tier_key=tier_key)
 
     # -------- Load Saved User Settings (if available) --------
-    if username and callable(get_user_settings):
-        safe_username = (username or "").strip()
-        last_profile_user = st.session_state.get("profile_loaded_for_user")
-
-        # Only load from Neon when we haven't yet loaded for this user
-        if last_profile_user != safe_username:
-            try:
-                saved = get_user_settings(safe_username)
-            except Exception:
-                saved = None
-
-            if saved:
-                # Seed session_state from saved settings when available.
-                if saved.get("universe") is not None:
-                    st.session_state["universe"] = saved["universe"]
-
-                if saved.get("min_price") is not None:
-                    st.session_state["min_price"] = float(saved["min_price"])
-                if saved.get("max_price") is not None:
-                    st.session_state["max_price"] = float(saved["max_price"])
-
-                if saved.get("min_dollar_vol") is not None:
-                    st.session_state["min_dollar_vol"] = float(saved["min_dollar_vol"])
-
-                if saved.get("include_ta") is not None:
-                    st.session_state["include_ta"] = bool(saved["include_ta"])
-                if saved.get("apply_gap_filter") is not None:
-                    st.session_state["apply_gap_filter"] = bool(saved["apply_gap_filter"])
-
-                # Diagnostics UI is admin-only, even if a non-admin saved it historically.
-                if saved.get("show_diagnostics_ui") is not None:
-                    st.session_state["show_diagnostics_ui"] = bool(saved["show_diagnostics_ui"]) and bool(st.session_state.get("is_admin"))
-
-                if saved.get("min_gap") is not None:
-                    st.session_state["min_gap"] = float(saved["min_gap"])
-                if saved.get("top_n") is not None:
-                    st.session_state["top_n"] = int(saved["top_n"])
-                if saved.get("max_nasdaq_scan") is not None:
-                    st.session_state["max_nasdaq_scan"] = int(saved["max_nasdaq_scan"])
-                if saved.get("max_combo_scan") is not None:
-                    st.session_state["max_combo_scan"] = int(saved["max_combo_scan"])
-
-                if saved.get("premarket") is not None:
-                    st.session_state["premarket"] = bool(saved["premarket"])
-                if saved.get("afterhours") is not None:
-                    st.session_state["afterhours"] = bool(saved["afterhours"])
-                if saved.get("unusual_vol") is not None:
-                    st.session_state["unusual_vol"] = bool(saved["unusual_vol"])
-
-                # Mark that we've applied the profile for this specific user in this session
-                st.session_state["profile_loaded_for_user"] = safe_username
+    load_saved_user_settings(
+        username=username,
+        get_user_settings=get_user_settings,
+        is_admin=bool(st.session_state.get("is_admin")),
+    )
 
     # -------- Sidebar Account Info --------
-    # Prefer display name; fall back to email prefix if missing
-    raw_display = (display_name or "").strip()
-    raw_username = (username or "").strip()
-
-    if raw_display:
-        name_label = raw_display
-    elif "@" in raw_username:
-        name_label = raw_username.split("@")[0]
-    else:
-        name_label = raw_username or "Account"
-
-    st.sidebar.markdown(f"### 👤 {name_label}")
-    st.sidebar.markdown(
-        f"**Plan:** `{ 'Admin' if bool(st.session_state.get('is_admin')) else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`"
+    render_account_sidebar(
+        display_name=display_name,
+        username=username,
+        tier=tier,
+        is_admin=bool(st.session_state.get("is_admin")),
+        forced_tier_key=forced_tier_key,
+        db_tier_err=db_tier_err,
+        db_user_debug=db_user_debug,
+        render_sidebar_upgrade_card=render_sidebar_upgrade_card,
+        has_min_tier=has_min_tier,
+        logout_and_reset_session=logout_and_reset_session,
     )
-    if bool(st.session_state.get("is_admin")):
-        st.sidebar.caption(
-            f"debug: db_tier={forced_tier_key or '-'} session_tier_key={st.session_state.get('tier_key')}"
-        )
-        if db_tier_err:
-            st.sidebar.error(f"DB tier lookup error: {db_tier_err}")
-        elif db_user_debug is not None:
-            st.sidebar.caption(f"DB user: {db_user_debug}")
-    # Day 6: Upgrade CTA card (Basic users only)
-    render_sidebar_upgrade_card(tier, has_min_tier=has_min_tier)
-
-    if st.sidebar.button("Log out", key="logout_button"):
-        logout_and_reset_session()
     #st.markdown("---")
 
     # -------- DB Status --------
@@ -599,33 +536,18 @@ def main():
 
     # -------- Admin: allow larger scans / full universe --------
     # Keep this override in app.py so admin can test at scale even if UI defaults are capped.
-    if bool(st.session_state.get("is_admin")):
-        # Use very large caps instead of None so downstream scan code that expects ints doesn't break.
-        # (We can later switch to None-unlimited once ui/scans.py fully supports it.)
-        _ADMIN_SCAN_CAP = 100_000
-        _ADMIN_TOP_N = 10_000
-        try:
-            max_nasdaq_scan = _ADMIN_SCAN_CAP
-            max_combo_scan = _ADMIN_SCAN_CAP
-            top_n = _ADMIN_TOP_N
-        except Exception:
-            pass
+    max_nasdaq_scan, max_combo_scan, top_n = apply_admin_scan_caps(
+        max_nasdaq_scan=max_nasdaq_scan,
+        max_combo_scan=max_combo_scan,
+        top_n=top_n,
+        is_admin=bool(st.session_state.get("is_admin")),
+    )
 
     # -------- Market Snapshot (moved back up near the top) --------
     # Render early so it appears above scans/results like before.
     # It can render with or without a recent results_df.
-    _snapshot_df: pd.DataFrame | None = None
-    try:
-        _snapshot_df = get_results_df()
-        if _snapshot_df is not None and getattr(_snapshot_df, "empty", False):
-            _snapshot_df = None
-    except Exception:
-        _snapshot_df = None
-
-    try:
-        st.session_state["latest_results_df"] = _snapshot_df
-    except Exception:
-        pass
+    _snapshot_df = load_latest_results_snapshot(get_results_df)
+    set_latest_results_snapshot(_snapshot_df)
 
     # 🔄 Clear stale selection state after a new scan
     for k in (
