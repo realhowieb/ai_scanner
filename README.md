@@ -16,6 +16,22 @@ Start the app:
 streamlit run app.py
 ```
 
+Developer checks:
+
+```bash
+python -m pip install -r requirements-dev.txt
+ruff check .
+python scripts/streamlit_smoke.py --timeout 60
+```
+
+Optional real browser smoke flow:
+
+```bash
+python -m pip install -r requirements-browser.txt
+python -m playwright install chromium
+python scripts/streamlit_browser_flow.py --timeout 60
+```
+
 The app defaults to local development settings when no secrets are configured. Production deployments should provide database, market-data, cookie, and billing secrets through the host environment or Streamlit secrets.
 
 Required production auth setting:

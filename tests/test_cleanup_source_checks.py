@@ -33,10 +33,13 @@ class CleanupSourceChecks(unittest.TestCase):
     def test_ci_has_dependency_import_smoke_job(self):
         source = (ROOT / ".github" / "workflows" / "smoke.yml").read_text()
         pyproject_source = (ROOT / "pyproject.toml").read_text()
+        dev_requirements = (ROOT / "requirements-dev.txt").read_text()
 
         self.assertIn("core-dependency-import-smoke", source)
         self.assertIn("full-dependency-import-smoke", source)
         self.assertIn("ruff check .", source)
+        self.assertIn("python -m pip install -r requirements-dev.txt", source)
+        self.assertIn("ruff", dev_requirements)
         self.assertIn("[tool.ruff.lint]", pyproject_source)
         self.assertIn("python -m pip install --prefer-binary -r requirements-core.txt", source)
         self.assertIn("Run dependency-backed unit tests", source)
@@ -69,6 +72,19 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("static/js", source)
         self.assertIn("subprocess.Popen", source)
         self.assertIn("STREAMLIT_SERVER_HEADLESS", source)
+
+    def test_streamlit_browser_flow_script_exercises_login_shell(self):
+        source = (ROOT / "scripts" / "streamlit_browser_flow.py").read_text()
+        browser_requirements = (ROOT / "requirements-browser.txt").read_text()
+        readme_source = (ROOT / "README.md").read_text()
+
+        self.assertIn("playwright", browser_requirements)
+        self.assertIn("sync_playwright", source)
+        self.assertIn("_stcore/health", source)
+        self.assertIn("LOGIN_MARKERS", source)
+        self.assertIn("AI_SCANNER_SMOKE_TEST", source)
+        self.assertIn("page.goto", source)
+        self.assertIn("python scripts/streamlit_browser_flow.py --timeout 60", readme_source)
 
     def test_deployment_doctor_exists(self):
         source = (ROOT / "scripts" / "deployment_doctor.py").read_text()
@@ -104,17 +120,24 @@ class CleanupSourceChecks(unittest.TestCase):
         scans_source = (ROOT / "ui" / "scans.py").read_text()
         provider_source = (ROOT / "ui" / "scan_providers.py").read_text()
         diagnostics_source = (ROOT / "ui" / "scan_diagnostics.py").read_text()
+        three_step_source = (ROOT / "ui" / "three_step_scanner.py").read_text()
 
-        self.assertLess(len(scans_source.splitlines()), 850)
+        self.assertLess(len(scans_source.splitlines()), 550)
         self.assertIn("from ui.scan_providers import", scans_source)
         self.assertIn("from ui.scan_diagnostics import render_data_provider_diagnostics", scans_source)
+        self.assertIn("from ui.three_step_scanner import render_three_step_scanner", scans_source)
         self.assertIn("apply_alpaca_extended_prices", scans_source)
         self.assertNotIn("import requests", scans_source)
         self.assertNotIn("ALPACA_MAX_SNAPSHOT_BATCH", scans_source)
+        self.assertNotIn("def render_three_step_scanner", scans_source)
+        self.assertNotIn("def run_scan_engine", scans_source)
         self.assertNotIn("def _get_alpaca_headers", scans_source)
         self.assertNotIn("def _get_alpaca_extended_last_prices", scans_source)
         self.assertNotIn("def _apply_alpaca_extended_prices", scans_source)
         self.assertNotIn("def render_data_provider_diagnostics", scans_source)
+        self.assertIn("def render_three_step_scanner", three_step_source)
+        self.assertIn("def run_scan_engine", three_step_source)
+        self.assertIn("except (RuntimeError, TypeError, ValueError, OSError)", three_step_source)
         self.assertIn("def sanitize_universe_symbols", provider_source)
         self.assertIn("def get_alpaca_extended_last_prices", provider_source)
         self.assertIn("except (ValueError, requests_exc.RequestException)", provider_source)
@@ -260,13 +283,21 @@ class CleanupSourceChecks(unittest.TestCase):
     def test_market_heat_helpers_are_extracted_from_pages_main(self):
         pages_source = (ROOT / "ui" / "pages_main.py").read_text()
         market_heat_source = (ROOT / "ui" / "market_heat.py").read_text()
+        runner_source = (ROOT / "ui" / "page_runners.py").read_text()
 
-        self.assertLess(len(pages_source.splitlines()), 800)
+        self.assertLess(len(pages_source.splitlines()), 500)
         self.assertIn("from ui.market_heat import", pages_source)
+        self.assertIn("from ui.page_runners import", pages_source)
         self.assertNotIn("def _fetch_predefined_screener", pages_source)
+        self.assertNotIn("def _bind_session_args", pages_source)
+        self.assertNotIn("def _call_with_overrides", pages_source)
+        self.assertNotIn("def _optional_attr", pages_source)
         self.assertNotIn("import requests as _requests", pages_source)
         self.assertIn("def _fetch_predefined_screener", market_heat_source)
         self.assertIn("except (_requests_exc.RequestException, ValueError)", market_heat_source)
+        self.assertIn("def _bind_session_args", runner_source)
+        self.assertIn("def _call_with_overrides", runner_source)
+        self.assertIn("except (ImportError, AttributeError)", runner_source)
 
     def test_auth_lockout_helpers_are_extracted_from_auth_ui(self):
         auth_source = (ROOT / "ui" / "auth.py").read_text()

@@ -27,7 +27,7 @@ jobs:
       - name: Run lightweight lint
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff
+          python -m pip install -r requirements-dev.txt
           ruff check .
 
       - name: Import smoke checks
