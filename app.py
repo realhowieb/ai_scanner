@@ -3,6 +3,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# Ensure project base directory is importable before local package imports.
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
 import pandas as pd
 
 import streamlit as st
@@ -37,11 +42,6 @@ from ui.app_user_profile import (
 install_streamlit_compat()
 
 from types import SimpleNamespace
-
-# Ensure project base directory importable
-BASE_DIR = Path(__file__).resolve().parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
 
 try:
     from db.core import get_conn as _get_db_conn_for_app

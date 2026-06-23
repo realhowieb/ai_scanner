@@ -191,6 +191,7 @@ class CleanupSourceChecks(unittest.TestCase):
         app_source = (ROOT / "app.py").read_text()
         boot_source = (ROOT / "ui" / "app_boot.py").read_text()
 
+        self.assertLess(app_source.index("sys.path.insert"), app_source.index("from ui.app_boot import"))
         self.assertIn("install_streamlit_compat", app_source)
         self.assertIn("configure_page()", app_source)
         self.assertIn("quiet_external_calls as _quiet_external_calls", app_source)
