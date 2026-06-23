@@ -16,6 +16,18 @@ except ImportError:  # pragma: no cover
     requests_exc = None  # type: ignore[assignment]
 
 
+def _secret_get(secrets: object, key: str) -> str | None:
+    """Safely read Streamlit secrets without failing when no secrets file exists."""
+    try:
+        if hasattr(secrets, "get"):
+            value = secrets.get(key)  # type: ignore[attr-defined]
+        else:
+            value = secrets[key]  # type: ignore[index]
+    except (AttributeError, KeyError, TypeError, RuntimeError, OSError):
+        return None
+    return str(value) if value else None
+
+
 def get_alpaca_config() -> Dict[str, str] | None:
     """Return Alpaca Market Data configuration if it is available."""
     api_key: str | None = None
@@ -26,9 +38,9 @@ def get_alpaca_config() -> Dict[str, str] | None:
         import streamlit as st  # type: ignore
 
         secrets = getattr(st, "secrets", {})
-        api_key = secrets.get("ALPACA_API_KEY_ID") or api_key
-        api_secret = secrets.get("ALPACA_API_SECRET_KEY") or api_secret
-        data_url = secrets.get("ALPACA_DATA_URL") or data_url
+        api_key = _secret_get(secrets, "ALPACA_API_KEY_ID") or api_key
+        api_secret = _secret_get(secrets, "ALPACA_API_SECRET_KEY") or api_secret
+        data_url = _secret_get(secrets, "ALPACA_DATA_URL") or data_url
     except (AttributeError, ImportError, RuntimeError):
         pass
 

@@ -64,6 +64,15 @@ class PriceUtilsTests(unittest.TestCase):
         self.assertEqual(cfg["api_secret"], "secret-key")
         self.assertEqual(cfg["data_url"], "https://example.test")
 
+    def test_alpaca_config_ignores_missing_streamlit_secrets(self):
+        from data.price_alpaca import _secret_get
+
+        class MissingSecrets:
+            def get(self, _key):
+                raise RuntimeError("No secrets found")
+
+        self.assertIsNone(_secret_get(MissingSecrets(), "ALPACA_API_KEY_ID"))
+
 
 if __name__ == "__main__":
     unittest.main()
