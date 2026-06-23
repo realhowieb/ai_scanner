@@ -550,7 +550,18 @@ def add_earnings_days_column(df, *, date_col: str = "earnings_date", out_col: st
         if df is None or getattr(df, "empty", True):
             return df
         if date_col not in df.columns:
-            return df
+            symbol_col = _find_symbol_column(df)
+            if symbol_col is None:
+                return df
+
+            symbols = df[symbol_col].astype(str).str.strip().str.upper().tolist()
+            details = load_earnings_details_map(symbols)
+            if not details:
+                return df
+
+            df[date_col] = [_earnings_date_for_symbol(sym, details) for sym in symbols]
+            if "earnings_time" not in df.columns:
+                df["earnings_time"] = [_earnings_time_for_symbol(sym, details) for sym in symbols]
 
         today_ts = pd.Timestamp(date.today())
         earn_ts = pd.to_datetime(df[date_col], errors="coerce")
@@ -559,3 +570,30 @@ def add_earnings_days_column(df, *, date_col: str = "earnings_date", out_col: st
     except Exception:
         # Best-effort: never break scans/UI
         return df
+
+
+def _find_symbol_column(df) -> Optional[str]:
+    for col in ("symbol", "Symbol", "Ticker", "ticker"):
+        if col in getattr(df, "columns", []):
+            return col
+    return None
+
+
+def _earnings_date_for_symbol(symbol: str, details: Dict[str, Tuple[Optional[date], Optional[str]]]) -> Optional[date]:
+    detail = _details_for_symbol(symbol, details)
+    return detail[0] if detail else None
+
+
+def _earnings_time_for_symbol(symbol: str, details: Dict[str, Tuple[Optional[date], Optional[str]]]) -> Optional[str]:
+    detail = _details_for_symbol(symbol, details)
+    return detail[1] if detail else None
+
+
+def _details_for_symbol(symbol: str, details: Dict[str, Tuple[Optional[date], Optional[str]]]):
+    for key in _expand_join_keys(symbol):
+        if key in details:
+            return details[key]
+    norm = _norm_symbol(symbol)
+    if norm in details:
+        return details[norm]
+    return None

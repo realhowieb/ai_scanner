@@ -26,6 +26,9 @@ from ui.result_watchlist import render_watchlist_action
 quiet_provider_loggers()
 
 
+EARNINGS_TABLE_COLUMNS = ("earnings_in_days", "Earnings", "📅 Earnings in X days")
+
+
 def render_results(
     df: Optional[pd.DataFrame],
     can_export_csv: bool,
@@ -164,8 +167,9 @@ def render_results(
 
         # Render without Styler for speed
         if can_export_csv:
+            table_df = _format_earnings_for_display(df)
             _tbl = st.dataframe(
-                df,
+                table_df,
                 width="stretch",
                 height=420,
                 selection_mode="single-row",
@@ -180,7 +184,7 @@ def render_results(
             )
         else:
             # Basic: keep non-interactive rendering. Use plain HTML (much faster than styled.to_html).
-            render_static_results_table(df, fallback_df=df)
+            render_static_results_table(_format_earnings_for_display(df), fallback_df=df)
 
         # Export (tier-gated) still available even in fast mode
         if can_export_csv:
@@ -351,12 +355,13 @@ def render_results(
             pass
 
     # --- Pro styling for results table ---
-    styled = df.style
+    table_df = _format_earnings_for_display(df)
+    styled = table_df.style
 
     # Format earnings column: None/NaN -> — ; ints shown as whole numbers
-    if "📅 Earnings in X days" in df.columns:
+    if "📅 Earnings in X days" in table_df.columns:
         styled = styled.format(
-            {"📅 Earnings in X days": (lambda v: "—" if pd.isna(v) else int(float(v)))}
+            {"📅 Earnings in X days": _format_earnings_cell}
         )
 
         def _earnings_style(v):
@@ -378,11 +383,11 @@ def render_results(
         styled = styled.map(_earnings_style, subset=["📅 Earnings in X days"])
 
     # Heatmap for BreakoutScore
-    if "BreakoutScore" in df.columns:
+    if "BreakoutScore" in table_df.columns:
         styled = styled.background_gradient(axis=None, cmap="RdYlGn", subset=["BreakoutScore"])
 
     # Conditional formatting for RS_Rank (0-100)
-    if "RS_Rank" in df.columns:
+    if "RS_Rank" in table_df.columns:
         styled = styled.background_gradient(axis=None, cmap="Greens", subset=["RS_Rank"])
 
     # Bold / color trend markers
@@ -402,14 +407,14 @@ def render_results(
                 styles.append("")
         return styles
 
-    if "Trend20D%" in df.columns:
+    if "Trend20D%" in table_df.columns:
         styled = styled.apply(_trend_style, subset=["Trend20D%"])
-    if "Trend10D%" in df.columns:
+    if "Trend10D%" in table_df.columns:
         styled = styled.apply(_trend_style, subset=["Trend10D%"])
 
     # Watchlist-style numeric formatting (Symbol/Last/Change/% Change/etc.)
     watchlist_cols = {"Last", "Change", "% Change", "Prev Close", "Open", "High", "Low"}
-    if watchlist_cols.intersection(df.columns):
+    if watchlist_cols.intersection(table_df.columns):
         # Define per-column formatters
         def _fmt_price(x):
             try:
@@ -430,7 +435,7 @@ def render_results(
                 return x
 
         fmt: dict[str, object] = {}
-        for col in df.columns:
+        for col in table_df.columns:
             if col in ["Last", "Prev Close", "Open", "High", "Low"]:
                 fmt[col] = _fmt_price
             elif col == "Change":
@@ -453,11 +458,11 @@ def render_results(
             return ""
 
         for col in ["Change", "% Change"]:
-            if col in df.columns:
+            if col in table_df.columns:
                 styled = styled.map(_change_style, subset=[col])
 
         # Color Last, Prev Close, Open, High, Low relative to Prev Close (green if above, red if below)
-        if "Prev Close" in df.columns:
+        if "Prev Close" in table_df.columns:
             def _price_relative_style(v, prev_close):
                 try:
                     val = float(v)
@@ -658,3 +663,23 @@ def render_results(
             st.caption("AI notes are unavailable for the selected row.")
     else:
         st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
+
+
+def _format_earnings_for_display(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a table-only copy where unknown earnings values render cleanly."""
+    table_df = df.copy()
+    for col in EARNINGS_TABLE_COLUMNS:
+        if col not in table_df.columns:
+            continue
+        values = pd.to_numeric(table_df[col], errors="coerce")
+        table_df[col] = values.map(_format_earnings_cell)
+    return table_df
+
+
+def _format_earnings_cell(value: object) -> object:
+    if pd.isna(value):
+        return "—"
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return value
