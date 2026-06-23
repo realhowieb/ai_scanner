@@ -229,8 +229,8 @@ def fetch_next_earnings(symbol: str) -> EarningsInfo:
                         dt = pd.to_datetime(val, errors="coerce", utc=True)
                         if pd.notna(dt):
                             return EarningsInfo(symbol=sym, earnings_date=dt.to_pydatetime().date(), earnings_time=None)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"WARNING: get_earnings_dates failed for {sym}: {exc}")
 
         # ----------------------------
         # 2) Fallback: calendar
@@ -251,13 +251,14 @@ def fetch_next_earnings(symbol: str) -> EarningsInfo:
                     dt = pd.to_datetime(val, errors="coerce", utc=True)
                     if pd.notna(dt):
                         return EarningsInfo(symbol=sym, earnings_date=dt.to_pydatetime().date(), earnings_time=None)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"WARNING: calendar earnings lookup failed for {sym}: {exc}")
 
         return EarningsInfo(symbol=sym, earnings_date=None, earnings_time=None)
 
-    except Exception:
+    except Exception as exc:
         # Best-effort; do not raise
+        print(f"WARNING: earnings lookup failed for {sym}: {exc}")
         return EarningsInfo(symbol=sym, earnings_date=None, earnings_time=None)
 
 
@@ -296,10 +297,15 @@ def populate_earnings_calendar(
             sym_key = _norm_symbol(info.symbol or sym)
             if not sym_key:
                 continue
-            cur.execute(
-                UPSERT_EARNINGS_SQL,
-                (sym_key, info.earnings_date, info.earnings_time),
-            )
+
+            # Do not insert placeholder rows with NULL earnings_date.
+            # A NULL first insert makes the refresh look successful while the UI
+            # still returns 0 rows because fetch_earnings_this_week filters NULLs out.
+            if info.earnings_date is not None:
+                cur.execute(
+                    UPSERT_EARNINGS_SQL,
+                    (sym_key, info.earnings_date, info.earnings_time),
+                )
 
             if progress_cb:
                 try:
@@ -320,6 +326,14 @@ def populate_earnings_calendar(
         c.commit()
     except Exception:
         pass
+
+    found_count = sum(1 for info in out.values() if info.earnings_date is not None)
+    if total > 0 and found_count == 0:
+        print(
+            "WARNING: earnings refresh attempted "
+            f"{total} symbols but found 0 earnings dates. "
+            "Provider data may be unavailable, blocked, or parser output may have changed."
+        )
 
     return out
 
