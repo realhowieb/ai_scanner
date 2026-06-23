@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover - keep import resilient in legacy paths
     summarize_provider_skips = None  # type: ignore
 
 
-_YFINANCE_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, ValueError)
+_YFINANCE_BASE_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, ValueError)
 
 # --- In-memory price DataFrame cache ---
 # We keep a short TTL so repeated scans within a few seconds can reuse
@@ -57,10 +57,32 @@ def clear_price_cache() -> None:
 # the UI can surface a clear message when running in restricted environments.
 try:
     import yfinance as _yf  # type: ignore
+    from yfinance import exceptions as _yf_exceptions  # type: ignore
+
     _YF_IMPORT_ERROR: Exception | None = None
 except (ImportError, OSError) as e:  # pragma: no cover - environment-specific
     _yf = None  # type: ignore
+    _yf_exceptions = None  # type: ignore
     _YF_IMPORT_ERROR = e
+
+
+def _build_yfinance_errors() -> tuple[type[Exception], ...]:
+    """Return provider exceptions that should be treated as non-fatal skips."""
+    extra_names = (
+        "YFException",
+        "YFRateLimitError",
+        "YFPricesMissingError",
+        "YFTzMissingError",
+    )
+    extra_types = []
+    for name in extra_names:
+        cls = getattr(_yf_exceptions, name, None)
+        if isinstance(cls, type) and issubclass(cls, Exception):
+            extra_types.append(cls)
+    return _YFINANCE_BASE_ERRORS + tuple(extra_types)
+
+
+_YFINANCE_ERRORS = _build_yfinance_errors()
 
 # ---------- Public API ----------
 __all__ = [

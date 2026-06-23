@@ -41,12 +41,32 @@ import re
 
 try:
     import yfinance as yf
+    from yfinance import exceptions as yf_exceptions
 except ImportError:  # pragma: no cover - allow the module to import without yfinance during linting
     yf = None  # type: ignore
+    yf_exceptions = None  # type: ignore
 
 
-_YFINANCE_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, ValueError)
+_YFINANCE_BASE_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, ValueError)
 _YAHOO_HTTP_ERRORS = (requests.RequestException, ValueError, KeyError, TypeError)
+
+
+def _build_yfinance_errors() -> tuple[type[Exception], ...]:
+    extra_names = (
+        "YFException",
+        "YFRateLimitError",
+        "YFPricesMissingError",
+        "YFTzMissingError",
+    )
+    extra_types = []
+    for name in extra_names:
+        cls = getattr(yf_exceptions, name, None)
+        if isinstance(cls, type) and issubclass(cls, Exception):
+            extra_types.append(cls)
+    return _YFINANCE_BASE_ERRORS + tuple(extra_types)
+
+
+_YFINANCE_ERRORS = _build_yfinance_errors()
 
 
 # -----------------------------
