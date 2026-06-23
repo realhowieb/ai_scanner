@@ -39,6 +39,11 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("provider_skipped", source)
         self.assertIn("Provider skip sample", source)
         self.assertIn("Price provider warning", source)
+        self.assertIn("_ENGINE_BOUNDARY_ERRORS = (", source)
+        self.assertIn("_STREAMLIT_UI_ERRORS = (RuntimeError, TypeError, ValueError, AttributeError)", source)
+        self.assertIn("except _ENGINE_BOUNDARY_ERRORS as e", source)
+        self.assertIn("except _STREAMLIT_UI_ERRORS", source)
+        self.assertEqual(source.count("except Exception"), 1)
 
     def test_ci_has_dependency_import_smoke_job(self):
         source = (ROOT / ".github" / "workflows" / "smoke.yml").read_text()
@@ -89,6 +94,7 @@ class CleanupSourceChecks(unittest.TestCase):
         readme_source = (ROOT / "README.md").read_text()
 
         self.assertIn("playwright", browser_requirements)
+        self.assertIn("import contextlib", source)
         self.assertIn("sync_playwright", source)
         self.assertIn("_stcore/health", source)
         self.assertIn("LOGIN_MARKERS", source)

@@ -8,6 +8,7 @@ server smoke while local/release validation can exercise the browser runtime.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import socket
 import subprocess
