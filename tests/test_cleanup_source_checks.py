@@ -311,6 +311,7 @@ class CleanupSourceChecks(unittest.TestCase):
     def test_earnings_results_helpers_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()
         earnings_source = (ROOT / "ui" / "earnings_results.py").read_text()
+        earnings_panel_source = (ROOT / "ui" / "earnings.py").read_text()
 
         self.assertIn("from ui.earnings_results import", app_source)
         self.assertIn("render_earnings_controls(", app_source)
@@ -321,6 +322,8 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def render_earnings_controls", earnings_source)
         self.assertIn("def prepare_results_with_earnings", earnings_source)
         self.assertIn("def _apply_earnings_enrichment", earnings_source)
+        self.assertIn('["ticker", "earnings_date", EARN_COL_DAYS]', earnings_panel_source)
+        self.assertNotIn('"earnings_time", EARN_COL_DAYS', earnings_panel_source)
 
     def test_market_header_helpers_are_not_duplicated_in_app(self):
         app_source = (ROOT / "app.py").read_text()

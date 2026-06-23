@@ -51,7 +51,7 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
         df[EARN_COL_DAYS] = (earn_ts - today_ts).dt.days
 
     cols = []
-    for c in ["ticker", "earnings_date", "earnings_time", EARN_COL_DAYS]:
+    for c in ["ticker", "earnings_date", EARN_COL_DAYS]:
         if c in df.columns:
             cols.append(c)
 
