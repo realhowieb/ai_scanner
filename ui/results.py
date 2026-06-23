@@ -673,6 +673,8 @@ def _format_earnings_for_display(df: pd.DataFrame) -> pd.DataFrame:
             continue
         values = pd.to_numeric(table_df[col], errors="coerce")
         table_df[col] = values.map(_format_earnings_cell)
+    if "Earnings" in table_df.columns and "earnings_in_days" in table_df.columns:
+        table_df = table_df.drop(columns=["earnings_in_days"])
     return table_df
 
 

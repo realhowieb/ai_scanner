@@ -106,7 +106,7 @@ class EarningsResultsTests(unittest.TestCase):
 
         result = _format_earnings_for_display(df)
 
-        self.assertEqual(result["earnings_in_days"].iloc[0], "—")
+        self.assertNotIn("earnings_in_days", result.columns)
         self.assertEqual(result["Earnings"].iloc[0], "—")
 
 
