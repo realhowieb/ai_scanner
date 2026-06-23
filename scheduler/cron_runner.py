@@ -90,6 +90,20 @@ def _skip_reason(now_utc: dt.datetime | None = None) -> str | None:
     return None
 
 
+def _configured_universes() -> list[str]:
+    """Return the universes configured for scheduled scans.
+
+    Environment variable:
+    - CRON_UNIVERSES=SP500,NASDAQ,COMBO
+
+    Blank entries are ignored. If the variable is not set, preserve the
+    existing default behavior.
+    """
+    raw = os.getenv("CRON_UNIVERSES", "SP500,NASDAQ,COMBO")
+    universes = [item.strip().upper() for item in raw.split(",") if item.strip()]
+    return universes or ["SP500", "NASDAQ", "COMBO"]
+
+
 def run_and_save(
     universe: str,
     username: str = "cron",
@@ -176,11 +190,10 @@ def main():
         return
 
     # --- Run the scans ---
-    runs = [
-        run_and_save("SP500"),
-        run_and_save("NASDAQ"),
-        run_and_save("COMBO"),
-    ]
+    universes = _configured_universes()
+    print(f"Configured universes: {', '.join(universes)}")
+
+    runs = [run_and_save(universe) for universe in universes]
 
     ok = all(run.ok for run in runs)
     _write_summary(

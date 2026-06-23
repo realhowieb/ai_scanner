@@ -21,7 +21,9 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def normalize_price_frame", helper_source)
         self.assertIn("def frame_fingerprint", helper_source)
         self.assertIn("def download_multi_alpaca", alpaca_source)
-        self.assertIn("except (requests_exc.RequestException, ValueError)", alpaca_source)
+        self.assertIn("except requests_exc.RequestException as exc", alpaca_source)
+        self.assertIn("except ValueError as exc", alpaca_source)
+        self.assertIn("logger.warning", alpaca_source)
 
     def test_scan_engine_surfaces_provider_diagnostics(self):
         source = (ROOT / "scan" / "engine.py").read_text()

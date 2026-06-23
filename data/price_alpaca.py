@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from typing import Dict, Sequence
 import os
+import logging
 
 import pandas as pd
 
 from .price_utils import chunks, normalize_price_frame
+
 
 try:
     import requests
@@ -14,6 +16,9 @@ try:
 except ImportError:  # pragma: no cover
     requests = None  # type: ignore[assignment]
     requests_exc = None  # type: ignore[assignment]
+
+
+logger = logging.getLogger(__name__)
 
 
 def _secret_get(secrets: object, key: str) -> str | None:
@@ -126,18 +131,51 @@ def download_multi_alpaca(
             resp = requests.get(url, headers=headers, params=params, timeout=timeout_s)  # type: ignore[union-attr]
             resp.raise_for_status()
             payload = resp.json()
-        except (requests_exc.RequestException, ValueError):  # type: ignore[union-attr]
+        except requests_exc.RequestException as exc:  # type: ignore[union-attr]
+            logger.warning(
+                "Alpaca request failed for %s symbols (%s): %s",
+                len(chunk),
+                params["symbols"],
+                exc,
+            )
+            continue
+        except ValueError as exc:
+            logger.warning(
+                "Alpaca returned invalid JSON for %s symbols (%s): %s",
+                len(chunk),
+                params["symbols"],
+                exc,
+            )
+            continue
+
+        if not isinstance(payload, dict):
+            logger.warning(
+                "Alpaca returned non-dict payload for %s symbols (%s): %s",
+                len(chunk),
+                params["symbols"],
+                type(payload).__name__,
+            )
             continue
 
         bars_by_symbol = payload.get("bars") if isinstance(payload, dict) else {}
         if not bars_by_symbol and isinstance(payload, dict):
             bars_by_symbol = {key: value for key, value in payload.items() if isinstance(value, list)}
 
+        if not bars_by_symbol:
+            logger.warning(
+                "Alpaca returned no bars for %s symbols (%s)",
+                len(chunk),
+                params["symbols"],
+            )
+            continue
+
         for symbol, bars in (bars_by_symbol or {}).items():
             if not bars:
+                logger.debug("Alpaca returned empty bars for symbol %s", symbol)
                 continue
             df = pd.DataFrame(bars)
             if df.empty:
+                logger.debug("Alpaca bars converted to empty DataFrame for symbol %s", symbol)
                 continue
 
             if "t" in df.columns:
