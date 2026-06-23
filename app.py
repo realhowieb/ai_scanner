@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from datetime import datetime, time, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -19,6 +18,13 @@ from ui.app_session import (
     is_admin_user,
     normalize_admin_users,
     tier_key as _tier_key,
+)
+from ui.app_runtime import (
+    get_market_session,
+    normalize_results_to_df as _normalize_results_to_df,
+    render_active_filters_summary,
+    render_onboarding_hint,
+    render_sidebar_upgrade_card,
 )
 
 install_streamlit_compat()
@@ -62,40 +68,6 @@ except Exception:
 configure_page()
 
 
-# --------------- Market session helper (US/Eastern) ----------------
-
-def get_market_session(now: datetime | None = None) -> str:
-    """
-    Return one of 'premarket', 'regular', 'afterhours', or 'closed'
-    based on the current US/Eastern time.
-    """
-    tz = ZoneInfo("US/Eastern")
-    if now is None:
-        now = datetime.now(tz)
-    else:
-        now = now.astimezone(tz)
-
-    # Weekend: Saturday (5) / Sunday (6)
-    if now.weekday() >= 5:
-        return "closed"
-
-    t = now.time()
-
-    # Premarket roughly 4:00–9:30 ET
-    if time(4, 0) <= t < time(9, 30):
-        return "premarket"
-
-    # Regular session 9:30–16:00 ET
-    if time(9, 30) <= t < time(16, 0):
-        return "regular"
-
-    # After-hours 16:00–20:00 ET
-    if time(16, 0) <= t < time(20, 0):
-        return "afterhours"
-
-    # Everything else is treated as closed
-    return "closed"
-
 # --------------- Tiering ----------------
 # --------------- Tiering ----------------
 try:
@@ -109,6 +81,17 @@ try:
     )
 except Exception:
     from auth.tiering_fallback import USERS_DB, ADMIN_USERS, get_user_tier, Tier
+
+    def has_min_tier(tier_or_key, required: str) -> bool:
+        order = {"basic": 0, "pro": 1, "premium": 2, "admin": 3}
+        key = _tier_key(tier_or_key) or str(tier_or_key or "basic")
+        return order.get(str(key).strip().lower(), 0) >= order.get(str(required).strip().lower(), 0)
+
+    def require_min_tier(tier_or_key, required: str, feature_name: str) -> bool:
+        allowed = has_min_tier(tier_or_key, required)
+        if not allowed:
+            st.info(f"Upgrade to {required.title()} to use {feature_name}.")
+        return allowed
 
 # --- Normalize ADMIN_USERS to be username-only (no implicit premium/admin coercion) ---
 # Some legacy configs treat admin users as premium implicitly; we want DB tier to win.
@@ -333,157 +316,6 @@ def _resolve_tier_state(username: str, users_map: dict) -> dict:
 def _is_admin_user(username: str | None, tier_obj: object | None) -> bool:
     return is_admin_user(username, tier_obj, admin_users=ADMIN_USERS)
 
-
-# Day 6: Upgrade CTA card for Basic users only
-def render_sidebar_upgrade_card(tier_obj: object | None) -> None:
-    """Show a simple upgrade CTA card for Basic users in the sidebar."""
-    try:
-        # Show only for Basic (no Pro access)
-        if has_min_tier(tier_obj, "pro"):
-            return
-    except Exception:
-        return
-
-    with st.sidebar.container(border=True):
-        st.markdown("### 💡 You’re on Basic")
-        st.caption(
-            "You’re seeing a limited scan.\n"
-            "Upgrade to unlock advanced filters, exports, and AI signals."
-        )
-
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("🚀 Upgrade to Pro", key="upgrade_to_pro", width="stretch"):
-                st.session_state["pricing_focus"] = "pro"
-                st.switch_page("pages/billing.py")
-        with c2:
-            if st.button("⭐ Upgrade to Premium", key="upgrade_to_premium", width="stretch"):
-                st.session_state["pricing_focus"] = "premium"
-                st.switch_page("pages/billing.py")
-
-        st.caption(
-            "Tip: Pro unlocks exports + advanced filters. Premium unlocks full-universe + Early Breakout."
-        )
-
-def _normalize_results_to_df(obj: object) -> pd.DataFrame | None:
-    """Normalize load_run_results output to a DataFrame (or None).
-
-    Historical rows may store results as:
-      - pandas.DataFrame
-      - list[dict]
-      - dict
-      - JSON-serialized string
-    """
-    if obj is None:
-        return None
-
-    if isinstance(obj, pd.DataFrame):
-        return None if obj.empty else obj
-
-    if isinstance(obj, list):
-        try:
-            df = pd.DataFrame(obj)
-            return None if df.empty else df
-        except Exception:
-            return None
-
-    if isinstance(obj, dict):
-        try:
-            df = pd.DataFrame([obj])
-            return None if df.empty else df
-        except Exception:
-            return None
-
-    if isinstance(obj, str):
-        s = obj.strip()
-        if not s:
-            return None
-        try:
-            import json
-            parsed = json.loads(s)
-        except Exception:
-            return None
-        return _normalize_results_to_df(parsed)
-
-    return None
-
-# --------------- UX Helpers ----------------
-
-def render_active_filters_summary(
-    *,
-    tier,
-    universe,
-    min_price: float,
-    max_price: float,
-    min_dollar_vol: float,
-    top_n: int,
-    premarket: bool,
-    afterhours: bool,
-    include_ta: bool,
-    unusual_vol: bool,
-    apply_gap_filter: bool,
-    min_gap: float,
-    max_nasdaq_scan: int,
-    max_combo_scan: int,
-) -> None:
-    """Compact summary of active filters shown above results."""
-    chips: list[str] = []
-
-    if universe:
-        chips.append(f"Universe: {universe}")
-
-    chips.append(f"Price: ${min_price:g}–${max_price:g}")
-
-    if min_dollar_vol and min_dollar_vol > 0:
-        chips.append(f"Min $Vol: {int(min_dollar_vol):,}")
-
-    chips.append(f"Top N: {int(top_n)}")
-    chips.append(f"NASDAQ cap: {int(max_nasdaq_scan):,}")
-    chips.append(f"Combo cap: {int(max_combo_scan):,}")
-
-    if premarket:
-        chips.append("Session: Premarket")
-    elif afterhours:
-        chips.append("Session: After-hours")
-    else:
-        chips.append("Session: Regular")
-
-    if include_ta:
-        chips.append("TA: ON")
-    if unusual_vol:
-        chips.append("Unusual Vol: ON")
-
-    if apply_gap_filter:
-        chips.append(f"Gap Filter: ON (≥ {float(min_gap):g}%)")
-
-    st.markdown("#### ✅ Active Filters")
-    st.caption(" • ".join(chips))
-
-
-def render_onboarding_hint(username: str, *, tier_name: str) -> None:
-    """One-time onboarding hint per session per user."""
-    key = f"onboarding_dismissed::{(username or '').strip().lower()}"
-    if st.session_state.get(key):
-        return
-
-    with st.expander("👋 Quick start (click once)", expanded=True):
-        st.markdown(
-            f"""
-**Welcome!** You’re signed in on **{tier_name}**.
-
-**Fast workflow:**
-1) Set filters in the sidebar  
-2) Click **Run Scan** (SP500 / NASDAQ / Combo)  
-3) Use **Save as my default settings** once you like your setup  
-4) Use **Reset to saved profile** anytime to revert
-
-Tip: turn on **Apply Gap Filter** to enforce **Min Gap %**.
-"""
-        )
-        if st.button("✅ Got it", key=f"onboarding_got_it::{username}"):
-            st.session_state[key] = True
-            st.rerun()
-
 # ============================================================
 #                       MAIN UI
 # ============================================================
@@ -684,7 +516,7 @@ def main():
         elif db_user_debug is not None:
             st.sidebar.caption(f"DB user: {db_user_debug}")
     # Day 6: Upgrade CTA card (Basic users only)
-    render_sidebar_upgrade_card(tier)
+    render_sidebar_upgrade_card(tier, has_min_tier=has_min_tier)
 
     if st.sidebar.button("Log out", key="logout_button"):
         logout_and_reset_session()
@@ -718,7 +550,6 @@ def main():
     if not flags.get("can_diagnostics"):
         diagnostics = False
     render_active_filters_summary(
-        tier=tier,
         universe=st.session_state.get("universe"),
         min_price=float(min_price),
         max_price=float(max_price),

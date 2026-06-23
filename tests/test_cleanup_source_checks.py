@@ -126,6 +126,21 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def is_admin_user", session_source)
         self.assertIn("def compute_entitlements", session_source)
 
+    def test_app_runtime_helpers_are_extracted_from_app(self):
+        app_source = (ROOT / "app.py").read_text()
+        runtime_source = (ROOT / "ui" / "app_runtime.py").read_text()
+
+        self.assertLess(len(app_source.splitlines()), 800)
+        self.assertIn("from ui.app_runtime import", app_source)
+        self.assertNotIn("def get_market_session", app_source)
+        self.assertNotIn("def _normalize_results_to_df", app_source)
+        self.assertNotIn("def render_active_filters_summary", app_source)
+        self.assertNotIn("def render_onboarding_hint", app_source)
+        self.assertIn("def get_market_session", runtime_source)
+        self.assertIn("def normalize_results_to_df", runtime_source)
+        self.assertIn("except (JSONDecodeError, TypeError)", runtime_source)
+        self.assertIn("def render_sidebar_upgrade_card", runtime_source)
+
     def test_results_tabs_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()
         tabs_source = (ROOT / "ui" / "results_tabs.py").read_text()
@@ -205,6 +220,8 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def render_watchlist_action", watchlist_source)
         self.assertIn("except ImportError", watchlist_source)
         self.assertIn("except (RuntimeError, TypeError, ValueError, OSError)", watchlist_source)
+        self.assertIn("except (RuntimeError, TypeError, ValueError)", results_source)
+        self.assertNotIn("except Exception:\n            st.caption(\"AI notes are unavailable", results_source)
 
     def test_plaintext_demo_auth_config_is_removed(self):
         self.assertFalse((ROOT / "ui" / "config.yaml").exists())

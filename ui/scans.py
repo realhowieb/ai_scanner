@@ -162,7 +162,7 @@ def run_scan_engine(
     # 4) Strategy-specific post-filters (operate on the breakout results)
     try:
         df = apply_strategy_filter(strategy, df)
-    except Exception:
+    except (KeyError, TypeError, ValueError):
         # On any filter error, just return the unfiltered results (capped below)
         pass
 
@@ -172,7 +172,7 @@ def run_scan_engine(
     # 6) Optional: score pre-breakout probabilities
     try:
         df = score_prebreakout(df)
-    except Exception:
+    except (ImportError, RuntimeError, TypeError, ValueError):
         # Never break scans if the model is missing or fails
         pass
     return df
@@ -377,7 +377,7 @@ def render_three_step_scanner() -> None:
                 # Clear cached run list so the new run appears immediately in history
                 try:
                     list_runs.clear()  # type: ignore
-                except Exception:
+                except AttributeError:
                     pass
         except Exception:
             # Never break the UI because of logging issues

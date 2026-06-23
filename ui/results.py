@@ -320,7 +320,7 @@ def render_results(
                     value=auto_note,
                     height=220,
                 )
-            except Exception:
+            except (RuntimeError, TypeError, ValueError):
                 st.caption("AI notes are unavailable for the selected row.")
         else:
             st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
@@ -337,7 +337,7 @@ def render_results(
             ticker_idx = cols.index("Ticker")
             cols.insert(ticker_idx + 1, earn_col)
             df = df[cols]
-        except Exception:
+        except (KeyError, ValueError):
             pass
 
     # --- Pro styling for results table ---
@@ -484,7 +484,7 @@ def render_results(
                 key="results_table_styled",
             )
             sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker")
-        except Exception:
+        except (RuntimeError, TypeError, ValueError):
             # Fallback: keep styled rendering without selection
             st.dataframe(styled, width="stretch", height=420)
     else:
@@ -636,7 +636,7 @@ def render_results(
                 value=auto_note,
                 height=220,
             )
-        except Exception:
+        except (RuntimeError, TypeError, ValueError):
             st.caption("AI notes are unavailable for the selected row.")
     else:
         st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
