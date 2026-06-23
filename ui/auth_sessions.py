@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover - optional DB dependency
 
 COOKIE_PREFIX = os.environ.get("COOKIE_PREFIX", "ai_scanner")
 COOKIE_NAME = os.environ.get("COOKIE_NAME", f"{COOKIE_PREFIX}_sid")
+COOKIE_MANAGER_STATE_KEY = "_ai_scanner_cookie_manager"
 
 
 def _get_secret(name: str) -> str | None:
@@ -58,9 +59,14 @@ def cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
         st.error("Cookie sessions require COOKIE_PASSWORD to be configured.")
         return None
 
+    cached = st.session_state.get(COOKIE_MANAGER_STATE_KEY)
+    if cached is not None:
+        return cached
+
     cookies = EncryptedCookieManager(prefix=COOKIE_PREFIX, password=COOKIE_PASSWORD)
     if not cookies.ready():
         st.stop()
+    st.session_state[COOKIE_MANAGER_STATE_KEY] = cookies
     return cookies
 
 

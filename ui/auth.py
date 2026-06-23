@@ -9,6 +9,7 @@ from ui.auth_lockout import (
     register_failed_login_attempt as _register_failed_login_attempt,
 )
 from ui.auth_sessions import (
+    COOKIE_MANAGER_STATE_KEY,
     COOKIE_NAME,
     cookies_ready_or_stop as _cookies_ready_or_stop,
     create_session as _create_session,
@@ -490,6 +491,7 @@ def logout_and_reset_session() -> None:
         "tier",
         "is_admin",
         "authentication_status",
+        COOKIE_MANAGER_STATE_KEY,
         # Common app-level keys we control
         "results_df",
         "last_scan_at",
