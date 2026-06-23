@@ -30,11 +30,9 @@ from scan.options import (
 )
 from scan.strategies import apply_strategy_filter
 from scan.universe_selection import resolve_scan_universe
+from ui.scan_diagnostics import render_data_provider_diagnostics
 from ui.scan_providers import (
     apply_alpaca_extended_prices,
-    fetch_alpaca_snapshot_debug,
-    get_alpaca_extended_last_prices,
-    get_alpaca_headers,
     sanitize_universe_symbols,
 )
 from ui.single_ticker import handle_single_ticker_actions, render_single_ticker_panel
@@ -813,90 +811,3 @@ def render_scan_controls(
         do_scan=do_scan,
         banner=_banner,
     )
-
-
-# --- Data Provider Diagnostics (moved from render_scan_controls) ---
-def render_data_provider_diagnostics() -> None:
-    """Render Alpaca / data provider diagnostics.
-
-    Intended to be called from a dedicated Debug / Data Provider tab instead
-    of the main scanner layout.
-    """
-    st.markdown("### 🧪 Data Provider Diagnostics")
-
-    if st.button(
-        "Test Alpaca Market Data (AAPL)",
-        key="btn_test_alpaca",
-        width="stretch",
-    ):
-        headers = get_alpaca_headers()
-        if not headers:
-            _banner(
-                "Alpaca API keys are not configured in Streamlit secrets. "
-                "Set ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY in .streamlit/secrets.toml.",
-                "error",
-            )
-        else:
-            with st.spinner("Contacting Alpaca for AAPL snapshot..."):
-                quotes = get_alpaca_extended_last_prices(["AAPL"])
-            price = quotes.get("AAPL")
-            if price is not None:
-                st.success(f"✅ Alpaca Market Data OK. AAPL extended price: ${price:.2f}")
-            else:
-                now_et = datetime.now(ZoneInfo("America/New_York"))
-
-                # Weekend-aware messaging
-                if now_et.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
-                    st.info(
-                        "🟦 Market is closed (weekend). "
-                        "Extended-hours data is usually unavailable."
-                    )
-                else:
-                    st.info("Market may be outside active extended-hours windows.")
-
-                _banner(
-                    "Connected to Alpaca but no price was returned for AAPL. "
-                    "Attempting to show raw Alpaca response for AAPL below for debugging.",
-                    "warning",
-                )
-
-                try:
-                    status_code, debug_payload = fetch_alpaca_snapshot_debug("AAPL")
-                    st.write("Alpaca debug HTTP status:", status_code)
-                    if isinstance(debug_payload, dict):
-                        debug_json = debug_payload
-                        st.write("Alpaca debug top-level keys:", list(debug_json.keys()))
-
-                        raw_snaps = debug_json.get("snapshots")
-                        if isinstance(raw_snaps, dict) and raw_snaps:
-                            snaps = raw_snaps
-                        elif isinstance(debug_json, dict):
-                            snaps = debug_json
-                        else:
-                            snaps = {}
-
-                        aapl_snap = snaps.get("AAPL") or {}
-
-                        st.write(
-                            "Alpaca debug 'snapshots' keys:",
-                            list(snaps.keys()) if isinstance(snaps, dict) else snaps,
-                        )
-                        st.write(
-                            "Alpaca debug AAPL snapshot keys:",
-                            list(aapl_snap.keys())
-                            if isinstance(aapl_snap, dict)
-                            else aapl_snap,
-                        )
-                        st.text_area(
-                            "Raw Alpaca JSON (truncated)",
-                            value=str(debug_json)[:1200],
-                            height=200,
-                        )
-                    else:
-                        st.text_area(
-                            "Raw Alpaca response (non-JSON, truncated)",
-                            value=str(debug_payload)[:1200],
-                            height=200,
-                        )
-                except Exception as e:
-                    st.error(f"Alpaca debug request failed: {e}")

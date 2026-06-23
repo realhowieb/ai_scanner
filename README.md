@@ -42,6 +42,11 @@ The GitHub Actions workflow uses this module path. The runner reads local univer
 
 Useful optional environment variables:
 
+- `NEON_DATABASE_URL` or `DATABASE_URL`
+- `AI_SCANNER_SQLITE_FALLBACK=false` for production/scheduled jobs
+- `ALPACA_API_KEY_ID`
+- `ALPACA_API_SECRET_KEY`
+- `ALPACA_DATA_URL`
 - `CRON_NASDAQ_LIMIT`
 - `CRON_MIN_GAP`
 - `CRON_MIN_PRICE`

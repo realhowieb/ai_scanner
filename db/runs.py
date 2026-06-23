@@ -1,11 +1,37 @@
 # db/runs.py
 from typing import Optional, List, Dict, Any
-import streamlit as st
 import json
 import sqlite3
+import os
 
 from .engine import get_neon_conn, get_sqlite_conn
 from .schema import ensure_neon_runs_schema, ensure_sqlite_runs_schema
+
+try:
+    import streamlit as st
+except ImportError:  # pragma: no cover - allows scheduler/headless imports without Streamlit
+    class _StreamlitShim:
+        @staticmethod
+        def caption(*_args, **_kwargs):
+            return None
+
+        @staticmethod
+        def error(*_args, **_kwargs):
+            return None
+
+    st = _StreamlitShim()  # type: ignore[assignment]
+
+
+def sqlite_fallback_enabled(default: bool = True) -> bool:
+    """Return whether DB calls may fall back to local SQLite.
+
+    Local Streamlit use defaults to allowing SQLite. Production jobs can set
+    AI_SCANNER_SQLITE_FALLBACK=false to fail fast when Neon/Postgres is missing.
+    """
+    raw = os.getenv("AI_SCANNER_SQLITE_FALLBACK")
+    if raw is None:
+        return bool(default)
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def save_run(
@@ -17,11 +43,13 @@ def save_run(
     row_count: Optional[int] = None,
     duration_sec: Optional[float] = None,
     is_snapshot: bool = False,
-    allow_sqlite_fallback: bool = True,
+    allow_sqlite_fallback: bool | None = None,
 ) -> None:
     """
     Save a run to Neon/Postgres if available, optionally falling back to SQLite.
     """
+
+    fallback_allowed = sqlite_fallback_enabled(default=True) if allow_sqlite_fallback is None else bool(allow_sqlite_fallback)
 
     # Try Neon first
     try:
@@ -54,11 +82,11 @@ def save_run(
             conn.close()
             return
     except Exception as e:
-        if not allow_sqlite_fallback:
+        if not fallback_allowed:
             raise RuntimeError(f"Neon DB write failed and SQLite fallback is disabled: {e}") from e
         st.caption(f"⚠️ Neon DB write failed, falling back to SQLite: {e}")
 
-    if not allow_sqlite_fallback:
+    if not fallback_allowed:
         raise RuntimeError("Neon DB is not configured or unavailable; SQLite fallback is disabled")
 
     # --- SQLite fallback ---

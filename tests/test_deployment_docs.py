@@ -13,6 +13,8 @@ class DeploymentDocsTests(unittest.TestCase):
         self.assertIn("dependency import", text)
         self.assertIn("requirements-core.txt", text)
         self.assertIn("requirements-extended.txt", text)
+        self.assertIn("AI_SCANNER_SQLITE_FALLBACK=false", text)
+        self.assertIn("ALPACA_API_KEY_ID", text)
 
 
 if __name__ == "__main__":

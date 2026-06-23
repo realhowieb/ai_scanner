@@ -1,11 +1,16 @@
 import streamlit as st
 import bcrypt
-import time
 import re
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
+from ui.auth_lockout import (
+    clear_failed_login_attempts as _clear_failed_login_attempts,
+    is_login_locked as _is_login_locked,
+    lockout_remaining_seconds as _lockout_remaining_seconds,
+    register_failed_login_attempt as _register_failed_login_attempt,
+)
 
 # Cookie-based persistent sessions (recommended)
 try:
@@ -204,47 +209,6 @@ def _delete_session(session_id: str) -> None:
         conn.close()
     except Exception:
         return
-
-
-# -------------------- Login lockout helpers --------------------
-
-def _is_login_locked() -> bool:
-    """Return True if the user is currently locked out due to too many failed logins."""
-    try:
-        locked_until = st.session_state.get("login_locked_until")
-        if not locked_until:
-            return False
-        return time.time() < float(locked_until)
-    except Exception:
-        return False
-
-
-def _lockout_remaining_seconds() -> int:
-    try:
-        locked_until = st.session_state.get("login_locked_until")
-        if not locked_until:
-            return 0
-        remaining = int(float(locked_until) - time.time())
-        return max(0, remaining)
-    except Exception:
-        return 0
-
-
-def _register_failed_login_attempt(max_attempts: int = 5, lockout_seconds: int = 300) -> None:
-    """Increment failed attempts and apply lockout if threshold exceeded."""
-    try:
-        failed = int(st.session_state.get("failed_login_attempts") or 0) + 1
-    except Exception:
-        failed = 1
-
-    st.session_state["failed_login_attempts"] = failed
-    if failed >= int(max_attempts):
-        st.session_state["login_locked_until"] = time.time() + int(lockout_seconds)
-
-
-def _clear_failed_login_attempts() -> None:
-    st.session_state.pop("failed_login_attempts", None)
-    st.session_state.pop("login_locked_until", None)
 
 
 # --- Fallback: direct Neon query for display username -> email mapping ---

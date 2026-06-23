@@ -40,3 +40,21 @@ their optional dependency group is not installed.
 - `requirements-extended.txt`: alpaca-py
 - `billing_service/requirements.txt`: billing service dependencies
 - future `requirements-dev.txt`: test/lint tooling
+
+## Scheduled scan runtime
+
+The scheduled GitHub Actions scan job installs `requirements-core.txt`, not the
+full deployment profile. Scheduled scans are headless scanner jobs, so they do
+not need optional ML or extended integration packages to start.
+
+Production scheduled scans should use Neon/Postgres and fail visibly if the
+database is unavailable:
+
+- `NEON_DATABASE_URL` or `DATABASE_URL`
+- `AI_SCANNER_SQLITE_FALLBACK=false`
+
+Alpaca market data credentials must use the same names read by the scanner:
+
+- `ALPACA_API_KEY_ID`
+- `ALPACA_API_SECRET_KEY`
+- optional `ALPACA_DATA_URL`

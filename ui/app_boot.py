@@ -117,10 +117,6 @@ def install_streamlit_compat() -> None:
     """Install Streamlit compatibility shims and warning suppression."""
     install_stderr_filter()
     patch_use_container_width()
-    try:
-        st.cache = st.cache_data  # type: ignore[attr-defined]
-    except Exception:
-        pass
 
 
 def configure_page() -> None:

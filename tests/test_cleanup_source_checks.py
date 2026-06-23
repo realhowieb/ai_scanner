@@ -8,9 +8,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 class CleanupSourceChecks(unittest.TestCase):
     def test_price_fetcher_logs_provider_summary(self):
         source = (ROOT / "data" / "prices.py").read_text()
+        helper_source = (ROOT / "data" / "price_utils.py").read_text()
 
         self.assertIn("summarize_provider_skips", source)
         self.assertIn("[prices] {summary.message}", source)
+        self.assertIn("from .price_utils import", source)
+        self.assertNotIn("def _normalize_df", source)
+        self.assertNotIn("def _frame_fingerprint", source)
+        self.assertIn("def normalize_price_frame", helper_source)
+        self.assertIn("def frame_fingerprint", helper_source)
 
     def test_scan_engine_surfaces_provider_diagnostics(self):
         source = (ROOT / "scan" / "engine.py").read_text()
@@ -30,6 +36,18 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("import scan.engine", source)
         self.assertIn("Live Streamlit startup smoke", source)
         self.assertIn("python scripts/streamlit_smoke.py --timeout 60", source)
+
+    def test_scheduled_scan_workflow_uses_core_deps_and_runtime_secret_names(self):
+        source = (ROOT / ".github" / "workflows" / "scheduled-scans.yml").read_text()
+
+        self.assertIn("python -m pip install --prefer-binary -r requirements-core.txt", source)
+        self.assertNotIn("pip install -r requirements.txt", source)
+        self.assertIn("ALPACA_API_KEY_ID", source)
+        self.assertIn("ALPACA_API_SECRET_KEY", source)
+        self.assertIn("NEON_DATABASE_URL", source)
+        self.assertIn('AI_SCANNER_SQLITE_FALLBACK: "false"', source)
+        self.assertNotIn("ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}", source)
+        self.assertNotIn("ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}", source)
 
     def test_streamlit_smoke_script_starts_live_server(self):
         source = (ROOT / "scripts" / "streamlit_smoke.py").read_text()
@@ -64,18 +82,23 @@ class CleanupSourceChecks(unittest.TestCase):
     def test_scan_provider_helpers_are_extracted_from_scan_ui(self):
         scans_source = (ROOT / "ui" / "scans.py").read_text()
         provider_source = (ROOT / "ui" / "scan_providers.py").read_text()
+        diagnostics_source = (ROOT / "ui" / "scan_diagnostics.py").read_text()
 
+        self.assertLess(len(scans_source.splitlines()), 850)
         self.assertIn("from ui.scan_providers import", scans_source)
+        self.assertIn("from ui.scan_diagnostics import render_data_provider_diagnostics", scans_source)
         self.assertIn("apply_alpaca_extended_prices", scans_source)
-        self.assertIn("fetch_alpaca_snapshot_debug", scans_source)
         self.assertNotIn("import requests", scans_source)
         self.assertNotIn("ALPACA_MAX_SNAPSHOT_BATCH", scans_source)
         self.assertNotIn("def _get_alpaca_headers", scans_source)
         self.assertNotIn("def _get_alpaca_extended_last_prices", scans_source)
         self.assertNotIn("def _apply_alpaca_extended_prices", scans_source)
+        self.assertNotIn("def render_data_provider_diagnostics", scans_source)
         self.assertIn("def sanitize_universe_symbols", provider_source)
         self.assertIn("def get_alpaca_extended_last_prices", provider_source)
         self.assertIn("except (ValueError, requests_exc.RequestException)", provider_source)
+        self.assertIn("def render_data_provider_diagnostics", diagnostics_source)
+        self.assertIn("except (RuntimeError, OSError, ValueError)", diagnostics_source)
 
     def test_app_boot_helpers_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()
@@ -89,6 +112,7 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("class FilteredStderr", boot_source)
         self.assertIn("def patch_use_container_width", boot_source)
         self.assertIn("def configure_page", boot_source)
+        self.assertNotIn("st.cache =", boot_source)
 
     def test_app_session_helpers_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()
@@ -181,6 +205,42 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def render_watchlist_action", watchlist_source)
         self.assertIn("except ImportError", watchlist_source)
         self.assertIn("except (RuntimeError, TypeError, ValueError, OSError)", watchlist_source)
+
+    def test_plaintext_demo_auth_config_is_removed(self):
+        self.assertFalse((ROOT / "ui" / "config.yaml").exists())
+        users_source = (ROOT / "db" / "users.py").read_text()
+
+        self.assertIn("ENABLE_DEMO_USERS", users_source)
+        self.assertIn("DEMO_BASIC_PASSWORD", users_source)
+
+    def test_scheduler_ui_placeholder_has_real_renderer(self):
+        source = (ROOT / "scheduler" / "ui.py").read_text()
+
+        self.assertIn("def render_scheduler", source)
+        self.assertIn("AI_SCANNER_SQLITE_FALLBACK", source)
+
+    def test_market_heat_helpers_are_extracted_from_pages_main(self):
+        pages_source = (ROOT / "ui" / "pages_main.py").read_text()
+        market_heat_source = (ROOT / "ui" / "market_heat.py").read_text()
+
+        self.assertLess(len(pages_source.splitlines()), 800)
+        self.assertIn("from ui.market_heat import", pages_source)
+        self.assertNotIn("def _fetch_predefined_screener", pages_source)
+        self.assertNotIn("import requests as _requests", pages_source)
+        self.assertIn("def _fetch_predefined_screener", market_heat_source)
+        self.assertIn("except (_requests_exc.RequestException, ValueError)", market_heat_source)
+
+    def test_auth_lockout_helpers_are_extracted_from_auth_ui(self):
+        auth_source = (ROOT / "ui" / "auth.py").read_text()
+        lockout_source = (ROOT / "ui" / "auth_lockout.py").read_text()
+
+        self.assertLess(len(auth_source.splitlines()), 700)
+        self.assertIn("from ui.auth_lockout import", auth_source)
+        self.assertNotIn("def _is_login_locked", auth_source)
+        self.assertNotIn("def _register_failed_login_attempt", auth_source)
+        self.assertIn("def is_login_locked", lockout_source)
+        self.assertIn("def register_failed_login_attempt", lockout_source)
+        self.assertIn("except (TypeError, ValueError)", lockout_source)
 
 
 if __name__ == "__main__":

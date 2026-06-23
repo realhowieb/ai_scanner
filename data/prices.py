@@ -12,16 +12,22 @@ All functions are safe to import in headless scheduler jobs.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Sequence, Tuple, Iterator
+from typing import Callable, Dict, List, Sequence, Tuple, Iterator
 import concurrent.futures as _fut
 import datetime as _dt
 import time as _time
-import random as _random
 import os as _os
-import hashlib as _hashlib
 
 import numpy as _np
 import pandas as _pd
+
+from .price_utils import (
+    backoff_sleep as _backoff_sleep,
+    cache_key as _cache_key,
+    chunks as _chunks,
+    frame_fingerprint as _frame_fingerprint,
+    normalize_price_frame as _normalize_df,
+)
 
 try:
     from .provider_diagnostics import summarize_provider_skips
@@ -315,23 +321,6 @@ def _log(logger: Callable[[str], None] | None, msg: str) -> None:
             pass
 
 
-# --- Helper for cache keys ---
-def _cache_key(sym: str, cfg: PriceFetchConfig) -> str:
-    """Build a stable cache key for a given symbol + config."""
-    return f"{str(sym).upper()}|{cfg.period}|{cfg.interval}|{'1' if cfg.prepost else '0'}"
-
-
-def _chunks(seq: Sequence[str], n: int) -> Iterable[List[str]]:
-    n = max(1, int(n))
-    return (list(seq[i : i + n]) for i in range(0, len(seq), n))
-
-
-def _backoff_sleep(base: float, attempt: int) -> None:
-    jitter = _random.uniform(0.25, 0.75)
-    delay = max(0.05, base * (2 ** max(0, attempt - 1)) * jitter)
-    _time.sleep(delay)
-
-
 # ----------------- Core download routines -----------------
 
 def _download_multi(
@@ -389,122 +378,6 @@ def _download_multi(
 
     data, _skipped = _download_batch(norm_syms, cfg)
     return data
-
-
-def _normalize_df(df: _pd.DataFrame) -> _pd.DataFrame:
-    """Best-effort normalization of an OHLCV DataFrame.
-
-    This helper is intentionally defensive: any failure to coerce dtypes will
-    leave the original column values in place rather than raising. This avoids
-    crashes like "TypeError: arg must be a list, tuple, 1-d array, or Series"
-    that can occur with some yfinance/pandas combinations.
-    """
-    if df is None or not isinstance(df, _pd.DataFrame):
-        return df
-
-    df = df.copy()
-
-    # Normalize column names to canonical OHLCV labels.
-    # This handles common variants like 'open', 'Open ', 'adj_close', etc.
-    try:
-        col_map: Dict[object, str] = {}
-        for col in list(df.columns):
-            name = str(col).strip()
-            lower = name.lower().replace("_", " ")
-
-            if lower in ("open", "o"):
-                new = "Open"
-            elif lower in ("high", "h"):
-                new = "High"
-            elif lower in ("low", "l"):
-                new = "Low"
-            elif lower in ("close", "c"):
-                new = "Close"
-            elif lower in ("adj close", "adjclose", "adjusted close"):
-                new = "Adj Close"
-            elif lower in ("volume", "vol", "v"):
-                new = "Volume"
-            else:
-                new = name
-
-            col_map[col] = new
-
-        if col_map:
-            df = df.rename(columns=col_map)
-            # Ensure column names are unique (drop duplicate labels, keep first).
-            try:
-                if df.columns.duplicated().any():
-                    df = df.loc[:, ~df.columns.duplicated()]
-            except Exception:
-                # If anything goes wrong during deduplication, keep the original columns.
-                pass
-    except Exception:
-        # If anything goes wrong during renaming, keep the original columns.
-        pass
-
-    # Float-like OHLC columns
-    for c in ["Open", "High", "Low", "Close", "Adj Close"]:
-        if c not in df.columns:
-            continue
-        try:
-            df[c] = _pd.to_numeric(df[c], errors="coerce")
-            try:
-                df[c] = df[c].astype("float32")
-            except TypeError:
-                pass
-        except Exception:
-            continue
-
-    # Volume column
-    if "Volume" in df.columns:
-        try:
-            df["Volume"] = _pd.to_numeric(df["Volume"], errors="coerce")
-            try:
-                df["Volume"] = df["Volume"].astype("int64")
-            except TypeError:
-                pass
-        except Exception:
-            pass
-
-    # Sort index defensively
-    try:
-        if not df.index.is_monotonic_increasing:
-            df = df.sort_index()
-    except Exception:
-        pass
-
-    return df
-
-
-# --- Frame fingerprinting helper ---
-def _frame_fingerprint(df: _pd.DataFrame) -> str | None:
-    """
-    Build a lightweight fingerprint for a price DataFrame.
-
-    This is used as a defensive guardrail against the rare case where
-    multiple *different* tickers end up with the exact same OHLCV data
-    due to upstream API quirks. We intentionally only sample a few rows
-    so this stays inexpensive even for large universes.
-    """
-    if not isinstance(df, _pd.DataFrame) or df.empty:
-        return None
-
-    # Focus on core OHLCV columns only.
-    cols = [c for c in ["Open", "High", "Low", "Close", "Adj Close", "Volume"] if c in df.columns]
-    if not cols:
-        return None
-
-    try:
-        # Take a few rows from the head and tail to build a sample.
-        sample_head = df[cols].head(4)
-        sample_tail = df[cols].tail(4)
-        sample = _pd.concat([sample_head, sample_tail], axis=0)
-        # Convert to CSV bytes and hash them.
-        payload = sample.to_csv(index=False).encode("utf-8")
-        return _hashlib.sha1(payload).hexdigest()
-    except Exception:
-        # If anything goes wrong, just skip fingerprinting.
-        return None
 
 
 def _download_batch(

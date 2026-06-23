@@ -22,8 +22,10 @@ import streamlit as st
 
 try:
     import requests  # type: ignore
-except Exception:  # pragma: no cover - requests import failure handled at runtime
+    from requests import exceptions as requests_exc
+except ImportError:  # pragma: no cover - requests import failure handled at runtime
     requests = None  # type: ignore
+    requests_exc = None  # type: ignore
 
 
 # ------------------------- Internal config helpers -------------------------
@@ -107,7 +109,7 @@ def fetch_alpaca_snapshots(symbols: List[str]) -> Dict[str, dict]:
 
     try:
         resp = requests.get(url, headers=headers, params=params, timeout=10)
-    except Exception:
+    except requests_exc.RequestException:  # type: ignore[union-attr]
         return {}
 
     if resp.status_code != 200:
@@ -115,7 +117,7 @@ def fetch_alpaca_snapshots(symbols: List[str]) -> Dict[str, dict]:
 
     try:
         data = resp.json()
-    except Exception:
+    except ValueError:
         return {}
 
     # Alpaca returns a top-level dict keyed by symbol.
@@ -193,7 +195,7 @@ def get_latest_quotes(
                 if candidate is not None:
                     last = float(candidate)
                     break
-            except Exception:
+            except (TypeError, ValueError):
                 continue
 
         # Previous close from prevDailyBar.c, if available
@@ -201,7 +203,7 @@ def get_latest_quotes(
         try:
             if prev_daily_bar.get("c") is not None:
                 prev_close = float(prev_daily_bar["c"])
-        except Exception:
+        except (TypeError, ValueError):
             prev_close = None
 
         # Volume preference: minuteBar.v, else dailyBar.v
@@ -211,7 +213,7 @@ def get_latest_quotes(
                 if candidate is not None:
                     volume = float(candidate)
                     break
-            except Exception:
+            except (TypeError, ValueError):
                 continue
 
         if last is None:

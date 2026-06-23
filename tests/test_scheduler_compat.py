@@ -86,10 +86,11 @@ class ScannerEntrypointSourceTests(unittest.TestCase):
         self.assertIn("Price fetch chunk skipped", source)
 
     def test_scan_ui_uses_eastern_time_for_market_diagnostics(self) -> None:
-        source = (ROOT / "ui" / "scans.py").read_text(encoding="utf-8")
+        scans_source = (ROOT / "ui" / "scans.py").read_text(encoding="utf-8")
+        diagnostics_source = (ROOT / "ui" / "scan_diagnostics.py").read_text(encoding="utf-8")
 
-        self.assertNotIn("utcnow()", source)
-        self.assertIn('ZoneInfo("America/New_York")', source)
+        self.assertNotIn("utcnow()", scans_source)
+        self.assertIn('ZoneInfo("America/New_York")', diagnostics_source)
 
     def test_project_uses_timezone_aware_utc_datetimes(self) -> None:
         forbidden = "datetime." + "utcnow()"
@@ -167,6 +168,15 @@ class DbImportSafetyTests(unittest.TestCase):
                 import db.engine as engine
 
                 self.assertIsNone(engine.get_neon_conn())
+
+    def test_sqlite_fallback_policy_can_be_disabled_by_env(self) -> None:
+        from db.runs import sqlite_fallback_enabled
+
+        with patch.dict(os.environ, {"AI_SCANNER_SQLITE_FALLBACK": "false"}, clear=False):
+            self.assertFalse(sqlite_fallback_enabled())
+
+        with patch.dict(os.environ, {"AI_SCANNER_SQLITE_FALLBACK": "true"}, clear=False):
+            self.assertTrue(sqlite_fallback_enabled(default=False))
 
 
 if __name__ == "__main__":
