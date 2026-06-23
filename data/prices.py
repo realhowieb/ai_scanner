@@ -34,8 +34,11 @@ from .price_utils import (
 
 try:
     from .provider_diagnostics import summarize_provider_skips
-except Exception:  # pragma: no cover - keep import resilient in legacy paths
+except ImportError:  # pragma: no cover - keep import resilient in legacy paths
     summarize_provider_skips = None  # type: ignore
+
+
+_YFINANCE_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, ValueError)
 
 # --- In-memory price DataFrame cache ---
 # We keep a short TTL so repeated scans within a few seconds can reuse
@@ -48,18 +51,14 @@ def clear_price_cache() -> None:
 
     This is useful when debugging or when you suspect stale OHLCV data.
     """
-    try:
-        _PRICE_CACHE.clear()
-    except Exception:
-        # Extremely defensive: if anything goes wrong, just ignore.
-        pass
+    _PRICE_CACHE.clear()
 
 # yfinance import (used for historical OHLCV). We keep the import error so
 # the UI can surface a clear message when running in restricted environments.
 try:
     import yfinance as _yf  # type: ignore
     _YF_IMPORT_ERROR: Exception | None = None
-except Exception as e:  # pragma: no cover - environment-specific
+except (ImportError, OSError) as e:  # pragma: no cover - environment-specific
     _yf = None  # type: ignore
     _YF_IMPORT_ERROR = e
 
@@ -124,7 +123,7 @@ def debug_yfinance_status(symbol: str = "AAPL") -> dict:
             timeout=10,
         )
         status["test_rows"] = int(len(df))
-    except Exception as e:  # pragma: no cover - depends on network
+    except _YFINANCE_ERRORS as e:  # pragma: no cover - depends on network
         status["test_error"] = str(e)
 
     return status
@@ -137,7 +136,7 @@ def _log(logger: Callable[[str], None] | None, msg: str) -> None:
     if logger:
         try:
             logger(msg)
-        except Exception:
+        except (RuntimeError, TypeError, ValueError):
             pass
 
 
@@ -239,7 +238,7 @@ def _download_batch(
             # Defensive: ensure each symbol gets its own independent DataFrame
             try:
                 df = _pd.DataFrame(df).copy(deep=True)
-            except Exception:
+            except (TypeError, ValueError):
                 pass
 
             # yfinance may still return OHLC values that are effectively
@@ -269,10 +268,10 @@ def _download_batch(
                     # rest of the app expects.
                     if "Close" in df.columns:
                         df["Adj Close"] = df["Close"]
-            except Exception:
+            except (AttributeError, KeyError, TypeError, ValueError):
                 # If anything goes wrong while de-adjusting, keep df as-is.
                 pass
-        except Exception as e:
+        except _YFINANCE_ERRORS as e:
             skipped.append((sym_u, f"error_download:{type(e).__name__}:{e}"))
             continue
 
@@ -288,18 +287,18 @@ def _download_batch(
             try:
                 if norm.columns.duplicated().any():
                     norm = norm.loc[:, ~norm.columns.duplicated()]
-            except Exception:
+            except (AttributeError, TypeError, ValueError):
                 pass
 
             # Tag the frame with its symbol and make sure it is not shared
             try:
                 norm.attrs["symbol"] = sym_u
                 norm = norm.copy(deep=True)
-            except Exception:
+            except (AttributeError, TypeError, ValueError):
                 norm = norm.copy()
 
             data[sym_u] = norm
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
             # If normalization blows up, fall back to the raw df so the caller
             # still has something to work with.
             data[sym_u] = df
@@ -340,7 +339,7 @@ def _rescue_missing_in_minibatches(
         for attempt in range(1, cfg.mini_retries + 2):
             try:
                 got_batch, skipped_batch = _download_batch(still_missing, cfg)
-            except Exception as e:  # very defensive
+            except _YFINANCE_ERRORS as e:
                 got_batch = {}
                 skipped_batch = [
                     (s, f"rescue_error:{type(e).__name__}:{e}") for s in still_missing
@@ -351,13 +350,13 @@ def _rescue_missing_in_minibatches(
                 try:
                     df.attrs["source"] = "rescue_single"
                     df.attrs["symbol"] = str(sym).upper()
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     pass
 
             for _sym, _df in got_batch.items():
                 try:
                     data[_sym] = _df.copy(deep=True)
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     data[_sym] = _df
             skipped.extend(skipped_batch)
 
@@ -467,13 +466,13 @@ def fetch_price_data_parallel(
                         cached_df = cached
                     else:
                         _PRICE_CACHE.pop(key, None)
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     cached_df = None
 
             if cached_df is not None:
                 try:
                     df_cached = cached_df.copy(deep=True)
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     df_cached = _pd.DataFrame(cached_df)
                 price_data[str(sym).upper()] = df_cached
                 cache_hits += 1
@@ -500,7 +499,7 @@ def fetch_price_data_parallel(
                 _log(logger, f"[prices] Downloading chunk of {len(batch)} symbols…")
                 try:
                     data, sk = _download_batch(batch, cfg)
-                except Exception as e:  # very defensive
+                except _YFINANCE_ERRORS as e:
                     data, sk = {}, [(s, f"batch_error:{type(e).__name__}:{e}") for s in batch]
                 price_data.update(data)
                 skipped.extend(sk)
@@ -519,7 +518,7 @@ def fetch_price_data_parallel(
                     batch = future_map[fut]
                     try:
                         data, sk = fut.result()
-                    except Exception as e:
+                    except _YFINANCE_ERRORS as e:
                         data, sk = {}, [(s, f"batch_error:{type(e).__name__}:{e}") for s in batch]
                     done += 1
                     _log(
@@ -599,7 +598,7 @@ def fetch_price_data_parallel(
             key = _cache_key(sym, cfg)
             try:
                 _PRICE_CACHE[key] = (df.copy(deep=True), _time.time())
-            except Exception:
+            except (AttributeError, TypeError, ValueError):
                 _PRICE_CACHE[key] = (df, _time.time())
 
     if summarize_provider_skips is not None:
@@ -610,7 +609,7 @@ def fetch_price_data_parallel(
                 skipped=skipped,
             )
             _log(logger, f"[prices] {summary.message}")
-        except Exception:
+        except (RuntimeError, TypeError, ValueError):
             pass
 
     return deduped_price_data, skipped
@@ -704,7 +703,7 @@ def fetch_price_data_streaming(
         for fut in _fut.as_completed(future_map):
             try:
                 data, skipped = fut.result()
-            except Exception as e:
+            except _YFINANCE_ERRORS as e:
                 data, skipped = {}, [(s, f"stream_error:{type(e).__name__}") for s in future_map[fut]]
             done += 1
             _log(logger, f"[prices] Chunk {done}/{total} ready ({len(data)} ok, {len(skipped)} skipped)")
