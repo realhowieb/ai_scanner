@@ -184,6 +184,7 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def patch_use_container_width", boot_source)
         self.assertIn("def configure_page", boot_source)
         self.assertNotIn("st.cache =", boot_source)
+        self.assertIn("`st.cache` is deprecated", boot_source)
 
     def test_app_session_helpers_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()
@@ -351,6 +352,29 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def delete_session", sessions_source)
         self.assertIn("COOKIE_PASSWORD", sessions_source)
         self.assertNotIn("except Exception", sessions_source)
+
+    def test_headless_scan_helpers_are_shared(self):
+        pre_post_source = (ROOT / "scan" / "pre_post.py").read_text()
+        session_source = (ROOT / "scan" / "session.py").read_text()
+        common_source = (ROOT / "scan" / "headless_common.py").read_text()
+
+        self.assertIn("def run_headless_pipeline", common_source)
+        self.assertIn("def fetch_headless_prices", common_source)
+        self.assertIn("HEADLESS_BOUNDARY_ERRORS = (", common_source)
+        self.assertIn("run_headless_pipeline", pre_post_source)
+        self.assertIn("run_headless_pipeline", session_source)
+        self.assertNotIn("fetch_price_data_parallel", pre_post_source)
+        self.assertNotIn("fetch_price_data_batch", session_source)
+        self.assertNotIn("except Exception", pre_post_source)
+        self.assertNotIn("except Exception", session_source)
+
+    def test_ui_package_uses_lazy_submodule_imports(self):
+        source = (ROOT / "ui" / "__init__.py").read_text()
+
+        self.assertIn("def __getattr__", source)
+        self.assertIn("importlib.import_module", source)
+        self.assertNotIn("pages = _try_import", source)
+        self.assertNotIn("universe = _try_import", source)
 
 
 if __name__ == "__main__":

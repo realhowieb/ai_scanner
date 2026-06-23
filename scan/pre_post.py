@@ -3,21 +3,17 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
 import pandas as pd
 
 from data.fetch import fetch_and_save_sp500, load_sp500_tickers, load_sp600_tickers
 from data.filters import (
-    filter_by_dollar_volume,
     filter_problem_tickers,
-    filter_tickers_by_price,
     filter_us_tickers,
 )
-from data.prices import fetch_price_data_batch, fetch_price_data_parallel
 from db.runs import save_run
-from scan.breakout import run_breakout_scan
+from scan.headless_common import HEADLESS_BOUNDARY_ERRORS, fetch_headless_prices, run_headless_pipeline
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,7 +31,7 @@ def _read_symbols(path: Path) -> list[str]:
 def _load_sp500() -> list[str]:
     try:
         symbols = load_sp500_tickers()
-    except Exception:
+    except HEADLESS_BOUNDARY_ERRORS:
         symbols = []
     return list(symbols or _read_symbols(ROOT / "sp500.txt"))
 
@@ -43,45 +39,26 @@ def _load_sp500() -> list[str]:
 def _load_sp600_or_sp500() -> list[str]:
     try:
         symbols = load_sp600_tickers()
-    except Exception:
+    except HEADLESS_BOUNDARY_ERRORS:
         symbols = []
     return list(symbols or _load_sp500())
 
 try:
-    from scan.gap_unusual import gap_unusual_volume_scanner  # type: ignore
-except Exception:
-    def gap_unusual_volume_scanner(*args, **kwargs):  # type: ignore
-        return None
-
-try:
     from scan.spy import get_spy_history  # type: ignore
-except Exception:
+except ImportError:
     def get_spy_history(*args, **kwargs):  # type: ignore
         return None
 
 def _fetch_prices(universe, *, period: str = "60d", interval: str = "1d", use_parallel: bool = True,
                   parallel_chunk: int = 800, parallel_workers: int = 4):
-    t0 = time.perf_counter()
-    if use_parallel:
-        try:
-            # Preferred signature
-            price_data, skipped = fetch_price_data_parallel(
-                universe, period=period, interval=interval,
-                chunk_size=parallel_chunk, max_workers=parallel_workers, logger=None
-            )
-        except TypeError:
-            # Alternate arg name "chunks"
-            price_data, skipped = fetch_price_data_parallel(
-                universe, period=period, interval=interval,
-                chunks=parallel_chunk, max_workers=parallel_workers
-            )
-    else:
-        try:
-            price_data, skipped = fetch_price_data_batch(universe, period=period, interval=interval, batch_size=50)
-        except TypeError:
-            price_data, skipped = fetch_price_data_batch(universe, period=period, interval=interval)
-    t1 = time.perf_counter()
-    return price_data, skipped, (t1 - t0)
+    return fetch_headless_prices(
+        universe,
+        period=period,
+        interval=interval,
+        use_parallel=use_parallel,
+        parallel_chunk=parallel_chunk,
+        parallel_workers=parallel_workers,
+    )
 
 def run_scan(
     run_type: str,
@@ -108,54 +85,32 @@ def run_scan(
 
     spy_df = get_spy_history("60d") if include_ta else None
 
-    price_data, skipped, elapsed_fetch = _fetch_prices(
-        universe, period="60d", interval="1d", use_parallel=use_parallel,
-        parallel_chunk=parallel_chunk, parallel_workers=parallel_workers
+    breakout_df, meta = run_headless_pipeline(
+        run_type,
+        universe,
+        min_price=min_price,
+        max_price=max_price,
+        min_dollar_vol=min_dollar_vol,
+        use_parallel=use_parallel,
+        parallel_workers=parallel_workers,
+        parallel_chunk=parallel_chunk,
+        apply_gap_filter=apply_gap_filter,
+        top_n=100,
+        spy_df=spy_df,
+        session_label=session_label,
     )
 
-    filtered = filter_tickers_by_price(price_data, min_price, max_price)
-    liquid = filter_by_dollar_volume(price_data, min_dollar_vol)
-    filtered = [t for t in filtered if t in liquid]
-    filtered_data = {t: price_data[t] for t in filtered if t in price_data}
-
-    if apply_gap_filter:
-        try:
-            _ = gap_unusual_volume_scanner(filtered_data)
-        except Exception:
-            pass
-
-    try:
-        breakout_df = run_breakout_scan(
-            price_data=filtered_data,
-            spy_df=spy_df,
-            premarket=session_label == "premarket",
-            afterhours=session_label == "postmarket",
-            unusual_volume=False,
-            min_gap=0.0,
-            min_price=min_price,
-            max_price=max_price,
-            top_n=100,
-            diagnostics=False,
-        )
-    except Exception:
-        breakout_df = pd.DataFrame()
-
-    meta = {
-        "downloaded_count": len({t for t in price_data if t in universe}),
-        "skipped_count": len(skipped),
-        "elapsed_s": float(elapsed_fetch),
-        "params": {
-            "min_price": float(min_price),
-            "max_price": float(max_price),
-            "include_ta": bool(include_ta),
-            "min_dollar_vol": int(min_dollar_vol),
-            "use_parallel": bool(use_parallel),
-            "parallel_workers": int(parallel_workers),
-            "parallel_chunk": int(parallel_chunk if use_parallel else 50),
-            "us_only": bool(us_only),
-            "apply_gap_filter": bool(apply_gap_filter),
-            "session": session_label,
-        },
+    meta["params"] = {
+        "min_price": float(min_price),
+        "max_price": float(max_price),
+        "include_ta": bool(include_ta),
+        "min_dollar_vol": int(min_dollar_vol),
+        "use_parallel": bool(use_parallel),
+        "parallel_workers": int(parallel_workers),
+        "parallel_chunk": int(parallel_chunk if use_parallel else 50),
+        "us_only": bool(us_only),
+        "apply_gap_filter": bool(apply_gap_filter),
+        "session": session_label,
     }
     return breakout_df, meta
 
@@ -178,7 +133,7 @@ def run_and_save(run_type: str, universe: list[str] | None, **kwargs) -> int:
             allow_sqlite_fallback=False,
         )
         return 0
-    except Exception:
+    except HEADLESS_BOUNDARY_ERRORS:
         return -1
 
 def run_premarket_headless() -> int:
@@ -190,7 +145,7 @@ def run_postmarket_headless() -> int:
 def run_sp500_headless(session_label: str = "regular") -> int:
     try:
         uni = _load_sp500() or fetch_and_save_sp500()
-    except Exception:
+    except HEADLESS_BOUNDARY_ERRORS:
         uni = _load_sp500()
     uni = uni or []
     uni = filter_problem_tickers(uni)

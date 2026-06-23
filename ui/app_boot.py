@@ -79,6 +79,9 @@ class FilteredStderr(io.TextIOBase):
             "No fundamentals data found",
             "HTTP Error 404",
             "No earnings dates found, symbol may be delisted",
+            "`st.cache` is deprecated",
+            "Please use one of Streamlit's new",
+            "The behavior of `st.cache` was updated",
         )
         if any(pattern in text for pattern in noisy_patterns):
             return len(text)
