@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import io
 import sys
+import warnings
 from collections.abc import Iterator
 
 import streamlit as st
@@ -107,6 +108,16 @@ def install_stderr_filter() -> None:
         pass
 
 
+def install_warning_filters() -> None:
+    """Suppress known third-party warning spam without hiding app warnings."""
+    warnings.filterwarnings(
+        "ignore",
+        message=r"The 'generic' unit for NumPy timedelta is deprecated.*",
+        category=DeprecationWarning,
+        module=r"yfinance\.utils",
+    )
+
+
 @contextlib.contextmanager
 def quiet_external_calls() -> Iterator[None]:
     """Silence stdout/stderr for noisy third-party libraries."""
@@ -118,6 +129,7 @@ def quiet_external_calls() -> Iterator[None]:
 
 def install_streamlit_compat() -> None:
     """Install Streamlit compatibility shims and warning suppression."""
+    install_warning_filters()
     install_stderr_filter()
     patch_use_container_width()
 
