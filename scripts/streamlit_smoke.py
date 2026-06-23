@@ -31,7 +31,16 @@ def _read_url(url: str, timeout: float) -> str:
         return response.read(4096).decode("utf-8", errors="replace")
 
 
-def _wait_for_streamlit(port: int, timeout: float) -> None:
+def _validate_browser_shell(html: str) -> None:
+    """Validate that the root page contains a usable Streamlit browser shell."""
+    lowered = html.lower()
+    required_markers = ("streamlit", "<script", "static/js")
+    missing = [marker for marker in required_markers if marker not in lowered]
+    if missing:
+        raise RuntimeError(f"Streamlit browser shell missing markers: {', '.join(missing)}")
+
+
+def _wait_for_streamlit(port: int, timeout: float, *, browser_shell_check: bool = True) -> None:
     health_url = f"http://127.0.0.1:{port}/_stcore/health"
     root_url = f"http://127.0.0.1:{port}/"
     deadline = time.monotonic() + timeout
@@ -40,8 +49,10 @@ def _wait_for_streamlit(port: int, timeout: float) -> None:
     while time.monotonic() < deadline:
         try:
             health = _read_url(health_url, timeout=2.0).strip().lower()
-            home = _read_url(root_url, timeout=2.0).lower()
-            if health == "ok" and "streamlit" in home:
+            home = _read_url(root_url, timeout=2.0)
+            if health == "ok" and "streamlit" in home.lower():
+                if browser_shell_check:
+                    _validate_browser_shell(home)
                 return
         except (OSError, URLError) as exc:
             last_error = exc
@@ -51,7 +62,7 @@ def _wait_for_streamlit(port: int, timeout: float) -> None:
     raise TimeoutError(f"Streamlit did not become healthy on port {port}{detail}")
 
 
-def run_smoke(timeout: float = 45.0) -> None:
+def run_smoke(timeout: float = 45.0, *, browser_shell_check: bool = True) -> None:
     port = _free_port()
     env = os.environ.copy()
     env.setdefault("AI_SCANNER_SMOKE_TEST", "1")
@@ -83,7 +94,7 @@ def run_smoke(timeout: float = 45.0) -> None:
     )
 
     try:
-        _wait_for_streamlit(port, timeout=timeout)
+        _wait_for_streamlit(port, timeout=timeout, browser_shell_check=browser_shell_check)
     except Exception:
         output = ""
         if proc.stdout is not None:
@@ -104,8 +115,13 @@ def run_smoke(timeout: float = 45.0) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--timeout", type=float, default=45.0)
+    parser.add_argument(
+        "--no-browser-shell-check",
+        action="store_true",
+        help="only check Streamlit health/root response, not browser shell markers",
+    )
     args = parser.parse_args()
-    run_smoke(timeout=args.timeout)
+    run_smoke(timeout=args.timeout, browser_shell_check=not args.no_browser_shell_check)
 
 
 if __name__ == "__main__":

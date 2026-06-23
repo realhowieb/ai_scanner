@@ -9,14 +9,19 @@ class CleanupSourceChecks(unittest.TestCase):
     def test_price_fetcher_logs_provider_summary(self):
         source = (ROOT / "data" / "prices.py").read_text()
         helper_source = (ROOT / "data" / "price_utils.py").read_text()
+        alpaca_source = (ROOT / "data" / "price_alpaca.py").read_text()
 
         self.assertIn("summarize_provider_skips", source)
         self.assertIn("[prices] {summary.message}", source)
         self.assertIn("from .price_utils import", source)
+        self.assertIn("from .price_alpaca import", source)
         self.assertNotIn("def _normalize_df", source)
         self.assertNotIn("def _frame_fingerprint", source)
+        self.assertNotIn("def _download_multi_alpaca", source)
         self.assertIn("def normalize_price_frame", helper_source)
         self.assertIn("def frame_fingerprint", helper_source)
+        self.assertIn("def download_multi_alpaca", alpaca_source)
+        self.assertIn("except (requests_exc.RequestException, ValueError)", alpaca_source)
 
     def test_scan_engine_surfaces_provider_diagnostics(self):
         source = (ROOT / "scan" / "engine.py").read_text()
@@ -27,14 +32,18 @@ class CleanupSourceChecks(unittest.TestCase):
 
     def test_ci_has_dependency_import_smoke_job(self):
         source = (ROOT / ".github" / "workflows" / "smoke.yml").read_text()
+        pyproject_source = (ROOT / "pyproject.toml").read_text()
 
         self.assertIn("core-dependency-import-smoke", source)
         self.assertIn("full-dependency-import-smoke", source)
+        self.assertIn("ruff check .", source)
+        self.assertIn("[tool.ruff.lint]", pyproject_source)
         self.assertIn("python -m pip install --prefer-binary -r requirements-core.txt", source)
         self.assertIn("Run dependency-backed unit tests", source)
         self.assertIn("python -m pip install --prefer-binary -r requirements.txt", source)
         self.assertIn("import scan.engine", source)
         self.assertIn("Live Streamlit startup smoke", source)
+        self.assertIn("Deployment readiness doctor", source)
         self.assertIn("python scripts/streamlit_smoke.py --timeout 60", source)
 
     def test_scheduled_scan_workflow_uses_core_deps_and_runtime_secret_names(self):
@@ -46,6 +55,8 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("ALPACA_API_SECRET_KEY", source)
         self.assertIn("NEON_DATABASE_URL", source)
         self.assertIn('AI_SCANNER_SQLITE_FALLBACK: "false"', source)
+        self.assertIn("Upload scheduled scan summary", source)
+        self.assertIn("scheduled_scan_summary.json", source)
         self.assertNotIn("ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}", source)
         self.assertNotIn("ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}", source)
 
@@ -54,8 +65,18 @@ class CleanupSourceChecks(unittest.TestCase):
 
         self.assertIn("streamlit", source)
         self.assertIn("_stcore/health", source)
+        self.assertIn("def _validate_browser_shell", source)
+        self.assertIn("static/js", source)
         self.assertIn("subprocess.Popen", source)
         self.assertIn("STREAMLIT_SERVER_HEADLESS", source)
+
+    def test_deployment_doctor_exists(self):
+        source = (ROOT / "scripts" / "deployment_doctor.py").read_text()
+
+        self.assertIn("def run_checks", source)
+        self.assertIn("NEON_DATABASE_URL", source)
+        self.assertIn("ALPACA_API_KEY_ID", source)
+        self.assertIn("scheduler.cron_runner", source)
 
     def test_single_ticker_tools_are_extracted_from_scan_ui(self):
         scans_source = (ROOT / "ui" / "scans.py").read_text()

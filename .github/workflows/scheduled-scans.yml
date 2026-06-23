@@ -43,4 +43,13 @@ jobs:
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          CRON_SUMMARY_PATH: artifacts/scheduled_scan_summary.json
         run: python -m scheduler.cron_runner
+
+      - name: Upload scheduled scan summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduled-scan-summary
+          path: artifacts/scheduled_scan_summary.json
+          if-no-files-found: warn

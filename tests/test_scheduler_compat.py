@@ -3,12 +3,14 @@ from __future__ import annotations
 import unittest
 import importlib
 import importlib.util
+import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from scheduler.cron_runner import _load_universe, _skip_reason
+from scheduler.cron_runner import ScanRunSummary, _load_universe, _skip_reason, _write_summary
 from scheduler import jobs
 
 
@@ -46,6 +48,19 @@ class SchedulerCompatTests(unittest.TestCase):
     def test_manual_job_failure_returns_negative_one(self) -> None:
         with patch.object(jobs, "run_and_save", return_value=False):
             self.assertEqual(jobs.run_sp500_now(), -1)
+
+        with patch.object(jobs, "run_and_save", return_value=ScanRunSummary("SP500", ok=False)):
+            self.assertEqual(jobs.run_sp500_now(), -1)
+
+    def test_scheduled_scan_summary_writes_json_artifact(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "summary.json"
+            _write_summary({"ok": True, "runs": [{"universe": "SP500", "row_count": 2}]}, target)
+
+            payload = json.loads(target.read_text(encoding="utf-8"))
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["runs"][0]["universe"], "SP500")
 
     def test_market_time_gate_uses_new_york_dst(self) -> None:
         # June is EDT (UTC-4). A fixed UTC-5 conversion would incorrectly

@@ -6,12 +6,23 @@ import datetime as dt
 import json
 import os
 import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SUMMARY_PATH = ROOT / "artifacts" / "scheduled_scan_summary.json"
+
+
+@dataclass
+class ScanRunSummary:
+    universe: str
+    ok: bool
+    row_count: int = 0
+    duration_sec: float = 0.0
+    error: str | None = None
 
 
 def _read_symbols(path: Path) -> list[str]:
@@ -57,6 +68,13 @@ def _results_to_json(results) -> str:
     return json.dumps(results, default=str)
 
 
+def _write_summary(summary: dict, path: Path | None = None) -> None:
+    """Write a scheduled scan summary artifact for CI/deployment review."""
+    target = path or Path(os.getenv("CRON_SUMMARY_PATH", str(SUMMARY_PATH)))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+
+
 def _skip_reason(now_utc: dt.datetime | None = None) -> str | None:
     """Return a reason to skip scheduled scans, or None when scans may run."""
     if now_utc is None:
@@ -84,7 +102,7 @@ def run_and_save(
     max_price: float | None = None,
     top_n: int | None = None,
     profile: str | None = None,
-) -> bool:
+) -> ScanRunSummary:
     """Run one universe scan and save results to the configured database."""
     from db.runs import save_run
     from scan.engine import run_breakout_scan
@@ -126,28 +144,57 @@ def run_and_save(
             allow_sqlite_fallback=False,
         )
         print(f"Saved {row_count} rows for {universe}.")
-        return True
+        return ScanRunSummary(
+            universe=universe,
+            ok=True,
+            row_count=row_count,
+            duration_sec=duration,
+        )
 
     except Exception as e:
         print(f"ERROR running {universe} scan: {e}")
-        return False
+        return ScanRunSummary(universe=universe, ok=False, error=f"{type(e).__name__}: {e}")
 
 
 def main():
     print("=== cron_runner started ===")
+    started_at = dt.datetime.now(dt.timezone.utc)
 
     skip_reason = _skip_reason()
     if skip_reason:
         print(skip_reason)
+        _write_summary(
+            {
+                "started_at": started_at.isoformat(),
+                "completed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "ok": True,
+                "skipped": True,
+                "skip_reason": skip_reason,
+                "runs": [],
+            }
+        )
         return
 
     # --- Run the scans ---
-    results = [
+    runs = [
         run_and_save("SP500"),
         run_and_save("NASDAQ"),
         run_and_save("COMBO"),
     ]
-    if not all(results):
+
+    ok = all(run.ok for run in runs)
+    _write_summary(
+        {
+            "started_at": started_at.isoformat(),
+            "completed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "ok": ok,
+            "skipped": False,
+            "runs": [asdict(run) for run in runs],
+            "total_rows": sum(run.row_count for run in runs),
+        }
+    )
+
+    if not ok:
         raise SystemExit(1)
 
     print("=== cron_runner complete ===")

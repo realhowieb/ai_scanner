@@ -16,11 +16,14 @@ from typing import Callable, Dict, List, Sequence, Tuple, Iterator
 import concurrent.futures as _fut
 import datetime as _dt
 import time as _time
-import os as _os
 
 import numpy as _np
 import pandas as _pd
 
+from .price_alpaca import (
+    download_multi_alpaca as _download_multi_alpaca,
+    get_alpaca_config as _get_alpaca_config,
+)
 from .price_utils import (
     backoff_sleep as _backoff_sleep,
     cache_key as _cache_key,
@@ -50,11 +53,6 @@ def clear_price_cache() -> None:
     except Exception:
         # Extremely defensive: if anything goes wrong, just ignore.
         pass
-
-try:
-    import requests as _req
-except Exception:  # pragma: no cover
-    _req = None
 
 # yfinance import (used for historical OHLCV). We keep the import error so
 # the UI can surface a clear message when running in restricted environments.
@@ -130,184 +128,6 @@ def debug_yfinance_status(symbol: str = "AAPL") -> dict:
         status["test_error"] = str(e)
 
     return status
-
-
-# ----------------- Alpaca helpers -----------------
-
-
-def _get_alpaca_config() -> Dict[str, str] | None:
-    """Return Alpaca API configuration if available, otherwise None.
-
-    We try, in order:
-      1) streamlit.secrets (if Streamlit is installed)
-      2) environment variables
-    """
-    api_key: str | None = None
-    api_secret: str | None = None
-    data_url: str | None = None
-
-    # Try Streamlit secrets first
-    try:  # pragma: no cover - optional dependency
-        import streamlit as _st  # type: ignore
-
-        secrets = getattr(_st, "secrets", {})
-        api_key = secrets.get("ALPACA_API_KEY_ID") or api_key
-        api_secret = secrets.get("ALPACA_API_SECRET_KEY") or api_secret
-        data_url = secrets.get("ALPACA_DATA_URL") or data_url
-    except Exception:
-        pass
-
-    # Fallback to environment
-    api_key = api_key or _os.getenv("ALPACA_API_KEY_ID")
-    api_secret = api_secret or _os.getenv("ALPACA_API_SECRET_KEY")
-    data_url = data_url or _os.getenv("ALPACA_DATA_URL") or "https://data.alpaca.markets"
-
-    if not api_key or not api_secret or _req is None:
-        return None
-
-    return {
-        "api_key": api_key,
-        "api_secret": api_secret,
-        "data_url": data_url.rstrip("/"),
-    }
-
-
-def _alpaca_timeframe_from_interval(interval: str) -> str | None:
-    """Map yfinance-style intervals to Alpaca timeframes (subset only).
-
-    We currently support daily-only (1d) in this prices module.
-    """
-    mapping = {
-        "1d": "1Day",
-        "1D": "1Day",
-    }
-    return mapping.get(interval)
-
-
-def _alpaca_limit_from_period(period: str) -> int:
-    """Convert a yfinance-style period string into an approximate bar limit."""
-    default = 60
-    try:
-        p = period.lower()
-        if p.endswith("d"):
-            return max(1, int(p[:-1]))
-        if p.endswith("mo"):
-            months = int(p[:-2])
-            return max(1, months * 21)  # ~21 trading days per month
-        if p.endswith("y"):
-            years = int(p[:-1])
-            return max(1, years * 252)  # ~252 trading days per year
-    except Exception:
-        pass
-    return default
-
-
-def _download_multi_alpaca(
-    tickers: Sequence[str],
-    period: str,
-    interval: str,
-    prepost: bool,  # kept for signature compatibility; daily bars ignore it
-    timeout_s: float,
-) -> Dict[str, _pd.DataFrame]:
-    """Download bars for multiple symbols from Alpaca Market Data.
-
-    Returns a dict[symbol -> DataFrame] with OHLCV columns shaped like
-    yfinance output (Open, High, Low, Close, Adj Close, Volume).
-    """
-    cfg = _get_alpaca_config()
-    if cfg is None:
-        raise RuntimeError("Alpaca configuration is not available.")
-
-    timeframe = _alpaca_timeframe_from_interval(interval)
-    if timeframe is None:
-        raise RuntimeError(f"Unsupported interval for Alpaca bars: {interval!r}")
-
-    limit = _alpaca_limit_from_period(period)
-    symbols = [s for s in dict.fromkeys(tickers) if isinstance(s, str) and s.strip()]
-    if not symbols:
-        return {}
-
-    url = f"{cfg['data_url']}/v2/stocks/bars"
-    headers = {
-        "APCA-API-KEY-ID": cfg["api_key"],
-        "APCA-API-SECRET-KEY": cfg["api_secret"],
-        "Accept": "application/json",
-    }
-
-    out: Dict[str, _pd.DataFrame] = {}
-
-    # Alpaca has practical limits on how many symbols can be requested in a
-    # single /v2/stocks/bars call. To stay well under those limits (and to keep
-    # responses fast for large universes like NASDAQ/Combo), we further chunk
-    # the provided tickers into modest sub-batches.
-    max_symbols_per_call = 150
-    for chunk in _chunks(symbols, max_symbols_per_call):
-        params = {
-            "symbols": ",".join(sorted(chunk)),
-            "timeframe": timeframe,
-            "limit": limit,
-            "adjustment": "raw",
-            "feed": "iex",
-        }
-
-        try:
-            resp = _req.get(url, headers=headers, params=params, timeout=timeout_s)
-        except Exception:
-            # Network / transport error for this chunk: skip it and continue with others.
-            continue
-
-        if resp.status_code != 200:
-            # Do not raise for a single-chunk failure; just skip this chunk so that
-            # partial results can still be used. The caller will fall back to
-            # yfinance only if *all* chunks fail to return any data.
-            continue
-
-        try:
-            payload = resp.json()
-        except Exception:
-            # Malformed JSON for this chunk; skip it.
-            continue
-
-        # Alpaca responds with a dict under 'bars': {symbol: [bars...]}, but we
-        # defensively handle a top-level mapping as well.
-        bars_by_symbol = payload.get("bars") if isinstance(payload, dict) else {}
-        if not bars_by_symbol and isinstance(payload, dict):
-            # Some legacy formats may use a different key; treat payload itself
-            bars_by_symbol = {
-                k: v for k, v in payload.items() if isinstance(v, list)
-            }
-
-        for sym, bars in (bars_by_symbol or {}).items():
-            if not bars:
-                continue
-            df = _pd.DataFrame(bars)
-            if df.empty:
-                continue
-
-            # Expect columns like t/o/h/l/c/v
-            if "t" in df.columns:
-                df["t"] = _pd.to_datetime(df["t"], errors="coerce")
-                df = df.set_index("t")
-
-            rename: Dict[str, str] = {}
-            for old, new in (("o", "Open"), ("h", "High"), ("l", "Low"), ("c", "Close"), ("v", "Volume")):
-                if old in df.columns:
-                    rename[old] = new
-            if rename:
-                df = df.rename(columns=rename)
-
-            if "Adj Close" not in df.columns and "Close" in df.columns:
-                df["Adj Close"] = df["Close"]
-
-            df = _normalize_df(df)
-            try:
-                df.attrs["source"] = "alpaca_multi"
-                df.attrs["symbol"] = str(sym).upper()
-            except Exception:
-                pass
-            out[str(sym).upper()] = df
-
-    return out
 
 
 # ----------------- Helpers -----------------

@@ -45,9 +45,10 @@ class PriceUtilsTests(unittest.TestCase):
         self.assertNotEqual(frame_fingerprint(first), frame_fingerprint(second))
 
     def test_alpaca_config_reads_runtime_env_names(self):
+        import data.price_alpaca as price_alpaca
         import data.prices as prices
 
-        with patch.object(prices, "_req", object()):
+        with patch.object(price_alpaca, "requests", object()):
             with patch.dict(
                 "os.environ",
                 {

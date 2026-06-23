@@ -60,7 +60,8 @@ def _run_now(
         top_n=_coerce_positive_int(top_n),
         profile=profile,
     )
-    return 0 if ok else -1
+    success = bool(getattr(ok, "ok", ok))
+    return 0 if success else -1
 
 
 def run_sp500_now(**kwargs: Any) -> int:
