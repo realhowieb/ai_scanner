@@ -273,6 +273,13 @@ def _render_scan_history_tab(
                 flags.get("can_ai_notes", False),
                 render_chart_for_ticker,
                 generate_ai_note,
+                key_prefix=f"history_results_{_safe_widget_key(picked)}",
             )
         except RESULTS_TAB_ERRORS:
             st.dataframe(run_df_norm, width="stretch")
+
+
+def _safe_widget_key(value: object) -> str:
+    text = str(value or "").strip()
+    safe = "".join(ch if ch.isalnum() else "_" for ch in text)
+    return safe[:80] or "selected"

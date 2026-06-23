@@ -32,6 +32,8 @@ def render_results(
     can_ai_notes: bool,
     render_chart_for_ticker: Callable[[str], None],
     generate_ai_note: Callable[[pd.Series], str],
+    *,
+    key_prefix: str = "results",
 ) -> None:
     """Render the results table, chart picker, and AI Notes section.
 
@@ -64,12 +66,12 @@ def render_results(
     # 🔒 Basic hard-lock: clear any selection state so Basic cannot "inherit" Pro clicks
     if is_basic:
         for k in (
-            "results_selected_ticker",
-            "results_chart_picker",
-            "results_chart_picker_fast",
-            "results_table_fast",
-            "results_table_styled",
-            "results_enable_styling",
+            f"{key_prefix}_selected_ticker",
+            f"{key_prefix}_chart_picker",
+            f"{key_prefix}_chart_picker_fast",
+            f"{key_prefix}_table_fast",
+            f"{key_prefix}_table_styled",
+            f"{key_prefix}_enable_styling",
         ):
             st.session_state.pop(k, None)
 
@@ -89,13 +91,13 @@ def render_results(
             excl_3 = st.checkbox(
                 "Exclude earnings in next 3 days",
                 value=False,
-                key="earn_excl_3_results",
+                key=f"{key_prefix}_earn_excl_3",
                 help="Hides stocks with earnings 0–3 days away (keeps unknown earnings).",
             )
             within_7 = st.checkbox(
                 "Only earnings within 7 days",
                 value=False,
-                key="earn_within_7_results",
+                key=f"{key_prefix}_earn_within_7",
                 help="Shows only stocks with earnings 0–7 days away.",
             )
 
@@ -138,7 +140,7 @@ def render_results(
             "🎨 Enable table styling (slower)",
             value=default_enable_style and (not auto_fast),
             help="Styling can be slow even on medium tables. Leave off for the fastest results.",
-            key="results_enable_styling",
+            key=f"{key_prefix}_enable_styling",
         )
 
     # If user enables styling but the table is beyond the safe limit, force fast mode.
@@ -168,9 +170,14 @@ def render_results(
                 height=420,
                 selection_mode="single-row",
                 on_select="rerun",
-                key="results_table_fast",
+                key=f"{key_prefix}_table_fast",
             )
-            sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker_fast")
+            sync_selected_ticker_from_table(
+                _tbl,
+                df,
+                picker_key=f"{key_prefix}_chart_picker_fast",
+                selected_key=f"{key_prefix}_selected_ticker",
+            )
         else:
             # Basic: keep non-interactive rendering. Use plain HTML (much faster than styled.to_html).
             render_static_results_table(df, fallback_df=df)
@@ -184,6 +191,7 @@ def render_results(
                 file_name="breakout_results.csv",
                 mime="text/csv",
                 width="content",
+                key=f"{key_prefix}_download_csv_fast",
             )
         else:
             st.info("🔒 Pro feature — export scan results to CSV")
@@ -249,8 +257,9 @@ def render_results(
                 if not tickers:
                     st.caption("No tickers available to chart.")
                 else:
-                    picker_key = "results_chart_picker_fast"
-                    auto_pick = (st.session_state.get("results_selected_ticker") or st.session_state.get(picker_key) or tickers[0])
+                    picker_key = f"{key_prefix}_chart_picker_fast"
+                    selected_key = f"{key_prefix}_selected_ticker"
+                    auto_pick = (st.session_state.get(selected_key) or st.session_state.get(picker_key) or tickers[0])
                     auto_pick = str(auto_pick).strip().upper()
                     if auto_pick not in tickers:
                         auto_pick = tickers[0]
@@ -267,10 +276,10 @@ def render_results(
 
                     render_chart_for_ticker(st.session_state[picker_key])
 
-        pick = st.session_state.get("results_chart_picker_fast")
+        pick = st.session_state.get(f"{key_prefix}_chart_picker_fast")
 
         # Detail panel (row-click driven)
-        selected_ticker = st.session_state.get("results_selected_ticker") or pick
+        selected_ticker = st.session_state.get(f"{key_prefix}_selected_ticker") or pick
         if selected_ticker:
             with st.expander(f"📌 {selected_ticker} details", expanded=False):
                 # Show a compact stats + earnings card (no extra network calls)
@@ -298,7 +307,7 @@ def render_results(
                             st.caption(f"📅 Earnings in {int(earn_days)} days")
 
                     # ⭐ Add to watchlist action
-                    render_watchlist_action(str(selected_ticker))
+                    render_watchlist_action(str(selected_ticker), key_prefix=key_prefix)
 
                     # Optional: show a tiny raw row preview for debugging (collapsed)
                     with st.expander("Show row fields", expanded=False):
@@ -319,6 +328,7 @@ def render_results(
                     "Edit or copy these notes (Premium only):",
                     value=auto_note,
                     height=220,
+                    key=f"{key_prefix}_ai_notes_fast",
                 )
             except (RuntimeError, TypeError, ValueError):
                 st.caption("AI notes are unavailable for the selected row.")
@@ -481,9 +491,14 @@ def render_results(
                 height=420,
                 selection_mode="single-row",
                 on_select="rerun",
-                key="results_table_styled",
+                key=f"{key_prefix}_table_styled",
             )
-            sync_selected_ticker_from_table(_tbl, df, picker_key="results_chart_picker")
+            sync_selected_ticker_from_table(
+                _tbl,
+                df,
+                picker_key=f"{key_prefix}_chart_picker",
+                selected_key=f"{key_prefix}_selected_ticker",
+            )
         except (RuntimeError, TypeError, ValueError):
             # Fallback: keep styled rendering without selection
             st.dataframe(styled, width="stretch", height=420)
@@ -501,6 +516,7 @@ def render_results(
             file_name="breakout_results.csv",
             mime="text/csv",
             width="content",
+            key=f"{key_prefix}_download_csv_styled",
         )
     else:
         st.info("🔒 Pro feature — export scan results to CSV")
@@ -565,8 +581,9 @@ def render_results(
                 if not tickers:
                     st.caption("No tickers available to chart.")
                 else:
-                    picker_key = "results_chart_picker"
-                    auto_pick = (st.session_state.get("results_selected_ticker") or st.session_state.get(picker_key) or tickers[0])
+                    picker_key = f"{key_prefix}_chart_picker"
+                    selected_key = f"{key_prefix}_selected_ticker"
+                    auto_pick = (st.session_state.get(selected_key) or st.session_state.get(picker_key) or tickers[0])
                     auto_pick = str(auto_pick).strip().upper()
                     if auto_pick not in tickers:
                         auto_pick = tickers[0]
@@ -582,10 +599,10 @@ def render_results(
 
                     render_chart_for_ticker(st.session_state[picker_key])
 
-        pick = st.session_state.get("results_chart_picker")
+        pick = st.session_state.get(f"{key_prefix}_chart_picker")
 
         # Detail panel (row-click driven)
-        selected_ticker = st.session_state.get("results_selected_ticker") or pick
+        selected_ticker = st.session_state.get(f"{key_prefix}_selected_ticker") or pick
         if selected_ticker:
             with st.expander(f"📌 {selected_ticker} details", expanded=False):
                 # Show a compact stats + earnings card (no extra network calls)
@@ -612,7 +629,7 @@ def render_results(
                             st.caption(f"📅 Earnings in {int(earn_days)} days")
 
                     # ⭐ Add to watchlist action
-                    render_watchlist_action(str(selected_ticker))
+                    render_watchlist_action(str(selected_ticker), key_prefix=key_prefix)
 
                     with st.expander("Show row fields", expanded=False):
                         st.json(row_to_jsonable_dict(r0))
@@ -625,7 +642,7 @@ def render_results(
         st.caption("⭐ Premium feature")
         try:
             # Use the same ticker the user selected for the chart
-            pick = st.session_state.get("results_chart_picker")
+            pick = st.session_state.get(f"{key_prefix}_chart_picker")
             row = find_row_for_ticker(df, pick)
             if row is None:
                 raise ValueError("No matching row for selected ticker")
@@ -635,6 +652,7 @@ def render_results(
                 "Edit or copy these notes (Premium only):",
                 value=auto_note,
                 height=220,
+                key=f"{key_prefix}_ai_notes_styled",
             )
         except (RuntimeError, TypeError, ValueError):
             st.caption("AI notes are unavailable for the selected row.")

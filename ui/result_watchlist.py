@@ -37,7 +37,7 @@ def _resolve_watchlist_fns() -> tuple[WatchlistGetter | None, WatchlistSetter | 
     return None, None
 
 
-def render_watchlist_action(ticker: str) -> None:
+def render_watchlist_action(ticker: str, *, key_prefix: str = "results") -> None:
     """Render and handle adding a result ticker to the active watchlist."""
     normalized_ticker = (ticker or "").strip().upper()
     if not normalized_ticker:
@@ -57,7 +57,7 @@ def render_watchlist_action(ticker: str) -> None:
     with action_col:
         clicked = st.button(
             "⭐ Add to Watchlist" if not already else "✅ In Watchlist",
-            key=f"btn_details_add_watchlist_{normalized_ticker}",
+            key=f"{key_prefix}_btn_details_add_watchlist_{normalized_ticker}",
             disabled=already,
             width="stretch",
         )

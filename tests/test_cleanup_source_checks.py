@@ -283,6 +283,7 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertLess(len(tabs_source.splitlines()), 350)
         self.assertIn("def render_results_tabs", tabs_source)
         self.assertIn("def _render_scan_history_tab", tabs_source)
+        self.assertIn("key_prefix=f\"history_results_{_safe_widget_key(picked)}\"", tabs_source)
         self.assertIn("from ui.admin_results_tab import render_admin_tab", tabs_source)
         self.assertNotIn("def _render_admin_tab", tabs_source)
         self.assertNotIn("except Exception", tabs_source)

@@ -56,7 +56,13 @@ def ticker_column(df: pd.DataFrame) -> str | None:
     return None
 
 
-def sync_selected_ticker_from_table(selection_obj: object, df: pd.DataFrame, picker_key: str) -> None:
+def sync_selected_ticker_from_table(
+    selection_obj: object,
+    df: pd.DataFrame,
+    picker_key: str,
+    *,
+    selected_key: str = "results_selected_ticker",
+) -> None:
     """Sync Streamlit dataframe row selection into ticker picker state."""
     rows = getattr(getattr(selection_obj, "selection", None), "rows", None)
     if not rows:
@@ -78,7 +84,7 @@ def sync_selected_ticker_from_table(selection_obj: object, df: pd.DataFrame, pic
     if not ticker:
         return
 
-    st.session_state["results_selected_ticker"] = ticker
+    st.session_state[selected_key] = ticker
     st.session_state[picker_key] = ticker
 
 
