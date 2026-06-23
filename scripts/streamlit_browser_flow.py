@@ -21,6 +21,14 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 LOGIN_MARKERS = ("AI Scanner", "Login", "Username", "Password", "Streamlit")
+ERROR_MARKERS = (
+    "Traceback",
+    "ModuleNotFoundError",
+    "ImportError",
+    "StreamlitSecretNotFoundError",
+    "App failed during startup",
+)
+BROWSER_FLOW_ERRORS = (RuntimeError, TimeoutError, OSError)
 
 
 def _free_port() -> int:
@@ -78,7 +86,7 @@ def _start_streamlit(port: int) -> subprocess.Popen[str]:
 
 
 def _wait_for_app_markers(page, timeout_ms: int) -> str:
-    """Wait for Streamlit to render app/login text and return page text."""
+    """Wait for Streamlit to render app/login text and return validated page text."""
     page.wait_for_function(
         """
         (markers) => {
@@ -110,6 +118,7 @@ def _stop_streamlit(proc: subprocess.Popen[str]) -> str:
 
 def run_browser_flow(timeout: float = 60.0, *, headless: bool = True) -> None:
     try:
+        from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise RuntimeError(
@@ -118,6 +127,7 @@ def run_browser_flow(timeout: float = 60.0, *, headless: bool = True) -> None:
             "`python -m playwright install chromium`."
         ) from exc
 
+    flow_errors = (*BROWSER_FLOW_ERRORS, PlaywrightError)
     port = _free_port()
     proc = _start_streamlit(port)
 
@@ -129,11 +139,15 @@ def run_browser_flow(timeout: float = 60.0, *, headless: bool = True) -> None:
             page = browser.new_page()
             page.goto(url, wait_until="domcontentloaded", timeout=int(timeout * 1000))
             body_text = _wait_for_app_markers(page, timeout_ms=int(timeout * 1000))
+            lower_text = body_text.lower()
+            for marker in ERROR_MARKERS:
+                if marker.lower() in lower_text:
+                    raise RuntimeError(f"Browser flow found app error marker: {marker}")
             browser.close()
 
-        if not any(marker.lower() in body_text.lower() for marker in LOGIN_MARKERS):
+        if not any(marker.lower() in lower_text for marker in LOGIN_MARKERS):
             raise RuntimeError("Browser flow did not find expected login/app markers.")
-    except Exception:
+    except flow_errors:
         output = _stop_streamlit(proc)
         if output:
             print(output[-4000:], file=sys.stderr)

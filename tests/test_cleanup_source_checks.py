@@ -99,6 +99,9 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("_stcore/health", source)
         self.assertIn("LOGIN_MARKERS", source)
         self.assertIn("AI_SCANNER_SMOKE_TEST", source)
+        self.assertIn("ERROR_MARKERS", source)
+        self.assertIn("Browser flow found app error marker", source)
+        self.assertIn("StreamlitSecretNotFoundError", source)
         self.assertIn("page.goto", source)
         self.assertIn("def _wait_for_app_markers", source)
         self.assertIn("page.wait_for_function", source)
@@ -202,7 +205,7 @@ class CleanupSourceChecks(unittest.TestCase):
         app_source = (ROOT / "app.py").read_text()
         runtime_source = (ROOT / "ui" / "app_runtime.py").read_text()
 
-        self.assertLess(len(app_source.splitlines()), 800)
+        self.assertLess(len(app_source.splitlines()), 680)
         self.assertIn("from ui.app_runtime import", app_source)
         self.assertNotIn("def get_market_session", app_source)
         self.assertNotIn("def _normalize_results_to_df", app_source)
@@ -212,6 +215,39 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def normalize_results_to_df", runtime_source)
         self.assertIn("except (JSONDecodeError, TypeError)", runtime_source)
         self.assertIn("def render_sidebar_upgrade_card", runtime_source)
+
+    def test_app_profile_helpers_are_extracted_from_app(self):
+        app_source = (ROOT / "app.py").read_text()
+        profile_source = (ROOT / "ui" / "app_user_profile.py").read_text()
+
+        self.assertIn("from ui.app_user_profile import", app_source)
+        self.assertIn("render_account_sidebar(", app_source)
+        self.assertIn("load_saved_user_settings(", app_source)
+        self.assertIn("apply_admin_scan_caps(", app_source)
+        self.assertIn("load_latest_results_snapshot(", app_source)
+        self.assertNotIn("def _account_label", app_source)
+        self.assertNotIn("ADMIN_SCAN_CAP = 100_000", app_source)
+        self.assertIn("def render_account_sidebar", profile_source)
+        self.assertIn("def load_saved_user_settings", profile_source)
+        self.assertIn("def apply_admin_scan_caps", profile_source)
+        self.assertIn("APP_PROFILE_ERRORS = (", profile_source)
+
+    def test_universe_db_helpers_are_extracted_from_universe_ui(self):
+        universe_source = (ROOT / "ui" / "universe.py").read_text()
+        universe_db_source = (ROOT / "ui" / "universe_db.py").read_text()
+
+        self.assertLess(len(universe_source.splitlines()), 500)
+        self.assertIn("from ui.universe_db import", universe_source)
+        self.assertIn("db_get_universe(", universe_source)
+        self.assertIn("db_upsert_universe(", universe_source)
+        self.assertNotIn("def _get_db_conn", universe_source)
+        self.assertNotIn("def _db_get_universe", universe_source)
+        self.assertNotIn("def _db_upsert_universe", universe_source)
+        self.assertNotIn("except Exception", universe_source)
+        self.assertIn("def db_get_universe", universe_db_source)
+        self.assertIn("def db_upsert_universe", universe_db_source)
+        self.assertIn("def try_import", universe_db_source)
+        self.assertIn("UNIVERSE_DB_ERRORS = (", universe_db_source)
 
     def test_results_tabs_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()
