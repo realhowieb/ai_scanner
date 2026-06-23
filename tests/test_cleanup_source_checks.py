@@ -88,6 +88,19 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("subprocess.Popen", source)
         self.assertIn("STREAMLIT_SERVER_HEADLESS", source)
 
+    def test_streamlit_ui_uses_width_instead_of_use_container_width(self):
+        allowed = {
+            ROOT / "ui" / "app_boot.py",
+        }
+        offenders = []
+        for path in (ROOT / "ui").rglob("*.py"):
+            if path in allowed:
+                continue
+            if "use_container_width" in path.read_text():
+                offenders.append(str(path.relative_to(ROOT)))
+
+        self.assertEqual(offenders, [])
+
     def test_streamlit_browser_flow_script_exercises_login_shell(self):
         source = (ROOT / "scripts" / "streamlit_browser_flow.py").read_text()
         browser_requirements = (ROOT / "requirements-browser.txt").read_text()

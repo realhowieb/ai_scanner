@@ -183,7 +183,7 @@ def render_results(
                 data=csv,
                 file_name="breakout_results.csv",
                 mime="text/csv",
-                use_container_width=False,
+                width="content",
             )
         else:
             st.info("🔒 Pro feature — export scan results to CSV")
@@ -500,7 +500,7 @@ def render_results(
             data=csv,
             file_name="breakout_results.csv",
             mime="text/csv",
-            use_container_width=False,
+            width="content",
         )
     else:
         st.info("🔒 Pro feature — export scan results to CSV")
