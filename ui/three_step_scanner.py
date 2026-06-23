@@ -146,9 +146,9 @@ def _step_status(active_step: int, step_num: int, done_map: dict[int, bool]) -> 
 
 
 def _step_label(active_step: int, step_num: int, title: str, done_map: dict[int, bool]) -> str:
-    icons = {"active": "blue", "done": "green", "upcoming": "white"}
+    icons = {"active": "🔵", "done": "🟢", "upcoming": "⚪"}
     status = _step_status(active_step, step_num, done_map)
-    return f":{icons[status]}_circle: {step_num} {title}"
+    return f"{icons[status]} {step_num} {title}"
 
 
 def _persist_three_step_run(df: pd.DataFrame | None) -> None:
