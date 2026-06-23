@@ -348,6 +348,8 @@ class CleanupSourceChecks(unittest.TestCase):
         helper_source = (ROOT / "ui" / "result_helpers.py").read_text()
         table_source = (ROOT / "ui" / "result_tables.py").read_text()
         watchlist_source = (ROOT / "ui" / "result_watchlist.py").read_text()
+        charts_source = (ROOT / "ui" / "charts.py").read_text()
+        single_ticker_source = (ROOT / "ui" / "single_ticker.py").read_text()
 
         self.assertLess(len(results_source.splitlines()), 700)
         self.assertIn("from ui.result_helpers import", results_source)
@@ -368,6 +370,10 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("except (RuntimeError, TypeError, ValueError, OSError)", watchlist_source)
         self.assertIn("except (RuntimeError, TypeError, ValueError)", results_source)
         self.assertNotIn("except Exception:\n            st.caption(\"AI notes are unavailable", results_source)
+        self.assertIn("st.plotly_chart(fig, width=\"stretch\", key=key)", charts_source)
+        self.assertIn("key=f\"single_ticker_chart_{_safe_chart_key(sym)}\"", single_ticker_source)
+        self.assertIn("key=f\"{key_prefix}_chart_{st.session_state[picker_key]}_fast\"", results_source)
+        self.assertIn("key=f\"{key_prefix}_chart_{st.session_state[picker_key]}_styled\"", results_source)
 
     def test_plaintext_demo_auth_config_is_removed(self):
         self.assertFalse((ROOT / "ui" / "config.yaml").exists())

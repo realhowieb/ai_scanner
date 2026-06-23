@@ -143,7 +143,7 @@ def render_single_symbol_chart(symbol: str, days: int = 90) -> None:
         margin=dict(l=10, r=10, t=40, b=10),
     )
     try:
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", key=f"single_ticker_chart_{_safe_chart_key(sym)}")
     except Exception as e:
         st.warning(f"Failed to render chart for {sym} due to an internal plotting error: {e}")
         try:
@@ -151,6 +151,11 @@ def render_single_symbol_chart(symbol: str, days: int = 90) -> None:
             st.dataframe(price_series.to_frame(name="Close").tail(), width="stretch")
         except Exception:
             pass
+
+
+def _safe_chart_key(value: str) -> str:
+    safe = "".join(ch if ch.isalnum() else "_" for ch in str(value or "").strip().upper())
+    return safe or "symbol"
 
 
 def render_single_ticker_panel() -> tuple[str, bool, bool]:

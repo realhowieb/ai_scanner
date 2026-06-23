@@ -62,6 +62,7 @@ def _render_builtin_candlestick(
     *,
     height: int = 420,
     show_ma: bool = True,
+    key: str | None = None,
 ) -> None:
     """Render a simple candlestick chart using Plotly if available.
 
@@ -128,7 +129,7 @@ def _render_builtin_candlestick(
         title=f"{ticker} – Daily Chart",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", key=key)
 
 
 # ---------- Public chart API ----------
@@ -140,6 +141,7 @@ def render_chart_for_ticker(
     interval: str = "1d",
     height: int = 420,
     show_ma: bool = True,
+    key: str | None = None,
 ) -> None:
     """High‑level chart function used by the main app.
 
@@ -155,4 +157,4 @@ def render_chart_for_ticker(
         st.info("No price history available for this symbol.")
         return
 
-    _render_builtin_candlestick(df, ticker, height=height, show_ma=show_ma)
+    _render_builtin_candlestick(df, ticker, height=height, show_ma=show_ma, key=key)

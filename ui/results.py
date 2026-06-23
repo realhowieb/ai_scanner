@@ -278,7 +278,10 @@ def render_results(
                         pick = st.selectbox("Ticker", tickers, index=tickers.index(auto_pick), key=f"{picker_key}_manual")
                         st.session_state[picker_key] = str(pick).strip().upper()
 
-                    render_chart_for_ticker(st.session_state[picker_key])
+                    render_chart_for_ticker(
+                        st.session_state[picker_key],
+                        key=f"{key_prefix}_chart_{st.session_state[picker_key]}_fast",
+                    )
 
         pick = st.session_state.get(f"{key_prefix}_chart_picker_fast")
 
@@ -602,7 +605,10 @@ def render_results(
                         pick = st.selectbox("Ticker", tickers, index=tickers.index(auto_pick), key=f"{picker_key}_manual")
                         st.session_state[picker_key] = str(pick).strip().upper()
 
-                    render_chart_for_ticker(st.session_state[picker_key])
+                    render_chart_for_ticker(
+                        st.session_state[picker_key],
+                        key=f"{key_prefix}_chart_{st.session_state[picker_key]}_styled",
+                    )
 
         pick = st.session_state.get(f"{key_prefix}_chart_picker")
 
