@@ -216,14 +216,21 @@ class CleanupSourceChecks(unittest.TestCase):
     def test_results_tabs_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()
         tabs_source = (ROOT / "ui" / "results_tabs.py").read_text()
+        admin_tabs_source = (ROOT / "ui" / "admin_results_tab.py").read_text()
 
         self.assertIn("from ui.results_tabs import render_results_tabs", app_source)
         self.assertIn("render_results_tabs(", app_source)
         self.assertNotIn("tab_names = [f\"📊 Latest scan results", app_source)
         self.assertNotIn("def _render_admin_tab", app_source)
+        self.assertLess(len(tabs_source.splitlines()), 350)
         self.assertIn("def render_results_tabs", tabs_source)
         self.assertIn("def _render_scan_history_tab", tabs_source)
-        self.assertIn("def _render_admin_tab", tabs_source)
+        self.assertIn("from ui.admin_results_tab import render_admin_tab", tabs_source)
+        self.assertNotIn("def _render_admin_tab", tabs_source)
+        self.assertNotIn("except Exception", tabs_source)
+        self.assertIn("def render_admin_tab", admin_tabs_source)
+        self.assertIn("ADMIN_TAB_ERRORS = (", admin_tabs_source)
+        self.assertNotIn("except Exception", admin_tabs_source)
 
     def test_db_and_user_settings_helpers_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()
