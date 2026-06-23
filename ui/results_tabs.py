@@ -32,7 +32,6 @@ def render_results_tabs(
     render_admin_users_panel: Callable[..., Any],
     render_chart_for_ticker: Callable[..., Any],
     generate_ai_note: Callable[..., Any],
-    fetch_earnings_this_week: Callable[..., Any],
     get_db_conn: Callable[[], Any],
     normalize_results_to_df: Callable[[object], pd.DataFrame | None],
 ) -> None:
@@ -110,7 +109,6 @@ def render_results_tabs(
             db_status=db_status,
             admin_users=admin_users,
             render_admin_users_panel=render_admin_users_panel,
-            fetch_earnings_this_week=fetch_earnings_this_week,
             get_db_conn=get_db_conn,
         )
 

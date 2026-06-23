@@ -629,7 +629,6 @@ def main():
         render_admin_users_panel=render_admin_users_panel,
         render_chart_for_ticker=render_chart_for_ticker,
         generate_ai_note=generate_ai_note,
-        fetch_earnings_this_week=fetch_earnings_this_week,
         get_db_conn=_get_db_conn_for_app,
         normalize_results_to_df=_normalize_results_to_df,
     )

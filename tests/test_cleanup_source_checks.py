@@ -288,6 +288,9 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertNotIn("except Exception", tabs_source)
         self.assertIn("def render_admin_tab", admin_tabs_source)
         self.assertIn("ADMIN_TAB_ERRORS = (", admin_tabs_source)
+        self.assertIn("populate_earnings_calendar", admin_tabs_source)
+        self.assertIn("def _resolve_earnings_refresh_symbols", admin_tabs_source)
+        self.assertNotIn("_fetch_earnings_list", admin_tabs_source)
         self.assertNotIn("except Exception", admin_tabs_source)
 
     def test_db_and_user_settings_helpers_are_extracted_from_app(self):

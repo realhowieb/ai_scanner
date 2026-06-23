@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Callable
 
 import streamlit as st
@@ -13,6 +14,8 @@ ADMIN_TAB_ERRORS = (
     OSError,
     ImportError,
 )
+APP_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_EARNINGS_REFRESH_LIMIT = 250
 
 
 def render_admin_tab(
@@ -22,7 +25,6 @@ def render_admin_tab(
     db_status: str,
     admin_users: object,
     render_admin_users_panel: Callable[..., Any],
-    fetch_earnings_this_week: Callable[..., Any],
     get_db_conn: Callable[[], Any],
 ) -> None:
     with tab_admin:
@@ -46,7 +48,7 @@ def render_admin_tab(
         else:
             c1, c2, c3 = st.columns(3)
             _render_force_tier_resync(c1)
-            _render_earnings_refresh(c2, fetch_earnings_this_week, get_db_conn)
+            _render_earnings_refresh(c2, get_db_conn)
             _render_db_integrity_checks(c3, get_db_conn)
 
         st.caption(
@@ -78,41 +80,46 @@ def _render_force_tier_resync(column: Any) -> None:
 
 def _render_earnings_refresh(
     column: Any,
-    fetch_earnings_this_week: Callable[..., Any],
     get_db_conn: Callable[[], Any],
 ) -> None:
     with column:
+        refresh_limit = st.number_input(
+            "Earnings refresh limit",
+            min_value=25,
+            max_value=12000,
+            value=_earnings_refresh_limit_default(),
+            step=25,
+            key="admin_earnings_refresh_limit",
+            help="Limits the admin refresh so flaky upstream earnings calls do not stall the app.",
+        )
         if not st.button("📅 Refresh earnings now", key="admin_refresh_earnings", width="stretch"):
             return
 
         with st.spinner("Refreshing earnings calendar (admin)..."):
             conn = None
-            refreshed = 0
             try:
-                earnings_list = _fetch_earnings_list(fetch_earnings_this_week)
-                if not earnings_list:
-                    st.info(
-                        "Earnings refresh completed, but the upstream source returned 0 items. "
-                        "(This can happen on weekends/holidays or if the provider is unavailable.)"
+                symbols = _resolve_earnings_refresh_symbols(limit=int(refresh_limit))
+                if not symbols:
+                    st.warning(
+                        "No symbols were available for earnings refresh. "
+                        "Load a market universe or check the bundled universe files."
                     )
                     clear_earnings_result_cache()
-                    st.stop()
+                    return
 
                 conn = get_db_conn()
-                _ensure_earnings_table(conn)
+                result = _populate_earnings(conn, symbols)
+                attempted = _count_attempted_refreshes(result, fallback=len(symbols))
+                dated = _count_refreshes_with_dates(result)
 
-                try:
-                    _populate_earnings(conn, earnings_list)
-                    refreshed = len(earnings_list)
-                except ADMIN_TAB_ERRORS as exc:
-                    st.warning(f"Earnings refresh ran, but upsert failed: {type(exc).__name__}: {exc}")
-
-                if refreshed > 0:
-                    st.success(f"✅ Earnings refreshed: upsert attempted for {refreshed} symbols.")
+                if dated > 0:
+                    st.success(
+                        f"✅ Earnings refreshed: dates found for {dated} of {attempted} symbols."
+                    )
                 else:
-                    st.info(
-                        "Earnings refresh completed, but no rows were upserted. "
-                        "(This can happen if the DB helper is unavailable or rejected all symbols.)"
+                    st.warning(
+                        f"Earnings refresh attempted {attempted} symbols, but the provider returned no dates. "
+                        "Existing DB rows remain available; try a smaller limit later if Yahoo is rate-limiting."
                     )
 
                 clear_earnings_result_cache()
@@ -124,11 +131,79 @@ def _render_earnings_refresh(
                 _close_conn(conn)
 
 
-def _fetch_earnings_list(fetch_earnings_this_week: Callable[..., Any]) -> list[Any]:
+def _earnings_refresh_limit_default() -> int:
     try:
-        return list(fetch_earnings_this_week() or [])
-    except ADMIN_TAB_ERRORS:
+        raw_limit = int(st.session_state.get("admin_earnings_refresh_limit", DEFAULT_EARNINGS_REFRESH_LIMIT))
+    except (TypeError, ValueError):
+        return DEFAULT_EARNINGS_REFRESH_LIMIT
+    return min(12000, max(25, raw_limit))
+
+
+def _resolve_earnings_refresh_symbols(*, limit: int) -> list[str]:
+    symbols: list[str] = []
+    for key in ("sp500_universe", "nasdaq_universe", "combo_capped", "nasdaq_capped"):
+        symbols.extend(_normalize_symbols(st.session_state.get(key)))
+
+    symbols.extend(_read_symbols_file("sp500.txt"))
+    symbols.extend(_read_symbols_file("nasdaq.txt"))
+    symbols.extend(_normalize_symbols(st.session_state.get("active_watchlist_tickers")))
+    return _dedupe_symbols(symbols)[: max(0, int(limit))]
+
+
+def _normalize_symbols(raw_symbols: Any) -> list[str]:
+    if not isinstance(raw_symbols, (list, tuple, set)):
         return []
+
+    symbols: list[str] = []
+    for raw in raw_symbols:
+        sym = str(raw or "").strip().upper()
+        if sym:
+            symbols.append(sym)
+    return symbols
+
+
+def _read_symbols_file(filename: str) -> list[str]:
+    try:
+        text = (APP_ROOT / filename).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return []
+    return _normalize_symbols(text.splitlines())
+
+
+def _dedupe_symbols(symbols: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for sym in symbols:
+        if sym in seen:
+            continue
+        seen.add(sym)
+        out.append(sym)
+    return out
+
+
+def _count_attempted_refreshes(result: Any, *, fallback: int) -> int:
+    if isinstance(result, dict):
+        return len(result)
+    try:
+        return len(result)
+    except TypeError:
+        return int(fallback)
+
+
+def _count_refreshes_with_dates(result: Any) -> int:
+    values = result.values() if isinstance(result, dict) else result
+    if not isinstance(values, (list, tuple, set)):
+        try:
+            values = list(values or [])
+        except TypeError:
+            return 0
+    return sum(1 for item in values if _extract_earnings_date(item) is not None)
+
+
+def _extract_earnings_date(item: Any) -> Any:
+    if isinstance(item, dict):
+        return item.get("earnings_date")
+    return getattr(item, "earnings_date", None)
 
 
 def _ensure_earnings_table(conn: Any) -> None:
@@ -140,23 +215,14 @@ def _ensure_earnings_table(conn: Any) -> None:
         return
 
 
-def _populate_earnings(conn: Any, earnings_list: list[Any]) -> None:
+def _populate_earnings(conn: Any, symbols: list[str]) -> Any:
     import db.earnings as earn_mod  # type: ignore
 
     populate = getattr(earn_mod, "populate_earnings_calendar", None)
     if not callable(populate):
         raise TypeError("populate_earnings_calendar is not callable")
 
-    try:
-        populate(conn, earnings_list)
-    except TypeError:
-        try:
-            populate(earnings_list)
-        except TypeError:
-            try:
-                populate(conn=conn, earnings_info_list=earnings_list)
-            except TypeError:
-                populate(conn=conn, earnings_list=earnings_list)
+    return populate(symbols, conn=conn)
 
 
 def _render_db_integrity_checks(column: Any, get_db_conn: Callable[[], Any]) -> None:
