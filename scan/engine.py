@@ -521,6 +521,7 @@ def run_breakout_scan(
                     print("chunked fetch_price_data_batch failed:", batch_error)
             else:
                 print("chunked fetch_price_data_batch failed:", batch_error)
+            _log_scan_error(e, context="chunked_fetch_price_data_batch", tickers=tickers_to_fetch)
             price_data = {}
 
     # --- Fast path: parallel fetch for smaller scans ---
@@ -596,6 +597,17 @@ def run_breakout_scan(
                     st.caption(f"Provider skip sample: {examples}")
             elif provider_summary.severe:
                 print(f"Price provider warning: {provider_summary.message}")
+                try:
+                    from telemetry import log_provider_warning
+                    username = None
+                    try:
+                        ss = getattr(st, "session_state", None)
+                        username = (ss.get("username") or None) if ss else None
+                    except _ENGINE_BOUNDARY_ERRORS:
+                        pass
+                    log_provider_warning("yfinance", provider_summary.message, username=username)
+                except _ENGINE_BOUNDARY_ERRORS:
+                    pass
         except _ENGINE_BOUNDARY_ERRORS as e:
             _diag_exception(diagnostics, "Provider diagnostics skipped", e)
 
@@ -645,18 +657,22 @@ def run_breakout_scan(
         except _STREAMLIT_UI_ERRORS:
             pass
 
-    df = legacy_breakout.run_breakout_scan(
-        price_data=price_data_no_spy,
-        spy_df=spy_df,
-        premarket=premarket,
-        afterhours=afterhours,
-        unusual_volume=effective_unusual_volume,
-        min_gap=effective_min_gap,
-        min_price=min_price,
-        max_price=max_price,
-        top_n=top_n,
-        diagnostics=diagnostics,
-    )
+    try:
+        df = legacy_breakout.run_breakout_scan(
+            price_data=price_data_no_spy,
+            spy_df=spy_df,
+            premarket=premarket,
+            afterhours=afterhours,
+            unusual_volume=effective_unusual_volume,
+            min_gap=effective_min_gap,
+            min_price=min_price,
+            max_price=max_price,
+            top_n=top_n,
+            diagnostics=diagnostics,
+        )
+    except _ENGINE_BOUNDARY_ERRORS as e:
+        _log_scan_error(e, context="legacy_breakout.run_breakout_scan", tickers=tickers)
+        raise
 
     if diagnostics:
         try:
@@ -668,3 +684,18 @@ def run_breakout_scan(
             pass
 
     return df
+
+
+def _log_scan_error(exc: BaseException, *, context: str, tickers: list) -> None:
+    """Best-effort telemetry call — never raises."""
+    try:
+        from telemetry import log_scan_error
+        username = None
+        try:
+            ss = getattr(st, "session_state", None)
+            username = (ss.get("username") or None) if ss else None
+        except _ENGINE_BOUNDARY_ERRORS:
+            pass
+        log_scan_error(exc, context=context, username=username, ticker_count=len(tickers))
+    except _ENGINE_BOUNDARY_ERRORS:
+        pass

@@ -51,6 +51,16 @@ def render_admin_tab(
             _render_earnings_refresh(c2, get_db_conn)
             _render_db_integrity_checks(c3, get_db_conn)
 
+        if bool(st.session_state.get("is_admin")):
+            st.markdown("---")
+            st.markdown("### 📊 Diagnostics")
+            _render_billing_health_badge()
+            diag_col1, diag_col2 = st.columns(2)
+            with diag_col1:
+                _render_scan_errors_panel(get_db_conn)
+            with diag_col2:
+                _render_login_attempts_panel(get_db_conn)
+
         st.caption(
             "Tip: Earnings refresh is intentionally admin-only and never runs automatically during scans."
         )
@@ -330,3 +340,87 @@ def clear_earnings_result_cache() -> None:
     st.session_state.pop("earnings_enriched_df", None)
     st.session_state.pop("earnings_enriched_signature", None)
     st.session_state.pop("earnings_enrichment_rerun_sig", None)
+
+
+def _render_billing_health_badge() -> None:
+    """Ping the billing service and show a status badge. Never raises."""
+    try:
+        import os
+        import requests
+        base = (os.getenv("BILLING_API_BASE") or "https://ai-scanner-h2c8.onrender.com").strip()
+        timeout = float(os.getenv("BILLING_HEALTH_TIMEOUT", "3"))
+        try:
+            r = requests.get(f"{base}/health", timeout=timeout)
+            ok = r.status_code == 200
+        except ADMIN_TAB_ERRORS:
+            ok = False
+        if ok:
+            st.success(f"✅ Billing service reachable ({base})")
+        else:
+            st.error(f"❌ Billing service unreachable — {base}/health did not respond. Subscriptions will not work.")
+    except ADMIN_TAB_ERRORS:
+        st.warning("⚠️ Could not check billing service health.")
+
+
+def _render_scan_errors_panel(get_db_conn: Callable[[], Any]) -> None:
+    st.markdown("#### Scan Errors (last 50)")
+    if not st.button("🔍 Load scan errors", key="admin_load_scan_errors"):
+        return
+    conn = None
+    try:
+        conn = get_db_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT occurred_at, context, username, ticker_count, error_type, message
+                FROM scan_errors
+                ORDER BY occurred_at DESC
+                LIMIT 50
+                """
+            )
+            rows = cur.fetchall()
+        if not rows:
+            st.success("No scan errors recorded.")
+            return
+        import pandas as pd
+        df = pd.DataFrame(rows, columns=["occurred_at", "context", "username", "tickers", "error_type", "message"])
+        st.dataframe(df)
+    except ADMIN_TAB_ERRORS as exc:
+        st.error("Failed to load scan errors.")
+        _show_exception(exc)
+    finally:
+        _close_conn(conn)
+
+
+def _render_login_attempts_panel(get_db_conn: Callable[[], Any]) -> None:
+    st.markdown("#### Login Attempts (last 100)")
+    if not st.button("🔍 Load login attempts", key="admin_load_login_attempts"):
+        return
+    conn = None
+    try:
+        conn = get_db_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT attempted_at, username, success, ip_address
+                FROM login_attempts
+                ORDER BY attempted_at DESC
+                LIMIT 100
+                """
+            )
+            rows = cur.fetchall()
+        if not rows:
+            st.success("No login attempts recorded.")
+            return
+        import pandas as pd
+        df = pd.DataFrame(rows, columns=["attempted_at", "username", "success", "ip_address"])
+        st.dataframe(df)
+
+        failed = sum(1 for r in rows if not r[2])
+        if failed:
+            st.warning(f"{failed} failed login attempt(s) in the last 100 rows.")
+    except ADMIN_TAB_ERRORS as exc:
+        st.error("Failed to load login attempts.")
+        _show_exception(exc)
+    finally:
+        _close_conn(conn)
