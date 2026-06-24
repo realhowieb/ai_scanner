@@ -98,6 +98,12 @@ The billing service itself requires its own env vars (set in Render dashboard):
 - `DATABASE_URL` — same Neon connection string as the main app
 - `APP_SUCCESS_URL` / `APP_CANCEL_URL` / `APP_PORTAL_RETURN_URL`
 
+### Alerting (optional but recommended)
+- `SLACK_WEBHOOK_URL` — Incoming Webhook URL for a Slack channel; alerts fire when scan errors exceed threshold
+- `ALERT_EMAIL` — fallback alert email if Slack is not configured
+- `SCAN_ERROR_ALERT_THRESHOLD` — errors in window before alerting (default: 5)
+- `SCAN_ERROR_ALERT_WINDOW_MINUTES` — lookback window in minutes (default: 15)
+
 ### Optional
 - `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` — extended market data
 - `SHOW_DIAGNOSTICS=1` — enable scan diagnostics panel by default

@@ -81,6 +81,15 @@ def _purge_old_login_attempts() -> None:
         print(f"[scheduler] login_attempts purge failed: {e}")
 
 
+def _check_scan_error_alerts() -> None:
+    """Delegate to telemetry alerting. Runs every 15 min during market hours."""
+    try:
+        from telemetry import check_and_alert_scan_errors
+        check_and_alert_scan_errors()
+    except Exception as e:
+        print(f"[scheduler] scan error alert check failed: {e}")
+
+
 def clear_jobs(scheduler: BackgroundScheduler) -> None:
     for job in scheduler.get_jobs():
         scheduler.remove_job(job.id)
@@ -129,6 +138,14 @@ def add_default_jobs(
         _purge_old_login_attempts,
         trigger=CronTrigger(hour=2, minute=0, timezone=tz_str),
         id="purge_login_attempts",
+        replace_existing=True,
+    )
+
+    # Scan error spike alerting: check every 15 minutes during market hours
+    scheduler.add_job(
+        _check_scan_error_alerts,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="8-17", minute="*/15", timezone=tz_str),
+        id="scan_error_alert",
         replace_existing=True,
     )
 

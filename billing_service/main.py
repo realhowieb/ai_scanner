@@ -59,6 +59,43 @@ print(
 
 # ---------- DB helpers ----------
 
+def _ensure_processed_events_table(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS stripe_processed_events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT,
+                processed_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """
+        )
+    conn.commit()
+
+
+def _is_event_processed(conn, event_id: str) -> bool:
+    """Return True if this Stripe event_id was already handled (idempotency guard)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM stripe_processed_events WHERE event_id = %s LIMIT 1",
+            (event_id,),
+        )
+        return cur.fetchone() is not None
+
+
+def _mark_event_processed(conn, event_id: str, event_type: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO stripe_processed_events (event_id, event_type)
+            VALUES (%s, %s)
+            ON CONFLICT (event_id) DO NOTHING
+            """,
+            (event_id, event_type),
+        )
+    conn.commit()
+
+
 def _normalize_db_url(url: str) -> str:
     u = (url or "").strip()
     if not u:
@@ -288,7 +325,19 @@ async def stripe_webhook(request: Request):
         raise HTTPException(400, f"Webhook signature verification failed: {e}")
 
     etype = event.get("type")
+    event_id = event.get("id", "")
     data = event.get("data", {}).get("object", {})
+
+    # Idempotency: skip already-processed events (Stripe retries on non-2xx).
+    if DATABASE_URL and event_id:
+        try:
+            with _db_conn() as conn:
+                _ensure_processed_events_table(conn)
+                if _is_event_processed(conn, event_id):
+                    _log.info("Skipping already-processed event %s (%s)", event_id, etype)
+                    return JSONResponse({"received": True, "type": etype, "note": "already_processed"})
+        except Exception as _idem_err:
+            _log.warning("Idempotency check failed for %s: %s", event_id, _idem_err)
 
     # 1) Initial checkout completion
     if etype == "checkout.session.completed":
@@ -404,5 +453,13 @@ async def stripe_webhook(request: Request):
                 )
             except Exception as e:
                 raise HTTPException(500, f"DB update failed: {e}")
+
+    # Mark the event processed so retries are skipped.
+    if DATABASE_URL and event_id:
+        try:
+            with _db_conn() as conn:
+                _mark_event_processed(conn, event_id, etype or "")
+        except Exception as _mark_err:
+            _log.warning("Failed to mark event %s processed: %s", event_id, _mark_err)
 
     return JSONResponse({"received": True, "type": etype})

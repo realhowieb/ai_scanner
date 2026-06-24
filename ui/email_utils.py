@@ -45,3 +45,57 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str) -> bool:
+    """Internal shared SMTP sender."""
+    try:
+        from config import SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER
+    except Exception:
+        return False
+    if not SMTP_HOST or not SMTP_USER or not SMTP_PASS:
+        return False
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
+    msg["To"] = to_address
+    msg.attach(MIMEText(body_text, "plain"))
+    msg.attach(MIMEText(body_html, "html"))
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_FROM, [to_address], msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
+def send_verification_email(to_address: str, verify_url: str) -> bool:
+    """Send an email address verification email."""
+    return _send_smtp(
+        to_address=to_address,
+        subject="Verify your AI Scanner email address",
+        body_text=(
+            f"Welcome to AI Scanner!\n\n"
+            f"Please verify your email address by clicking the link below "
+            f"(valid for 24 hours):\n\n{verify_url}\n\n"
+            f"If you did not sign up, ignore this email.\n"
+        ),
+        body_html=(
+            f"<p>Welcome to <strong>AI Scanner</strong>!</p>"
+            f"<p><a href='{verify_url}'>Verify my email address</a></p>"
+            f"<p>This link expires in 24 hours. If you didn't sign up, ignore this email.</p>"
+        ),
+    )
+
+
+def send_alert_email(to_address: str, subject: str, body: str) -> bool:
+    """Send an ops alert email."""
+    return _send_smtp(
+        to_address=to_address,
+        subject=subject,
+        body_text=body,
+        body_html=f"<pre>{body}</pre>",
+    )

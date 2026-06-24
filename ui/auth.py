@@ -315,6 +315,18 @@ def auth_ui():
         except _AUTH_BACKEND_ERRORS:
             pass
 
+        # Send email verification link (best-effort — never blocks signup).
+        try:
+            from config import APP_BASE_URL
+            from db.email_verification import create_verification_token
+            from ui.email_utils import send_verification_email
+            v_token = create_verification_token(email_raw)
+            if v_token:
+                verify_url = f"{APP_BASE_URL.rstrip('/')}/verify_email?token={v_token}"
+                send_verification_email(to_address=email_raw, verify_url=verify_url)
+        except _AUTH_BACKEND_ERRORS:
+            pass
+
         # If db returned nothing, still proceed to login with defaults.
         user_rec = created_user if isinstance(created_user, dict) else {"password": pw_hash, "tier": "basic"}
 

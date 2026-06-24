@@ -75,6 +75,12 @@ LOGIN_RATE_LIMIT_MAX_ATTEMPTS: int = 10  # max failures before lockout
 # --- Session lifetime ---
 SESSION_TTL_DAYS: int = int(_get("SESSION_TTL_DAYS", "14"))
 
+# --- Alerting ---
+SLACK_WEBHOOK_URL: str | None = _get("SLACK_WEBHOOK_URL")
+ALERT_EMAIL: str | None = _get("ALERT_EMAIL")
+SCAN_ERROR_ALERT_THRESHOLD: int = int(_get("SCAN_ERROR_ALERT_THRESHOLD", "5"))
+SCAN_ERROR_ALERT_WINDOW_MINUTES: int = int(_get("SCAN_ERROR_ALERT_WINDOW_MINUTES", "15"))
+
 # --- Password reset ---
 RESET_TOKEN_TTL_MINUTES: int = int(_get("RESET_TOKEN_TTL_MINUTES", "30"))
 SMTP_HOST: str | None = _get("SMTP_HOST")
