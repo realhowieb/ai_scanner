@@ -187,10 +187,9 @@ def _is_admin_context() -> bool:
             return False
         try:
             from db.users import is_admin_from_db
-            return is_admin_from_db(username)
-        except Exception:
-            # DB unavailable: fall back to session state (degraded but operational).
+        except ImportError:
             return session_claims_admin
+        return is_admin_from_db(username)
     except _ENGINE_BOUNDARY_ERRORS:
         return False
 
