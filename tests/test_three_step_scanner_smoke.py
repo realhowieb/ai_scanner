@@ -4,14 +4,16 @@ from unittest.mock import patch
 
 
 PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
+STREAMLIT_AVAILABLE = importlib.util.find_spec("streamlit") is not None
+_DEPS_OK = PANDAS_AVAILABLE and STREAMLIT_AVAILABLE
 
-if PANDAS_AVAILABLE:
+if _DEPS_OK:
     import pandas as pd
 
     from ui.three_step_scanner import run_scan_engine
 
 
-@unittest.skipUnless(PANDAS_AVAILABLE, "pandas is required for three-step scanner smoke tests")
+@unittest.skipUnless(_DEPS_OK, "pandas and streamlit are required for three-step scanner smoke tests")
 class ThreeStepScannerSmokeTests(unittest.TestCase):
     def test_run_scan_engine_uses_fake_provider_path_and_strategy_filter(self):
         session_state = {
