@@ -170,49 +170,30 @@ def _refresh_tier_from_db(email: str) -> str | None:
 # =========================
 
 def _open_checkout_same_tab(url: str, *, kind: str = "Checkout") -> None:
-    """Reliable Streamlit-friendly checkout open.
-
-    Streamlit Cloud can intercept plain <a target=_self> links, sometimes resulting in a blank
-    Streamlit loading screen. The most reliable approach is a USER CLICK inside a components
-    iframe that redirects the TOP window.
-    """
+    """Redirect the current tab to Stripe using a styled anchor link."""
     u = (url or "").strip()
     if not u:
         return
 
-    st.success(f"Stripe {kind} is ready ✅")
-    st.caption(f"Click the button below to open Stripe {kind}. If it doesn’t open, use the fallback link.")
-
-    # Primary: user-click button that redirects the TOP window.
-    components.html(
+    # Render a full-width styled anchor that opens in the same tab.
+    st.markdown(
         f"""
-        <div style="width:100%;">
-          <button id="stripeGo"
-            style="width:100%; padding:0.65rem 1rem; border-radius:0.6rem; border:1px solid rgba(255,255,255,0.18);
-                   background: rgba(255,255,255,0.06); color: inherit; font-size: 1rem; cursor: pointer;">
-            💳 Open Stripe (same tab)
-          </button>
-        </div>
-        <script>
-          (function() {{
-            var url = {u!r};
-            var btn = document.getElementById('stripeGo');
-            if (!btn) return;
-            btn.addEventListener('click', function() {{
-              try {{
-                window.top.location.href = url;
-              }} catch (e) {{
-                try {{ window.parent.location.href = url; }} catch (e2) {{ window.location.href = url; }}
-              }}
-            }});
-          }})();
-        </script>
+        <a href="{u}" target="_self" style="
+            display: block;
+            width: 100%;
+            padding: 0.65rem 1rem;
+            border-radius: 0.6rem;
+            border: 1px solid rgba(255,255,255,0.18);
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 1rem;
+            text-align: center;
+            text-decoration: none;
+            margin-bottom: 0.5rem;
+        ">💳 Continue to Stripe {kind}</a>
         """,
-        height=72,
+        unsafe_allow_html=True,
     )
-
-    # Fallback if the browser still forces a new tab
-    st.link_button(f"Open Stripe {kind} (fallback)", u, width="stretch")
     st.stop()
 
 
