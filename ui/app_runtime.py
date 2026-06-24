@@ -149,6 +149,10 @@ def render_sidebar_upgrade_card(
 ) -> None:
     """Show the upgrade CTA card for Basic users in the sidebar."""
     try:
+        # Admins never see the upgrade card regardless of tier_obj key.
+        import streamlit as _st
+        if _st.session_state.get("is_admin"):
+            return
         if has_min_tier(tier_obj, "pro"):
             return
     except (AttributeError, KeyError, TypeError, ValueError):
