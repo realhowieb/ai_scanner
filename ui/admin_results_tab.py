@@ -343,7 +343,9 @@ def clear_earnings_result_cache() -> None:
 
 
 def _render_billing_health_badge() -> None:
-    """Ping the billing service and show a status badge. Never raises."""
+    """Ping the billing service on demand and show a status badge."""
+    if not st.button("🔌 Check billing service", key="admin_billing_health"):
+        return
     try:
         import os
         import requests
@@ -369,6 +371,8 @@ def _render_scan_errors_panel(get_db_conn: Callable[[], Any]) -> None:
     conn = None
     try:
         conn = get_db_conn()
+        from db.schema import ensure_neon_scan_errors_schema
+        ensure_neon_scan_errors_schema(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -399,6 +403,8 @@ def _render_login_attempts_panel(get_db_conn: Callable[[], Any]) -> None:
     conn = None
     try:
         conn = get_db_conn()
+        from db.schema import ensure_neon_login_attempts_schema
+        ensure_neon_login_attempts_schema(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
