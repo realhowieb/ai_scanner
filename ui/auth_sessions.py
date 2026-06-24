@@ -41,9 +41,22 @@ def _profile() -> str:
     return (os.environ.get("PROFILE") or os.environ.get("ENV") or "dev").strip().lower()
 
 
-COOKIE_PASSWORD = _get_secret("COOKIE_PASSWORD")
-if not COOKIE_PASSWORD and _profile() in {"dev", "local", "test"}:
-    COOKIE_PASSWORD = "dev-only-cookie-password"
+_COOKIE_PASSWORD_CACHE: str | None = None
+
+
+def _cookie_password() -> str | None:
+    global _COOKIE_PASSWORD_CACHE
+    if _COOKIE_PASSWORD_CACHE:
+        return _COOKIE_PASSWORD_CACHE
+    pw = _get_secret("COOKIE_PASSWORD")
+    if not pw and _profile() in {"dev", "local", "test"}:
+        pw = "dev-only-cookie-password"
+    _COOKIE_PASSWORD_CACHE = pw
+    return pw
+
+
+# Module-level alias kept for any direct imports elsewhere
+COOKIE_PASSWORD = _cookie_password()
 
 
 def cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
@@ -54,7 +67,8 @@ def cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
             "Add it to requirements.txt and redeploy."
         )
         return None
-    if not COOKIE_PASSWORD:
+    pw = _cookie_password()
+    if not pw:
         st.error("Cookie sessions require COOKIE_PASSWORD to be configured.")
         return None
 
@@ -62,7 +76,7 @@ def cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
     if cached is not None:
         return cached
 
-    cookies = EncryptedCookieManager(prefix=COOKIE_PREFIX, password=COOKIE_PASSWORD)
+    cookies = EncryptedCookieManager(prefix=COOKIE_PREFIX, password=pw)
     if not cookies.ready():
         st.stop()
     st.session_state[COOKIE_MANAGER_STATE_KEY] = cookies
