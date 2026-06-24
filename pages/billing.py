@@ -175,25 +175,8 @@ def _open_checkout_same_tab(url: str, *, kind: str = "Checkout") -> None:
     if not u:
         return
 
-    # Render a full-width styled anchor that opens in the same tab.
-    st.markdown(
-        f"""
-        <a href="{u}" target="_self" style="
-            display: block;
-            width: 100%;
-            padding: 0.65rem 1rem;
-            border-radius: 0.6rem;
-            border: 1px solid rgba(255,255,255,0.18);
-            background: #1a1a2e;
-            color: #fff;
-            font-size: 1rem;
-            text-align: center;
-            text-decoration: none;
-            margin-bottom: 0.5rem;
-        ">💳 Continue to Stripe {kind}</a>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.success(f"Stripe {kind} is ready ✅")
+    st.link_button(f"💳 Continue to Stripe {kind}", u, use_container_width=True)
 
 
 # =========================
