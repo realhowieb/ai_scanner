@@ -462,6 +462,37 @@ def _build_demo_users() -> Dict[str, Dict[str, str]]:
 USERS_DB = _build_demo_users()
 
 
+def get_user_by_username(username: str) -> dict | None:
+    """Look up a single user record from Neon by username. Used by tier_sync."""
+    username_norm = (username or "").strip().lower()
+    if not username_norm:
+        return None
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return None
+        ensure_neon_users_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT username, full_name, tier, is_admin, is_active FROM users WHERE lower(username) = %s LIMIT 1",
+            (username_norm,),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not row:
+            return None
+        if isinstance(row, dict):
+            return dict(row)
+        return {"username": row[0], "full_name": row[1], "tier": row[2], "is_admin": bool(row[3]), "is_active": bool(row[4])}
+    except Exception:
+        return None
+
+
+# Alias used by some call sites
+get_user_by_email = get_user_by_username
+
+
 def is_admin_from_db(username: str) -> bool:
     """Server-side admin check: queries DB is_admin flag and tier='admin'.
 
