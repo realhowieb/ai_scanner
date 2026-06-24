@@ -194,7 +194,6 @@ def _open_checkout_same_tab(url: str, *, kind: str = "Checkout") -> None:
         """,
         unsafe_allow_html=True,
     )
-    st.stop()
 
 
 # =========================
