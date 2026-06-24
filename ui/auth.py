@@ -2,6 +2,11 @@ import streamlit as st
 import bcrypt
 import re
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
+try:
+    from db.users import record_login_attempt as _record_login_attempt_db, is_login_rate_limited as _is_login_rate_limited_db
+except ImportError:
+    _record_login_attempt_db = None
+    _is_login_rate_limited_db = None
 from ui.auth_lockout import (
     clear_failed_login_attempts as _clear_failed_login_attempts,
     is_login_locked as _is_login_locked,
@@ -103,6 +108,15 @@ def auth_ui():
             u = _get_username_for_session(str(sid))
             if u:
                 st.session_state["username"] = (u or "").strip().lower()
+            else:
+                # Session expired or invalid — clear the stale cookie so the user
+                # gets a clean login form rather than a silent broken state.
+                try:
+                    cookies.pop(COOKIE_NAME, None)
+                    cookies.save()
+                except _AUTH_BACKEND_ERRORS:
+                    pass
+                st.info("Your session has expired. Please log in again.")
 
     # If Stripe redirects back with ?checkout=success but this Streamlit session isn't authenticated,
     # it usually means the success/cancel URL is pointing at a different deployment (domain) than
@@ -325,6 +339,15 @@ def auth_ui():
             # Do not count this as a brute-force attempt; user simply forgot fields.
             return False, None, None
 
+        # DB-backed rate limit check (persistent across sessions/refreshes)
+        if _is_login_rate_limited_db is not None:
+            try:
+                if _is_login_rate_limited_db(username):
+                    st.error("Too many failed login attempts. Please try again in 10 minutes.")
+                    return False, None, None
+            except _AUTH_BACKEND_ERRORS:
+                pass
+
         # Map display-username -> email (DB key) when user doesn't type an email
         login_key = username
         if "@" not in username:
@@ -371,18 +394,24 @@ def auth_ui():
                     login_key = k  # actual DB key (email)
                     break
 
-        if user is None:
-            st.error("User not found. Please use the email you signed up with, or your username.")
+        def _fail(msg: str) -> tuple:
+            st.error(msg)
             _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
+            if _record_login_attempt_db is not None:
+                try:
+                    _record_login_attempt_db(username, success=False)
+                except _AUTH_BACKEND_ERRORS:
+                    pass
             return False, None, None
+
+        if user is None:
+            return _fail("User not found. Please use the email you signed up with, or your username.")
 
         # Expect user dict to contain a 'password' field.
         # Supports legacy plain-text passwords and new bcrypt hashes, with auto-migration.
         stored_password = user.get("password")
         if stored_password is None:
-            st.error("User record is missing a password field.")
-            _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
-            return False, None, None
+            return _fail("User record is missing a password field.")
 
         # Normalize stored password to a clean string (handles bytes from DB as well)
         if isinstance(stored_password, (bytes, bytearray)):
@@ -399,9 +428,7 @@ def auth_ui():
             if not bcrypt.checkpw(password.encode("utf-8"), stored_str.encode("utf-8")):
                 # Fallback: try raw input (older accounts may have accidental whitespace)
                 if not bcrypt.checkpw(raw_password.encode("utf-8"), stored_str.encode("utf-8")):
-                    st.error("Incorrect password.")
-                    _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
-                    return False, None, None
+                    return _fail("Incorrect password.")
                 else:
                     # Normalize forward: re-hash stripped password
                     try:
@@ -413,9 +440,7 @@ def auth_ui():
         else:
             # Legacy plain-text password in DB
             if stored_str != password and stored_str != raw_password:
-                st.error("Incorrect password.")
-                _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
-                return False, None, None
+                return _fail("Incorrect password.")
 
             # Auto-migrate: convert legacy plain-text to bcrypt hash in Neon (normalize to stripped password)
             try:
@@ -454,6 +479,11 @@ def auth_ui():
 
         # Reset failed-attempt tracking on successful login
         _clear_failed_login_attempts()
+        if _record_login_attempt_db is not None:
+            try:
+                _record_login_attempt_db(login_key, success=True)
+            except _AUTH_BACKEND_ERRORS:
+                pass
 
         # Remove the login form from the screen after successful login.
         login_placeholder.empty()

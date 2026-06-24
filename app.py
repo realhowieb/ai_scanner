@@ -397,10 +397,24 @@ def main():
     is_admin = _is_admin_user(username, tier)
     tier_key = (tier_state.get("tier_key") or "basic").strip().lower()
 
-    # If the tier changed since last render, invalidate cached entitlements so UI unlocks immediately.
+    # Detect tier changes since last render.
     prev_key = (st.session_state.get("tier_key") or "").strip().lower()
+    _tier_rank = {"basic": 0, "pro": 1, "premium": 2, "admin": 3}
     if prev_key and prev_key != tier_key:
         st.session_state.pop("entitlements", None)
+        # Downgrade: DB resolved a lower tier than what was in session.
+        if _tier_rank.get(tier_key, 0) < _tier_rank.get(prev_key, 0):
+            # Clear Premium/Pro-only state that would now be inaccessible.
+            for _k in (
+                "price_snapshot_id", "snapshot_id",
+                "ai_notes", "ai_notes_text", "ai_notes_cache",
+                "ai_notes_last", "ai_notes_last_text", "last_ai_notes",
+            ):
+                st.session_state.pop(_k, None)
+            st.warning(
+                f"Your plan has changed from **{prev_key.upper()}** to **{tier_key.upper()}**. "
+                "Some features have been locked. Visit the Billing page to upgrade."
+            )
 
     # If the tier object doesn't reflect the resolved key, build a tiny proxy for gating.
     tier_for_flags = tier

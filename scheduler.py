@@ -1,6 +1,7 @@
 # scheduler.py
 from __future__ import annotations
 
+import threading
 from typing import Callable, Optional, Tuple
 from dataclasses import dataclass
 
@@ -17,13 +18,40 @@ class RunFns:
     run_sp500: Callable[[], int]
 
 
+# Process-level singleton so concurrent Streamlit sessions share one scheduler
+# instead of each spawning their own background thread.
+_process_scheduler: BackgroundScheduler | None = None
+_process_scheduler_lock = threading.Lock()
+_process_scheduler_started: bool = False
+
+
+def _warn_if_multi_worker() -> None:
+    """Emit a one-time warning when the app appears to run with multiple workers."""
+    import os
+    workers = int(os.environ.get("WEB_CONCURRENCY", os.environ.get("STREAMLIT_SERVER_WORKERS", "1")))
+    if workers > 1 and not st.session_state.get("_sched_multiworker_warned"):
+        st.warning(
+            f"⚠️ Scheduler: detected {workers} workers. "
+            "APScheduler's BackgroundScheduler is a single-process singleton — "
+            "jobs will only fire in ONE worker process. "
+            "For reliable multi-worker scheduling, use an external queue (Celery/RQ) or "
+            "a dedicated scheduler process."
+        )
+        st.session_state["_sched_multiworker_warned"] = True
+
+
 def get_scheduler(tz_str: str = "America/New_York") -> BackgroundScheduler:
-    """Return a single BackgroundScheduler stored in session_state."""
-    if "scheduler" not in st.session_state:
-        tz = pytz.timezone(tz_str)
-        st.session_state["scheduler"] = BackgroundScheduler(timezone=tz)
-        st.session_state["scheduler_started"] = False
-    return st.session_state["scheduler"]
+    """Return the process-level BackgroundScheduler (shared across all Streamlit sessions)."""
+    global _process_scheduler, _process_scheduler_started
+    with _process_scheduler_lock:
+        if _process_scheduler is None:
+            tz = pytz.timezone(tz_str)
+            _process_scheduler = BackgroundScheduler(timezone=tz)
+            _process_scheduler_started = False
+    # Mirror into session_state so existing callers can still read it from there.
+    st.session_state["scheduler"] = _process_scheduler
+    st.session_state["scheduler_started"] = _process_scheduler_started
+    return _process_scheduler
 
 
 def clear_jobs(scheduler: BackgroundScheduler) -> None:
@@ -71,9 +99,13 @@ def add_default_jobs(
 
 
 def start(scheduler: BackgroundScheduler) -> None:
-    if not st.session_state.get("scheduler_started", False):
-        scheduler.start()
-        st.session_state["scheduler_started"] = True
+    global _process_scheduler_started
+    with _process_scheduler_lock:
+        if not _process_scheduler_started:
+            scheduler.start()
+            _process_scheduler_started = True
+            st.session_state["scheduler_started"] = True
+    _warn_if_multi_worker()
 
 
 def pause(scheduler: BackgroundScheduler) -> None:

@@ -1,4 +1,5 @@
 # db/runs.py
+from __future__ import annotations
 from typing import Optional, List, Dict, Any
 import json
 import sqlite3
