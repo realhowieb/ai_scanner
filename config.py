@@ -54,6 +54,23 @@ class Settings:
 
 SETTINGS = Settings()
 
+# --- Scan engine constants ---
+# Minimum universe size to activate DB price caching (admin-only runs).
+DB_CACHE_MIN_TICKERS: int = 800
+# Default chunk size for parallel price fetching.
+PRICE_FETCH_CHUNK_SIZE: int = 150
+# Bounds for the chunk size parameter.
+PRICE_FETCH_CHUNK_MIN: int = 25
+PRICE_FETCH_CHUNK_MAX: int = 400
+# Maximum age for DB-cached price data before it is considered stale.
+DB_CACHE_MAX_AGE_MINUTES: int = 30
+# Throttle interval for scan progress UI updates (seconds).
+PROGRESS_UI_THROTTLE_SEC: float = 0.25
+
+# --- Login rate limiting ---
+LOGIN_RATE_LIMIT_WINDOW_SEC: int = 600   # 10-minute window
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS: int = 10  # max failures before lockout
+
 # ---------- Stripe Billing Configuration ----------
 STRIPE_MONTHLY_LINKS = {
     "basic":  "https://buy.stripe.com/fZu7sNgEi4JW4j98zo1Jm00",

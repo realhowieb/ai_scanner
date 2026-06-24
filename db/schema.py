@@ -66,6 +66,7 @@ def ensure_neon_users_schema(conn):
             full_name TEXT NOT NULL,
             password TEXT NOT NULL,
             tier TEXT DEFAULT 'basic',
+            is_admin BOOLEAN DEFAULT FALSE,
             stripe_customer_id TEXT,
             stripe_subscription_id TEXT,
             stripe_price_id TEXT,
@@ -79,6 +80,28 @@ def ensure_neon_users_schema(conn):
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT")
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_price_id TEXT")
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_updated_at TIMESTAMPTZ")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE")
+    conn.commit()
+    cur.close()
+
+
+def ensure_neon_login_attempts_schema(conn):
+    """Ensure the login_attempts table exists for rate limiting."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id SERIAL PRIMARY KEY,
+            username TEXT NOT NULL,
+            attempted_at TIMESTAMPTZ DEFAULT NOW(),
+            success BOOLEAN DEFAULT FALSE,
+            ip_address TEXT
+        )
+        """
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_login_attempts_username_time ON login_attempts (username, attempted_at)"
+    )
     conn.commit()
     cur.close()
 
@@ -94,6 +117,7 @@ def ensure_sqlite_users_schema(conn):
             full_name TEXT NOT NULL,
             password TEXT NOT NULL,
             tier TEXT DEFAULT 'basic',
+            is_admin INTEGER DEFAULT 0,
             stripe_customer_id TEXT,
             stripe_subscription_id TEXT,
             stripe_price_id TEXT,
@@ -113,6 +137,29 @@ def ensure_sqlite_users_schema(conn):
         cur.execute("ALTER TABLE users ADD COLUMN stripe_price_id TEXT")
     if "plan_updated_at" not in cols:
         cur.execute("ALTER TABLE users ADD COLUMN plan_updated_at TIMESTAMP")
+    if "is_admin" not in cols:
+        cur.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+    conn.commit()
+    cur.close()
+
+
+def ensure_sqlite_login_attempts_schema(conn):
+    """Ensure the login_attempts table exists for rate limiting (SQLite)."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            success INTEGER DEFAULT 0,
+            ip_address TEXT
+        )
+        """
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_login_attempts_username_time ON login_attempts (username, attempted_at)"
+    )
     conn.commit()
     cur.close()
 

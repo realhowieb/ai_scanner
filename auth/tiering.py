@@ -1,4 +1,3 @@
-import streamlit as st
 """
 Tiering module for user access levels.
 
@@ -12,6 +11,17 @@ This module centralizes:
 from dataclasses import dataclass
 from typing import Dict, Optional
 from datetime import datetime, timezone
+
+try:
+    import streamlit as st
+except Exception:
+    class _StShim:
+        @staticmethod
+        def warning(*_a, **_kw): pass
+        @staticmethod
+        def get(*_a, **_kw): return None
+        session_state: dict = {}
+    st = _StShim()  # type: ignore[assignment]
 
 # Load tier configuration from config.py
 from config import TIERS_CONFIG
@@ -53,12 +63,30 @@ USERS_DB: Dict[str, Dict[str, str]] = {
 
 
 # ------------------------------
-# Admin users
+# Admin users — loaded from secrets/env, NOT hardcoded
 # ------------------------------
-ADMIN_USERS = {
-    "admin",
-    "howard",
-}
+
+def _load_admin_users() -> set[str]:
+    """Load admin usernames from st.secrets or ADMIN_USERS env var.
+
+    Format: comma-separated list, e.g. "alice,bob"
+    Falls back to empty set if not configured (DB is_admin flag is the real source of truth).
+    """
+    raw: str | None = None
+    try:
+        import streamlit as _st
+        raw = _st.secrets.get("ADMIN_USERS") or _st.secrets.get("admin_users")
+    except Exception:
+        pass
+    if not raw:
+        import os as _os
+        raw = _os.environ.get("ADMIN_USERS", "")
+    if not raw:
+        return set()
+    return {u.strip().lower() for u in str(raw).split(",") if u.strip()}
+
+
+ADMIN_USERS: set[str] = _load_admin_users()
 
 
 # ------------------------------

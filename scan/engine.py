@@ -5,6 +5,15 @@ import pandas as pd
 import streamlit as st
 import time
 
+from config import (
+    DB_CACHE_MIN_TICKERS,
+    PRICE_FETCH_CHUNK_SIZE,
+    PRICE_FETCH_CHUNK_MIN,
+    PRICE_FETCH_CHUNK_MAX,
+    DB_CACHE_MAX_AGE_MINUTES,
+    PROGRESS_UI_THROTTLE_SEC,
+)
+
 
 T = TypeVar("T")
 
@@ -55,7 +64,7 @@ def _db_cache_allowed_for_run(*, tickers_count: int, diagnostics: bool) -> bool:
     if not _is_admin_context():
         return False
     # Only worth it for big runs
-    if int(tickers_count) < 800:
+    if int(tickers_count) < DB_CACHE_MIN_TICKERS:
         return False
     try:
         ss = getattr(st, "session_state", None)
@@ -156,20 +165,32 @@ def _db_save_price_cache(
 
 
 def _is_admin_context() -> bool:
-    """Best-effort admin role check.
+    """Admin role check: session state is the fast path; DB is the authoritative gate.
 
-    Admin is a role (not a tier). We use session_state flags when present.
-    This must be safe in non-Streamlit contexts.
+    For cache-write operations (the only place this is called) we verify against
+    the DB so a tampered session_state cannot unlock admin-only paths.
     """
     try:
         ss = getattr(st, "session_state", None)
         if not ss:
             return False
-        if bool(ss.get("is_admin", False)):
-            return True
-        # Common alternative keys
+
+        # Fast-reject: if session says not admin, skip DB call entirely.
+        session_claims_admin = bool(ss.get("is_admin", False))
         role = (ss.get("role") or ss.get("user_role") or ss.get("account_role") or "").strip().lower()
-        return role == "admin"
+        if not session_claims_admin and role != "admin":
+            return False
+
+        # Session claims admin — verify against DB before granting privileged access.
+        username = (ss.get("username") or ss.get("user") or "").strip().lower()
+        if not username:
+            return False
+        try:
+            from db.users import is_admin_from_db
+            return is_admin_from_db(username)
+        except Exception:
+            # DB unavailable: fall back to session state (degraded but operational).
+            return session_claims_admin
     except _ENGINE_BOUNDARY_ERRORS:
         return False
 
@@ -260,7 +281,7 @@ def _make_progress_ui(total: int, *, title: str) -> tuple[callable, callable]:
 
         def tick(i: int, note: str = "") -> None:
             now = time.time()
-            if now - last["t"] < 0.25:
+            if now - last["t"] < PROGRESS_UI_THROTTLE_SEC:
                 return
             last["t"] = now
             pct = min(1.0, max(0.0, float(i) / float(total)))
@@ -427,7 +448,7 @@ def run_breakout_scan(
         except _ENGINE_BOUNDARY_ERRORS as e:
             _diag_exception(diagnostics, "DB cache stale-symbol filtering skipped", e)
     fetch_total = len(tickers_to_fetch)
-    large_scan = fetch_total >= 800
+    large_scan = fetch_total >= DB_CACHE_MIN_TICKERS
 
     if not tickers_to_fetch:
         # All requested symbols were satisfied from the snapshot.
@@ -449,8 +470,8 @@ def run_breakout_scan(
             from data.prices import fetch_price_data_batch  # type: ignore
 
             # Chunk size tuned to keep UI responsive without hammering Yahoo.
-            chunk_size = int(st.session_state.get("price_fetch_chunk_size", 150))
-            chunk_size = max(25, min(400, chunk_size))
+            chunk_size = int(st.session_state.get("price_fetch_chunk_size", PRICE_FETCH_CHUNK_SIZE))
+            chunk_size = max(PRICE_FETCH_CHUNK_MIN, min(PRICE_FETCH_CHUNK_MAX, chunk_size))
 
             tick(0, note=f"chunk_size={chunk_size}")
             processed = 0

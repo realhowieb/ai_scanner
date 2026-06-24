@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from .engine import get_neon_conn
-from .schema import ensure_neon_users_schema
+from .schema import ensure_neon_users_schema, ensure_neon_login_attempts_schema
 
 
 # Optional: auth library + hasher for seeding hashed passwords
@@ -460,3 +460,149 @@ def _build_demo_users() -> Dict[str, Dict[str, str]]:
 # Optional local fallback user config. Disabled unless ENABLE_DEMO_USERS=1 and
 # passwords are supplied through DEMO_*_PASSWORD env vars or Streamlit secrets.
 USERS_DB = _build_demo_users()
+
+
+def is_admin_from_db(username: str) -> bool:
+    """Server-side admin check: queries DB is_admin flag and tier='admin'.
+
+    This is the authoritative check — do not rely solely on session state.
+    Returns False if DB is unreachable (safe default).
+    """
+    username_norm = (username or "").strip().lower()
+    if not username_norm:
+        return False
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return False
+        ensure_neon_users_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT is_admin, tier FROM users WHERE lower(username) = %s AND is_active = TRUE LIMIT 1",
+            (username_norm,),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not row:
+            return False
+        if isinstance(row, dict):
+            return bool(row.get("is_admin")) or str(row.get("tier", "")).lower() == "admin"
+        return bool(row[0]) or str(row[1] or "").lower() == "admin"
+    except Exception:
+        return False
+
+
+def grant_admin(username: str) -> bool:
+    """Promote a user to admin in the DB. Returns True on success."""
+    username_norm = (username or "").strip().lower()
+    if not username_norm:
+        return False
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return False
+        ensure_neon_users_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE users SET is_admin = TRUE, tier = 'admin' WHERE lower(username) = %s",
+            (username_norm,),
+        )
+        conn.commit()
+        updated = cur.rowcount > 0
+        cur.close()
+        conn.close()
+        try:
+            load_users.clear()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return updated
+    except Exception:
+        return False
+
+
+def revoke_admin(username: str) -> bool:
+    """Remove admin flag from a user. Returns True on success."""
+    username_norm = (username or "").strip().lower()
+    if not username_norm:
+        return False
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return False
+        ensure_neon_users_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE users SET is_admin = FALSE, tier = 'basic' WHERE lower(username) = %s",
+            (username_norm,),
+        )
+        conn.commit()
+        updated = cur.rowcount > 0
+        cur.close()
+        conn.close()
+        try:
+            load_users.clear()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return updated
+    except Exception:
+        return False
+
+
+# --- Login rate limiting ---
+from config import LOGIN_RATE_LIMIT_WINDOW_SEC as _LOGIN_WINDOW_SECONDS, LOGIN_RATE_LIMIT_MAX_ATTEMPTS as _LOGIN_MAX_ATTEMPTS
+
+
+def record_login_attempt(username: str, *, success: bool, ip_address: str | None = None) -> None:
+    """Persist a login attempt for rate-limit tracking. Best-effort; never raises."""
+    username_norm = (username or "").strip().lower()
+    if not username_norm:
+        return
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return
+        ensure_neon_login_attempts_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO login_attempts (username, success, ip_address) VALUES (%s, %s, %s)",
+            (username_norm, success, ip_address),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        pass
+
+
+def is_login_rate_limited(username: str) -> bool:
+    """Return True if the user has exceeded failed login attempts in the window.
+
+    Counts only failed attempts in the last _LOGIN_WINDOW_SECONDS seconds.
+    Returns False (allow) when DB is unavailable so auth still works offline.
+    """
+    username_norm = (username or "").strip().lower()
+    if not username_norm:
+        return False
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return False
+        ensure_neon_login_attempts_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT COUNT(*) FROM login_attempts
+            WHERE username = %s
+              AND success = FALSE
+              AND attempted_at > NOW() - INTERVAL '%s seconds'
+            """,
+            (username_norm, _LOGIN_WINDOW_SECONDS),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        count = row[0] if row else 0
+        return int(count) >= _LOGIN_MAX_ATTEMPTS
+    except Exception:
+        return False
