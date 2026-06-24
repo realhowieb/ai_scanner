@@ -1,4 +1,29 @@
 # db/schema.py
+def ensure_neon_scan_errors_schema(conn):
+    """Ensure the scan_errors table exists for telemetry logging."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS scan_errors (
+            id SERIAL PRIMARY KEY,
+            context TEXT,
+            username TEXT,
+            universe TEXT,
+            ticker_count INTEGER,
+            error_type TEXT,
+            message TEXT,
+            traceback TEXT,
+            occurred_at TIMESTAMPTZ DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_scan_errors_occurred ON scan_errors (occurred_at DESC)"
+    )
+    conn.commit()
+    cur.close()
+
+
 def ensure_neon_runs_schema(conn):
     """Ensure the Neon 'runs' table exists with the expected schema, including watchlist_id."""
     cur = conn.cursor()

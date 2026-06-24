@@ -54,6 +54,24 @@ def get_scheduler(tz_str: str = "America/New_York") -> BackgroundScheduler:
     return _process_scheduler
 
 
+def _purge_old_login_attempts() -> None:
+    """Delete login_attempts rows older than 24 hours. Runs nightly."""
+    try:
+        from db.engine import get_neon_conn
+        conn = get_neon_conn()
+        if conn is None:
+            return
+        cur = conn.cursor()
+        cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '24 hours'")
+        deleted = cur.rowcount
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"[scheduler] purged {deleted} stale login_attempts rows")
+    except Exception as e:
+        print(f"[scheduler] login_attempts purge failed: {e}")
+
+
 def clear_jobs(scheduler: BackgroundScheduler) -> None:
     for job in scheduler.get_jobs():
         scheduler.remove_job(job.id)
@@ -96,6 +114,14 @@ def add_default_jobs(
             id="postmarket_job",
             replace_existing=True,
         )
+
+    # Nightly maintenance: purge stale login_attempts rows
+    scheduler.add_job(
+        _purge_old_login_attempts,
+        trigger=CronTrigger(hour=2, minute=0, timezone=tz_str),
+        id="purge_login_attempts",
+        replace_existing=True,
+    )
 
 
 def start(scheduler: BackgroundScheduler) -> None:

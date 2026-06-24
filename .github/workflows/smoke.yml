@@ -37,7 +37,7 @@ jobs:
           python -c "from scheduler.cron_runner import _load_universe; assert _load_universe('SP500')"
 
       - name: Run unit smoke tests
-        run: python -m unittest discover -s tests -v
+        run: python -m pytest tests/ -v --tb=short
 
   core-dependency-import-smoke:
     runs-on: ubuntu-latest
