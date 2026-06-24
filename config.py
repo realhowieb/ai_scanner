@@ -71,6 +71,18 @@ PROGRESS_UI_THROTTLE_SEC: float = 0.25
 LOGIN_RATE_LIMIT_WINDOW_SEC: int = 600   # 10-minute window
 LOGIN_RATE_LIMIT_MAX_ATTEMPTS: int = 10  # max failures before lockout
 
+# --- Session lifetime ---
+SESSION_TTL_DAYS: int = int(_get("SESSION_TTL_DAYS", "14"))
+
+# --- Password reset ---
+RESET_TOKEN_TTL_MINUTES: int = int(_get("RESET_TOKEN_TTL_MINUTES", "30"))
+SMTP_HOST: str | None = _get("SMTP_HOST")
+SMTP_PORT: int = int(_get("SMTP_PORT", "587"))
+SMTP_USER: str | None = _get("SMTP_USER")
+SMTP_PASS: str | None = _get("SMTP_PASS")
+SMTP_FROM: str = _get("SMTP_FROM", "noreply@ai-scanner.app")
+APP_BASE_URL: str = _get("APP_BASE_URL", "https://hsf-beta.streamlit.app")
+
 # ---------- Stripe Billing Configuration ----------
 STRIPE_MONTHLY_LINKS = {
     "basic":  "https://buy.stripe.com/fZu7sNgEi4JW4j98zo1Jm00",

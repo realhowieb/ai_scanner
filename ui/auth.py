@@ -173,6 +173,7 @@ def auth_ui():
                 username = st.text_input("Email or Username", key="login_username")
                 password = st.text_input("Password", type="password", key="login_password")
                 login_clicked = st.button("Login", key="login_button")
+                st.page_link("pages/reset_password.py", label="Forgot password?", icon="🔑")
 
         # ---- Sign Up tab ----
         with tabs[1]:

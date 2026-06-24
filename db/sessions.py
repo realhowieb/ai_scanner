@@ -29,12 +29,19 @@ def ensure_auth_sessions_schema(conn) -> None:
     cur.close()
 
 
-def create_session(username: str, ttl_days: int = 14) -> Optional[str]:
+def create_session(username: str, ttl_days: int | None = None) -> Optional[str]:
     if get_neon_conn is None:
         return None
     u = (username or "").strip().lower()
     if not u:
         return None
+
+    if ttl_days is None:
+        try:
+            from config import SESSION_TTL_DAYS
+            ttl_days = SESSION_TTL_DAYS
+        except (ImportError, AttributeError):
+            ttl_days = 14
 
     conn = get_neon_conn()
     if conn is None:

@@ -293,6 +293,11 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("def _resolve_earnings_refresh_symbols", admin_tabs_source)
         self.assertNotIn("_fetch_earnings_list", admin_tabs_source)
         self.assertNotIn("except Exception", admin_tabs_source)
+        self.assertIn("def _render_scan_errors_panel", admin_tabs_source)
+        self.assertIn("def _render_login_attempts_panel", admin_tabs_source)
+        self.assertIn("def _render_billing_health_badge", admin_tabs_source)
+        self.assertIn("ensure_neon_scan_errors_schema", admin_tabs_source)
+        self.assertIn("ensure_neon_login_attempts_schema", admin_tabs_source)
 
     def test_db_and_user_settings_helpers_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()

@@ -95,8 +95,14 @@ def ensure_auth_sessions_schema(conn) -> None:
     cur.close()
 
 
-def create_session(username: str, ttl_days: int = 14) -> Optional[str]:
+def create_session(username: str, ttl_days: int | None = None) -> Optional[str]:
     """Create a new session row and return session_id as str."""
+    if ttl_days is None:
+        try:
+            from config import SESSION_TTL_DAYS
+            ttl_days = SESSION_TTL_DAYS
+        except (ImportError, AttributeError):
+            ttl_days = 14
     try:
         if get_neon_conn is None:
             return None
