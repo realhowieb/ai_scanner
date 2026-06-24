@@ -126,6 +126,15 @@ def auth_ui():
             u = _get_username_for_session(str(sid))
             if u:
                 st.session_state["username"] = (u or "").strip().lower()
+                # Re-read tier from DB so post-Stripe-upgrade redirects reflect the new plan.
+                try:
+                    from auth.tier_sync import resolve_user_tier
+                    t = resolve_user_tier((u or "").strip().lower())
+                    if t:
+                        st.session_state["tier"] = t
+                        st.session_state["plan"] = t
+                except (ImportError, *_AUTH_BACKEND_ERRORS):
+                    pass
             else:
                 # Session expired or invalid — clear the stale cookie so the user
                 # gets a clean login form rather than a silent broken state.
