@@ -9,7 +9,11 @@ from __future__ import annotations
 import time
 
 import pandas as pd
-import streamlit as st
+try:
+    import streamlit as st
+except ModuleNotFoundError:
+    from types import SimpleNamespace as _NS
+    st = _NS(session_state={}, cache_data=lambda **_kw: (lambda fn: fn))  # type: ignore[assignment]
 from auth.tiering import require_min_tier
 
 from db.runs import list_runs, save_run

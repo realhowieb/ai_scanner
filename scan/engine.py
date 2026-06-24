@@ -2,8 +2,20 @@ from __future__ import annotations
 
 from typing import List, Callable, TypeVar, Any, Optional, Dict
 import pandas as pd
-import streamlit as st
 import time
+
+try:
+    import streamlit as st
+except ModuleNotFoundError:
+    from types import SimpleNamespace as _NS
+    st = _NS(  # type: ignore[assignment]
+        cache_data=lambda **_kw: (lambda fn: fn),
+        session_state={},
+        caption=lambda *_a, **_kw: None,
+        warning=lambda *_a, **_kw: None,
+        progress=lambda *_a, **_kw: _NS(empty=lambda: None),
+        empty=lambda: _NS(empty=lambda: None),
+    )
 
 from config import (
     DB_CACHE_MIN_TICKERS,
