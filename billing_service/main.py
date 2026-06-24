@@ -1,9 +1,22 @@
 import json
+import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
 import stripe
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_log = logging.getLogger("billing_service")
+
+
+def _validate_email(email: str) -> str:
+    """Normalize and validate an email from a Stripe webhook. Raises ValueError if invalid."""
+    email = (email or "").strip().lower()
+    if not email or not _EMAIL_RE.match(email):
+        raise ValueError(f"Invalid or missing email from webhook: {email!r}")
+    return email
 
 # ---------- DB helpers ----------
 
@@ -279,13 +292,17 @@ async def stripe_webhook(request: Request):
 
     # 1) Initial checkout completion
     if etype == "checkout.session.completed":
-        email = (
+        raw_email = (
             (data.get("metadata", {}) or {}).get("user_email")
             or (data.get("customer_details") or {}).get("email")
             or data.get("customer_email")
             or ""
         )
-        email = email.strip().lower()
+        try:
+            email = _validate_email(raw_email)
+        except ValueError as exc:
+            _log.warning("checkout.session.completed: %s", exc)
+            return JSONResponse({"received": True, "type": etype, "note": str(exc)})
         customer_id = data.get("customer")
         subscription_id = data.get("subscription")
 

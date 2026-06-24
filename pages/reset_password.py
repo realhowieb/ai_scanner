@@ -105,7 +105,13 @@ def main() -> None:
     st.set_page_config(page_title="Reset Password | AI Scanner", page_icon="🔑")
     st.title("🔑 Password Reset")
 
-    token = st.query_params.get("token", "")
+    raw_token = st.query_params.get("token", "")
+    # Guard against oversized or malformed tokens before hitting the DB.
+    token = (raw_token or "").strip()
+    if token and (len(token) > 128 or not token.replace("-", "").replace("_", "").isalnum()):
+        st.error("Invalid reset link. Please request a new one.")
+        token = ""
+
     if token:
         _set_new_password_form(token)
     else:

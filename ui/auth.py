@@ -413,24 +413,24 @@ def auth_ui():
                     login_key = k  # actual DB key (email)
                     break
 
-        def _fail(msg: str) -> tuple:
+        def _fail(msg: str, reason: str = "unknown") -> tuple:
             st.error(msg)
             _register_failed_login_attempt(MAX_FAILED_ATTEMPTS, LOCKOUT_SECONDS)
             if _record_login_attempt_db is not None:
                 try:
-                    _record_login_attempt_db(username, success=False)
+                    _record_login_attempt_db(username, success=False, failure_reason=reason)
                 except _AUTH_BACKEND_ERRORS:
                     pass
             return False, None, None
 
         if user is None:
-            return _fail("User not found. Please use the email you signed up with, or your username.")
+            return _fail("User not found. Please use the email you signed up with, or your username.", reason="user_not_found")
 
         # Expect user dict to contain a 'password' field.
         # Supports legacy plain-text passwords and new bcrypt hashes, with auto-migration.
         stored_password = user.get("password")
         if stored_password is None:
-            return _fail("User record is missing a password field.")
+            return _fail("User record is missing a password field.", reason="no_password_field")
 
         # Normalize stored password to a clean string (handles bytes from DB as well)
         if isinstance(stored_password, (bytes, bytearray)):
@@ -447,7 +447,7 @@ def auth_ui():
             if not bcrypt.checkpw(password.encode("utf-8"), stored_str.encode("utf-8")):
                 # Fallback: try raw input (older accounts may have accidental whitespace)
                 if not bcrypt.checkpw(raw_password.encode("utf-8"), stored_str.encode("utf-8")):
-                    return _fail("Incorrect password.")
+                    return _fail("Incorrect password.", reason="wrong_password")
                 else:
                     # Normalize forward: re-hash stripped password
                     try:

@@ -81,26 +81,19 @@ def get_username_for_session(session_id: str) -> Optional[str]:
     ensure_auth_sessions_schema(conn)
 
     cur = conn.cursor()
+    # Atomic: only touch last_seen if still valid; prevents extending expired sessions.
     cur.execute(
         """
-        SELECT username
-        FROM auth_sessions
+        UPDATE auth_sessions
+        SET last_seen_at = now()
         WHERE session_id = %s
           AND expires_at > now()
-        LIMIT 1;
+        RETURNING username;
         """,
         (sid,),
     )
     row = cur.fetchone()
-
-    # touch last_seen
-    if row:
-        cur.execute(
-            "UPDATE auth_sessions SET last_seen_at = now() WHERE session_id = %s;",
-            (sid,),
-        )
-        conn.commit()
-
+    conn.commit()
     cur.close()
     conn.close()
     return row[0] if row else None

@@ -39,6 +39,10 @@ def _demo_users_enabled() -> bool:
 
 
 def _demo_password(name: str) -> str | None:
+    """Read a demo password once and never store it in a named variable.
+
+    Do NOT log or repr() the return value — it contains a plaintext password.
+    """
     value = os.getenv(name)
     if value:
         return value
@@ -592,7 +596,13 @@ from config import LOGIN_RATE_LIMIT_MAX_ATTEMPTS as _LOGIN_MAX_ATTEMPTS
 from config import LOGIN_RATE_LIMIT_WINDOW_SEC as _LOGIN_WINDOW_SECONDS
 
 
-def record_login_attempt(username: str, *, success: bool, ip_address: str | None = None) -> None:
+def record_login_attempt(
+    username: str,
+    *,
+    success: bool,
+    ip_address: str | None = None,
+    failure_reason: str | None = None,
+) -> None:
     """Persist a login attempt for rate-limit tracking. Best-effort; never raises."""
     username_norm = (username or "").strip().lower()
     if not username_norm:
@@ -604,8 +614,8 @@ def record_login_attempt(username: str, *, success: bool, ip_address: str | None
         ensure_neon_login_attempts_schema(conn)
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO login_attempts (username, success, ip_address) VALUES (%s, %s, %s)",
-            (username_norm, success, ip_address),
+            "INSERT INTO login_attempts (username, success, ip_address, failure_reason) VALUES (%s, %s, %s, %s)",
+            (username_norm, success, ip_address, failure_reason),
         )
         conn.commit()
         cur.close()

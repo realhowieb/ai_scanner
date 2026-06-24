@@ -120,10 +120,12 @@ def ensure_neon_login_attempts_schema(conn):
             username TEXT NOT NULL,
             attempted_at TIMESTAMPTZ DEFAULT NOW(),
             success BOOLEAN DEFAULT FALSE,
-            ip_address TEXT
+            ip_address TEXT,
+            failure_reason TEXT
         )
         """
     )
+    cur.execute("ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS failure_reason TEXT")
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_login_attempts_username_time ON login_attempts (username, attempted_at)"
     )

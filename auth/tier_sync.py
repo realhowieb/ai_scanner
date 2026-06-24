@@ -122,8 +122,8 @@ def resolve_user_tier(
                     "source": "admin_users",
                 },
             }
-    except Exception:
-        pass
+    except Exception as _e:
+        print(f"[tier_sync] admin fast-path error: {type(_e).__name__}: {_e}")
 
     # ---- DB lookup (prefer direct DB conn when provided, otherwise fall back to db.users helpers)
     user: Optional[Dict[str, Any]] = None

@@ -38,8 +38,27 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+_RESET_MAX_PER_HOUR = 3
+
+
+def _rate_limited(cur, username: str) -> bool:
+    """Return True if user has requested too many resets in the last hour."""
+    cur.execute(
+        """
+        SELECT COUNT(*) FROM password_reset_tokens
+        WHERE username = %s AND created_at > NOW() - INTERVAL '1 hour'
+        """,
+        (username,),
+    )
+    row = cur.fetchone()
+    return (row[0] if row else 0) >= _RESET_MAX_PER_HOUR
+
+
 def create_reset_token(username: str, ttl_minutes: int = 30) -> Optional[str]:
-    """Generate a URL-safe token, store its hash, return the raw token."""
+    """Generate a URL-safe token, store its hash, return the raw token.
+
+    Returns None if the user has already requested 3+ resets in the last hour.
+    """
     if get_neon_conn is None:
         return None
     conn = get_neon_conn()
@@ -47,6 +66,14 @@ def create_reset_token(username: str, ttl_minutes: int = 30) -> Optional[str]:
         return None
 
     _ensure_schema(conn)
+
+    cur = conn.cursor()
+    if _rate_limited(cur, username):
+        cur.close()
+        conn.close()
+        return None
+    cur.close()
+
     token = secrets.token_urlsafe(32)
     expires = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
 

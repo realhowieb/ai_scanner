@@ -26,18 +26,27 @@ _process_scheduler_started: bool = False
 
 
 def _warn_if_multi_worker() -> None:
-    """Emit a one-time warning when the app appears to run with multiple workers."""
+    """Log a startup warning when WEB_CONCURRENCY > 1.
+
+    APScheduler BackgroundScheduler is a single-process singleton. With multiple
+    workers, scheduled jobs only fire in one process. This is printed to stdout
+    (visible in Streamlit Cloud logs) so ops can catch it without needing a UI session.
+    """
     import os
     workers = int(os.environ.get("WEB_CONCURRENCY", os.environ.get("STREAMLIT_SERVER_WORKERS", "1")))
-    if workers > 1 and not st.session_state.get("_sched_multiworker_warned"):
-        st.warning(
-            f"⚠️ Scheduler: detected {workers} workers. "
-            "APScheduler's BackgroundScheduler is a single-process singleton — "
-            "jobs will only fire in ONE worker process. "
-            "For reliable multi-worker scheduling, use an external queue (Celery/RQ) or "
-            "a dedicated scheduler process."
+    if workers > 1:
+        msg = (
+            f"[scheduler] WARNING: {workers} workers detected. "
+            "APScheduler fires in ONE worker only — scheduled scans may be unreliable. "
+            "Set WEB_CONCURRENCY=1 or use an external queue."
         )
-        st.session_state["_sched_multiworker_warned"] = True
+        print(msg)
+        try:
+            if not st.session_state.get("_sched_multiworker_warned"):
+                st.warning(msg)
+                st.session_state["_sched_multiworker_warned"] = True
+        except Exception:
+            pass
 
 
 def get_scheduler(tz_str: str = "America/New_York") -> BackgroundScheduler:
