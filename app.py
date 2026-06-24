@@ -239,7 +239,7 @@ except Exception:
 # --------------- Tier Sync (DB-first tier resolver) ----------------
 # Uses DB as source-of-truth (Stripe webhooks write to DB), with safe fallback to legacy behavior.
 try:
-    from tier_sync import resolve_user_tier  # type: ignore
+    from auth.tier_sync import resolve_user_tier  # type: ignore
 except Exception:
     resolve_user_tier = None  # type: ignore
 

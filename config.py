@@ -123,4 +123,20 @@ TIERS_CONFIG = {
         ],
         "max_results": 200,
     },
+    "admin": {
+        "name": "Admin",
+        "price_monthly": 0,
+        "price_yearly": 0,
+        "features": [
+            "SP500 Scan",
+            "NASDAQ",
+            "ExportCSV",
+            "AI Notes",
+            "Premarket",
+            "AfterHours",
+            "UnusualVolume",
+            "Snapshots",
+        ],
+        "max_results": 9999,
+    },
 }
