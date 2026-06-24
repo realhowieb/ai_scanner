@@ -114,6 +114,32 @@ def _lookup_email_by_display_username(display_username: str) -> str | None:
         return None
 
 
+def _poll_for_tier_upgrade(username: str, max_attempts: int = 10) -> None:
+    """After Stripe checkout, webhook fires async. Poll DB until tier upgrades or we give up."""
+    import time
+    current = st.session_state.get("tier", "basic")
+    attempt = st.session_state.get("_tier_poll_attempt", 0)
+    if current != "basic" or attempt >= max_attempts:
+        st.session_state.pop("_tier_poll_attempt", None)
+        if current != "basic":
+            st.success(f"🎉 Plan upgraded to **{current}**! Enjoy your new features.")
+        return
+    with st.spinner("Activating your plan upgrade…"):
+        time.sleep(2)
+    try:
+        from auth.tier_sync import resolve_user_tier
+        t = resolve_user_tier(username)
+        if t and t != "basic":
+            st.session_state["tier"] = t
+            st.session_state["plan"] = t
+            st.session_state.pop("_tier_poll_attempt", None)
+            st.rerun()
+    except (ImportError, *_AUTH_BACKEND_ERRORS):
+        pass
+    st.session_state["_tier_poll_attempt"] = attempt + 1
+    st.rerun()
+
+
 def auth_ui():
     # --- Cookie session restore (persists login across refresh / Stripe redirects) ---
     cookies = _cookies_ready_or_stop()
@@ -145,13 +171,15 @@ def auth_ui():
                     pass
                 st.info("Your session has expired. Please log in again.")
 
-    # If Stripe redirects back with ?checkout=success but this Streamlit session isn't authenticated,
-    # it usually means the success/cancel URL is pointing at a different deployment (domain) than
-    # the one that initiated checkout, so session_state is empty here.
+    # If Stripe redirects back with ?checkout=success, poll for tier upgrade
+    # (webhook fires async so DB may still show old tier for a few seconds).
     try:
         checkout_flag = (st.query_params.get("checkout") or "").strip().lower()
     except _AUTH_BACKEND_ERRORS:
         checkout_flag = ""
+
+    if checkout_flag == "success" and "username" in st.session_state:
+        _poll_for_tier_upgrade(st.session_state["username"])
 
     if "username" not in st.session_state and checkout_flag in ("success", "cancel"):
         if checkout_flag == "success":
