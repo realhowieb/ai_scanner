@@ -10,8 +10,35 @@ import streamlit as st
 
 from config import STRIPE_MONTHLY_LINKS, STRIPE_YEARLY_LINKS, TIERS_CONFIG
 
+try:
+    from config import BILLING_API_BASE
+except ImportError:
+    BILLING_API_BASE = None
 
-def pricing_sidebar(current_username: Optional[str], users: Dict[str, Dict[str, str]]):
+
+def _create_checkout_url(email: str, plan: str, period: str) -> str | None:
+    """Call billing service to create a Stripe checkout session. Returns URL or None."""
+    base = (BILLING_API_BASE or "").rstrip("/")
+    if not base or not email:
+        return None
+    try:
+        import json
+        import urllib.request
+        payload = json.dumps({"email": email, "plan": plan, "period": period}).encode()
+        req = urllib.request.Request(
+            f"{base}/create-checkout-session",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read())
+        return data.get("url") or data.get("portal_url")
+    except Exception:
+        return None
+
+
+def pricing_sidebar(current_username: Optional[str], users: Dict[str, Dict[str, str]], email: str | None = None):
     """Show upgrade options only for tiers above the user's current plan.
 
     - Basic users see Pro + Premium
@@ -102,15 +129,29 @@ def pricing_sidebar(current_username: Optional[str], users: Dict[str, Dict[str, 
             else:
                 st.markdown("- AI Notes: ❌")
 
-            # Choose the correct Stripe link key based on billing period
-            checkout_url = (
-                STRIPE_MONTHLY_LINKS if billing_period == "Monthly" else STRIPE_YEARLY_LINKS
-            ).get(key)
+            btn_label = f"Subscribe {name} ({billing_period})"
+            btn_key = f"upgrade_{key}_{billing_period}"
 
-            if checkout_url:
-                st.link_button(
-                    f"Subscribe {name} ({billing_period})",
-                    checkout_url,
-                )
+            # Use dynamic checkout session (same-tab redirect) when billing service is available.
+            if BILLING_API_BASE and email:
+                if st.button(btn_label, key=btn_key):
+                    with st.spinner("Preparing checkout…"):
+                        url = _create_checkout_url(email, key, billing_period.lower())
+                    if url:
+                        st.markdown(
+                            f'<meta http-equiv="refresh" content="0; url={url}">',
+                            unsafe_allow_html=True,
+                        )
+                        st.info("Redirecting to Stripe checkout…")
+                        st.stop()
+                    else:
+                        st.error("Could not create checkout session. Try again or contact support.")
             else:
-                st.caption("Stripe link not configured yet for this plan/period.")
+                # Fallback: static payment links (open in same tab via link_button)
+                fallback_url = (
+                    STRIPE_MONTHLY_LINKS if billing_period == "Monthly" else STRIPE_YEARLY_LINKS
+                ).get(key)
+                if fallback_url:
+                    st.link_button(btn_label, fallback_url)
+                else:
+                    st.caption("Stripe link not configured yet for this plan/period.")

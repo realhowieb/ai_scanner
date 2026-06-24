@@ -183,16 +183,12 @@ def auth_ui():
 
     if "username" not in st.session_state and checkout_flag in ("success", "cancel"):
         if checkout_flag == "success":
-            st.info(
-                "Payment completed ✅ — please log in to unlock your upgraded plan. "
-                "If you keep landing here after checkout, update your billing service env vars "
-                "APP_SUCCESS_URL / APP_CANCEL_URL to THIS deployment’s URL so Stripe redirects back "
-                "to the same app instance."
+            st.success(
+                "Payment completed ✅ — log in below to access your upgraded plan. "
+                "Your account has already been upgraded."
             )
         else:
-            st.info(
-                "Checkout was cancelled. You can log in and try upgrading again anytime."
-            )
+            st.info("Checkout was cancelled. You can log in and try upgrading again anytime.")
 
     if "username" in st.session_state:
         username = (st.session_state["username"] or "").strip().lower()
