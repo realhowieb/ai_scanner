@@ -6,7 +6,6 @@ from typing import Any
 
 from .cron_runner import run_and_save
 
-
 _UNIVERSE_ALIASES = {
     "S&P 500": "SP500",
     "SP500": "SP500",

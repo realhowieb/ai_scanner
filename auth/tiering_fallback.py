@@ -3,7 +3,7 @@ Used only when main tiering module fails to import.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Any, Dict
 
 # Default fallback DB (empty)
 USERS_DB: Dict[str, Dict[str, Any]] = {}

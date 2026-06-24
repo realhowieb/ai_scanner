@@ -9,26 +9,31 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 import pandas as pd
-
 import streamlit as st
 
 from ui.app_boot import (
     configure_page,
     install_streamlit_compat,
+)
+from ui.app_boot import (
     quiet_external_calls as _quiet_external_calls,
+)
+from ui.app_runtime import (
+    get_market_session,
+    render_active_filters_summary,
+    render_onboarding_hint,
+    render_sidebar_upgrade_card,
+)
+from ui.app_runtime import (
+    normalize_results_to_df as _normalize_results_to_df,
 )
 from ui.app_session import (
     compute_entitlements,
     is_admin_user,
     normalize_admin_users,
-    tier_key as _tier_key,
 )
-from ui.app_runtime import (
-    get_market_session,
-    normalize_results_to_df as _normalize_results_to_df,
-    render_active_filters_summary,
-    render_onboarding_hint,
-    render_sidebar_upgrade_card,
+from ui.app_session import (
+    tier_key as _tier_key,
 )
 from ui.app_user_profile import (
     apply_admin_scan_caps,
@@ -79,15 +84,15 @@ configure_page()
 # --------------- Tiering ----------------
 try:
     from auth.tiering import (
-        USERS_DB,
         ADMIN_USERS,
-        get_user_tier,
+        USERS_DB,
         Tier,
-        require_min_tier,
+        get_user_tier,
         has_min_tier,
+        require_min_tier,
     )
 except Exception:
-    from auth.tiering_fallback import USERS_DB, ADMIN_USERS, get_user_tier, Tier
+    from auth.tiering_fallback import ADMIN_USERS, USERS_DB, Tier, get_user_tier
 
     def has_min_tier(tier_or_key, required: str) -> bool:
         order = {"basic": 0, "pro": 1, "premium": 2, "admin": 3}
@@ -126,8 +131,8 @@ except Exception as _e:
 _IMPORT_ERROR: str | None = None
 
 try:
-    from db.users import seed_neon_users_from_local, load_users
-    from db.runs import save_run, save_daily_snapshot, list_runs, load_run_results
+    from db.runs import list_runs, load_run_results, save_daily_snapshot, save_run
+    from db.users import load_users, seed_neon_users_from_local
 
     # User settings (per-user defaults) – optional Neon-backed feature
     try:
@@ -137,19 +142,19 @@ try:
         upsert_user_settings = None
 
     from ui.admin_users import render_admin_users_panel
-    from ui.history import render_history_expander
-    from ui.results import render_results, get_results_df
-    from ui.scans import render_scan_controls, render_three_step_scanner
-    from ui.universe_panel import render_universe_panel, init_universe_state
-    from ui.filters import render_filters
     from ui.db_status import render_db_status_badge
-    from ui.header import render_header, render_price_ticker, render_market_snapshot
-    from ui.prebreakout_tab import render_prebreakout_tab
-    from ui.results_tabs import render_results_tabs
     from ui.earnings_results import prepare_results_with_earnings, render_earnings_controls
+    from ui.filters import render_filters
     from ui.footer import render_footer
-    from ui.watchlists import render_watchlists_panel
+    from ui.header import render_header, render_market_snapshot, render_price_ticker
+    from ui.history import render_history_expander
+    from ui.prebreakout_tab import render_prebreakout_tab
+    from ui.results import get_results_df, render_results
+    from ui.results_tabs import render_results_tabs
+    from ui.scans import render_scan_controls, render_three_step_scanner
+    from ui.universe_panel import init_universe_state, render_universe_panel
     from ui.user_settings import render_user_settings_footer
+    from ui.watchlists import render_watchlists_panel
 
 except Exception as _e:
     # Capture the error and provide minimal placeholders so the module loads.
@@ -376,7 +381,7 @@ def main():
     )
 
     # Also check the raw authenticator state
-    is_authed_state = st.session_state.get("authentication_status") is True
+    _ = st.session_state.get("authentication_status") is True
 
 
     # -------- ONLY NOW RENDER HEADER + TICKER --------

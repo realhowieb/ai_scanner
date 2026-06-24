@@ -1,7 +1,6 @@
 import pathlib
 import unittest
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
@@ -334,7 +333,7 @@ class CleanupSourceChecks(unittest.TestCase):
         app_source = (ROOT / "app.py").read_text()
         header_source = (ROOT / "ui" / "header.py").read_text()
 
-        self.assertIn("from ui.header import render_header, render_price_ticker, render_market_snapshot", app_source)
+        self.assertIn("from ui.header import render_header, render_market_snapshot, render_price_ticker", app_source)
         self.assertIn("render_price_ticker()", app_source)
         self.assertIn("render_market_snapshot(results_df=_snapshot_df)", app_source)
         self.assertNotIn("def _fetch_index_snapshot", app_source)

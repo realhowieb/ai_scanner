@@ -1,5 +1,5 @@
 import re
-from typing import Iterable, List, Mapping, Any, Optional
+from typing import Any, Iterable, List, Mapping, Optional
 
 # --- Normalization helpers -------------------------------------------------
 

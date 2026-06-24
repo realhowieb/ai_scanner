@@ -6,7 +6,6 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-
 BASIC_RESULTS_TABLE_CSS = """
 <style>
 .basic-results-wrap {

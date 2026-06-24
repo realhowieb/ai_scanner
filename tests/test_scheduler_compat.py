@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-import unittest
 import importlib
 import importlib.util
 import json
 import os
+import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from scheduler.cron_runner import ScanRunSummary, _load_universe, _skip_reason, _write_summary
 from scheduler import jobs
-
+from scheduler.cron_runner import ScanRunSummary, _load_universe, _skip_reason, _write_summary
 
 ROOT = Path(__file__).resolve().parents[1]
 

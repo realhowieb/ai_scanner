@@ -1,6 +1,8 @@
 # ai_scanner/utils/market_time.py
 from __future__ import annotations
+
 import datetime as dt
+
 import pytz
 
 NY = pytz.timezone("America/New_York")

@@ -10,7 +10,6 @@ from typing import Any
 
 from .options import normalize_market
 
-
 SymbolLoader = Callable[[], Sequence[str]]
 SymbolTransform = Callable[[Sequence[str]], list[str]]
 SafeCall = Callable[..., Any]

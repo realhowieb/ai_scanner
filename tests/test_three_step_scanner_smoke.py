@@ -2,7 +2,6 @@ import importlib.util
 import unittest
 from unittest.mock import patch
 
-
 PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
 STREAMLIT_AVAILABLE = importlib.util.find_spec("streamlit") is not None
 _DEPS_OK = PANDAS_AVAILABLE and STREAMLIT_AVAILABLE

@@ -1,9 +1,9 @@
 """Runtime helpers for the Streamlit app shell."""
 from __future__ import annotations
 
+import json
 from datetime import datetime, time
 from json import JSONDecodeError
-import json
 from typing import Callable
 from zoneinfo import ZoneInfo
 

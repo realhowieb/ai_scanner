@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import threading
-from typing import Callable, Optional, Tuple
 from dataclasses import dataclass
+from typing import Callable, Optional, Tuple
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 import pytz
 import streamlit as st
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 
 @dataclass

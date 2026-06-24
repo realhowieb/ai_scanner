@@ -10,13 +10,12 @@ except Exception:  # pragma: no cover
     pd = None
 
 from db.watchlists import (
-    list_watchlists,
     create_watchlist,
     delete_watchlist,
     get_watchlist_tickers,
+    list_watchlists,
     set_watchlist_tickers,
 )
-
 
 BannerFn = Callable[[str, str], None]
 ScanFn = Callable[[List[str], str], None]

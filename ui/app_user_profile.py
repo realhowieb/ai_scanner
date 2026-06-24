@@ -7,7 +7,6 @@ from typing import Any, Callable
 import pandas as pd
 import streamlit as st
 
-
 APP_PROFILE_ERRORS = (
     RuntimeError,
     TypeError,

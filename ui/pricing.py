@@ -4,11 +4,11 @@ Provides:
     - pricing_sidebar(current_username, users)
 """
 
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 import streamlit as st
 
-from config import TIERS_CONFIG, STRIPE_MONTHLY_LINKS, STRIPE_YEARLY_LINKS
+from config import STRIPE_MONTHLY_LINKS, STRIPE_YEARLY_LINKS, TIERS_CONFIG
 
 
 def pricing_sidebar(current_username: Optional[str], users: Dict[str, Dict[str, str]]):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from db.engine import get_neon_conn
 from db.schema import ensure_neon_watchlists_schema

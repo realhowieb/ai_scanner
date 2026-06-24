@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import os
 import time
+
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
 from requests import exceptions as req_exc
-
 
 # =========================
 # Config

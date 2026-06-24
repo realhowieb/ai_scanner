@@ -1,12 +1,11 @@
 # db/user_settings.py
 from __future__ import annotations
 
-from typing import Optional, Dict, Any
-
-from .engine import get_neon_conn, get_db_status
-
-import os
 import logging
+import os
+from typing import Any, Dict, Optional
+
+from .engine import get_db_status, get_neon_conn
 
 logger = logging.getLogger(__name__)
 

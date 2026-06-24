@@ -1,7 +1,10 @@
 # ai_scanner/utils/retry.py
 from __future__ import annotations
-import time, random
-from typing import Callable, Type, Iterable
+
+import random
+import time
+from typing import Callable, Iterable, Type
+
 
 def with_backoff(fn: Callable, exceptions: Iterable[Type[BaseException]], tries=3, base=0.5, jitter=0.3):
     def wrapped(*a, **kw):
@@ -9,7 +12,7 @@ def with_backoff(fn: Callable, exceptions: Iterable[Type[BaseException]], tries=
         while True:
             try:
                 return fn(*a, **kw)
-            except tuple(exceptions) as e:
+            except tuple(exceptions):
                 t += 1
                 if t >= tries:
                     raise

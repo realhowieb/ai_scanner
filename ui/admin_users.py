@@ -2,9 +2,9 @@
 
 import streamlit as st
 
-from db.users import fetch_all_users, load_users
 from db.engine import get_neon_conn
 from db.schema import ensure_neon_users_schema
+from db.users import fetch_all_users, load_users
 
 try:
     import streamlit_authenticator as stauth

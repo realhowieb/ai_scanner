@@ -6,6 +6,7 @@ import inspect
 
 import pandas as pd
 import streamlit as st
+
 from ui.market_heat import fetch_hot_stocks, fetch_most_active_stocks
 
 

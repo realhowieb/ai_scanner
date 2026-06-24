@@ -13,10 +13,10 @@ Notes:
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-import time
-from typing import Iterable, Optional, Dict, Tuple
+from typing import Dict, Iterable, Optional, Tuple
 
 
 def _norm_symbol(sym: str) -> str:
@@ -199,8 +199,8 @@ def fetch_next_earnings(symbol: str) -> EarningsInfo:
         return EarningsInfo(symbol=sym, earnings_date=None, earnings_time=None)
 
     try:
-        import yfinance as yf  # local import to avoid import cost when unused
         import pandas as pd
+        import yfinance as yf  # local import to avoid import cost when unused
 
         t = yf.Ticker(sym)
 

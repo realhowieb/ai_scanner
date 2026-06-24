@@ -2,8 +2,8 @@
 
 try:
     from .helpers import (
-        normalize_ticker,
         format_dollar_volume,
+        normalize_ticker,
         parse_date,
     )
 except ImportError:

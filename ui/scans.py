@@ -4,17 +4,17 @@ Contains the scan buttons (SP500, NASDAQ, Combo) and the core do_scan logic
 that runs the breakout scan and persists results to the runs DB.
 """
 
-from datetime import datetime, timedelta
-from typing import List, Optional, Any
-from zoneinfo import ZoneInfo
 import time
 import traceback
+from datetime import datetime, timedelta
+from typing import Any, List, Optional
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
 
-from db.runs import save_run, save_daily_snapshot, list_runs
-from scan.engine import safe_call, run_breakout_scan
+from db.runs import list_runs, save_daily_snapshot, save_run
+from scan.engine import run_breakout_scan, safe_call
 from scan.execution import run_manual_scan_execution
 from scan.options import apply_admin_caps
 from scan.universe_selection import resolve_scan_universe
@@ -41,17 +41,17 @@ def _admin_override_caps(max_nasdaq_scan: int, max_combo_scan: int, top_n: int) 
 # Universe loaders (imported here so this module is self-contained)
 try:
     from ui.universe import (
-        load_sp500_universe,
-        load_nasdaq_universe,
-        filter_universe,
         apply_liquidity_filter_batch,
+        filter_universe,
+        load_nasdaq_universe,
+        load_sp500_universe,
     )
 except ModuleNotFoundError:
     from ai_scanner.ui.universe import (  # type: ignore
-        load_sp500_universe,
-        load_nasdaq_universe,
-        filter_universe,
         apply_liquidity_filter_batch,
+        filter_universe,
+        load_nasdaq_universe,
+        load_sp500_universe,
     )
 
 

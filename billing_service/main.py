@@ -1,9 +1,10 @@
-import os
 import json
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
 import stripe
+
 # ---------- DB helpers ----------
 
 def _append_qp(url: str, key: str, value: str) -> str:
@@ -11,7 +12,7 @@ def _append_qp(url: str, key: str, value: str) -> str:
     sep = "&" if "?" in base else "?"
     return f"{base}{sep}{key}={value}"
 import psycopg2
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 app = FastAPI()

@@ -5,7 +5,6 @@ from typing import Any, Callable
 
 import streamlit as st
 
-
 ADMIN_TAB_ERRORS = (
     RuntimeError,
     TypeError,
@@ -348,6 +347,7 @@ def _render_billing_health_badge() -> None:
         return
     try:
         import os
+
         import requests
         base = (os.getenv("BILLING_API_BASE") or "https://ai-scanner-h2c8.onrender.com").strip()
         timeout = float(os.getenv("BILLING_HEALTH_TIMEOUT", "3"))

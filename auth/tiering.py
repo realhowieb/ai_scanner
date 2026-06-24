@@ -9,8 +9,8 @@ This module centralizes:
 """
 
 from dataclasses import dataclass
-from typing import Dict, Optional
 from datetime import datetime, timezone
+from typing import Dict, Optional
 
 try:
     import streamlit as st

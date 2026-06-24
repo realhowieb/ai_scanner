@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import List, Callable, TypeVar, Any, Optional, Dict
-import pandas as pd
 import time
+from typing import Any, Callable, Dict, List, Optional, TypeVar
+
+import pandas as pd
 
 try:
     import streamlit as st
@@ -18,14 +19,13 @@ except ModuleNotFoundError:
     )
 
 from config import (
-    DB_CACHE_MIN_TICKERS,
-    PRICE_FETCH_CHUNK_SIZE,
-    PRICE_FETCH_CHUNK_MIN,
-    PRICE_FETCH_CHUNK_MAX,
     DB_CACHE_MAX_AGE_MINUTES,
+    DB_CACHE_MIN_TICKERS,
+    PRICE_FETCH_CHUNK_MAX,
+    PRICE_FETCH_CHUNK_MIN,
+    PRICE_FETCH_CHUNK_SIZE,
     PROGRESS_UI_THROTTLE_SEC,
 )
-
 
 T = TypeVar("T")
 

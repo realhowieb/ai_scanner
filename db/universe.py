@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Callable, Iterable
 from datetime import datetime, timezone
+from typing import Callable, Iterable
+
 
 def _chunked(seq: list[str], size: int) -> Iterable[list[str]]:
     for i in range(0, len(seq), size):

@@ -101,8 +101,8 @@ class BillingServiceWebhookSignatureTest(unittest.TestCase):
 
     def test_webhook_rejects_bad_signature(self):
         """Endpoint must raise 400 on tampered payload."""
-        from fastapi.testclient import TestClient
         import stripe as _stripe
+        from fastapi.testclient import TestClient
         _stripe.Webhook.construct_event.side_effect = Exception("invalid signature")
 
         client = TestClient(self.bm.app, raise_server_exceptions=False)

@@ -1,7 +1,6 @@
 import importlib.util
 import unittest
 
-
 PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
 
 if PANDAS_AVAILABLE:

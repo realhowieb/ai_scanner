@@ -7,7 +7,6 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
-
 YF_DISABLED_KEY = "yf_disabled"
 YF_DISABLED_REASON_KEY = "yf_disabled_reason"
 YF_WARNED_KEY = "yf_disabled_warned"

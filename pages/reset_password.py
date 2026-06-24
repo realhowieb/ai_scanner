@@ -46,7 +46,7 @@ def _request_reset_form() -> None:
 
 def _issue_and_send_token(email: str) -> None:
     try:
-        from config import RESET_TOKEN_TTL_MINUTES, APP_BASE_URL
+        from config import APP_BASE_URL, RESET_TOKEN_TTL_MINUTES
         from db.password_reset import create_reset_token
         from ui.email_utils import send_password_reset_email
 
@@ -90,8 +90,9 @@ def _set_new_password_form(token: str) -> None:
         return
 
     try:
-        from db.users import update_neon_user_password
         import bcrypt
+
+        from db.users import update_neon_user_password
         hashed = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
         update_neon_user_password(username, hashed)
         st.success("Password updated! You can now log in with your new password.")

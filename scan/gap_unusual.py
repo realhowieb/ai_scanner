@@ -1,7 +1,9 @@
 # gap_unusual.py
 from __future__ import annotations
-from typing import Dict, Tuple, Iterable, Optional
+
 import math
+from typing import Dict, Iterable, Optional, Tuple
+
 import pandas as pd
 
 

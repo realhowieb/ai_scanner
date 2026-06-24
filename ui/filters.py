@@ -3,6 +3,7 @@
 from typing import Tuple
 
 import streamlit as st
+
 from auth.tiering import has_min_tier  # fallback only; entitlements are preferred
 
 

@@ -12,7 +12,6 @@ from data.prices import fetch_price_data_batch, fetch_price_data_parallel
 from scan.breakout import run_breakout_scan
 from scan.gap_unusual import gap_unusual_volume_scanner
 
-
 HEADLESS_BOUNDARY_ERRORS = (
     RuntimeError,
     TimeoutError,

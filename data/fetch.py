@@ -29,15 +29,15 @@ __all__ = [
     "remove_delisted_tickers",
 ]
 
+import math
+import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
-import time
-import math
-import pandas as pd
 import numpy as np
+import pandas as pd
 import requests
-import re
 
 try:
     import yfinance as yf

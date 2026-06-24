@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import pandas as pd
-import streamlit as st
 from datetime import date
 
+import pandas as pd
+import streamlit as st
+
 from db.earnings import (
-    fetch_earnings_this_week,
     add_earnings_days_column,
+    fetch_earnings_this_week,
 )
 
 # Column name used everywhere

@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-
 UNIVERSE_DB_ERRORS = (
     RuntimeError,
     TypeError,

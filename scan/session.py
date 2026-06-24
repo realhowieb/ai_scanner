@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from data.fetch import load_sp500_tickers, load_sp600_tickers, fetch_and_save_sp500
+from data.fetch import fetch_and_save_sp500, load_sp500_tickers, load_sp600_tickers
 from data.filters import filter_problem_tickers, filter_us_tickers
 from scan.headless_common import HEADLESS_BOUNDARY_ERRORS, run_headless_pipeline
 

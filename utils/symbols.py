@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 def normalize_ticker(sym: str) -> str:
     s = str(sym).strip().upper()
     if not s: return ""

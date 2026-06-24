@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import patch
 
-
 try:
     import pandas as pd
 except Exception:  # pragma: no cover - optional in minimal envs

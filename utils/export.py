@@ -1,8 +1,12 @@
 # ai_scanner/utils/export.py
 from __future__ import annotations
-import io, zipfile
+
+import io
+import zipfile
+
 import pandas as pd
 import streamlit as st
+
 
 def dataframe(df: pd.DataFrame, *, fill_none: bool=False, width: str="stretch"):
     if fill_none:

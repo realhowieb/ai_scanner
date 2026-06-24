@@ -1,27 +1,32 @@
 """Results, charts, and AI notes UI module."""
 from __future__ import annotations
 
-from typing import Callable, Optional
 import re
-
+from typing import Callable, Optional
 
 import pandas as pd
 import streamlit as st
+
 from ui.result_helpers import (
     as_optional_float,
     auto_details_ticker,
-    disable_yfinance_for_session as _disable_yfinance_for_session,
     find_row_for_ticker,
     get_results_df,
-    is_yahoo_crumb_error as _is_yahoo_crumb_error,
     quiet_provider_loggers,
     row_to_jsonable_dict,
     sync_selected_ticker_from_table,
+)
+from ui.result_helpers import (
+    disable_yfinance_for_session as _disable_yfinance_for_session,
+)
+from ui.result_helpers import (
+    is_yahoo_crumb_error as _is_yahoo_crumb_error,
+)
+from ui.result_helpers import (
     warn_yfinance_disabled_once as _warn_yfinance_disabled_once,
 )
 from ui.result_tables import render_static_results_table
 from ui.result_watchlist import render_watchlist_action
-
 
 quiet_provider_loggers()
 

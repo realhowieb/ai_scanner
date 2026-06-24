@@ -1,14 +1,13 @@
 """Alpaca price-provider helpers for historical OHLCV downloads."""
 from __future__ import annotations
 
-from typing import Dict, Sequence
-import os
 import logging
+import os
+from typing import Dict, Sequence
 
 import pandas as pd
 
 from .price_utils import chunks, normalize_price_frame
-
 
 try:
     import requests

@@ -15,8 +15,8 @@ _PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
 # Tier comparison helpers
 # ---------------------------------------------------------------------------
 
-from ui.app_session import compute_entitlements, is_admin_user, FEATURE_MIN_TIER
-from auth.tiering import has_min_tier, require_min_tier, get_user_tier, Tier, TIER_ORDER
+from auth.tiering import TIER_ORDER, Tier, get_user_tier, has_min_tier, require_min_tier
+from ui.app_session import FEATURE_MIN_TIER, compute_entitlements, is_admin_user
 
 
 class TestHasMinTier(unittest.TestCase):
@@ -196,14 +196,14 @@ class TestLoginRateLimiting(unittest.TestCase):
             self.assertFalse(is_login_rate_limited("alice"))
 
     def test_rate_limited_after_max_attempts(self):
-        from db.users import is_login_rate_limited, _LOGIN_MAX_ATTEMPTS
+        from db.users import _LOGIN_MAX_ATTEMPTS, is_login_rate_limited
         mock_conn, _ = _mock_conn_with_cursor((_LOGIN_MAX_ATTEMPTS,))
         with patch("db.users.get_neon_conn", return_value=mock_conn):
             with patch("db.users.ensure_neon_login_attempts_schema"):
                 self.assertTrue(is_login_rate_limited("alice"))
 
     def test_not_rate_limited_below_threshold(self):
-        from db.users import is_login_rate_limited, _LOGIN_MAX_ATTEMPTS
+        from db.users import _LOGIN_MAX_ATTEMPTS, is_login_rate_limited
         mock_conn, _ = _mock_conn_with_cursor((_LOGIN_MAX_ATTEMPTS - 1,))
         with patch("db.users.get_neon_conn", return_value=mock_conn):
             with patch("db.users.ensure_neon_login_attempts_schema"):

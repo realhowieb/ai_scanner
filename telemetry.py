@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import time
 import traceback
-from typing import Callable, Any
 from functools import wraps
+from typing import Any, Callable
 
 
 def timed(save_cb: Callable[[float], None]):

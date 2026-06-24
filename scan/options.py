@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-
 DEFAULT_MARKET = "SP500"
 DEFAULT_STRATEGY = "gap_up"
 DEFAULT_PROFILE = "aggressive"

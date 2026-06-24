@@ -10,8 +10,8 @@ format (e.g., BRK.B -> BRK-B, BF.B -> BF-B).
 """
 from __future__ import annotations
 
-from typing import Iterable, List, Tuple
 import re
+from typing import Iterable, List, Tuple
 
 # --- Known Yahoo exchange suffixes we should preserve (dot notation) ---
 # NOTE: Order matters (longer first) to avoid partial suffix matches.

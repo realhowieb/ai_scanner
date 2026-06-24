@@ -7,7 +7,7 @@ UI and scan engine can use. It keeps the logic for interpreting `features`
 centralized so app.py stays slim.
 """
 
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 def derive_tier_flags(tier: Any) -> Dict[str, bool]:

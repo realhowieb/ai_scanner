@@ -7,7 +7,6 @@ from typing import Any
 
 import streamlit as st
 
-
 WatchlistGetter = Callable[[object, str], list[str]]
 WatchlistSetter = Callable[[object, str, list[str]], Any]
 

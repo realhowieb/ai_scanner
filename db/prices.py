@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Iterable, Dict
+from typing import Dict, Iterable
 
 from sqlalchemy import text
 

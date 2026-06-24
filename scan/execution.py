@@ -11,7 +11,6 @@ import pandas as pd
 
 from .strategies import apply_strategy_filter
 
-
 ScanRunner = Callable[..., pd.DataFrame]
 ProgressCallback = Callable[..., None]
 

@@ -1,6 +1,7 @@
 # symbols.py
 import threading
 
+
 def thread_safe_logger(log_fn):
     """
     Wrap a UI logger (e.g., from new_log_panel) so it can be called from worker threads

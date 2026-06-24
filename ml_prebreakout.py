@@ -1,7 +1,9 @@
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta, timezone
 import json
+from datetime import datetime, timedelta, timezone
+
+import numpy as np
+import pandas as pd
+
 from db.runs import list_runs, load_run_results
 
 try:
@@ -10,8 +12,8 @@ except Exception:  # pragma: no cover - optional ML dependency
     joblib = None  # type: ignore
 
 try:
-    from sklearn.model_selection import train_test_split
     from sklearn.metrics import roc_auc_score
+    from sklearn.model_selection import train_test_split
 except Exception:  # pragma: no cover - optional ML dependency
     train_test_split = None  # type: ignore
     roc_auc_score = None  # type: ignore

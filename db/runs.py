@@ -1,9 +1,10 @@
 # db/runs.py
 from __future__ import annotations
-from typing import Optional, List, Dict, Any
+
 import json
-import sqlite3
 import os
+import sqlite3
+from typing import Any, Dict, List, Optional
 
 from .engine import get_neon_conn, get_sqlite_conn
 from .schema import ensure_neon_runs_schema, ensure_sqlite_runs_schema

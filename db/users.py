@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pandas as pd
 
@@ -15,8 +15,7 @@ except ModuleNotFoundError:
     st = _NS(cache_data=_noop_cache, caption=lambda *_a, **_kw: None, error=lambda *_a, **_kw: None)  # type: ignore[assignment]
 
 from .engine import get_neon_conn
-from .schema import ensure_neon_users_schema, ensure_neon_login_attempts_schema
-
+from .schema import ensure_neon_login_attempts_schema, ensure_neon_users_schema
 
 # Optional: auth library + hasher for seeding hashed passwords
 try:
@@ -102,7 +101,7 @@ def seed_neon_users_from_local() -> None:
 
         cur.close()
         conn.close()
-    except Exception as e:
+    except Exception:
         # Best-effort seeding; log to UI but do not crash
         # st.caption(f"⚠️ Neon user seeding failed: {e}")
         pass
@@ -589,7 +588,8 @@ def revoke_admin(username: str) -> bool:
 
 
 # --- Login rate limiting ---
-from config import LOGIN_RATE_LIMIT_WINDOW_SEC as _LOGIN_WINDOW_SECONDS, LOGIN_RATE_LIMIT_MAX_ATTEMPTS as _LOGIN_MAX_ATTEMPTS
+from config import LOGIN_RATE_LIMIT_MAX_ATTEMPTS as _LOGIN_MAX_ATTEMPTS
+from config import LOGIN_RATE_LIMIT_WINDOW_SEC as _LOGIN_WINDOW_SECONDS
 
 
 def record_login_attempt(username: str, *, success: bool, ip_address: str | None = None) -> None:

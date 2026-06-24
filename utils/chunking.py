@@ -1,6 +1,8 @@
 # ai_scanner/utils/chunking.py
 from __future__ import annotations
+
 from typing import Iterable, List
+
 
 def chunks(seq: List[str]|tuple[str,...], n: int) -> Iterable[list[str]]:
     for i in range(0, len(seq), n):

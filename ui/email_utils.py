@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 
 def send_password_reset_email(to_address: str, reset_url: str) -> bool:
     """Send a password reset email. Returns True on success, False on any failure."""
     try:
-        from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+        from config import SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER
     except Exception:
         return False
 

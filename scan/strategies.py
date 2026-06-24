@@ -5,7 +5,6 @@ from typing import Callable
 
 import pandas as pd
 
-
 STRATEGY_NAMES = {
     "gap_up",
     "gap_down",

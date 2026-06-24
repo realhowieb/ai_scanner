@@ -9,13 +9,13 @@ from __future__ import annotations
 import time
 
 import pandas as pd
+
 try:
     import streamlit as st
 except ModuleNotFoundError:
     from types import SimpleNamespace as _NS
     st = _NS(session_state={}, cache_data=lambda **_kw: (lambda fn: fn))  # type: ignore[assignment]
 from auth.tiering import require_min_tier
-
 from db.runs import list_runs, save_run
 from ml_prebreakout import score_prebreakout
 from scan.engine import run_breakout_scan, safe_call
@@ -31,7 +31,6 @@ from scan.options import (
 from scan.strategies import apply_strategy_filter
 from scan.universe_selection import resolve_scan_universe
 from ui.scan_providers import sanitize_universe_symbols
-
 
 try:
     from ui.universe import (

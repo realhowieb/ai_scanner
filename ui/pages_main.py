@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 # ui/pages_main.py
 import datetime as _dt
 from typing import Optional
+
 import pandas as pd
 import streamlit as st
+
 from ui.market_heat import fetch_hot_stocks, fetch_most_active_stocks, fetch_trending_stocks
 from ui.page_runners import (
     run_nasdaq_button,

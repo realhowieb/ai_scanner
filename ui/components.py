@@ -1,11 +1,12 @@
 # ai_scanner/ui/components.py
 from __future__ import annotations
+
 import pandas as pd
 import streamlit as st
 
 # Optional diagnostics (no-op if not available)
 try:
-    from .diagnostics import show_runner_info, run_with_diagnostics  # type: ignore
+    from .diagnostics import run_with_diagnostics, show_runner_info  # type: ignore
 except Exception:  # pragma: no cover
     def show_runner_info(label, target):
         return None
@@ -58,7 +59,7 @@ def runs_table(list_runs, load_run_results, max_rows: int = 200):
 # Enhanced run_button with diagnostics and flexible result preview
 def run_button(label: str, fn):
     disabled = fn is None
-    target = getattr(fn, "_target_fn", fn)
+    _ = getattr(fn, "_target_fn", fn)
 
     # Show which function is bound (diagnostic caption)
     try:

@@ -1,12 +1,12 @@
 """Scan history UI module."""
 
-from typing import List, Dict, Any
-
-import streamlit as st
-import pandas as pd
 import traceback
-from auth.tiering import has_min_tier
+from typing import Any, Dict, List
 
+import pandas as pd
+import streamlit as st
+
+from auth.tiering import has_min_tier
 from db.runs import list_runs, load_run_results
 
 

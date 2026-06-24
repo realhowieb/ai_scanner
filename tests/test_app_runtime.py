@@ -3,6 +3,7 @@ import unittest
 
 try:
     import pandas as pd
+
     from ui.app_runtime import get_market_session, normalize_results_to_df
 except Exception:  # pragma: no cover - optional in minimal envs
     pd = None

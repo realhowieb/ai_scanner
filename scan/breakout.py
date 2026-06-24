@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List, Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
 
@@ -214,7 +214,7 @@ def run_breakout_scan(
             continue
 
         close = metrics["Close"]
-        prev_close = metrics["PrevClose"]
+        _ = metrics["PrevClose"]
         pct_change = metrics["PctChange"]
         gap_pct = metrics["GapPct"]
         vol_today = metrics["Volume"]

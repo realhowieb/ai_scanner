@@ -1,7 +1,7 @@
 # db/engine.py
-from pathlib import Path
 import os
 import sqlite3
+from pathlib import Path
 
 try:
     import streamlit as st

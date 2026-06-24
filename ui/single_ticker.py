@@ -8,7 +8,6 @@ import streamlit as st
 
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
 
-
 BannerFn = Callable[[str, str], None]
 ScanFn = Callable[[list[str], str], None]
 
@@ -47,8 +46,8 @@ def render_single_symbol_chart(symbol: str, days: int = 90) -> None:
         return
 
     try:
-        import yfinance as yf  # type: ignore
         import plotly.graph_objects as go  # type: ignore
+        import yfinance as yf  # type: ignore
     except Exception:
         st.info("Charting libraries (yfinance/plotly) are not available.")
         return

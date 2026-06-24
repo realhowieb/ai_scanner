@@ -3,12 +3,12 @@ from __future__ import annotations
 # UI loader that exposes `render_app()` for app.py
 # Tries to import a concrete page renderer from `ui/pages_main.py`
 # and falls back to a simple stub if not available.
-
 import importlib
 import os
 import sys
-import streamlit as st
 import traceback
+
+import streamlit as st
 
 
 def render_app() -> None:
@@ -23,8 +23,6 @@ def render_app() -> None:
         "ai_scanner.ui.pages_main",      # installed/namespace package style
         "pages_main",                    # flat module next to this file
     )
-    last_err = None
-
     for candidate in candidates:
         try:
             mod = importlib.import_module(candidate)
@@ -34,7 +32,6 @@ def render_app() -> None:
             else:
                 st.warning(f"Module `{candidate}` found but has no callable `render()`.")
         except Exception as e:
-            last_err = e
             # Show a concise error in the UI; full traceback if needed.
             st.error(f"Failed to load `{candidate}`: {e}")
             st.caption("Traceback:")

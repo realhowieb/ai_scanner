@@ -4,7 +4,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-
 FEATURE_MIN_TIER: dict[str, str] = {
     "can_scan_sp500": "basic",
     "can_scan_nasdaq": "pro",

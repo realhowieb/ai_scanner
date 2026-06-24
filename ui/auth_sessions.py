@@ -8,7 +8,6 @@ from typing import Optional
 
 import streamlit as st
 
-
 try:
     from streamlit_cookies_manager import EncryptedCookieManager
 except ImportError:  # pragma: no cover - optional dependency

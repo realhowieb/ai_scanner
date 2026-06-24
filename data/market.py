@@ -1,11 +1,21 @@
 from __future__ import annotations
+
 from typing import List
-import numpy as np, pandas as pd, yfinance as yf
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
+
+from utils.symbols import as_ticker_list, sanitize_ticker_list
+
 from .fetch import (
-    fetch_trending_stocks, fetch_most_active_stocks, fetch_hot_stocks,
-    load_sp500_tickers, load_sp600_tickers,
+    fetch_hot_stocks,
+    fetch_most_active_stocks,
+    fetch_trending_stocks,
+    load_sp500_tickers,
+    load_sp600_tickers,
 )
-from utils.symbols import sanitize_ticker_list, as_ticker_list
+
 
 def fallback_universe(max_size: int = 1500) -> list[str]:
     for loader in (load_sp500_tickers, load_sp600_tickers):

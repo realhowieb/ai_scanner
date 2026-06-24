@@ -7,7 +7,6 @@ import streamlit as st
 
 from ui.admin_results_tab import render_admin_tab
 
-
 RESULTS_TAB_ERRORS = (
     RuntimeError,
     TypeError,
