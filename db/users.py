@@ -4,7 +4,15 @@ import os
 from typing import Dict, Any
 
 import pandas as pd
-import streamlit as st
+
+try:
+    import streamlit as st
+except ModuleNotFoundError:
+    from types import SimpleNamespace as _NS
+    def _noop_cache(**_kw):
+        def _dec(fn): return fn
+        return _dec
+    st = _NS(cache_data=_noop_cache, caption=lambda *_a, **_kw: None, error=lambda *_a, **_kw: None)  # type: ignore[assignment]
 
 from .engine import get_neon_conn
 from .schema import ensure_neon_users_schema, ensure_neon_login_attempts_schema
