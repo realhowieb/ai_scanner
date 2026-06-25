@@ -54,11 +54,14 @@ if not url:
     st.page_link("app.py", label="← Back")
     st.stop()
 
-# Meta-refresh in the main Streamlit page (not an iframe) navigates the real browser tab.
+st.success("Checkout ready! Redirecting to Stripe in 2 seconds…")
 st.markdown(
     f"""
-    <meta http-equiv="refresh" content="0; url={url}">
-    <p>Redirecting to Stripe… <a href="{url}">Click here if not redirected.</a></p>
+    <meta http-equiv="refresh" content="2; url={url}">
+    <p style="font-size:1.1rem; margin-top:1rem;">
+        Not redirected automatically?
+        <a href="{url}" style="color:#4f8ef7;">Click here to open Stripe</a>
+    </p>
     """,
     unsafe_allow_html=True,
 )
