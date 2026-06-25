@@ -320,6 +320,25 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
     )
 
     st.caption("Use your active watchlist for viewing, scanning, and managing symbols.")
+
+    # 🤖 Premium: AI watchlist digest + alert preview.
+    ent = st.session_state.get("entitlements") or {}
+    if has_watchlist and ent.get("can_ai_notes"):
+        try:
+            from ui.ai import is_configured
+            if is_configured():
+                df = st.session_state.get("results_df")
+                with st.expander("🤖 AI watchlist insights", expanded=False):
+                    from ui.ai_insights import (
+                        render_watchlist_alert_preview,
+                        render_watchlist_digest,
+                    )
+                    render_watchlist_digest(watchlist_tickers, df)
+                    st.divider()
+                    render_watchlist_alert_preview(watchlist_tickers, df)
+        except Exception:
+            pass
+
     return (
         bool(view_watchlist_btn),
         bool(run_watchlist_btn),

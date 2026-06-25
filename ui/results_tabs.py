@@ -79,6 +79,10 @@ def render_results_tabs(
         render_results=render_results,
         render_chart_for_ticker=render_chart_for_ticker,
         generate_ai_note=generate_ai_note,
+        username=username,
+        list_runs=list_runs,
+        load_run_results=load_run_results,
+        normalize_results_to_df=normalize_results_to_df,
     )
 
     if tab_early is not None:
@@ -122,6 +126,10 @@ def _render_latest_results_tab(
     render_results: Callable[..., Any],
     render_chart_for_ticker: Callable[..., Any],
     generate_ai_note: Callable[..., Any],
+    username: str = "",
+    list_runs: Callable[..., Any] | None = None,
+    load_run_results: Callable[..., Any] | None = None,
+    normalize_results_to_df: Callable[..., Any] | None = None,
 ) -> None:
     with tab_latest:
         if scan_ran_at:
@@ -148,12 +156,20 @@ def _render_latest_results_tab(
                 generate_ai_note,
             )
 
-        # Premium: AI-generated summary of the strongest setups.
+        # Premium: AI-generated summary + "what changed" diff.
         if rows > 0 and flags.get("can_ai_notes"):
             try:
                 st.divider()
                 from ui.ai_summary import render_ai_summary
                 render_ai_summary(df)
+            except RESULTS_TAB_ERRORS:
+                pass
+            try:
+                st.divider()
+                from ui.ai_insights import render_scan_diff
+                render_scan_diff(
+                    df, load_run_results, list_runs, normalize_results_to_df, username
+                )
             except RESULTS_TAB_ERRORS:
                 pass
 
