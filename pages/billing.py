@@ -210,11 +210,17 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             width="stretch",
             type="primary" if focus == plan else "secondary",
         ):
-            with st.spinner("Preparing checkout…"):
-                from ui.checkout import create_checkout_url
-                url, err = create_checkout_url(email, plan)
-            st.session_state[f"_checkout_url_{plan}"] = url
-            st.session_state[f"_checkout_err_{plan}"] = err
+            try:
+                from ui.email_verification_gate import require_verified_for_upgrade
+                allowed = require_verified_for_upgrade(email, key_suffix=key)
+            except Exception:
+                allowed = True
+            if allowed:
+                with st.spinner("Preparing checkout…"):
+                    from ui.checkout import create_checkout_url
+                    url, err = create_checkout_url(email, plan)
+                st.session_state[f"_checkout_url_{plan}"] = url
+                st.session_state[f"_checkout_err_{plan}"] = err
         url = st.session_state.get(f"_checkout_url_{plan}")
         err = st.session_state.get(f"_checkout_err_{plan}")
         if url:

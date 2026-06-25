@@ -15,11 +15,17 @@ def _upgrade_button(label: str, plan: str, key: str) -> None:
     """Create a checkout session inline and show the Stripe link."""
     if st.button(label, key=key, width="stretch"):
         email = st.session_state.get("username", "")
-        with st.spinner("Preparing checkout…"):
-            from ui.checkout import create_checkout_url
-            url, err = create_checkout_url(email, plan)
-        st.session_state[f"_checkout_url_{plan}"] = url
-        st.session_state[f"_checkout_err_{plan}"] = err
+        try:
+            from ui.email_verification_gate import require_verified_for_upgrade
+            allowed = require_verified_for_upgrade(email, key_suffix=key)
+        except Exception:
+            allowed = True
+        if allowed:
+            with st.spinner("Preparing checkout…"):
+                from ui.checkout import create_checkout_url
+                url, err = create_checkout_url(email, plan)
+            st.session_state[f"_checkout_url_{plan}"] = url
+            st.session_state[f"_checkout_err_{plan}"] = err
 
     url = st.session_state.get(f"_checkout_url_{plan}")
     err = st.session_state.get(f"_checkout_err_{plan}")

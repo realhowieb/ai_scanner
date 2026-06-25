@@ -61,6 +61,13 @@ def run_watchlist_alerts() -> None:
         email = (username or "").strip().lower()
         if not email or "@" not in email:
             continue
+        # Only email verified addresses to protect deliverability.
+        try:
+            from db.email_verification import is_email_verified
+            if not is_email_verified(email):
+                continue
+        except Exception:
+            pass
         try:
             wls = list_watchlists(email) or []
             tickers: list[str] = []
