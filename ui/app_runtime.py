@@ -11,6 +11,38 @@ import pandas as pd
 import streamlit as st
 
 
+def _upgrade_button(label: str, plan: str, key: str) -> None:
+    """Show upgrade button that creates a checkout session and redirects via link_button."""
+    if st.button(label, key=key, width="stretch"):
+        st.session_state[f"_checkout_url_{plan}"] = None
+        try:
+            import json
+            import urllib.request
+
+            from config import BILLING_API_BASE
+            base = (BILLING_API_BASE or "").rstrip("/")
+            username = st.session_state.get("username", "")
+            if base and username:
+                payload = json.dumps({"email": username, "plan": plan}).encode()
+                req = urllib.request.Request(
+                    f"{base}/create-checkout-session",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = json.loads(resp.read())
+                url = data.get("url") or data.get("portal_url")
+                if url:
+                    st.session_state[f"_checkout_url_{plan}"] = url
+        except Exception:
+            pass
+
+    url = st.session_state.get(f"_checkout_url_{plan}")
+    if url:
+        st.link_button(f"💳 Open Stripe for {plan.title()}", url)
+
+
 def get_market_session(now: datetime | None = None) -> str:
     """Return premarket, regular, afterhours, or closed for US/Eastern time."""
     tz = ZoneInfo("US/Eastern")
@@ -167,13 +199,9 @@ def render_sidebar_upgrade_card(
 
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("Upgrade to Pro", key="upgrade_to_pro", width="stretch"):
-                st.session_state["pricing_focus"] = "pro"
-                st.switch_page("pages/billing.py")
+            _upgrade_button("Upgrade to Pro", "pro", "upgrade_to_pro")
         with c2:
-            if st.button("Upgrade to Premium", key="upgrade_to_premium", width="stretch"):
-                st.session_state["pricing_focus"] = "premium"
-                st.switch_page("pages/billing.py")
+            _upgrade_button("Upgrade to Premium", "premium", "upgrade_to_premium")
 
         st.caption(
             "Pro unlocks exports and advanced filters. Premium unlocks full-universe and Early Breakout."
