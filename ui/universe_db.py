@@ -10,6 +10,8 @@ UNIVERSE_DB_ERRORS = (
     AttributeError,
     OSError,
     ImportError,
+    KeyError,
+    IndexError,
 )
 
 
@@ -64,7 +66,14 @@ def db_get_universe(
             if not row:
                 return None, None
 
-            _univ, source, refreshed_utc_date, ticker_count, updated_at = row
+            # psycopg uses dict_row; unpacking a dict would yield keys, not values.
+            if isinstance(row, dict):
+                source = row.get("source")
+                refreshed_utc_date = row.get("refreshed_utc_date")
+                ticker_count = row.get("ticker_count")
+                updated_at = row.get("updated_at")
+            else:
+                _univ, source, refreshed_utc_date, ticker_count, updated_at = row
             now_utc = dt.datetime.now(dt.timezone.utc)
             if isinstance(updated_at, dt.date) and not isinstance(updated_at, dt.datetime):
                 updated_at_dt = dt.datetime.combine(updated_at, dt.time(0, 0), tzinfo=dt.timezone.utc)
@@ -89,7 +98,13 @@ def db_get_universe(
                 """,
                 (universe,),
             )
-            tickers = [row[0] for row in cur.fetchall() if row and row[0]]
+            # psycopg uses dict_row; rows are dicts keyed by column name.
+            tickers = [
+                (r.get("ticker") if isinstance(r, dict) else r[0])
+                for r in cur.fetchall()
+                if r
+            ]
+            tickers = [t for t in tickers if t]
 
         meta = {
             "universe": universe,

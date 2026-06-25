@@ -461,13 +461,16 @@ def should_refresh_earnings_today(refresh_key: str, *, conn=None) -> bool:
         cur.execute(sql, (key,))
         row = cur.fetchone()
 
-    if not row or not row[0]:
+    # psycopg uses dict_row, so row may be a dict keyed by column name.
+    refreshed_on = None
+    if row:
+        refreshed_on = row.get("refreshed_on") if isinstance(row, dict) else row[0]
+    if not refreshed_on:
         return True
 
     try:
-        # row[0] should be a date
         utc_today = datetime.now(timezone.utc).date()
-        return row[0] != utc_today
+        return refreshed_on != utc_today
     except Exception:
         return True
 

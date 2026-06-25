@@ -142,8 +142,12 @@ def resolve_user_tier(
                         (username_norm,),
                     )
                     row = cur.fetchone()
-                    if row and row[0]:
-                        db_tier = _norm_tier_key(row[0])
+                    # psycopg uses dict_row; row may be a dict keyed by column.
+                    tier_val = None
+                    if row:
+                        tier_val = row.get("tier") if isinstance(row, dict) else row[0]
+                    if tier_val:
+                        db_tier = _norm_tier_key(tier_val)
                         user = {"username": username_norm, "tier": db_tier}
             finally:
                 try:

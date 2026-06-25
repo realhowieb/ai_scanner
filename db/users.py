@@ -38,6 +38,26 @@ def _demo_users_enabled() -> bool:
     return os.getenv("ENABLE_DEMO_USERS", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _scalar(row) -> object:
+    """Return the first value of a DB row regardless of cursor type.
+
+    psycopg uses dict_row (rows are dicts keyed by column name), while sqlite
+    and tuple cursors are sequences. Using row[0] on a dict raises KeyError: 0.
+    """
+    if row is None:
+        return None
+    if isinstance(row, (tuple, list)):
+        return row[0] if row else None
+    if isinstance(row, dict):
+        vals = list(row.values())
+        return vals[0] if vals else None
+    # sqlite3.Row supports integer indexing
+    try:
+        return row[0]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
 def _demo_password(name: str) -> str | None:
     """Read a demo password once and never store it in a named variable.
 
@@ -72,7 +92,7 @@ def seed_neon_users_from_local() -> None:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM users WHERE is_active = TRUE")
         row = cur.fetchone()
-        count = row[0] if row is not None and len(row) > 0 else 0
+        count = _scalar(row) or 0
 
         # Nothing in table? → seed from USERS_DB
         if count == 0:
@@ -651,7 +671,7 @@ def is_login_rate_limited(username: str) -> bool:
         row = cur.fetchone()
         cur.close()
         conn.close()
-        count = row[0] if row else 0
+        count = _scalar(row) or 0
         return int(count) >= _LOGIN_MAX_ATTEMPTS
     except Exception:
         return False
