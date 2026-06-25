@@ -22,6 +22,10 @@ def _validate_email(email: str) -> str:
 
 def _append_qp(url: str, key: str, value: str) -> str:
     base = (url or "").strip() or "https://example.com"
+    # Idempotent: don't append the param if it's already present (avoids
+    # ?portal=return&portal=return when APP_*_URL already carries it).
+    if f"{key}=" in base:
+        return base
     sep = "&" if "?" in base else "?"
     return f"{base}{sep}{key}={value}"
 import psycopg2
