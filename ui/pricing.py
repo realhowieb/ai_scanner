@@ -33,7 +33,7 @@ def _create_checkout_url(email: str, plan: str, period: str) -> str | None:
         )
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read())
-        return data.get("url") or data.get("portal_url")
+        return data.get("checkout_url") or data.get("url") or data.get("portal_url")
     except Exception:
         return None
 
