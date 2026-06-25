@@ -244,6 +244,19 @@ async def create_checkout_session(payload: dict):
     if plan not in {"pro", "premium"}:
         raise HTTPException(400, "Plan must be 'pro' or 'premium'")
 
+    # Optional success_url override — only honored if it points at the same host
+    # as APP_SUCCESS_URL (prevents this endpoint becoming an open redirect).
+    success_override = (payload.get("success_url") or "").strip()
+    success_url = _append_qp(APP_SUCCESS_URL or "https://example.com", "checkout", "success")
+    if success_override:
+        try:
+            from urllib.parse import urlparse
+            base_host = urlparse(APP_SUCCESS_URL or "").netloc
+            if base_host and urlparse(success_override).netloc == base_host:
+                success_url = success_override
+        except Exception:
+            pass
+
     price_id = STRIPE_PRICE_PRO if plan == "pro" else STRIPE_PRICE_PREMIUM
 
     # Use existing customer if we have it
@@ -272,7 +285,7 @@ async def create_checkout_session(payload: dict):
             customer_email=None if customer_id else email,
             line_items=[{"price": price_id, "quantity": 1}],
             allow_promotion_codes=True,
-            success_url=_append_qp(APP_SUCCESS_URL or "https://example.com", "checkout", "success"),
+            success_url=success_url,
             cancel_url=_append_qp(APP_CANCEL_URL or "https://example.com", "checkout", "cancel"),
             metadata={
                 "user_email": email,

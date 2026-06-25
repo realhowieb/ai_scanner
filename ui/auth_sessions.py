@@ -68,20 +68,16 @@ def cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
         )
         return None
     pw = _cookie_password()
-    print(f"[cookies] pw_set={bool(pw)} prefix={COOKIE_PREFIX!r}")
     if not pw:
         st.error("Cookie sessions require COOKIE_PASSWORD to be configured.")
         return None
 
     cached = st.session_state.get(COOKIE_MANAGER_STATE_KEY)
     if cached is not None:
-        print(f"[cookies] using cached manager, ready={cached.ready()}")
         return cached
 
     cookies = EncryptedCookieManager(prefix=COOKIE_PREFIX, password=pw)
-    print(f"[cookies] new manager created, ready={cookies.ready()}")
     if not cookies.ready():
-        print("[cookies] not ready yet — calling st.stop() for rerun")
         st.stop()
     st.session_state[COOKIE_MANAGER_STATE_KEY] = cookies
     return cookies

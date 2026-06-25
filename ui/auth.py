@@ -141,18 +141,41 @@ def _poll_for_tier_upgrade(username: str, max_attempts: int = 10) -> None:
 
 
 def auth_ui():
+    # --- URL token restore (Stripe redirect carries ?rt=<session_id>) ---
+    # Browser cookies are unreliable across the Stripe round-trip on Streamlit
+    # Cloud, so we also accept a session id passed back in the success_url.
+    if "username" not in st.session_state:
+        try:
+            rt = (st.query_params.get("rt") or "").strip()
+        except _AUTH_BACKEND_ERRORS:
+            rt = ""
+        if rt:
+            u = _get_username_for_session(rt)
+            if u:
+                st.session_state["username"] = (u or "").strip().lower()
+                try:
+                    from auth.tier_sync import resolve_user_tier
+                    t = resolve_user_tier(st.session_state["username"])
+                    if t:
+                        st.session_state["tier"] = t
+                        st.session_state["plan"] = t
+                except (ImportError, *_AUTH_BACKEND_ERRORS):
+                    pass
+            # Strip the token from the URL so it isn't reused / bookmarked.
+            try:
+                st.query_params.pop("rt", None)
+            except _AUTH_BACKEND_ERRORS:
+                pass
+
     # --- Cookie session restore (persists login across refresh / Stripe redirects) ---
     cookies = _cookies_ready_or_stop()
     if cookies is not None and "username" not in st.session_state:
-        print(f"[auth] cookie manager ready, keys={list(cookies.keys()) if cookies else []}")
         try:
             sid = cookies.get(COOKIE_NAME)
         except _AUTH_BACKEND_ERRORS:
             sid = None
-        print(f"[auth] COOKIE_NAME={COOKIE_NAME!r} sid_found={bool(sid)}")
         if sid:
             u = _get_username_for_session(str(sid))
-            print(f"[auth] cookie restore: sid={str(sid)[:8]}... user={u!r}")
             if u:
                 st.session_state["username"] = (u or "").strip().lower()
                 # Re-read tier from DB so post-Stripe-upgrade redirects reflect the new plan.

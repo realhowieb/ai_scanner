@@ -1,4 +1,9 @@
-"""Intermediate redirect page — calls billing service then meta-refreshes to Stripe."""
+"""Intermediate redirect page — calls billing service then opens Stripe checkout.
+
+Carries a return token (rt) in the Stripe success_url so the session can be
+restored after the redirect without relying on browser cookies (which are
+unreliable on Streamlit Cloud).
+"""
 from __future__ import annotations
 
 import json
@@ -9,13 +14,16 @@ import streamlit as st
 st.set_page_config(page_title="Redirecting to Stripe…", page_icon="💳")
 
 
-def _get_checkout_url(email: str, plan: str) -> tuple[str | None, str | None]:
+def _get_checkout_url(email: str, plan: str, success_url: str | None) -> tuple[str | None, str | None]:
     try:
         from config import BILLING_API_BASE
         base = (BILLING_API_BASE or "").rstrip("/")
         if not base:
             return None, "BILLING_API_BASE not configured."
-        payload = json.dumps({"email": email, "plan": plan}).encode()
+        body: dict[str, str] = {"email": email, "plan": plan}
+        if success_url:
+            body["success_url"] = success_url
+        payload = json.dumps(body).encode()
         req = urllib.request.Request(
             f"{base}/create-checkout-session",
             data=payload,
@@ -24,11 +32,24 @@ def _get_checkout_url(email: str, plan: str) -> tuple[str | None, str | None]:
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
-        print(f"[go_stripe] billing response: {data}")
         url = data.get("checkout_url") or data.get("url") or data.get("portal_url")
         return url, f"response={data}" if not url else None
     except Exception as e:
         return None, str(e)
+
+
+def _build_success_url(username: str) -> str | None:
+    """Mint a session for the user and embed its id in the success URL."""
+    try:
+        from config import APP_BASE_URL
+        from ui.auth_sessions import create_session
+        sid = create_session(username)
+        if not sid:
+            return None
+        base = (APP_BASE_URL or "").rstrip("/")
+        return f"{base}/?checkout=success&rt={sid}"
+    except Exception:
+        return None
 
 
 plan = (st.session_state.get("_upgrade_plan") or st.query_params.get("plan") or "").strip().lower()
@@ -45,7 +66,8 @@ if not email:
     st.stop()
 
 with st.spinner("Preparing your checkout… (may take 30s if billing service is waking up)"):
-    url, err = _get_checkout_url(email, plan)
+    success_url = _build_success_url(email)
+    url, err = _get_checkout_url(email, plan, success_url)
 
 if not url:
     st.error(f"Could not connect to billing service: {err}")
@@ -57,4 +79,4 @@ if not url:
 
 st.success("Checkout ready!")
 st.link_button("💳 Continue to Stripe", url, use_container_width=True)
-st.caption("Opens in a new tab. After payment, return to this tab — your plan will update automatically.")
+st.caption("After payment you'll be returned here automatically — your plan will update.")
