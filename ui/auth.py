@@ -114,15 +114,29 @@ def _lookup_email_by_display_username(display_username: str) -> str | None:
         return None
 
 
+def _tier_display(tier_val: object) -> str:
+    """Normalize a tier value (str / dict / Tier object) to its key string."""
+    if tier_val is None:
+        return "basic"
+    if isinstance(tier_val, str):
+        return tier_val.strip().lower() or "basic"
+    # Tier dataclass/namedtuple exposes .key; debug dicts use 'tier_key'.
+    key = getattr(tier_val, "key", None)
+    if not key and isinstance(tier_val, dict):
+        key = tier_val.get("tier_key") or tier_val.get("forced_tier_key")
+    return str(key).strip().lower() if key else "basic"
+
+
 def _poll_for_tier_upgrade(username: str, max_attempts: int = 10) -> None:
     """After Stripe checkout, webhook fires async. Poll DB until tier upgrades or we give up."""
     import time
     current = st.session_state.get("tier", "basic")
+    current_key = _tier_display(current)
     attempt = st.session_state.get("_tier_poll_attempt", 0)
-    if current != "basic" or attempt >= max_attempts:
+    if current_key != "basic" or attempt >= max_attempts:
         st.session_state.pop("_tier_poll_attempt", None)
-        if current != "basic":
-            st.success(f"🎉 Plan upgraded to **{current}**! Enjoy your new features.")
+        if current_key != "basic":
+            st.success(f"🎉 Plan upgraded to **{current_key.title()}**! Enjoy your new features.")
         return
     with st.spinner("Activating your plan upgrade…"):
         time.sleep(2)

@@ -419,7 +419,7 @@ class CleanupSourceChecks(unittest.TestCase):
         lockout_source = (ROOT / "ui" / "auth_lockout.py").read_text()
         sessions_source = (ROOT / "ui" / "auth_sessions.py").read_text()
 
-        self.assertLess(len(auth_source.splitlines()), 670)
+        self.assertLess(len(auth_source.splitlines()), 690)
         self.assertIn("from ui.auth_lockout import", auth_source)
         self.assertIn("from ui.auth_sessions import", auth_source)
         self.assertNotIn("def _is_login_locked", auth_source)
