@@ -14,7 +14,9 @@ import streamlit as st
 st.set_page_config(page_title="Redirecting to Stripe…", page_icon="💳")
 
 
-def _get_checkout_url(email: str, plan: str, success_url: str | None) -> tuple[str | None, str | None]:
+def _get_checkout_url(
+    email: str, plan: str, success_url: str | None, return_url: str | None
+) -> tuple[str | None, str | None]:
     try:
         from config import BILLING_API_BASE
         base = (BILLING_API_BASE or "").rstrip("/")
@@ -23,6 +25,8 @@ def _get_checkout_url(email: str, plan: str, success_url: str | None) -> tuple[s
         body: dict[str, str] = {"email": email, "plan": plan}
         if success_url:
             body["success_url"] = success_url
+        if return_url:
+            body["return_url"] = return_url
         payload = json.dumps(body).encode()
         req = urllib.request.Request(
             f"{base}/create-checkout-session",
@@ -38,18 +42,21 @@ def _get_checkout_url(email: str, plan: str, success_url: str | None) -> tuple[s
         return None, str(e)
 
 
-def _build_success_url(username: str) -> str | None:
-    """Mint a session for the user and embed its id in the success URL."""
+def _build_return_urls(username: str) -> tuple[str | None, str | None]:
+    """Mint a session for the user; embed its id in both the checkout success
+    URL and the portal return URL so the session restores without a cookie."""
     try:
         from config import APP_BASE_URL
         from ui.auth_sessions import create_session
         sid = create_session(username)
         if not sid:
-            return None
+            return None, None
         base = (APP_BASE_URL or "").rstrip("/")
-        return f"{base}/?checkout=success&rt={sid}"
+        success = f"{base}/?checkout=success&rt={sid}"
+        portal = f"{base}/?portal=return&rt={sid}"
+        return success, portal
     except Exception:
-        return None
+        return None, None
 
 
 plan = (st.session_state.get("_upgrade_plan") or st.query_params.get("plan") or "").strip().lower()
@@ -66,8 +73,8 @@ if not email:
     st.stop()
 
 with st.spinner("Preparing your checkout… (may take 30s if billing service is waking up)"):
-    success_url = _build_success_url(email)
-    url, err = _get_checkout_url(email, plan, success_url)
+    success_url, return_url = _build_return_urls(email)
+    url, err = _get_checkout_url(email, plan, success_url, return_url)
 
 if not url:
     st.error(f"Could not connect to billing service: {err}")

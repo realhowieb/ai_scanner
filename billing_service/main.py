@@ -244,18 +244,29 @@ async def create_checkout_session(payload: dict):
     if plan not in {"pro", "premium"}:
         raise HTTPException(400, "Plan must be 'pro' or 'premium'")
 
-    # Optional success_url override — only honored if it points at the same host
-    # as APP_SUCCESS_URL (prevents this endpoint becoming an open redirect).
-    success_override = (payload.get("success_url") or "").strip()
-    success_url = _append_qp(APP_SUCCESS_URL or "https://example.com", "checkout", "success")
-    if success_override:
+    # Optional success_url / return_url overrides — only honored if they point at
+    # the same host as APP_SUCCESS_URL (prevents this becoming an open redirect).
+    def _validate_same_host(candidate: str) -> str | None:
         try:
             from urllib.parse import urlparse
             base_host = urlparse(APP_SUCCESS_URL or "").netloc
-            if base_host and urlparse(success_override).netloc == base_host:
-                success_url = success_override
+            if base_host and urlparse(candidate).netloc == base_host:
+                return candidate
         except Exception:
             pass
+        return None
+
+    success_url = _append_qp(APP_SUCCESS_URL or "https://example.com", "checkout", "success")
+    success_override = _validate_same_host((payload.get("success_url") or "").strip())
+    if success_override:
+        success_url = success_override
+
+    portal_return_url = _append_qp(
+        APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com", "portal", "return"
+    )
+    return_override = _validate_same_host((payload.get("return_url") or "").strip())
+    if return_override:
+        portal_return_url = return_override
 
     price_id = STRIPE_PRICE_PRO if plan == "pro" else STRIPE_PRICE_PREMIUM
 
@@ -271,7 +282,7 @@ async def create_checkout_session(payload: dict):
             if subs and subs.get("data"):
                 portal = stripe.billing_portal.Session.create(
                     customer=customer_id,
-                    return_url=_append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com", "portal", "return"),
+                    return_url=portal_return_url,
                 )
                 return {"portal_url": portal.url, "mode": "portal"}
         except Exception as e:
@@ -314,10 +325,23 @@ async def create_portal_session(payload: dict):
     if not customer_id:
         raise HTTPException(400, "No Stripe customer found for this user yet")
 
+    return_url = _append_qp(
+        APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com", "portal", "return"
+    )
+    override = (payload.get("return_url") or "").strip()
+    if override:
+        try:
+            from urllib.parse import urlparse
+            base_host = urlparse(APP_SUCCESS_URL or "").netloc
+            if base_host and urlparse(override).netloc == base_host:
+                return_url = override
+        except Exception:
+            pass
+
     try:
         portal = stripe.billing_portal.Session.create(
             customer=customer_id,
-            return_url=_append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com", "portal", "return"),
+            return_url=return_url,
         )
         return {"portal_url": portal.url}
     except Exception as e:
