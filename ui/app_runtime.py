@@ -12,43 +12,10 @@ import streamlit as st
 
 
 def _upgrade_button(label: str, plan: str, key: str) -> None:
-    """Show upgrade button that creates a checkout session and redirects via link_button."""
+    """Switch to go_stripe page which meta-refreshes to Stripe in the same tab."""
     if st.button(label, key=key, width="stretch"):
-        st.session_state[f"_checkout_url_{plan}"] = None
-        try:
-            import json
-            import urllib.request
-
-            from config import BILLING_API_BASE
-            base = (BILLING_API_BASE or "").rstrip("/")
-            username = st.session_state.get("username", "")
-            if base and username:
-                payload = json.dumps({"email": username, "plan": plan}).encode()
-                req = urllib.request.Request(
-                    f"{base}/create-checkout-session",
-                    data=payload,
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=8) as resp:
-                    data = json.loads(resp.read())
-                url = data.get("url") or data.get("portal_url")
-                if url:
-                    st.session_state[f"_checkout_url_{plan}"] = url
-        except Exception:
-            pass
-
-    url = st.session_state.get(f"_checkout_url_{plan}")
-    if url:
-        import streamlit.components.v1 as _components
-        _components.html(
-            f"""
-            <script>
-              window.top.location.href = {url!r};
-            </script>
-            """,
-            height=0,
-        )
+        st.session_state["_upgrade_plan"] = plan
+        st.switch_page("pages/go_stripe.py")
 
 
 def get_market_session(now: datetime | None = None) -> str:

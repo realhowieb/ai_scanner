@@ -245,15 +245,8 @@ def _upgrade_buttons(current_tier_key: str) -> None:
                 width="stretch",
                 type="primary" if focus == "pro" else "secondary",
             ):
-                try:
-                    st.session_state["pricing_focus"] = "pro"
-                    mode, url = _create_checkout_or_portal(email=email, plan="pro")
-                    st.session_state["stripe_redirect_kind"] = "Customer Portal" if mode == "portal" else "Checkout"
-                    st.session_state["stripe_redirect_url"] = url
-                    _open_checkout_same_tab(url, kind=st.session_state["stripe_redirect_kind"])
-                except Exception as e:
-                    st.error(str(e))
-                    st.caption("Tip: On free Render, billing may need ~30 seconds to wake up.")
+                st.session_state["_upgrade_plan"] = "pro"
+                st.switch_page("pages/go_stripe.py")
 
     with col_premium:
         st.markdown("### ⭐ Premium")
@@ -268,15 +261,8 @@ def _upgrade_buttons(current_tier_key: str) -> None:
                 width="stretch",
                 type="primary" if focus == "premium" else "secondary",
             ):
-                try:
-                    st.session_state["pricing_focus"] = "premium"
-                    mode, url = _create_checkout_or_portal(email=email, plan="premium")
-                    st.session_state["stripe_redirect_kind"] = "Customer Portal" if mode == "portal" else "Checkout"
-                    st.session_state["stripe_redirect_url"] = url
-                    _open_checkout_same_tab(url, kind=st.session_state["stripe_redirect_kind"])
-                except Exception as e:
-                    st.error(str(e))
-                    st.caption("Tip: On free Render, billing may need ~30 seconds to wake up.")
+                st.session_state["_upgrade_plan"] = "premium"
+                st.switch_page("pages/go_stripe.py")
 
 
 # =========================
