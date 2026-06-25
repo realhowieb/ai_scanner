@@ -24,8 +24,9 @@ def _get_checkout_url(email: str, plan: str) -> tuple[str | None, str | None]:
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
+        print(f"[go_stripe] billing response: {data}")
         url = data.get("url") or data.get("portal_url")
-        return url, None
+        return url, f"response={data}" if not url else None
     except Exception as e:
         return None, str(e)
 
