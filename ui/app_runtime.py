@@ -40,7 +40,15 @@ def _upgrade_button(label: str, plan: str, key: str) -> None:
 
     url = st.session_state.get(f"_checkout_url_{plan}")
     if url:
-        st.link_button(f"💳 Open Stripe for {plan.title()}", url)
+        import streamlit.components.v1 as _components
+        _components.html(
+            f"""
+            <script>
+              window.top.location.href = {url!r};
+            </script>
+            """,
+            height=0,
+        )
 
 
 def get_market_session(now: datetime | None = None) -> str:
