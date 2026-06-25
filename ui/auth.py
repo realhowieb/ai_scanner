@@ -126,18 +126,32 @@ def _poll_for_tier_upgrade(username: str, max_attempts: int = 10) -> None:
         return
     with st.spinner("Activating your plan upgrade…"):
         time.sleep(2)
-    try:
-        from auth.tier_sync import resolve_user_tier
-        t = resolve_user_tier(username)
-        if t and t != "basic":
-            st.session_state["tier"] = t
-            st.session_state["plan"] = t
-            st.session_state.pop("_tier_poll_attempt", None)
-            st.rerun()
-    except (ImportError, *_AUTH_BACKEND_ERRORS):
-        pass
+    t = _resolve_tier_key(username)
+    if t and t != "basic":
+        st.session_state["tier"] = t
+        st.session_state["plan"] = t
+        st.session_state.pop("_tier_poll_attempt", None)
+        st.rerun()
     st.session_state["_tier_poll_attempt"] = attempt + 1
     st.rerun()
+
+
+def _resolve_tier_key(username: str) -> str | None:
+    """Return the resolved tier as a plain string.
+
+    resolve_user_tier() returns a debug dict; the tier string lives under
+    'tier_key'. Guard against it being a dict so we never store the whole
+    structure into session_state['tier'].
+    """
+    try:
+        from auth.tier_sync import resolve_user_tier
+        result = resolve_user_tier(username)
+    except (ImportError, *_AUTH_BACKEND_ERRORS):
+        return None
+    if isinstance(result, dict):
+        key = result.get("tier_key") or result.get("forced_tier_key")
+        return str(key) if key else None
+    return str(result) if result else None
 
 
 def auth_ui():
@@ -153,14 +167,10 @@ def auth_ui():
             u = _get_username_for_session(rt)
             if u:
                 st.session_state["username"] = (u or "").strip().lower()
-                try:
-                    from auth.tier_sync import resolve_user_tier
-                    t = resolve_user_tier(st.session_state["username"])
-                    if t:
-                        st.session_state["tier"] = t
-                        st.session_state["plan"] = t
-                except (ImportError, *_AUTH_BACKEND_ERRORS):
-                    pass
+                t = _resolve_tier_key(st.session_state["username"])
+                if t:
+                    st.session_state["tier"] = t
+                    st.session_state["plan"] = t
             # Strip the token from the URL so it isn't reused / bookmarked.
             try:
                 st.query_params.pop("rt", None)
@@ -179,14 +189,10 @@ def auth_ui():
             if u:
                 st.session_state["username"] = (u or "").strip().lower()
                 # Re-read tier from DB so post-Stripe-upgrade redirects reflect the new plan.
-                try:
-                    from auth.tier_sync import resolve_user_tier
-                    t = resolve_user_tier((u or "").strip().lower())
-                    if t:
-                        st.session_state["tier"] = t
-                        st.session_state["plan"] = t
-                except (ImportError, *_AUTH_BACKEND_ERRORS):
-                    pass
+                t = _resolve_tier_key(st.session_state["username"])
+                if t:
+                    st.session_state["tier"] = t
+                    st.session_state["plan"] = t
             else:
                 # Session expired or invalid — clear the stale cookie so the user
                 # gets a clean login form rather than a silent broken state.
