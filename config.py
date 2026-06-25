@@ -78,6 +78,11 @@ SESSION_TTL_DAYS: int = int(_get("SESSION_TTL_DAYS", "14"))
 # --- Billing service ---
 BILLING_API_BASE: str = _get("BILLING_API_BASE", "https://ai-scanner-h2c8.onrender.com")
 
+# --- AI scan summary (Anthropic) ---
+ANTHROPIC_API_KEY: str | None = _get("ANTHROPIC_API_KEY")
+# Default to the most capable Opus model; override via env if desired.
+ANTHROPIC_MODEL: str = _get("ANTHROPIC_MODEL", "claude-opus-4-8")
+
 # --- Alerting ---
 SLACK_WEBHOOK_URL: str | None = _get("SLACK_WEBHOOK_URL")
 ALERT_EMAIL: str | None = _get("ALERT_EMAIL")

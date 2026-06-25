@@ -148,6 +148,15 @@ def _render_latest_results_tab(
                 generate_ai_note,
             )
 
+        # Premium: AI-generated summary of the strongest setups.
+        if rows > 0 and flags.get("can_ai_notes"):
+            try:
+                st.divider()
+                from ui.ai_summary import render_ai_summary
+                render_ai_summary(df)
+            except RESULTS_TAB_ERRORS:
+                pass
+
 
 def _render_early_breakout_tab(
     *,

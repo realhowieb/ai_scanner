@@ -104,6 +104,10 @@ The billing service itself requires its own env vars (set in Render dashboard):
 - `SCAN_ERROR_ALERT_THRESHOLD` — errors in window before alerting (default: 5)
 - `SCAN_ERROR_ALERT_WINDOW_MINUTES` — lookback window in minutes (default: 15)
 
+### AI scan summary (Premium feature)
+- `ANTHROPIC_API_KEY` — Anthropic API key; enables the Premium "AI Scan Summary" button
+- `ANTHROPIC_MODEL` — model id (default: `claude-opus-4-8`)
+
 ### Optional
 - `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` — extended market data
 - `SHOW_DIAGNOSTICS=1` — enable scan diagnostics panel by default
