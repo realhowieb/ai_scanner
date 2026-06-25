@@ -80,6 +80,7 @@ def render_results_chat(df: pd.DataFrame) -> None:
                 messages=api_messages,
                 max_tokens=500,
                 username=_current_user(),
+                feature="results_chat",
             )
         if answer:
             st.markdown(answer)

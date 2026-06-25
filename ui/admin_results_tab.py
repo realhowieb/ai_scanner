@@ -59,6 +59,7 @@ def render_admin_tab(
                 _render_scan_errors_panel(get_db_conn)
             with diag_col2:
                 _render_login_attempts_panel(get_db_conn)
+            _render_ai_usage_panel()
 
         st.caption(
             "Tip: Earnings refresh is intentionally admin-only and never runs automatically during scans."
@@ -339,6 +340,26 @@ def clear_earnings_result_cache() -> None:
     st.session_state.pop("earnings_enriched_df", None)
     st.session_state.pop("earnings_enriched_signature", None)
     st.session_state.pop("earnings_enrichment_rerun_sig", None)
+
+
+def _render_ai_usage_panel() -> None:
+    """Show which AI features are used most (last 30 days)."""
+    st.markdown("#### AI feature usage (30d)")
+    if not st.button("📈 Load AI usage", key="admin_load_ai_usage"):
+        return
+    try:
+        from db.ai_usage import feature_usage_counts
+        counts = feature_usage_counts(30)
+        if not counts:
+            st.info("No AI usage recorded yet.")
+            return
+        import pandas as pd
+        df = pd.DataFrame(counts, columns=["feature", "calls"])
+        st.dataframe(df)
+        st.bar_chart(df.set_index("feature"))
+    except ADMIN_TAB_ERRORS as exc:
+        st.error("Failed to load AI usage.")
+        _show_exception(exc)
 
 
 def _render_billing_health_badge() -> None:

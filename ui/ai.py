@@ -39,6 +39,7 @@ def ask_claude(
     max_tokens: int = 1024,
     model: str | None = None,
     username: str | None = None,
+    feature: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Single-turn Claude call. Returns (text, error); never raises.
 
@@ -82,7 +83,7 @@ def ask_claude(
         if text and username:
             try:
                 from db.ai_usage import record_ai_call
-                record_ai_call(username)
+                record_ai_call(username, feature)
             except Exception:
                 pass
         return (text or None), (None if text else "Empty response from AI.")
@@ -105,6 +106,7 @@ def ask_claude_chat(
     max_tokens: int = 700,
     model: str | None = None,
     username: str | None = None,
+    feature: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Multi-turn Claude call. `messages` is a list of {role, content} dicts.
 
@@ -149,7 +151,7 @@ def ask_claude_chat(
         if text and username:
             try:
                 from db.ai_usage import record_ai_call
-                record_ai_call(username)
+                record_ai_call(username, feature)
             except Exception:
                 pass
         return (text or None), (None if text else "Empty response from AI.")

@@ -77,6 +77,7 @@ def generate_scan_summary(df: pd.DataFrame) -> tuple[str | None, str | None]:
         ),
         max_tokens=1024,
         username=_current_user(),
+        feature="scan_summary",
     )
 
 
@@ -124,6 +125,7 @@ def generate_ticker_analysis(row) -> tuple[str | None, str | None]:
         user=f"Technical scan metrics for {ticker}:\n\n{metrics}\n\nExplain this setup.",
         max_tokens=600,
         username=_current_user(),
+        feature="ticker_deepdive",
     )
 
 

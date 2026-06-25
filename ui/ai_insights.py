@@ -75,6 +75,7 @@ def generate_scan_diff(prev_df: pd.DataFrame, curr_df: pd.DataFrame) -> tuple[st
         ),
         max_tokens=900,
         username=_current_user(),
+        feature="scan_diff",
     )
 
 
@@ -128,6 +129,7 @@ def generate_watchlist_digest(tickers: list[str], df: pd.DataFrame) -> tuple[str
         user=f"Watchlist scan metrics (CSV):\n{_table(sub)}\n\nGive the watchlist digest.",
         max_tokens=700,
         username=_current_user(),
+        feature="watchlist_digest",
     )
 
 
@@ -161,6 +163,7 @@ def generate_alert_line(ticker: str, row) -> tuple[str | None, str | None]:
         user=f"{ticker}: {metrics}",
         max_tokens=80,
         username=_current_user(),
+        feature="alert_line",
     )
 
 
@@ -232,4 +235,5 @@ def triage_scan_errors(error_rows) -> tuple[str | None, str | None]:
         system=_TRIAGE_SYSTEM,
         user="Recent error rows:\n" + "\n".join(lines) + "\n\nTriage these.",
         max_tokens=700,
+        feature="admin_triage",
     )

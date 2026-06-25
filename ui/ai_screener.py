@@ -87,6 +87,7 @@ def parse_screen_request(query: str) -> tuple[dict, str | None, str | None]:
         user=query.strip(),
         max_tokens=400,
         username=username,
+        feature="nl_screener",
     )
     if err:
         return {}, None, err
