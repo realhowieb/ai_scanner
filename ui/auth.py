@@ -174,24 +174,27 @@ def auth_ui():
                     pass
                 st.info("Your session has expired. Please log in again.")
 
-    # If Stripe redirects back with ?checkout=success, poll for tier upgrade
-    # (webhook fires async so DB may still show old tier for a few seconds).
+    # Handle Stripe redirects: ?checkout=success, ?checkout=cancel, ?portal=return
     try:
         checkout_flag = (st.query_params.get("checkout") or "").strip().lower()
+        portal_flag = (st.query_params.get("portal") or "").strip().lower()
     except _AUTH_BACKEND_ERRORS:
         checkout_flag = ""
+        portal_flag = ""
 
-    if checkout_flag == "success" and "username" in st.session_state:
+    _stripe_return = checkout_flag == "success" or portal_flag == "return"
+
+    if _stripe_return and "username" in st.session_state:
         _poll_for_tier_upgrade(st.session_state["username"])
 
-    if "username" not in st.session_state and checkout_flag in ("success", "cancel"):
-        if checkout_flag == "success":
-            st.success(
-                "Payment completed ✅ — log in below to access your upgraded plan. "
-                "Your account has already been upgraded."
-            )
-        else:
-            st.info("Checkout was cancelled. You can log in and try upgrading again anytime.")
+    if "username" not in st.session_state and _stripe_return:
+        st.success(
+            "Payment completed ✅ — log in below to access your upgraded plan. "
+            "Your account has already been upgraded."
+        )
+
+    if "username" not in st.session_state and checkout_flag == "cancel":
+        st.info("Checkout was cancelled. You can log in and try upgrading again anytime.")
 
     if "username" in st.session_state:
         username = (st.session_state["username"] or "").strip().lower()
