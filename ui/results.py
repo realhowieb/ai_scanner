@@ -321,6 +321,14 @@ def render_results(
                     # ⭐ Add to watchlist action
                     render_watchlist_action(str(selected_ticker), key_prefix=key_prefix)
 
+                    # 🤖 Premium: AI deep-dive on this single ticker
+                    if can_ai_notes:
+                        try:
+                            from ui.ai_summary import render_ticker_analysis
+                            render_ticker_analysis(r0, str(selected_ticker))
+                        except Exception:
+                            pass
+
                     # Optional: show a tiny raw row preview for debugging (collapsed)
                     with st.expander("Show row fields", expanded=False):
                         st.json(row_to_jsonable_dict(r0))

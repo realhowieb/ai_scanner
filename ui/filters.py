@@ -31,6 +31,17 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Centralized entitlements (preferred). Fallback to tier checks if missing.
     ent = st.session_state.get("entitlements") or {}
 
+    # 🗣️ Premium: natural-language screener (sets filters from plain English).
+    if ent.get("can_ai_notes"):
+        try:
+            from ui.ai import is_configured
+            if is_configured():
+                with st.sidebar.expander("🗣️ AI screener", expanded=False):
+                    from ui.ai_screener import render_nl_screener
+                    render_nl_screener()
+        except Exception:
+            pass
+
     def _entitled(feature: str, *, fallback_min_tier: str | None = None) -> bool:
         v = ent.get(feature)
         if v is not None:

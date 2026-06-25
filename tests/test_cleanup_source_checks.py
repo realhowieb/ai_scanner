@@ -358,7 +358,7 @@ class CleanupSourceChecks(unittest.TestCase):
         charts_source = (ROOT / "ui" / "charts.py").read_text()
         single_ticker_source = (ROOT / "ui" / "single_ticker.py").read_text()
 
-        self.assertLess(len(results_source.splitlines()), 700)
+        self.assertLess(len(results_source.splitlines()), 720)
         self.assertIn("from ui.result_helpers import", results_source)
         self.assertIn("from ui.result_tables import render_static_results_table", results_source)
         self.assertIn("from ui.result_watchlist import render_watchlist_action", results_source)

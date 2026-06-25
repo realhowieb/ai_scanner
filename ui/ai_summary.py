@@ -25,6 +25,16 @@ _SYSTEM_PROMPT = (
     "is educational technical commentary only."
 )
 
+_TICKER_SYSTEM_PROMPT = (
+    "You are a concise equity-scan analyst. You are given the technical scan "
+    "metrics for a single stock. Explain this one setup in plain language: what "
+    "the breakout score, gap, 20-day trend, relative volume, dollar volume, and "
+    "volatility together suggest about the setup's quality and risk. Be specific "
+    "and reference the numbers. Keep it under 150 words, use markdown bullets, "
+    "and end with one short risk caveat. Do NOT give financial advice or price "
+    "targets; this is educational technical commentary only."
+)
+
 
 def _results_fingerprint(df: pd.DataFrame) -> str:
     """Stable hash of the table so we can cache the summary per scan."""
@@ -48,44 +58,16 @@ def generate_scan_summary(df: pd.DataFrame) -> tuple[str | None, str | None]:
     if df is None or len(df) == 0:
         return None, "No scan results to summarize. Run a scan first."
 
-    try:
-        from config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
-    except Exception:
-        return None, "AI summary is not configured."
-
-    if not ANTHROPIC_API_KEY:
-        return None, "AI summary is not configured (missing ANTHROPIC_API_KEY)."
-
-    try:
-        import anthropic
-    except ImportError:
-        return None, "AI summary requires the `anthropic` package (add to requirements)."
-
     table_text = _build_table_text(df)
-    try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=1024,
-            system=_SYSTEM_PROMPT,
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"Here are the top {min(len(df), _MAX_ROWS)} scan results "
-                    f"(CSV):\n\n{table_text}\n\nSummarize the strongest setups."
-                ),
-            }],
-        )
-        text = "".join(b.text for b in response.content if b.type == "text").strip()
-        return (text or None), (None if text else "Empty response from AI.")
-    except anthropic.AuthenticationError:
-        return None, "AI summary failed: invalid ANTHROPIC_API_KEY."
-    except anthropic.RateLimitError:
-        return None, "AI summary rate-limited. Try again in a moment."
-    except anthropic.APIError as e:
-        return None, f"AI summary failed: {e}"
-    except Exception as e:
-        return None, f"AI summary error: {type(e).__name__}: {e}"
+    from ui.ai import ask_claude
+    return ask_claude(
+        system=_SYSTEM_PROMPT,
+        user=(
+            f"Here are the top {min(len(df), _MAX_ROWS)} scan results "
+            f"(CSV):\n\n{table_text}\n\nSummarize the strongest setups."
+        ),
+        max_tokens=1024,
+    )
 
 
 def render_ai_summary(df: pd.DataFrame) -> None:
@@ -114,3 +96,50 @@ def render_ai_summary(df: pd.DataFrame) -> None:
             st.markdown(summary)
         else:
             st.warning(err or "Could not generate summary.")
+
+
+def generate_ticker_analysis(row) -> tuple[str | None, str | None]:
+    """Analyze a single ticker's scan metrics. Returns (markdown, error)."""
+    if row is None:
+        return None, "No ticker selected."
+    try:
+        fields = {c: row.get(c) for c in _SUMMARY_COLUMNS if c in getattr(row, "index", row)}
+    except Exception:
+        fields = {c: (row.get(c) if hasattr(row, "get") else None) for c in _SUMMARY_COLUMNS}
+    ticker = fields.get("Ticker") or fields.get("Symbol") or "this stock"
+    metrics = "\n".join(f"- {k}: {v}" for k, v in fields.items() if v is not None)
+    from ui.ai import ask_claude
+    return ask_claude(
+        system=_TICKER_SYSTEM_PROMPT,
+        user=f"Technical scan metrics for {ticker}:\n\n{metrics}\n\nExplain this setup.",
+        max_tokens=600,
+    )
+
+
+def render_ticker_analysis(row, ticker: str) -> None:
+    """Button-gated single-ticker AI analysis, cached per ticker+metrics."""
+    import hashlib as _h
+
+    import streamlit as st
+
+    try:
+        fp = _h.sha256(str(dict(row)).encode()).hexdigest()[:12]
+    except Exception:
+        fp = (ticker or "x")[:12]
+    cache_key = f"_ai_ticker_{fp}"
+
+    if st.session_state.get(cache_key):
+        st.markdown(st.session_state[cache_key])
+        if st.button("🔄 Regenerate", key=f"ai_tkr_regen_{fp}"):
+            st.session_state.pop(cache_key, None)
+            st.rerun()
+        return
+
+    if st.button(f"🤖 Explain {ticker} setup", key=f"ai_tkr_{fp}"):
+        with st.spinner(f"Analyzing {ticker}…"):
+            text, err = generate_ticker_analysis(row)
+        if text:
+            st.session_state[cache_key] = text
+            st.markdown(text)
+        else:
+            st.warning(err or "Could not analyze this ticker.")
