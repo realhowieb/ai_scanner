@@ -389,11 +389,30 @@ def _render_scan_errors_panel(get_db_conn: Callable[[], Any]) -> None:
         import pandas as pd
         df = pd.DataFrame(rows, columns=["occurred_at", "context", "username", "tickers", "error_type", "message"])
         st.dataframe(df)
+        st.session_state["_admin_error_rows"] = rows
     except ADMIN_TAB_ERRORS as exc:
         st.error("Failed to load scan errors.")
         _show_exception(exc)
     finally:
         _close_conn(conn)
+
+    # 🤖 AI triage of the loaded errors (admin-only; no per-user cap).
+    rows_cached = st.session_state.get("_admin_error_rows")
+    if rows_cached and st.button("🤖 AI triage these errors", key="admin_ai_triage"):
+        try:
+            from ui.ai import is_configured
+            if not is_configured():
+                st.info("AI triage needs ANTHROPIC_API_KEY configured.")
+            else:
+                from ui.ai_insights import triage_scan_errors
+                with st.spinner("Triaging…"):
+                    text, err = triage_scan_errors(rows_cached)
+                if text:
+                    st.markdown(text)
+                else:
+                    st.warning(err or "Could not triage errors.")
+        except ADMIN_TAB_ERRORS as exc:
+            _show_exception(exc)
 
 
 def _render_login_attempts_panel(get_db_conn: Callable[[], Any]) -> None:

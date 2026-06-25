@@ -33,6 +33,13 @@ _ALERT_SYSTEM = (
     "specific metrics. No advice, no targets, no preamble — just the sentence."
 )
 
+_TRIAGE_SYSTEM = (
+    "You are an SRE triaging application errors from a stock-scanner. You are "
+    "given recent error log rows. Group them by likely root cause, name the most "
+    "frequent/severe issues, and suggest the single most likely fix for each. Be "
+    "concrete and technical. Under 180 words, markdown bullets."
+)
+
 
 def _current_user() -> str | None:
     try:
@@ -203,3 +210,26 @@ def render_watchlist_alert_preview(tickers: list[str], df, *, max_alerts: int = 
             )
         except Exception as e:
             st.warning(f"Could not send to Slack: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 4) Admin: error triage (internal, not user-facing — no per-user cap needed)
+# ---------------------------------------------------------------------------
+
+def triage_scan_errors(error_rows) -> tuple[str | None, str | None]:
+    """Summarize recent scan_errors rows into likely causes + fixes."""
+    if not error_rows:
+        return None, "No errors to triage."
+    lines = []
+    for r in list(error_rows)[:50]:
+        try:
+            vals = list(r) if not isinstance(r, dict) else list(r.values())
+            lines.append(" | ".join(str(v) for v in vals))
+        except Exception:
+            lines.append(str(r))
+    from ui.ai import ask_claude
+    return ask_claude(
+        system=_TRIAGE_SYSTEM,
+        user="Recent error rows:\n" + "\n".join(lines) + "\n\nTriage these.",
+        max_tokens=700,
+    )

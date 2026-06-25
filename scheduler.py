@@ -149,6 +149,23 @@ def add_default_jobs(
         replace_existing=True,
     )
 
+    # Daily per-user watchlist email digest (opt-in via WATCHLIST_ALERTS_ENABLED)
+    scheduler.add_job(
+        _run_watchlist_alerts,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=9, minute=45, timezone=tz_str),
+        id="watchlist_alerts",
+        replace_existing=True,
+    )
+
+
+def _run_watchlist_alerts() -> None:
+    """Delegate to the watchlist digest job. No-op unless opted in."""
+    try:
+        from ui.watchlist_alerts import run_watchlist_alerts
+        run_watchlist_alerts()
+    except Exception as e:
+        print(f"[scheduler] watchlist alerts failed: {e}")
+
 
 def start(scheduler: BackgroundScheduler) -> None:
     global _process_scheduler_started

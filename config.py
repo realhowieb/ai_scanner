@@ -88,6 +88,10 @@ AI_ENABLED: bool = _get("AI_ENABLED", "1") != "0"
 AI_DAILY_LIMIT: int = int(_get("AI_DAILY_LIMIT", "25"))
 # Hard timeout (seconds) on each Claude request so the UI never hangs.
 AI_REQUEST_TIMEOUT_SECONDS: float = float(_get("AI_REQUEST_TIMEOUT_SECONDS", "30"))
+# Scheduled per-user watchlist email digests (opt-in; off by default).
+WATCHLIST_ALERTS_ENABLED: bool = _get("WATCHLIST_ALERTS_ENABLED", "0") == "1"
+# Max users emailed per run, to bound cost/volume.
+WATCHLIST_ALERTS_MAX_USERS: int = int(_get("WATCHLIST_ALERTS_MAX_USERS", "100"))
 
 # --- Alerting ---
 SLACK_WEBHOOK_URL: str | None = _get("SLACK_WEBHOOK_URL")

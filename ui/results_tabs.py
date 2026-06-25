@@ -172,6 +172,12 @@ def _render_latest_results_tab(
                 )
             except RESULTS_TAB_ERRORS:
                 pass
+            try:
+                st.divider()
+                from ui.ai_chat import render_results_chat
+                render_results_chat(df)
+            except RESULTS_TAB_ERRORS:
+                pass
 
 
 def _render_early_breakout_tab(

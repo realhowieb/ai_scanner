@@ -110,6 +110,8 @@ The billing service itself requires its own env vars (set in Render dashboard):
 - `AI_ENABLED` — set to `0` to instantly disable all AI features without a redeploy (default: on)
 - `AI_DAILY_LIMIT` — max AI calls per user per rolling 24h (default: 25; `0` = unlimited)
 - `AI_REQUEST_TIMEOUT_SECONDS` — per-request timeout so the UI never hangs (default: 30)
+- `WATCHLIST_ALERTS_ENABLED` — set to `1` to email each user a daily AI watchlist digest (default: off; requires SMTP + SLACK optional)
+- `WATCHLIST_ALERTS_MAX_USERS` — cap users emailed per run (default: 100)
 
 ### Optional
 - `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` — extended market data
