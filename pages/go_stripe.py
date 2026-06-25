@@ -9,12 +9,12 @@ import streamlit as st
 st.set_page_config(page_title="Redirecting to Stripe…", page_icon="💳")
 
 
-def _get_checkout_url(email: str, plan: str) -> str | None:
+def _get_checkout_url(email: str, plan: str) -> tuple[str | None, str | None]:
     try:
         from config import BILLING_API_BASE
         base = (BILLING_API_BASE or "").rstrip("/")
         if not base:
-            return None
+            return None, "BILLING_API_BASE not configured."
         payload = json.dumps({"email": email, "plan": plan}).encode()
         req = urllib.request.Request(
             f"{base}/create-checkout-session",
@@ -22,11 +22,12 @@ def _get_checkout_url(email: str, plan: str) -> str | None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
-        return data.get("url") or data.get("portal_url")
-    except Exception:
-        return None
+        url = data.get("url") or data.get("portal_url")
+        return url, None
+    except Exception as e:
+        return None, str(e)
 
 
 plan = (st.session_state.get("_upgrade_plan") or st.query_params.get("plan") or "").strip().lower()
@@ -42,11 +43,14 @@ if not email:
     st.page_link("app.py", label="← Log in")
     st.stop()
 
-with st.spinner("Preparing your checkout…"):
-    url = _get_checkout_url(email, plan)
+with st.spinner("Preparing your checkout… (may take 30s if billing service is waking up)"):
+    url, err = _get_checkout_url(email, plan)
 
 if not url:
-    st.error("Could not connect to billing service. Please try again.")
+    st.error(f"Could not connect to billing service: {err}")
+    st.caption("The billing service may be sleeping (free Render tier). Wait 30 seconds and try again.")
+    if st.button("🔄 Retry"):
+        st.rerun()
     st.page_link("app.py", label="← Back")
     st.stop()
 
