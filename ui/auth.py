@@ -130,13 +130,24 @@ def _tier_display(tier_val: object) -> str:
 def _poll_for_tier_upgrade(username: str, max_attempts: int = 10) -> None:
     """After Stripe checkout, webhook fires async. Poll DB until tier upgrades or we give up."""
     import time
-    current = st.session_state.get("tier", "basic")
-    current_key = _tier_display(current)
+
+    def _clear_stripe_params() -> None:
+        # Strip return flags so refreshes / interactions don't re-trigger polling.
+        for _p in ("checkout", "portal", "rt"):
+            try:
+                st.query_params.pop(_p, None)
+            except _AUTH_BACKEND_ERRORS:
+                pass
+
+    current_key = _tier_display(st.session_state.get("tier", "basic"))
     attempt = st.session_state.get("_tier_poll_attempt", 0)
     if current_key != "basic" or attempt >= max_attempts:
         st.session_state.pop("_tier_poll_attempt", None)
+        _clear_stripe_params()
         if current_key != "basic":
             st.success(f"🎉 Plan upgraded to **{current_key.title()}**! Enjoy your new features.")
+        else:
+            st.info("Upgrade is still processing. If you completed payment, refresh in a moment.")
         return
     with st.spinner("Activating your plan upgrade…"):
         time.sleep(2)
@@ -145,6 +156,7 @@ def _poll_for_tier_upgrade(username: str, max_attempts: int = 10) -> None:
         st.session_state["tier"] = t
         st.session_state["plan"] = t
         st.session_state.pop("_tier_poll_attempt", None)
+        _clear_stripe_params()
         st.rerun()
     st.session_state["_tier_poll_attempt"] = attempt + 1
     st.rerun()
