@@ -42,21 +42,24 @@ def _get_checkout_url(
         return None, str(e)
 
 
-def _build_return_urls(username: str) -> tuple[str | None, str | None]:
+def _build_return_urls(username: str) -> tuple[str | None, str | None, str | None]:
     """Mint a session for the user; embed its id in both the checkout success
-    URL and the portal return URL so the session restores without a cookie."""
+    URL and the portal return URL so the session restores without a cookie.
+
+    Returns (success_url, portal_url, debug_error).
+    """
     try:
         from config import APP_BASE_URL
         from ui.auth_sessions import create_session
         sid = create_session(username)
         if not sid:
-            return None, None
+            return None, None, "create_session returned None (DB session not created)"
         base = (APP_BASE_URL or "").rstrip("/")
         success = f"{base}/?checkout=success&rt={sid}"
         portal = f"{base}/?portal=return&rt={sid}"
-        return success, portal
-    except Exception:
-        return None, None
+        return success, portal, None
+    except Exception as e:
+        return None, None, f"{type(e).__name__}: {e}"
 
 
 plan = (st.session_state.get("_upgrade_plan") or st.query_params.get("plan") or "").strip().lower()
@@ -73,8 +76,16 @@ if not email:
     st.stop()
 
 with st.spinner("Preparing your checkout… (may take 30s if billing service is waking up)"):
-    success_url, return_url = _build_return_urls(email)
+    success_url, return_url, session_err = _build_return_urls(email)
     url, err = _get_checkout_url(email, plan, success_url, return_url)
+
+# Temporary diagnostic — confirms whether the rt session token was minted.
+with st.expander("🔧 Debug (temporary)"):
+    st.write({
+        "session_token_minted": bool(success_url),
+        "session_error": session_err,
+        "success_url_sent": success_url,
+    })
 
 if not url:
     st.error(f"Could not connect to billing service: {err}")
