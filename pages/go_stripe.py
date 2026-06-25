@@ -54,14 +54,6 @@ if not url:
     st.page_link("app.py", label="← Back")
     st.stop()
 
-st.success("Checkout ready! Redirecting to Stripe in 2 seconds…")
-st.markdown(
-    f"""
-    <meta http-equiv="refresh" content="2; url={url}">
-    <p style="font-size:1.1rem; margin-top:1rem;">
-        Not redirected automatically?
-        <a href="{url}" style="color:#4f8ef7;">Click here to open Stripe</a>
-    </p>
-    """,
-    unsafe_allow_html=True,
-)
+st.success("Checkout ready!")
+st.link_button("💳 Continue to Stripe", url, use_container_width=True)
+st.caption("Opens in a new tab. After payment, return to this tab — your plan will update automatically.")
