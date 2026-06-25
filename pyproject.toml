@@ -1,0 +1,84 @@
+[project]
+name = "ai-scanner"
+version = "0.2.0"
+description = "AI-powered stock market scanner with Streamlit, PostgreSQL, and scheduling"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "streamlit==1.49.1",
+    "pandas>=2.0",
+    "numpy>=1.23",
+    "yfinance>=0.2.27",
+    "pytz>=2025.2",
+    "requests",
+    "lxml",
+    "html5lib",
+    "beautifulsoup4",
+    "matplotlib",
+    "mplfinance",
+    "SQLAlchemy>=2.0",
+    "apscheduler",
+    "plotly",
+    "streamlit-authenticator>=0.4.0",
+    "bcrypt",
+    "streamlit-autorefresh",
+    "extra-streamlit-components",
+    "streamlit-cookies-manager>=0.2.0",
+    "psycopg[binary]>=3.2"
+]
+
+[project.optional-dependencies]
+ml = [
+    "xgboost",
+    "scikit-learn",
+    "joblib"
+]
+extended = [
+    "alpaca-py"
+]
+billing = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.32.1",
+    "stripe==11.1.1",
+    "psycopg2-binary==2.9.10",
+    "python-dotenv==1.0.1"
+]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "assets",
+    "auth",
+    "billing_service",
+    "data",
+    "db",
+    "jobs",
+    "pages",
+    "scan",
+    "scheduler",
+    "ui",
+    "utils"
+]
+py-modules = [
+    "app",
+    "config",
+    "logger",
+    "market_data",
+    "ml_prebreakout",
+    "telemetry"
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = [
+    ".venv",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+select = ["E9", "F", "I"]
+ignore = ["F401", "F811"]

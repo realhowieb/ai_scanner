@@ -1,0 +1,27 @@
+# Core Streamlit scanner runtime.
+streamlit==1.49.1
+pandas>=2.0
+numpy>=1.23
+yfinance>=0.2.27
+pytz>=2025.2
+requests
+
+# Universe loading / HTML table parsing.
+lxml
+html5lib
+beautifulsoup4
+
+# Charts and scanner UI.
+matplotlib
+mplfinance
+plotly
+streamlit-authenticator>=0.4.0
+bcrypt
+streamlit-autorefresh
+extra-streamlit-components
+streamlit-cookies-manager>=0.2.0
+
+# Scheduler, persistence, and Neon/Postgres access.
+SQLAlchemy>=2.0
+apscheduler
+psycopg[binary]>=3.2

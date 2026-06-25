@@ -1,0 +1,3 @@
+# Optional integrations kept in the full deploy profile.
+alpaca-py
+anthropic>=0.69.0

@@ -1,13 +1,8 @@
-streamlit==1.49.1
-pandas>=2.0
-numpy>=1.23
-yfinance>=0.2.27
-pytz>=2025.2
-lxml
-html5lib
-beautifulsoup4
-yahoo_fin
-matplotlib
-websockets
-pyppeteer
-mplfinance
+# Full Streamlit deployment dependencies.
+#
+# Streamlit Cloud and normal production deploys should continue installing this
+# file. It delegates to smaller groups so CI can test the lean scanner runtime
+# separately from heavier optional features.
+-r requirements-core.txt
+-r requirements-ml.txt
+-r requirements-extended.txt

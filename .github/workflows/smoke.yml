@@ -1,0 +1,114 @@
+name: Smoke Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile Python files
+        run: python -m compileall -q .
+
+      - name: Run lightweight lint
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          ruff check . --select E9,F,I --ignore F401,F811
+
+      - name: Import smoke checks
+        run: |
+          python -c "import config"
+          python -c "import scheduler.cron_runner"
+          python -c "from scheduler.cron_runner import _load_universe; assert _load_universe('SP500')"
+
+      - name: Run unit smoke tests
+        run: python -m pytest tests/ -v --tb=short
+
+  core-dependency-import-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements-core.txt
+
+      - name: Install core scanner dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt
+
+      - name: Import core scanner modules
+        run: |
+          python -c "import data.provider_diagnostics"
+          python -c "import data.prices"
+          python -c "import data.fetch"
+          python -c "import scan.breakout"
+          python -c "import scan.engine"
+          python -c "import db.runs"
+          python -c "import ui.scans"
+
+      - name: Run dependency-backed unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Deployment readiness doctor
+        run: python scripts/deployment_doctor.py
+
+      - name: Live Streamlit startup smoke
+        run: python scripts/streamlit_smoke.py --timeout 60
+
+  full-dependency-import-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-core.txt
+            requirements-ml.txt
+            requirements-extended.txt
+
+      - name: Install full app dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements.txt
+
+      - name: Import full app modules
+        run: |
+          python -c "import data.provider_diagnostics"
+          python -c "import data.prices"
+          python -c "import data.fetch"
+          python -c "import scan.breakout"
+          python -c "import scan.engine"
+          python -c "import db.runs"
+          python -c "import ui.scans"
+          python -c "import ml_prebreakout"
