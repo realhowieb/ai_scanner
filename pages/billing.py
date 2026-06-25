@@ -201,37 +201,42 @@ def _upgrade_buttons(current_tier_key: str) -> None:
 
     col_pro, col_premium = st.columns(2)
 
+    email = _logged_in_email()
+
+    def _plan_button(plan: str, key: str) -> None:
+        if st.button(
+            f"Upgrade to {plan.title()}",
+            key=key,
+            width="stretch",
+            type="primary" if focus == plan else "secondary",
+        ):
+            with st.spinner("Preparing checkout…"):
+                from ui.checkout import create_checkout_url
+                url, err = create_checkout_url(email, plan)
+            st.session_state[f"_checkout_url_{plan}"] = url
+            st.session_state[f"_checkout_err_{plan}"] = err
+        url = st.session_state.get(f"_checkout_url_{plan}")
+        err = st.session_state.get(f"_checkout_err_{plan}")
+        if url:
+            st.link_button(f"💳 Continue to Stripe ({plan.title()})", url, width="stretch")
+        elif err:
+            st.caption(f"⚠️ {err}")
+
     with col_pro:
         st.markdown("### 🚀 Pro")
         st.caption("Unlock exports + advanced filters + scan history")
-
         if current_tier_key in ("pro", "premium", "admin"):
             st.success("You already have Pro (or higher).")
         else:
-            if st.button(
-                "Upgrade to Pro",
-                key="billing_upgrade_pro",
-                width="stretch",
-                type="primary" if focus == "pro" else "secondary",
-            ):
-                st.session_state["_upgrade_plan"] = "pro"
-                st.switch_page("pages/go_stripe.py")
+            _plan_button("pro", "billing_upgrade_pro")
 
     with col_premium:
         st.markdown("### ⭐ Premium")
         st.caption("Unlock ML signals + full universe + diagnostics")
-
         if current_tier_key in ("premium", "admin"):
             st.success("You already have Premium (or Admin).")
         else:
-            if st.button(
-                "Upgrade to Premium",
-                key="billing_upgrade_premium",
-                width="stretch",
-                type="primary" if focus == "premium" else "secondary",
-            ):
-                st.session_state["_upgrade_plan"] = "premium"
-                st.switch_page("pages/go_stripe.py")
+            _plan_button("premium", "billing_upgrade_premium")
 
 
 # =========================

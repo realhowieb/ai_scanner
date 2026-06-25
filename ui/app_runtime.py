@@ -12,10 +12,21 @@ import streamlit as st
 
 
 def _upgrade_button(label: str, plan: str, key: str) -> None:
-    """Switch to go_stripe page which meta-refreshes to Stripe in the same tab."""
+    """Create a checkout session inline and show the Stripe link."""
     if st.button(label, key=key, width="stretch"):
-        st.session_state["_upgrade_plan"] = plan
-        st.switch_page("pages/go_stripe.py")
+        email = st.session_state.get("username", "")
+        with st.spinner("Preparing checkout…"):
+            from ui.checkout import create_checkout_url
+            url, err = create_checkout_url(email, plan)
+        st.session_state[f"_checkout_url_{plan}"] = url
+        st.session_state[f"_checkout_err_{plan}"] = err
+
+    url = st.session_state.get(f"_checkout_url_{plan}")
+    err = st.session_state.get(f"_checkout_err_{plan}")
+    if url:
+        st.link_button(f"💳 Continue to Stripe ({plan.title()})", url)
+    elif err:
+        st.caption(f"⚠️ {err}")
 
 
 def get_market_session(now: datetime | None = None) -> str:
