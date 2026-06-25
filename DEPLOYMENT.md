@@ -104,9 +104,12 @@ The billing service itself requires its own env vars (set in Render dashboard):
 - `SCAN_ERROR_ALERT_THRESHOLD` — errors in window before alerting (default: 5)
 - `SCAN_ERROR_ALERT_WINDOW_MINUTES` — lookback window in minutes (default: 15)
 
-### AI scan summary (Premium feature)
-- `ANTHROPIC_API_KEY` — Anthropic API key; enables the Premium "AI Scan Summary" button
-- `ANTHROPIC_MODEL` — model id (default: `claude-opus-4-8`)
+### AI features (Premium)
+- `ANTHROPIC_API_KEY` — Anthropic API key; enables AI summary, ticker deep-dive, and NL screener
+- `ANTHROPIC_MODEL` — model id (default: `claude-opus-4-8`; use `claude-haiku-4-5` to cut cost ~5x)
+- `AI_ENABLED` — set to `0` to instantly disable all AI features without a redeploy (default: on)
+- `AI_DAILY_LIMIT` — max AI calls per user per rolling 24h (default: 25; `0` = unlimited)
+- `AI_REQUEST_TIMEOUT_SECONDS` — per-request timeout so the UI never hangs (default: 30)
 
 ### Optional
 - `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` — extended market data

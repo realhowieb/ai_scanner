@@ -36,6 +36,15 @@ _TICKER_SYSTEM_PROMPT = (
 )
 
 
+def _current_user() -> str | None:
+    """Best-effort current username for per-user AI usage tracking."""
+    try:
+        import streamlit as st
+        return st.session_state.get("username")
+    except Exception:
+        return None
+
+
 def _results_fingerprint(df: pd.DataFrame) -> str:
     """Stable hash of the table so we can cache the summary per scan."""
     try:
@@ -67,6 +76,7 @@ def generate_scan_summary(df: pd.DataFrame) -> tuple[str | None, str | None]:
             f"(CSV):\n\n{table_text}\n\nSummarize the strongest setups."
         ),
         max_tokens=1024,
+        username=_current_user(),
     )
 
 
@@ -113,6 +123,7 @@ def generate_ticker_analysis(row) -> tuple[str | None, str | None]:
         system=_TICKER_SYSTEM_PROMPT,
         user=f"Technical scan metrics for {ticker}:\n\n{metrics}\n\nExplain this setup.",
         max_tokens=600,
+        username=_current_user(),
     )
 
 

@@ -74,11 +74,19 @@ def parse_screen_request(query: str) -> tuple[dict, str | None, str | None]:
     if not (query or "").strip():
         return {}, None, "Type what you're looking for first."
 
+    username = None
+    try:
+        import streamlit as st
+        username = st.session_state.get("username")
+    except Exception:
+        username = None
+
     from ui.ai import ask_claude
     text, err = ask_claude(
         system=_SYSTEM_PROMPT,
         user=query.strip(),
         max_tokens=400,
+        username=username,
     )
     if err:
         return {}, None, err

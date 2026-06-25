@@ -82,6 +82,12 @@ BILLING_API_BASE: str = _get("BILLING_API_BASE", "https://ai-scanner-h2c8.onrend
 ANTHROPIC_API_KEY: str | None = _get("ANTHROPIC_API_KEY")
 # Default to the most capable Opus model; override via env if desired.
 ANTHROPIC_MODEL: str = _get("ANTHROPIC_MODEL", "claude-opus-4-8")
+# Global kill switch — set AI_ENABLED=0 to disable all AI features instantly.
+AI_ENABLED: bool = _get("AI_ENABLED", "1") != "0"
+# Per-user AI calls allowed per rolling 24h (0 = unlimited).
+AI_DAILY_LIMIT: int = int(_get("AI_DAILY_LIMIT", "25"))
+# Hard timeout (seconds) on each Claude request so the UI never hangs.
+AI_REQUEST_TIMEOUT_SECONDS: float = float(_get("AI_REQUEST_TIMEOUT_SECONDS", "30"))
 
 # --- Alerting ---
 SLACK_WEBHOOK_URL: str | None = _get("SLACK_WEBHOOK_URL")
