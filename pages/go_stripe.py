@@ -76,16 +76,8 @@ if not email:
     st.stop()
 
 with st.spinner("Preparing your checkout… (may take 30s if billing service is waking up)"):
-    success_url, return_url, session_err = _build_return_urls(email)
+    success_url, return_url, _session_err = _build_return_urls(email)
     url, err = _get_checkout_url(email, plan, success_url, return_url)
-
-# Temporary diagnostic — confirms whether the rt session token was minted.
-with st.expander("🔧 Debug (temporary)"):
-    st.write({
-        "session_token_minted": bool(success_url),
-        "session_error": session_err,
-        "success_url_sent": success_url,
-    })
 
 if not url:
     st.error(f"Could not connect to billing service: {err}")

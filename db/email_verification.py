@@ -104,7 +104,10 @@ def consume_verification_token(token: str) -> Optional[str]:
         conn.close()
         return None
 
-    row_id, username = row
+    if isinstance(row, (tuple, list)):
+        row_id, username = row[0], row[1]
+    else:
+        row_id, username = row["id"], row["username"]
     cur.execute(
         "UPDATE email_verifications SET verified_at = NOW() WHERE id = %s",
         (row_id,),
@@ -138,6 +141,7 @@ def is_email_verified(username: str) -> bool:
         conn.close()
         if row is None:
             return True  # unknown user — don't block
-        return bool(row[0])
+        verified = row[0] if isinstance(row, (tuple, list)) else row.get("email_verified")
+        return bool(verified)
     except Exception:
         return True  # fail open so a DB blip doesn't lock everyone out

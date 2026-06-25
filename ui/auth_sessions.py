@@ -141,8 +141,12 @@ def create_session(username: str, ttl_days: int | None = None) -> Optional[str]:
         conn.commit()
         cur.close()
         conn.close()
-        return str(row[0]) if row else None
-    except (RuntimeError, OSError, TypeError, ValueError):
+        if not row:
+            return None
+        # Connection may use a tuple cursor or a dict cursor (RealDictCursor).
+        sid = row[0] if isinstance(row, (tuple, list)) else row.get("session_id")
+        return str(sid) if sid else None
+    except (RuntimeError, OSError, TypeError, ValueError, KeyError):
         return None
 
 
@@ -176,8 +180,10 @@ def get_username_for_session(session_id: str) -> Optional[str]:
             conn.commit()
         cur.close()
         conn.close()
-        return row[0] if row else None
-    except (RuntimeError, OSError, TypeError, ValueError):
+        if not row:
+            return None
+        return row[0] if isinstance(row, (tuple, list)) else row.get("username")
+    except (RuntimeError, OSError, TypeError, ValueError, KeyError):
         return None
 
 

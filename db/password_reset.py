@@ -51,7 +51,11 @@ def _rate_limited(cur, username: str) -> bool:
         (username,),
     )
     row = cur.fetchone()
-    return (row[0] if row else 0) >= _RESET_MAX_PER_HOUR
+    if not row:
+        return False
+    # psycopg dict_row returns a dict; sqlite/tuple cursors return a sequence.
+    count = row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]
+    return count >= _RESET_MAX_PER_HOUR
 
 
 def create_reset_token(username: str, ttl_minutes: int = 30) -> Optional[str]:
@@ -124,7 +128,10 @@ def consume_reset_token(token: str) -> Optional[str]:
         conn.close()
         return None
 
-    row_id, username = row
+    if isinstance(row, (tuple, list)):
+        row_id, username = row[0], row[1]
+    else:
+        row_id, username = row["id"], row["username"]
     cur.execute("UPDATE password_reset_tokens SET used = TRUE WHERE id = %s", (row_id,))
     conn.commit()
     cur.close()

@@ -130,5 +130,29 @@ class ConsumeResetTokenTest(unittest.TestCase):
         self.assertIsNone(second)
 
 
+class DictRowCompatTest(unittest.TestCase):
+    """Production uses psycopg dict_row — rows are dicts, not tuples.
+
+    These guard against the KeyError: 0 / wrong-unpacking bug where row[0]
+    or `a, b = row` was used on a dict cursor.
+    """
+
+    def test_rate_limited_handles_dict_row(self):
+        from db.password_reset import _RESET_MAX_PER_HOUR, _rate_limited
+        cur = MagicMock()
+        cur.fetchone.return_value = {"count": _RESET_MAX_PER_HOUR}
+        self.assertTrue(_rate_limited(cur, "u@example.com"))
+        cur.fetchone.return_value = {"count": 0}
+        self.assertFalse(_rate_limited(cur, "u@example.com"))
+
+    def test_consume_token_handles_dict_row(self):
+        from db import password_reset as pr
+        conn, cur = _make_conn(rows=[{"id": 42, "username": "u@example.com"}])
+        with patch.object(pr, "get_neon_conn", return_value=conn):
+            with patch.object(pr, "_ensure_schema"):
+                result = pr.consume_reset_token("validtoken")
+        self.assertEqual(result, "u@example.com")
+
+
 if __name__ == "__main__":
     unittest.main()
