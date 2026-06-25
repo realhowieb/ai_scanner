@@ -144,12 +144,15 @@ def auth_ui():
     # --- Cookie session restore (persists login across refresh / Stripe redirects) ---
     cookies = _cookies_ready_or_stop()
     if cookies is not None and "username" not in st.session_state:
+        print(f"[auth] cookie manager ready, keys={list(cookies.keys()) if cookies else []}")
         try:
             sid = cookies.get(COOKIE_NAME)
         except _AUTH_BACKEND_ERRORS:
             sid = None
+        print(f"[auth] COOKIE_NAME={COOKIE_NAME!r} sid_found={bool(sid)}")
         if sid:
             u = _get_username_for_session(str(sid))
+            print(f"[auth] cookie restore: sid={str(sid)[:8]}... user={u!r}")
             if u:
                 st.session_state["username"] = (u or "").strip().lower()
                 # Re-read tier from DB so post-Stripe-upgrade redirects reflect the new plan.
