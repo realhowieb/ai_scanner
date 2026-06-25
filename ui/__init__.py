@@ -4,13 +4,12 @@ This package contains all user-interface related modules:
     - pages:     Streamlit page definitions / page router
     - universe:  Universe loaders + filtering + liquidity helpers
     - auth:      Authentication UI
-    - pricing:   Pricing / upgrade sidebar UI
     - charts:    UI-level wrappers around chart rendering (if needed)
 """
 
 import importlib
 
-__all__ = ["pages", "universe", "auth", "pricing", "charts", "ai_notes"]
+__all__ = ["pages", "universe", "auth", "charts", "ai_notes"]
 
 
 def __getattr__(name: str):
