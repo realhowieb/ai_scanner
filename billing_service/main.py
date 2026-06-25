@@ -194,7 +194,9 @@ def _price_to_plan(price_id: str) -> str:
 # ---------- API ----------
 @app.get("/health")
 def health():
-    return {"ok": True}
+    # 'features' lets you confirm which code version is deployed without
+    # exposing secrets — handy after a Render redeploy.
+    return {"ok": True, "features": ["url_override", "idempotent_qp"]}
 
 
 @app.get("/debug/status")
