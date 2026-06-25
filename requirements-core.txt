@@ -1,27 +1,30 @@
 # Core Streamlit scanner runtime.
+# Upper bounds cap major versions to prevent a surprise breaking release from
+# breaking a deploy. For full reproducibility, replace with exact == pins from
+# `pip freeze` in the deploy environment.
 streamlit==1.49.1
-pandas>=2.0
-numpy>=1.23
-yfinance>=0.2.27
+pandas>=2.0,<3
+numpy>=1.23,<3
+yfinance>=0.2.27,<0.3
 pytz>=2025.2
-requests
+requests>=2.31,<3
 
 # Universe loading / HTML table parsing.
-lxml
-html5lib
-beautifulsoup4
+lxml>=4.9,<6
+html5lib>=1.1,<2
+beautifulsoup4>=4.12,<5
 
 # Charts and scanner UI.
-matplotlib
-mplfinance
-plotly
-streamlit-authenticator>=0.4.0
-bcrypt
+matplotlib>=3.7,<4
+mplfinance>=0.12,<0.13
+plotly>=5.18,<7
+streamlit-authenticator>=0.4.0,<0.5
+bcrypt>=4.0,<5
 streamlit-autorefresh
 extra-streamlit-components
-streamlit-cookies-manager>=0.2.0
+streamlit-cookies-manager>=0.2.0,<0.3
 
 # Scheduler, persistence, and Neon/Postgres access.
-SQLAlchemy>=2.0
-apscheduler
-psycopg[binary]>=3.2
+SQLAlchemy>=2.0,<3
+apscheduler>=3.10,<4
+psycopg[binary]>=3.2,<4
