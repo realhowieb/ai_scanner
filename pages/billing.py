@@ -5,7 +5,6 @@ import time
 
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 from requests import exceptions as req_exc
 
 # =========================
@@ -76,36 +75,27 @@ def _billing_post_json(path: str, payload: dict) -> dict:
     ) from last_err
 
 
-def _create_checkout_or_portal(*, email: str, plan: str) -> tuple[str, str]:
-    """Create a Stripe redirect for this plan.
-
-    Backend may return either:
-      - {checkout_url: ..., mode: "checkout"}
-      - {portal_url: ..., mode: "portal"}  (existing subscriber should manage upgrade in portal)
-    Returns (mode, url).
-    """
-    data = _billing_post_json("/create-checkout-session", {"email": email, "plan": plan})
-
-    portal_url = (data.get("portal_url") or "").strip()
-    checkout_url = (data.get("checkout_url") or "").strip()
-    mode = (data.get("mode") or "").strip().lower()
-
-    if portal_url:
-        return ("portal", portal_url)
-    if checkout_url:
-        return ("checkout", checkout_url)
-
-    # Fallback if mode is present but URL key differs
-    if mode == "portal" and portal_url:
-        return ("portal", portal_url)
-    if mode == "checkout" and checkout_url:
-        return ("checkout", checkout_url)
-
-    raise RuntimeError("Billing service did not return a checkout_url or portal_url")
+def _portal_return_url(email: str) -> str | None:
+    """Mint a session and build a portal return URL carrying the rt token so the
+    Customer Portal returns the user logged in (cookie-independent)."""
+    try:
+        from config import APP_BASE_URL
+        from ui.auth_sessions import create_session
+        sid = create_session(email)
+        if not sid:
+            return None
+        base = (APP_BASE_URL or "").rstrip("/")
+        return f"{base}/?portal=return&rt={sid}"
+    except Exception:
+        return None
 
 
 def _create_portal_url(*, email: str) -> str:
-    data = _billing_post_json("/create-portal-session", {"email": email})
+    body = {"email": email}
+    ret = _portal_return_url(email)
+    if ret:
+        body["return_url"] = ret
+    data = _billing_post_json("/create-portal-session", body)
     url = (data.get("portal_url") or "").strip()
     if not url:
         raise RuntimeError("Billing service did not return portal_url")
@@ -169,16 +159,6 @@ def _refresh_tier_from_db(email: str) -> str | None:
 # Stripe open helper (reliable)
 # =========================
 
-def _open_checkout_same_tab(url: str, *, kind: str = "Checkout") -> None:
-    """Redirect the current tab to Stripe using a styled anchor link."""
-    u = (url or "").strip()
-    if not u:
-        return
-
-    st.success(f"Stripe {kind} is ready ✅")
-    st.link_button(f"💳 Continue to Stripe {kind}", u, use_container_width=True)
-
-
 # =========================
 # UI blocks
 # =========================
@@ -218,17 +198,6 @@ def _upgrade_buttons(current_tier_key: str) -> None:
     if not email or "@" not in email:
         st.warning("Please sign in before upgrading. Upgrades are tied to your account.")
         return
-
-    # Back-compat cleanup: older sessions may have used checkout_url
-    if st.session_state.get("checkout_url"):
-        st.session_state["stripe_redirect_url"] = st.session_state.pop("checkout_url")
-        st.session_state.setdefault("stripe_redirect_kind", "Checkout")
-
-    # If we already created a Stripe redirect URL in this session, show same-tab open UI
-    stripe_url = (st.session_state.get("stripe_redirect_url") or "").strip()
-    stripe_kind = (st.session_state.get("stripe_redirect_kind") or "Checkout").strip() or "Checkout"
-    if stripe_url:
-        _open_checkout_same_tab(stripe_url, kind=stripe_kind)
 
     col_pro, col_premium = st.columns(2)
 
@@ -331,38 +300,16 @@ def render_billing_page() -> None:
     if current_label in ("Pro", "Premium"):
         if st.button("Manage subscription", key="billing_manage", width="stretch"):
             try:
-                portal_url = _create_portal_url(email=email)
-                # Prefer same-tab open
-                components.html(
-                    f"""
-                    <div style=\"width:100%;\">
-                      <button id=\"portalGo\"
-                        style=\"width:100%; padding:0.65rem 1rem; border-radius:0.6rem; border:1px solid rgba(255,255,255,0.18);
-                               background: rgba(255,255,255,0.06); color: inherit; font-size: 1rem; cursor: pointer;\">
-                        🔧 Open Stripe Customer Portal (same tab)
-                      </button>
-                    </div>
-                    <script>
-                      (function() {{
-                        var url = {portal_url!r};
-                        var btn = document.getElementById('portalGo');
-                        if (!btn) return;
-                        btn.addEventListener('click', function() {{
-                          try {{
-                            window.top.location.href = url;
-                          }} catch (e) {{
-                            try {{ window.parent.location.href = url; }} catch (e2) {{ window.location.href = url; }}
-                          }}
-                        }});
-                      }})();
-                    </script>
-                    """,
-                    height=72,
-                )
-                st.link_button("Open Stripe Customer Portal (fallback)", portal_url, width="stretch")
+                st.session_state["_portal_url"] = _create_portal_url(email=email)
             except Exception as e:
                 st.error(str(e))
                 st.caption("Tip: The billing service may be waking up. Try again in ~30 seconds.")
+
+        portal_url = st.session_state.get("_portal_url")
+        if portal_url:
+            st.success("Customer Portal ready!")
+            st.link_button("🔧 Open Stripe Customer Portal", portal_url, width="stretch")
+            st.caption("Opens in a new tab. After managing your plan, return here — your changes apply automatically.")
 
     _pricing_table()
     _benefits_block()
