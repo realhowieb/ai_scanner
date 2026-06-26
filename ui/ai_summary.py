@@ -10,7 +10,7 @@ import hashlib
 import pandas as pd
 
 _SUMMARY_COLUMNS = [
-    "Ticker", "Symbol", "BreakoutScore", "Gap%",
+    "Ticker", "Symbol", "BreakoutScore", "GapPct", "Gap%",
     "Trend20D%", "VolRel20", "DollarVol20", "Volatility20D%",
 ]
 _MAX_ROWS = 15

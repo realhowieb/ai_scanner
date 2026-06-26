@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-_DIFF_COLS = ["Ticker", "Symbol", "BreakoutScore", "Gap%", "Trend20D%", "VolRel20", "DollarVol20"]
+_DIFF_COLS = ["Ticker", "Symbol", "BreakoutScore", "GapPct", "Gap%", "Trend20D%", "VolRel20", "DollarVol20"]
 _SCORE_COL = "BreakoutScore"
 
 _DIFF_SYSTEM = (

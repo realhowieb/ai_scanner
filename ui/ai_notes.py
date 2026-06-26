@@ -22,7 +22,8 @@ def generate_ai_note(row: pd.Series) -> str:
     try:
         ticker = row.get("Ticker", "?")
         score = row.get("BreakoutScore", 0)
-        gap = row.get("Gap%", 0)
+        # Scan engine emits the gap column as "GapPct"; fall back to "Gap%".
+        gap = row.get("GapPct", row.get("Gap%", 0)) or 0
         trend = row.get("Trend20D%", 0)
         volrel = row.get("VolRel20", 0)
         dvol = row.get("DollarVol20", 0)

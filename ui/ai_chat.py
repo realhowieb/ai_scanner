@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-_CHAT_COLS = ["Ticker", "Symbol", "BreakoutScore", "Gap%", "Trend20D%", "VolRel20", "DollarVol20", "Volatility20D%"]
+_CHAT_COLS = ["Ticker", "Symbol", "BreakoutScore", "GapPct", "Gap%", "Trend20D%", "VolRel20", "DollarVol20", "Volatility20D%"]
 _MAX_ROWS = 20
 _MAX_HISTORY = 8  # cap turns sent to control cost
 
