@@ -90,8 +90,12 @@ def _render_builtin_candlestick(
         return
 
     if go is None:
-        # Fallback: simple line chart
-        st.line_chart(df["Close"])
+        # Fallback: simple line chart (native chart pulls in altair, which can
+        # fail on some runtimes — degrade to a table rather than crash).
+        try:
+            st.line_chart(df["Close"])
+        except Exception:
+            st.dataframe(df[["Close"]])
         return
 
     fig = go.Figure()

@@ -73,6 +73,7 @@ def _save_user_settings(
             premarket=st.session_state.get("premarket"),
             afterhours=st.session_state.get("afterhours"),
             unusual_vol=st.session_state.get("unusual_vol"),
+            enable_earnings_enrichment=st.session_state.get("enable_earnings_enrichment"),
         )
         st.sidebar.success("Default scan settings saved for your account.")
     except Exception as e:

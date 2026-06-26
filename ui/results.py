@@ -343,7 +343,7 @@ def render_results(
                 if row is None:
                     raise ValueError("No matching row for selected ticker")
                 auto_note = generate_ai_note(row)
-                st.markdown(auto_note)
+                st.markdown(auto_note.replace("$", "\\$"))
                 st.text_area(
                     "Edit or copy these notes (Premium only):",
                     value=auto_note,
@@ -671,7 +671,7 @@ def render_results(
             if row is None:
                 raise ValueError("No matching row for selected ticker")
             auto_note = generate_ai_note(row)
-            st.markdown(auto_note)
+            st.markdown(auto_note.replace("$", "\\$"))
             st.text_area(
                 "Edit or copy these notes (Premium only):",
                 value=auto_note,

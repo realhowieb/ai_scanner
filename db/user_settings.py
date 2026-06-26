@@ -53,6 +53,7 @@ def _ensure_user_settings_schema() -> None:
                     premarket BOOLEAN,
                     afterhours BOOLEAN,
                     unusual_vol BOOLEAN,
+                    enable_earnings_enrichment BOOLEAN,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
@@ -69,6 +70,7 @@ def _ensure_user_settings_schema() -> None:
                     ADD COLUMN IF NOT EXISTS premarket BOOLEAN,
                     ADD COLUMN IF NOT EXISTS afterhours BOOLEAN,
                     ADD COLUMN IF NOT EXISTS unusual_vol BOOLEAN,
+                    ADD COLUMN IF NOT EXISTS enable_earnings_enrichment BOOLEAN,
                     ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
                 """
@@ -124,7 +126,8 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
                     max_combo_scan,
                     premarket,
                     afterhours,
-                    unusual_vol
+                    unusual_vol,
+                    enable_earnings_enrichment
                 FROM user_settings
                 WHERE user_id = %s
                 """,
@@ -151,7 +154,8 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
                         max_combo_scan,
                         premarket,
                         afterhours,
-                        unusual_vol
+                        unusual_vol,
+                        enable_earnings_enrichment
                     FROM user_settings
                     WHERE TRIM(LOWER(user_id)) = TRIM(LOWER(%s))
                     """,
@@ -181,6 +185,7 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
             "premarket": bool(row["premarket"]) if row.get("premarket") is not None else None,
             "afterhours": bool(row["afterhours"]) if row.get("afterhours") is not None else None,
             "unusual_vol": bool(row["unusual_vol"]) if row.get("unusual_vol") is not None else None,
+            "enable_earnings_enrichment": bool(row["enable_earnings_enrichment"]) if row.get("enable_earnings_enrichment") is not None else None,
         }
 
     # Fallback: if we ever get a positional row (tuple), keep the original tuple-unpack logic.
@@ -199,6 +204,7 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
         premarket,
         afterhours,
         unusual_vol,
+        enable_earnings_enrichment,
     ) = row
 
     return {
@@ -216,6 +222,7 @@ def get_user_settings(user_id: str) -> Optional[Dict[str, Any]]:
         "premarket": bool(premarket) if premarket is not None else None,
         "afterhours": bool(afterhours) if afterhours is not None else None,
         "unusual_vol": bool(unusual_vol) if unusual_vol is not None else None,
+        "enable_earnings_enrichment": bool(enable_earnings_enrichment) if enable_earnings_enrichment is not None else None,
     }
 
 
@@ -236,6 +243,7 @@ def upsert_user_settings(
     premarket: Optional[bool] = None,
     afterhours: Optional[bool] = None,
     unusual_vol: Optional[bool] = None,
+    enable_earnings_enrichment: Optional[bool] = None,
 ) -> None:
     """
     Insert or update per-user scan settings in the Neon-backed user_settings table.
@@ -259,7 +267,8 @@ def upsert_user_settings(
                     max_combo_scan,
                     premarket,
                     afterhours,
-                    unusual_vol
+                    unusual_vol,
+                    enable_earnings_enrichment
                 )
                 VALUES (
                     %(user_id)s,
@@ -276,7 +285,8 @@ def upsert_user_settings(
                     %(max_combo_scan)s,
                     %(premarket)s,
                     %(afterhours)s,
-                    %(unusual_vol)s
+                    %(unusual_vol)s,
+                    %(enable_earnings_enrichment)s
                 )
                 ON CONFLICT (user_id) DO UPDATE
                 SET
@@ -293,7 +303,8 @@ def upsert_user_settings(
                     max_combo_scan = EXCLUDED.max_combo_scan,
                     premarket = EXCLUDED.premarket,
                     afterhours = EXCLUDED.afterhours,
-                    unusual_vol = EXCLUDED.unusual_vol;
+                    unusual_vol = EXCLUDED.unusual_vol,
+                    enable_earnings_enrichment = EXCLUDED.enable_earnings_enrichment;
                 """,
                 {
                     "user_id": user_id,
@@ -311,6 +322,7 @@ def upsert_user_settings(
                     "premarket": premarket,
                     "afterhours": afterhours,
                     "unusual_vol": unusual_vol,
+                    "enable_earnings_enrichment": enable_earnings_enrichment,
                 },
             )
         conn.commit()

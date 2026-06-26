@@ -43,9 +43,11 @@ def render_earnings_controls(
         return
 
     with st.sidebar.expander("📅 Earnings", expanded=False):
+        # Seed a default without passing value= (which conflicts with the
+        # session-state key set during profile restore and warns in Streamlit).
+        st.session_state.setdefault("enable_earnings_enrichment", False)
         earn_enabled = st.checkbox(
             "Enable earnings enrichment (adds 📅 Earnings in X days)",
-            value=bool(st.session_state.get("enable_earnings_enrichment", False)),
             key="enable_earnings_enrichment",
             help=(
                 "If enabled, the app will add timing from the DB to results. "

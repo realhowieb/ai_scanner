@@ -146,6 +146,24 @@ def run_and_save(
         run_name = f"{universe} | {row_count} results | {duration:.1f}s"
         print(f"Scan completed: {run_name}")
 
+        # Guard: a large universe returning almost nothing means the price fetch
+        # was throttled/failed. Don't overwrite a good snapshot with garbage —
+        # skip the save and report the run as failed so it's visible.
+        min_save_rows = int(os.getenv("CRON_MIN_SAVE_ROWS", "10"))
+        if len(tickers) >= 200 and row_count < min_save_rows:
+            msg = (
+                f"{universe}: only {row_count} rows from {len(tickers)} tickers "
+                f"(< {min_save_rows}); likely throttled — snapshot NOT saved."
+            )
+            print(f"⚠️ {msg}")
+            return ScanRunSummary(
+                universe=universe,
+                ok=False,
+                row_count=row_count,
+                duration_sec=duration,
+                error=f"SkippedSave: {msg}",
+            )
+
         save_run(
             name=run_name,
             label=universe,
@@ -169,8 +187,25 @@ def run_and_save(
         return ScanRunSummary(universe=universe, ok=False, error=f"{type(e).__name__}: {e}")
 
 
+def _print_provider_status() -> None:
+    """Log which price provider will be used, to diagnose Alpaca config."""
+    key = os.getenv("ALPACA_API_KEY_ID")
+    secret = os.getenv("ALPACA_API_SECRET_KEY")
+    print(
+        f"Price provider — ALPACA_API_KEY_ID={'set(…' + key[-4:] + ')' if key else 'MISSING'}, "
+        f"ALPACA_API_SECRET_KEY={'set' if secret else 'MISSING'}"
+    )
+    try:
+        from data.price_alpaca import get_alpaca_config
+        cfg = get_alpaca_config()
+        print(f"Active provider: {'Alpaca' if cfg else 'yfinance (Alpaca not configured)'}")
+    except Exception as e:
+        print(f"Active provider: unknown (config check failed: {e})")
+
+
 def main():
     print("=== cron_runner started ===")
+    _print_provider_status()
     started_at = dt.datetime.now(dt.timezone.utc)
 
     skip_reason = _skip_reason()

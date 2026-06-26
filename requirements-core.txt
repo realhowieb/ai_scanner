@@ -15,13 +15,16 @@ html5lib>=1.1,<2
 beautifulsoup4>=4.12,<5
 
 # Charts and scanner UI.
+# altair<5.5: 5.5+ generates TypedDict(closed=True) schemas that crash on
+# Python 3.14 (Streamlit Cloud runtime). Pin below that until upstream fixes it.
+altair>=5.0,<5.5
 matplotlib>=3.7,<4
 mplfinance>=0.12,<0.13
 plotly>=5.18,<7
 streamlit-authenticator>=0.4.0,<0.5
 bcrypt>=4.0,<5
-streamlit-autorefresh
-extra-streamlit-components
+streamlit-autorefresh<2
+extra-streamlit-components<1
 streamlit-cookies-manager>=0.2.0,<0.3
 
 # Scheduler, persistence, and Neon/Postgres access.
