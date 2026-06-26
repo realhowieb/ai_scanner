@@ -187,8 +187,25 @@ def run_and_save(
         return ScanRunSummary(universe=universe, ok=False, error=f"{type(e).__name__}: {e}")
 
 
+def _print_provider_status() -> None:
+    """Log which price provider will be used, to diagnose Alpaca config."""
+    key = os.getenv("ALPACA_API_KEY_ID")
+    secret = os.getenv("ALPACA_API_SECRET_KEY")
+    print(
+        f"Price provider — ALPACA_API_KEY_ID={'set(…' + key[-4:] + ')' if key else 'MISSING'}, "
+        f"ALPACA_API_SECRET_KEY={'set' if secret else 'MISSING'}"
+    )
+    try:
+        from data.price_alpaca import get_alpaca_config
+        cfg = get_alpaca_config()
+        print(f"Active provider: {'Alpaca' if cfg else 'yfinance (Alpaca not configured)'}")
+    except Exception as e:
+        print(f"Active provider: unknown (config check failed: {e})")
+
+
 def main():
     print("=== cron_runner started ===")
+    _print_provider_status()
     started_at = dt.datetime.now(dt.timezone.utc)
 
     skip_reason = _skip_reason()
