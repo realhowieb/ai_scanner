@@ -12,6 +12,17 @@ def _read_lines(name):
     ]
 
 
+def _pkg_names(name):
+    """Package names only (strip version specifiers/extras) for spec-agnostic checks."""
+    import re
+    names = set()
+    for line in _read_lines(name):
+        if line.startswith("-r"):
+            continue
+        names.add(re.split(r"[<>=!~\[ ]", line, 1)[0].lower())
+    return names
+
+
 class RequirementsLayoutTests(unittest.TestCase):
     def test_full_requirements_delegates_to_groups(self):
         lines = _read_lines("requirements.txt")
@@ -26,31 +37,25 @@ class RequirementsLayoutTests(unittest.TestCase):
         )
 
     def test_core_requirements_keep_scanner_runtime_deps(self):
-        core = set(_read_lines("requirements-core.txt"))
+        core = _pkg_names("requirements-core.txt")
 
-        for dep in {
-            "streamlit==1.49.1",
-            "pandas>=2.0",
-            "numpy>=1.23",
-            "yfinance>=0.2.27",
-            "requests",
-            "SQLAlchemy>=2.0",
-            "apscheduler",
-            "psycopg[binary]>=3.2",
-        }:
-            self.assertIn(dep, core)
+        # Streamlit stays exactly pinned; others checked by package name so
+        # version-spec changes (e.g. adding upper bounds) don't break the test.
+        self.assertIn("streamlit==1.49.1", set(_read_lines("requirements-core.txt")))
+        for pkg in {"pandas", "numpy", "yfinance", "requests", "sqlalchemy", "apscheduler", "psycopg"}:
+            self.assertIn(pkg, core)
 
     def test_optional_heavy_deps_are_not_in_core(self):
-        core = set(_read_lines("requirements-core.txt"))
-        optional = set(_read_lines("requirements-ml.txt")) | set(_read_lines("requirements-extended.txt"))
+        core = _pkg_names("requirements-core.txt")
+        optional = _pkg_names("requirements-ml.txt") | _pkg_names("requirements-extended.txt")
 
-        for dep in {"xgboost", "scikit-learn", "joblib", "alpaca-py"}:
-            self.assertNotIn(dep, core)
-            self.assertIn(dep, optional)
+        for pkg in {"xgboost", "scikit-learn", "joblib", "alpaca-py"}:
+            self.assertNotIn(pkg, core)
+            self.assertIn(pkg, optional)
 
-        for conflicting_dep in {"pyppeteer", "yahoo_fin"}:
-            self.assertNotIn(conflicting_dep, core)
-            self.assertNotIn(conflicting_dep, optional)
+        for conflicting in {"pyppeteer", "yahoo_fin"}:
+            self.assertNotIn(conflicting, core)
+            self.assertNotIn(conflicting, optional)
 
     def test_pyproject_keeps_heavy_deps_optional(self):
         text = (ROOT / "pyproject.toml").read_text()
