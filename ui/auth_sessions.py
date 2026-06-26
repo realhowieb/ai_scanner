@@ -83,6 +83,36 @@ def cookies_ready_or_stop() -> Optional["EncryptedCookieManager"]:
     return cookies
 
 
+_COOKIE_SAVE_FLAG = "_cookies_saved_this_run"
+
+
+def reset_cookie_save_guard() -> None:
+    """Call once at the top of each script run before any cookie save."""
+    try:
+        st.session_state.pop(_COOKIE_SAVE_FLAG, None)
+    except (RuntimeError, AttributeError, KeyError):
+        pass
+
+
+def save_cookies(cookies) -> None:
+    """Save the cookie jar at most once per script run.
+
+    streamlit-cookies-manager's save() renders a component with a fixed key
+    (CookieManager.sync_cookies.save). Newer Streamlit hard-errors with
+    StreamlitDuplicateElementKey if save() runs more than once in a single
+    run, so we guard to a single save per run.
+    """
+    if cookies is None:
+        return
+    try:
+        if st.session_state.get(_COOKIE_SAVE_FLAG):
+            return
+        cookies.save()
+        st.session_state[_COOKIE_SAVE_FLAG] = True
+    except (RuntimeError, AttributeError, KeyError, OSError, TypeError, ValueError):
+        pass
+
+
 def ensure_auth_sessions_schema(conn) -> None:
     """Create auth_sessions table if missing."""
     cur = conn.cursor()

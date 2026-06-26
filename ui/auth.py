@@ -39,6 +39,12 @@ from ui.auth_sessions import (
 from ui.auth_sessions import (
     get_username_for_session as _get_username_for_session,
 )
+from ui.auth_sessions import (
+    reset_cookie_save_guard as _reset_cookie_save_guard,
+)
+from ui.auth_sessions import (
+    save_cookies as _save_cookies,
+)
 
 # Direct Neon lookup fallback for username -> email mapping
 try:
@@ -181,6 +187,9 @@ def _resolve_tier_key(username: str) -> str | None:
 
 
 def auth_ui():
+    # Reset the once-per-run cookie-save guard at the start of each run.
+    _reset_cookie_save_guard()
+
     # --- URL token restore (Stripe redirect carries ?rt=<session_id>) ---
     # Browser cookies are unreliable across the Stripe round-trip on Streamlit
     # Cloud, so we also accept a session id passed back in the success_url.
@@ -224,7 +233,7 @@ def auth_ui():
                 # gets a clean login form rather than a silent broken state.
                 try:
                     cookies.pop(COOKIE_NAME, None)
-                    cookies.save()
+                    _save_cookies(cookies)
                 except _AUTH_BACKEND_ERRORS:
                     pass
                 st.info("Your session has expired. Please log in again.")
@@ -438,7 +447,7 @@ def auth_ui():
                 sid = _create_session(email_raw)
                 if sid:
                     cookies2[COOKIE_NAME] = sid
-                    cookies2.save()
+                    _save_cookies(cookies2)
         except _AUTH_BACKEND_ERRORS:
             pass
 
@@ -598,7 +607,7 @@ def auth_ui():
                 sid = _create_session(login_key)
                 if sid:
                     cookies2[COOKIE_NAME] = sid
-                    cookies2.save()
+                    _save_cookies(cookies2)
         except _AUTH_BACKEND_ERRORS:
             pass
 
@@ -624,6 +633,7 @@ def logout_and_reset_session() -> None:
     can result in a blank screen. Instead, we clear the keys we know we own.
     """
     # Clear cookie-backed session (best-effort)
+    _reset_cookie_save_guard()
     try:
         cookies = _cookies_ready_or_stop()
         if cookies is not None:
@@ -634,7 +644,7 @@ def logout_and_reset_session() -> None:
                 cookies.pop(COOKIE_NAME, None)
             except _AUTH_BACKEND_ERRORS:
                 pass
-            cookies.save()
+            _save_cookies(cookies)
     except _AUTH_BACKEND_ERRORS:
         pass
 
