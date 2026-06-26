@@ -66,6 +66,7 @@ def load_saved_user_settings(
         "premarket",
         "afterhours",
         "unusual_vol",
+        "enable_earnings_enrichment",
     )
     for key in direct_keys:
         value = saved.get(key)
