@@ -356,7 +356,12 @@ def _render_ai_usage_panel() -> None:
         import pandas as pd
         df = pd.DataFrame(counts, columns=["feature", "calls"])
         st.dataframe(df)
-        st.bar_chart(df.set_index("feature"))
+        # Bar chart is best-effort: native charts pull in altair which can fail
+        # on some runtimes. The table above already conveys the data.
+        try:
+            st.bar_chart(df.set_index("feature"))
+        except ADMIN_TAB_ERRORS:
+            pass
     except ADMIN_TAB_ERRORS as exc:
         st.error("Failed to load AI usage.")
         _show_exception(exc)
