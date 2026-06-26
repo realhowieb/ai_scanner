@@ -23,8 +23,8 @@ mplfinance>=0.12,<0.13
 plotly>=5.18,<7
 streamlit-authenticator>=0.4.0,<0.5
 bcrypt>=4.0,<5
-streamlit-autorefresh
-extra-streamlit-components
+streamlit-autorefresh<2
+extra-streamlit-components<1
 streamlit-cookies-manager>=0.2.0,<0.3
 
 # Scheduler, persistence, and Neon/Postgres access.
