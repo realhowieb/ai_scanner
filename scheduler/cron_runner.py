@@ -146,6 +146,24 @@ def run_and_save(
         run_name = f"{universe} | {row_count} results | {duration:.1f}s"
         print(f"Scan completed: {run_name}")
 
+        # Guard: a large universe returning almost nothing means the price fetch
+        # was throttled/failed. Don't overwrite a good snapshot with garbage —
+        # skip the save and report the run as failed so it's visible.
+        min_save_rows = int(os.getenv("CRON_MIN_SAVE_ROWS", "10"))
+        if len(tickers) >= 200 and row_count < min_save_rows:
+            msg = (
+                f"{universe}: only {row_count} rows from {len(tickers)} tickers "
+                f"(< {min_save_rows}); likely throttled — snapshot NOT saved."
+            )
+            print(f"⚠️ {msg}")
+            return ScanRunSummary(
+                universe=universe,
+                ok=False,
+                row_count=row_count,
+                duration_sec=duration,
+                error=f"SkippedSave: {msg}",
+            )
+
         save_run(
             name=run_name,
             label=universe,
