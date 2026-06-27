@@ -372,6 +372,20 @@ def render_results(
 
     # --- Pro styling for results table ---
     table_df = _format_earnings_for_display(df)
+
+    # Arrow-safe: the bare "Earnings" column can hold a mix of ints (days) and
+    # "—"/text, which fails pyarrow serialization and triggers a Streamlit
+    # "automatic fixes" warning. Coerce it to string for display. (The numeric
+    # "📅 Earnings in X days" column the styler uses is left untouched.)
+    if "Earnings" in table_df.columns:
+        try:
+            table_df = table_df.copy()
+            table_df["Earnings"] = table_df["Earnings"].apply(
+                lambda v: "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
+            )
+        except (TypeError, ValueError, AttributeError):
+            pass
+
     styled = table_df.style
 
     # Format earnings column: None/NaN -> — ; ints shown as whole numbers
