@@ -438,7 +438,15 @@ def auth_ui():
             v_token = create_verification_token(email_raw)
             if v_token:
                 verify_url = f"{APP_BASE_URL.rstrip('/')}/verify_email?token={v_token}"
-                send_verification_email(to_address=email_raw, verify_url=verify_url)
+                sent = send_verification_email(to_address=email_raw, verify_url=verify_url)
+                if sent:
+                    st.info("📧 Verification email sent — check your inbox (and spam).")
+                else:
+                    st.warning(
+                        "We couldn't send the verification email (email isn't "
+                        "configured yet). You can still use the app; verification "
+                        "is only needed for email alerts."
+                    )
         except _AUTH_BACKEND_ERRORS:
             pass
 
