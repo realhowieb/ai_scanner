@@ -66,7 +66,7 @@ def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) ->
             st.code(f"{type(e).__name__}: {e}\n{repr(e)}")
         return
 
-    with st.expander("➕ Create an alert", expanded=not existing):
+    with st.expander("➕ Create an alert", expanded=True):
         tab_break, tab_watch, tab_price = st.tabs(
             ["🚀 Breakout", "📋 Watchlist", "💲 Price"]
         )
@@ -177,9 +177,20 @@ def _guarded_create(existing: list, max_per_user: int, do_create) -> None:
         return
     try:
         do_create()
-        st.success("Alert created.")
-        st.rerun()
     except ValueError as e:
         st.warning(str(e))
+        return
+    except Exception as e:
+        # Surface the real reason instead of a vague message so DB/permission
+        # issues are diagnosable.
+        st.error(f"Could not create alert: {type(e).__name__}: {e}")
+        with st.expander("Create error details", expanded=True):
+            st.code(repr(e))
+        return
+    # toast survives the rerun so the user gets confirmation even though the
+    # script restarts immediately to refresh the alert list.
+    try:
+        st.toast("✅ Alert created")
     except Exception:
-        st.warning("Could not create alert (Neon DB may be unavailable).")
+        pass
+    st.rerun()
