@@ -131,6 +131,17 @@ def download_multi_alpaca(
     if not symbols:
         return {}
 
+    # Alpaca uses a dot for class shares (BRK.B), while our universe uses
+    # Yahoo's dash form (BRK-B). Send the dot form and map responses back so a
+    # single class-share symbol doesn't 400 the whole batch.
+    orig_by_alpaca: Dict[str, str] = {}
+    alpaca_symbols: list[str] = []
+    for sym in symbols:
+        a = str(sym).upper().replace("-", ".")
+        orig_by_alpaca[a] = str(sym).upper()
+        alpaca_symbols.append(a)
+    symbols = alpaca_symbols
+
     url = f"{cfg['data_url']}/v2/stocks/bars"
     headers = {
         "APCA-API-KEY-ID": cfg["api_key"],
@@ -216,12 +227,15 @@ def download_multi_alpaca(
             if "Adj Close" not in df.columns and "Close" in df.columns:
                 df["Adj Close"] = df["Close"]
 
+            # Map Alpaca's dot form back to the caller's original (dash) symbol.
+            out_sym = orig_by_alpaca.get(str(symbol).upper(), str(symbol).upper())
+
             normalized = normalize_price_frame(df)
             try:
                 normalized.attrs["source"] = "alpaca_multi"
-                normalized.attrs["symbol"] = str(symbol).upper()
+                normalized.attrs["symbol"] = out_sym
             except (AttributeError, TypeError, ValueError):
                 pass
-            out[str(symbol).upper()] = normalized
+            out[out_sym] = normalized
 
     return out
