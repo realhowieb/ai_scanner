@@ -76,6 +76,11 @@ def _write_summary(summary: dict, path: Path | None = None) -> None:
 
 def _skip_reason(now_utc: dt.datetime | None = None) -> str | None:
     """Return a reason to skip scheduled scans, or None when scans may run."""
+    # CRON_FORCE=1 bypasses the weekend/premarket skip — used by the manual
+    # "Run workflow" trigger so the pipeline can be tested any time.
+    if os.getenv("CRON_FORCE", "").strip() == "1":
+        return None
+
     if now_utc is None:
         now_utc = dt.datetime.now(dt.timezone.utc)
     elif now_utc.tzinfo is None:
