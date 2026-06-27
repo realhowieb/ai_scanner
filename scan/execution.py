@@ -30,6 +30,7 @@ def _call_scan_runner(
     diagnostics: bool,
     progress_cb: ProgressCallback | None,
     snapshot_id: object = None,
+    min_dollar_vol: float = 0.0,
 ) -> pd.DataFrame:
     """Call the scan runner with compatibility fallbacks for older signatures."""
     kwargs = {
@@ -44,6 +45,10 @@ def _call_scan_runner(
         "profile": profile,
         "diagnostics": diagnostics,
     }
+    # Only pass the liquidity floor when set, so runners with older signatures
+    # that don't accept it still work.
+    if min_dollar_vol and min_dollar_vol > 0:
+        kwargs["min_dollar_vol"] = float(min_dollar_vol)
     try:
         return runner(**kwargs, progress_cb=progress_cb, snapshot_id=snapshot_id)
     except TypeError:
@@ -71,6 +76,7 @@ def run_manual_scan_execution(
     progress_cb: ProgressCallback | None = None,
     snapshot_id: object = None,
     extended_price_transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    min_dollar_vol: float = 0.0,
 ) -> pd.DataFrame:
     """Run the manual scanner and apply shared post-processing rules."""
     frame = _call_scan_runner(
@@ -87,6 +93,7 @@ def run_manual_scan_execution(
         diagnostics=diagnostics,
         progress_cb=progress_cb,
         snapshot_id=snapshot_id,
+        min_dollar_vol=min_dollar_vol,
     )
     if frame is None or not isinstance(frame, pd.DataFrame):
         frame = pd.DataFrame()

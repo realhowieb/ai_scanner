@@ -352,6 +352,11 @@ def render_scan_controls(
                 if _is_admin():
                     snapshot_id = st.session_state.get("price_snapshot_id") or st.session_state.get("snapshot_id")
 
+                # Apply the sidebar "Min Dollar Volume" as a liquidity floor so
+                # in-app scans screen out illiquid micro-caps (same filter the
+                # scheduled cron uses).
+                sidebar_min_dollar_vol = float(st.session_state.get("min_dollar_vol") or 0.0)
+
                 df = run_manual_scan_execution(
                     runner=run_breakout_scan,
                     tickers=list(tickers),
@@ -368,6 +373,7 @@ def render_scan_controls(
                     progress_cb=progress_cb,
                     snapshot_id=snapshot_id,
                     extended_price_transform=apply_alpaca_extended_prices,
+                    min_dollar_vol=sidebar_min_dollar_vol,
                 )
 
                 progress.progress(92)
