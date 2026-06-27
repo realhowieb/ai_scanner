@@ -60,8 +60,10 @@ def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) ->
 
     try:
         existing = list_alerts(user_id)
-    except Exception:
+    except Exception as e:
         st.caption("Alerts require Neon DB (cloud) and are currently unavailable.")
+        with st.expander("Alert error details", expanded=False):
+            st.code(f"{type(e).__name__}: {e}\n{repr(e)}")
         return
 
     with st.expander("➕ Create an alert", expanded=not existing):

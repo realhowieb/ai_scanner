@@ -8,8 +8,9 @@ Three launch alert types (alert_type column):
 - 'price'     : fire when ticker's Last crosses `direction` ('above'/'below')
                 the `threshold` price.
 
-Backed by Neon/PostgreSQL (psycopg, dict_row). Rows are normalized to plain
-dicts so callers don't depend on the cursor row factory.
+Backed by Neon/PostgreSQL (psycopg, dict_row). Mirrors the proven connection
+pattern in db/watchlists.py: plain cursor + conn.commit() + cur.close(). Rows
+are normalized to plain dicts so callers don't depend on the cursor row factory.
 """
 from __future__ import annotations
 
@@ -22,46 +23,47 @@ ALERT_TYPES = ("breakout", "watchlist", "price")
 
 def _ensure_alerts_schema(conn) -> None:
     """Create the alert tables/indexes if they don't exist (idempotent)."""
-    with conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS user_alerts (
-                    id BIGSERIAL PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    alert_type TEXT NOT NULL,
-                    ticker TEXT,
-                    threshold DOUBLE PRECISION,
-                    direction TEXT,
-                    watchlist_only BOOLEAN NOT NULL DEFAULT FALSE,
-                    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                    last_fired_at TIMESTAMPTZ,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                );
-                """
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS idx_user_alerts_user ON user_alerts(user_id);"
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS idx_user_alerts_enabled ON user_alerts(enabled);"
-            )
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS alert_events (
-                    id BIGSERIAL PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    alert_id BIGINT,
-                    ticker TEXT,
-                    message TEXT NOT NULL,
-                    fired_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                );
-                """
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS idx_alert_events_user "
-                "ON alert_events(user_id, fired_at DESC);"
-            )
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_alerts (
+            id BIGSERIAL PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            alert_type TEXT NOT NULL,
+            ticker TEXT,
+            threshold DOUBLE PRECISION,
+            direction TEXT,
+            watchlist_only BOOLEAN NOT NULL DEFAULT FALSE,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            last_fired_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_alerts_user ON user_alerts(user_id)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_alerts_enabled ON user_alerts(enabled)"
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS alert_events (
+            id BIGSERIAL PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            alert_id BIGINT,
+            ticker TEXT,
+            message TEXT NOT NULL,
+            fired_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_alert_events_user "
+        "ON alert_events(user_id, fired_at DESC)"
+    )
+    conn.commit()
+    cur.close()
 
 
 def _get_conn():
@@ -125,81 +127,84 @@ def create_alert(
     if alert_type not in ALERT_TYPES:
         raise ValueError(f"Unknown alert_type: {alert_type!r}")
     conn = _get_conn()
-    with conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO user_alerts
-                    (user_id, alert_type, ticker, threshold, direction, watchlist_only)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    user_id,
-                    alert_type,
-                    (ticker or "").upper() or None,
-                    threshold,
-                    direction,
-                    bool(watchlist_only),
-                ),
-            )
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO user_alerts
+            (user_id, alert_type, ticker, threshold, direction, watchlist_only)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (
+            user_id,
+            alert_type,
+            (ticker or "").upper() or None,
+            threshold,
+            direction,
+            bool(watchlist_only),
+        ),
+    )
+    conn.commit()
+    cur.close()
 
 
 def list_alerts(user_id: str) -> List[Dict[str, Any]]:
     """Return all alerts owned by user_id, newest first."""
     conn = _get_conn()
-    with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT {_SELECT_COLS} FROM user_alerts WHERE user_id = %s "
-            "ORDER BY created_at DESC",
-            (user_id,),
-        )
-        rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT {_SELECT_COLS} FROM user_alerts WHERE user_id = %s "
+        "ORDER BY created_at DESC",
+        (user_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
     return [_row_to_alert(r) for r in rows]
 
 
 def list_all_enabled_alerts() -> List[Dict[str, Any]]:
     """Return every enabled alert across all users (for the headless runner)."""
     conn = _get_conn()
-    with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT {_SELECT_COLS} FROM user_alerts WHERE enabled = TRUE "
-            "ORDER BY user_id ASC"
-        )
-        rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT {_SELECT_COLS} FROM user_alerts WHERE enabled = TRUE "
+        "ORDER BY user_id ASC"
+    )
+    rows = cur.fetchall()
+    cur.close()
     return [_row_to_alert(r) for r in rows]
 
 
 def delete_alert(alert_id: int, user_id: str) -> None:
     """Delete an alert (ownership-checked)."""
     conn = _get_conn()
-    with conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM user_alerts WHERE id = %s AND user_id = %s",
-                (alert_id, user_id),
-            )
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM user_alerts WHERE id = %s AND user_id = %s",
+        (alert_id, user_id),
+    )
+    conn.commit()
+    cur.close()
 
 
 def set_alert_enabled(alert_id: int, user_id: str, enabled: bool) -> None:
     """Enable/disable an alert (ownership-checked)."""
     conn = _get_conn()
-    with conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE user_alerts SET enabled = %s WHERE id = %s AND user_id = %s",
-                (bool(enabled), alert_id, user_id),
-            )
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE user_alerts SET enabled = %s WHERE id = %s AND user_id = %s",
+        (bool(enabled), alert_id, user_id),
+    )
+    conn.commit()
+    cur.close()
 
 
 def mark_alert_fired(alert_id: int) -> None:
     """Stamp last_fired_at = NOW() for throttling repeat sends."""
     conn = _get_conn()
-    with conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE user_alerts SET last_fired_at = NOW() WHERE id = %s",
-                (alert_id,),
-            )
+    cur = conn.cursor()
+    cur.execute("UPDATE user_alerts SET last_fired_at = NOW() WHERE id = %s", (alert_id,))
+    conn.commit()
+    cur.close()
 
 
 def record_alert_event(
@@ -207,27 +212,29 @@ def record_alert_event(
 ) -> None:
     """Append a fired-event row for the in-app 'Recently triggered' feed."""
     conn = _get_conn()
-    with conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO alert_events (user_id, alert_id, ticker, message)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (user_id, alert_id, (ticker or "").upper() or None, message),
-            )
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO alert_events (user_id, alert_id, ticker, message)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (user_id, alert_id, (ticker or "").upper() or None, message),
+    )
+    conn.commit()
+    cur.close()
 
 
 def list_recent_events(user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
     """Return the user's most recent fired alert events."""
     conn = _get_conn()
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id, alert_id, ticker, message, fired_at FROM alert_events "
-            "WHERE user_id = %s ORDER BY fired_at DESC LIMIT %s",
-            (user_id, int(limit)),
-        )
-        rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, alert_id, ticker, message, fired_at FROM alert_events "
+        "WHERE user_id = %s ORDER BY fired_at DESC LIMIT %s",
+        (user_id, int(limit)),
+    )
+    rows = cur.fetchall()
+    cur.close()
     out: List[Dict[str, Any]] = []
     for r in rows:
         if isinstance(r, dict):
