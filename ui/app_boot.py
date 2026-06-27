@@ -179,7 +179,7 @@ def install_streamlit_compat() -> None:
 def configure_page() -> None:
     """Apply Streamlit page config for the scanner app."""
     st.set_page_config(
-        page_title="Breakout Stock Scanner",
+        page_title="HSFinest.AI — Scan. Analyze. Trade. Win.",
         page_icon="📈",
         layout="wide",
         initial_sidebar_state="expanded",

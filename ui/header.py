@@ -1,8 +1,24 @@
 from __future__ import annotations
 
+import os
 from datetime import date
 
 import streamlit as st
+
+# Brand logo: prefer the HSFinest.AI logo; fall back to the legacy asset so the
+# header never breaks if the new file hasn't been added yet.
+_LOGO_CANDIDATES = (
+    "assets/hsfailogo.png",
+    "assets/market_ai_logo_tighter.png",
+    "assets/market_ai_logo.png",
+)
+
+
+def _logo_path() -> str:
+    for path in _LOGO_CANDIDATES:
+        if os.path.exists(path):
+            return path
+    return _LOGO_CANDIDATES[-1]
 
 try:
     import pandas as pd
@@ -20,7 +36,7 @@ HEADER_PROVIDER_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, 
 
 
 def render_header() -> None:
-    """Render a compact, left-aligned MarketPulse AI header logo."""
+    """Render a compact, left-aligned HSFinest.AI header logo."""
 
     # Logo column + spacer (prevents full-width stretch)
     logo_col, _ = st.columns([1.2, 4])
@@ -31,7 +47,7 @@ def render_header() -> None:
             unsafe_allow_html=True,
         )
         st.image(
-            "assets/market_ai_logo_tighter.png",
+            _logo_path(),
             width="content",
         )
         st.markdown("</div>", unsafe_allow_html=True)
