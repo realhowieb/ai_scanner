@@ -631,7 +631,13 @@ def auth_ui():
 
         # Remove the login form from the screen after successful login.
         login_placeholder.empty()
-        # No success banner to keep the UI clean after login.
+        # Force a clean rerun so login-screen chrome rendered earlier this run
+        # (the centered logo, any "session expired" banner) is cleared. On the
+        # rerun, username is in session_state and auth_ui early-returns logged in.
+        if hasattr(st, "rerun"):
+            st.rerun()
+        else:
+            st.experimental_rerun()
         return True, login_key, display_name
 
     return False, None, None
