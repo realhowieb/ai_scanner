@@ -71,24 +71,32 @@ def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) ->
             ["🚀 Breakout", "📋 Watchlist", "💲 Price"]
         )
 
+        # NOTE: plain widgets (not st.form) — st.form rendered empty inside the
+        # expander → tabs nesting on the deployed Streamlit, so the inputs and
+        # submit button never appeared. Keyed widgets + st.button work reliably.
         with tab_break:
             st.caption("Fire when a ticker's breakout score crosses your threshold.")
-            with st.form("alert_create_breakout", clear_on_submit=True):
-                thr = st.number_input(
-                    "Breakout score ≥", min_value=0.0, value=8.0, step=0.5
+            thr = st.number_input(
+                "Breakout score ≥",
+                min_value=0.0,
+                value=8.0,
+                step=0.5,
+                key="alert_break_thr",
+            )
+            wl_only = st.checkbox(
+                "Limit to my watchlist tickers", value=False, key="alert_break_wl"
+            )
+            if st.button("Create breakout alert", key="alert_break_btn"):
+                _guarded_create(
+                    existing,
+                    ALERT_MAX_PER_USER,
+                    lambda: create_alert(
+                        user_id,
+                        "breakout",
+                        threshold=float(thr),
+                        watchlist_only=bool(wl_only),
+                    ),
                 )
-                wl_only = st.checkbox("Limit to my watchlist tickers", value=False)
-                if st.form_submit_button("Create breakout alert"):
-                    _guarded_create(
-                        existing,
-                        ALERT_MAX_PER_USER,
-                        lambda: create_alert(
-                            user_id,
-                            "breakout",
-                            threshold=float(thr),
-                            watchlist_only=bool(wl_only),
-                        ),
-                    )
 
         with tab_watch:
             st.caption(
@@ -96,41 +104,45 @@ def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) ->
             )
             if not watch_tickers:
                 st.info("Add tickers to a watchlist first to use this alert.")
-            with st.form("alert_create_watchlist", clear_on_submit=True):
-                if st.form_submit_button("Create watchlist alert"):
-                    _guarded_create(
-                        existing,
-                        ALERT_MAX_PER_USER,
-                        lambda: create_alert(user_id, "watchlist"),
-                    )
+            if st.button("Create watchlist alert", key="alert_watch_btn"):
+                _guarded_create(
+                    existing,
+                    ALERT_MAX_PER_USER,
+                    lambda: create_alert(user_id, "watchlist"),
+                )
 
         with tab_price:
             st.caption("Fire when a specific ticker crosses a price you set.")
-            with st.form("alert_create_price", clear_on_submit=True):
-                c1, c2, c3 = st.columns([2, 1, 2])
-                with c1:
-                    tk = st.text_input("Ticker", value="", placeholder="e.g. AAPL")
-                with c2:
-                    direction = st.selectbox("Direction", ["above", "below"])
-                with c3:
-                    target = st.number_input("Price", min_value=0.0, value=0.0, step=1.0)
-                if st.form_submit_button("Create price alert"):
-                    if not tk.strip():
-                        st.warning("Enter a ticker symbol.")
-                    elif float(target) <= 0:
-                        st.warning("Enter a price greater than 0.")
-                    else:
-                        _guarded_create(
-                            existing,
-                            ALERT_MAX_PER_USER,
-                            lambda: create_alert(
-                                user_id,
-                                "price",
-                                ticker=tk.strip().upper(),
-                                threshold=float(target),
-                                direction=direction,
-                            ),
-                        )
+            c1, c2, c3 = st.columns([2, 1, 2])
+            with c1:
+                tk = st.text_input(
+                    "Ticker", value="", placeholder="e.g. AAPL", key="alert_price_tk"
+                )
+            with c2:
+                direction = st.selectbox(
+                    "Direction", ["above", "below"], key="alert_price_dir"
+                )
+            with c3:
+                target = st.number_input(
+                    "Price", min_value=0.0, value=0.0, step=1.0, key="alert_price_val"
+                )
+            if st.button("Create price alert", key="alert_price_btn"):
+                if not tk.strip():
+                    st.warning("Enter a ticker symbol.")
+                elif float(target) <= 0:
+                    st.warning("Enter a price greater than 0.")
+                else:
+                    _guarded_create(
+                        existing,
+                        ALERT_MAX_PER_USER,
+                        lambda: create_alert(
+                            user_id,
+                            "price",
+                            ticker=tk.strip().upper(),
+                            threshold=float(target),
+                            direction=direction,
+                        ),
+                    )
 
     # --- Existing alerts ---
     if existing:
