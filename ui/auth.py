@@ -289,7 +289,7 @@ def auth_ui():
         _lc1, _lc2, _lc3 = st.columns([1, 2, 1])
         with _lc2:
             st.image(_logo_path(), width="stretch")
-    except Exception:
+    except (ImportError, *_AUTH_BACKEND_ERRORS):
         pass
 
     login_placeholder = st.empty()
