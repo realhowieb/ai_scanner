@@ -44,6 +44,9 @@ jobs:
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
           CRON_SUMMARY_PATH: artifacts/scheduled_scan_summary.json
+          # Manual "Run workflow" forces a run (bypasses weekend/premarket skip);
+          # scheduled runs respect the skip.
+          CRON_FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: python -m scheduler.cron_runner
 
       - name: Upload scheduled scan summary
