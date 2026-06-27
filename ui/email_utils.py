@@ -48,12 +48,19 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
 
 
 def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str) -> bool:
-    """Internal shared SMTP sender."""
+    """Internal shared SMTP sender. Logs the failure reason instead of failing silently."""
     try:
         from config import SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER
-    except Exception:
+    except Exception as e:
+        print(f"[email] config import failed: {e}")
         return False
-    if not SMTP_HOST or not SMTP_USER or not SMTP_PASS:
+    missing = [
+        name
+        for name, val in (("SMTP_HOST", SMTP_HOST), ("SMTP_USER", SMTP_USER), ("SMTP_PASS", SMTP_PASS))
+        if not val
+    ]
+    if missing:
+        print(f"[email] not sending — missing SMTP config: {', '.join(missing)}")
         return False
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -67,8 +74,10 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str) ->
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(SMTP_FROM, [to_address], msg.as_string())
+        print(f"[email] sent '{subject}' to {to_address} from {SMTP_FROM} via {SMTP_HOST}")
         return True
-    except Exception:
+    except Exception as e:
+        print(f"[email] SEND FAILED to {to_address} via {SMTP_HOST}:{SMTP_PORT} from {SMTP_FROM} — {type(e).__name__}: {e}")
         return False
 
 
