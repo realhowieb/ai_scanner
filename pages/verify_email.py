@@ -4,6 +4,32 @@ from __future__ import annotations
 import streamlit as st
 
 
+def _render_resend_box() -> None:
+    """Let the user re-send the verification email to their address."""
+    st.markdown("---")
+    st.subheader("Resend verification email")
+    st.caption("Enter your account email and we'll send a fresh verification link.")
+    email = st.text_input("Email address", key="resend_verify_email", placeholder="you@example.com")
+    if st.button("✉️ Resend verification email", key="resend_verify_btn"):
+        addr = (email or "").strip().lower()
+        if "@" not in addr:
+            st.warning("Enter a valid email address.")
+            return
+        try:
+            from ui.email_verification_gate import _resend_verification
+
+            sent = _resend_verification(addr)
+        except Exception:
+            sent = False
+        if sent:
+            st.success("✅ Verification email sent. Check your inbox (and spam).")
+        else:
+            st.warning(
+                "Could not send the verification email. Make sure the address has "
+                "an account, and that email is configured."
+            )
+
+
 def main() -> None:
     st.set_page_config(page_title="Verify Email | HSFinest.AI", page_icon="✉️")
     st.title("✉️ Email Verification")
@@ -14,8 +40,9 @@ def main() -> None:
     if not token:
         st.info(
             "No verification token found in the link. "
-            "Check your email for the verification link, or sign up again."
+            "Use the box below to resend it, or check your email for an existing link."
         )
+        _render_resend_box()
         st.page_link("app.py", label="← Back to login")
         return
 
@@ -35,7 +62,7 @@ def main() -> None:
             "This verification link is invalid or has already been used. "
             "Links expire after 24 hours."
         )
-        st.caption("Sign up again or contact support if you need help.")
+        _render_resend_box()
 
     st.page_link("app.py", label="← Go to login")
 
