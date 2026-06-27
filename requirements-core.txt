@@ -10,7 +10,10 @@ pytz>=2025.2
 requests>=2.31,<3
 
 # Universe loading / HTML table parsing.
-lxml>=4.9,<6
+# No upper cap: lxml is a C-extension and we need whatever major version ships
+# a prebuilt wheel for the deploy's Python (3.14). Capping <6 forced 5.4.0,
+# which has no cp314 wheel and fails to build from source on Streamlit Cloud.
+lxml>=5.0
 html5lib>=1.1,<2
 beautifulsoup4>=4.12,<5
 
