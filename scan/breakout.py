@@ -116,6 +116,22 @@ def _compute_basic_metrics(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
+def _clip(x, lo: float, hi: float) -> float:
+    """Clamp a value into [lo, hi]; NaN/invalid -> 0.0.
+
+    Used to bound the percentage inputs to the breakout score so a single
+    micro-cap with an extreme move (e.g. a 2,900% 20-day trend) can't blow the
+    score up into the thousands and dominate the rankings.
+    """
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return 0.0
+    if x != x:  # NaN
+        return 0.0
+    return max(lo, min(hi, x))
+
+
 def run_breakout_scan(
     price_data,
     spy_df,
@@ -129,6 +145,7 @@ def run_breakout_scan(
     diagnostics,
     progress_cb: Optional[Callable[[int, int, str], Any]] = None,
     heartbeat_every: int = 25,
+    min_dollar_vol: float = 0.0,
 ):
     """Breakout scan with richer metrics.
 
@@ -176,6 +193,7 @@ def run_breakout_scan(
     attempted = 0
     added = 0
     skipped_price = 0
+    skipped_liquidity = 0
     skipped_unusual = 0
     skipped_gap = 0
     skipped_invalid = 0
@@ -277,6 +295,14 @@ def run_breakout_scan(
         except Exception:
             dollar_vol_20 = float("nan")
 
+        # 3b) Liquidity filter — exclude thin micro-caps (the pump/penny names
+        # that otherwise dominate by score). Uses 20-day-avg dollar volume so a
+        # stock that was quiet then spiked is correctly screened out.
+        if min_dollar_vol and min_dollar_vol > 0:
+            if not (dollar_vol_20 == dollar_vol_20) or dollar_vol_20 < min_dollar_vol:
+                skipped_liquidity += 1
+                continue
+
         # 20-day volatility (std dev of daily returns)
         vol_20d = float("nan")
         try:
@@ -310,34 +336,39 @@ def run_breakout_scan(
         #   - Favor strong short-term trend and % change
         #   - Reward being close to 20-day high
         #   - Reward higher relative volume and positive gap
+        # Each percentage input is clipped to a sane band so extreme micro-cap
+        # moves can't explode the score into the thousands. This keeps scores on
+        # a bounded, intuitive range (roughly 0-100) where the threshold means
+        # something, and stops pump/penny names from dominating purely on
+        # magnitude.
         score = 0.0
         try:
-            # Base on daily move
-            score += pct_change
+            # Base on daily move (cap ±30%)
+            score += _clip(pct_change, -30.0, 30.0)
 
-            # Trend weighting
+            # Trend weighting (cap each trend at +50% before weighting)
             if trend_20 == trend_20 and trend_20 > 0:
-                score += trend_20 * 0.4
+                score += _clip(trend_20, 0.0, 50.0) * 0.4
             if trend_10 == trend_10 and trend_10 > 0:
-                score += trend_10 * 0.6
+                score += _clip(trend_10, 0.0, 50.0) * 0.6
 
             # Position vs high (closer to 1.0 is better)
             if breakout_pos_20d == breakout_pos_20d:
                 score += (breakout_pos_20d - 0.9) * 50.0  # reward > 0.9
 
-            # Gap contribution
-            score += gap_pct * 0.5
+            # Gap contribution (cap ±30%)
+            score += _clip(gap_pct, -30.0, 30.0) * 0.5
 
-            # Volume contribution
+            # Volume contribution (cap rel_vol at 5x)
             if rel_vol and rel_vol == rel_vol:
-                score += (rel_vol - 1.0) * 10.0
+                score += (_clip(rel_vol, 1.0, 5.0) - 1.0) * 10.0
 
             # Small bonus for confirmed breakout
             if is_breakout:
                 score += 5.0
         except Exception:
-            # Fall back to simple pct_change score on any error
-            score = pct_change
+            # Fall back to a bounded pct_change score on any error
+            score = _clip(pct_change, -30.0, 30.0)
 
         rows.append(
             {
@@ -365,7 +396,8 @@ def run_breakout_scan(
         try:
             st.caption(
                 f"🧪 Breakout summary: attempted={attempted}, added={added}, "
-                f"skipped_price={skipped_price}, skipped_gap={skipped_gap}, "
+                f"skipped_price={skipped_price}, skipped_liquidity={skipped_liquidity}, "
+                f"skipped_gap={skipped_gap}, "
                 f"skipped_unusual={skipped_unusual}, skipped_invalid={skipped_invalid}"
             )
         except Exception:
