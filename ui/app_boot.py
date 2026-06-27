@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import logging
 import sys
 import warnings
 from collections.abc import Iterator
@@ -118,6 +119,46 @@ def install_warning_filters() -> None:
     )
 
 
+class _DropStCacheDeprecation(logging.Filter):
+    """Drop the st.cache deprecation log emitted by older third-party libs.
+
+    Streamlit logs this via the logging module (not stderr), so the stderr
+    filter can't catch it. Our own code uses st.cache_data/st.cache_resource;
+    the call comes from a dependency (e.g. streamlit-authenticator).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        return "st.cache` is deprecated" not in msg and "`st.cache`" not in msg
+
+
+def install_logging_filters() -> None:
+    """Suppress the st.cache deprecation log emitted by older third-party libs.
+
+    A logging.Filter on a *logger* only filters records logged directly through
+    it — not records propagated up from child loggers. So we attach the filter
+    to the root logger's *handlers* (where every propagated record is actually
+    written) as well as to the candidate Streamlit loggers, to catch it
+    regardless of which logger emits it.
+    """
+    flt = _DropStCacheDeprecation()
+    # Direct loggers (best-effort).
+    for name in ("streamlit", "streamlit.runtime.caching", "streamlit.deprecation_util", ""):
+        try:
+            logging.getLogger(name).addFilter(flt)
+        except Exception:
+            pass
+    # Root handlers — this is the reliable catch-all for propagated records.
+    try:
+        for handler in logging.getLogger().handlers:
+            handler.addFilter(flt)
+    except Exception:
+        pass
+
+
 @contextlib.contextmanager
 def quiet_external_calls() -> Iterator[None]:
     """Silence stdout/stderr for noisy third-party libraries."""
@@ -130,6 +171,7 @@ def quiet_external_calls() -> Iterator[None]:
 def install_streamlit_compat() -> None:
     """Install Streamlit compatibility shims and warning suppression."""
     install_warning_filters()
+    install_logging_filters()
     install_stderr_filter()
     patch_use_container_width()
 
