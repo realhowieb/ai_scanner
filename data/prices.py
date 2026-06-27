@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import concurrent.futures as _fut
 import datetime as _dt
+import os
 import time as _time
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterator, List, Sequence, Tuple
@@ -265,7 +266,10 @@ def _download_batch(
     # --- Primary provider: Alpaca (bulk), when configured ---
     # Alpaca does not IP-throttle like yfinance, so it handles large universes
     # (e.g. the 2400+ COMBO list) reliably. Whatever Alpaca doesn't return falls
-    # through to the per-symbol yfinance loop below.
+    # through to the per-symbol yfinance loop below — unless PRICE_SKIP_YF_FALLBACK
+    # is set, in which case stragglers (mostly micro-caps/warrants not on Alpaca's
+    # IEX feed, which never pass filters) are skipped for a big speedup.
+    alpaca_returned_data = False
     if _get_alpaca_config() is not None:
         try:
             alpaca_data = _download_multi_alpaca(
@@ -281,8 +285,16 @@ def _download_batch(
                 data[str(sym).upper()] = norm
             got = set(data.keys())
             remaining = [s for s in remaining if s not in got]
+            alpaca_returned_data = len(got) > 0
         except _ALPACA_ERRORS as e:
             print(f"[prices] Alpaca batch failed, falling back to yfinance: {type(e).__name__}: {e}")
+
+    # Skip the slow per-symbol yfinance fallback when Alpaca already returned
+    # data and the operator opted into Alpaca-only mode for speed.
+    if alpaca_returned_data and os.getenv("PRICE_SKIP_YF_FALLBACK", "").strip() == "1":
+        for sym in remaining:
+            skipped.append((str(sym).upper(), "skipped_yf_fallback"))
+        remaining = []
 
     for sym in remaining:
         sym_u = str(sym).upper()
