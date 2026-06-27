@@ -94,6 +94,18 @@ def _build_yfinance_errors() -> tuple[type[Exception], ...]:
 
 _YFINANCE_ERRORS = _build_yfinance_errors()
 
+
+def _build_alpaca_errors() -> tuple[type[Exception], ...]:
+    base = (RuntimeError, OSError, ValueError, KeyError, TypeError, ConnectionError, TimeoutError)
+    try:
+        from requests import exceptions as _req_exc  # type: ignore
+        return base + (_req_exc.RequestException,)
+    except ImportError:
+        return base
+
+
+_ALPACA_ERRORS = _build_alpaca_errors()
+
 # ---------- Public API ----------
 __all__ = [
     "PriceFetchConfig",
@@ -248,7 +260,31 @@ def _download_batch(
     if not batch:
         return data, skipped
 
-    for sym in batch:
+    remaining = [str(s).upper() for s in batch if str(s).strip()]
+
+    # --- Primary provider: Alpaca (bulk), when configured ---
+    # Alpaca does not IP-throttle like yfinance, so it handles large universes
+    # (e.g. the 2400+ COMBO list) reliably. Whatever Alpaca doesn't return falls
+    # through to the per-symbol yfinance loop below.
+    if _get_alpaca_config() is not None:
+        try:
+            alpaca_data = _download_multi_alpaca(
+                remaining, cfg.period, cfg.interval, cfg.prepost, cfg.timeout_s
+            )
+            for sym, adf in (alpaca_data or {}).items():
+                if adf is None or adf.empty:
+                    continue
+                try:
+                    norm = _normalize_df(adf)
+                except _YFINANCE_ERRORS:
+                    norm = adf
+                data[str(sym).upper()] = norm
+            got = set(data.keys())
+            remaining = [s for s in remaining if s not in got]
+        except _ALPACA_ERRORS as e:
+            print(f"[prices] Alpaca batch failed, falling back to yfinance: {type(e).__name__}: {e}")
+
+    for sym in remaining:
         sym_u = str(sym).upper()
         if _yf is None:
             skipped.append((sym_u, "yf_not_installed"))
