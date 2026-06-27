@@ -1,0 +1,183 @@
+"""In-app UI for creating and managing per-user alerts.
+
+Three launch alert types: Breakout, Watchlist, and Price Above/Below. Renders a
+create form per type, the user's existing alerts (toggle/delete), and a
+'Recently triggered' feed populated by the scheduled alert runner.
+
+Gracefully degrades to a caption when ALERTS_ENABLED is off or Neon is
+unavailable — it never raises into the main app.
+"""
+from __future__ import annotations
+
+from typing import List
+
+import streamlit as st
+
+
+def _fmt_alert(a: dict) -> str:
+    """One-line human description of an alert row."""
+    t = a.get("alert_type")
+    if t == "breakout":
+        scope = "watchlist only" if a.get("watchlist_only") else "all tickers"
+        return f"🚀 Breakout ≥ {float(a.get('threshold') or 0):g} ({scope})"
+    if t == "watchlist":
+        return "📋 Watchlist — any holding appears in scan results"
+    if t == "price":
+        return (
+            f"💲 {a.get('ticker')} price {a.get('direction') or 'above'} "
+            f"{float(a.get('threshold') or 0):g}"
+        )
+    return str(t)
+
+
+def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) -> None:
+    """Render the alerts management block in the main column."""
+    try:
+        from config import ALERT_MAX_PER_USER, ALERTS_ENABLED
+    except Exception:
+        return
+    if not ALERTS_ENABLED:
+        return
+    if not user_id:
+        return
+
+    try:
+        from db.alerts import (
+            create_alert,
+            delete_alert,
+            list_alerts,
+            list_recent_events,
+            set_alert_enabled,
+        )
+    except Exception:
+        return
+
+    st.markdown("## 🔔 Alerts")
+    st.caption(
+        "Get notified (in-app + email) when your conditions hit. "
+        "Checked automatically a few times a day."
+    )
+
+    try:
+        existing = list_alerts(user_id)
+    except Exception:
+        st.caption("Alerts require Neon DB (cloud) and are currently unavailable.")
+        return
+
+    with st.expander("➕ Create an alert", expanded=not existing):
+        tab_break, tab_watch, tab_price = st.tabs(
+            ["🚀 Breakout", "📋 Watchlist", "💲 Price"]
+        )
+
+        with tab_break:
+            st.caption("Fire when a ticker's breakout score crosses your threshold.")
+            with st.form("alert_create_breakout", clear_on_submit=True):
+                thr = st.number_input(
+                    "Breakout score ≥", min_value=0.0, value=8.0, step=0.5
+                )
+                wl_only = st.checkbox("Limit to my watchlist tickers", value=False)
+                if st.form_submit_button("Create breakout alert"):
+                    _guarded_create(
+                        existing,
+                        ALERT_MAX_PER_USER,
+                        lambda: create_alert(
+                            user_id,
+                            "breakout",
+                            threshold=float(thr),
+                            watchlist_only=bool(wl_only),
+                        ),
+                    )
+
+        with tab_watch:
+            st.caption(
+                "Fire when any ticker on your watchlist shows up in the scan results."
+            )
+            if not watch_tickers:
+                st.info("Add tickers to a watchlist first to use this alert.")
+            with st.form("alert_create_watchlist", clear_on_submit=True):
+                if st.form_submit_button("Create watchlist alert"):
+                    _guarded_create(
+                        existing,
+                        ALERT_MAX_PER_USER,
+                        lambda: create_alert(user_id, "watchlist"),
+                    )
+
+        with tab_price:
+            st.caption("Fire when a specific ticker crosses a price you set.")
+            with st.form("alert_create_price", clear_on_submit=True):
+                c1, c2, c3 = st.columns([2, 1, 2])
+                with c1:
+                    tk = st.text_input("Ticker", value="", placeholder="e.g. AAPL")
+                with c2:
+                    direction = st.selectbox("Direction", ["above", "below"])
+                with c3:
+                    target = st.number_input("Price", min_value=0.0, value=0.0, step=1.0)
+                if st.form_submit_button("Create price alert"):
+                    if not tk.strip():
+                        st.warning("Enter a ticker symbol.")
+                    elif float(target) <= 0:
+                        st.warning("Enter a price greater than 0.")
+                    else:
+                        _guarded_create(
+                            existing,
+                            ALERT_MAX_PER_USER,
+                            lambda: create_alert(
+                                user_id,
+                                "price",
+                                ticker=tk.strip().upper(),
+                                threshold=float(target),
+                                direction=direction,
+                            ),
+                        )
+
+    # --- Existing alerts ---
+    if existing:
+        st.markdown("**Your alerts**")
+        for a in existing:
+            cols = st.columns([6, 2, 2])
+            label = _fmt_alert(a)
+            if not a.get("enabled"):
+                label = f"~~{label}~~ (paused)"
+            cols[0].markdown(label)
+            new_enabled = cols[1].toggle(
+                "On", value=bool(a.get("enabled")), key=f"alert_tog_{a['id']}"
+            )
+            if new_enabled != bool(a.get("enabled")):
+                try:
+                    set_alert_enabled(a["id"], user_id, new_enabled)
+                    st.rerun()
+                except Exception:
+                    st.warning("Could not update alert.")
+            if cols[2].button("Delete", key=f"alert_del_{a['id']}"):
+                try:
+                    delete_alert(a["id"], user_id)
+                    st.rerun()
+                except Exception:
+                    st.warning("Could not delete alert.")
+
+    # --- Recently triggered ---
+    try:
+        events = list_recent_events(user_id, limit=10)
+    except Exception:
+        events = []
+    if events:
+        with st.expander(f"🔥 Recently triggered ({len(events)})", expanded=False):
+            for ev in events:
+                when = ev.get("fired_at")
+                when_s = when.strftime("%Y-%m-%d %H:%M UTC") if hasattr(when, "strftime") else ""
+                st.markdown(f"**{when_s}** — {ev.get('message', '')}")
+
+
+def _guarded_create(existing: list, max_per_user: int, do_create) -> None:
+    """Enforce the per-user cap, run the create, and refresh."""
+    if len(existing) >= int(max_per_user):
+        st.warning(f"You've reached the maximum of {max_per_user} alerts.")
+        return
+    try:
+        do_create()
+        st.success("Alert created.")
+        st.rerun()
+    except ValueError as e:
+        st.warning(str(e))
+    except Exception:
+        st.warning("Could not create alert (Neon DB may be unavailable).")

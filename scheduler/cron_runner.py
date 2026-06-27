@@ -234,6 +234,15 @@ def main():
 
     runs = [run_and_save(universe) for universe in universes]
 
+    # Evaluate per-user alerts against the fresh snapshot (best-effort; never
+    # let alert failures fail the scan run).
+    try:
+        from scheduler.alert_runner import run_alerts
+
+        run_alerts()
+    except Exception as e:
+        print(f"[cron] alert evaluation failed: {e}")
+
     ok = all(run.ok for run in runs)
     _write_summary(
         {
