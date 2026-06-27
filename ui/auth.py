@@ -282,6 +282,16 @@ def auth_ui():
         if st.session_state.get("login_locked_until"):
             _clear_failed_login_attempts()
 
+    # Brand logo, centered above the login / sign-up tabs.
+    try:
+        from ui.header import _logo_path
+
+        _lc1, _lc2, _lc3 = st.columns([1, 2, 1])
+        with _lc2:
+            st.image(_logo_path(), width="stretch")
+    except Exception:
+        pass
+
     login_placeholder = st.empty()
     with login_placeholder.container():
         tabs = st.tabs(["🔐 Log In", "🧠 Sign Up"])
