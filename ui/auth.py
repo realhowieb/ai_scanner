@@ -286,7 +286,9 @@ def auth_ui():
     try:
         from ui.header import _logo_path
 
-        _lc1, _lc2, _lc3 = st.columns([1, 2, 1])
+        # Narrow center column keeps the logo a tasteful size on desktop; on
+        # mobile Streamlit stacks columns so it still renders full-width.
+        _lc1, _lc2, _lc3 = st.columns([2, 1, 2])
         with _lc2:
             st.image(_logo_path(), width="stretch")
     except (ImportError, *_AUTH_BACKEND_ERRORS):
