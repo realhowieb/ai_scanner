@@ -93,7 +93,15 @@ WATCHLIST_ALERTS_ENABLED: bool = _get("WATCHLIST_ALERTS_ENABLED", "0") == "1"
 # Max users emailed per run, to bound cost/volume.
 WATCHLIST_ALERTS_MAX_USERS: int = int(_get("WATCHLIST_ALERTS_MAX_USERS", "100"))
 
-# --- Alerting ---
+# --- Per-user alerts (breakout / watchlist / price) ---
+# Master switch for the alert engine (UI panel + scheduled evaluation).
+ALERTS_ENABLED: bool = _get("ALERTS_ENABLED", "1") == "1"
+# Don't re-fire the same standing alert more often than this (hours).
+ALERT_THROTTLE_HOURS: float = float(_get("ALERT_THROTTLE_HOURS", "12"))
+# Max alerts a single user may create (guards table growth / email volume).
+ALERT_MAX_PER_USER: int = int(_get("ALERT_MAX_PER_USER", "25"))
+
+# --- Alerting (ops) ---
 SLACK_WEBHOOK_URL: str | None = _get("SLACK_WEBHOOK_URL")
 ALERT_EMAIL: str | None = _get("ALERT_EMAIL")
 SCAN_ERROR_ALERT_THRESHOLD: int = int(_get("SCAN_ERROR_ALERT_THRESHOLD", "5"))

@@ -142,6 +142,7 @@ try:
         upsert_user_settings = None
 
     from ui.admin_users import render_admin_users_panel
+    from ui.alerts import render_alerts_panel
     from ui.db_status import render_db_status_badge
     from ui.earnings_results import prepare_results_with_earnings, render_earnings_controls
     from ui.filters import render_filters
@@ -194,6 +195,7 @@ except Exception as _e:
     render_earnings_controls = _missing  # type: ignore
     render_footer = lambda *a, **k: None  # type: ignore
     render_watchlists_panel = _missing  # type: ignore
+    render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_user_settings_footer = _missing  # type: ignore
 
 # --------------- Earnings (shared implementation) ----------------
@@ -584,6 +586,10 @@ def main():
     watch_id, watch_tickers = render_watchlists_panel(username)
     st.session_state["active_watchlist_id"] = watch_id
     st.session_state["active_watchlist_tickers"] = watch_tickers
+
+    # -------- Alerts (breakout / watchlist / price) --------
+    render_alerts_panel(username, watch_tickers=watch_tickers)
+    st.markdown("---")
 
     render_earnings_controls(
         flags=flags,
