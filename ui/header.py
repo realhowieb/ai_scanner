@@ -8,6 +8,7 @@ import streamlit as st
 # Brand logo: prefer the HSFinest.AI logo; fall back to the legacy asset so the
 # header never breaks if the new file hasn't been added yet.
 _LOGO_CANDIDATES = (
+    "assets/hsfailogo_transparent.png",
     "assets/hsfailogo.png",
     "assets/market_ai_logo_tighter.png",
     "assets/market_ai_logo.png",
