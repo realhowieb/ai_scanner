@@ -44,6 +44,9 @@ jobs:
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
           CRON_SUMMARY_PATH: artifacts/scheduled_scan_summary.json
+          # Skip the slow per-symbol yfinance fallback for symbols Alpaca doesn't
+          # carry (micro-caps/warrants that never pass filters) — big speedup.
+          PRICE_SKIP_YF_FALLBACK: "1"
           # Manual "Run workflow" forces a run (bypasses weekend/premarket skip);
           # scheduled runs respect the skip.
           CRON_FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
