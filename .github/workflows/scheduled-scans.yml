@@ -58,6 +58,9 @@ jobs:
           # Manual "Run workflow" forces a run (bypasses weekend/premarket skip);
           # scheduled runs respect the skip.
           CRON_FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+          # Manual runs also bypass the per-alert cooldown so alerts can be
+          # tested on demand; scheduled runs keep the normal 12h throttle.
+          ALERT_THROTTLE_HOURS: ${{ github.event_name == 'workflow_dispatch' && '0' || '12' }}
         run: python -m scheduler.cron_runner
 
       - name: Upload scheduled scan summary
