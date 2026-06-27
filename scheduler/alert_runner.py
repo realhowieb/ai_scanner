@@ -224,12 +224,12 @@ def run_alerts() -> None:
                 try:
                     from ui.email_utils import send_alert_email
 
-                    send_alert_email(
+                    if send_alert_email(
                         to_address=user_id,
                         subject=f"📈 {label} triggered",
                         body=body,
-                    )
-                    emailed += 1
+                    ):
+                        emailed += 1
                 except Exception as e:
                     print(f"[alert_runner] email to {user_id} failed: {e}")
         except Exception as e:  # never let one alert kill the run
