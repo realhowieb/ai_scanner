@@ -1,6 +1,7 @@
 """Alpaca price-provider helpers for historical OHLCV downloads."""
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 import os
 from typing import Dict, Sequence
@@ -86,6 +87,28 @@ def alpaca_limit_from_period(period: str) -> int:
     return default
 
 
+def alpaca_start_from_period(period: str) -> str:
+    """Return an ISO date (UTC) far enough back to cover `period` trading days.
+
+    Alpaca's /v2/stocks/bars endpoint requires a `start` date; without it the
+    request 400s or returns no bars. We use ~1.7x calendar days per requested
+    trading day (plus a buffer) so weekends/holidays don't starve the window.
+    """
+    days = 60
+    try:
+        n = (period or "").lower()
+        if n.endswith("d"):
+            days = max(1, int(n[:-1]))
+        elif n.endswith("mo"):
+            days = max(1, int(n[:-2])) * 31
+        elif n.endswith("y"):
+            days = max(1, int(n[:-1])) * 366
+    except (AttributeError, TypeError, ValueError):
+        pass
+    start = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=int(days * 1.7) + 5)
+    return start.strftime("%Y-%m-%d")
+
+
 def download_multi_alpaca(
     tickers: Sequence[str],
     period: str,
@@ -104,7 +127,6 @@ def download_multi_alpaca(
     if timeframe is None:
         raise RuntimeError(f"Unsupported interval for Alpaca bars: {interval!r}")
 
-    limit = alpaca_limit_from_period(period)
     symbols = [symbol for symbol in dict.fromkeys(tickers) if isinstance(symbol, str) and symbol.strip()]
     if not symbols:
         return {}
@@ -116,56 +138,58 @@ def download_multi_alpaca(
         "Accept": "application/json",
     }
 
+    start = alpaca_start_from_period(period)
     out: Dict[str, pd.DataFrame] = {}
     for chunk in chunks(symbols, 150):
-        params = {
-            "symbols": ",".join(sorted(chunk)),
-            "timeframe": timeframe,
-            "limit": limit,
-            "adjustment": "raw",
-            "feed": "iex",
-        }
+        symbols_param = ",".join(sorted(chunk))
+        # Accumulate bars across pages (a 150-symbol × ~60-bar response can
+        # exceed Alpaca's 1000-bar page limit, so we must follow next_page_token).
+        bars_by_symbol: Dict[str, list] = {}
+        page_token: str | None = None
+        failed = False
+        for _ in range(50):  # hard page cap as a safety bound
+            params = {
+                "symbols": symbols_param,
+                "timeframe": timeframe,
+                "start": start,
+                "limit": 10000,
+                "adjustment": "raw",
+                "feed": "iex",
+            }
+            if page_token:
+                params["page_token"] = page_token
 
-        try:
-            resp = requests.get(url, headers=headers, params=params, timeout=timeout_s)  # type: ignore[union-attr]
-            resp.raise_for_status()
-            payload = resp.json()
-        except requests_exc.RequestException as exc:  # type: ignore[union-attr]
-            logger.warning(
-                "Alpaca request failed for %s symbols (%s): %s",
-                len(chunk),
-                params["symbols"],
-                exc,
-            )
+            try:
+                resp = requests.get(url, headers=headers, params=params, timeout=timeout_s)  # type: ignore[union-attr]
+                resp.raise_for_status()
+                payload = resp.json()
+            except requests_exc.RequestException as exc:  # type: ignore[union-attr]
+                logger.warning("Alpaca request failed for %s symbols (%s): %s", len(chunk), symbols_param, exc)
+                failed = True
+                break
+            except ValueError as exc:
+                logger.warning("Alpaca returned invalid JSON for %s symbols (%s): %s", len(chunk), symbols_param, exc)
+                failed = True
+                break
+
+            if not isinstance(payload, dict):
+                logger.warning("Alpaca returned non-dict payload for %s symbols", len(chunk))
+                failed = True
+                break
+
+            page_bars = payload.get("bars") or {}
+            for sym, bars in page_bars.items():
+                if bars:
+                    bars_by_symbol.setdefault(sym, []).extend(bars)
+
+            page_token = payload.get("next_page_token")
+            if not page_token:
+                break
+
+        if failed:
             continue
-        except ValueError as exc:
-            logger.warning(
-                "Alpaca returned invalid JSON for %s symbols (%s): %s",
-                len(chunk),
-                params["symbols"],
-                exc,
-            )
-            continue
-
-        if not isinstance(payload, dict):
-            logger.warning(
-                "Alpaca returned non-dict payload for %s symbols (%s): %s",
-                len(chunk),
-                params["symbols"],
-                type(payload).__name__,
-            )
-            continue
-
-        bars_by_symbol = payload.get("bars") if isinstance(payload, dict) else {}
-        if not bars_by_symbol and isinstance(payload, dict):
-            bars_by_symbol = {key: value for key, value in payload.items() if isinstance(value, list)}
-
         if not bars_by_symbol:
-            logger.warning(
-                "Alpaca returned no bars for %s symbols (%s)",
-                len(chunk),
-                params["symbols"],
-            )
+            logger.warning("Alpaca returned no bars for %s symbols (%s)", len(chunk), symbols_param)
             continue
 
         for symbol, bars in (bars_by_symbol or {}).items():
