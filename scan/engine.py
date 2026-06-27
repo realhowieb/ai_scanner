@@ -366,6 +366,7 @@ def cached_real_scan(
 def run_breakout_scan(
     tickers: List[str],
     *,
+    min_dollar_vol: float = 0.0,
     premarket: bool,
     afterhours: bool,
     unusual_volume: bool,
@@ -669,6 +670,7 @@ def run_breakout_scan(
             max_price=max_price,
             top_n=top_n,
             diagnostics=diagnostics,
+            min_dollar_vol=min_dollar_vol,
         )
     except _ENGINE_BOUNDARY_ERRORS as e:
         _log_scan_error(e, context="legacy_breakout.run_breakout_scan", tickers=tickers)

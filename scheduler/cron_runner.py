@@ -141,6 +141,9 @@ def run_and_save(
             min_price=min_price if min_price is not None else float(os.getenv("CRON_MIN_PRICE", "1")),
             max_price=max_price if max_price is not None else float(os.getenv("CRON_MAX_PRICE", "1000")),
             top_n=top_n if top_n is not None else int(os.getenv("CRON_TOP_N", "100")),
+            # Liquidity floor (20-day-avg dollar volume) to keep illiquid
+            # micro-cap/pump names out of scheduled scans + alerts. Default $5M.
+            min_dollar_vol=float(os.getenv("CRON_MIN_DOLLAR_VOL", "5000000")),
             profile=profile or os.getenv("CRON_PROFILE", "regular"),
             diagnostics=False,
             use_cache=True,
