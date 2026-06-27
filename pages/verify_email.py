@@ -5,7 +5,7 @@ import streamlit as st
 
 
 def main() -> None:
-    st.set_page_config(page_title="Verify Email | AI Scanner", page_icon="✉️")
+    st.set_page_config(page_title="Verify Email | HSFinest.AI", page_icon="✉️")
     st.title("✉️ Email Verification")
 
     raw_token = (st.query_params.get("token", "") or "").strip()
@@ -28,7 +28,7 @@ def main() -> None:
     if username:
         st.success(
             f"✅ Email verified for **{username}**. "
-            "You now have full access to AI Scanner."
+            "You now have full access to HSFinest.AI."
         )
     else:
         st.error(

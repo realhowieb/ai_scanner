@@ -16,15 +16,15 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
     if not SMTP_HOST or not SMTP_USER or not SMTP_PASS:
         return False
 
-    subject = "Reset your AI Scanner password"
+    subject = "Reset your HSFinest.AI password"
     body_text = (
-        f"You requested a password reset for your AI Scanner account.\n\n"
+        f"You requested a password reset for your HSFinest.AI account.\n\n"
         f"Click the link below to set a new password (valid for 30 minutes):\n\n"
         f"{reset_url}\n\n"
         f"If you did not request this, you can ignore this email.\n"
     )
     body_html = f"""
-<p>You requested a password reset for your <strong>AI Scanner</strong> account.</p>
+<p>You requested a password reset for your <strong>HSFinest.AI</strong> account.</p>
 <p><a href="{reset_url}">Reset my password</a></p>
 <p>This link expires in 30 minutes. If you did not request this, ignore this email.</p>
 """
@@ -76,15 +76,15 @@ def send_verification_email(to_address: str, verify_url: str) -> bool:
     """Send an email address verification email."""
     return _send_smtp(
         to_address=to_address,
-        subject="Verify your AI Scanner email address",
+        subject="Verify your HSFinest.AI email address",
         body_text=(
-            f"Welcome to AI Scanner!\n\n"
+            f"Welcome to HSFinest.AI — Scan. Analyze. Trade. Win.\n\n"
             f"Please verify your email address by clicking the link below "
             f"(valid for 24 hours):\n\n{verify_url}\n\n"
             f"If you did not sign up, ignore this email.\n"
         ),
         body_html=(
-            f"<p>Welcome to <strong>AI Scanner</strong>!</p>"
+            f"<p>Welcome to <strong>HSFinest.AI</strong> — Scan. Analyze. Trade. Win.</p>"
             f"<p><a href='{verify_url}'>Verify my email address</a></p>"
             f"<p>This link expires in 24 hours. If you didn't sign up, ignore this email.</p>"
         ),
@@ -92,10 +92,14 @@ def send_verification_email(to_address: str, verify_url: str) -> bool:
 
 
 def send_alert_email(to_address: str, subject: str, body: str) -> bool:
-    """Send an ops alert email."""
+    """Send a branded alert email."""
     return _send_smtp(
         to_address=to_address,
-        subject=subject,
-        body_text=body,
-        body_html=f"<pre>{body}</pre>",
+        subject=f"HSFinest.AI — {subject}",
+        body_text=f"HSFinest.AI alert\n\n{body}\n\n— Scan. Analyze. Trade. Win.",
+        body_html=(
+            f"<p><strong>HSFinest.AI</strong> alert</p>"
+            f"<pre>{body}</pre>"
+            f"<p style='color:#888'>— Scan. Analyze. Trade. Win.</p>"
+        ),
     )

@@ -102,7 +102,7 @@ def _set_new_password_form(token: str) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Reset Password | AI Scanner", page_icon="🔑")
+    st.set_page_config(page_title="Reset Password | HSFinest.AI", page_icon="🔑")
     st.title("🔑 Password Reset")
 
     raw_token = st.query_params.get("token", "")
