@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Iterable, Optional, Tuple
 
 
@@ -273,13 +273,19 @@ def populate_earnings_calendar(
     sleep_s: float = 0.02,
     commit_every: int = 200,
     progress_cb=None,
+    lookahead_days: int = 120,
 ) -> Dict[str, EarningsInfo]:
     """Populate / refresh earnings_calendar for given symbols.
 
+    Source order: FMP (bulk) -> Finnhub (bulk) -> yfinance (per-symbol, only for
+    symbols the bulk sources miss) -> DB cache. The bulk window is one API call
+    covering the whole universe, so yfinance is barely used when keys are set.
+
     - symbols: universe list
-    - sleep_s: gentle rate limit between yfinance calls
+    - sleep_s: gentle rate limit between yfinance fallback calls
     - commit_every: commit every N rows
     - progress_cb: optional callback(progress:int, total:int, symbol:str)
+    - lookahead_days: how far ahead to pull the bulk earnings window
 
     Returns a dict symbol -> EarningsInfo for what we attempted.
     """
@@ -290,9 +296,30 @@ def populate_earnings_calendar(
     total = len(syms)
     out: Dict[str, EarningsInfo] = {}
 
+    # Bulk fetch from FMP -> Finnhub for the lookahead window (one request).
+    # Empty when no API keys are configured, in which case every symbol falls
+    # through to the yfinance per-symbol path below (prior behavior).
+    bulk: Dict[str, Tuple[Optional[date], Optional[str]]] = {}
+    try:
+        from data.earnings_sources import fetch_earnings_window
+
+        start = date.today()
+        end = start + timedelta(days=int(lookahead_days))
+        bulk, source = fetch_earnings_window(start.isoformat(), end.isoformat())
+        if bulk:
+            print(f"[earnings] {source}: {len(bulk)} symbols; yfinance fills the rest")
+    except Exception as exc:
+        print(f"WARNING: bulk earnings window fetch failed: {exc}")
+
     with c.cursor() as cur:
         for i, sym in enumerate(syms, start=1):
-            info = fetch_next_earnings(sym)
+            sym_key = _norm_symbol(sym)
+            hit = bulk.get(sym_key)
+            if hit is not None:
+                info = EarningsInfo(symbol=sym_key, earnings_date=hit[0], earnings_time=hit[1])
+            else:
+                # Fallback only for symbols the bulk sources didn't cover.
+                info = fetch_next_earnings(sym)
             out[sym] = info
             sym_key = _norm_symbol(info.symbol or sym)
             if not sym_key:
@@ -319,7 +346,8 @@ def populate_earnings_calendar(
                 except Exception:
                     pass
 
-            if sleep_s:
+            # Only rate-limit when we actually called yfinance (bulk hits are free).
+            if sleep_s and hit is None:
                 time.sleep(sleep_s)
 
     try:
