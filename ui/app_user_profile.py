@@ -20,8 +20,10 @@ ADMIN_TOP_N = 10_000
 
 
 def render_admin_build_stamp(*, app_file: str, username: str, tier_key: str) -> None:
-    """Render a tiny admin-only build stamp."""
+    """Render a tiny admin-only build stamp (only when diagnostics are on)."""
     if not bool(st.session_state.get("is_admin")):
+        return
+    if not bool(st.session_state.get("show_diagnostics_ui")):
         return
     try:
         build_mtime = datetime.fromtimestamp(Path(app_file).stat().st_mtime, tz=timezone.utc).isoformat()
@@ -98,13 +100,15 @@ def render_account_sidebar(
     st.sidebar.markdown(
         f"**Plan:** `{ 'Admin' if is_admin else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`"
     )
-    if is_admin:
+    # Admin tier-debug lines are noisy; only show when diagnostics are enabled.
+    # A real DB tier error always surfaces so it isn't silently hidden.
+    if is_admin and db_tier_err:
+        st.sidebar.error(f"DB tier lookup error: {db_tier_err}")
+    elif is_admin and st.session_state.get("show_diagnostics_ui"):
         st.sidebar.caption(
             f"debug: db_tier={forced_tier_key or '-'} session_tier_key={st.session_state.get('tier_key')}"
         )
-        if db_tier_err:
-            st.sidebar.error(f"DB tier lookup error: {db_tier_err}")
-        elif db_user_debug is not None:
+        if db_user_debug is not None:
             st.sidebar.caption(f"DB user: {db_user_debug}")
 
     render_sidebar_upgrade_card(tier, has_min_tier=has_min_tier)
