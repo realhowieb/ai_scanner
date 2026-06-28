@@ -165,6 +165,15 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
         else:
             st.caption("Create a watchlist to add tickers.")
 
+    # Watchlist tools (view / scan / export / add / remove) rendered here so the
+    # whole watchlist lives in one unified area. render_active_watchlist_tools
+    # reads the active list from session_state, so seed it first; the returned
+    # button states are stashed for the scan-action handler in ui/scans.py.
+    st.session_state["active_watchlist_id"] = active_id
+    st.session_state["active_watchlist_tickers"] = active_tickers
+    st.markdown("**🛠️ Watchlist tools**")
+    st.session_state["_wl_tools_state"] = render_active_watchlist_tools()
+
     return active_id, active_tickers
 
 
