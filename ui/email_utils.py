@@ -105,10 +105,17 @@ def send_alert_email(to_address: str, subject: str, body: str) -> bool:
     return _send_smtp(
         to_address=to_address,
         subject=f"HSFinest.AI — {subject}",
-        body_text=f"HSFinest.AI alert\n\n{body}\n\n— Scan. Analyze. Trade. Win.",
+        body_text=(
+            f"HSFinest.AI alert\n\n{body}\n\n— Scan. Analyze. Trade. Win.\n\n"
+            "Informational and educational purposes only — not financial, investment, "
+            "or trading advice. Trading involves risk of loss; do your own research."
+        ),
         body_html=(
             f"<p><strong>HSFinest.AI</strong> alert</p>"
             f"<pre>{body}</pre>"
             f"<p style='color:#888'>— Scan. Analyze. Trade. Win.</p>"
+            f"<p style='color:#aaa;font-size:11px'>Informational and educational "
+            "purposes only — not financial, investment, or trading advice. Trading "
+            "involves risk of loss; do your own research.</p>"
         ),
     )

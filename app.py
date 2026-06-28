@@ -681,6 +681,12 @@ def main():
         normalize_results_to_df=_normalize_results_to_df,
     )
 
+    # Legal disclaimer footer (financial product) — rendered app-wide.
+    try:
+        render_footer()
+    except Exception:
+        pass
+
 # ============================================================
 #                     APP ENTRYPOINT
 # ============================================================
