@@ -244,7 +244,13 @@ def _refresh_earnings() -> None:
     result = populate_earnings_calendar(universe, use_yf_fallback=False, sleep_s=0)
     found = sum(1 for info in result.values() if info.earnings_date is not None)
     print(f"[earnings] cron refresh complete: {found} dated of {len(universe)}")
-    mark_earnings_refreshed_today(key)
+    # Only mark as refreshed when we actually got dates. If all sources returned
+    # nothing (keys missing, rate-limited, provider outage), leave today unmarked
+    # so the next scheduled scan retries instead of waiting until tomorrow.
+    if found > 0:
+        mark_earnings_refreshed_today(key)
+    else:
+        print("[earnings] 0 dates found — not marking refreshed; will retry next scan")
 
 
 def main():

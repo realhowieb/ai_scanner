@@ -78,6 +78,39 @@ def _probe_alpaca() -> tuple[bool, bool, Optional[float]]:
         return True, False, None
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def _probe_earnings_source(which: str) -> tuple[bool, Optional[int], Optional[float]]:
+    """Probe FMP/Finnhub with a small live window. Returns (configured, rows, ms).
+
+    Cached 2 min so opening the panel repeatedly doesn't burn the (rate-limited)
+    free-tier API quotas.
+    """
+    import datetime as dt
+
+    try:
+        from data.earnings_sources import (
+            _secret,
+            fetch_earnings_window_finnhub,
+            fetch_earnings_window_fmp,
+        )
+    except Exception:
+        return (False, None, None)
+
+    keyname = "FMP_API_KEY" if which == "fmp" else "FINNHUB_API_KEY"
+    if not _secret(keyname):
+        return (False, None, None)
+
+    start = dt.date.today().isoformat()
+    end = (dt.date.today() + dt.timedelta(days=30)).isoformat()
+    fn = fetch_earnings_window_fmp if which == "fmp" else fetch_earnings_window_finnhub
+    t0 = time.perf_counter()
+    try:
+        m = fn(start, end)
+        return (True, len(m), (time.perf_counter() - t0) * 1000.0)
+    except Exception:
+        return (True, None, None)
+
+
 def _earnings_status() -> dict:
     out = {"last_refresh": None, "dated_rows": None}
     conn = _neon_conn()
@@ -151,7 +184,28 @@ def render_provider_health() -> None:
             lat = alp_ms if alp_ms is not None else db_ms
             st.metric("Provider latency (live)", f"{lat:.0f} ms" if lat is not None else "—")
 
-        # --- Earnings + last scan row ---
+        # --- Earnings sources row (FMP + Finnhub, 30-day probe) ---
+        fmp_conf, fmp_rows, fmp_ms = _probe_earnings_source("fmp")
+        fh_conf, fh_rows, fh_ms = _probe_earnings_source("finnhub")
+
+        def _src_metric(label, conf, rows, ms):
+            if not conf:
+                st.metric(label, "⚪ not configured", "—")
+                return
+            icon = "🟢" if (rows or 0) > 0 else "🟡"
+            st.metric(
+                label,
+                f"{icon} {rows if rows is not None else 'error'} rows",
+                f"{ms:.0f} ms (30d window)" if ms is not None else "—",
+            )
+
+        c6, c7 = st.columns(2)
+        with c6:
+            _src_metric("FMP (earnings)", fmp_conf, fmp_rows, fmp_ms)
+        with c7:
+            _src_metric("Finnhub (earnings)", fh_conf, fh_rows, fh_ms)
+
+        # --- Earnings cache + last scan row ---
         earn = _earnings_status()
         last = _last_scan()
 
