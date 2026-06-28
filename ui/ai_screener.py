@@ -130,7 +130,7 @@ def render_nl_screener() -> None:
         ("🚀 Breakouts", "breakout stocks"),
         ("💰 Under $20", "stocks under $20"),
         ("📈 High Volume", "high volume stocks"),
-        ("🤖 AI Stocks", "AI stocks"),
+        ("🧠 AI Stocks", "AI stocks"),
         ("💎 Swing Trades", "swing trade setups"),
         ("⚡ Gap Ups", "stocks gapping up"),
     ]
