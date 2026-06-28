@@ -142,10 +142,22 @@ def render_active_filters_summary(
 
 
 def render_onboarding_hint(username: str, *, tier_name: str) -> None:
-    """Render a one-time quick-start hint per session per user."""
+    """Render a one-time quick-start hint, dismissable permanently per user."""
     key = f"onboarding_dismissed::{(username or '').strip().lower()}"
     if st.session_state.get(key):
         return
+
+    # Persisted dismissal: once a user clicks "Got it" it stays gone across
+    # sessions. Lazy + guarded so a stale module / DB hiccup falls back to the
+    # session-only behavior instead of crashing.
+    try:
+        from db.user_settings import get_onboarding_dismissed
+
+        if get_onboarding_dismissed(username):
+            st.session_state[key] = True
+            return
+    except Exception:
+        pass
 
     with st.expander("Quick start", expanded=True):
         st.markdown(
@@ -163,6 +175,12 @@ Tip: turn on **Apply Gap Filter** to enforce **Min Gap %**.
         )
         if st.button("Got it", key=f"onboarding_got_it::{username}"):
             st.session_state[key] = True
+            try:
+                from db.user_settings import set_onboarding_dismissed
+
+                set_onboarding_dismissed(username, True)
+            except Exception:
+                pass
             st.rerun()
 
 

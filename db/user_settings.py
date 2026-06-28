@@ -71,6 +71,7 @@ def _ensure_user_settings_schema() -> None:
                     ADD COLUMN IF NOT EXISTS afterhours BOOLEAN,
                     ADD COLUMN IF NOT EXISTS unusual_vol BOOLEAN,
                     ADD COLUMN IF NOT EXISTS enable_earnings_enrichment BOOLEAN,
+                    ADD COLUMN IF NOT EXISTS onboarding_dismissed BOOLEAN,
                     ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
                 """
@@ -326,3 +327,39 @@ def upsert_user_settings(
                 },
             )
         conn.commit()
+
+def get_onboarding_dismissed(user_id: str) -> bool:
+    """True if the user permanently dismissed the Quick Start panel."""
+    conn = _get_conn()
+    if conn is None:
+        return False
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT onboarding_dismissed FROM user_settings WHERE user_id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        return False
+    val = row.get("onboarding_dismissed") if isinstance(row, dict) else row[0]
+    return bool(val)
+
+
+def set_onboarding_dismissed(user_id: str, value: bool = True) -> None:
+    """Persist the Quick Start dismissal for a user (upsert)."""
+    conn = _get_conn()
+    if conn is None:
+        return
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO user_settings (user_id, onboarding_dismissed)
+                VALUES (%s, %s)
+                ON CONFLICT (user_id)
+                DO UPDATE SET onboarding_dismissed = EXCLUDED.onboarding_dismissed,
+                              updated_at = NOW()
+                """,
+                (user_id, bool(value)),
+            )
