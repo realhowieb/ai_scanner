@@ -122,8 +122,8 @@ def render_nl_screener() -> None:
     """Streamlit UI: NL input -> proposed filters -> apply to scan controls."""
     import streamlit as st
 
-    st.markdown("#### 🗣️ Natural-language screener")
-    st.caption('Describe what you want, e.g. "NASDAQ stocks under $20 gapping up on volume".')
+    st.markdown("#### 🤖 AI Assistant")
+    st.caption('Describe the stocks you want, e.g. "NASDAQ stocks under $20 gapping up on volume".')
 
     query = st.text_input(
         "Describe your screen",
