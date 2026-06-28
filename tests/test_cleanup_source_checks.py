@@ -148,11 +148,14 @@ class CleanupSourceChecks(unittest.TestCase):
         scans_source = (ROOT / "ui" / "scans.py").read_text()
         watchlist_source = (ROOT / "ui" / "watchlists.py").read_text()
 
-        self.assertIn("render_active_watchlist_tools", scans_source)
+        # Watchlist tools now render inside the unified watchlists panel; scans.py
+        # consumes the button states from session_state and runs the actions.
+        self.assertIn("_wl_tools_state", scans_source)
         self.assertIn("handle_active_watchlist_actions", scans_source)
         self.assertNotIn("def build_watchlist_df", scans_source)
         self.assertIn("def build_watchlist_df", watchlist_source)
         self.assertIn("def render_active_watchlist_tools", watchlist_source)
+        self.assertIn("render_active_watchlist_tools()", watchlist_source)  # called in the panel
         self.assertIn("def handle_active_watchlist_actions", watchlist_source)
 
     def test_scan_provider_helpers_are_extracted_from_scan_ui(self):
