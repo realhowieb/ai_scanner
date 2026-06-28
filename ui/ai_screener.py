@@ -122,16 +122,32 @@ def render_nl_screener() -> None:
     """Streamlit UI: NL input -> proposed filters -> apply to scan controls."""
     import streamlit as st
 
-    st.caption('Describe the stocks you want, e.g. "NASDAQ stocks under $20 gapping up on volume".')
+    st.caption("Describe the stocks you're looking for — or tap a suggestion:")
+
+    # One-tap example chips: clicking fills the input box (set the widget's
+    # session_state key BEFORE the text_input is created, then rerun).
+    _chips = [
+        ("🚀 Breakouts", "breakout stocks"),
+        ("💰 Under $20", "stocks under $20"),
+        ("📈 High Volume", "high volume stocks"),
+        ("🤖 AI Stocks", "AI stocks"),
+        ("💎 Swing Trades", "swing trade setups"),
+        ("⚡ Gap Ups", "stocks gapping up"),
+    ]
+    _chip_cols = st.columns(2)
+    for _i, (_label, _q) in enumerate(_chips):
+        if _chip_cols[_i % 2].button(_label, key=f"nl_chip_{_i}", width="stretch"):
+            st.session_state["nl_screen_query"] = _q
+            st.rerun()
 
     query = st.text_input(
         "Describe your screen",
         key="nl_screen_query",
-        placeholder="e.g. liquid S&P 500 names with a 3%+ gap",
+        placeholder="Try: NASDAQ stocks under $20 with unusual volume",
         label_visibility="collapsed",
     )
 
-    if st.button("🔎 Interpret", key="nl_screen_run"):
+    if st.button("🔎 Find Stocks", key="nl_screen_run", width="stretch"):
         with st.spinner("Interpreting…"):
             filters, explanation, err = parse_screen_request(query)
         if err:
