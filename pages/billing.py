@@ -171,6 +171,7 @@ def _pricing_table() -> None:
 | Curated Breakout Scans | ✅ | ✅ | ✅ |
 | Breakout Score | ✅ | ✅ | ✅ |
 | Charts | ✅ | ✅ | ✅ |
+| Watchlists | ✅ | ✅ | ✅ |
 | Alerts (Breakout / Watchlist / Price) | 1 | 5 | 25 |
 | Email Alert Delivery | ❌ | ✅ | ✅ |
 | CSV Export | ❌ | ✅ | ✅ |
