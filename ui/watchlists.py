@@ -22,19 +22,19 @@ ScanFn = Callable[[List[str], str], None]
 
 
 def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
-    """Render the 'My Watchlists' block in the sidebar.
+    """Render the 'My Watchlists' block in the main content area.
 
     Returns:
         (active_watchlist_id, active_watchlist_tickers)
     """
-    st.sidebar.markdown("### 📋 My Watchlists")
+    st.markdown("### 📋 My Watchlists")
 
     try:
         watchlists = list_watchlists(user_id)
     except Exception as e:
-        st.sidebar.caption("Watchlists require Neon DB (cloud) and may be unavailable.")
+        st.caption("Watchlists require Neon DB (cloud) and may be unavailable.")
         # Show the underlying error in dev so we can diagnose connection/config issues.
-        with st.sidebar.expander("Watchlist error details", expanded=False):
+        with st.expander("Watchlist error details", expanded=False):
             st.code(f"{type(e)}\n{str(e)}\n{repr(e)}")
         # For safety, don't crash the app; just return empty.
         return None, []
@@ -44,7 +44,7 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
 
     if watchlists:
         options = {f"{wl['name']} (#{wl['id']})": wl for wl in watchlists}
-        selected_label = st.sidebar.selectbox(
+        selected_label = st.selectbox(
             "Active watchlist",
             list(options.keys()),
             index=0,
@@ -53,11 +53,11 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
         active_id = active["id"]
         active_tickers = get_watchlist_tickers(active_id, user_id)
     else:
-        st.sidebar.caption("No watchlists yet. Create one below.")
+        st.caption("No watchlists yet. Create one below.")
 
     # If there is an active watchlist with tickers, show a simple table with prices & changes
     if active_id is not None and active_tickers:
-        with st.sidebar.expander("View active watchlist (with prices)", expanded=False):
+        with st.expander("View active watchlist (with prices)", expanded=False):
             rows = []
             try:
                 import yfinance as yf  # type: ignore
@@ -132,7 +132,7 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
                         txt = f"{row['Ticker']}: —"
                     st.write(txt)
 
-    with st.sidebar.expander("Manage watchlists", expanded=False):
+    with st.expander("Manage watchlists", expanded=False):
         new_name = st.text_input("New watchlist name", key="wl_new_name")
         if st.button("Create watchlist", key="wl_create_btn"):
             if new_name.strip():
