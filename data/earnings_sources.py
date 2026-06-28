@@ -146,14 +146,23 @@ def fetch_earnings_window_finnhub(start_iso: str, end_iso: str) -> EarnMap:
 
 
 def fetch_earnings_window(start_iso: str, end_iso: str) -> Tuple[EarnMap, str]:
-    """FMP primary, Finnhub fallback. Returns (map, source) where source is
-    'fmp' | 'finnhub' | 'none'."""
-    out = fetch_earnings_window_fmp(start_iso, end_iso)
-    if out:
-        print(f"[earnings] FMP window {start_iso}..{end_iso}: {len(out)} symbols")
-        return out, "fmp"
-    out = fetch_earnings_window_finnhub(start_iso, end_iso)
-    if out:
-        print(f"[earnings] Finnhub window {start_iso}..{end_iso}: {len(out)} symbols")
-        return out, "finnhub"
-    return {}, "none"
+    """Merge FMP (primary) + Finnhub (secondary) for max coverage.
+
+    Both free tiers are limited in different ways (FMP returns few rows; Finnhub
+    a broader subset), so we union them: Finnhub provides the base, FMP overlays
+    on top (primary precedence on conflicts). Returns (map, source).
+    """
+    fmp = fetch_earnings_window_fmp(start_iso, end_iso)
+    finnhub = fetch_earnings_window_finnhub(start_iso, end_iso)
+    if fmp:
+        print(f"[earnings] FMP window {start_iso}..{end_iso}: {len(fmp)} symbols")
+    if finnhub:
+        print(f"[earnings] Finnhub window {start_iso}..{end_iso}: {len(finnhub)} symbols")
+
+    if not fmp and not finnhub:
+        return {}, "none"
+
+    merged: EarnMap = dict(finnhub)
+    merged.update(fmp)  # FMP wins on overlap (primary)
+    source = "fmp+finnhub" if (fmp and finnhub) else ("fmp" if fmp else "finnhub")
+    return merged, source
