@@ -274,6 +274,7 @@ def populate_earnings_calendar(
     commit_every: int = 200,
     progress_cb=None,
     lookahead_days: int = 120,
+    use_yf_fallback: bool = True,
 ) -> Dict[str, EarningsInfo]:
     """Populate / refresh earnings_calendar for given symbols.
 
@@ -317,9 +318,13 @@ def populate_earnings_calendar(
             hit = bulk.get(sym_key)
             if hit is not None:
                 info = EarningsInfo(symbol=sym_key, earnings_date=hit[0], earnings_time=hit[1])
-            else:
+            elif use_yf_fallback:
                 # Fallback only for symbols the bulk sources didn't cover.
                 info = fetch_next_earnings(sym)
+            else:
+                # Bulk-only mode (e.g. the cron over the full universe): skip the
+                # slow per-symbol yfinance path for misses.
+                info = EarningsInfo(symbol=sym_key, earnings_date=None, earnings_time=None)
             out[sym] = info
             sym_key = _norm_symbol(info.symbol or sym)
             if not sym_key:
@@ -347,7 +352,7 @@ def populate_earnings_calendar(
                     pass
 
             # Only rate-limit when we actually called yfinance (bulk hits are free).
-            if sleep_s and hit is None:
+            if sleep_s and hit is None and use_yf_fallback:
                 time.sleep(sleep_s)
 
     try:
