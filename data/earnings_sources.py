@@ -17,7 +17,12 @@ import urllib.parse
 import urllib.request
 from typing import Dict, Optional, Tuple
 
-FMP_BASE = "https://financialmodelingprep.com/api/v3/earning_calendar"
+# FMP deprecated the v3 legacy calendar; try the newer "stable" endpoint first,
+# then fall back to v3 (some keys/plans still serve one but not the other).
+FMP_BASES = (
+    "https://financialmodelingprep.com/stable/earnings-calendar",
+    "https://financialmodelingprep.com/api/v3/earning_calendar",
+)
 FINNHUB_BASE = "https://finnhub.io/api/v1/calendar/earnings"
 
 EarnMap = Dict[str, Tuple[_dt.date, Optional[str]]]
@@ -81,14 +86,20 @@ def fetch_earnings_window_fmp(start_iso: str, end_iso: str) -> EarnMap:
     if not key:
         return {}
     params = urllib.parse.urlencode({"from": start_iso, "to": end_iso, "apikey": key})
-    try:
-        data = _get_json(f"{FMP_BASE}?{params}")
-    except Exception as e:
-        print(f"[earnings] FMP fetch failed: {type(e).__name__}: {e}")
-        return {}
+
+    data = None
+    for base in FMP_BASES:
+        try:
+            data = _get_json(f"{base}?{params}")
+            if isinstance(data, list) and data:
+                print(f"[earnings] FMP endpoint OK: {base}")
+                break
+        except Exception as e:
+            print(f"[earnings] FMP {base} failed: {type(e).__name__}: {e}")
+            data = None
     if not isinstance(data, list):
-        print(f"[earnings] FMP returned non-list payload: {str(data)[:120]}")
         return {}
+
     out: EarnMap = {}
     today = _dt.date.today()
     for row in data:
@@ -98,6 +109,7 @@ def fetch_earnings_window_fmp(start_iso: str, end_iso: str) -> EarnMap:
             out,
             _norm_symbol(row.get("symbol")),
             _parse_date(row.get("date")),
+            # v3 used "time"; stable may omit it.
             _norm_time(row.get("time")),
             today,
         )
