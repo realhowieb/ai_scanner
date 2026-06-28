@@ -136,15 +136,46 @@ def apply_admin_scan_caps(
     return ADMIN_SCAN_CAP, ADMIN_SCAN_CAP, ADMIN_TOP_N
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_saved_snapshot_df() -> pd.DataFrame | None:
+    """Latest SAVED scan snapshot from the DB (the scheduled cron's results).
+
+    Used so the market header (Top Gainer / Most Active) populates on first load
+    even before the user runs their own scan. Cached for 5 min to avoid querying
+    on every rerun.
+    """
+    try:
+        from db.runs import list_runs, load_run_results
+        from ui.app_runtime import normalize_results_to_df
+
+        runs = list_runs(limit=10) or []
+        snap = next((r for r in runs if r.get("is_snapshot")), None) or (
+            runs[0] if runs else None
+        )
+        if not snap:
+            return None
+        raw = load_run_results(snap["id"])
+        df = normalize_results_to_df(raw) if raw else None
+        if df is not None and getattr(df, "empty", False):
+            return None
+        return df
+    except Exception:
+        return None
+
+
 def load_latest_results_snapshot(get_results_df: Callable[[], pd.DataFrame | None]) -> pd.DataFrame | None:
-    """Best-effort latest results snapshot for market header rendering."""
+    """Best-effort latest results snapshot for market header rendering.
+
+    Prefers the current session's scan; falls back to the latest saved snapshot
+    from the DB so the header isn't empty (Top Gainer / Most Active) on first load.
+    """
     try:
         snapshot_df = get_results_df()
-        if snapshot_df is not None and getattr(snapshot_df, "empty", False):
-            return None
-        return snapshot_df
+        if snapshot_df is not None and not getattr(snapshot_df, "empty", False):
+            return snapshot_df
     except APP_PROFILE_ERRORS:
-        return None
+        pass
+    return _load_saved_snapshot_df()
 
 
 def set_latest_results_snapshot(snapshot_df: pd.DataFrame | None) -> None:

@@ -66,7 +66,9 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     default_premarket = bool(st.session_state.get("premarket", False))
     default_afterhours = bool(st.session_state.get("afterhours", False))
     default_unusual_vol = bool(st.session_state.get("unusual_vol", False))
-    default_min_dollar_vol = float(st.session_state.get("min_dollar_vol", 1_000_000.0))
+    # Default $5M liquidity floor (matches the scheduled cron) so manual scans
+    # exclude illiquid micro-cap/pump names out of the box.
+    default_min_dollar_vol = float(st.session_state.get("min_dollar_vol", 5_000_000.0))
     # Include Technical Indicators and Show diagnostics pull from session_state keys
     # that can be populated from user_settings. Default them to False when not set.
     default_include_ta = bool(st.session_state.get("include_ta", False))
