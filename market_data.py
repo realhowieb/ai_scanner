@@ -16,6 +16,7 @@ It is intentionally written to be:
 
 from __future__ import annotations
 
+import os
 from typing import Dict, List, Optional
 
 import streamlit as st
@@ -41,12 +42,23 @@ def _get_alpaca_base_urls() -> Dict[str, str]:
       ALPACA_BASE_URL (optional, defaults to https://paper-api.alpaca.markets)
       ALPACA_DATA_URL (optional, defaults to https://data.alpaca.markets)
     """
-    secrets = getattr(st, "secrets", {})
+    # Read env vars first (works headlessly, e.g. the scheduled cron), then fall
+    # back to Streamlit secrets — guarded, since accessing st.secrets raises
+    # StreamlitSecretNotFoundError when there's no secrets file (non-app context).
+    def _secret(key: str, default: Optional[str] = None) -> Optional[str]:
+        env_val = os.getenv(key)
+        if env_val:
+            return env_val
+        try:
+            val = getattr(st, "secrets", {}).get(key)
+        except Exception:
+            val = None
+        return val if val else default
 
-    api_key = secrets.get("ALPACA_API_KEY_ID")
-    api_secret = secrets.get("ALPACA_API_SECRET_KEY")
-    base_url = secrets.get("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
-    data_url = secrets.get("ALPACA_DATA_URL", "https://data.alpaca.markets")
+    api_key = _secret("ALPACA_API_KEY_ID")
+    api_secret = _secret("ALPACA_API_SECRET_KEY")
+    base_url = _secret("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
+    data_url = _secret("ALPACA_DATA_URL", "https://data.alpaca.markets")
 
     return {
         "api_key": api_key,
