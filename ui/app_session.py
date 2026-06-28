@@ -13,9 +13,25 @@ FEATURE_MIN_TIER: dict[str, str] = {
     "can_scan_history": "pro",
     "can_early_breakout": "premium",
     "can_full_universe": "premium",
+    "can_email_alerts": "pro",  # in-app alerts are open to all; email is Pro+
     "can_diagnostics": "admin",
     "can_admin_panel": "admin",
 }
+
+# Max number of alerts a user may create, by tier. Basic gets a taste; upgrade
+# for more. Admin shares the Premium cap.
+ALERT_LIMIT_BY_TIER: dict[str, int] = {
+    "basic": 1,
+    "pro": 5,
+    "premium": 25,
+    "admin": 25,
+}
+
+
+def alert_limit_for_tier(tier_key: object | None) -> int:
+    """Resolve the max-alerts cap for a tier key (defaults to Basic = 1)."""
+    key = str(tier_key or "basic").strip().lower()
+    return ALERT_LIMIT_BY_TIER.get(key, 1)
 
 TIER_ORDER = {
     "basic": 0,

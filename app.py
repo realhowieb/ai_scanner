@@ -588,7 +588,18 @@ def main():
     st.session_state["active_watchlist_tickers"] = watch_tickers
 
     # -------- Alerts (breakout / watchlist / price) --------
-    render_alerts_panel(username, watch_tickers=watch_tickers)
+    # Tier-gated: per-tier alert cap (Basic 1 / Pro 5 / Premium 25); email
+    # delivery is Pro+ (in-app alerts stay open to all).
+    from ui.app_session import alert_limit_for_tier
+
+    _alert_max = 25 if is_admin else alert_limit_for_tier(tier_key)
+    _alert_email_ok = bool(is_admin or flags.get("can_email_alerts"))
+    render_alerts_panel(
+        username,
+        watch_tickers=watch_tickers,
+        max_alerts=_alert_max,
+        email_enabled=_alert_email_ok,
+    )
     st.markdown("---")
 
     render_earnings_controls(

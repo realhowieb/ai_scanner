@@ -130,6 +130,19 @@ def _is_verified(email: str) -> bool:
         return False
 
 
+def _email_allowed_for_tier(user_id: str) -> bool:
+    """Email alerts are a Pro+ perk; Basic users get in-app alerts only."""
+    try:
+        from auth.tier_sync import resolve_user_tier
+
+        res = resolve_user_tier(user_id)
+        key = (res.get("tier_key") if isinstance(res, dict) else None) or "basic"
+        return str(key).strip().lower() in ("pro", "premium", "admin")
+    except Exception:
+        # Fail closed: if we can't determine the tier, don't email.
+        return False
+
+
 def run_alerts() -> None:
     """Evaluate all enabled alerts against the latest snapshot and notify."""
     try:
@@ -220,7 +233,11 @@ def run_alerts() -> None:
             mark_alert_fired(alert.get("id"))
             fired += 1
 
-            if "@" in user_id and _is_verified(user_id):
+            if (
+                "@" in user_id
+                and _is_verified(user_id)
+                and _email_allowed_for_tier(user_id)
+            ):
                 try:
                     from ui.email_utils import send_alert_email
 
