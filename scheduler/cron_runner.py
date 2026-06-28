@@ -217,6 +217,33 @@ def _print_provider_status() -> None:
         print(f"Active provider: unknown (config check failed: {e})")
 
 
+def _refresh_earnings() -> None:
+    """Once-per-day earnings-calendar refresh over the full universe (FMP/Finnhub).
+
+    Throttled via the earnings refresh log so it runs on only one scheduled scan
+    per day. Disabled when CRON_EARNINGS_REFRESH=0.
+    """
+    if os.getenv("CRON_EARNINGS_REFRESH", "1").strip() != "1":
+        return
+    from db.earnings import (
+        mark_earnings_refreshed_today,
+        populate_earnings_calendar,
+        should_refresh_earnings_today,
+    )
+
+    key = "cron_earnings"
+    if not should_refresh_earnings_today(key):
+        print("[earnings] already refreshed today; skipping")
+        return
+
+    universe = _dedupe([*_load_universe("SP500"), *_load_universe("NASDAQ")])
+    print(f"[earnings] refreshing {len(universe)} symbols (FMP -> Finnhub, bulk)")
+    result = populate_earnings_calendar(universe, use_yf_fallback=False, sleep_s=0)
+    found = sum(1 for info in result.values() if info.earnings_date is not None)
+    print(f"[earnings] cron refresh complete: {found} dated of {len(universe)}")
+    mark_earnings_refreshed_today(key)
+
+
 def main():
     print("=== cron_runner started ===")
     try:
@@ -257,6 +284,14 @@ def main():
         run_alerts()
     except Exception as e:
         print(f"[cron] alert evaluation failed: {e}")
+
+    # Refresh the earnings calendar once per day from FMP -> Finnhub (bulk; no
+    # per-symbol yfinance over the full universe). Best-effort, throttled so it
+    # runs on only one of the day's scheduled scans.
+    try:
+        _refresh_earnings()
+    except Exception as e:
+        print(f"[cron] earnings refresh failed: {e}")
 
     ok = all(run.ok for run in runs)
     _write_summary(

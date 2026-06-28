@@ -53,6 +53,9 @@ jobs:
           SMTP_FROM: ${{ secrets.SMTP_FROM }}
           # Optional error monitoring (no-op unless set).
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # Earnings calendar sources (FMP primary, Finnhub fallback).
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           CRON_SUMMARY_PATH: artifacts/scheduled_scan_summary.json
           # Skip the slow per-symbol yfinance fallback for symbols Alpaca doesn't
           # carry (micro-caps/warrants that never pass filters) — big speedup.
