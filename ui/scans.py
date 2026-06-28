@@ -25,7 +25,7 @@ from ui.scan_providers import (
 )
 from ui.single_ticker import handle_single_ticker_actions, render_single_ticker_panel
 from ui.three_step_scanner import render_three_step_scanner
-from ui.watchlists import handle_active_watchlist_actions, render_active_watchlist_tools
+from ui.watchlists import handle_active_watchlist_actions
 
 
 # --- Admin helpers for scan caps ---
@@ -172,9 +172,8 @@ def render_scan_controls(
                 except (RuntimeError, TypeError, ValueError, OSError) as e:
                     st.error(f"Earnings debug failed: {e}")
 
-    # Watchlist actions (uses active_watchlist_tickers from session_state)
-    st.markdown("### 📋 Watchlist Tools")
-
+    # Watchlist tool buttons are now rendered in the unified Watchlists area
+    # (ui/watchlists.py); read their states here for the action handler below.
     (
         view_watchlist_btn,
         run_watchlist_btn,
@@ -182,7 +181,9 @@ def render_scan_controls(
         add_watchlist_btn,
         remove_watchlist_btn,
         watchlist_add_symbol,
-    ) = render_active_watchlist_tools()
+    ) = st.session_state.get(
+        "_wl_tools_state", (False, False, False, False, False, "")
+    )
 
     single_ticker, show_chart_btn, run_single_scan_btn = render_single_ticker_panel()
 
