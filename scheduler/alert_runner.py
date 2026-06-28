@@ -145,9 +145,11 @@ def _live_quote(ticker: str) -> Optional[float]:
         quotes = get_latest_quotes([ticker]) or {}
         info = quotes.get(str(ticker).upper())
         if isinstance(info, dict) and info.get("last") is not None:
+            print(f"[alert_runner] live quote {ticker}={info['last']}")
             return float(info["last"])
-    except Exception:
-        pass
+        print(f"[alert_runner] no live quote for {ticker} (quotes={quotes!r})")
+    except Exception as e:
+        print(f"[alert_runner] live quote failed for {ticker}: {type(e).__name__}: {e}")
     return None
 
 
