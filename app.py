@@ -604,32 +604,6 @@ def main():
     watch_id, watch_tickers = render_watchlists_panel(username)
     st.session_state["active_watchlist_id"] = watch_id
     st.session_state["active_watchlist_tickers"] = watch_tickers
-
-    # -------- Alerts (breakout / watchlist / price) --------
-    # Tier-gated: per-tier alert cap (Basic 1 / Pro 5 / Premium 25); email
-    # delivery is Pro+ (in-app alerts stay open to all). Import is guarded so a
-    # transient stale-module state on redeploy can't crash the whole app.
-    try:
-        from ui.app_session import alert_limit_for_tier
-
-        _alert_max = 25 if is_admin else alert_limit_for_tier(tier_key)
-    except Exception:
-        _alert_max = 25 if is_admin else 1
-    _alert_email_ok = bool(is_admin or flags.get("can_email_alerts"))
-    try:
-        render_alerts_panel(
-            username,
-            watch_tickers=watch_tickers,
-            max_alerts=_alert_max,
-            email_enabled=_alert_email_ok,
-        )
-    except TypeError:
-        # Stale ui.alerts module (old signature) during a redeploy — render with
-        # the legacy signature rather than crashing the whole app.
-        try:
-            render_alerts_panel(username, watch_tickers=watch_tickers)
-        except Exception:
-            pass
     st.markdown("---")
 
     render_earnings_controls(
@@ -698,6 +672,32 @@ def main():
         get_db_conn=_get_db_conn_for_app,
         normalize_results_to_df=_normalize_results_to_df,
     )
+
+    # -------- Alerts (breakout / watchlist / price) --------
+    # Rendered below results (secondary management); tier-gated cap, Pro+ email.
+    # Import is guarded so a transient stale-module state on redeploy can't crash
+    # the whole app.
+    st.markdown("---")
+    try:
+        from ui.app_session import alert_limit_for_tier
+
+        _alert_max = 25 if is_admin else alert_limit_for_tier(tier_key)
+    except Exception:
+        _alert_max = 25 if is_admin else 1
+    _alert_email_ok = bool(is_admin or flags.get("can_email_alerts"))
+    try:
+        render_alerts_panel(
+            username,
+            watch_tickers=watch_tickers,
+            max_alerts=_alert_max,
+            email_enabled=_alert_email_ok,
+        )
+    except TypeError:
+        # Stale ui.alerts module (old signature) during a redeploy — fall back.
+        try:
+            render_alerts_panel(username, watch_tickers=watch_tickers)
+        except Exception:
+            pass
 
     # Legal disclaimer footer (financial product) — rendered app-wide.
     try:
