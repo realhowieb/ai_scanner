@@ -192,6 +192,12 @@ def run_and_save(
 
     except Exception as e:
         print(f"ERROR running {universe} scan: {e}")
+        try:
+            from ui.monitoring import capture
+
+            capture(e)
+        except Exception:
+            pass
         return ScanRunSummary(universe=universe, ok=False, error=f"{type(e).__name__}: {e}")
 
 
@@ -213,6 +219,12 @@ def _print_provider_status() -> None:
 
 def main():
     print("=== cron_runner started ===")
+    try:
+        from ui.monitoring import init_sentry
+
+        init_sentry("cron")
+    except Exception:
+        pass
     _print_provider_status()
     started_at = dt.datetime.now(dt.timezone.utc)
 

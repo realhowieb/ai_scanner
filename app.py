@@ -46,6 +46,14 @@ from ui.app_user_profile import (
 
 install_streamlit_compat()
 
+# Optional error monitoring (no-op unless SENTRY_DSN is set).
+try:
+    from ui.monitoring import init_sentry
+
+    init_sentry("streamlit")
+except Exception:
+    pass
+
 from types import SimpleNamespace
 
 try:
@@ -697,6 +705,12 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
+        try:
+            from ui.monitoring import capture
+
+            capture(e)
+        except Exception:
+            pass
         st.error("❌ App failed during startup.")
         try:
             st.exception(e)
