@@ -598,12 +598,20 @@ def main():
     except Exception:
         _alert_max = 25 if is_admin else 1
     _alert_email_ok = bool(is_admin or flags.get("can_email_alerts"))
-    render_alerts_panel(
-        username,
-        watch_tickers=watch_tickers,
-        max_alerts=_alert_max,
-        email_enabled=_alert_email_ok,
-    )
+    try:
+        render_alerts_panel(
+            username,
+            watch_tickers=watch_tickers,
+            max_alerts=_alert_max,
+            email_enabled=_alert_email_ok,
+        )
+    except TypeError:
+        # Stale ui.alerts module (old signature) during a redeploy — render with
+        # the legacy signature rather than crashing the whole app.
+        try:
+            render_alerts_panel(username, watch_tickers=watch_tickers)
+        except Exception:
+            pass
     st.markdown("---")
 
     render_earnings_controls(
