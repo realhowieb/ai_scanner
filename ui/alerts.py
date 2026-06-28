@@ -30,10 +30,21 @@ def _fmt_alert(a: dict) -> str:
     return str(t)
 
 
-def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) -> None:
-    """Render the alerts management block in the main column."""
+def render_alerts_panel(
+    user_id: str,
+    watch_tickers: List[str] | None = None,
+    *,
+    max_alerts: int = 1,
+    email_enabled: bool = False,
+) -> None:
+    """Render the alerts management block in the main column.
+
+    max_alerts: per-tier cap on how many alerts the user may create.
+    email_enabled: whether this user's tier (Pro+) gets email delivery; Basic
+    still gets in-app alerts but not email.
+    """
     try:
-        from config import ALERT_MAX_PER_USER, ALERTS_ENABLED
+        from config import ALERTS_ENABLED
     except Exception:
         return
     if not ALERTS_ENABLED:
@@ -53,10 +64,17 @@ def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) ->
         return
 
     st.markdown("## 🔔 Alerts")
-    st.caption(
-        "Get notified (in-app + email) when your conditions hit. "
-        "Checked automatically a few times a day."
-    )
+    if email_enabled:
+        st.caption(
+            "Get notified (in-app + email) when your conditions hit. "
+            "Checked automatically a few times a day."
+        )
+    else:
+        st.caption(
+            "Get notified in-app when your conditions hit, checked automatically "
+            "a few times a day. 📧 **Email alerts are a Pro feature** — upgrade to "
+            "get them in your inbox."
+        )
 
     try:
         existing = list_alerts(user_id)
@@ -65,6 +83,15 @@ def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) ->
         with st.expander("Alert error details", expanded=False):
             st.code(f"{type(e).__name__}: {e}\n{repr(e)}")
         return
+
+    used = len(existing)
+    if used >= int(max_alerts):
+        st.warning(
+            f"You're using all **{used}/{max_alerts}** alerts on your plan. "
+            "Upgrade for more alert slots."
+        )
+    else:
+        st.caption(f"Using {used} of {max_alerts} alert slots on your plan.")
 
     with st.expander("➕ Create an alert", expanded=True):
         tab_break, tab_watch, tab_price = st.tabs(
@@ -89,7 +116,7 @@ def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) ->
             if st.button("Create breakout alert", key="alert_break_btn"):
                 _guarded_create(
                     existing,
-                    ALERT_MAX_PER_USER,
+                    max_alerts,
                     lambda: create_alert(
                         user_id,
                         "breakout",
@@ -107,7 +134,7 @@ def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) ->
             if st.button("Create watchlist alert", key="alert_watch_btn"):
                 _guarded_create(
                     existing,
-                    ALERT_MAX_PER_USER,
+                    max_alerts,
                     lambda: create_alert(user_id, "watchlist"),
                 )
 
@@ -134,7 +161,7 @@ def render_alerts_panel(user_id: str, watch_tickers: List[str] | None = None) ->
                 else:
                     _guarded_create(
                         existing,
-                        ALERT_MAX_PER_USER,
+                        max_alerts,
                         lambda: create_alert(
                             user_id,
                             "price",

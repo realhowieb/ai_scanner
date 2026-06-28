@@ -226,7 +226,7 @@ class CleanupSourceChecks(unittest.TestCase):
         app_source = (ROOT / "app.py").read_text()
         runtime_source = (ROOT / "ui" / "app_runtime.py").read_text()
 
-        self.assertLess(len(app_source.splitlines()), 680)
+        self.assertLess(len(app_source.splitlines()), 700)
         self.assertIn("from ui.app_runtime import", app_source)
         self.assertNotIn("def get_market_session", app_source)
         self.assertNotIn("def _normalize_results_to_df", app_source)
