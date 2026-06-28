@@ -100,18 +100,31 @@ def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
             lines.append(f"{tk}: in scan results")
 
     elif atype == "price":
-        if last_col is None:
-            return []
         tk = str(alert.get("ticker") or "").upper()
+        if not tk:
+            return []
         direction = (alert.get("direction") or "above").lower()
         target = float(alert.get("threshold") or 0)
-        match = df[df[ticker_col].astype(str).str.upper() == tk]
-        if match.empty:
+
+        # 1) Use the snapshot price if the ticker is in the scan results.
+        last: Optional[float] = None
+        if last_col is not None:
+            match = df[df[ticker_col].astype(str).str.upper() == tk]
+            if not match.empty:
+                try:
+                    last = float(match.iloc[0][last_col])
+                except (TypeError, ValueError):
+                    last = None
+
+        # 2) Fall back to a live quote so price alerts work for ANY ticker,
+        # not just ones that happen to be in the breakout snapshot. This is the
+        # common case ("alert me when AAPL crosses $200" — AAPL is rarely a
+        # breakout candidate, so it wouldn't be in the snapshot).
+        if last is None:
+            last = _live_quote(tk)
+        if last is None:
             return []
-        try:
-            last = float(match.iloc[0][last_col])
-        except (TypeError, ValueError):
-            return []
+
         crossed = (direction == "above" and last >= target) or (
             direction == "below" and last <= target
         )
@@ -119,6 +132,23 @@ def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
             lines.append(f"{tk}: Last {last:.2f} is {direction} {target:.2f}")
 
     return lines
+
+
+def _live_quote(ticker: str) -> Optional[float]:
+    """Latest price for a single ticker via the Alpaca-backed quote provider.
+
+    Returns None if unavailable (Alpaca not configured, unknown symbol, etc.).
+    """
+    try:
+        from market_data import get_latest_quotes
+
+        quotes = get_latest_quotes([ticker]) or {}
+        info = quotes.get(str(ticker).upper())
+        if isinstance(info, dict) and info.get("last") is not None:
+            return float(info["last"])
+    except Exception:
+        pass
+    return None
 
 
 def _is_verified(email: str) -> bool:
