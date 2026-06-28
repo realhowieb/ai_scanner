@@ -491,6 +491,16 @@ def main():
     # -------- DB Status --------
     db_status = render_db_status_badge()
 
+    # -------- Provider Health (admin diagnostics) --------
+    if flags.get("can_diagnostics"):
+        try:
+            from ui.provider_health import render_provider_health
+
+            with st.expander("🩺 Provider Health", expanded=False):
+                render_provider_health()
+        except Exception:
+            pass
+
     # Pre-clamp diagnostics BEFORE filters render widgets.
     # Streamlit forbids mutating widget-bound session_state keys after widget creation.
     if not flags.get("can_diagnostics"):
