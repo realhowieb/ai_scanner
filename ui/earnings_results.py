@@ -15,19 +15,12 @@ def render_earnings_controls(
     flags: dict[str, bool],
     render_earnings_this_week_panel: Callable[..., Any],
 ) -> None:
-    """Render earnings panel/toggle and keep earnings session flags safe."""
-    if bool(flags.get("can_earnings")):
-        with st.expander("📅 Earnings this week", expanded=False):
-            earn_enabled = bool(st.session_state.get("enable_earnings_enrichment", False))
-            is_admin = bool(st.session_state.get("is_admin", False))
+    """Render a single unified Earnings section (toggle + this-week view).
 
-            st.session_state["enable_earnings_refresh"] = False
-
-            if not earn_enabled and not is_admin:
-                st.caption("Earnings enrichment is OFF. Enable it in the sidebar to load earnings data.")
-            else:
-                render_earnings_this_week_panel(can_earnings=True)
-
+    Previously the enrichment toggle lived in the sidebar while the "this week"
+    panel was a separate main-area expander — so the panel told users to "enable
+    it in the sidebar". Now it's one '📅 Earnings' section in the main area.
+    """
     if not bool(flags.get("can_earnings")):
         for key, value in {
             "enable_earnings_enrichment": False,
@@ -42,7 +35,7 @@ def render_earnings_controls(
         _clear_earnings_refresh_state()
         return
 
-    with st.sidebar.expander("📅 Earnings", expanded=False):
+    with st.expander("📅 Earnings", expanded=False):
         # Seed a default without passing value= (which conflicts with the
         # session-state key set during profile restore and warns in Streamlit).
         st.session_state.setdefault("enable_earnings_enrichment", False)
@@ -50,7 +43,7 @@ def render_earnings_controls(
             "Enable earnings enrichment (adds 📅 Earnings in X days)",
             key="enable_earnings_enrichment",
             help=(
-                "If enabled, the app will add timing from the DB to results. "
+                "Adds earnings timing from the DB to your results. "
                 "Turn this OFF for the fastest scans."
             ),
         )
@@ -65,6 +58,14 @@ def render_earnings_controls(
         if not bool(earn_enabled):
             clear_earnings_result_cache()
             _clear_earnings_refresh_state()
+
+        # This-week view, in the same section.
+        st.markdown("**📆 Reporting this week**")
+        is_admin = bool(st.session_state.get("is_admin", False))
+        if not earn_enabled and not is_admin:
+            st.caption("Enable enrichment above to load this week's earnings.")
+        else:
+            render_earnings_this_week_panel(can_earnings=True)
 
 
 def prepare_results_with_earnings(
