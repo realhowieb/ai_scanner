@@ -31,6 +31,7 @@ def init_sentry(component: str = "app") -> bool:
         return True
     dsn = _get_dsn()
     if not dsn:
+        print(f"[monitoring] Sentry not configured (no SENTRY_DSN) — component={component}")
         return False
     try:
         import sentry_sdk
@@ -44,8 +45,10 @@ def init_sentry(component: str = "app") -> bool:
         )
         sentry_sdk.set_tag("component", component)
         _initialized = True
+        print(f"[monitoring] Sentry active — component={component}")
         return True
-    except Exception:
+    except Exception as e:
+        print(f"[monitoring] Sentry init failed: {type(e).__name__}: {e}")
         return False
 
 
