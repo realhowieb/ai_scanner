@@ -168,6 +168,7 @@ def _pricing_table() -> None:
         """
 | Feature | Basic | Pro | Premium |
 |---|---:|---:|---:|
+| **Price** | **Free** | **$19/mo** | **$39/mo** |
 | Curated Breakout Scans | ✅ | ✅ | ✅ |
 | Breakout Score | ✅ | ✅ | ✅ |
 | Charts | ✅ | ✅ | ✅ |
@@ -235,16 +236,16 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             st.caption(f"⚠️ {err}")
 
     with col_pro:
-        st.markdown("### 🚀 Pro")
-        st.caption("Unlock exports + advanced filters + scan history")
+        st.markdown("### 🚀 Pro · $19/mo")
+        st.caption("Unlock email alerts + exports + advanced filters + scan history")
         if current_tier_key in ("pro", "premium", "admin"):
             st.success("You already have Pro (or higher).")
         else:
             _plan_button("pro", "billing_upgrade_pro")
 
     with col_premium:
-        st.markdown("### ⭐ Premium")
-        st.caption("Unlock ML signals + full universe + diagnostics")
+        st.markdown("### ⭐ Premium · $39/mo")
+        st.caption("Unlock AI insights + ML signals + full universe + diagnostics")
         if current_tier_key in ("premium", "admin"):
             st.success("You already have Premium (or Admin).")
         else:
