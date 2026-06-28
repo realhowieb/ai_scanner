@@ -171,9 +171,13 @@ def _pricing_table() -> None:
 | Curated Breakout Scans | ✅ | ✅ | ✅ |
 | Breakout Score | ✅ | ✅ | ✅ |
 | Charts | ✅ | ✅ | ✅ |
+| Alerts (Breakout / Watchlist / Price) | 1 | 5 | 25 |
+| Email Alert Delivery | ❌ | ✅ | ✅ |
 | CSV Export | ❌ | ✅ | ✅ |
 | Advanced Filters | ❌ | ✅ | ✅ |
+| Earnings Calendar | ❌ | ✅ | ✅ |
 | Scan History | ❌ | ✅ | ✅ |
+| AI Insights (notes / summary / chat) | ❌ | ❌ | ✅ |
 | Early Breakout (ML) | ❌ | ❌ | ✅ |
 | Full Universe Mode | ❌ | ❌ | ✅ |
 | Diagnostics / Retrain | ❌ | ❌ | ✅ |
@@ -185,8 +189,9 @@ def _benefits_block() -> None:
     st.subheader("What’s locked + why")
     st.markdown(
         """
-- **🔒 Pro features** help you *move faster*: export results, use advanced filters, and review scan history.
-- **🔒 Premium features** help you *get earlier signals*: ML early breakout candidates, full-universe mode, and deeper diagnostics.
+- **Everyone** gets **1 alert** (Breakout / Watchlist / Price), checked automatically a few times a day — delivered in-app.
+- **🔒 Pro features** help you *move faster*: **5 alerts with email delivery**, CSV export, advanced filters, earnings calendar, and scan history.
+- **🔒 Premium features** help you *get earlier signals*: **25 alerts**, AI insights (notes / summary / chat), ML early breakout candidates, full-universe mode, and deeper diagnostics.
 """
     )
 
