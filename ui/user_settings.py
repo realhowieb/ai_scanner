@@ -19,16 +19,17 @@ def render_user_settings_footer(
     if session_username:
         st.session_state["username"] = session_username
 
-    st.sidebar.caption(
-        f"User settings status — user: {session_username or 'not set'}, "
-        f"storage: {'available' if callable(upsert_user_settings) else 'unavailable'}"
-    )
+    # Debug status line only when diagnostics are on (kept out of the default UI).
+    if st.session_state.get("show_diagnostics_ui"):
+        st.sidebar.caption(
+            f"User settings status — user: {session_username or 'not set'}, "
+            f"storage: {'available' if callable(upsert_user_settings) else 'unavailable'}"
+        )
 
     if not session_username:
         return
 
     if callable(upsert_user_settings):
-        st.sidebar.caption(f"Signed in as: {session_username}")
         if st.sidebar.button("💾 Save as my default settings"):
             _save_user_settings(
                 session_username=session_username,
