@@ -232,7 +232,10 @@ def _refresh_earnings() -> None:
     )
 
     key = "cron_earnings"
-    if not should_refresh_earnings_today(key):
+    # Manual "Run workflow" (CRON_FORCE=1) bypasses the daily throttle so the
+    # refresh can be tested on demand; scheduled runs respect once-per-day.
+    forced = os.getenv("CRON_FORCE", "").strip() == "1"
+    if not forced and not should_refresh_earnings_today(key):
         print("[earnings] already refreshed today; skipping")
         return
 
