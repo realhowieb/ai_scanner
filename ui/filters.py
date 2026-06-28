@@ -36,7 +36,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         try:
             from ui.ai import is_configured
             if is_configured():
-                with st.sidebar.expander("🤖 AI Assistant", expanded=False):
+                with st.sidebar.expander("💬 AI Assistant", expanded=False):
                     from ui.ai_screener import render_nl_screener
                     render_nl_screener()
         except Exception:
