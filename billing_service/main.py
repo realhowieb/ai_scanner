@@ -5,7 +5,10 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
+import psycopg2
 import stripe
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _log = logging.getLogger("billing_service")
@@ -17,20 +20,6 @@ def _validate_email(email: str) -> str:
     if not email or not _EMAIL_RE.match(email):
         raise ValueError(f"Invalid or missing email from webhook: {email!r}")
     return email
-
-# ---------- DB helpers ----------
-
-def _append_qp(url: str, key: str, value: str) -> str:
-    base = (url or "").strip() or "https://example.com"
-    # Idempotent: don't append the param if it's already present (avoids
-    # ?portal=return&portal=return when APP_*_URL already carries it).
-    if f"{key}=" in base:
-        return base
-    sep = "&" if "?" in base else "?"
-    return f"{base}{sep}{key}={value}"
-import psycopg2
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
@@ -62,6 +51,53 @@ print(
 
 
 # ---------- DB helpers ----------
+
+def _append_qp(url: str, key: str, value: str) -> str:
+    base = (url or "").strip()
+    if not base:
+        raise ValueError("Redirect URL is required")
+    # Idempotent: don't append the param if it's already present (avoids
+    # ?portal=return&portal=return when APP_*_URL already carries it).
+    if f"{key}=" in base:
+        return base
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}{key}={value}"
+
+
+def _required_env_missing(*names: str) -> list[str]:
+    values = {
+        "STRIPE_SECRET_KEY": STRIPE_SECRET_KEY,
+        "STRIPE_WEBHOOK_SECRET": STRIPE_WEBHOOK_SECRET,
+        "STRIPE_PRICE_PRO": STRIPE_PRICE_PRO,
+        "STRIPE_PRICE_PREMIUM": STRIPE_PRICE_PREMIUM,
+        "APP_SUCCESS_URL": APP_SUCCESS_URL,
+        "APP_CANCEL_URL": APP_CANCEL_URL,
+        "DATABASE_URL": DATABASE_URL,
+    }
+    return [name for name in names if not values.get(name)]
+
+
+def _require_env(*names: str) -> None:
+    missing = _required_env_missing(*names)
+    if missing:
+        raise HTTPException(500, f"Missing required billing env vars: {', '.join(missing)}")
+
+
+def _db_status() -> dict:
+    status = {"reachable": False, "error": None}
+    if not DATABASE_URL:
+        status["error"] = "DATABASE_URL is missing"
+        return status
+    try:
+        with _db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+        status["reachable"] = True
+    except Exception as e:
+        status["error"] = str(e)[:200]
+    return status
+
 
 def _ensure_processed_events_table(conn) -> None:
     with conn.cursor() as cur:
@@ -152,7 +188,7 @@ def _set_user_plan_by_email(
                 ),
             )
             if cur.rowcount == 0:
-                print(f"[billing_service][WARN] No user row updated for email={email_key}")
+                raise LookupError(f"No user row updated for email={email_key}")
         conn.commit()
 
 
@@ -166,21 +202,16 @@ def _get_user_by_email(email: str) -> dict:
     email_key = (email or "").strip().lower()
     if not email_key:
         return {}
-    try:
-        with _db_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT username, tier, stripe_customer_id FROM users WHERE username = %s LIMIT 1",
-                    (email_key,),
-                )
-                row = cur.fetchone()
-        if not row:
-            return {}
-        return {"username": row[0], "tier": row[1], "stripe_customer_id": row[2]}
-    except Exception as e:
-        # DB issues should not block checkout creation.
-        print(f"[billing_service] DB lookup failed for {email_key}: {e}")
+    with _db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT username, tier, stripe_customer_id FROM users WHERE username = %s LIMIT 1",
+                (email_key,),
+            )
+            row = cur.fetchone()
+    if not row:
         return {}
+    return {"username": row[0], "tier": row[1], "stripe_customer_id": row[2]}
 
 
 def _price_to_plan(price_id: str) -> str:
@@ -194,16 +225,29 @@ def _price_to_plan(price_id: str) -> str:
 # ---------- API ----------
 @app.get("/health")
 def health():
-    # 'features' lets you confirm which code version is deployed without
-    # exposing secrets — handy after a Render redeploy.
-    return {"ok": True, "features": ["url_override", "idempotent_qp"]}
+    missing = _required_env_missing(
+        "STRIPE_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_PRICE_PRO",
+        "STRIPE_PRICE_PREMIUM",
+        "APP_SUCCESS_URL",
+        "APP_CANCEL_URL",
+        "DATABASE_URL",
+    )
+    db = _db_status()
+    ok = not missing and bool(db["reachable"])
+    body = {"ok": ok, "missing_env": missing, "db": db}
+    if not ok:
+        return JSONResponse(body, status_code=503)
+    body["features"] = ["url_override", "idempotent_qp", "billing_readiness"]
+    return body
 
 
 @app.get("/debug/status")
 def debug_status():
     # Do not return secrets; only whether they are set.
     status = {
-        "ok": True,
+        "ok": False,
         "env": {
             "STRIPE_SECRET_KEY": bool(STRIPE_SECRET_KEY),
             "STRIPE_WEBHOOK_SECRET": bool(STRIPE_WEBHOOK_SECRET),
@@ -213,19 +257,19 @@ def debug_status():
             "APP_CANCEL_URL": bool(APP_CANCEL_URL),
             "DATABASE_URL": bool(DATABASE_URL),
         },
-        "db": {"reachable": False, "error": None},
+        "db": _db_status(),
     }
-
-    if DATABASE_URL:
-        try:
-            with _db_conn() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-                    cur.fetchone()
-            status["db"]["reachable"] = True
-        except Exception as e:
-            status["db"]["error"] = str(e)[:200]
-
+    required = (
+        "STRIPE_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_PRICE_PRO",
+        "STRIPE_PRICE_PREMIUM",
+        "APP_SUCCESS_URL",
+        "APP_CANCEL_URL",
+        "DATABASE_URL",
+    )
+    status["missing_env"] = _required_env_missing(*required)
+    status["ok"] = not status["missing_env"] and bool(status["db"]["reachable"])
     return status
 
 
@@ -238,8 +282,13 @@ async def create_checkout_session(payload: dict):
       "plan": "pro" | "premium"
     }
     """
-    if not STRIPE_PRICE_PRO or not STRIPE_PRICE_PREMIUM:
-        raise HTTPException(500, "Missing STRIPE_PRICE_PRO/STRIPE_PRICE_PREMIUM env vars")
+    _require_env(
+        "STRIPE_PRICE_PRO",
+        "STRIPE_PRICE_PREMIUM",
+        "APP_SUCCESS_URL",
+        "APP_CANCEL_URL",
+        "DATABASE_URL",
+    )
 
     email = (payload.get("email") or "").strip().lower()
     plan = (payload.get("plan") or "").strip().lower()
@@ -262,22 +311,24 @@ async def create_checkout_session(payload: dict):
             pass
         return None
 
-    success_url = _append_qp(APP_SUCCESS_URL or "https://example.com", "checkout", "success")
+    success_url = _append_qp(APP_SUCCESS_URL, "checkout", "success")
     success_override = _validate_same_host((payload.get("success_url") or "").strip())
     if success_override:
         success_url = success_override
 
-    portal_return_url = _append_qp(
-        APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com", "portal", "return"
-    )
+    portal_return_url = _append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL, "portal", "return")
     return_override = _validate_same_host((payload.get("return_url") or "").strip())
     if return_override:
         portal_return_url = return_override
 
     price_id = STRIPE_PRICE_PRO if plan == "pro" else STRIPE_PRICE_PREMIUM
 
-    # Use existing customer if we have it
-    user = _get_user_by_email(email)  # safe: returns {} on DB failure
+    try:
+        user = _get_user_by_email(email)
+    except Exception as e:
+        raise HTTPException(503, f"User database lookup failed: {e}")
+    if not user:
+        raise HTTPException(404, "No app user exists for this email. Please sign up before upgrading.")
     customer_id = user.get("stripe_customer_id") if user else None
 
     # If this customer already has an active subscription, DO NOT create a second subscription.
@@ -303,7 +354,7 @@ async def create_checkout_session(payload: dict):
             line_items=[{"price": price_id, "quantity": 1}],
             allow_promotion_codes=True,
             success_url=success_url,
-            cancel_url=_append_qp(APP_CANCEL_URL or "https://example.com", "checkout", "cancel"),
+            cancel_url=_append_qp(APP_CANCEL_URL, "checkout", "cancel"),
             metadata={
                 "user_email": email,
                 "requested_plan": plan,
@@ -326,14 +377,16 @@ async def create_portal_session(payload: dict):
     if not email or "@" not in email:
         raise HTTPException(400, "Valid email is required")
 
-    user = _get_user_by_email(email)
+    _require_env("APP_SUCCESS_URL", "DATABASE_URL")
+    try:
+        user = _get_user_by_email(email)
+    except Exception as e:
+        raise HTTPException(503, f"User database lookup failed: {e}")
     customer_id = user.get("stripe_customer_id")
     if not customer_id:
         raise HTTPException(400, "No Stripe customer found for this user yet")
 
-    return_url = _append_qp(
-        APP_PORTAL_RETURN_URL or APP_SUCCESS_URL or "https://example.com", "portal", "return"
-    )
+    return_url = _append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL, "portal", "return")
     override = (payload.get("return_url") or "").strip()
     if override:
         try:
@@ -358,6 +411,7 @@ async def create_portal_session(payload: dict):
 async def stripe_webhook(request: Request):
     if not STRIPE_WEBHOOK_SECRET:
         raise HTTPException(500, "Missing STRIPE_WEBHOOK_SECRET env var")
+    _require_env("DATABASE_URL")
 
     payload = await request.body()
     sig = request.headers.get("stripe-signature")
@@ -394,7 +448,7 @@ async def stripe_webhook(request: Request):
             email = _validate_email(raw_email)
         except ValueError as exc:
             _log.warning("checkout.session.completed: %s", exc)
-            return JSONResponse({"received": True, "type": etype, "note": str(exc)})
+            raise HTTPException(500, str(exc))
         customer_id = data.get("customer")
         subscription_id = data.get("subscription")
 
@@ -407,6 +461,8 @@ async def stripe_webhook(request: Request):
             price_id = None
             plan = (data.get("metadata", {}) or {}).get("requested_plan") or "basic"
             plan = plan.strip().lower()
+        if plan not in {"pro", "premium"}:
+            raise HTTPException(500, f"Could not determine paid plan for checkout session {data.get('id')}")
 
         try:
             _set_user_plan_by_email(
@@ -430,12 +486,12 @@ async def stripe_webhook(request: Request):
         # We need user_email; safest is to look it up from Stripe customer email
         try:
             cust = stripe.Customer.retrieve(customer_id)
-            email = (cust.get("email") or "").strip().lower()
-        except Exception:
-            email = ""
+            email = _validate_email(cust.get("email") or "")
+        except Exception as exc:
+            raise HTTPException(500, f"Missing customer email for subscription update: {exc}")
 
         if not email:
-            return JSONResponse({"received": True, "type": etype, "note": "missing customer email"})
+            raise HTTPException(500, "Missing customer email for subscription update")
 
         # Immediate cancellation -> downgrade to basic now
         if status == "canceled":
@@ -481,21 +537,22 @@ async def stripe_webhook(request: Request):
         customer_id = data.get("customer")
         try:
             cust = stripe.Customer.retrieve(customer_id)
-            email = (cust.get("email") or "").strip().lower()
-        except Exception:
-            email = ""
+            email = _validate_email(cust.get("email") or "")
+        except Exception as exc:
+            raise HTTPException(500, f"Missing customer email for subscription deletion: {exc}")
 
-        if email:
-            try:
-                _set_user_plan_by_email(
-                    email=email,
-                    tier="basic",
-                    stripe_customer_id=customer_id,
-                    stripe_subscription_id=data.get("id"),
-                    stripe_price_id=None,
-                )
-            except Exception as e:
-                raise HTTPException(500, f"DB update failed: {e}")
+        if not email:
+            raise HTTPException(500, "Missing customer email for subscription deletion")
+        try:
+            _set_user_plan_by_email(
+                email=email,
+                tier="basic",
+                stripe_customer_id=customer_id,
+                stripe_subscription_id=data.get("id"),
+                stripe_price_id=None,
+            )
+        except Exception as e:
+            raise HTTPException(500, f"DB update failed: {e}")
 
     # Mark the event processed so retries are skipped.
     if DATABASE_URL and event_id:

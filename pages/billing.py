@@ -26,21 +26,34 @@ POST_RETRY_SLEEP_S = float(os.getenv("BILLING_POST_RETRY_SLEEP", "1.0"))
 # Billing service helpers
 # =========================
 
-def _billing_healthcheck() -> bool:
-    """Return True if billing service is reachable quickly."""
+def _billing_healthcheck() -> tuple[bool, str | None]:
+    """Return billing readiness and a short reason when unavailable."""
     try:
         r = requests.get(f"{BILLING_API_BASE}/health", timeout=HEALTH_TIMEOUT_S)
-        return r.status_code == 200
+        if r.status_code == 200:
+            return True, None
+        try:
+            data = r.json() or {}
+            missing = data.get("missing_env") or []
+            if missing:
+                return False, f"Billing service is missing launch config: {', '.join(missing)}."
+            db = data.get("db") or {}
+            if db.get("error"):
+                return False, f"Billing database is not ready: {db['error']}."
+        except Exception:
+            pass
+        return False, f"Billing service is not ready yet (HTTP {r.status_code})."
     except Exception:
-        return False
+        return False, None
 
 
 def _billing_post_json(path: str, payload: dict) -> dict:
     """POST JSON to billing service with cold-start-friendly behavior."""
     # Fast preflight: avoids waiting on a long POST when the service is asleep.
-    if not _billing_healthcheck():
+    ready, reason = _billing_healthcheck()
+    if not ready:
         raise RuntimeError(
-            "Billing service is waking up (cold start). Please wait ~20–40 seconds and try again."
+            reason or "Billing service is waking up (cold start). Please wait ~20–40 seconds and try again."
         )
 
     last_err = None

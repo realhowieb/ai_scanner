@@ -79,7 +79,19 @@ python -m pip install -r billing_service/requirements.txt
 uvicorn billing_service.main:app --host 0.0.0.0 --port 8000
 ```
 
-Required billing environment variables include `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_PREMIUM`, and `DATABASE_URL`.
+Required billing service environment variables:
+
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_PRO`
+- `STRIPE_PRICE_PREMIUM`
+- `DATABASE_URL`
+- `APP_SUCCESS_URL`
+- `APP_CANCEL_URL`
+
+Required Streamlit app billing setting:
+
+- `BILLING_API_BASE`
 
 ## Database Notes
 
