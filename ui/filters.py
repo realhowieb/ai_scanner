@@ -7,6 +7,14 @@ import streamlit as st
 from auth.tiering import has_min_tier  # fallback only; entitlements are preferred
 
 
+def _clamp_int(value, *, minimum: int, maximum: int, fallback: int) -> int:
+    try:
+        current = int(value)
+    except (TypeError, ValueError):
+        current = fallback
+    return max(minimum, min(maximum, current))
+
+
 def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool, bool, bool, float, bool, bool]:
     """Render the sidebar filters and return the selected values.
 
@@ -60,7 +68,12 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     default_min_gap = float(st.session_state.get("min_gap", 1.0))
     default_min_price = float(st.session_state.get("min_price", 1.0))
     default_max_price = float(st.session_state.get("max_price", 1000.0))
-    default_top_n = int(st.session_state.get("top_n", min(25, tier.max_results)))
+    default_top_n = _clamp_int(
+        st.session_state.get("top_n", min(25, tier.max_results)),
+        minimum=5,
+        maximum=int(tier.max_results),
+        fallback=min(25, int(tier.max_results)),
+    )
     default_max_nasdaq_scan = int(st.session_state.get("max_nasdaq_scan", 1200))
     default_max_combo_scan = int(st.session_state.get("max_combo_scan", 1000))
     default_premarket = bool(st.session_state.get("premarket", False))
@@ -123,6 +136,13 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Initialize top_n through session_state if not already set
     if "top_n" not in st.session_state:
         st.session_state["top_n"] = default_top_n
+    else:
+        st.session_state["top_n"] = _clamp_int(
+            st.session_state["top_n"],
+            minimum=5,
+            maximum=int(tier.max_results),
+            fallback=default_top_n,
+        )
 
     top_n = st.sidebar.slider(
         "Top N Results",
