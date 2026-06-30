@@ -7,6 +7,17 @@ import pandas as pd
 from db.runs import list_runs, load_run_results
 
 try:
+    from db.prebreakout_models import (
+        load_latest_prebreakout_model_bundle,
+        save_prebreakout_model,
+        serialize_model_to_bytes,
+    )
+except Exception:  # pragma: no cover - keeps ML imports resilient in partial deploys
+    load_latest_prebreakout_model_bundle = None  # type: ignore[assignment]
+    save_prebreakout_model = None  # type: ignore[assignment]
+    serialize_model_to_bytes = None  # type: ignore[assignment]
+
+try:
     import joblib
 except Exception:  # pragma: no cover - optional ML dependency
     joblib = None  # type: ignore
@@ -25,6 +36,7 @@ except Exception:  # pragma: no cover - optional ML dependency
 
 
 MODEL_PATH = "prebreakout_model.pkl"
+MODEL_VERSION = "prebreakout-xgb-v1"
 
 
 def _utc_now() -> datetime:
@@ -183,11 +195,26 @@ def build_ml_dataset(df: pd.DataFrame):
 def load_prebreakout_model(model_path: str = MODEL_PATH):
     """
     Load model bundle with model, features, trained_at, auc.
+
+    Database is the durable source of truth. Local file loading is retained as
+    a best-effort fallback only, so app reboots do not require retraining when
+    a saved database model exists.
     """
     if joblib is None:
         return None
+    if load_latest_prebreakout_model_bundle is not None:
+        try:
+            bundle = load_latest_prebreakout_model_bundle(joblib)
+            if bundle:
+                return bundle
+            return None
+        except Exception as e:
+            print(f"[ml_prebreakout] DB model load failed: {e}")
     try:
-        return joblib.load(model_path)
+        bundle = joblib.load(model_path)
+        if isinstance(bundle, dict):
+            bundle.setdefault("source", "local")
+        return bundle
     except Exception:
         return None
 
@@ -279,7 +306,25 @@ def train_prebreakout_model(
         "features": list(X.columns),
         "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
         "auc": float(auc),
+        "model_version": MODEL_VERSION,
+        "source": "local",
     }
+
+    if save_prebreakout_model is not None and serialize_model_to_bytes is not None:
+        try:
+            saved = save_prebreakout_model(
+                model_bytes=serialize_model_to_bytes(clf, joblib),
+                feature_names=list(X.columns),
+                auc=float(auc),
+                trained_at=str(bundle["trained_at"]),
+                model_version=MODEL_VERSION,
+            )
+            if saved:
+                bundle["source"] = "database"
+        except Exception as e:
+            bundle["db_save_error"] = str(e)
+            print(f"[ml_prebreakout] DB model save failed: {e}")
+
     joblib.dump(bundle, model_path)
     print(f"[ml_prebreakout] Saved XGBoost model to {model_path}")
     return bundle

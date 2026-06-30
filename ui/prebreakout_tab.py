@@ -83,8 +83,15 @@ def render_prebreakout_tab() -> None:
     # --- Model status + training controls ---
     with st.expander("🧠 Model status & training", expanded=False):
         bundle = load_prebreakout_model()
+        features = list(bundle.get("features", []) if bundle else [])
+        status_cols = st.columns(5)
+        status_cols[0].metric("Model loaded", "Yes" if bundle else "No")
+        status_cols[1].metric("AUC", "—" if not bundle else f"{float(bundle.get('auc') or 0):.3f}")
+        status_cols[2].metric("trained_at", "—" if not bundle else str(bundle.get("trained_at") or "unknown"))
+        status_cols[3].metric("Feature count", str(len(features)) if bundle else "0")
+        status_cols[4].metric("Source", str(bundle.get("source") or "unknown") if bundle else "—")
+
         if bundle:
-            features = bundle.get("features", [])
             feature_preview = ", ".join(features[:8])
             if len(features) > 8:
                 feature_preview += ", ..."
@@ -93,12 +100,15 @@ def render_prebreakout_tab() -> None:
                 f"Current model loaded.\n\n"
                 f"- AUC: **{bundle.get('auc', 0):.3f}**\n"
                 f"- Trained at: **{bundle.get('trained_at', 'unknown')}**\n"
+                f"- Source: **{bundle.get('source', 'unknown')}**\n"
                 f"- Features: `{feature_preview}`"
             )
+            if bundle.get("db_save_error"):
+                st.caption(f"⚠️ Last database save warning: {bundle.get('db_save_error')}")
         else:
             st.warning(
                 "No pre-breakout model is currently loaded. "
-                "Train a new model using your historical runs."
+                "No saved database model was found. Train a new model using your historical runs."
             )
 
         if st.button("🚀 Train / Refresh model from DB history", width="stretch"):
@@ -110,8 +120,11 @@ def render_prebreakout_tab() -> None:
             if trained_bundle:
                 st.success(
                     f"Model trained! AUC={trained_bundle.get('auc', 0):.3f}, "
-                    f"trained_at={trained_bundle.get('trained_at', 'unknown')}"
+                    f"trained_at={trained_bundle.get('trained_at', 'unknown')}, "
+                    f"source={trained_bundle.get('source', 'unknown')}"
                 )
+                if trained_bundle.get("db_save_error"):
+                    st.caption(f"⚠️ Database save warning: {trained_bundle.get('db_save_error')}")
             else:
                 st.error(
                     "Training failed. Check the app logs for details "
