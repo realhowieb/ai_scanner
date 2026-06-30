@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 from auth.tiering import require_min_tier
 from db.runs import list_runs, save_run
 from ml_prebreakout import score_prebreakout
+from scan.ai_confidence import score_ai_confidence
 from scan.engine import run_breakout_scan, safe_call
 from scan.options import (
     DEFAULT_MARKET,
@@ -139,6 +140,7 @@ def run_scan_engine(
         df = score_prebreakout(df)
     except (ImportError, RuntimeError, TypeError, ValueError):
         pass
+    df = score_ai_confidence(df)
     return df
 
 

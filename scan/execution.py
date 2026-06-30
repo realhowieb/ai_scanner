@@ -9,6 +9,7 @@ from collections.abc import Callable
 
 import pandas as pd
 
+from .ai_confidence import score_ai_confidence
 from .strategies import apply_strategy_filter
 
 try:
@@ -123,5 +124,6 @@ def run_manual_scan_execution(
                 frame = score_prebreakout(frame)
             except (RuntimeError, TypeError, ValueError, KeyError, AttributeError):
                 pass
+        frame = score_ai_confidence(frame)
 
     return frame
