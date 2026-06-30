@@ -38,11 +38,13 @@ class AiConfidenceTests(unittest.TestCase):
         frame = pd.DataFrame({"Trend10D%": [1.0]})
         with tempfile.TemporaryDirectory() as tmp:
             metadata_path = self._metadata_path(tmp, ["Trend10D%"])
-            result = score_ai_confidence(
-                frame,
-                model_path=Path(tmp) / "missing.joblib",
-                metadata_path=metadata_path,
-            )
+            fake_joblib = types.SimpleNamespace(load=lambda _path: FakeConfidenceModel())
+            with patch("scan.ai_confidence.joblib", fake_joblib):
+                result = score_ai_confidence(
+                    frame,
+                    model_path=Path(tmp) / "missing.joblib",
+                    metadata_path=metadata_path,
+                )
 
         self.assertNotIn(CONFIDENCE_COL, result.columns)
         self.assertIn("not available", result.attrs[WARNING_ATTR])
