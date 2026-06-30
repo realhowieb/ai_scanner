@@ -90,6 +90,11 @@ def render_alerts_panel(
             f"You're using all **{used}/{max_alerts}** alerts on your plan. "
             "Upgrade for more alert slots."
         )
+        if used > int(max_alerts):
+            st.caption(
+                f"Only your newest {int(max_alerts)} alert(s) can actively fire on this plan. "
+                "Older alerts stay saved so you can delete them or upgrade later."
+            )
     else:
         st.caption(f"Using {used} of {max_alerts} alert slots on your plan.")
 
@@ -174,11 +179,13 @@ def render_alerts_panel(
     # --- Existing alerts ---
     if existing:
         st.markdown("**Your alerts**")
-        for a in existing:
+        for index, a in enumerate(existing):
             cols = st.columns([6, 2, 2])
             label = _fmt_alert(a)
             if not a.get("enabled"):
                 label = f"~~{label}~~ (paused)"
+            elif index >= int(max_alerts):
+                label = f"{label} _(over plan limit)_"
             cols[0].markdown(label)
             new_enabled = cols[1].toggle(
                 "On", value=bool(a.get("enabled")), key=f"alert_tog_{a['id']}"

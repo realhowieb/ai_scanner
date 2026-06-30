@@ -167,7 +167,7 @@ def list_all_enabled_alerts() -> List[Dict[str, Any]]:
     cur = conn.cursor()
     cur.execute(
         f"SELECT {_SELECT_COLS} FROM user_alerts WHERE enabled = TRUE "
-        "ORDER BY user_id ASC"
+        "ORDER BY user_id ASC, created_at DESC, id DESC"
     )
     rows = cur.fetchall()
     cur.close()

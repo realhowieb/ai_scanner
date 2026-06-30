@@ -162,17 +162,29 @@ def _is_verified(email: str) -> bool:
         return False
 
 
-def _email_allowed_for_tier(user_id: str) -> bool:
-    """Email alerts are a Pro+ perk; Basic users get in-app alerts only."""
+def _tier_key_for_user(user_id: str) -> str:
     try:
         from auth.tier_sync import resolve_user_tier
 
         res = resolve_user_tier(user_id)
         key = (res.get("tier_key") if isinstance(res, dict) else None) or "basic"
-        return str(key).strip().lower() in ("pro", "premium", "admin")
+        return str(key).strip().lower() or "basic"
     except Exception:
-        # Fail closed: if we can't determine the tier, don't email.
-        return False
+        return "basic"
+
+
+def _alert_limit_for_user(user_id: str) -> int:
+    try:
+        from ui.app_session import alert_limit_for_tier
+
+        return int(alert_limit_for_tier(_tier_key_for_user(user_id)))
+    except Exception:
+        return 1
+
+
+def _email_allowed_for_tier(user_id: str) -> bool:
+    """Email alerts are a Pro+ perk; Basic users get in-app alerts only."""
+    return _tier_key_for_user(user_id) in ("pro", "premium", "admin")
 
 
 def run_alerts() -> None:
@@ -211,6 +223,8 @@ def run_alerts() -> None:
 
     # Resolve each user's watchlist tickers once (lazily, cached per user).
     watch_cache: Dict[str, set] = {}
+    limit_cache: Dict[str, int] = {}
+    active_seen: Dict[str, int] = {}
 
     def _watch_for(user_id: str) -> set:
         if user_id in watch_cache:
@@ -236,6 +250,13 @@ def run_alerts() -> None:
             if _throttled(alert.get("last_fired_at"), float(ALERT_THROTTLE_HOURS)):
                 continue
             user_id = str(alert.get("user_id") or "")
+            if user_id not in limit_cache:
+                limit_cache[user_id] = _alert_limit_for_user(user_id)
+            active_seen[user_id] = active_seen.get(user_id, 0)
+            if active_seen[user_id] >= limit_cache[user_id]:
+                continue
+            active_seen[user_id] += 1
+
             needs_watch = alert.get("alert_type") == "watchlist" or alert.get(
                 "watchlist_only"
             )
