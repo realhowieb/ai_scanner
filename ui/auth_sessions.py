@@ -38,7 +38,7 @@ def _get_secret(name: str) -> str | None:
 
 
 def _profile() -> str:
-    return (os.environ.get("PROFILE") or os.environ.get("ENV") or "dev").strip().lower()
+    return (os.environ.get("PROFILE") or os.environ.get("ENV") or "prod").strip().lower()
 
 
 _COOKIE_PASSWORD_CACHE: str | None = None

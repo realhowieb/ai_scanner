@@ -7,6 +7,22 @@ import streamlit as st
 from auth.tiering import has_min_tier  # fallback only; entitlements are preferred
 
 
+def _clamp_int(value, *, minimum: int, maximum: int, fallback: int) -> int:
+    try:
+        current = int(value)
+    except (TypeError, ValueError):
+        current = fallback
+    return max(minimum, min(maximum, current))
+
+
+def _clamp_float(value, *, minimum: float, maximum: float, fallback: float) -> float:
+    try:
+        current = float(value)
+    except (TypeError, ValueError):
+        current = fallback
+    return max(minimum, min(maximum, current))
+
+
 def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool, bool, bool, float, bool, bool]:
     """Render the sidebar filters and return the selected values.
 
@@ -57,10 +73,20 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     is_premium_plus = _entitled("can_full_universe", fallback_min_tier="premium")
     can_diagnostics = _entitled("can_diagnostics", fallback_min_tier=None)
     # Seed defaults from session_state if present (loaded from user_settings)
-    default_min_gap = float(st.session_state.get("min_gap", 1.0))
-    default_min_price = float(st.session_state.get("min_price", 1.0))
-    default_max_price = float(st.session_state.get("max_price", 1000.0))
-    default_top_n = int(st.session_state.get("top_n", min(25, tier.max_results)))
+    default_min_gap = _clamp_float(st.session_state.get("min_gap", 1.0), minimum=0.0, maximum=20.0, fallback=1.0)
+    default_min_price = _clamp_float(st.session_state.get("min_price", 1.0), minimum=0.5, maximum=500.0, fallback=1.0)
+    default_max_price = _clamp_float(
+        st.session_state.get("max_price", 1000.0),
+        minimum=1.0,
+        maximum=5000.0,
+        fallback=1000.0,
+    )
+    default_top_n = _clamp_int(
+        st.session_state.get("top_n", min(25, tier.max_results)),
+        minimum=5,
+        maximum=int(tier.max_results),
+        fallback=min(25, int(tier.max_results)),
+    )
     default_max_nasdaq_scan = int(st.session_state.get("max_nasdaq_scan", 1200))
     default_max_combo_scan = int(st.session_state.get("max_combo_scan", 1000))
     default_premarket = bool(st.session_state.get("premarket", False))
@@ -77,6 +103,13 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Initialize min_gap through session_state if not already set
     if "min_gap" not in st.session_state:
         st.session_state["min_gap"] = default_min_gap
+    else:
+        st.session_state["min_gap"] = _clamp_float(
+            st.session_state["min_gap"],
+            minimum=0.0,
+            maximum=20.0,
+            fallback=default_min_gap,
+        )
 
     # Pro+ tiers get advanced filters (TA + Gap); Basic sees them disabled.
 
@@ -99,6 +132,13 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Initialize min_price through session_state if not already set
     if "min_price" not in st.session_state:
         st.session_state["min_price"] = default_min_price
+    else:
+        st.session_state["min_price"] = _clamp_float(
+            st.session_state["min_price"],
+            minimum=0.5,
+            maximum=500.0,
+            fallback=default_min_price,
+        )
 
     min_price = st.sidebar.number_input(
         "Min Price",
@@ -111,6 +151,13 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Initialize max_price through session_state if not already set
     if "max_price" not in st.session_state:
         st.session_state["max_price"] = default_max_price
+    else:
+        st.session_state["max_price"] = _clamp_float(
+            st.session_state["max_price"],
+            minimum=1.0,
+            maximum=5000.0,
+            fallback=default_max_price,
+        )
 
     max_price = st.sidebar.number_input(
         "Max Price",
@@ -123,6 +170,13 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Initialize top_n through session_state if not already set
     if "top_n" not in st.session_state:
         st.session_state["top_n"] = default_top_n
+    else:
+        st.session_state["top_n"] = _clamp_int(
+            st.session_state["top_n"],
+            minimum=5,
+            maximum=int(tier.max_results),
+            fallback=default_top_n,
+        )
 
     top_n = st.sidebar.slider(
         "Top N Results",
@@ -189,6 +243,13 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Initialize max_combo_scan through session_state if not already set
     if "max_combo_scan" not in st.session_state:
         st.session_state["max_combo_scan"] = default_max_combo_scan
+    else:
+        st.session_state["max_combo_scan"] = _clamp_int(
+            st.session_state["max_combo_scan"],
+            minimum=100,
+            maximum=6000,
+            fallback=default_max_combo_scan,
+        )
 
     if not is_pro_plus:
         max_combo_scan = st.sidebar.number_input(
@@ -266,6 +327,8 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     # Initialize unusual_vol through session_state if not already set
     if "unusual_vol" not in st.session_state:
         st.session_state["unusual_vol"] = default_unusual_vol
+    elif not getattr(tier, "can_unusual_volume", False):
+        st.session_state["unusual_vol"] = False
 
     unusual_vol = st.sidebar.checkbox(
         "Unusual Volume Filter",
