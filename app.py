@@ -11,13 +11,29 @@ if str(BASE_DIR) not in sys.path:
 import pandas as pd
 import streamlit as st
 
-from ui.app_boot import (
-    configure_page,
-    install_streamlit_compat,
-)
-from ui.app_boot import (
-    quiet_external_calls as _quiet_external_calls,
-)
+try:
+    from ui.app_boot import (
+        configure_page,
+        install_streamlit_compat,
+    )
+    from ui.app_boot import (
+        quiet_external_calls as _quiet_external_calls,
+    )
+except (ImportError, KeyError):
+    import importlib.util
+
+    _APP_BOOT_PATH = BASE_DIR / "ui" / "app_boot.py"
+    _APP_BOOT_SPEC = importlib.util.spec_from_file_location(
+        "_ai_scanner_ui_app_boot",
+        _APP_BOOT_PATH,
+    )
+    if _APP_BOOT_SPEC is None or _APP_BOOT_SPEC.loader is None:
+        raise
+    _app_boot = importlib.util.module_from_spec(_APP_BOOT_SPEC)
+    _APP_BOOT_SPEC.loader.exec_module(_app_boot)
+    configure_page = _app_boot.configure_page
+    install_streamlit_compat = _app_boot.install_streamlit_compat
+    _quiet_external_calls = _app_boot.quiet_external_calls
 from ui.app_runtime import (
     get_market_session,
     render_active_filters_summary,
