@@ -7,7 +7,7 @@ from typing import Callable, Optional
 import pandas as pd
 import streamlit as st
 
-from scan.ai_confidence import TRAINED_AT_ATTR, WARNING_ATTR
+from scan.ai_confidence import SOURCE_ATTR, TRAINED_AT_ATTR, WARNING_ATTR
 from ui.result_helpers import (
     as_optional_float,
     auto_details_ticker,
@@ -87,10 +87,12 @@ def render_results(
     st.subheader("Results")
     ai_warning = df.attrs.get(WARNING_ATTR)
     ai_trained_at = df.attrs.get(TRAINED_AT_ATTR)
+    ai_source = df.attrs.get(SOURCE_ATTR)
     if ai_warning:
         st.caption(f"⚠️ {ai_warning}")
     if ai_trained_at:
-        st.caption(f"AI Confidence model trained at: {ai_trained_at}")
+        source_text = f" • source: {ai_source}" if ai_source else ""
+        st.caption(f"AI Confidence model trained at: {ai_trained_at}{source_text}")
     st.caption(
         f"Showing {len(df)} results. Increase 'Top N Results' in the sidebar to see more, "
         "or relax filters (Min Gap %, price range, Unusual Volume Filter). "
