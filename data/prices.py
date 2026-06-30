@@ -56,6 +56,8 @@ _YFINANCE_BASE_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, V
 # results, but fresh data is fetched on subsequent runs.
 _PRICE_CACHE_TTL_SECONDS: float = 60.0  # ~1 minute; tuned for daily bars
 _PRICE_CACHE: Dict[str, tuple[_pd.DataFrame, float]] = {}
+_MISSING_PRICE_CACHE_TTL_SECONDS: float = 900.0  # avoid repeated dead-symbol provider calls
+_MISSING_PRICE_CACHE: Dict[str, tuple[str, float]] = {}
 
 def clear_price_cache() -> None:
     """Clear the in-memory price DataFrame cache.
@@ -63,6 +65,7 @@ def clear_price_cache() -> None:
     This is useful when debugging or when you suspect stale OHLCV data.
     """
     _PRICE_CACHE.clear()
+    _MISSING_PRICE_CACHE.clear()
 
 # yfinance import (used for historical OHLCV). We keep the import error so
 # the UI can surface a clear message when running in restricted environments.
@@ -185,6 +188,38 @@ def _log(logger: Callable[[str], None] | None, msg: str) -> None:
             pass
 
 
+def _missing_cache_key(sym: str, cfg: PriceFetchConfig) -> str:
+    return f"{str(sym).upper()}|{cfg.period}|{cfg.interval}|{int(bool(cfg.prepost))}"
+
+
+def _remember_missing(sym: str, cfg: PriceFetchConfig, reason: str) -> None:
+    _MISSING_PRICE_CACHE[_missing_cache_key(sym, cfg)] = (reason, _time.time())
+
+
+def _recent_missing_reason(sym: str, cfg: PriceFetchConfig) -> str | None:
+    key = _missing_cache_key(sym, cfg)
+    entry = _MISSING_PRICE_CACHE.get(key)
+    if not entry:
+        return None
+    reason, ts = entry
+    if _time.time() - float(ts) <= _MISSING_PRICE_CACHE_TTL_SECONDS:
+        return reason
+    _MISSING_PRICE_CACHE.pop(key, None)
+    return None
+
+
+def _dedupe_skipped(skipped: Sequence[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    seen: set[tuple[str, str]] = set()
+    deduped: List[Tuple[str, str]] = []
+    for sym, reason in skipped or []:
+        item = (str(sym).upper(), str(reason))
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return deduped
+
+
 # ----------------- Core download routines -----------------
 
 def _download_multi(
@@ -269,8 +304,8 @@ def _download_batch(
     # through to the per-symbol yfinance loop below — unless PRICE_SKIP_YF_FALLBACK
     # is set, in which case stragglers (mostly micro-caps/warrants not on Alpaca's
     # IEX feed, which never pass filters) are skipped for a big speedup.
-    alpaca_returned_data = False
-    if _get_alpaca_config() is not None:
+    alpaca_configured = _get_alpaca_config() is not None
+    if alpaca_configured:
         try:
             alpaca_data = _download_multi_alpaca(
                 remaining, cfg.period, cfg.interval, cfg.prepost, cfg.timeout_s
@@ -285,21 +320,30 @@ def _download_batch(
                 data[str(sym).upper()] = norm
             got = set(data.keys())
             remaining = [s for s in remaining if s not in got]
-            alpaca_returned_data = len(got) > 0
         except _ALPACA_ERRORS as e:
             print(f"[prices] Alpaca batch failed, falling back to yfinance: {type(e).__name__}: {e}")
 
-    # Skip the slow per-symbol yfinance fallback when Alpaca already returned
-    # data and the operator opted into Alpaca-only mode for speed.
-    if alpaca_returned_data and os.getenv("PRICE_SKIP_YF_FALLBACK", "").strip() == "1":
+    # Skip the slow/noisy per-symbol yfinance fallback when the operator opted
+    # into Alpaca-only mode. This applies even when Alpaca returns no bars for
+    # the entire batch; otherwise all-empty chunks repeatedly fall through to
+    # Yahoo and spam "possibly delisted" warnings for the same symbols.
+    if alpaca_configured and os.getenv("PRICE_SKIP_YF_FALLBACK", "").strip() == "1":
         for sym in remaining:
-            skipped.append((str(sym).upper(), "skipped_yf_fallback"))
+            sym_u = str(sym).upper()
+            skipped.append((sym_u, "skipped_yf_fallback"))
+            _remember_missing(sym_u, cfg, "skipped_yf_fallback")
         remaining = []
 
     for sym in remaining:
         sym_u = str(sym).upper()
+        cached_missing = _recent_missing_reason(sym_u, cfg)
+        if cached_missing:
+            skipped.append((sym_u, f"recent_missing:{cached_missing}"))
+            continue
+
         if _yf is None:
             skipped.append((sym_u, "yf_not_installed"))
+            _remember_missing(sym_u, cfg, "yf_not_installed")
             continue
 
         # 1) Pull raw bars via per-symbol Ticker().history
@@ -353,10 +397,12 @@ def _download_batch(
                 pass
         except _YFINANCE_ERRORS as e:
             skipped.append((sym_u, f"error_download:{type(e).__name__}:{e}"))
+            _remember_missing(sym_u, cfg, f"error_download:{type(e).__name__}")
             continue
 
         if df is None or df.empty:
             skipped.append((sym_u, "empty_single"))
+            _remember_missing(sym_u, cfg, "empty_single")
             continue
 
         # 2) Normalize the DataFrame but keep the DateTimeIndex semantics
@@ -384,7 +430,7 @@ def _download_batch(
             data[sym_u] = df
             skipped.append((sym_u, f"error_normalize:{type(e).__name__}:{e}"))
 
-    return data, skipped
+    return data, _dedupe_skipped(skipped)
 
 
 def _rescue_missing_in_minibatches(
@@ -453,7 +499,7 @@ def _rescue_missing_in_minibatches(
         for s in still_missing:
             skipped.append((s, "missing_after_rescue"))
 
-    return data, skipped
+    return data, _dedupe_skipped(skipped)
 
 
 # ----------------- Public Orchestrator -----------------
@@ -692,7 +738,7 @@ def fetch_price_data_parallel(
         except (RuntimeError, TypeError, ValueError):
             pass
 
-    return deduped_price_data, skipped
+    return deduped_price_data, _dedupe_skipped(skipped)
 
 
 # ----------------- Back-compat shims -----------------

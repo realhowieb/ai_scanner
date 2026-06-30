@@ -200,7 +200,7 @@ def download_multi_alpaca(
         if failed:
             continue
         if not bars_by_symbol:
-            logger.warning("Alpaca returned no bars for %s symbols (%s)", len(chunk), symbols_param)
+            logger.info("Alpaca returned no bars for %s symbols (%s)", len(chunk), symbols_param)
             continue
 
         for symbol, bars in (bars_by_symbol or {}).items():

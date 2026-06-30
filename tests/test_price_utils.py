@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 try:
     import pandas as pd
@@ -71,6 +71,34 @@ class PriceUtilsTests(unittest.TestCase):
                 raise RuntimeError("No secrets found")
 
         self.assertIsNone(_secret_get(MissingSecrets(), "ALPACA_API_KEY_ID"))
+
+    def test_alpaca_only_mode_skips_yfinance_when_alpaca_returns_no_bars(self):
+        import data.prices as prices
+
+        fake_yf = MagicMock()
+        prices.clear_price_cache()
+
+        cfg = prices.PriceFetchConfig(tickers=["DAY", "FI", "K", "MMC"])
+        with (
+            patch.object(prices, "_get_alpaca_config", return_value={"api_key": "key"}),
+            patch.object(prices, "_download_multi_alpaca", return_value={}),
+            patch.object(prices, "_yf", fake_yf),
+            patch.dict("os.environ", {"PRICE_SKIP_YF_FALLBACK": "1"}, clear=False),
+        ):
+            data, skipped = prices._download_batch(["DAY", "FI", "K", "MMC"], cfg)
+
+        self.assertEqual(data, {})
+        fake_yf.Ticker.assert_not_called()
+        self.assertEqual(
+            skipped,
+            [
+                ("DAY", "skipped_yf_fallback"),
+                ("FI", "skipped_yf_fallback"),
+                ("K", "skipped_yf_fallback"),
+                ("MMC", "skipped_yf_fallback"),
+            ],
+        )
+        prices.clear_price_cache()
 
 
 if __name__ == "__main__":
