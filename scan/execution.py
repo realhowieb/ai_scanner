@@ -11,6 +11,11 @@ import pandas as pd
 
 from .strategies import apply_strategy_filter
 
+try:
+    from ml_prebreakout import score_prebreakout
+except ImportError:  # pragma: no cover - optional ML path
+    score_prebreakout = None  # type: ignore[assignment]
+
 ScanRunner = Callable[..., pd.DataFrame]
 ProgressCallback = Callable[..., None]
 
@@ -113,5 +118,10 @@ def run_manual_scan_execution(
         frame = frame.head(int(top_n)).reset_index(drop=True)
         if (premarket or afterhours) and extended_price_transform is not None:
             frame = extended_price_transform(frame)
+        if score_prebreakout is not None:
+            try:
+                frame = score_prebreakout(frame)
+            except (RuntimeError, TypeError, ValueError, KeyError, AttributeError):
+                pass
 
     return frame

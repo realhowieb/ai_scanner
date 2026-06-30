@@ -1,5 +1,6 @@
 import importlib.util
 import unittest
+from unittest.mock import patch
 
 PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
 
@@ -115,6 +116,21 @@ class ScanExecutionTests(unittest.TestCase):
         )
 
         self.assertEqual(float(result.loc[0, "Close"]), 11.0)
+
+    def test_scores_prebreakout_probabilities_for_manual_scans(self):
+        def fake_score(frame):
+            out = frame.copy()
+            out["PreBreakoutProb"] = [0.1, 0.5, 0.9][: len(out)]
+            out["PreBreakoutProb%"] = (out["PreBreakoutProb"] * 100).round(1)
+            return out
+
+        with patch("scan.execution.score_prebreakout", side_effect=fake_score) as scorer:
+            result = self._run(lambda **_kwargs: self._frame())
+
+        scorer.assert_called_once()
+        self.assertIn("PreBreakoutProb", result.columns)
+        self.assertIn("PreBreakoutProb%", result.columns)
+        self.assertEqual(list(result["PreBreakoutProb%"]), [10.0, 50.0, 90.0])
 
 
 if __name__ == "__main__":
