@@ -209,6 +209,8 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("warnings.filterwarnings", boot_source)
         self.assertIn("yfinance\\.utils", boot_source)
         self.assertIn("generic' unit for NumPy timedelta", boot_source)
+        self.assertIn("possibly delisted; no price data found", boot_source)
+        self.assertIn("No data found, symbol may be delisted", boot_source)
         self.assertIn("def configure_page", boot_source)
         self.assertNotIn("st.cache =", boot_source)
         self.assertIn("`st.cache` is deprecated", boot_source)

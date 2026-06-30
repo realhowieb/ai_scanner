@@ -80,6 +80,8 @@ class FilteredStderr(io.TextIOBase):
             "quoteSummary",
             "No fundamentals data found",
             "HTTP Error 404",
+            "possibly delisted; no price data found",
+            "No data found, symbol may be delisted",
             "No earnings dates found, symbol may be delisted",
             "`st.cache` is deprecated",
             "Please use one of Streamlit's new",
@@ -120,11 +122,11 @@ def install_warning_filters() -> None:
 
 
 class _DropStCacheDeprecation(logging.Filter):
-    """Drop the st.cache deprecation log emitted by older third-party libs.
+    """Drop noisy third-party logs while preserving actionable app errors.
 
-    Streamlit logs this via the logging module (not stderr), so the stderr
-    filter can't catch it. Our own code uses st.cache_data/st.cache_resource;
-    the call comes from a dependency (e.g. streamlit-authenticator).
+    Some dependencies log through logging instead of stderr, so the stderr
+    filter can't catch them. Our own code uses st.cache_data/st.cache_resource;
+    st.cache messages come from a dependency (e.g. streamlit-authenticator).
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -132,7 +134,13 @@ class _DropStCacheDeprecation(logging.Filter):
             msg = record.getMessage()
         except Exception:
             return True
-        return "st.cache` is deprecated" not in msg and "`st.cache`" not in msg
+        noisy_patterns = (
+            "st.cache` is deprecated",
+            "`st.cache`",
+            "possibly delisted; no price data found",
+            "No data found, symbol may be delisted",
+        )
+        return not any(pattern in msg for pattern in noisy_patterns)
 
 
 def install_logging_filters() -> None:
