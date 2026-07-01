@@ -1,8 +1,17 @@
 name: Scheduled Market Scans
 
 on:
-  # Manual trigger if you ever want to run it by hand from the Actions tab
+  # Manual trigger (Actions tab) or external scheduler (e.g. Render cron) via the
+  # API. `force` defaults true so a hand-run bypasses the weekend/premarket skip,
+  # the alert cooldown, and the earnings throttle for on-demand testing. A
+  # reliable external scheduler should pass force=false so runs behave like real
+  # scheduled runs (throttled alerts, once-daily earnings).
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Bypass weekend/throttle (manual testing). Set false for scheduled use."
+        type: boolean
+        default: true
 
   # Automated schedule (Mon–Fri, US market days)
   # Times below are in UTC (GitHub Actions runs on UTC):
@@ -62,10 +71,10 @@ jobs:
           PRICE_SKIP_YF_FALLBACK: "1"
           # Manual "Run workflow" forces a run (bypasses weekend/premarket skip);
           # scheduled runs respect the skip.
-          CRON_FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+          CRON_FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '1' || '0' }}
           # Manual runs also bypass the per-alert cooldown so alerts can be
           # tested on demand; scheduled runs keep the normal 12h throttle.
-          ALERT_THROTTLE_HOURS: ${{ github.event_name == 'workflow_dispatch' && '0' || '12' }}
+          ALERT_THROTTLE_HOURS: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '0' || '12' }}
         run: python -m scheduler.cron_runner
 
       - name: Upload scheduled scan summary
