@@ -1,0 +1,40 @@
+name: Upload AI Confidence Model
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload-model:
+    runs-on: ubuntu-latest
+
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-core.txt -r requirements-ml.txt
+
+      - name: Verify model files exist
+        run: |
+          test -f models/xgb_breakout_model.joblib
+          test -f models/xgb_breakout_metadata.json
+
+      - name: Upload AI Confidence model to Neon
+        run: |
+          python scripts/save_ai_confidence_model.py \
+            --model models/xgb_breakout_model.joblib \
+            --metadata models/xgb_breakout_metadata.json
+
+      - name: Verify DB model loads
+        run: |
+          python -c "from scan.ai_confidence import load_ai_confidence_bundle; model, metadata, warning = load_ai_confidence_bundle(); print({'loaded': model is not None, 'source': metadata.get('source'), 'trained_at': metadata.get('trained_at'), 'features': len(metadata.get('feature_names') or []), 'warning': warning}); raise SystemExit(0 if model is not None and metadata.get('source') == 'database' else 1)"
