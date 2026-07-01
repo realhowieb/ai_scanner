@@ -1,0 +1,79 @@
+name: Upload AI Confidence Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub Release tag containing the model assets"
+        required: true
+        default: "ai-confidence-model"
+      model_asset:
+        description: "Release asset name for the trained joblib model"
+        required: true
+        default: "xgb_breakout_model.joblib"
+      metadata_asset:
+        description: "Release asset name for the model metadata JSON"
+        required: true
+        default: "xgb_breakout_metadata.json"
+
+permissions:
+  contents: read
+
+jobs:
+  upload-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements-core.txt
+            requirements-ml.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -r requirements-ml.txt
+
+      - name: Check Neon connection secret
+        run: |
+          if [ -z "$NEON_DATABASE_URL" ]; then
+            echo "NEON_DATABASE_URL or DATABASE_URL GitHub Actions secret is required."
+            exit 1
+          fi
+
+      - name: Download model assets from GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          MODEL_ASSET: ${{ inputs.model_asset }}
+          METADATA_ASSET: ${{ inputs.metadata_asset }}
+        run: |
+          mkdir -p models
+          gh release download "$RELEASE_TAG" \
+            --pattern "$MODEL_ASSET" \
+            --pattern "$METADATA_ASSET" \
+            --dir models \
+            --clobber
+          test -f "models/$MODEL_ASSET"
+          test -f "models/$METADATA_ASSET"
+
+      - name: Upload AI Confidence model to Neon
+        run: |
+          python scripts/save_ai_confidence_model.py \
+            --model "models/${{ inputs.model_asset }}" \
+            --metadata "models/${{ inputs.metadata_asset }}"
+
+      - name: Verify DB model loads
+        run: |
+          python -c "from scan.ai_confidence import load_ai_confidence_bundle; model, metadata, warning = load_ai_confidence_bundle(); print({'loaded': model is not None, 'source': metadata.get('source'), 'trained_at': metadata.get('trained_at'), 'features': len(metadata.get('feature_names') or []), 'warning': warning}); raise SystemExit(0 if model is not None and metadata.get('source') == 'database' else 1)"
