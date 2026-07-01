@@ -3,6 +3,14 @@ name: Upload AI Confidence Model
 on:
   workflow_dispatch:
     inputs:
+      source:
+        description: "Use a GitHub Release asset or train from DB history"
+        required: true
+        default: "release"
+        type: choice
+        options:
+          - release
+          - train
       release_tag:
         description: "GitHub Release tag containing the model assets"
         required: true
@@ -15,6 +23,14 @@ on:
         description: "Release asset name for the model metadata JSON"
         required: true
         default: "xgb_breakout_metadata.json"
+      days_back:
+        description: "Training lookback days when source=train"
+        required: true
+        default: "90"
+      max_runs:
+        description: "Max scan-history runs when source=train"
+        required: true
+        default: "2000"
 
 permissions:
   contents: read
@@ -53,6 +69,7 @@ jobs:
           fi
 
       - name: Download model assets from GitHub Release
+        if: ${{ inputs.source == 'release' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -67,6 +84,17 @@ jobs:
             --clobber
           test -f "models/$MODEL_ASSET"
           test -f "models/$METADATA_ASSET"
+
+      - name: Train model from DB history
+        if: ${{ inputs.source == 'train' }}
+        env:
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+        run: |
+          python scripts/train_ai_confidence_model.py \
+            --days-back "${{ inputs.days_back }}" \
+            --max-runs "${{ inputs.max_runs }}" \
+            --model "models/${{ inputs.model_asset }}" \
+            --metadata "models/${{ inputs.metadata_asset }}"
 
       - name: Upload AI Confidence model to Neon
         run: |
