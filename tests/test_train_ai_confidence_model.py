@@ -49,14 +49,21 @@ class TrainAiConfidenceModelTests(unittest.TestCase):
         )
         fake_joblib = types.SimpleNamespace(dump=MagicMock(side_effect=lambda _model, path: Path(path).write_bytes(b"model")))
         upload_mock = MagicMock(return_value=True)
+        split_result = (
+            history[trainer.FEATURE_NAMES],
+            history[trainer.FEATURE_NAMES],
+            history["IsBreakout"],
+            history["IsBreakout"],
+        )
 
         with tempfile.TemporaryDirectory() as tmp:
             model_path = Path(tmp) / "xgb_breakout_model.joblib"
             metadata_path = Path(tmp) / "xgb_breakout_metadata.json"
             with (
+                patch.object(trainer, "pd", pd),
                 patch.object(trainer, "joblib", fake_joblib),
                 patch.object(trainer, "load_run_history", return_value=history),
-                patch.object(trainer, "train_test_split", return_value=(history[trainer.FEATURE_NAMES], history[trainer.FEATURE_NAMES], history["IsBreakout"], history["IsBreakout"])),
+                patch.object(trainer, "train_test_split", return_value=split_result),
                 patch.object(trainer, "roc_auc_score", return_value=0.82),
                 patch.object(trainer, "XGBClassifier", return_value=FakeXGBClassifier()),
                 patch.object(trainer, "save_ai_confidence_model_from_files", upload_mock),

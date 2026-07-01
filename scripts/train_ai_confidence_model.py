@@ -26,10 +26,13 @@ except Exception:  # pragma: no cover - optional ML dependency
 
 try:
     import pandas as pd
+except Exception:  # pragma: no cover - optional dependency in import smoke jobs
+    pd = None  # type: ignore[assignment]
+
+try:
     from sklearn.metrics import roc_auc_score
     from sklearn.model_selection import train_test_split
 except Exception:  # pragma: no cover - optional ML dependency
-    pd = None  # type: ignore[assignment]
     roc_auc_score = None  # type: ignore[assignment]
     train_test_split = None  # type: ignore[assignment]
 
