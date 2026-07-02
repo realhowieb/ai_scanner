@@ -7,7 +7,7 @@ from typing import Callable, Optional
 import pandas as pd
 import streamlit as st
 
-from scan.ai_confidence import SOURCE_ATTR, TRAINED_AT_ATTR, WARNING_ATTR
+from scan.ai_confidence import CONFIDENCE_COL, SOURCE_ATTR, TRAINED_AT_ATTR, WARNING_ATTR
 from ui.result_helpers import (
     as_optional_float,
     auto_details_ticker,
@@ -64,6 +64,15 @@ def render_results(
         # Treat AI Notes as Premium-only; fall back to passed flag if not present.
         can_ai_notes = bool(ent.get("can_ai_notes", can_ai_notes))
 
+    # AI Confidence is an admin-only evaluation feature for now: it predicts the
+    # present breakout label from features that include BreakoutScore, so it adds
+    # little user-facing signal beyond BreakoutScore/PreBreakout. Keep it visible
+    # to admins for A/B evaluation, but hide the column (and its caption) from
+    # everyone else so users see one clean signal.
+    is_admin_view = bool(ent.get("can_diagnostics"))
+    if not is_admin_view and CONFIDENCE_COL in df.columns:
+        df = df.drop(columns=[CONFIDENCE_COL])
+
     # Option A: Basic = auto-details only, no selection
     is_basic = not can_export_csv
 
@@ -88,9 +97,9 @@ def render_results(
     ai_warning = df.attrs.get(WARNING_ATTR)
     ai_trained_at = df.attrs.get(TRAINED_AT_ATTR)
     ai_source = df.attrs.get(SOURCE_ATTR)
-    if ai_warning:
+    if is_admin_view and ai_warning:
         st.caption(f"⚠️ {ai_warning}")
-    if ai_trained_at:
+    if is_admin_view and ai_trained_at:
         source_text = f" • source: {ai_source}" if ai_source else ""
         st.caption(f"AI Confidence model trained at: {ai_trained_at}{source_text}")
     st.caption(
