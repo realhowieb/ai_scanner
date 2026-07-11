@@ -85,7 +85,7 @@ def render_ai_summary(df: pd.DataFrame) -> None:
     """Streamlit UI block — button-gated, cached per scan in session_state."""
     import streamlit as st
 
-    st.markdown("#### 🤖 AI Scan Summary")
+    st.markdown("#### 🧠 AI Scan Summary")
     st.caption("Claude reviews your top results and highlights the strongest setups.")
 
     fp = _results_fingerprint(df) if df is not None and len(df) else None
@@ -148,7 +148,7 @@ def render_ticker_analysis(row, ticker: str) -> None:
             st.rerun()
         return
 
-    if st.button(f"🤖 Explain {ticker} setup", key=f"ai_tkr_{fp}"):
+    if st.button(f"🧠 Explain {ticker} setup", key=f"ai_tkr_{fp}"):
         with st.spinner(f"Analyzing {ticker}…"):
             text, err = generate_ticker_analysis(row)
         if text:

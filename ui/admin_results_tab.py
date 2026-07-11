@@ -424,7 +424,7 @@ def _render_scan_errors_panel(get_db_conn: Callable[[], Any]) -> None:
 
     # 🤖 AI triage of the loaded errors (admin-only; no per-user cap).
     rows_cached = st.session_state.get("_admin_error_rows")
-    if rows_cached and st.button("🤖 AI triage these errors", key="admin_ai_triage"):
+    if rows_cached and st.button("🧠 AI triage these errors", key="admin_ai_triage"):
         try:
             from ui.ai import is_configured
             if not is_configured():
