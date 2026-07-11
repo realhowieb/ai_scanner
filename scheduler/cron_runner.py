@@ -246,11 +246,14 @@ def _refresh_track_record() -> None:
             win_rate=summary["win_rate"],
             sample_size=summary["sample_size"],
             runs_used=summary["runs_used"],
+            benchmark=summary.get("benchmark"),
+            top_n=summary.get("top_n"),
         )
         any_saved = any_saved or saved
         print(
-            f"[track_record] horizon={horizon}: avg={summary['avg_return']:.3%} "
-            f"win={summary['win_rate']:.0%} n={summary['sample_size']}"
+            f"[track_record] horizon={horizon}: excess_vs_{summary.get('benchmark')}="
+            f"{summary['avg_return']:+.2%} beat={summary['win_rate']:.0%} "
+            f"n={summary['sample_size']} (top_{summary.get('top_n')})"
         )
 
     if any_saved:

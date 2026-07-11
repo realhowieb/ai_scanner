@@ -32,12 +32,15 @@ def render_track_record_badge() -> None:
     win = tr.get("win_rate")
     n = tr.get("sample_size")
     h = tr.get("horizon_days", 5)
+    bench = tr.get("benchmark") or "SPY"
+    top_n = tr.get("top_n") or 5
     if avg is None or win is None:
         return
     st.caption(
-        f"📈 **Track record:** past scan candidates averaged **{avg:+.1%}** over the next "
-        f"{h} trading days, **{win:.0%}** positive (n={n}). Backtested on saved snapshots — "
-        "past performance is not indicative of future results."
+        f"📈 **Track record:** top-{top_n} scan candidates beat the {bench} by "
+        f"**{avg:+.1%}** over the next {h} trading days on average, **{win:.0%}** "
+        f"beating the benchmark (n={n}). Backtested on saved snapshots — past "
+        "performance is not indicative of future results."
     )
 
 YF_DISABLED_KEY = "yf_disabled"

@@ -143,12 +143,17 @@ def _track_record_line() -> tuple[str, str]:
         avg = tr["avg_return"]
         win = tr.get("win_rate") or 0.0
         h = tr.get("horizon_days", 5)
+        bench = tr.get("benchmark") or "SPY"
+        top_n = tr.get("top_n") or 5
         html = (
             f"<p style='color:#166534;background:#f0fdf4;padding:8px 10px;border-radius:6px'>"
-            f"📈 <strong>Track record:</strong> recent scan candidates averaged "
-            f"<strong>{avg:+.1%}</strong> over {h} trading days · {win:.0%} positive.</p>"
+            f"📈 <strong>Track record:</strong> top-{top_n} candidates beat the {bench} by "
+            f"<strong>{avg:+.1%}</strong> over {h} trading days · {win:.0%} beat the benchmark.</p>"
         )
-        text = f"Track record: recent candidates averaged {avg:+.1%} over {h} days ({win:.0%} positive)."
+        text = (
+            f"Track record: top-{top_n} candidates beat {bench} by {avg:+.1%} "
+            f"over {h} days ({win:.0%} beat the benchmark)."
+        )
         return html, text
     except Exception:
         return "", ""

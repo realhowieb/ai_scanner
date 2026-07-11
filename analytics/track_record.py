@@ -12,6 +12,9 @@ from datetime import datetime, timedelta, timezone
 from statistics import mean, median
 from typing import Any, Dict, List, Optional
 
+TOP_N = 5
+BENCHMARK = "SPY"
+
 
 def _symbol_column(df) -> Optional[str]:
     for col in ("Symbol", "Ticker", "symbol", "ticker"):
@@ -59,8 +62,10 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
         sym_col = _symbol_column(df)
         if not sym_col:
             continue
-        # Top candidates as presented (already ranked); bound per-snapshot.
-        symbols = [str(s).upper() for s in df[sym_col].head(20).tolist() if str(s).strip()]
+        # Highest-conviction picks only (top-N as ranked/presented). These are
+        # what we'd actually spotlight, and they measure the signal's best output
+        # rather than diluting it with marginal names.
+        symbols = [str(s).upper() for s in df[sym_col].head(TOP_N).tolist() if str(s).strip()]
         if symbols:
             out.append((created.date(), symbols))
         if len(out) >= max_snapshots:
@@ -105,7 +110,7 @@ def compute_track_record(
     if not snapshots:
         return None
 
-    all_symbols = sorted({s for _, syms in snapshots for s in syms})
+    all_symbols = sorted({s for _, syms in snapshots for s in syms} | {BENCHMARK})
     if not all_symbols:
         return None
 
@@ -124,8 +129,19 @@ def compute_track_record(
     if not bars_by_symbol:
         return None
 
-    returns: List[float] = []
+    spy_bars = bars_by_symbol.get(BENCHMARK)
+    if spy_bars is None:
+        # Can't compute excess returns without the benchmark.
+        return None
+
+    # Benchmark forward return is per-snapshot (same for all its candidates).
+    excess: List[float] = []
+    runs_counted = 0
     for run_date, symbols in snapshots:
+        spy_ret = _forward_return(spy_bars, run_date, horizon_days)
+        if spy_ret is None:
+            continue
+        used_this_run = False
         for sym in symbols:
             # Avoid `a or b` here: bars are DataFrames and their truth value is
             # ambiguous. Resolve the alias (dash vs dot class shares) explicitly.
@@ -136,17 +152,22 @@ def compute_track_record(
                 continue
             r = _forward_return(bars, run_date, horizon_days)
             if r is not None:
-                returns.append(r)
+                excess.append(r - spy_ret)
+                used_this_run = True
+        if used_this_run:
+            runs_counted += 1
 
-    if not returns:
+    if not excess:
         return None
 
-    wins = sum(1 for r in returns if r > 0)
+    beats = sum(1 for e in excess if e > 0)
     return {
         "horizon_days": horizon_days,
-        "avg_return": mean(returns),
-        "median_return": median(returns),
-        "win_rate": wins / len(returns),
-        "sample_size": len(returns),
-        "runs_used": len(snapshots),
+        "avg_return": mean(excess),          # avg excess vs benchmark
+        "median_return": median(excess),
+        "win_rate": beats / len(excess),     # share that beat the benchmark
+        "sample_size": len(excess),
+        "runs_used": runs_counted,
+        "benchmark": BENCHMARK,
+        "top_n": TOP_N,
     }
