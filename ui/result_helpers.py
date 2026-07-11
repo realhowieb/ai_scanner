@@ -8,6 +8,13 @@ import pandas as pd
 import streamlit as st
 
 
+# Don't surface a track record until it's statistically meaningful — a handful
+# of snapshots over one week is noise and can misrepresent the signal in either
+# direction. Require a real sample before showing anything to users.
+TRACK_RECORD_MIN_SAMPLE = 150
+TRACK_RECORD_MIN_RUNS = 8
+
+
 def render_track_record_badge() -> None:
     """Show the latest signal track record (forward-return performance)."""
     try:
@@ -17,6 +24,10 @@ def render_track_record_badge() -> None:
     except Exception:
         tr = None
     if not tr or not tr.get("sample_size"):
+        return
+    if int(tr.get("sample_size") or 0) < TRACK_RECORD_MIN_SAMPLE or int(
+        tr.get("runs_used") or 0
+    ) < TRACK_RECORD_MIN_RUNS:
         return
     avg = tr.get("avg_return")
     win = tr.get("win_rate")

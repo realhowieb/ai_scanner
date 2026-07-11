@@ -137,6 +137,9 @@ def _track_record_line() -> tuple[str, str]:
         tr = load_latest_track_record(horizon_days=5)
         if not tr or not tr.get("sample_size") or tr.get("avg_return") is None:
             return "", ""
+        # Only show once the sample is statistically meaningful (see UI gate).
+        if int(tr.get("sample_size") or 0) < 150 or int(tr.get("runs_used") or 0) < 8:
+            return "", ""
         avg = tr["avg_return"]
         win = tr.get("win_rate") or 0.0
         h = tr.get("horizon_days", 5)
