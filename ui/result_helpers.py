@@ -7,7 +7,6 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
-
 # Don't surface a track record until it's statistically meaningful — a handful
 # of snapshots over one week is noise and can misrepresent the signal in either
 # direction. Require a real sample before showing anything to users.
