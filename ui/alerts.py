@@ -115,6 +115,15 @@ def render_alerts_panel(
                 step=0.5,
                 key="alert_break_thr",
             )
+            # Smart create: show the observed score distribution and how often
+            # this threshold would have fired, so dead/spam thresholds are
+            # caught before the alert exists. Guarded — insight is optional.
+            try:
+                from ui.alert_preview import render_breakout_threshold_insight
+
+                render_breakout_threshold_insight(float(thr))
+            except Exception:
+                pass
             wl_only = st.checkbox(
                 "Limit to my watchlist tickers", value=False, key="alert_break_wl"
             )
@@ -158,6 +167,22 @@ def render_alerts_panel(
                 target = st.number_input(
                     "Price", min_value=0.0, value=0.0, step=1.0, key="alert_price_val"
                 )
+            # Immediate-fire check: if the condition is already true at the
+            # current price, say so before the user creates it.
+            if tk.strip() and float(target) > 0:
+                try:
+                    from market_data import get_latest_quotes
+
+                    q = (get_latest_quotes([tk.strip().upper()]) or {}).get(tk.strip().upper())
+                    last = q.get("last") if isinstance(q, dict) else None
+                    if last is not None:
+                        already = (direction == "above" and last >= float(target)) or (
+                            direction == "below" and last <= float(target)
+                        )
+                        note = " — this would fire on the next check" if already else ""
+                        st.caption(f"{tk.strip().upper()} last: **{last:,.2f}**{note}")
+                except Exception:
+                    pass
             if st.button("Create price alert", key="alert_price_btn"):
                 if not tk.strip():
                     st.warning("Enter a ticker symbol.")
