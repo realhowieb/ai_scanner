@@ -282,6 +282,16 @@ def auth_ui():
         if st.session_state.get("login_locked_until"):
             _clear_failed_login_attempts()
 
+    # Session-restore grace: on a fresh browser session (refresh, reconnect,
+    # redeploy) the cookie component can report ready before the stored values
+    # have synced, so a logged-in user's first frame falls into this login
+    # branch — flashing the big logo/login UI before the session restores.
+    # Give the component one extra roundtrip before concluding logged-out.
+    if not st.session_state.get("_auth_restore_grace"):
+        st.session_state["_auth_restore_grace"] = True
+        st.caption("Restoring session…")
+        st.rerun()
+
     # Brand logo, centered above the login / sign-up tabs.
     try:
         from ui.header import _logo_path
