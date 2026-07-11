@@ -65,7 +65,7 @@ def render_day_trader_panel(
         refresh_label = st.selectbox(
             "Auto-refresh",
             ["Off", "15s", "30s", "60s"],
-            index=2,
+            index=0,  # Off by default; users opt in to live refresh
             key="dt_refresh",
         )
     with c3:
