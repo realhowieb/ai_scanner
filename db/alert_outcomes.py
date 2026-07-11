@@ -49,15 +49,29 @@ def list_unscored_events(min_age_days: int = 6, limit: int = 500) -> List[Dict[s
         return []
     _ensure_schema(conn)
     cur = conn.cursor()
+    # DISTINCT ON (alert_id, ticker, day): forced/manual runs bypass the alert
+    # throttle and can record the same fire several times in one day; scoring
+    # each duplicate would overweight it in the scorecard. Keep the earliest
+    # event per (alert, ticker, day) and mark the rest scored via the same
+    # outcome row rule below (they simply never get selected).
     cur.execute(
         """
-        SELECT e.id, e.alert_id, e.user_id, e.ticker, e.fired_at
+        SELECT DISTINCT ON (e.alert_id, e.ticker, (e.fired_at AT TIME ZONE 'UTC')::date)
+               e.id, e.alert_id, e.user_id, e.ticker, e.fired_at
         FROM alert_events e
         LEFT JOIN alert_outcomes o ON o.event_id = e.id
         WHERE o.event_id IS NULL
           AND e.ticker IS NOT NULL
           AND e.fired_at < NOW() - make_interval(days => %s)
-        ORDER BY e.fired_at DESC
+          AND NOT EXISTS (
+              SELECT 1 FROM alert_outcomes o2
+              WHERE o2.alert_id IS NOT DISTINCT FROM e.alert_id
+                AND o2.ticker = UPPER(e.ticker)
+                AND (o2.fired_at AT TIME ZONE 'UTC')::date
+                    = (e.fired_at AT TIME ZONE 'UTC')::date
+          )
+        ORDER BY e.alert_id, e.ticker, (e.fired_at AT TIME ZONE 'UTC')::date,
+                 e.fired_at ASC
         LIMIT %s
         """,
         (int(min_age_days), int(limit)),

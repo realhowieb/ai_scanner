@@ -223,15 +223,27 @@ def render_alerts_panel(
 
     # --- Recently triggered ---
     try:
-        events = list_recent_events(user_id, limit=10)
+        events = list_recent_events(user_id, limit=25)
     except Exception:
         events = []
     if events:
-        with st.expander(f"🔥 Recently triggered ({len(events)})", expanded=False):
-            for ev in events:
+        # Collapse repeats: manual/forced runs can record the same fire several
+        # times in a day; show it once with a repeat count instead of a wall of
+        # identical entries.
+        deduped: list = []
+        for ev in events:
+            msg = ev.get("message", "")
+            if deduped and deduped[-1][0].get("message", "") == msg:
+                deduped[-1][1] += 1
+            else:
+                deduped.append([ev, 1])
+        deduped = deduped[:10]
+        with st.expander(f"🔥 Recently triggered ({len(deduped)})", expanded=False):
+            for ev, count in deduped:
                 when = ev.get("fired_at")
                 when_s = when.strftime("%Y-%m-%d %H:%M UTC") if hasattr(when, "strftime") else ""
-                st.markdown(f"**{when_s}** — {ev.get('message', '')}")
+                repeat = f" _(×{count} today)_" if count > 1 else ""
+                st.markdown(f"**{when_s}** — {ev.get('message', '')}{repeat}")
 
 
 def _guarded_create(existing: list, max_per_user: int, do_create) -> None:
