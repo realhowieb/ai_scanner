@@ -178,6 +178,16 @@ def render_alerts_panel(
 
     # --- Existing alerts ---
     if existing:
+        # Outcome scorecards: how each alert's recent fires actually played out.
+        # Shown only with >=3 scored fires so one lucky/unlucky fire can't
+        # masquerade as a track record.
+        try:
+            from db.alert_outcomes import HIT_TARGET_PCT, HORIZON_DAYS, scorecards_for_user
+
+            scorecards = scorecards_for_user(user_id)
+        except Exception:
+            scorecards, HIT_TARGET_PCT, HORIZON_DAYS = {}, 5.0, 3
+
         st.markdown("**Your alerts**")
         for index, a in enumerate(existing):
             cols = st.columns([6, 2, 2])
@@ -187,6 +197,14 @@ def render_alerts_panel(
             elif index >= int(max_alerts):
                 label = f"{label} _(over plan limit)_"
             cols[0].markdown(label)
+            card = scorecards.get(a.get("id"))
+            if card and card.get("fires", 0) >= 3:
+                avg = card.get("avg_return_pct")
+                avg_s = f" · avg {avg:+.1f}%/{HORIZON_DAYS}d" if avg is not None else ""
+                cols[0].caption(
+                    f"🎯 {card['hits']}/{card['fires']} recent fires hit "
+                    f"+{HIT_TARGET_PCT:g}% within {HORIZON_DAYS}d{avg_s}"
+                )
             new_enabled = cols[1].toggle(
                 "On", value=bool(a.get("enabled")), key=f"alert_tog_{a['id']}"
             )

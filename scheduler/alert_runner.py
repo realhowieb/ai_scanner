@@ -21,6 +21,39 @@ except Exception:  # pragma: no cover - fallback when monitoring is unavailable
         pass
 
 
+EARNINGS_FLAG_DAYS = 5
+
+
+def _annotate_earnings(lines: List[str]) -> List[str]:
+    """Append '⚠️ earnings in Nd' to alert lines whose ticker reports soon.
+
+    Lines are '<TICKER>: ...' strings. DB-only lookup (earnings_calendar) — no
+    network calls — and best-effort: any failure returns the lines unchanged.
+    """
+    try:
+        from db.earnings import load_earnings_map
+
+        tickers = sorted(
+            {ln.split(":", 1)[0].strip().upper() for ln in lines if ":" in ln}
+        )
+        if not tickers:
+            return lines
+        emap = load_earnings_map(tickers)
+        today = _dt.datetime.now(_dt.timezone.utc).date()
+        out: List[str] = []
+        for ln in lines:
+            sym = ln.split(":", 1)[0].strip().upper() if ":" in ln else None
+            edate = emap.get(sym) if sym else None
+            if edate is not None:
+                days = (edate - today).days
+                if 0 <= days <= EARNINGS_FLAG_DAYS:
+                    ln = f"{ln} ⚠️ earnings in {days}d"
+            out.append(ln)
+        return out
+    except Exception:
+        return lines
+
+
 def _latest_snapshot_df():
     """Load the most recent saved scan as a DataFrame, or None."""
     try:
@@ -274,6 +307,9 @@ def run_alerts() -> None:
             lines = _evaluate(alert, df, watch)
             if not lines:
                 continue
+            # Earnings safety rail: flag names reporting within days, so nobody
+            # acts on an alert blind to an imminent earnings gap.
+            lines = _annotate_earnings(lines)
 
             # Cap the body so a broad breakout alert doesn't email 100 lines.
             shown = lines[:25]
