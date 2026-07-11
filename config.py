@@ -101,6 +101,10 @@ ALERT_THROTTLE_HOURS: float = float(_get("ALERT_THROTTLE_HOURS", "12"))
 # Max alerts a single user may create (guards table growth / email volume).
 ALERT_MAX_PER_USER: int = int(_get("ALERT_MAX_PER_USER", "25"))
 
+# --- Day Trader live panel (intraday snapshots: gappers / VWAP / RVOL) ---
+# Master switch for the live day-trader monitor. On by default; set to 0 to hide.
+DAY_TRADER_ENABLED: bool = _get("DAY_TRADER_ENABLED", "1") == "1"
+
 # --- Alerting (ops) ---
 SLACK_WEBHOOK_URL: str | None = _get("SLACK_WEBHOOK_URL")
 ALERT_EMAIL: str | None = _get("ALERT_EMAIL")

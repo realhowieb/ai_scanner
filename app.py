@@ -167,6 +167,7 @@ try:
 
     from ui.admin_users import render_admin_users_panel
     from ui.alerts import render_alerts_panel
+    from ui.day_trader import render_day_trader_panel
     from ui.db_status import render_db_status_badge
     from ui.earnings_results import prepare_results_with_earnings, render_earnings_controls
     from ui.filters import render_filters
@@ -220,6 +221,7 @@ except Exception as _e:
     render_footer = lambda *a, **k: None  # type: ignore
     render_watchlists_panel = _missing  # type: ignore
     render_alerts_panel = lambda *a, **k: None  # type: ignore
+    render_day_trader_panel = lambda *a, **k: None  # type: ignore
     render_user_settings_footer = _missing  # type: ignore
 
 # --------------- Earnings (shared implementation) ----------------
@@ -657,6 +659,14 @@ def main():
             except Exception:
                 pass
         st.rerun()
+
+    # -------- Day Trader live monitor (intraday snapshots) --------
+    # Guarded so a transient stale-module state on redeploy can't crash the app.
+    try:
+        render_day_trader_panel(watch_tickers=watch_tickers)
+        st.markdown("---")
+    except Exception:
+        pass
 
     st.markdown("## 🚀 EZ 3-Step AI Scanner")
     render_three_step_scanner()
