@@ -13,6 +13,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+# Report silent per-user failures to Sentry when configured (no-op otherwise).
+try:
+    from ui.monitoring import capture as _capture
+except Exception:  # pragma: no cover - fallback when monitoring is unavailable
+    def _capture(exc: BaseException) -> None:
+        pass
+
 _DIGEST_REFRESH_KEY = "morning_digest"
 
 
@@ -292,6 +299,7 @@ def run_morning_digest(force: bool = False) -> None:
             sent += 1
         except Exception as e:
             print(f"[morning_digest] {email}: {e}")
+            _capture(e)
             continue
 
     if sent > 0:

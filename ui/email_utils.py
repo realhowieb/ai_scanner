@@ -5,6 +5,14 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+# Report silent failures to Sentry when configured (no-op otherwise). Guarded so
+# this module keeps working in any context, headless or app.
+try:
+    from ui.monitoring import capture as _capture
+except Exception:  # pragma: no cover - fallback when monitoring is unavailable
+    def _capture(exc: BaseException) -> None:
+        pass
+
 
 def send_password_reset_email(to_address: str, reset_url: str) -> bool:
     """Send a password reset email. Returns True on success, False on any failure."""
@@ -43,7 +51,10 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(SMTP_FROM, [to_address], msg.as_string())
         return True
-    except Exception:
+    except Exception as e:
+        # A silently-failing password reset locks the user out with no trace.
+        print(f"[email] password reset SEND FAILED to {to_address}: {type(e).__name__}: {e}")
+        _capture(e)
         return False
 
 
@@ -78,6 +89,7 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str) ->
         return True
     except Exception as e:
         print(f"[email] SEND FAILED to {to_address} via {SMTP_HOST}:{SMTP_PORT} from {SMTP_FROM} — {type(e).__name__}: {e}")
+        _capture(e)
         return False
 
 

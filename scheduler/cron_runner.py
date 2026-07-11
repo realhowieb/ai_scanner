@@ -14,6 +14,14 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 SUMMARY_PATH = ROOT / "artifacts" / "scheduled_scan_summary.json"
 
+# Report best-effort task failures to Sentry when configured (no-op otherwise),
+# so silently-swallowed cron problems still get counted somewhere.
+try:
+    from ui.monitoring import capture as _capture
+except Exception:  # pragma: no cover - fallback when monitoring is unavailable
+    def _capture(exc: BaseException) -> None:
+        pass
+
 
 @dataclass
 class ScanRunSummary:
@@ -341,6 +349,7 @@ def main():
         run_alerts()
     except Exception as e:
         print(f"[cron] alert evaluation failed: {e}")
+        _capture(e)
 
     # Refresh the earnings calendar once per day from FMP -> Finnhub (bulk; no
     # per-symbol yfinance over the full universe). Best-effort, throttled so it
@@ -349,6 +358,7 @@ def main():
         _refresh_earnings()
     except Exception as e:
         print(f"[cron] earnings refresh failed: {e}")
+        _capture(e)
 
     # Recompute the signal track record once per day (forward returns of past
     # snapshot candidates). Best-effort; never fail the scan run.
@@ -356,6 +366,7 @@ def main():
         _refresh_track_record()
     except Exception as e:
         print(f"[cron] track record refresh failed: {e}")
+        _capture(e)
 
     # Send the Pro+ morning digest once per day (throttled to the first scan run
     # of the day). Best-effort; never let email failures fail the scan run.
@@ -367,6 +378,7 @@ def main():
         run_morning_digest(force=os.getenv("CRON_FORCE", "").strip() == "1")
     except Exception as e:
         print(f"[cron] morning digest failed: {e}")
+        _capture(e)
 
     ok = all(run.ok for run in runs)
     _write_summary(
