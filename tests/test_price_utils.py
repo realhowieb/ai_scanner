@@ -64,13 +64,19 @@ class PriceUtilsTests(unittest.TestCase):
         self.assertEqual(cfg["data_url"], "https://example.test")
 
     def test_alpaca_config_ignores_missing_streamlit_secrets(self):
-        from data.price_alpaca import _secret_get
+        # Secret resolution now lives in data.alpaca_config; a raising secrets
+        # object (no secrets file, e.g. the cron) must resolve to the default.
+        from data.alpaca_config import alpaca_secret
 
         class MissingSecrets:
             def get(self, _key):
                 raise RuntimeError("No secrets found")
 
-        self.assertIsNone(_secret_get(MissingSecrets(), "ALPACA_API_KEY_ID"))
+        fake_st = type("FakeSt", (), {"secrets": MissingSecrets()})
+        with patch.dict("os.environ", {}, clear=True), patch.dict(
+            "sys.modules", {"streamlit": fake_st}
+        ):
+            self.assertIsNone(alpaca_secret("ALPACA_API_KEY_ID"))
 
     def test_alpaca_only_mode_skips_yfinance_when_alpaca_returns_no_bars(self):
         import data.prices as prices
