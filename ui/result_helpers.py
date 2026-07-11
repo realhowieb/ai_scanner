@@ -7,6 +7,29 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+
+def render_track_record_badge() -> None:
+    """Show the latest signal track record (forward-return performance)."""
+    try:
+        from db.track_record import load_latest_track_record
+
+        tr = load_latest_track_record(horizon_days=5)
+    except Exception:
+        tr = None
+    if not tr or not tr.get("sample_size"):
+        return
+    avg = tr.get("avg_return")
+    win = tr.get("win_rate")
+    n = tr.get("sample_size")
+    h = tr.get("horizon_days", 5)
+    if avg is None or win is None:
+        return
+    st.caption(
+        f"📈 **Track record:** past scan candidates averaged **{avg:+.1%}** over the next "
+        f"{h} trading days, **{win:.0%}** positive (n={n}). Backtested on saved snapshots — "
+        "past performance is not indicative of future results."
+    )
+
 YF_DISABLED_KEY = "yf_disabled"
 YF_DISABLED_REASON_KEY = "yf_disabled_reason"
 YF_WARNED_KEY = "yf_disabled_warned"

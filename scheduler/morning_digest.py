@@ -129,6 +129,28 @@ def _movers_text(rows: List[Dict[str, Any]]) -> str:
     )
 
 
+def _track_record_line() -> tuple[str, str]:
+    """Return (html, text) one-liner for the signal track record, or ('','')."""
+    try:
+        from db.track_record import load_latest_track_record
+
+        tr = load_latest_track_record(horizon_days=5)
+        if not tr or not tr.get("sample_size") or tr.get("avg_return") is None:
+            return "", ""
+        avg = tr["avg_return"]
+        win = tr.get("win_rate") or 0.0
+        h = tr.get("horizon_days", 5)
+        html = (
+            f"<p style='color:#166534;background:#f0fdf4;padding:8px 10px;border-radius:6px'>"
+            f"📈 <strong>Track record:</strong> recent scan candidates averaged "
+            f"<strong>{avg:+.1%}</strong> over {h} trading days · {win:.0%} positive.</p>"
+        )
+        text = f"Track record: recent candidates averaged {avg:+.1%} over {h} days ({win:.0%} positive)."
+        return html, text
+    except Exception:
+        return "", ""
+
+
 def _compose(
     username: str,
     watch_rows: List[Dict[str, Any]],
@@ -140,6 +162,11 @@ def _compose(
     date_s = datetime.now(timezone.utc).strftime("%A, %b %d")
     html = [f"<p style='color:#666;margin:0 0 12px'>Morning snapshot · {date_s}</p>"]
     text = [f"Morning snapshot · {date_s}", ""]
+
+    tr_html, tr_text = _track_record_line()
+    if tr_html:
+        html.append(tr_html)
+        text += [tr_text, ""]
 
     html.append("<h3 style='margin:16px 0 6px'>📋 Your watchlist</h3>")
     html.append(_movers_table(watch_rows, show_gap=True))

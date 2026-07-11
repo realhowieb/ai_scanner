@@ -217,6 +217,46 @@ def _print_provider_status() -> None:
         print(f"Active provider: unknown (config check failed: {e})")
 
 
+def _refresh_track_record() -> None:
+    """Recompute + persist the signal track record once per day (throttled).
+
+    CRON_FORCE=1 (manual run) bypasses the daily throttle for on-demand testing.
+    """
+    from db.earnings import mark_earnings_refreshed_today, should_refresh_earnings_today
+
+    key = "cron_track_record"
+    forced = os.getenv("CRON_FORCE", "").strip() == "1"
+    if not forced and not should_refresh_earnings_today(key):
+        print("[track_record] already computed today; skipping")
+        return
+
+    from analytics.track_record import compute_track_record
+    from db.track_record import save_track_record
+
+    any_saved = False
+    for horizon in (5,):
+        summary = compute_track_record(horizon_days=horizon)
+        if not summary:
+            print(f"[track_record] horizon={horizon}: insufficient history")
+            continue
+        saved = save_track_record(
+            horizon_days=summary["horizon_days"],
+            avg_return=summary["avg_return"],
+            median_return=summary["median_return"],
+            win_rate=summary["win_rate"],
+            sample_size=summary["sample_size"],
+            runs_used=summary["runs_used"],
+        )
+        any_saved = any_saved or saved
+        print(
+            f"[track_record] horizon={horizon}: avg={summary['avg_return']:.3%} "
+            f"win={summary['win_rate']:.0%} n={summary['sample_size']}"
+        )
+
+    if any_saved:
+        mark_earnings_refreshed_today(key)
+
+
 def _refresh_earnings() -> None:
     """Once-per-day earnings-calendar refresh over the full universe (FMP/Finnhub).
 
@@ -301,6 +341,13 @@ def main():
         _refresh_earnings()
     except Exception as e:
         print(f"[cron] earnings refresh failed: {e}")
+
+    # Recompute the signal track record once per day (forward returns of past
+    # snapshot candidates). Best-effort; never fail the scan run.
+    try:
+        _refresh_track_record()
+    except Exception as e:
+        print(f"[cron] track record refresh failed: {e}")
 
     # Send the Pro+ morning digest once per day (throttled to the first scan run
     # of the day). Best-effort; never let email failures fail the scan run.

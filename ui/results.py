@@ -14,6 +14,7 @@ from ui.result_helpers import (
     find_row_for_ticker,
     get_results_df,
     quiet_provider_loggers,
+    render_track_record_badge,
     row_to_jsonable_dict,
     sync_selected_ticker_from_table,
 )
@@ -30,7 +31,6 @@ from ui.result_tables import render_static_results_table
 from ui.result_watchlist import render_watchlist_action
 
 quiet_provider_loggers()
-
 
 EARNINGS_TABLE_COLUMNS = ("earnings_in_days", "Earnings", "📅 Earnings in X days")
 
@@ -102,6 +102,7 @@ def render_results(
     if is_admin_view and ai_trained_at:
         source_text = f" • source: {ai_source}" if ai_source else ""
         st.caption(f"AI Confidence model trained at: {ai_trained_at}{source_text}")
+    render_track_record_badge()
     st.caption(
         f"Showing {len(df)} results. Increase 'Top N Results' in the sidebar to see more, "
         "or relax filters (Min Gap %, price range, Unusual Volume Filter). "
