@@ -127,7 +127,11 @@ def compute_track_record(
     returns: List[float] = []
     for run_date, symbols in snapshots:
         for sym in symbols:
-            bars = bars_by_symbol.get(sym) or bars_by_symbol.get(sym.replace("-", "."))
+            # Avoid `a or b` here: bars are DataFrames and their truth value is
+            # ambiguous. Resolve the alias (dash vs dot class shares) explicitly.
+            bars = bars_by_symbol.get(sym)
+            if bars is None:
+                bars = bars_by_symbol.get(sym.replace("-", "."))
             if bars is None:
                 continue
             r = _forward_return(bars, run_date, horizon_days)
