@@ -234,7 +234,10 @@ def _refresh_track_record() -> None:
     from db.track_record import save_track_record
 
     any_saved = False
-    for horizon in (5,):
+    # Multiple horizons so we can see which holding period the signal actually
+    # wins at: 1d (day-trade), 5d (swing), 20d (position). Longer horizons need
+    # older snapshots, so they populate later as history accumulates.
+    for horizon in (1, 5, 20):
         summary = compute_track_record(horizon_days=horizon)
         if not summary:
             print(f"[track_record] horizon={horizon}: insufficient history")
