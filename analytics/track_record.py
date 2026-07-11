@@ -107,6 +107,7 @@ def compute_track_record(
 ) -> Optional[Dict[str, Any]]:
     """Compute forward-return performance across recent snapshot candidates."""
     snapshots = _eligible_snapshots(horizon_days, lookback_days, max_snapshots)
+    print(f"[track_record] diag: eligible_snapshots={len(snapshots)}")
     if not snapshots:
         return None
 
@@ -124,8 +125,10 @@ def compute_track_record(
             prepost=False,
             timeout_s=20.0,
         )
-    except Exception:
+    except Exception as e:
+        print(f"[track_record] diag: download raised {type(e).__name__}: {e}")
         return None
+    print(f"[track_record] diag: requested={len(all_symbols)} fetched={len(bars_by_symbol or {})}")
     if not bars_by_symbol:
         return None
 
