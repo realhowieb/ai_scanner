@@ -245,11 +245,28 @@ def run_loop() -> None:
         time.sleep(POLL_SECONDS)
 
 
+_worker_thread: Optional[threading.Thread] = None
+
+
+def worker_status() -> Dict[str, Any]:
+    """Introspection for /debug/status: is the worker enabled/alive?"""
+    return {
+        "enabled": os.getenv("REALTIME_ALERTS_ENABLED", "0").strip() == "1",
+        "alive": bool(_worker_thread and _worker_thread.is_alive()),
+        "poll_seconds": POLL_SECONDS,
+        "throttle_hours": THROTTLE_HOURS,
+        "market_open_now": market_session_open(),
+        "alpaca_env": bool(os.getenv("ALPACA_API_KEY_ID", "").strip()),
+        "smtp_env": bool(os.getenv("SMTP_HOST", "").strip()),
+    }
+
+
 def start_background_worker() -> bool:
     """Start the polling thread when enabled; returns whether it started."""
+    global _worker_thread
     if os.getenv("REALTIME_ALERTS_ENABLED", "0").strip() != "1":
         _log("disabled (set REALTIME_ALERTS_ENABLED=1 to enable)")
         return False
-    thread = threading.Thread(target=run_loop, name="realtime-alerts", daemon=True)
-    thread.start()
+    _worker_thread = threading.Thread(target=run_loop, name="realtime-alerts", daemon=True)
+    _worker_thread.start()
     return True
