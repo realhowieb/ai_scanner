@@ -130,6 +130,10 @@ def compute_track_record(
         return None
 
     spy_bars = bars_by_symbol.get(BENCHMARK)
+    print(
+        f"[track_record] diag: snapshots={len(snapshots)} "
+        f"symbols_fetched={len(bars_by_symbol)} spy_present={spy_bars is not None}"
+    )
     if spy_bars is None:
         # Can't compute excess returns without the benchmark.
         return None
@@ -137,9 +141,11 @@ def compute_track_record(
     # Benchmark forward return is per-snapshot (same for all its candidates).
     excess: List[float] = []
     runs_counted = 0
+    spy_none = 0
     for run_date, symbols in snapshots:
         spy_ret = _forward_return(spy_bars, run_date, horizon_days)
         if spy_ret is None:
+            spy_none += 1
             continue
         used_this_run = False
         for sym in symbols:
@@ -157,6 +163,10 @@ def compute_track_record(
         if used_this_run:
             runs_counted += 1
 
+    print(
+        f"[track_record] diag: excess_obs={len(excess)} runs_counted={runs_counted} "
+        f"spy_ret_none_runs={spy_none}"
+    )
     if not excess:
         return None
 
