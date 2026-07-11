@@ -130,7 +130,8 @@ class ScanExecutionTests(unittest.TestCase):
         scorer.assert_called_once()
         self.assertIn("PreBreakoutProb", result.columns)
         self.assertIn("PreBreakoutProb%", result.columns)
-        self.assertEqual(list(result["PreBreakoutProb%"]), [10.0, 50.0, 90.0])
+        # Default ranking presents model-first: highest PreBreakoutProb% on top.
+        self.assertEqual(list(result["PreBreakoutProb%"]), [90.0, 50.0, 10.0])
 
 
 if __name__ == "__main__":
