@@ -125,5 +125,11 @@ def run_manual_scan_execution(
             except (RuntimeError, TypeError, ValueError, KeyError, AttributeError):
                 pass
         frame = score_ai_confidence(frame)
+        # Present model-first ordering (PreBreakout when scored, else
+        # BreakoutScore) — the track-record A/B measured the model ranking
+        # outperforming the raw score.
+        from .ranking import apply_default_ranking
+
+        frame = apply_default_ranking(frame)
 
     return frame

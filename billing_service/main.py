@@ -23,6 +23,23 @@ def _validate_email(email: str) -> str:
 
 app = FastAPI()
 
+
+@app.on_event("startup")
+def _start_realtime_alerts() -> None:
+    """Start the real-time price-alert worker (no-op unless enabled via env)."""
+    try:
+        from billing_service.realtime_alerts import start_background_worker
+    except ImportError:  # running as a flat module dir on Render
+        try:
+            from realtime_alerts import start_background_worker  # type: ignore
+        except ImportError:
+            return
+    try:
+        start_background_worker()
+    except Exception as e:
+        _log.warning("realtime alerts worker failed to start: %s", e)
+
+
 # ---------- ENV ----------
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()

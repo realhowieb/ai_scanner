@@ -141,6 +141,12 @@ def run_scan_engine(
     except (ImportError, RuntimeError, TypeError, ValueError):
         pass
     df = score_ai_confidence(df)
+    try:
+        from scan.ranking import apply_default_ranking
+
+        df = apply_default_ranking(df)
+    except Exception:
+        pass
     return df
 
 
