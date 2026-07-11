@@ -102,6 +102,54 @@ def _skip_reason(now_utc: dt.datetime | None = None) -> str | None:
     return None
 
 
+def _resolve_session(now_utc: dt.datetime | None = None) -> str:
+    """Resolve the scan session: explicit CRON_SESSION, or inferred from ET time.
+
+    'auto' (the scheduled default) maps ET time to a session so one external
+    cron job covers every slot: before 9:30 -> premarket, 16:00 or later ->
+    postmarket, otherwise regular.
+    """
+    explicit = os.getenv("CRON_SESSION", "auto").strip().lower()
+    if explicit in ("regular", "premarket", "postmarket"):
+        return explicit
+
+    if now_utc is None:
+        now_utc = dt.datetime.now(dt.timezone.utc)
+    elif now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=dt.timezone.utc)
+    now_et = now_utc.astimezone(ZoneInfo("America/New_York"))
+    minutes = now_et.hour * 60 + now_et.minute
+    if minutes < 9 * 60 + 30:
+        return "premarket"
+    if minutes >= 16 * 60:
+        return "postmarket"
+    return "regular"
+
+
+def _run_session_scan(session: str) -> "ScanRunSummary":
+    """Run the session-labeled premarket/postmarket scan (scan.pre_post)."""
+    started = time.time()
+    try:
+        from scan.pre_post import run_postmarket_headless, run_premarket_headless
+
+        rc = run_premarket_headless() if session == "premarket" else run_postmarket_headless()
+        ok = rc == 0
+        return ScanRunSummary(
+            universe=session.upper(),
+            ok=ok,
+            duration_sec=time.time() - started,
+            error=None if ok else f"{session} scan returned {rc}",
+        )
+    except Exception as e:
+        _capture(e)
+        return ScanRunSummary(
+            universe=session.upper(),
+            ok=False,
+            duration_sec=time.time() - started,
+            error=f"{type(e).__name__}: {e}",
+        )
+
+
 def _configured_universes() -> list[str]:
     """Return the universes configured for scheduled scans.
 
@@ -229,6 +277,33 @@ def _print_provider_status() -> None:
         print(f"Active provider: unknown (config check failed: {e})")
 
 
+def _purge_old_login_attempts() -> None:
+    """Delete login_attempts rows older than 24 hours (throttled once/day).
+
+    Migrated from the retired top-level scheduler.py APScheduler path, which was
+    shadowed by the scheduler/ package and never actually ran — so this purge
+    had never executed and the table grew unbounded.
+    """
+    from db.earnings import mark_earnings_refreshed_today, should_refresh_earnings_today
+
+    key = "cron_login_purge"
+    if not should_refresh_earnings_today(key):
+        return
+    from db.engine import get_neon_conn
+
+    conn = get_neon_conn()
+    if conn is None:
+        return
+    cur = conn.cursor()
+    cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '24 hours'")
+    deleted = cur.rowcount
+    conn.commit()
+    cur.close()
+    conn.close()
+    mark_earnings_refreshed_today(key)
+    print(f"[maintenance] purged {deleted} stale login_attempts row(s)")
+
+
 def _refresh_track_record() -> None:
     """Recompute + persist the signal track record once per day (throttled).
 
@@ -340,10 +415,18 @@ def main():
         return
 
     # --- Run the scans ---
-    universes = _configured_universes()
-    print(f"Configured universes: {', '.join(universes)}")
-
-    runs = [run_and_save(universe) for universe in universes]
+    # Session routing: premarket/postmarket slots run the session-labeled scan
+    # (scan.pre_post) instead of the full universe sweep; the regular slots keep
+    # the standard universes + daily snapshot. Alerts/digest/etc. below run for
+    # every session (each is throttled or cheap).
+    session = _resolve_session()
+    print(f"Session: {session}")
+    if session in ("premarket", "postmarket"):
+        runs = [_run_session_scan(session)]
+    else:
+        universes = _configured_universes()
+        print(f"Configured universes: {', '.join(universes)}")
+        runs = [run_and_save(universe) for universe in universes]
 
     # Evaluate per-user alerts against the fresh snapshot (best-effort; never
     # let alert failures fail the scan run).
@@ -396,6 +479,13 @@ def main():
         print(f"[cron] morning digest failed: {e}")
         _capture(e)
 
+    # Nightly-equivalent maintenance (throttled once/day). Best-effort.
+    try:
+        _purge_old_login_attempts()
+    except Exception as e:
+        print(f"[cron] login purge failed: {e}")
+        _capture(e)
+
     ok = all(run.ok for run in runs)
     _write_summary(
         {
@@ -403,6 +493,7 @@ def main():
             "completed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "ok": ok,
             "skipped": False,
+            "session": session,
             "runs": [asdict(run) for run in runs],
             "total_rows": sum(run.row_count for run in runs),
         }
