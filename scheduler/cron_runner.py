@@ -372,6 +372,18 @@ def main():
         print(f"[cron] track record refresh failed: {e}")
         _capture(e)
 
+    # Score fired alerts against what happened next (per-alert scorecards).
+    # Best-effort; the unscored-events query is naturally incremental.
+    try:
+        from analytics.alert_outcomes import score_pending_outcomes
+
+        scored = score_pending_outcomes()
+        if scored:
+            print(f"[alert_outcomes] scored {scored} fired alert(s)")
+    except Exception as e:
+        print(f"[cron] alert outcome scoring failed: {e}")
+        _capture(e)
+
     # Send the Pro+ morning digest once per day (throttled to the first scan run
     # of the day). Best-effort; never let email failures fail the scan run.
     try:

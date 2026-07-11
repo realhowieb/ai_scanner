@@ -115,6 +115,15 @@ def render_alerts_panel(
                 step=0.5,
                 key="alert_break_thr",
             )
+            # Smart create: show the observed score distribution and how often
+            # this threshold would have fired, so dead/spam thresholds are
+            # caught before the alert exists. Guarded — insight is optional.
+            try:
+                from ui.alert_preview import render_breakout_threshold_insight
+
+                render_breakout_threshold_insight(float(thr))
+            except Exception:
+                pass
             wl_only = st.checkbox(
                 "Limit to my watchlist tickers", value=False, key="alert_break_wl"
             )
@@ -158,6 +167,22 @@ def render_alerts_panel(
                 target = st.number_input(
                     "Price", min_value=0.0, value=0.0, step=1.0, key="alert_price_val"
                 )
+            # Immediate-fire check: if the condition is already true at the
+            # current price, say so before the user creates it.
+            if tk.strip() and float(target) > 0:
+                try:
+                    from market_data import get_latest_quotes
+
+                    q = (get_latest_quotes([tk.strip().upper()]) or {}).get(tk.strip().upper())
+                    last = q.get("last") if isinstance(q, dict) else None
+                    if last is not None:
+                        already = (direction == "above" and last >= float(target)) or (
+                            direction == "below" and last <= float(target)
+                        )
+                        note = " — this would fire on the next check" if already else ""
+                        st.caption(f"{tk.strip().upper()} last: **{last:,.2f}**{note}")
+                except Exception:
+                    pass
             if st.button("Create price alert", key="alert_price_btn"):
                 if not tk.strip():
                     st.warning("Enter a ticker symbol.")
@@ -178,6 +203,16 @@ def render_alerts_panel(
 
     # --- Existing alerts ---
     if existing:
+        # Outcome scorecards: how each alert's recent fires actually played out.
+        # Shown only with >=3 scored fires so one lucky/unlucky fire can't
+        # masquerade as a track record.
+        try:
+            from db.alert_outcomes import HIT_TARGET_PCT, HORIZON_DAYS, scorecards_for_user
+
+            scorecards = scorecards_for_user(user_id)
+        except Exception:
+            scorecards, HIT_TARGET_PCT, HORIZON_DAYS = {}, 5.0, 3
+
         st.markdown("**Your alerts**")
         for index, a in enumerate(existing):
             cols = st.columns([6, 2, 2])
@@ -187,6 +222,14 @@ def render_alerts_panel(
             elif index >= int(max_alerts):
                 label = f"{label} _(over plan limit)_"
             cols[0].markdown(label)
+            card = scorecards.get(a.get("id"))
+            if card and card.get("fires", 0) >= 3:
+                avg = card.get("avg_return_pct")
+                avg_s = f" · avg {avg:+.1f}%/{HORIZON_DAYS}d" if avg is not None else ""
+                cols[0].caption(
+                    f"🎯 {card['hits']}/{card['fires']} recent fires hit "
+                    f"+{HIT_TARGET_PCT:g}% within {HORIZON_DAYS}d{avg_s}"
+                )
             new_enabled = cols[1].toggle(
                 "On", value=bool(a.get("enabled")), key=f"alert_tog_{a['id']}"
             )
@@ -205,15 +248,27 @@ def render_alerts_panel(
 
     # --- Recently triggered ---
     try:
-        events = list_recent_events(user_id, limit=10)
+        events = list_recent_events(user_id, limit=25)
     except Exception:
         events = []
     if events:
-        with st.expander(f"🔥 Recently triggered ({len(events)})", expanded=False):
-            for ev in events:
+        # Collapse repeats: manual/forced runs can record the same fire several
+        # times in a day; show it once with a repeat count instead of a wall of
+        # identical entries.
+        deduped: list = []
+        for ev in events:
+            msg = ev.get("message", "")
+            if deduped and deduped[-1][0].get("message", "") == msg:
+                deduped[-1][1] += 1
+            else:
+                deduped.append([ev, 1])
+        deduped = deduped[:10]
+        with st.expander(f"🔥 Recently triggered ({len(deduped)})", expanded=False):
+            for ev, count in deduped:
                 when = ev.get("fired_at")
                 when_s = when.strftime("%Y-%m-%d %H:%M UTC") if hasattr(when, "strftime") else ""
-                st.markdown(f"**{when_s}** — {ev.get('message', '')}")
+                repeat = f" _(×{count} today)_" if count > 1 else ""
+                st.markdown(f"**{when_s}** — {ev.get('message', '')}{repeat}")
 
 
 def _guarded_create(existing: list, max_per_user: int, do_create) -> None:

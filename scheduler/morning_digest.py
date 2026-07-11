@@ -83,6 +83,39 @@ def _market_gappers(df, limit: int = 5) -> List[Dict[str, Any]]:
         return []
 
 
+def _earnings_days_map(symbols: List[str], flag_days: int = 5) -> Dict[str, int]:
+    """{symbol: days-until-earnings} for names reporting within flag_days.
+
+    DB-only (earnings_calendar); best-effort empty map on any failure.
+    """
+    try:
+        from db.earnings import load_earnings_map
+
+        syms = sorted({str(s).upper() for s in symbols if str(s).strip()})
+        if not syms:
+            return {}
+        emap = load_earnings_map(syms)
+        today = datetime.now(timezone.utc).date()
+        out: Dict[str, int] = {}
+        for sym, edate in emap.items():
+            if edate is None:
+                continue
+            days = (edate - today).days
+            if 0 <= days <= flag_days:
+                out[str(sym).upper()] = days
+        return out
+    except Exception:
+        return {}
+
+
+def _flag_earnings_rows(rows: List[Dict[str, Any]], edays: Dict[str, int]) -> None:
+    """Append '⚠️E{n}d' to each row's ticker when earnings are imminent (in place)."""
+    for r in rows:
+        days = edays.get(str(r.get("ticker") or "").upper())
+        if days is not None:
+            r["ticker"] = f"{r['ticker']} ⚠️E{days}d"
+
+
 def _earnings_today() -> set:
     """Set of symbols reporting earnings today (UTC)."""
     try:
@@ -243,6 +276,15 @@ def run_morning_digest(force: bool = False) -> None:
     pick = _prebreakout_pick(df) if df is not None else None
     earnings_today = _earnings_today()
 
+    # Earnings safety rail (shared across all users): flag gappers and the pick
+    # when they report within days, so nobody trades the digest blind to it.
+    gapper_edays = _earnings_days_map([r.get("ticker") for r in gappers])
+    _flag_earnings_rows(gappers, gapper_edays)
+    if pick:
+        pick_days = _earnings_days_map([pick["symbol"]]).get(pick["symbol"])
+        if pick_days is not None:
+            pick["symbol"] = f"{pick['symbol']} ⚠️E{pick_days}d"
+
     try:
         users = load_users() or {}
     except Exception:
@@ -287,6 +329,7 @@ def run_morning_digest(force: bool = False) -> None:
                 if build_day_trader_metrics
                 else []
             )
+            _flag_earnings_rows(watch_rows, _earnings_days_map(tickers))
             earnings_hits = [t for t in tickers if t in earnings_today]
 
             html_inner, text_inner = _compose(email, watch_rows, gappers, earnings_hits, pick)

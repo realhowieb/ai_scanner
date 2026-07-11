@@ -175,6 +175,7 @@ try:
     from ui.header import render_header, render_market_snapshot, render_price_ticker
     from ui.history import render_history_expander
     from ui.prebreakout_tab import render_prebreakout_tab
+    from ui.result_explain import add_why_column
     from ui.results import get_results_df, render_results
     from ui.results_tabs import render_results_tabs
     from ui.scans import render_scan_controls, render_three_step_scanner
@@ -222,6 +223,7 @@ except Exception as _e:
     render_watchlists_panel = _missing  # type: ignore
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
+    add_why_column = lambda df: df  # type: ignore
     render_user_settings_footer = _missing  # type: ignore
 
 # --------------- Earnings (shared implementation) ----------------
@@ -680,6 +682,7 @@ def main():
         add_earnings_days_column=add_earnings_days_column,
         quiet_external_calls=_quiet_external_calls,
     )
+    df = add_why_column(df)  # plain-English "why this passed" per row
 
     render_results_tabs(
         df=df,

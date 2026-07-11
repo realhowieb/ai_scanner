@@ -337,7 +337,7 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
             from ui.ai import is_configured
             if is_configured():
                 df = st.session_state.get("results_df")
-                with st.expander("🤖 AI watchlist insights", expanded=False):
+                with st.expander("🧠 AI watchlist insights", expanded=False):
                     from ui.ai_insights import (
                         render_watchlist_alert_preview,
                         render_watchlist_digest,
