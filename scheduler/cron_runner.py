@@ -211,8 +211,12 @@ def run_and_save(
 
 def _print_provider_status() -> None:
     """Log which price provider will be used, to diagnose Alpaca config."""
-    key = os.getenv("ALPACA_API_KEY_ID")
-    secret = os.getenv("ALPACA_API_SECRET_KEY")
+    # Resolve through the shared config so the diagnostic reflects exactly what
+    # the download code will see (env-first, then guarded secrets).
+    from data.alpaca_config import alpaca_secret
+
+    key = alpaca_secret("ALPACA_API_KEY_ID")
+    secret = alpaca_secret("ALPACA_API_SECRET_KEY")
     print(
         f"Price provider — ALPACA_API_KEY_ID={'set(…' + key[-4:] + ')' if key else 'MISSING'}, "
         f"ALPACA_API_SECRET_KEY={'set' if secret else 'MISSING'}"

@@ -56,20 +56,14 @@ def sanitize_universe_symbols(symbols: List[str]) -> List[str]:
 
 
 def get_alpaca_headers() -> Optional[dict[str, str]]:
-    """Return Alpaca auth headers from Streamlit secrets when configured."""
-    try:
-        key = st.secrets["ALPACA_API_KEY_ID"]
-        secret = st.secrets["ALPACA_API_SECRET_KEY"]
-    except (AttributeError, KeyError, TypeError):
-        return None
+    """Return Alpaca auth headers when configured.
 
-    if not key or not secret:
-        return None
+    Delegates to data.alpaca_config (env-first, then guarded secrets) — the
+    previous secrets-only read silently returned None in headless contexts.
+    """
+    from data.alpaca_config import get_alpaca_headers as _shared_headers
 
-    return {
-        "APCA-API-KEY-ID": str(key),
-        "APCA-API-SECRET-KEY": str(secret),
-    }
+    return _shared_headers()
 
 
 def _extract_snapshot_price(snapshot: Any) -> float | None:

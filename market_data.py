@@ -16,7 +16,6 @@ It is intentionally written to be:
 
 from __future__ import annotations
 
-import os
 from typing import Dict, List, Optional
 
 import streamlit as st
@@ -33,55 +32,27 @@ except ImportError:  # pragma: no cover - requests import failure handled at run
 
 
 def _get_alpaca_base_urls() -> Dict[str, str]:
-    """
-    Read Alpaca API URLs from Streamlit secrets.
+    """Return Alpaca config (creds may be None). Resolution lives in
+    data.alpaca_config (env-first, guarded secrets) so every reader agrees."""
+    from data.alpaca_config import DEFAULT_BASE_URL, DEFAULT_DATA_URL, get_alpaca_config
 
-    Expected keys in .streamlit/secrets.toml:
-      ALPACA_API_KEY_ID
-      ALPACA_API_SECRET_KEY
-      ALPACA_BASE_URL (optional, defaults to https://paper-api.alpaca.markets)
-      ALPACA_DATA_URL (optional, defaults to https://data.alpaca.markets)
-    """
-    # Read env vars first (works headlessly, e.g. the scheduled cron), then fall
-    # back to Streamlit secrets — guarded, since accessing st.secrets raises
-    # StreamlitSecretNotFoundError when there's no secrets file (non-app context).
-    def _secret(key: str, default: Optional[str] = None) -> Optional[str]:
-        env_val = os.getenv(key)
-        if env_val:
-            return env_val
-        try:
-            val = getattr(st, "secrets", {}).get(key)
-        except Exception:
-            val = None
-        return val if val else default
-
-    api_key = _secret("ALPACA_API_KEY_ID")
-    api_secret = _secret("ALPACA_API_SECRET_KEY")
-    base_url = _secret("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
-    data_url = _secret("ALPACA_DATA_URL", "https://data.alpaca.markets")
-
+    cfg = get_alpaca_config()
+    if cfg is not None:
+        return cfg
+    # Preserve this module's historical shape: URLs always present, creds None.
     return {
-        "api_key": api_key,
-        "api_secret": api_secret,
-        "base_url": base_url.rstrip("/"),
-        "data_url": data_url.rstrip("/"),
+        "api_key": None,
+        "api_secret": None,
+        "base_url": DEFAULT_BASE_URL,
+        "data_url": DEFAULT_DATA_URL,
     }
 
 
 def _get_alpaca_headers() -> Optional[Dict[str, str]]:
     """Return Alpaca auth headers if configured, otherwise None."""
-    cfg = _get_alpaca_base_urls()
-    api_key = cfg.get("api_key")
-    api_secret = cfg.get("api_secret")
+    from data.alpaca_config import get_alpaca_headers
 
-    if not api_key or not api_secret:
-        return None
-
-    return {
-        "APCA-API-KEY-ID": api_key,
-        "APCA-API-SECRET-KEY": api_secret,
-        "Accept": "application/json",
-    }
+    return get_alpaca_headers()
 
 
 # ------------------------------- Snapshots ---------------------------------
