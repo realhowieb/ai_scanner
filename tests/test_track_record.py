@@ -72,6 +72,17 @@ class RankedSymbolsTests(unittest.TestCase):
         ):
             self.assertEqual(tr._ranked_symbols(self._df(), "prebreakout", 2), [])
 
+    def test_prebreakout_ranking_empty_on_all_zero_probabilities(self):
+        # score_prebreakout emits all-zero probs when no trained model loads;
+        # zeros are not a ranking and must not fall back to stored order.
+        def zero_score(df):
+            out = df.copy()
+            out["PreBreakoutProb%"] = 0.0
+            return out
+
+        with mock.patch("ml_prebreakout.score_prebreakout", side_effect=zero_score):
+            self.assertEqual(tr._ranked_symbols(self._df(), "prebreakout", 2), [])
+
 
 class ComputeTrackRecordTests(unittest.TestCase):
     def test_excess_vs_benchmark_math(self):
@@ -87,7 +98,14 @@ class ComputeTrackRecordTests(unittest.TestCase):
         }
         with mock.patch.object(
             tr, "_eligible_snapshots", return_value=[(run_date, snapshot_df)]
-        ), mock.patch("data.price_alpaca.download_multi_alpaca", return_value=bars):
+        ), mock.patch(
+            "data.price_alpaca.download_multi_alpaca", return_value=bars
+        ), mock.patch(
+            # Deterministic across environments: with ML libs installed but no
+            # trained model, the real score_prebreakout returns zero probs.
+            "ml_prebreakout.score_prebreakout",
+            side_effect=RuntimeError("no model"),
+        ):
             results = tr.compute_track_record(horizon_days=1)
 
         self.assertIn("breakout", results)

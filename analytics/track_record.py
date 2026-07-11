@@ -37,6 +37,12 @@ def _ranked_symbols(df, ranking: str, top_n: int) -> List[str]:
             scored = score_prebreakout(df)
             if scored is None or "PreBreakoutProb%" not in scored.columns:
                 return []
+            # score_prebreakout returns all-zero probabilities when no trained
+            # model is available. Zeros are not a ranking — treating them as one
+            # silently degrades to the snapshot's stored order and fakes the
+            # A/B comparison. Require a real signal.
+            if float(scored["PreBreakoutProb%"].max() or 0.0) <= 0.0:
+                return []
             work = scored.sort_values("PreBreakoutProb%", ascending=False)
         except Exception:
             return []
