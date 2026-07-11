@@ -276,6 +276,15 @@ def debug_status():
         },
         "db": _db_status(),
     }
+    # Real-time alert worker introspection (enabled/alive/env presence).
+    try:
+        try:
+            from billing_service.realtime_alerts import worker_status
+        except ImportError:
+            from realtime_alerts import worker_status  # type: ignore
+        status["realtime_alerts"] = worker_status()
+    except Exception as e:
+        status["realtime_alerts"] = {"error": f"{type(e).__name__}: {e}"}
     required = (
         "STRIPE_SECRET_KEY",
         "STRIPE_WEBHOOK_SECRET",
