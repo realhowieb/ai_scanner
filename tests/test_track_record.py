@@ -3,11 +3,16 @@ import datetime as dt
 import unittest
 from unittest import mock
 
-import pytest
-
-pd = pytest.importorskip("pandas")
+# Pandas-gated via stdlib skip (not pytest.importorskip) so the core smoke job,
+# which runs unittest discovery without pytest installed, can still collect.
+try:
+    import pandas as pd
+except Exception:  # pragma: no cover - core envs without pandas
+    pd = None
 
 from analytics import track_record as tr  # noqa: E402
+
+requires_pandas = unittest.skipIf(pd is None, "pandas not installed")
 
 
 def _bars(start: str, closes):
@@ -16,6 +21,7 @@ def _bars(start: str, closes):
     return pd.DataFrame({"Close": closes}, index=idx)
 
 
+@requires_pandas
 class ForwardReturnTests(unittest.TestCase):
     def test_entry_is_first_bar_on_or_after_run_date(self):
         # Mon Jan 6 .. Fri Jan 10; run_date Tue Jan 7 → entry 102, exit +2 bars 104.
@@ -42,6 +48,7 @@ class ForwardReturnTests(unittest.TestCase):
         self.assertIsNone(tr._forward_return(bars, dt.date(2025, 1, 6), horizon_days=1))
 
 
+@requires_pandas
 class RankedSymbolsTests(unittest.TestCase):
     def _df(self):
         return pd.DataFrame(
@@ -84,6 +91,7 @@ class RankedSymbolsTests(unittest.TestCase):
             self.assertEqual(tr._ranked_symbols(self._df(), "prebreakout", 2), [])
 
 
+@requires_pandas
 class ComputeTrackRecordTests(unittest.TestCase):
     def test_excess_vs_benchmark_math(self):
         run_date = dt.date(2025, 1, 6)
