@@ -3,6 +3,13 @@
 # Streamlit Cloud and normal production deploys should continue installing this
 # file. It delegates to smaller groups so CI can test the lean scanner runtime
 # separately from heavier optional features.
+#
+# The constraints line pins every transitive dependency to the exact versions
+# resolved by the Freeze Dependency Lock workflow, so a redeploy can never
+# silently pick up a different native stack (numpy/pyarrow ABI drift and
+# source-build failures caused the July 11 outage). To upgrade deps: edit the
+# ranged files, re-run the freeze workflow, and commit the new lock.
+-c requirements.lock
 -r requirements-core.txt
 -r requirements-ml.txt
 -r requirements-extended.txt

@@ -7,6 +7,42 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+# Don't surface a track record until it's statistically meaningful — a handful
+# of snapshots over one week is noise and can misrepresent the signal in either
+# direction. Require a real sample before showing anything to users.
+TRACK_RECORD_MIN_SAMPLE = 150
+TRACK_RECORD_MIN_RUNS = 8
+
+
+def render_track_record_badge() -> None:
+    """Show the latest signal track record (forward-return performance)."""
+    try:
+        from db.track_record import load_latest_track_record
+
+        tr = load_latest_track_record(horizon_days=5)
+    except Exception:
+        tr = None
+    if not tr or not tr.get("sample_size"):
+        return
+    if int(tr.get("sample_size") or 0) < TRACK_RECORD_MIN_SAMPLE or int(
+        tr.get("runs_used") or 0
+    ) < TRACK_RECORD_MIN_RUNS:
+        return
+    avg = tr.get("avg_return")
+    win = tr.get("win_rate")
+    n = tr.get("sample_size")
+    h = tr.get("horizon_days", 5)
+    bench = tr.get("benchmark") or "SPY"
+    top_n = tr.get("top_n") or 5
+    if avg is None or win is None:
+        return
+    st.caption(
+        f"📈 **Track record:** top-{top_n} scan candidates beat the {bench} by "
+        f"**{avg:+.1%}** over the next {h} trading days on average, **{win:.0%}** "
+        f"beating the benchmark (n={n}). Backtested on saved snapshots — past "
+        "performance is not indicative of future results."
+    )
+
 YF_DISABLED_KEY = "yf_disabled"
 YF_DISABLED_REASON_KEY = "yf_disabled_reason"
 YF_WARNED_KEY = "yf_disabled_warned"

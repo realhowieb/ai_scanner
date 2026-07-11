@@ -14,6 +14,14 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 SUMMARY_PATH = ROOT / "artifacts" / "scheduled_scan_summary.json"
 
+# Report best-effort task failures to Sentry when configured (no-op otherwise),
+# so silently-swallowed cron problems still get counted somewhere.
+try:
+    from ui.monitoring import capture as _capture
+except Exception:  # pragma: no cover - fallback when monitoring is unavailable
+    def _capture(exc: BaseException) -> None:
+        pass
+
 
 @dataclass
 class ScanRunSummary:
@@ -203,8 +211,12 @@ def run_and_save(
 
 def _print_provider_status() -> None:
     """Log which price provider will be used, to diagnose Alpaca config."""
-    key = os.getenv("ALPACA_API_KEY_ID")
-    secret = os.getenv("ALPACA_API_SECRET_KEY")
+    # Resolve through the shared config so the diagnostic reflects exactly what
+    # the download code will see (env-first, then guarded secrets).
+    from data.alpaca_config import alpaca_secret
+
+    key = alpaca_secret("ALPACA_API_KEY_ID")
+    secret = alpaca_secret("ALPACA_API_SECRET_KEY")
     print(
         f"Price provider — ALPACA_API_KEY_ID={'set(…' + key[-4:] + ')' if key else 'MISSING'}, "
         f"ALPACA_API_SECRET_KEY={'set' if secret else 'MISSING'}"
@@ -215,6 +227,54 @@ def _print_provider_status() -> None:
         print(f"Active provider: {'Alpaca' if cfg else 'yfinance (Alpaca not configured)'}")
     except Exception as e:
         print(f"Active provider: unknown (config check failed: {e})")
+
+
+def _refresh_track_record() -> None:
+    """Recompute + persist the signal track record once per day (throttled).
+
+    CRON_FORCE=1 (manual run) bypasses the daily throttle for on-demand testing.
+    """
+    from db.earnings import mark_earnings_refreshed_today, should_refresh_earnings_today
+
+    key = "cron_track_record"
+    forced = os.getenv("CRON_FORCE", "").strip() == "1"
+    if not forced and not should_refresh_earnings_today(key):
+        print("[track_record] already computed today; skipping")
+        return
+
+    from analytics.track_record import compute_track_record
+    from db.track_record import save_track_record
+
+    any_saved = False
+    # Multiple horizons so we can see which holding period the signal actually
+    # wins at: 1d (day-trade), 5d (swing), 20d (position). Longer horizons need
+    # older snapshots, so they populate later as history accumulates.
+    for horizon in (1, 5, 20):
+        by_ranking = compute_track_record(horizon_days=horizon)
+        if not by_ranking:
+            print(f"[track_record] horizon={horizon}: insufficient history")
+            continue
+        for ranking, summary in by_ranking.items():
+            saved = save_track_record(
+                horizon_days=summary["horizon_days"],
+                avg_return=summary["avg_return"],
+                median_return=summary["median_return"],
+                win_rate=summary["win_rate"],
+                sample_size=summary["sample_size"],
+                runs_used=summary["runs_used"],
+                benchmark=summary.get("benchmark"),
+                top_n=summary.get("top_n"),
+                ranking=ranking,
+            )
+            any_saved = any_saved or saved
+            print(
+                f"[track_record] h={horizon} {ranking}: "
+                f"excess_vs_{summary.get('benchmark')}={summary['avg_return']:+.2%} "
+                f"beat={summary['win_rate']:.0%} n={summary['sample_size']}"
+            )
+
+    if any_saved:
+        mark_earnings_refreshed_today(key)
 
 
 def _refresh_earnings() -> None:
@@ -293,6 +353,7 @@ def main():
         run_alerts()
     except Exception as e:
         print(f"[cron] alert evaluation failed: {e}")
+        _capture(e)
 
     # Refresh the earnings calendar once per day from FMP -> Finnhub (bulk; no
     # per-symbol yfinance over the full universe). Best-effort, throttled so it
@@ -301,6 +362,27 @@ def main():
         _refresh_earnings()
     except Exception as e:
         print(f"[cron] earnings refresh failed: {e}")
+        _capture(e)
+
+    # Recompute the signal track record once per day (forward returns of past
+    # snapshot candidates). Best-effort; never fail the scan run.
+    try:
+        _refresh_track_record()
+    except Exception as e:
+        print(f"[cron] track record refresh failed: {e}")
+        _capture(e)
+
+    # Send the Pro+ morning digest once per day (throttled to the first scan run
+    # of the day). Best-effort; never let email failures fail the scan run.
+    try:
+        from scheduler.morning_digest import run_morning_digest
+
+        # A manual forced workflow run (CRON_FORCE=1) bypasses the daily throttle
+        # so admins can test the digest on demand; scheduled runs send once/day.
+        run_morning_digest(force=os.getenv("CRON_FORCE", "").strip() == "1")
+    except Exception as e:
+        print(f"[cron] morning digest failed: {e}")
+        _capture(e)
 
     ok = all(run.ok for run in runs)
     _write_summary(

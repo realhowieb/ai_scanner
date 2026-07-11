@@ -13,6 +13,13 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Any, Dict, List, Optional
 
+# Report silent failures to Sentry when configured (no-op otherwise).
+try:
+    from ui.monitoring import capture as _capture
+except Exception:  # pragma: no cover - fallback when monitoring is unavailable
+    def _capture(exc: BaseException) -> None:
+        pass
+
 
 def _latest_snapshot_df():
     """Load the most recent saved scan as a DataFrame, or None."""
@@ -150,6 +157,7 @@ def _live_quote(ticker: str) -> Optional[float]:
         print(f"[alert_runner] no live quote for {ticker} (quotes={quotes!r})")
     except Exception as e:
         print(f"[alert_runner] live quote failed for {ticker}: {type(e).__name__}: {e}")
+        _capture(e)
     return None
 
 
@@ -215,6 +223,7 @@ def run_alerts() -> None:
         alerts = list_all_enabled_alerts() or []
     except Exception as e:
         print(f"[alert_runner] could not load alerts: {e}")
+        _capture(e)
         return
 
     if not alerts:
@@ -302,8 +311,10 @@ def run_alerts() -> None:
                         emailed += 1
                 except Exception as e:
                     print(f"[alert_runner] email to {user_id} failed: {e}")
+                    _capture(e)
         except Exception as e:  # never let one alert kill the run
             print(f"[alert_runner] alert {alert.get('id')} failed: {e}")
+            _capture(e)
             continue
 
     print(f"[alert_runner] fired {fired} alert(s), emailed {emailed}")

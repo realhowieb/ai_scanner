@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
-import os
 from typing import Dict, Sequence
 
 import pandas as pd
@@ -21,46 +20,19 @@ except ImportError:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 
-def _secret_get(secrets: object, key: str) -> str | None:
-    """Safely read Streamlit secrets without failing when no secrets file exists."""
-    try:
-        if hasattr(secrets, "get"):
-            value = secrets.get(key)  # type: ignore[attr-defined]
-        else:
-            value = secrets[key]  # type: ignore[index]
-    except (AttributeError, KeyError, TypeError, RuntimeError, OSError):
-        return None
-    return str(value) if value else None
-
-
 def get_alpaca_config() -> Dict[str, str] | None:
-    """Return Alpaca Market Data configuration if it is available."""
-    api_key: str | None = None
-    api_secret: str | None = None
-    data_url: str | None = None
+    """Return Alpaca Market Data configuration if it is available.
 
-    try:  # pragma: no cover - optional dependency
-        import streamlit as st  # type: ignore
+    Resolution (env-first, then guarded Streamlit secrets) is centralized in
+    data.alpaca_config so every reader agrees; this wrapper only adds the
+    requests-availability check that bar downloads need.
+    """
+    from data.alpaca_config import get_alpaca_config as _shared_config
 
-        secrets = getattr(st, "secrets", {})
-        api_key = _secret_get(secrets, "ALPACA_API_KEY_ID") or api_key
-        api_secret = _secret_get(secrets, "ALPACA_API_SECRET_KEY") or api_secret
-        data_url = _secret_get(secrets, "ALPACA_DATA_URL") or data_url
-    except (AttributeError, ImportError, RuntimeError):
-        pass
-
-    api_key = api_key or os.getenv("ALPACA_API_KEY_ID")
-    api_secret = api_secret or os.getenv("ALPACA_API_SECRET_KEY")
-    data_url = data_url or os.getenv("ALPACA_DATA_URL") or "https://data.alpaca.markets"
-
-    if not api_key or not api_secret or requests is None:
+    cfg = _shared_config()
+    if cfg is None or requests is None:
         return None
-
-    return {
-        "api_key": api_key,
-        "api_secret": api_secret,
-        "data_url": data_url.rstrip("/"),
-    }
+    return cfg
 
 
 def alpaca_timeframe_from_interval(interval: str) -> str | None:

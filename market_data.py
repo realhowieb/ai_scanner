@@ -16,7 +16,6 @@ It is intentionally written to be:
 
 from __future__ import annotations
 
-import os
 from typing import Dict, List, Optional
 
 import streamlit as st
@@ -33,55 +32,27 @@ except ImportError:  # pragma: no cover - requests import failure handled at run
 
 
 def _get_alpaca_base_urls() -> Dict[str, str]:
-    """
-    Read Alpaca API URLs from Streamlit secrets.
+    """Return Alpaca config (creds may be None). Resolution lives in
+    data.alpaca_config (env-first, guarded secrets) so every reader agrees."""
+    from data.alpaca_config import DEFAULT_BASE_URL, DEFAULT_DATA_URL, get_alpaca_config
 
-    Expected keys in .streamlit/secrets.toml:
-      ALPACA_API_KEY_ID
-      ALPACA_API_SECRET_KEY
-      ALPACA_BASE_URL (optional, defaults to https://paper-api.alpaca.markets)
-      ALPACA_DATA_URL (optional, defaults to https://data.alpaca.markets)
-    """
-    # Read env vars first (works headlessly, e.g. the scheduled cron), then fall
-    # back to Streamlit secrets — guarded, since accessing st.secrets raises
-    # StreamlitSecretNotFoundError when there's no secrets file (non-app context).
-    def _secret(key: str, default: Optional[str] = None) -> Optional[str]:
-        env_val = os.getenv(key)
-        if env_val:
-            return env_val
-        try:
-            val = getattr(st, "secrets", {}).get(key)
-        except Exception:
-            val = None
-        return val if val else default
-
-    api_key = _secret("ALPACA_API_KEY_ID")
-    api_secret = _secret("ALPACA_API_SECRET_KEY")
-    base_url = _secret("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
-    data_url = _secret("ALPACA_DATA_URL", "https://data.alpaca.markets")
-
+    cfg = get_alpaca_config()
+    if cfg is not None:
+        return cfg
+    # Preserve this module's historical shape: URLs always present, creds None.
     return {
-        "api_key": api_key,
-        "api_secret": api_secret,
-        "base_url": base_url.rstrip("/"),
-        "data_url": data_url.rstrip("/"),
+        "api_key": None,
+        "api_secret": None,
+        "base_url": DEFAULT_BASE_URL,
+        "data_url": DEFAULT_DATA_URL,
     }
 
 
 def _get_alpaca_headers() -> Optional[Dict[str, str]]:
     """Return Alpaca auth headers if configured, otherwise None."""
-    cfg = _get_alpaca_base_urls()
-    api_key = cfg.get("api_key")
-    api_secret = cfg.get("api_secret")
+    from data.alpaca_config import get_alpaca_headers
 
-    if not api_key or not api_secret:
-        return None
-
-    return {
-        "APCA-API-KEY-ID": api_key,
-        "APCA-API-SECRET-KEY": api_secret,
-        "Accept": "application/json",
-    }
+    return get_alpaca_headers()
 
 
 # ------------------------------- Snapshots ---------------------------------
@@ -147,6 +118,120 @@ def fetch_alpaca_snapshots(symbols: List[str]) -> Dict[str, dict]:
 
 
 # ------------------------------ Public API ---------------------------------
+
+
+def _sf(value: object) -> Optional[float]:
+    """Best-effort float coercion (None on failure)."""
+    try:
+        if value is None:
+            return None
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_avg_daily_volume(symbols: List[str], lookback: int = 20) -> Dict[str, float]:
+    """Average daily share volume over `lookback` sessions (for RVOL).
+
+    Cached for 30 minutes because the denominator moves slowly. Returns an empty
+    dict when Alpaca isn't configured — callers should treat missing keys as
+    "RVOL unavailable" rather than an error.
+    """
+    if not symbols:
+        return {}
+    try:
+        from data.price_alpaca import download_multi_alpaca
+    except Exception:
+        return {}
+    try:
+        frames = download_multi_alpaca(
+            [s.upper() for s in symbols],
+            period=f"{max(lookback + 5, 25)}d",
+            interval="1d",
+            prepost=False,
+            timeout_s=15.0,
+        )
+    except Exception:
+        return {}
+
+    out: Dict[str, float] = {}
+    for sym, frame in (frames or {}).items():
+        try:
+            vol = frame["Volume"].tail(lookback)
+            avg = float(vol.mean())
+            if avg > 0:
+                out[str(sym).upper()] = avg
+        except Exception:
+            continue
+    return out
+
+
+def build_day_trader_metrics(
+    symbols: List[str],
+    *,
+    with_rvol: bool = True,
+) -> List[Dict[str, Optional[float]]]:
+    """Return per-symbol intraday day-trader metrics from Alpaca snapshots.
+
+    One cached snapshot call yields today's move, gap, VWAP, and volume — no
+    heavy bar downloads. RVOL layers on a slowly-changing cached average-volume
+    lookup. Each row:
+      { ticker, last, chg_pct, gap_pct, vwap, vs_vwap_pct, volume, rvol }
+    Symbols with no usable price are dropped. Sorted by |chg_pct| descending.
+    """
+    if not symbols:
+        return []
+    syms = [s.upper() for s in dict.fromkeys(symbols).keys() if str(s).strip()]
+    snapshots = fetch_alpaca_snapshots(syms)
+    if not snapshots:
+        return []
+
+    avg_vol = fetch_avg_daily_volume(syms) if with_rvol else {}
+
+    rows: List[Dict[str, Optional[float]]] = []
+    for sym in syms:
+        snap = snapshots.get(sym)
+        if not isinstance(snap, dict):
+            continue
+        latest_trade = snap.get("latestTrade") or {}
+        minute_bar = snap.get("minuteBar") or {}
+        daily_bar = snap.get("dailyBar") or {}
+        prev_daily_bar = snap.get("prevDailyBar") or {}
+
+        last = _sf(latest_trade.get("p")) or _sf(minute_bar.get("c")) or _sf(daily_bar.get("c"))
+        if last is None:
+            continue
+        prev_close = _sf(prev_daily_bar.get("c"))
+        today_open = _sf(daily_bar.get("o"))
+        vwap = _sf(daily_bar.get("vw"))
+        volume = _sf(daily_bar.get("v")) or _sf(minute_bar.get("v"))
+
+        chg_pct = ((last - prev_close) / prev_close * 100.0) if prev_close else None
+        gap_pct = (
+            (today_open - prev_close) / prev_close * 100.0
+            if (today_open and prev_close)
+            else None
+        )
+        vs_vwap_pct = ((last - vwap) / vwap * 100.0) if vwap else None
+        avg = avg_vol.get(sym)
+        rvol = (volume / avg) if (volume and avg) else None
+
+        rows.append(
+            {
+                "ticker": sym,
+                "last": round(last, 2),
+                "chg_pct": round(chg_pct, 2) if chg_pct is not None else None,
+                "gap_pct": round(gap_pct, 2) if gap_pct is not None else None,
+                "vwap": round(vwap, 2) if vwap is not None else None,
+                "vs_vwap_pct": round(vs_vwap_pct, 2) if vs_vwap_pct is not None else None,
+                "volume": int(volume) if volume else None,
+                "rvol": round(rvol, 2) if rvol is not None else None,
+            }
+        )
+
+    rows.sort(key=lambda r: abs(r["chg_pct"]) if r.get("chg_pct") is not None else -1.0, reverse=True)
+    return rows
 
 
 def get_latest_quotes(

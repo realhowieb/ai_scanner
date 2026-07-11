@@ -18,6 +18,21 @@ def _get(name: str, default: str|None=None):
     return os.getenv(name, default)
 
 
+def _get_int(name: str, default: int) -> int:
+    """Parse an int env/secret, tolerating unset or empty values.
+
+    A workflow that passes `${{ secrets.FOO }}` for an unset secret injects an
+    empty string, so a bare int(_get(...)) would crash config import (and the
+    whole cron). Fall back to the default on empty/invalid input.
+    """
+    raw = _get(name, None)
+    try:
+        text = str(raw).strip()
+        return int(text) if text else int(default)
+    except (TypeError, ValueError):
+        return int(default)
+
+
 def _get_any(names: tuple[str, ...], default: str | None = None):
     for name in names:
         val = _get(name)
@@ -100,6 +115,17 @@ ALERTS_ENABLED: bool = _get("ALERTS_ENABLED", "1") == "1"
 ALERT_THROTTLE_HOURS: float = float(_get("ALERT_THROTTLE_HOURS", "12"))
 # Max alerts a single user may create (guards table growth / email volume).
 ALERT_MAX_PER_USER: int = int(_get("ALERT_MAX_PER_USER", "25"))
+
+# --- Pre-open morning digest email (Pro+, structured, no AI dependency) ---
+# Off by default: enable per-environment once deliverability is verified so a
+# broken run can't email the whole user base. The cron sends at most once/day.
+MORNING_DIGEST_ENABLED: bool = str(_get("MORNING_DIGEST_ENABLED", "0")).strip() == "1"
+# Cap recipients per run to bound email volume/cost.
+MORNING_DIGEST_MAX_USERS: int = _get_int("MORNING_DIGEST_MAX_USERS", 500)
+
+# --- Day Trader live panel (intraday snapshots: gappers / VWAP / RVOL) ---
+# Master switch for the live day-trader monitor. On by default; set to 0 to hide.
+DAY_TRADER_ENABLED: bool = _get("DAY_TRADER_ENABLED", "1") == "1"
 
 # --- Alerting (ops) ---
 SLACK_WEBHOOK_URL: str | None = _get("SLACK_WEBHOOK_URL")
