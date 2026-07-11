@@ -302,6 +302,17 @@ def main():
     except Exception as e:
         print(f"[cron] earnings refresh failed: {e}")
 
+    # Send the Pro+ morning digest once per day (throttled to the first scan run
+    # of the day). Best-effort; never let email failures fail the scan run.
+    try:
+        from scheduler.morning_digest import run_morning_digest
+
+        # A manual forced workflow run (CRON_FORCE=1) bypasses the daily throttle
+        # so admins can test the digest on demand; scheduled runs send once/day.
+        run_morning_digest(force=os.getenv("CRON_FORCE", "").strip() == "1")
+    except Exception as e:
+        print(f"[cron] morning digest failed: {e}")
+
     ok = all(run.ok for run in runs)
     _write_summary(
         {

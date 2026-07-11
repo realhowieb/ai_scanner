@@ -100,6 +100,32 @@ def send_verification_email(to_address: str, verify_url: str) -> bool:
     )
 
 
+def send_digest_email(to_address: str, subject: str, html_inner: str, text_inner: str) -> bool:
+    """Send a branded rich-HTML digest (e.g. the pre-open morning digest).
+
+    `html_inner` is an HTML fragment (tables/headings) placed inside the branded
+    shell; `text_inner` is the plain-text fallback for non-HTML clients.
+    """
+    disclaimer = (
+        "Informational and educational purposes only — not financial, investment, "
+        "or trading advice. Trading involves risk of loss; do your own research."
+    )
+    return _send_smtp(
+        to_address=to_address,
+        subject=f"HSFinest.AI — {subject}",
+        body_text=(f"HSFinest.AI\n\n{text_inner}\n\n— Scan. Analyze. Trade. Win.\n\n{disclaimer}"),
+        body_html=(
+            "<div style='font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
+            "max-width:640px;margin:0 auto;color:#111'>"
+            "<p style='font-size:18px;margin:0 0 4px'><strong>⚡ HSFinest.AI</strong></p>"
+            f"{html_inner}"
+            "<p style='color:#888;margin-top:20px'>— Scan. Analyze. Trade. Win.</p>"
+            f"<p style='color:#aaa;font-size:11px'>{disclaimer}</p>"
+            "</div>"
+        ),
+    )
+
+
 def send_alert_email(to_address: str, subject: str, body: str) -> bool:
     """Send a branded alert email."""
     return _send_smtp(

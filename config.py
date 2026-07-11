@@ -101,6 +101,13 @@ ALERT_THROTTLE_HOURS: float = float(_get("ALERT_THROTTLE_HOURS", "12"))
 # Max alerts a single user may create (guards table growth / email volume).
 ALERT_MAX_PER_USER: int = int(_get("ALERT_MAX_PER_USER", "25"))
 
+# --- Pre-open morning digest email (Pro+, structured, no AI dependency) ---
+# Off by default: enable per-environment once deliverability is verified so a
+# broken run can't email the whole user base. The cron sends at most once/day.
+MORNING_DIGEST_ENABLED: bool = _get("MORNING_DIGEST_ENABLED", "0") == "1"
+# Cap recipients per run to bound email volume/cost.
+MORNING_DIGEST_MAX_USERS: int = int(_get("MORNING_DIGEST_MAX_USERS", "500"))
+
 # --- Day Trader live panel (intraday snapshots: gappers / VWAP / RVOL) ---
 # Master switch for the live day-trader monitor. On by default; set to 0 to hide.
 DAY_TRADER_ENABLED: bool = _get("DAY_TRADER_ENABLED", "1") == "1"
