@@ -12,6 +12,11 @@ on:
         description: "Bypass weekend/throttle (manual testing). Set false for scheduled use."
         type: boolean
         default: true
+      session:
+        description: "Scan session. 'auto' infers from ET time (premarket <9:30, postmarket >=16:00)."
+        type: choice
+        options: [auto, regular, premarket, postmarket]
+        default: auto
 
   # Automated schedule (Mon–Fri, US market days)
   # Times below are in UTC (GitHub Actions runs on UTC):
@@ -82,6 +87,9 @@ jobs:
           # Manual "Run workflow" forces a run (bypasses weekend/premarket skip);
           # scheduled runs respect the skip.
           CRON_FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '1' || '0' }}
+          # Session routing: 'auto' lets cron_runner infer premarket/regular/
+          # postmarket from ET time, so one external cron job covers all slots.
+          CRON_SESSION: ${{ inputs.session || 'auto' }}
           # Manual runs also bypass the per-alert cooldown so alerts can be
           # tested on demand; scheduled runs keep the normal 12h throttle.
           ALERT_THROTTLE_HOURS: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '0' || '12' }}

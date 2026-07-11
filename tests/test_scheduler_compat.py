@@ -195,3 +195,37 @@ class DbImportSafetyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SessionResolutionTests(unittest.TestCase):
+    """CRON_SESSION routing: explicit value wins; 'auto' infers from ET time."""
+
+    def _resolve(self, utc_iso: str, env_session: str = "auto") -> str:
+        from scheduler.cron_runner import _resolve_session
+
+        with patch.dict(os.environ, {"CRON_SESSION": env_session}, clear=False):
+            return _resolve_session(datetime.fromisoformat(utc_iso).replace(tzinfo=timezone.utc))
+
+    def test_explicit_session_wins(self):
+        self.assertEqual(self._resolve("2026-07-13T14:35:00", "postmarket"), "postmarket")
+
+    def test_auto_premarket_before_open(self):
+        # 12:35 UTC in July = 08:35 ET (EDT) -> premarket
+        self.assertEqual(self._resolve("2026-07-13T12:35:00"), "premarket")
+
+    def test_auto_regular_during_market(self):
+        # 13:35 UTC = 09:35 ET; 19:35 UTC = 15:35 ET
+        self.assertEqual(self._resolve("2026-07-13T13:35:00"), "regular")
+        self.assertEqual(self._resolve("2026-07-13T19:35:00"), "regular")
+
+    def test_auto_postmarket_after_close(self):
+        # 20:35 UTC = 16:35 ET; 21:35 UTC = 17:35 ET
+        self.assertEqual(self._resolve("2026-07-13T20:35:00"), "postmarket")
+        self.assertEqual(self._resolve("2026-07-13T21:35:00"), "postmarket")
+
+    def test_open_boundary_is_regular(self):
+        # 13:30 UTC = exactly 09:30 ET -> regular (not premarket)
+        self.assertEqual(self._resolve("2026-07-13T13:30:00"), "regular")
+
+    def test_invalid_explicit_falls_back_to_auto(self):
+        self.assertEqual(self._resolve("2026-07-13T14:35:00", "bogus"), "regular")
