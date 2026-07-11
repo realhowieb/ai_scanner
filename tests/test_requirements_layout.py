@@ -30,11 +30,31 @@ class RequirementsLayoutTests(unittest.TestCase):
         self.assertEqual(
             lines,
             [
+                "-c requirements.lock",
                 "-r requirements-core.txt",
                 "-r requirements-ml.txt",
                 "-r requirements-extended.txt",
             ],
         )
+
+    def test_lock_exists_and_pins_native_stack(self):
+        """The lock must exist and exact-pin the ABI-sensitive native deps."""
+        lock_lines = _read_lines("requirements.lock")
+        pinned = {line.split("==", 1)[0].lower() for line in lock_lines if "==" in line}
+
+        for pkg in {"numpy", "pandas", "pyarrow", "streamlit", "xgboost", "scikit-learn", "joblib"}:
+            self.assertIn(pkg, pinned, f"{pkg} missing from requirements.lock")
+        # Constraints files must be plain pins (no includes, no local paths).
+        for line in lock_lines:
+            self.assertNotIn("-r ", line)
+            self.assertNotIn(" @ file:", line)
+
+    def test_cron_workflow_installs_with_lock_constraints(self):
+        source = (ROOT / ".github" / "workflows" / "scheduled-scans.yml").read_text()
+
+        self.assertIn("-r requirements-core.txt -c requirements.lock", source)
+        self.assertIn("-r requirements-ml.txt -c requirements.lock", source)
+        self.assertIn("python-version: '3.13'", source)
 
     def test_core_requirements_keep_scanner_runtime_deps(self):
         core = _pkg_names("requirements-core.txt")

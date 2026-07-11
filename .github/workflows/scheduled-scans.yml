@@ -36,16 +36,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          # Match the Streamlit Cloud runtime and the requirements.lock platform
+          # so the cron runs the exact same dependency stack as the app.
+          python-version: '3.13'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --prefer-binary -r requirements-core.txt
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
           # ML group (xgboost/scikit-learn/joblib) so the cron can load the
           # PreBreakout / AI-Confidence models and actually score candidates —
           # required for the track-record ranking A/B to be meaningful.
-          python -m pip install --prefer-binary -r requirements-ml.txt
+          python -m pip install --prefer-binary -r requirements-ml.txt -c requirements.lock
 
       - name: Run scheduled scans
         env:
