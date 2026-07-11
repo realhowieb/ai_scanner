@@ -136,7 +136,31 @@ def render_day_trader_panel(
                 return ""
             return "color: #16a34a" if val >= 0 else "color: #dc2626"
 
-        styler = frame.style
+        def _pct(v):
+            return "—" if pd.isna(v) else f"{v:+.2f}%"
+
+        def _price(v):
+            return "—" if pd.isna(v) else f"{v:,.2f}"
+
+        def _rvol(v):
+            return "—" if pd.isna(v) else f"{v:.2f}×"
+
+        def _vol(v):
+            return "—" if pd.isna(v) else f"{int(v):,}"
+
+        fmt = {}
+        for col in ("Chg %", "Gap %", "vs VWAP %"):
+            if col in frame.columns:
+                fmt[col] = _pct
+        for col in ("Last", "VWAP"):
+            if col in frame.columns:
+                fmt[col] = _price
+        if "RVOL" in frame.columns:
+            fmt["RVOL"] = _rvol
+        if "Volume" in frame.columns:
+            fmt["Volume"] = _vol
+
+        styler = frame.style.format(fmt)
         for col in ("Chg %", "Gap %", "vs VWAP %"):
             if col in frame.columns:
                 styler = styler.map(color_pct, subset=[col])
