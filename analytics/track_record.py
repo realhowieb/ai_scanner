@@ -36,21 +36,27 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
     complete_before = now - timedelta(days=int(horizon_days * 1.6) + 2)
     oldest = now - timedelta(days=int(lookback_days))
 
+    # Use a large limit: snapshots are a small fraction of rows and can be buried
+    # far down the (newest-first) run log, so a small window misses the aged
+    # snapshots that actually have a complete forward return.
     try:
-        runs = list_runs(limit=200) or []
+        runs = list_runs(limit=5000) or []
     except Exception:
         return []
 
     out: List[tuple] = []
     for r in runs:
-        if not r.get("is_snapshot"):
-            continue
         created = r.get("created_at")
         if not isinstance(created, datetime):
             continue
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
-        if not (oldest <= created <= complete_before):
+        # Rows are newest-first; once we pass the lookback floor we can stop.
+        if created < oldest:
+            break
+        if not r.get("is_snapshot"):
+            continue
+        if created > complete_before:
             continue
         try:
             raw = load_run_results(r["id"])
@@ -107,7 +113,6 @@ def compute_track_record(
 ) -> Optional[Dict[str, Any]]:
     """Compute forward-return performance across recent snapshot candidates."""
     snapshots = _eligible_snapshots(horizon_days, lookback_days, max_snapshots)
-    print(f"[track_record] diag: eligible_snapshots={len(snapshots)}")
     if not snapshots:
         return None
 
@@ -125,18 +130,12 @@ def compute_track_record(
             prepost=False,
             timeout_s=20.0,
         )
-    except Exception as e:
-        print(f"[track_record] diag: download raised {type(e).__name__}: {e}")
+    except Exception:
         return None
-    print(f"[track_record] diag: requested={len(all_symbols)} fetched={len(bars_by_symbol or {})}")
     if not bars_by_symbol:
         return None
 
     spy_bars = bars_by_symbol.get(BENCHMARK)
-    print(
-        f"[track_record] diag: snapshots={len(snapshots)} "
-        f"symbols_fetched={len(bars_by_symbol)} spy_present={spy_bars is not None}"
-    )
     if spy_bars is None:
         # Can't compute excess returns without the benchmark.
         return None
@@ -144,11 +143,9 @@ def compute_track_record(
     # Benchmark forward return is per-snapshot (same for all its candidates).
     excess: List[float] = []
     runs_counted = 0
-    spy_none = 0
     for run_date, symbols in snapshots:
         spy_ret = _forward_return(spy_bars, run_date, horizon_days)
         if spy_ret is None:
-            spy_none += 1
             continue
         used_this_run = False
         for sym in symbols:
@@ -166,10 +163,6 @@ def compute_track_record(
         if used_this_run:
             runs_counted += 1
 
-    print(
-        f"[track_record] diag: excess_obs={len(excess)} runs_counted={runs_counted} "
-        f"spy_ret_none_runs={spy_none}"
-    )
     if not excess:
         return None
 
