@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 TOP_N = 5
 BENCHMARK = "SPY"
+RANKINGS = ("breakout", "prebreakout")
 
 
 def _symbol_column(df) -> Optional[str]:
@@ -23,8 +24,30 @@ def _symbol_column(df) -> Optional[str]:
     return None
 
 
+def _ranked_symbols(df, ranking: str, top_n: int) -> List[str]:
+    """Top-N symbols under a ranking method ('breakout' | 'prebreakout')."""
+    sym_col = _symbol_column(df)
+    if not sym_col:
+        return []
+    work = df
+    if ranking == "prebreakout":
+        try:
+            from ml_prebreakout import score_prebreakout
+
+            scored = score_prebreakout(df)
+            if scored is None or "PreBreakoutProb%" not in scored.columns:
+                return []
+            work = scored.sort_values("PreBreakoutProb%", ascending=False)
+        except Exception:
+            return []
+    else:  # breakout
+        if "BreakoutScore" in df.columns:
+            work = df.sort_values("BreakoutScore", ascending=False)
+    return [str(s).upper() for s in work[sym_col].head(top_n).tolist() if str(s).strip()]
+
+
 def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: int):
-    """Yield (run_date, symbols) for snapshots with a complete forward window."""
+    """Yield (run_date, df) for snapshots with a complete forward window."""
     try:
         from db.runs import list_runs, load_run_results
         from ui.app_runtime import normalize_results_to_df
@@ -65,15 +88,9 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
             continue
         if df is None or len(df) == 0:
             continue
-        sym_col = _symbol_column(df)
-        if not sym_col:
+        if not _symbol_column(df):
             continue
-        # Highest-conviction picks only (top-N as ranked/presented). These are
-        # what we'd actually spotlight, and they measure the signal's best output
-        # rather than diluting it with marginal names.
-        symbols = [str(s).upper() for s in df[sym_col].head(TOP_N).tolist() if str(s).strip()]
-        if symbols:
-            out.append((created.date(), symbols))
+        out.append((created.date(), df))
         if len(out) >= max_snapshots:
             break
     return out
@@ -106,29 +123,49 @@ def _forward_return(bars, run_date, horizon_days: int) -> Optional[float]:
         return None
 
 
+def _bars_for(bars_by_symbol, sym: str):
+    """Resolve a symbol's bars, tolerating dash/dot class-share aliasing."""
+    bars = bars_by_symbol.get(sym)
+    if bars is None:
+        bars = bars_by_symbol.get(sym.replace("-", "."))
+    return bars
+
+
 def compute_track_record(
     horizon_days: int = 5,
     lookback_days: int = 45,
     max_snapshots: int = 30,
-) -> Optional[Dict[str, Any]]:
-    """Compute forward-return performance across recent snapshot candidates."""
+) -> Optional[Dict[str, Dict[str, Any]]]:
+    """A/B forward performance of both rankings across recent snapshots.
+
+    Returns {ranking: summary_dict} for each ranking that produced data, or None.
+    Both rankings share one bar download (union of their picks + benchmark).
+    """
     snapshots = _eligible_snapshots(horizon_days, lookback_days, max_snapshots)
     if not snapshots:
         return None
 
-    all_symbols = sorted({s for _, syms in snapshots for s in syms} | {BENCHMARK})
-    if not all_symbols:
+    # Per-snapshot top-N picks under each ranking; collect the symbol union once.
+    per_snapshot: List[tuple] = []  # (run_date, {ranking: [symbols]})
+    all_symbols = {BENCHMARK}
+    for run_date, df in snapshots:
+        picks = {rk: _ranked_symbols(df, rk, TOP_N) for rk in RANKINGS}
+        per_snapshot.append((run_date, picks))
+        for syms in picks.values():
+            all_symbols.update(syms)
+
+    if all_symbols == {BENCHMARK}:
         return None
 
     try:
         from data.price_alpaca import download_multi_alpaca
 
         bars_by_symbol = download_multi_alpaca(
-            all_symbols,
+            sorted(all_symbols),
             period=f"{lookback_days + horizon_days + 10}d",
             interval="1d",
             prepost=False,
-            timeout_s=20.0,
+            timeout_s=25.0,
         )
     except Exception:
         return None
@@ -137,43 +174,39 @@ def compute_track_record(
 
     spy_bars = bars_by_symbol.get(BENCHMARK)
     if spy_bars is None:
-        # Can't compute excess returns without the benchmark.
         return None
 
-    # Benchmark forward return is per-snapshot (same for all its candidates).
-    excess: List[float] = []
-    runs_counted = 0
-    for run_date, symbols in snapshots:
-        spy_ret = _forward_return(spy_bars, run_date, horizon_days)
-        if spy_ret is None:
-            continue
-        used_this_run = False
-        for sym in symbols:
-            # Avoid `a or b` here: bars are DataFrames and their truth value is
-            # ambiguous. Resolve the alias (dash vs dot class shares) explicitly.
-            bars = bars_by_symbol.get(sym)
-            if bars is None:
-                bars = bars_by_symbol.get(sym.replace("-", "."))
-            if bars is None:
+    results: Dict[str, Dict[str, Any]] = {}
+    for ranking in RANKINGS:
+        excess: List[float] = []
+        runs_counted = 0
+        for run_date, picks in per_snapshot:
+            spy_ret = _forward_return(spy_bars, run_date, horizon_days)
+            if spy_ret is None:
                 continue
-            r = _forward_return(bars, run_date, horizon_days)
-            if r is not None:
-                excess.append(r - spy_ret)
-                used_this_run = True
-        if used_this_run:
-            runs_counted += 1
-
-    if not excess:
-        return None
-
-    beats = sum(1 for e in excess if e > 0)
-    return {
-        "horizon_days": horizon_days,
-        "avg_return": mean(excess),          # avg excess vs benchmark
-        "median_return": median(excess),
-        "win_rate": beats / len(excess),     # share that beat the benchmark
-        "sample_size": len(excess),
-        "runs_used": runs_counted,
-        "benchmark": BENCHMARK,
-        "top_n": TOP_N,
-    }
+            used = False
+            for sym in picks.get(ranking, []):
+                bars = _bars_for(bars_by_symbol, sym)
+                if bars is None:
+                    continue
+                r = _forward_return(bars, run_date, horizon_days)
+                if r is not None:
+                    excess.append(r - spy_ret)
+                    used = True
+            if used:
+                runs_counted += 1
+        if not excess:
+            continue
+        beats = sum(1 for e in excess if e > 0)
+        results[ranking] = {
+            "horizon_days": horizon_days,
+            "avg_return": mean(excess),
+            "median_return": median(excess),
+            "win_rate": beats / len(excess),
+            "sample_size": len(excess),
+            "runs_used": runs_counted,
+            "benchmark": BENCHMARK,
+            "top_n": TOP_N,
+            "ranking": ranking,
+        }
+    return results or None

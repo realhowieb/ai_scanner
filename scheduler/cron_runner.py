@@ -238,26 +238,28 @@ def _refresh_track_record() -> None:
     # wins at: 1d (day-trade), 5d (swing), 20d (position). Longer horizons need
     # older snapshots, so they populate later as history accumulates.
     for horizon in (1, 5, 20):
-        summary = compute_track_record(horizon_days=horizon)
-        if not summary:
+        by_ranking = compute_track_record(horizon_days=horizon)
+        if not by_ranking:
             print(f"[track_record] horizon={horizon}: insufficient history")
             continue
-        saved = save_track_record(
-            horizon_days=summary["horizon_days"],
-            avg_return=summary["avg_return"],
-            median_return=summary["median_return"],
-            win_rate=summary["win_rate"],
-            sample_size=summary["sample_size"],
-            runs_used=summary["runs_used"],
-            benchmark=summary.get("benchmark"),
-            top_n=summary.get("top_n"),
-        )
-        any_saved = any_saved or saved
-        print(
-            f"[track_record] horizon={horizon}: excess_vs_{summary.get('benchmark')}="
-            f"{summary['avg_return']:+.2%} beat={summary['win_rate']:.0%} "
-            f"n={summary['sample_size']} (top_{summary.get('top_n')})"
-        )
+        for ranking, summary in by_ranking.items():
+            saved = save_track_record(
+                horizon_days=summary["horizon_days"],
+                avg_return=summary["avg_return"],
+                median_return=summary["median_return"],
+                win_rate=summary["win_rate"],
+                sample_size=summary["sample_size"],
+                runs_used=summary["runs_used"],
+                benchmark=summary.get("benchmark"),
+                top_n=summary.get("top_n"),
+                ranking=ranking,
+            )
+            any_saved = any_saved or saved
+            print(
+                f"[track_record] h={horizon} {ranking}: "
+                f"excess_vs_{summary.get('benchmark')}={summary['avg_return']:+.2%} "
+                f"beat={summary['win_rate']:.0%} n={summary['sample_size']}"
+            )
 
     if any_saved:
         mark_earnings_refreshed_today(key)

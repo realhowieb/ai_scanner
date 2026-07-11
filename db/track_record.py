@@ -31,6 +31,9 @@ def _ensure_schema(conn) -> None:
     # avg/median/win_rate are excess vs this benchmark, top_n candidates each).
     cur.execute("ALTER TABLE signal_track_record ADD COLUMN IF NOT EXISTS benchmark TEXT")
     cur.execute("ALTER TABLE signal_track_record ADD COLUMN IF NOT EXISTS top_n INTEGER")
+    # Which ranking produced the top-N: 'breakout' (BreakoutScore) or
+    # 'prebreakout' (PreBreakout model). Lets us A/B the two signals.
+    cur.execute("ALTER TABLE signal_track_record ADD COLUMN IF NOT EXISTS ranking TEXT")
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_track_record_horizon_computed "
         "ON signal_track_record (horizon_days, computed_at DESC)"
@@ -49,11 +52,13 @@ def save_track_record(
     runs_used: int,
     benchmark: Optional[str] = None,
     top_n: Optional[int] = None,
+    ranking: Optional[str] = None,
 ) -> bool:
     """Insert a fresh track-record summary row. Returns False if Neon is down.
 
     avg/median/win_rate are excess-vs-benchmark when `benchmark` is set (win_rate
-    then = share of candidates that beat the benchmark).
+    then = share of candidates that beat the benchmark). `ranking` records which
+    signal chose the top-N ('breakout' or 'prebreakout').
     """
     conn = get_neon_conn()
     if conn is None:
@@ -64,8 +69,8 @@ def save_track_record(
         """
         INSERT INTO signal_track_record
             (horizon_days, avg_return, median_return, win_rate, sample_size,
-             runs_used, benchmark, top_n)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+             runs_used, benchmark, top_n, ranking)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             int(horizon_days),
@@ -76,6 +81,7 @@ def save_track_record(
             int(runs_used),
             benchmark,
             int(top_n) if top_n is not None else None,
+            ranking,
         ),
     )
     conn.commit()
@@ -84,8 +90,14 @@ def save_track_record(
     return True
 
 
-def load_latest_track_record(horizon_days: int = 5) -> Optional[Dict[str, Any]]:
-    """Return the most recent summary for a horizon, or None."""
+def load_latest_track_record(
+    horizon_days: int = 5, ranking: str = "breakout"
+) -> Optional[Dict[str, Any]]:
+    """Return the most recent summary for a horizon + ranking, or None.
+
+    Older rows may have NULL ranking (pre-A/B); treat those as 'breakout' so the
+    default display keeps working during the transition.
+    """
     conn = get_neon_conn()
     if conn is None:
         return None
@@ -94,13 +106,14 @@ def load_latest_track_record(horizon_days: int = 5) -> Optional[Dict[str, Any]]:
     cur.execute(
         """
         SELECT horizon_days, avg_return, median_return, win_rate,
-               sample_size, runs_used, computed_at, benchmark, top_n
+               sample_size, runs_used, computed_at, benchmark, top_n, ranking
         FROM signal_track_record
         WHERE horizon_days = %s
+          AND (ranking = %s OR (ranking IS NULL AND %s = 'breakout'))
         ORDER BY computed_at DESC
         LIMIT 1
         """,
-        (int(horizon_days),),
+        (int(horizon_days), ranking, ranking),
     )
     row = cur.fetchone()
     cur.close()
@@ -119,4 +132,5 @@ def load_latest_track_record(horizon_days: int = 5) -> Optional[Dict[str, Any]]:
         "computed_at": row[6],
         "benchmark": row[7],
         "top_n": row[8],
+        "ranking": row[9],
     }
