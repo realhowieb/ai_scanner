@@ -282,6 +282,16 @@ def auth_ui():
         if st.session_state.get("login_locked_until"):
             _clear_failed_login_attempts()
 
+    # Session-restore grace: on a fresh browser session (refresh, reconnect,
+    # redeploy) the cookie component can report ready before the stored values
+    # have synced, so a logged-in user's first frame falls into this login
+    # branch — flashing the big logo/login UI before the session restores.
+    # Give the component one extra roundtrip before concluding logged-out.
+    if not st.session_state.get("_auth_restore_grace"):
+        st.session_state["_auth_restore_grace"] = True
+        st.caption("Restoring session…")
+        st.rerun()
+
     # Brand logo, centered above the login / sign-up tabs.
     try:
         from ui.header import _logo_path
@@ -303,9 +313,13 @@ def auth_ui():
             st.markdown("### 🔐 Login")
             card = st.container(border=True)
             with card:
-                username = st.text_input("Email or Username", key="login_username")
-                password = st.text_input("Password", type="password", key="login_password")
-                login_clicked = st.button("Login", key="login_button")
+                # st.form batches typing: the app no longer reruns after each
+                # field commit (the "weird reload" between email and password),
+                # and Enter in the password field submits the login.
+                with st.form("login_form", clear_on_submit=False):
+                    username = st.text_input("Email or Username", key="login_username")
+                    password = st.text_input("Password", type="password", key="login_password")
+                    login_clicked = st.form_submit_button("Login")
                 st.page_link("pages/reset_password.py", label="Forgot password?", icon="🔑")
 
         # ---- Sign Up tab ----
@@ -315,18 +329,19 @@ def auth_ui():
 
             signup_card = st.container(border=True)
             with signup_card:
-                su_username = st.text_input(
-                    "👤 Username",
-                    key="signup_username",
-                    placeholder="e.g. chimera47",
-                    help="This will be your public display name. You can change it later."
-                )
+                with st.form("signup_form", clear_on_submit=False):
+                    su_username = st.text_input(
+                        "👤 Username",
+                        key="signup_username",
+                        placeholder="e.g. chimera47",
+                        help="This will be your public display name. You can change it later."
+                    )
 
-                su_email = st.text_input("✉️ Email", key="signup_email", placeholder="you@example.com")
-                su_pw1 = st.text_input("🔒 Password", type="password", key="signup_password_1", placeholder="At least 8 characters")
-                su_pw2 = st.text_input("🔒 Confirm Password", type="password", key="signup_password_2", placeholder="Re-enter password")
-                su_agree = st.checkbox("I agree to use this tool for educational/informational purposes only.", key="signup_agree")
-                signup_clicked = st.button("🟢 Create Free Account", key="signup_button")
+                    su_email = st.text_input("✉️ Email", key="signup_email", placeholder="you@example.com")
+                    su_pw1 = st.text_input("🔒 Password", type="password", key="signup_password_1", placeholder="At least 8 characters")
+                    su_pw2 = st.text_input("🔒 Confirm Password", type="password", key="signup_password_2", placeholder="Re-enter password")
+                    su_agree = st.checkbox("I agree to use this tool for educational/informational purposes only.", key="signup_agree")
+                    signup_clicked = st.form_submit_button("🟢 Create Free Account")
 
             with st.expander("✅ What you get with a free Basic account", expanded=True):
                 st.write("- ✔️ Access to curated breakout scans")

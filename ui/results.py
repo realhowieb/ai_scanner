@@ -328,6 +328,9 @@ def render_results(
                     c2.metric("Last", "—" if last is None else f"{last:.2f}")
                     c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
                     c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
+                    from ui.trade_plan import render_trade_plan
+
+                    render_trade_plan(r0, locked=is_basic)
 
                     # Earnings (only when enrichment is enabled)
                     if show_earnings_in_cards:

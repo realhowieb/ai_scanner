@@ -199,12 +199,29 @@ def _track_record_line() -> tuple[str, str]:
         return "", ""
 
 
+def _watchlist_notes(
+    watch_rows: List[Dict[str, Any]], week_earnings: Dict[str, int]
+) -> List[str]:
+    """Short narrative notes: biggest watchlist mover + who reports this week."""
+    notes: List[str] = []
+    movers = [r for r in watch_rows if r.get("chg_pct") is not None]
+    if movers:
+        top = max(movers, key=lambda r: abs(r["chg_pct"]))
+        base = str(top["ticker"]).split(" ")[0]
+        notes.append(f"Biggest mover: {base} {top['chg_pct']:+.1f}%")
+    for sym, days in sorted(week_earnings.items(), key=lambda kv: kv[1]):
+        when = "today" if days == 0 else ("tomorrow" if days == 1 else f"in {days}d")
+        notes.append(f"{sym} reports {when}")
+    return notes[:5]
+
+
 def _compose(
     username: str,
     watch_rows: List[Dict[str, Any]],
     gappers: List[Dict[str, Any]],
     earnings_hits: List[str],
     pick: Optional[Dict[str, Any]],
+    notes: Optional[List[str]] = None,
 ) -> tuple[str, str]:
     """Return (html_inner, text_inner) for one user's digest."""
     date_s = datetime.now(timezone.utc).strftime("%A, %b %d")
@@ -219,6 +236,10 @@ def _compose(
     html.append("<h3 style='margin:16px 0 6px'>📋 Your watchlist</h3>")
     html.append(_movers_table(watch_rows, show_gap=True))
     text += ["Your watchlist:", _movers_text(watch_rows), ""]
+    if notes:
+        joined = " · ".join(notes)
+        html.append(f"<p style='color:#555;margin:4px 0 0'>📌 {joined}</p>")
+        text += [f"Notes: {joined}", ""]
 
     html.append("<h3 style='margin:16px 0 6px'>🚀 Top market gappers</h3>")
     html.append(_movers_table(gappers, show_gap=True))
@@ -329,10 +350,14 @@ def run_morning_digest(force: bool = False) -> None:
                 if build_day_trader_metrics
                 else []
             )
-            _flag_earnings_rows(watch_rows, _earnings_days_map(tickers))
+            week_earnings = _earnings_days_map(tickers, flag_days=7)
+            _flag_earnings_rows(watch_rows, {k: v for k, v in week_earnings.items() if v <= 5})
             earnings_hits = [t for t in tickers if t in earnings_today]
+            notes = _watchlist_notes(watch_rows, week_earnings)
 
-            html_inner, text_inner = _compose(email, watch_rows, gappers, earnings_hits, pick)
+            html_inner, text_inner = _compose(
+                email, watch_rows, gappers, earnings_hits, pick, notes=notes
+            )
             send_digest_email(
                 to_address=email,
                 subject="Your morning market digest",

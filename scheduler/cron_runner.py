@@ -467,6 +467,16 @@ def main():
         print(f"[cron] alert outcome scoring failed: {e}")
         _capture(e)
 
+    # Postmarket slots additionally send the evening wrap (throttled once/day).
+    if session == "postmarket":
+        try:
+            from scheduler.evening_wrap import run_evening_wrap
+
+            run_evening_wrap(force=os.getenv("CRON_FORCE", "").strip() == "1")
+        except Exception as e:
+            print(f"[cron] evening wrap failed: {e}")
+            _capture(e)
+
     # Send the Pro+ morning digest once per day (throttled to the first scan run
     # of the day). Best-effort; never let email failures fail the scan run.
     try:

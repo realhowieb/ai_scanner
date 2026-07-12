@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -66,12 +66,12 @@ def _due_price_alerts(conn) -> List[Dict[str, Any]]:
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT a.id, a.user_id, a.ticker, a.threshold, a.direction,
+        SELECT a.id, a.user_id, a.ticker, a.threshold, a.direction, a.alert_type,
                COALESCE(u.email_verified, FALSE), COALESCE(u.tier, 'basic')
         FROM user_alerts a
         LEFT JOIN users u ON u.username = a.user_id
         WHERE a.enabled
-          AND a.alert_type = 'price'
+          AND a.alert_type IN ('price', 'move', 'rvol')
           AND a.ticker IS NOT NULL
           AND a.threshold IS NOT NULL
           AND (a.last_fired_at IS NULL
@@ -88,8 +88,9 @@ def _due_price_alerts(conn) -> List[Dict[str, Any]]:
             "ticker": str(r[2]).upper(),
             "threshold": float(r[3]),
             "direction": (r[4] or "above").lower(),
-            "email_verified": bool(r[5]),
-            "tier": str(r[6]).lower(),
+            "alert_type": str(r[5] or "price").lower(),
+            "email_verified": bool(r[6]),
+            "tier": str(r[7]).lower(),
         }
         for r in rows
     ]
@@ -109,8 +110,8 @@ def _record_fire(conn, alert: Dict[str, Any], message: str) -> None:
 # ------------------------------ quotes (httpx) --------------------------------
 
 
-def _latest_prices(tickers: List[str]) -> Dict[str, float]:
-    """Latest trade price per ticker from Alpaca snapshots (extended hours)."""
+def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
+    """Per ticker: {'last', 'prev_close', 'volume'} from Alpaca snapshots."""
     key = os.getenv("ALPACA_API_KEY_ID", "").strip()
     secret = os.getenv("ALPACA_API_SECRET_KEY", "").strip()
     if not key or not secret or not tickers:
@@ -131,20 +132,29 @@ def _latest_prices(tickers: List[str]) -> Dict[str, float]:
     except Exception as e:
         _log(f"quote fetch failed: {type(e).__name__}: {e}")
         return {}
-    out: Dict[str, float] = {}
+    def _f(val):
+        try:
+            return float(val) if val is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    out: Dict[str, Dict[str, Optional[float]]] = {}
     if isinstance(data, dict):
         for sym, snap in data.items():
             if not isinstance(snap, dict):
                 continue
-            for src in ("latestTrade", "minuteBar", "dailyBar"):
-                node = snap.get(src) or {}
-                px = node.get("p") if src == "latestTrade" else node.get("c")
-                try:
-                    if px is not None:
-                        out[str(sym).upper()] = float(px)
-                        break
-                except (TypeError, ValueError):
-                    continue
+            trade = snap.get("latestTrade") or {}
+            minute = snap.get("minuteBar") or {}
+            daily = snap.get("dailyBar") or {}
+            prev = snap.get("prevDailyBar") or {}
+            last = _f(trade.get("p")) or _f(minute.get("c")) or _f(daily.get("c"))
+            if last is None:
+                continue
+            out[str(sym).upper()] = {
+                "last": last,
+                "prev_close": _f(prev.get("c")),
+                "volume": _f(daily.get("v")) or _f(minute.get("v")),
+            }
     return out
 
 
@@ -191,6 +201,94 @@ def _send_email(to_address: str, subject: str, body: str) -> bool:
         return False
 
 
+# Daily-cached 20d average volume per ticker (for RVOL alerts). One bars call
+# per ticker per day; the denominator moves slowly.
+_AVG_VOL: Dict[str, tuple] = {}
+
+
+def _avg_volume(ticker: str) -> Optional[float]:
+    today = datetime.now(timezone.utc).date()
+    cached = _AVG_VOL.get(ticker)
+    if cached and cached[0] == today:
+        return cached[1]
+    key = os.getenv("ALPACA_API_KEY_ID", "").strip()
+    secret = os.getenv("ALPACA_API_SECRET_KEY", "").strip()
+    if not key or not secret:
+        return None
+    base = (os.getenv("ALPACA_DATA_URL", "").strip() or "https://data.alpaca.markets").rstrip("/")
+
+    import httpx
+
+    try:
+        resp = httpx.get(
+            f"{base}/v2/stocks/bars",
+            params={
+                "symbols": ticker,
+                "timeframe": "1Day",
+                "start": (datetime.now(timezone.utc) - timedelta(days=45)).strftime("%Y-%m-%d"),
+                "limit": 30,
+                "adjustment": "raw",
+                "feed": "iex",
+            },
+            headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret},
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+        bars = ((resp.json() or {}).get("bars") or {}).get(ticker) or []
+        vols = [float(b.get("v") or 0) for b in bars[-21:-1]] or [
+            float(b.get("v") or 0) for b in bars
+        ]
+        avg = sum(vols) / len(vols) if vols else None
+        if avg and avg > 0:
+            _AVG_VOL[ticker] = (today, avg)
+            return avg
+    except Exception as e:
+        _log(f"avg volume fetch failed for {ticker}: {type(e).__name__}: {e}")
+    return None
+
+
+def evaluate_alert(alert: Dict[str, Any], snap: Dict[str, Optional[float]]) -> Optional[str]:
+    """Message when the alert condition is met against a snapshot, else None."""
+    last = snap.get("last")
+    if last is None:
+        return None
+    atype = alert.get("alert_type", "price")
+    threshold = alert["threshold"]
+    if atype == "price":
+        if crossed(alert["direction"], last, threshold):
+            return (
+                f"Price alert: {alert['ticker']} {last:,.2f} is "
+                f"{alert['direction']} your {threshold:,.2f} target (live)"
+            )
+        return None
+    if atype == "move":
+        prev = snap.get("prev_close")
+        if not prev:
+            return None
+        move = (last - prev) / prev * 100.0
+        if abs(move) >= threshold:
+            return (
+                f"Move alert: {alert['ticker']} {move:+.1f}% today "
+                f"(last {last:,.2f}, threshold ±{threshold:g}%)"
+            )
+        return None
+    if atype == "rvol":
+        volume = snap.get("volume")
+        if not volume:
+            return None
+        avg = _avg_volume(alert["ticker"])
+        if not avg:
+            return None
+        rvol = volume / avg
+        if rvol >= threshold:
+            return (
+                f"RVOL alert: {alert['ticker']} trading {rvol:.1f}x its 20d "
+                f"average volume (threshold {threshold:g}x)"
+            )
+        return None
+    return None
+
+
 # --------------------------------- the loop -----------------------------------
 
 
@@ -203,18 +301,15 @@ def check_once() -> int:
         alerts = _due_price_alerts(conn)
         if not alerts:
             return 0
-        prices = _latest_prices([a["ticker"] for a in alerts])
+        snaps = _latest_snapshots([a["ticker"] for a in alerts])
         fired = 0
         for alert in alerts:
-            last = prices.get(alert["ticker"])
-            if last is None:
+            snap = snaps.get(alert["ticker"])
+            if not snap:
                 continue
-            if not crossed(alert["direction"], last, alert["threshold"]):
+            message = evaluate_alert(alert, snap)
+            if message is None:
                 continue
-            message = (
-                f"Price alert: {alert['ticker']} {last:,.2f} is "
-                f"{alert['direction']} your {alert['threshold']:,.2f} target (live)"
-            )
             _record_fire(conn, alert, message)
             fired += 1
             if (
@@ -222,9 +317,9 @@ def check_once() -> int:
                 and alert["email_verified"]
                 and alert["tier"] in EMAIL_TIERS
             ):
-                _send_email(alert["user_id"], "⚡ Price alert triggered", message)
+                _send_email(alert["user_id"], "⚡ Live alert triggered", message)
         if fired:
-            _log(f"fired {fired} price alert(s)")
+            _log(f"fired {fired} live alert(s)")
         return fired
     finally:
         try:

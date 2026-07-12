@@ -18,7 +18,9 @@ from typing import Any, Dict, List, Optional
 
 from db.engine import get_neon_conn
 
-ALERT_TYPES = ("breakout", "watchlist", "price")
+# 'move' (abs % change today >= threshold) and 'rvol' (today's volume vs 20d
+# avg >= threshold) are evaluated by the real-time worker, not the cron.
+ALERT_TYPES = ("breakout", "watchlist", "price", "move", "rvol")
 
 
 def _ensure_alerts_schema(conn) -> None:

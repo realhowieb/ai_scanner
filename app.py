@@ -174,6 +174,7 @@ try:
     from ui.footer import render_footer
     from ui.header import render_header, render_market_snapshot, render_price_ticker
     from ui.history import render_history_expander
+    from ui.journal import render_journal_panel
     from ui.prebreakout_tab import render_prebreakout_tab
     from ui.result_explain import add_why_column
     from ui.results import get_results_df, render_results
@@ -223,6 +224,7 @@ except Exception as _e:
     render_watchlists_panel = _missing  # type: ignore
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
+    render_journal_panel = lambda *a, **k: None  # type: ignore
     add_why_column = lambda df: df  # type: ignore
     render_user_settings_footer = _missing  # type: ignore
 
@@ -662,6 +664,22 @@ def main():
                 pass
         st.rerun()
 
+    # In-app notification line for alerts fired today (email-independent).
+    try:
+        from ui.notifications import render_alert_bell
+
+        render_alert_bell(username)
+    except Exception:
+        pass
+
+    # 'Since yesterday' strip: new entrants + biggest score movers (cheap, cached).
+    try:
+        from ui.whats_new import render_whats_new_strip
+
+        render_whats_new_strip()
+    except Exception:
+        pass
+
     # -------- Day Trader live monitor (intraday snapshots) --------
     # Guarded so a transient stale-module state on redeploy can't crash the app.
     try:
@@ -727,6 +745,12 @@ def main():
             render_alerts_panel(username, watch_tickers=watch_tickers)
         except Exception:
             pass
+
+    # Trade journal (positions logged from trade plans; hidden until first log).
+    try:
+        render_journal_panel(username)
+    except Exception:
+        pass
 
     # Legal disclaimer footer (financial product) — rendered app-wide.
     try:

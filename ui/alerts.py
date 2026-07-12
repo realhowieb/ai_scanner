@@ -27,6 +27,10 @@ def _fmt_alert(a: dict) -> str:
             f"💲 {a.get('ticker')} price {a.get('direction') or 'above'} "
             f"{float(a.get('threshold') or 0):g}"
         )
+    if t == "move":
+        return f"⚡ {a.get('ticker')} moves ±{float(a.get('threshold') or 0):g}% today (live)"
+    if t == "rvol":
+        return f"📊 {a.get('ticker')} RVOL ≥ {float(a.get('threshold') or 0):g}× (live)"
     return str(t)
 
 
@@ -99,8 +103,8 @@ def render_alerts_panel(
         st.caption(f"Using {used} of {max_alerts} alert slots on your plan.")
 
     with st.expander("➕ Create an alert", expanded=True):
-        tab_break, tab_watch, tab_price = st.tabs(
-            ["🚀 Breakout", "📋 Watchlist", "💲 Price"]
+        tab_break, tab_watch, tab_price, tab_move, tab_rvol = st.tabs(
+            ["🚀 Breakout", "📋 Watchlist", "💲 Price", "⚡ % Move", "📊 RVOL"]
         )
 
         # NOTE: plain widgets (not st.form) — st.form rendered empty inside the
@@ -198,6 +202,50 @@ def render_alerts_panel(
                             ticker=tk.strip().upper(),
                             threshold=float(target),
                             direction=direction,
+                        ),
+                    )
+
+        with tab_move:
+            st.caption(
+                "Fire when a ticker moves more than ±X% vs yesterday's close. "
+                "Checked live (~60s) during extended hours."
+            )
+            mc1, mc2 = st.columns([2, 2])
+            mv_tk = mc1.text_input("Ticker", value="", placeholder="e.g. NVDA", key="alert_move_tk")
+            mv_thr = mc2.number_input(
+                "Move % ≥", min_value=0.5, value=5.0, step=0.5, key="alert_move_thr"
+            )
+            if st.button("Create % move alert", key="alert_move_btn"):
+                if not mv_tk.strip():
+                    st.warning("Enter a ticker symbol.")
+                else:
+                    _guarded_create(
+                        existing,
+                        max_alerts,
+                        lambda: create_alert(
+                            user_id, "move", ticker=mv_tk.strip().upper(), threshold=float(mv_thr)
+                        ),
+                    )
+
+        with tab_rvol:
+            st.caption(
+                "Fire when a ticker trades at X times its 20-day average volume. "
+                "Checked live (~60s) during extended hours."
+            )
+            rc1, rc2 = st.columns([2, 2])
+            rv_tk = rc1.text_input("Ticker", value="", placeholder="e.g. TSLA", key="alert_rvol_tk")
+            rv_thr = rc2.number_input(
+                "RVOL ≥", min_value=1.0, value=2.0, step=0.5, key="alert_rvol_thr"
+            )
+            if st.button("Create RVOL alert", key="alert_rvol_btn"):
+                if not rv_tk.strip():
+                    st.warning("Enter a ticker symbol.")
+                else:
+                    _guarded_create(
+                        existing,
+                        max_alerts,
+                        lambda: create_alert(
+                            user_id, "rvol", ticker=rv_tk.strip().upper(), threshold=float(rv_thr)
                         ),
                     )
 
