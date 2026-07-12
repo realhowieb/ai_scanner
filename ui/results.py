@@ -733,10 +733,13 @@ def _format_earnings_for_display(df: pd.DataFrame) -> pd.DataFrame:
     return table_df
 
 
-def _format_earnings_cell(value: object) -> object:
+def _format_earnings_cell(value: object) -> str:
+    # Uniformly strings: mixing ints (known days) with "—" (unknown) makes an
+    # object column pyarrow can't serialize, so every st.dataframe render
+    # tripped Streamlit's "applying automatic fixes" warning on the fast path.
     if pd.isna(value):
         return "—"
     try:
-        return int(float(value))
+        return str(int(float(value)))
     except (TypeError, ValueError):
-        return value
+        return str(value)

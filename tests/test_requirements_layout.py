@@ -19,7 +19,7 @@ def _pkg_names(name):
     for line in _read_lines(name):
         if line.startswith("-r"):
             continue
-        names.add(re.split(r"[<>=!~\[ ]", line, 1)[0].lower())
+        names.add(re.split(r"[<>=!~\[ ]", line, maxsplit=1)[0].lower())
     return names
 
 

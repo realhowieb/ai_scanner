@@ -19,6 +19,12 @@ class FakePrebreakoutClassifier:
 
 
 class PrebreakoutModelPersistenceTests(unittest.TestCase):
+    def setUp(self):
+        # The loader caches bundles module-wide; clear so per-test mocks apply.
+        from ml_prebreakout import clear_model_cache
+
+        clear_model_cache()
+
     def test_load_prebreakout_model_prefers_database(self):
         db_bundle = {
             "model": object(),

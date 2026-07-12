@@ -199,6 +199,11 @@ _MODEL_CACHE: dict = {}
 _MODEL_CACHE_TTL_S = 900
 
 
+def clear_model_cache() -> None:
+    """Drop the cached model bundle (tests; or force a reload after retrain)."""
+    _MODEL_CACHE.clear()
+
+
 def load_prebreakout_model(model_path: str = MODEL_PATH):
     """
     Load model bundle with model, features, trained_at, auc.
