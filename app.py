@@ -169,6 +169,7 @@ try:
     from ui.alerts import render_alerts_panel
     from ui.day_trader import render_day_trader_panel
     from ui.db_status import render_db_status_badge
+    from ui.journal import render_journal_panel
     from ui.earnings_results import prepare_results_with_earnings, render_earnings_controls
     from ui.filters import render_filters
     from ui.footer import render_footer
@@ -223,6 +224,7 @@ except Exception as _e:
     render_watchlists_panel = _missing  # type: ignore
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
+    render_journal_panel = lambda *a, **k: None  # type: ignore
     add_why_column = lambda df: df  # type: ignore
     render_user_settings_footer = _missing  # type: ignore
 
@@ -727,6 +729,12 @@ def main():
             render_alerts_panel(username, watch_tickers=watch_tickers)
         except Exception:
             pass
+
+    # Trade journal (positions logged from trade plans; hidden until first log).
+    try:
+        render_journal_panel(username)
+    except Exception:
+        pass
 
     # Legal disclaimer footer (financial product) — rendered app-wide.
     try:
