@@ -34,31 +34,47 @@ except (ImportError, KeyError):
     configure_page = _app_boot.configure_page
     install_streamlit_compat = _app_boot.install_streamlit_compat
     _quiet_external_calls = _app_boot.quiet_external_calls
-from ui.app_runtime import (
-    get_market_session,
-    render_active_filters_summary,
-    render_onboarding_hint,
-    render_sidebar_upgrade_card,
-)
-from ui.app_runtime import (
-    normalize_results_to_df as _normalize_results_to_df,
-)
-from ui.app_session import (
-    compute_entitlements,
-    is_admin_user,
-    normalize_admin_users,
-)
-from ui.app_session import (
-    tier_key as _tier_key,
-)
-from ui.app_user_profile import (
-    apply_admin_scan_caps,
-    load_latest_results_snapshot,
-    load_saved_user_settings,
-    render_account_sidebar,
-    render_admin_build_stamp,
-    set_latest_results_snapshot,
-)
+try:
+    from ui.app_runtime import (
+        get_market_session,
+        render_active_filters_summary,
+        render_onboarding_hint,
+        render_sidebar_upgrade_card,
+    )
+    from ui.app_runtime import (
+        normalize_results_to_df as _normalize_results_to_df,
+    )
+    from ui.app_session import (
+        compute_entitlements,
+        is_admin_user,
+        normalize_admin_users,
+    )
+    from ui.app_session import (
+        tier_key as _tier_key,
+    )
+    from ui.app_user_profile import (
+        apply_admin_scan_caps,
+        load_latest_results_snapshot,
+        load_saved_user_settings,
+        render_account_sidebar,
+        render_admin_build_stamp,
+        set_latest_results_snapshot,
+    )
+except KeyError:
+    # Streamlit Cloud hot-redeploy race: the module table is mid-swap when the
+    # watcher re-executes this script, so imports raise KeyError instead of
+    # loading (same failure app_boot guards above). Retry a few reruns, then
+    # surface the real error instead of looping forever.
+    import time as _boot_time
+
+    _boot_retries = int(st.session_state.get("_boot_import_retries", 0))
+    st.session_state["_boot_import_retries"] = _boot_retries + 1
+    if _boot_retries < 3:
+        st.caption("⏳ App is updating — one moment…")
+        _boot_time.sleep(2)
+        st.rerun()
+    raise
+st.session_state.pop("_boot_import_retries", None)
 
 install_streamlit_compat()
 
