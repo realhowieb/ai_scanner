@@ -127,7 +127,12 @@ def render_day_trader_panel(
         lambda v: "▲ above" if (v is not None and v >= 0) else ("▼ below" if v is not None else "—")
     )
 
-    ordered = ["Ticker", "Last", "Chg %", "Gap %", "VWAP", "vs VWAP", "vs VWAP %", "RVOL", "Volume"]
+    # Compact mode: essentials only — much friendlier on phones.
+    compact = st.checkbox("📱 Compact view", value=False, key="dt_compact")
+    if compact:
+        ordered = ["Ticker", "Last", "Chg %", "vs VWAP", "RVOL"]
+    else:
+        ordered = ["Ticker", "Last", "Chg %", "Gap %", "VWAP", "vs VWAP", "vs VWAP %", "RVOL", "Volume"]
     df = df[[c for c in ordered if c in df.columns]]
 
     def _style(frame):

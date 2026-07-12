@@ -169,12 +169,12 @@ try:
     from ui.alerts import render_alerts_panel
     from ui.day_trader import render_day_trader_panel
     from ui.db_status import render_db_status_badge
-    from ui.journal import render_journal_panel
     from ui.earnings_results import prepare_results_with_earnings, render_earnings_controls
     from ui.filters import render_filters
     from ui.footer import render_footer
     from ui.header import render_header, render_market_snapshot, render_price_ticker
     from ui.history import render_history_expander
+    from ui.journal import render_journal_panel
     from ui.prebreakout_tab import render_prebreakout_tab
     from ui.result_explain import add_why_column
     from ui.results import get_results_df, render_results
@@ -663,6 +663,22 @@ def main():
             except Exception:
                 pass
         st.rerun()
+
+    # In-app notification line for alerts fired today (email-independent).
+    try:
+        from ui.notifications import render_alert_bell
+
+        render_alert_bell(username)
+    except Exception:
+        pass
+
+    # 'Since yesterday' strip: new entrants + biggest score movers (cheap, cached).
+    try:
+        from ui.whats_new import render_whats_new_strip
+
+        render_whats_new_strip()
+    except Exception:
+        pass
 
     # -------- Day Trader live monitor (intraday snapshots) --------
     # Guarded so a transient stale-module state on redeploy can't crash the app.

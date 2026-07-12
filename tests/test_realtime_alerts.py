@@ -75,8 +75,9 @@ class EvaluateAlertTests(unittest.TestCase):
         self.assertIsNone(evaluate_alert(self._alert("move", 5.0), {"last": 106.0}))
 
     def test_rvol_alert_uses_cached_average(self):
-        from billing_service import realtime_alerts as ra
         import datetime as dt
+
+        from billing_service import realtime_alerts as ra
 
         ra._AVG_VOL["TSLA"] = (dt.datetime.now(dt.timezone.utc).date(), 1_000_000.0)
         msg = ra.evaluate_alert(
