@@ -11,13 +11,18 @@ from datetime import datetime, timezone
 import streamlit as st
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _recent_events(user_id: str):
+    from db.alerts import list_recent_events
+
+    return list_recent_events(user_id, limit=25) or []
+
+
 def render_alert_bell(user_id: str) -> None:
     if not user_id:
         return
     try:
-        from db.alerts import list_recent_events
-
-        events = list_recent_events(user_id, limit=25) or []
+        events = _recent_events(user_id)
     except Exception:
         return
     today = datetime.now(timezone.utc).date()

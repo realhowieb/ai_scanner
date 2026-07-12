@@ -14,12 +14,21 @@ TRACK_RECORD_MIN_SAMPLE = 150
 TRACK_RECORD_MIN_RUNS = 8
 
 
-def render_track_record_badge() -> None:
-    """Show the latest signal track record (forward-return performance)."""
-    try:
-        from db.track_record import load_latest_track_record
+@st.cache_data(ttl=600, show_spinner=False)
+def _cached_track_record(horizon_days: int = 5):
+    from db.track_record import load_latest_track_record
 
-        tr = load_latest_track_record(horizon_days=5)
+    return load_latest_track_record(horizon_days=horizon_days)
+
+
+def render_track_record_badge() -> None:
+    """Show the latest signal track record (forward-return performance).
+
+    Cached 10 min: this renders on every rerun and each uncached read opens a
+    fresh Neon connection.
+    """
+    try:
+        tr = _cached_track_record(5)
     except Exception:
         tr = None
     if not tr or not tr.get("sample_size"):
