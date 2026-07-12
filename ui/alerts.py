@@ -14,6 +14,14 @@ from typing import List
 import streamlit as st
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_scorecards(user_id: str):
+    """Outcome scorecards, cached 5 min — computed daily, read every rerun."""
+    from db.alert_outcomes import scorecards_for_user
+
+    return scorecards_for_user(user_id)
+
+
 def _fmt_alert(a: dict) -> str:
     """One-line human description of an alert row."""
     t = a.get("alert_type")
@@ -255,9 +263,9 @@ def render_alerts_panel(
         # Shown only with >=3 scored fires so one lucky/unlucky fire can't
         # masquerade as a track record.
         try:
-            from db.alert_outcomes import HIT_TARGET_PCT, HORIZON_DAYS, scorecards_for_user
+            from db.alert_outcomes import HIT_TARGET_PCT, HORIZON_DAYS
 
-            scorecards = scorecards_for_user(user_id)
+            scorecards = _cached_scorecards(user_id)
         except Exception:
             scorecards, HIT_TARGET_PCT, HORIZON_DAYS = {}, 5.0, 3
 

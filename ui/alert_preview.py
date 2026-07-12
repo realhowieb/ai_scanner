@@ -17,7 +17,7 @@ except Exception:  # pragma: no cover - headless envs; pure functions still work
 _TOP_SCORES_PER_SNAPSHOT = 50
 
 
-def _score_history_uncached(max_days: int = 30) -> List[Dict[str, Any]]:
+def _score_history_uncached(max_days: int = 12) -> List[Dict[str, Any]]:
     """[{'day': date, 'scores': [(ticker, score) desc]}] — latest snapshot per
     UTC day (manual runs can save several snapshots a day; extras would skew
     'fired in N of last M scans')."""
@@ -67,7 +67,7 @@ def _score_history_uncached(max_days: int = 30) -> List[Dict[str, Any]]:
 if st is not None:
 
     @st.cache_data(ttl=900, show_spinner=False)
-    def load_score_history(max_days: int = 30) -> List[Dict[str, Any]]:
+    def load_score_history(max_days: int = 12) -> List[Dict[str, Any]]:
         return _score_history_uncached(max_days)
 
 else:  # pragma: no cover - headless fallback without caching

@@ -52,7 +52,7 @@ def render_whats_new_strip() -> None:
     try:
         from ui.alert_preview import load_score_history
 
-        diff = diff_snapshots(load_score_history())
+        diff = diff_snapshots(load_score_history(max_days=2))
     except Exception:
         return
     if not diff or (not diff["new"] and not diff["movers"]):
