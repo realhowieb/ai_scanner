@@ -680,10 +680,15 @@ def main():
     except Exception:
         pass
 
-    # -------- Day Trader live monitor (intraday snapshots) --------
-    # Guarded so a transient stale-module state on redeploy can't crash the app.
+    # -------- Day Trader live monitor: moved to its own page --------
+    # A dedicated page gets full width and lets auto-refresh poll only that
+    # view instead of rerunning the whole scanner.
     try:
-        render_day_trader_panel(watch_tickers=watch_tickers)
+        st.page_link(
+            "pages/day_trader.py",
+            label="⚡ Day Trader — live (gappers · VWAP · RVOL, real-time)",
+            icon="📈",
+        )
         st.markdown("---")
     except Exception:
         pass
