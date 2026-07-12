@@ -60,14 +60,37 @@ def _feature_names(model: Any, metadata: dict[str, Any]) -> list[str]:
     return [str(name) for name in list(raw) if str(name).strip()]
 
 
+# Process-level cache: loading re-downloaded the model from Neon and
+# re-deserialized it on every scan. The model changes at most daily.
+_BUNDLE_CACHE: dict[str, Any] = {}
+_BUNDLE_CACHE_TTL_S = 900
+
+
 def load_ai_confidence_bundle(
     *,
     model_path: Path = MODEL_PATH,
     metadata_path: Path = METADATA_PATH,
 ) -> tuple[Any | None, dict[str, Any], str | None]:
-    """Load the AI Confidence model, preferring the database source."""
+    """Load the AI Confidence model, preferring the database source (cached 15m)."""
     if joblib is None:
         return None, {}, "AI confidence model support is not installed."
+    import time as _time
+
+    cached = _BUNDLE_CACHE.get("bundle")
+    if cached and (_time.time() - cached[0]) < _BUNDLE_CACHE_TTL_S:
+        return cached[1]
+    result = _load_ai_confidence_bundle_uncached(
+        model_path=model_path, metadata_path=metadata_path
+    )
+    _BUNDLE_CACHE["bundle"] = (_time.time(), result)
+    return result
+
+
+def _load_ai_confidence_bundle_uncached(
+    *,
+    model_path: Path = MODEL_PATH,
+    metadata_path: Path = METADATA_PATH,
+) -> tuple[Any | None, dict[str, Any], str | None]:
 
     if load_latest_ai_confidence_model_bundle is not None:
         try:
