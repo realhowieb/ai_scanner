@@ -192,30 +192,43 @@ def build_ml_dataset(df: pd.DataFrame):
     return X, y
 
 
+# Process-level model cache: every scan was re-downloading the model BYTEA from
+# Neon and re-deserializing it (plus xgboost's old-pickle conversion), adding
+# seconds per scan. The model changes at most daily, so cache for 15 minutes.
+_MODEL_CACHE: dict = {}
+_MODEL_CACHE_TTL_S = 900
+
+
 def load_prebreakout_model(model_path: str = MODEL_PATH):
     """
     Load model bundle with model, features, trained_at, auc.
 
     Database is the durable source of truth. Local file loading is retained as
     a best-effort fallback only, so app reboots do not require retraining when
-    a saved database model exists.
+    a saved database model exists. Cached in-process for 15 minutes.
     """
     if joblib is None:
         return None
+    import time as _time
+
+    cached = _MODEL_CACHE.get("prebreakout")
+    if cached and (_time.time() - cached[0]) < _MODEL_CACHE_TTL_S:
+        return cached[1]
     if load_latest_prebreakout_model_bundle is not None:
         try:
             bundle = load_latest_prebreakout_model_bundle(joblib)
-            if bundle:
-                return bundle
-            return None
+            _MODEL_CACHE["prebreakout"] = (_time.time(), bundle or None)
+            return bundle or None
         except Exception as e:
             print(f"[ml_prebreakout] DB model load failed: {e}")
     try:
         bundle = joblib.load(model_path)
         if isinstance(bundle, dict):
             bundle.setdefault("source", "local")
+        _MODEL_CACHE["prebreakout"] = (_time.time(), bundle)
         return bundle
     except Exception:
+        _MODEL_CACHE["prebreakout"] = (_time.time(), None)
         return None
 
 
