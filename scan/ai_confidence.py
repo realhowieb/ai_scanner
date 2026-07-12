@@ -66,6 +66,11 @@ _BUNDLE_CACHE: dict[str, Any] = {}
 _BUNDLE_CACHE_TTL_S = 900
 
 
+def clear_bundle_cache() -> None:
+    """Drop the cached bundle (tests; or force a reload after retrain)."""
+    _BUNDLE_CACHE.clear()
+
+
 def load_ai_confidence_bundle(
     *,
     model_path: Path = MODEL_PATH,

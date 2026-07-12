@@ -33,6 +33,12 @@ class FakeConfidenceModel:
 
 
 class AiConfidenceTests(unittest.TestCase):
+    def setUp(self):
+        # The loader caches bundles module-wide; clear so per-test mocks apply.
+        from scan.ai_confidence import clear_bundle_cache
+
+        clear_bundle_cache()
+
     def _metadata_path(self, tmp: str, feature_names=None) -> Path:
         path = Path(tmp) / "xgb_breakout_metadata.json"
         payload = {"trained_at": "2026-06-30T15:00:00Z"}
