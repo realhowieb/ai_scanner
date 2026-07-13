@@ -54,7 +54,11 @@ _YFINANCE_BASE_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, V
 # --- In-memory price DataFrame cache ---
 # We keep a short TTL so repeated scans within a few seconds can reuse
 # results, but fresh data is fetched on subsequent runs.
-_PRICE_CACHE_TTL_SECONDS: float = 60.0  # ~1 minute; tuned for daily bars
+# Default ~1 minute keeps app rescans fresh (today's daily bar moves intraday).
+# The cron sets PRICE_CACHE_TTL_SECONDS=3600 so its three universe scans in one
+# process (SP500 -> NASDAQ -> COMBO) share bars instead of re-downloading the
+# overlap — COMBO is mostly a repeat of the first two.
+_PRICE_CACHE_TTL_SECONDS: float = float(os.getenv("PRICE_CACHE_TTL_SECONDS", "60") or "60")
 _PRICE_CACHE: Dict[str, tuple[_pd.DataFrame, float]] = {}
 _MISSING_PRICE_CACHE_TTL_SECONDS: float = 900.0  # avoid repeated dead-symbol provider calls
 _MISSING_PRICE_CACHE: Dict[str, tuple[str, float]] = {}

@@ -55,7 +55,7 @@ def _ranked_symbols(df, ranking: str, top_n: int) -> List[str]:
 def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: int):
     """Yield (run_date, df) for snapshots with a complete forward window."""
     try:
-        from db.runs import list_runs, load_run_results
+        from db.runs import list_snapshot_runs, load_many_run_results
         from ui.app_runtime import normalize_results_to_df
     except Exception:
         return []
@@ -65,30 +65,34 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
     complete_before = now - timedelta(days=int(horizon_days * 1.6) + 2)
     oldest = now - timedelta(days=int(lookback_days))
 
-    # Use a large limit: snapshots are a small fraction of rows and can be buried
-    # far down the (newest-first) run log, so a small window misses the aged
-    # snapshots that actually have a complete forward return.
+    # Snapshot-only, recency-bounded SQL (replaces scanning thousands of run
+    # rows), then one batched fetch of the chosen snapshots' JSON.
     try:
-        runs = list_runs(limit=5000) or []
+        runs = list_snapshot_runs(days=int(lookback_days) + 2, limit=max_snapshots * 6) or []
     except Exception:
         return []
 
-    out: List[tuple] = []
-    for r in runs:
+    chosen: List[dict] = []
+    for r in runs:  # newest-first
         created = r.get("created_at")
         if not isinstance(created, datetime):
             continue
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
-        # Rows are newest-first; once we pass the lookback floor we can stop.
         if created < oldest:
             break
-        if not r.get("is_snapshot"):
-            continue
         if created > complete_before:
             continue
+        r["_created"] = created
+        chosen.append(r)
+        if len(chosen) >= max_snapshots:
+            break
+    payloads = load_many_run_results([r["id"] for r in chosen])
+
+    out: List[tuple] = []
+    for r in chosen:
         try:
-            raw = load_run_results(r["id"])
+            raw = payloads.get(int(r["id"]))
             df = normalize_results_to_df(raw) if raw else None
         except Exception:
             continue
@@ -96,9 +100,7 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
             continue
         if not _symbol_column(df):
             continue
-        out.append((created.date(), df))
-        if len(out) >= max_snapshots:
-            break
+        out.append((r["_created"].date(), df))
     return out
 
 

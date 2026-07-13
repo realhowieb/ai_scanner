@@ -5,15 +5,38 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
-try:
-    import yfinance as yf
-except Exception:  # pragma: no cover - optional dependency
-    yf = None
+# plotly and yfinance are deliberately NOT imported at module scope: this
+# module loads during app boot via app.py's import chain, and both libraries
+# are heavy (memory + import time) while only being needed once a user actually
+# opens a chart. Lazy accessors below import on first use and cache the module
+# (also trims boot memory — the standing startup-OOM suspect).
+_yf_mod = None
+_go_mod = None
+_LAZY_UNSET = object()
 
-try:
-    import plotly.graph_objects as go
-except Exception:  # pragma: no cover - optional dependency
-    go = None
+
+def _get_yf():
+    global _yf_mod
+    if _yf_mod is None:
+        try:
+            import yfinance as _yf_import
+
+            _yf_mod = _yf_import
+        except Exception:
+            _yf_mod = False
+    return _yf_mod or None
+
+
+def _get_go():
+    global _go_mod
+    if _go_mod is None:
+        try:
+            import plotly.graph_objects as _go_import
+
+            _go_mod = _go_import
+        except Exception:
+            _go_mod = False
+    return _go_mod or None
 
 
 # ---------- OHLC fetch helper ----------
@@ -29,11 +52,11 @@ def _fetch_unadjusted_ohlc(
     the rest of the app. If yfinance is unavailable, returns an empty
     DataFrame and callers should handle that gracefully.
     """
-    if yf is None or not ticker:
+    if _get_yf() is None or not ticker:
         return pd.DataFrame()
 
     try:
-        df = yf.download(
+        df = _get_yf().download(
             tickers=ticker,
             period=period,
             interval=interval,
@@ -89,7 +112,7 @@ def _render_builtin_candlestick(
         st.info("Price data missing 'Close' column for this symbol.")
         return
 
-    if go is None:
+    if _get_go() is None:
         # Fallback: simple line chart (native chart pulls in altair, which can
         # fail on some runtimes — degrade to a table rather than crash).
         try:
@@ -98,7 +121,7 @@ def _render_builtin_candlestick(
             st.dataframe(df[["Close"]])
         return
 
-    fig = go.Figure()
+    fig = _get_go().Figure()
 
     if required_ohlc.issubset(df.columns):
         fig.add_candlestick(
@@ -111,17 +134,17 @@ def _render_builtin_candlestick(
         )
     else:
         fig.add_trace(
-            go.Scatter(x=df.index, y=df["Close"], mode="lines", name="Close"),
+            _get_go().Scatter(x=df.index, y=df["Close"], mode="lines", name="Close"),
         )
 
     if show_ma and len(df) >= 10:
         ma20 = df["Close"].rolling(window=20).mean()
         ma50 = df["Close"].rolling(window=50).mean()
         fig.add_trace(
-            go.Scatter(x=df.index, y=ma20, mode="lines", name="MA20"),
+            _get_go().Scatter(x=df.index, y=ma20, mode="lines", name="MA20"),
         )
         fig.add_trace(
-            go.Scatter(x=df.index, y=ma50, mode="lines", name="MA50"),
+            _get_go().Scatter(x=df.index, y=ma50, mode="lines", name="MA50"),
         )
 
     fig.update_layout(
