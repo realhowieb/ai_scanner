@@ -31,16 +31,24 @@ def _watch_tickers(user_id: str) -> list[str]:
 
 
 def _tier_limits() -> tuple[int, bool]:
-    """(max_alerts, email_enabled) for the current session's tier."""
-    tier = str(st.session_state.get("tier") or st.session_state.get("plan") or "basic").lower()
-    is_admin = tier == "admin"
-    try:
-        from ui.app_session import alert_limit_for_tier
+    """(max_alerts, email_enabled) for the current session's tier.
 
-        max_alerts = 25 if is_admin else alert_limit_for_tier(tier)
+    Normalize through tier_key(): session state can hold a Tier object or a
+    differently-cased value, and a raw string compare silently downgraded
+    Premium accounts to Basic limits here.
+    """
+    raw = st.session_state.get("tier") or st.session_state.get("plan")
+    try:
+        from ui.app_session import alert_limit_for_tier, tier_key
+
+        key = tier_key(raw) or "basic"
+        is_admin = key == "admin"
+        max_alerts = 25 if is_admin else alert_limit_for_tier(key)
     except Exception:
+        key = str(raw or "basic").strip().lower()
+        is_admin = key == "admin"
         max_alerts = 25 if is_admin else 1
-    email_ok = tier in ("pro", "premium", "admin")
+    email_ok = key in ("pro", "premium", "admin")
     return int(max_alerts), bool(email_ok)
 
 
