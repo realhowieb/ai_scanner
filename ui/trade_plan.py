@@ -111,5 +111,26 @@ def render_trade_plan(row: Mapping[str, Any], *, locked: bool = False) -> None:
             log_trade_button(row, shares=plan["shares"], key=f"tp_log_{row.get('Ticker')}")
         except Exception:
             pass
+        _render_alert_quick_action(row)
+    except Exception:
+        pass
+
+
+def _render_alert_quick_action(row: Mapping[str, Any]) -> None:
+    """'Alert me on this' — pre-fill the price-alert form and jump to Alerts.
+
+    Keeps in-context alert creation alive now that alert management lives on
+    its own page: sets the form's session keys before that page renders its
+    widgets (the established chip-prefill pattern), then switches pages.
+    """
+    try:
+        ticker = str(row.get("Ticker") or "").upper() if hasattr(row, "get") else ""
+        last = _num(row, "Last", "Close")
+        if not ticker or last is None:
+            return
+        if st.button(f"🔔 Alert me on {ticker}", key=f"tp_alert_{ticker}"):
+            st.session_state["alert_price_tk"] = ticker
+            st.session_state["alert_price_val"] = round(float(last), 2)
+            st.switch_page("pages/alerts.py")
     except Exception:
         pass
