@@ -289,6 +289,83 @@ def list_runs(
         return []
 
 
+def list_snapshot_runs(days: int = 45, limit: int = 60) -> List[Dict[str, Any]]:
+    """Recent snapshot runs only, filtered in SQL.
+
+    Callers used to pull thousands of run-metadata rows via list_runs() to find
+    a handful of snapshots; this pushes the is_snapshot + recency filter into
+    the query. Neon only (snapshot history features are cloud-backed); returns
+    [] when Neon is unavailable.
+    """
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return []
+        ensure_neon_runs_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, name, label, username, row_count, duration_sec,
+                   is_snapshot, created_at
+            FROM runs
+            WHERE is_snapshot = TRUE
+              AND created_at >= NOW() - make_interval(days => %s)
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (int(days), int(limit)),
+        )
+        rows = cur.fetchall() or []
+        cur.close()
+        conn.close()
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            if isinstance(r, dict):
+                out.append(dict(r))
+            else:
+                out.append(
+                    {
+                        "id": r[0], "name": r[1], "label": r[2], "username": r[3],
+                        "row_count": r[4], "duration_sec": r[5],
+                        "is_snapshot": bool(r[6]), "created_at": r[7],
+                    }
+                )
+        return out
+    except Exception:
+        return []
+
+
+def load_many_run_results(run_ids: List[int]) -> Dict[int, str]:
+    """Batch-fetch results_json for several runs in one query.
+
+    Replaces sequential per-run round trips in history loaders. Returns
+    {run_id: results_json}; missing/unavailable ids are simply absent.
+    """
+    ids = [int(i) for i in run_ids if i is not None]
+    if not ids:
+        return {}
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return {}
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, results_json FROM runs WHERE id = ANY(%s)", (ids,)
+        )
+        rows = cur.fetchall() or []
+        cur.close()
+        conn.close()
+        out: Dict[int, str] = {}
+        for r in rows:
+            rid = r["id"] if isinstance(r, dict) else r[0]
+            rj = r["results_json"] if isinstance(r, dict) else r[1]
+            if rj is not None:
+                out[int(rid)] = rj
+        return out
+    except Exception:
+        return {}
+
+
 def load_run_results(run_id: int) -> Optional[str]:
     """
     Load the results_json for a given run ID, preferring Neon then SQLite.

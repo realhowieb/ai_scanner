@@ -44,6 +44,7 @@ jobs:
           # Match the Streamlit Cloud runtime and the requirements.lock platform
           # so the cron runs the exact same dependency stack as the app.
           python-version: '3.13'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -84,6 +85,10 @@ jobs:
           # Skip the slow per-symbol yfinance fallback for symbols Alpaca doesn't
           # carry (micro-caps/warrants that never pass filters) — big speedup.
           PRICE_SKIP_YF_FALLBACK: "1"
+          # Share downloaded bars across the three universe scans in one run
+          # (COMBO largely repeats SP500+NASDAQ; default 60s TTL expired between
+          # scans and forced a full re-download).
+          PRICE_CACHE_TTL_SECONDS: "3600"
           # Manual "Run workflow" forces a run (bypasses weekend/premarket skip);
           # scheduled runs respect the skip.
           CRON_FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '1' || '0' }}

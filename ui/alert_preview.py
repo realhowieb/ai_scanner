@@ -29,30 +29,37 @@ def _score_history_uncached(max_days: int = 12) -> List[Dict[str, Any]]:
     UTC day (manual runs can save several snapshots a day; extras would skew
     'fired in N of last M scans')."""
     try:
-        from db.runs import list_runs, load_run_results
+        from db.runs import list_snapshot_runs, load_many_run_results
         from ui.app_runtime import normalize_results_to_df
     except Exception:
         return []
 
     try:
-        runs = list_runs(limit=5000) or []
+        runs = list_snapshot_runs(days=max_days * 3, limit=max_days * 5) or []
     except Exception:
         return []
 
-    by_day: Dict[Any, Dict[str, Any]] = {}
+    # Pick the newest snapshot per day first, then batch-fetch their JSON in
+    # one query instead of a round trip per snapshot.
+    chosen: Dict[Any, Dict[str, Any]] = {}
     for r in runs:  # newest-first
-        if not r.get("is_snapshot"):
-            continue
         created = r.get("created_at")
         if created is None or not hasattr(created, "date"):
             continue
         day = created.date()
         if day < SCORE_EPOCH:
             break  # runs are newest-first; everything older is pre-clipping
-        if day in by_day:
-            continue  # keep only the newest snapshot per day
+        if day in chosen:
+            continue
+        chosen[day] = r
+        if len(chosen) >= max_days:
+            break
+    payloads = load_many_run_results([r["id"] for r in chosen.values()])
+
+    by_day: Dict[Any, Dict[str, Any]] = {}
+    for day, r in chosen.items():
         try:
-            raw = load_run_results(r["id"])
+            raw = payloads.get(int(r["id"]))
             df = normalize_results_to_df(raw) if raw else None
         except Exception:
             continue
@@ -68,8 +75,6 @@ def _score_history_uncached(max_days: int = 12) -> List[Dict[str, Any]]:
         ]
         if scores:
             by_day[day] = {"day": day, "scores": scores}
-        if len(by_day) >= max_days:
-            break
     return sorted(by_day.values(), key=lambda h: h["day"], reverse=True)
 
 

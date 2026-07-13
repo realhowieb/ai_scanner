@@ -304,6 +304,41 @@ def _purge_old_login_attempts() -> None:
     print(f"[maintenance] purged {deleted} stale login_attempts row(s)")
 
 
+def _prune_old_runs() -> None:
+    """Delete old non-snapshot runs (throttled once/day).
+
+    Every scan stores a full results_json blob; without retention the runs
+    table grows unbounded and every metadata query slowly degrades. Snapshots
+    are kept forever (track record / history need them); plain runs are pruned
+    after CRON_RUNS_RETENTION_DAYS (default 90, 0 disables).
+    """
+    days = int(os.getenv("CRON_RUNS_RETENTION_DAYS", "90") or "90")
+    if days <= 0:
+        return
+    from db.earnings import mark_earnings_refreshed_today, should_refresh_earnings_today
+
+    key = "cron_runs_prune"
+    if not should_refresh_earnings_today(key):
+        return
+    from db.engine import get_neon_conn
+
+    conn = get_neon_conn()
+    if conn is None:
+        return
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM runs WHERE is_snapshot = FALSE "
+        "AND created_at < NOW() - make_interval(days => %s)",
+        (days,),
+    )
+    deleted = cur.rowcount
+    conn.commit()
+    cur.close()
+    conn.close()
+    mark_earnings_refreshed_today(key)
+    print(f"[maintenance] pruned {deleted} run(s) older than {days}d")
+
+
 def _refresh_track_record() -> None:
     """Recompute + persist the signal track record once per day (throttled).
 
@@ -494,6 +529,11 @@ def main():
         _purge_old_login_attempts()
     except Exception as e:
         print(f"[cron] login purge failed: {e}")
+        _capture(e)
+    try:
+        _prune_old_runs()
+    except Exception as e:
+        print(f"[cron] runs prune failed: {e}")
         _capture(e)
 
     ok = all(run.ok for run in runs)
