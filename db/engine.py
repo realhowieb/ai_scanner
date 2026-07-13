@@ -24,6 +24,60 @@ except Exception:  # pragma: no cover - depends on optional UI dependency
 
 DB_PATH = Path(__file__).resolve().parent.parent / "scanner.sqlite"
 
+# ---------------------------------------------------------------------------
+# Connection reuse: 40+ call sites open a Neon connection, use it once, and
+# close it — each open is a full TCP+TLS+auth handshake (~200-500ms) to a
+# remote Postgres. Keep one warm connection per thread behind a proxy whose
+# close() is a no-op; checkout validates it with rollback() (one cheap round
+# trip that also clears any dangling transaction) and reconnects when dead.
+# Set AI_SCANNER_DB_POOL=0 to restore connect-per-call behavior.
+# ---------------------------------------------------------------------------
+import threading as _threading
+
+_pool_local = _threading.local()
+
+
+class _WarmConn:
+    """Proxy over a psycopg connection that keeps it warm on close()."""
+
+    __slots__ = ("_conn",)
+
+    def __init__(self, conn):
+        object.__setattr__(self, "_conn", conn)
+
+    def __getattr__(self, name):
+        return getattr(object.__getattribute__(self, "_conn"), name)
+
+    def __setattr__(self, name, value):
+        setattr(object.__getattribute__(self, "_conn"), name, value)
+
+    def close(self):  # noqa: D102 - deliberate no-op; connection stays warm
+        pass
+
+
+def _pool_enabled() -> bool:
+    return os.environ.get("AI_SCANNER_DB_POOL", "1").strip() != "0"
+
+
+def _checkout_warm(url: str):
+    """Return a warm per-thread connection, reconnecting when stale."""
+    import psycopg
+
+    conn = getattr(_pool_local, "conn", None)
+    if conn is not None:
+        try:
+            conn.rollback()
+            return _WarmConn(conn)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            _pool_local.conn = None
+    real = psycopg.connect(url, row_factory=psycopg.rows.dict_row)
+    _pool_local.conn = real
+    return _WarmConn(real)
+
 def get_neon_conn():
     """Return a new Neon PostgreSQL connection.
 
@@ -71,6 +125,8 @@ def get_neon_conn():
         return None
 
     try:
+        if _pool_enabled():
+            return _checkout_warm(url)
         import psycopg
 
         conn = psycopg.connect(url, row_factory=psycopg.rows.dict_row)
