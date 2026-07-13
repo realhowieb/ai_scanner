@@ -16,6 +16,13 @@ except Exception:  # pragma: no cover - headless envs; pure functions still work
 
 _TOP_SCORES_PER_SNAPSHOT = 50
 
+# Snapshots saved before input clipping shipped carry absurd BreakoutScores
+# (observed up to 3289); mixing them into the distribution poisons the
+# median/max and the would-have-fired counts. The clipped ceiling is ~145.
+import datetime as _dt
+
+SCORE_EPOCH = _dt.date(2026, 7, 1)
+
 
 def _score_history_uncached(max_days: int = 12) -> List[Dict[str, Any]]:
     """[{'day': date, 'scores': [(ticker, score) desc]}] — latest snapshot per
@@ -40,6 +47,8 @@ def _score_history_uncached(max_days: int = 12) -> List[Dict[str, Any]]:
         if created is None or not hasattr(created, "date"):
             continue
         day = created.date()
+        if day < SCORE_EPOCH:
+            break  # runs are newest-first; everything older is pre-clipping
         if day in by_day:
             continue  # keep only the newest snapshot per day
         try:
