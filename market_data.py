@@ -84,35 +84,30 @@ def fetch_alpaca_snapshots(symbols: List[str]) -> Dict[str, dict]:
         return {}
 
     cfg = _get_alpaca_base_urls()
-    base_data_url = cfg["data_url"]
+    url = f"{cfg['data_url']}/v2/stocks/snapshots"
 
-    # Alpaca snapshots endpoint: /v2/stocks/snapshots?symbols=AAPL,MSFT,...
-    url = f"{base_data_url}/v2/stocks/snapshots"
-    params = {"symbols": ",".join(symbols)}
-
-    try:
-        resp = requests.get(url, headers=headers, params=params, timeout=10)
-    except requests_exc.RequestException:  # type: ignore[union-attr]
-        return {}
-
-    if resp.status_code != 200:
-        return {}
-
-    try:
-        data = resp.json()
-    except ValueError:
-        return {}
-
-    # Alpaca returns a top-level dict keyed by symbol.
-    if not isinstance(data, dict):
-        return {}
-
-    # Ensure keys are uppercased for consistency.
+    # Chunk the symbol list (~100 per call keeps URLs and responses sane) so
+    # callers aren't capped by a single request's practical limit.
     normalized: Dict[str, dict] = {}
-    for k, v in data.items():
-        if not isinstance(v, dict):
+    for start in range(0, len(symbols), 100):
+        chunk = symbols[start : start + 100]
+        try:
+            resp = requests.get(
+                url, headers=headers, params={"symbols": ",".join(chunk)}, timeout=10
+            )
+        except requests_exc.RequestException:  # type: ignore[union-attr]
             continue
-        normalized[k.upper()] = v
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        if not isinstance(data, dict):
+            continue
+        for k, v in data.items():
+            if isinstance(v, dict):
+                normalized[k.upper()] = v
 
     return normalized
 
@@ -207,6 +202,7 @@ def build_day_trader_metrics(
         vwap = _sf(daily_bar.get("vw"))
         volume = _sf(daily_bar.get("v")) or _sf(minute_bar.get("v"))
 
+        close_today = _sf(daily_bar.get("c"))
         chg_pct = ((last - prev_close) / prev_close * 100.0) if prev_close else None
         gap_pct = (
             (today_open - prev_close) / prev_close * 100.0
@@ -227,6 +223,7 @@ def build_day_trader_metrics(
                 "vs_vwap_pct": round(vs_vwap_pct, 2) if vs_vwap_pct is not None else None,
                 "volume": int(volume) if volume else None,
                 "rvol": round(rvol, 2) if rvol is not None else None,
+                "close_today": round(close_today, 2) if close_today is not None else None,
             }
         )
 
