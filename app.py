@@ -741,31 +741,19 @@ def main():
         normalize_results_to_df=_normalize_results_to_df,
     )
 
-    # -------- Alerts (breakout / watchlist / price) --------
-    # Rendered below results (secondary management); tier-gated cap, Pro+ email.
-    # Import is guarded so a transient stale-module state on redeploy can't crash
-    # the whole app.
+    # -------- Alerts: moved to their own page --------
+    # The bell at the top of the page surfaces fired alerts; management
+    # (create/scorecards/feed) lives on pages/alerts.py. In-context creation
+    # survives via 'Alert me on this' in the ticker details.
     st.markdown("---")
     try:
-        from ui.app_session import alert_limit_for_tier
-
-        _alert_max = 25 if is_admin else alert_limit_for_tier(tier_key)
-    except Exception:
-        _alert_max = 25 if is_admin else 1
-    _alert_email_ok = bool(is_admin or flags.get("can_email_alerts"))
-    try:
-        render_alerts_panel(
-            username,
-            watch_tickers=watch_tickers,
-            max_alerts=_alert_max,
-            email_enabled=_alert_email_ok,
+        st.page_link(
+            "pages/alerts.py",
+            label="🔔 Alerts — create & manage (breakout · watchlist · price · live % move · RVOL)",
+            icon="⚙️",
         )
-    except TypeError:
-        # Stale ui.alerts module (old signature) during a redeploy — fall back.
-        try:
-            render_alerts_panel(username, watch_tickers=watch_tickers)
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     # Trade journal (positions logged from trade plans; hidden until first log).
     try:
