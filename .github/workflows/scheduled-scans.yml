@@ -102,7 +102,7 @@ jobs:
 
       - name: Upload scheduled scan summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scheduled-scan-summary
           path: artifacts/scheduled_scan_summary.json
