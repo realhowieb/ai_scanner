@@ -4,6 +4,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from ui.arrow_safe import arrow_safe
+
 # Optional diagnostics (no-op if not available)
 try:
     from .diagnostics import run_with_diagnostics, show_runner_info  # type: ignore
@@ -39,7 +41,7 @@ def runs_table(list_runs, load_run_results, max_rows: int = 200):
             view[c] = pd.to_datetime(view[c], errors="ignore")
     if "elapsed_s" in view.columns:
         view["elapsed_s"] = pd.to_numeric(view["elapsed_s"], errors="coerce").round(2)
-    st.dataframe(view, width="stretch", height=260)
+    st.dataframe(arrow_safe(view), width="stretch", height=260)
     if "id" in view.columns and load_run_results:
         ids = [i for i in view["id"].tolist() if pd.notna(i)]
         if ids:
@@ -49,7 +51,7 @@ def runs_table(list_runs, load_run_results, max_rows: int = 200):
                     details = load_run_results(run_id)
                     if isinstance(details, pd.DataFrame) and not details.empty:
                         st.markdown("### Results for selected run")
-                        st.dataframe(details, width="stretch")
+                        st.dataframe(arrow_safe(details), width="stretch")
                     else:
                         st.write("This run has no saved rows.")
                 except Exception as e:
@@ -91,7 +93,7 @@ def run_button(label: str, fn):
                             break
 
                 if isinstance(df_to_show, pd.DataFrame) and not df_to_show.empty:
-                    st.dataframe(df_to_show.head(50), width="stretch")
+                    st.dataframe(arrow_safe(df_to_show.head(50)), width="stretch")
                 else:
                     st.write("No tabular results returned.")
             except Exception as e:  # pragma: no cover

@@ -5,6 +5,7 @@ import streamlit as st
 from db.engine import get_neon_conn
 from db.schema import ensure_neon_users_schema
 from db.users import fetch_all_users, load_users
+from ui.arrow_safe import arrow_safe
 
 try:
     import streamlit_authenticator as stauth
@@ -89,7 +90,7 @@ def render_admin_users_panel(username, ADMIN_USERS, db_status):
 
         desired_cols = ["id", "username", "full_name", "tier", "is_active", "created_at"]
         display_cols = [c for c in desired_cols if c in users_df.columns]
-        st.dataframe(users_df[display_cols], width="stretch", height=260)
+        st.dataframe(arrow_safe(users_df[display_cols]), width="stretch", height=260)
 
         usernames_list = users_df["username"].tolist()
         selected_user = st.selectbox("Select user to edit", usernames_list)
