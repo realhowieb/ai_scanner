@@ -204,6 +204,56 @@ def _render_ranking_ab() -> None:
         pass
 
 
+def _render_excess_calendar() -> None:
+    """Calendar heatmap: each scan day's top-5 excess vs SPY (5d horizon).
+
+    GitHub-contributions style — weeks across, weekdays down, diverging
+    red/neutral/green centered at 0. Every day shown, nothing hidden: the
+    future public track-record page's centerpiece, incubating here.
+    """
+    try:
+        from db.track_record import load_daily_excess
+
+        daily = [d for d in load_daily_excess("breakout", 5, days=120) if d[1] is not None]
+        if len(daily) < 5:
+            return
+        import plotly.graph_objects as go
+
+        weeks, weekdays, vals, texts = [], [], [], []
+        for day, excess in daily:
+            weeks.append(day.isocalendar()[1] + day.year * 53)
+            weekdays.append(day.weekday())
+            vals.append(excess * 100)
+            texts.append(f"{day:%b %d}: {excess * 100:+.2f}% vs SPY")
+        wmin = min(weeks)
+        weeks = [w - wmin for w in weeks]
+        bound = max(abs(v) for v in vals) or 1.0
+        fig = go.Figure(
+            go.Heatmap(
+                x=weeks, y=weekdays, z=vals, text=texts,
+                hovertemplate="%{text}<extra></extra>",
+                colorscale=[[0, "#dc2626"], [0.5, "#334155"], [1, "#16a34a"]],
+                zmid=0, zmin=-bound, zmax=bound,
+                xgap=3, ygap=3, showscale=True,
+                colorbar=dict(title="% vs SPY", thickness=10),
+            )
+        )
+        fig.update_layout(
+            title=dict(text="📆 Daily picks vs SPY (5-day forward, top-5)", font=dict(size=14)),
+            height=180, margin=dict(l=0, r=0, t=32, b=0),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(visible=False),
+            yaxis=dict(
+                tickvals=[0, 1, 2, 3, 4],
+                ticktext=["Mon", "Tue", "Wed", "Thu", "Fri"],
+                autorange="reversed",
+            ),
+        )
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+    except Exception:
+        pass
+
+
 def _render_earnings_debug() -> None:
     """One-click earnings-calendar write test (moved here from the scan flow)."""
     with st.expander("🧪 Earnings Calendar Debug", expanded=False):
@@ -234,6 +284,7 @@ def render_provider_health() -> None:
             "on. 🛠️ Admin override active: universe caps are disabled."
         )
         _render_ranking_ab()
+        _render_excess_calendar()
         _render_earnings_debug()
 
         # --- Database + Alpaca latency row ---

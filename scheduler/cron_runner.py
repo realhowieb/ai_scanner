@@ -377,6 +377,13 @@ def _refresh_track_record() -> None:
                 ranking=ranking,
             )
             any_saved = any_saved or saved
+            if horizon == 5 and summary.get("daily"):
+                try:
+                    from db.track_record import save_daily_excess
+
+                    save_daily_excess(ranking, 5, summary["daily"])
+                except Exception as e:
+                    print(f"[track_record] daily save failed: {e}")
             print(
                 f"[track_record] h={horizon} {ranking}: "
                 f"excess_vs_{summary.get('benchmark')}={summary['avg_return']:+.2%} "

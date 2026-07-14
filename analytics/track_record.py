@@ -187,12 +187,13 @@ def compute_track_record(
     results: Dict[str, Dict[str, Any]] = {}
     for ranking in RANKINGS:
         excess: List[float] = []
+        daily: List[tuple] = []  # (run_date, mean_excess, n_picks)
         runs_counted = 0
         for run_date, picks in per_snapshot:
             spy_ret = _forward_return(spy_bars, run_date, horizon_days)
             if spy_ret is None:
                 continue
-            used = False
+            day_vals: List[float] = []
             for sym in picks.get(ranking, []):
                 bars = _bars_for(bars_by_symbol, sym)
                 if bars is None:
@@ -200,9 +201,10 @@ def compute_track_record(
                 r = _forward_return(bars, run_date, horizon_days)
                 if r is not None:
                     excess.append(r - spy_ret)
-                    used = True
-            if used:
+                    day_vals.append(r - spy_ret)
+            if day_vals:
                 runs_counted += 1
+                daily.append((run_date, mean(day_vals), len(day_vals)))
         if not excess:
             continue
         beats = sum(1 for e in excess if e > 0)
@@ -216,5 +218,6 @@ def compute_track_record(
             "benchmark": BENCHMARK,
             "top_n": TOP_N,
             "ranking": ranking,
+            "daily": daily,
         }
     return results or None

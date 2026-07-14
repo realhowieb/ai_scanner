@@ -90,6 +90,8 @@ def results_column_config() -> dict:
         "RSvsSPY": cc.NumberColumn("RS vs SPY", format="%.2f"),
         "PreBreakoutProb%": cc.NumberColumn("PreBreakout", format="%.1f%%"),
         "AI Confidence": cc.NumberColumn(format="%.1f%%"),
+        "PctChange": cc.NumberColumn("Day %", format="%.2f%%"),
+        "Spark10D": cc.LineChartColumn("10-day", width="small"),
     }
 
 
