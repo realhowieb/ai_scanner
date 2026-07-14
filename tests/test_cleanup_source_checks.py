@@ -367,6 +367,8 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("from ui.result_helpers import", results_source)
         self.assertIn("from ui.result_tables import render_static_results_table", results_source)
         self.assertIn("from ui.result_watchlist import render_watchlist_action", results_source)
+        self.assertNotIn("Enable table styling", results_source)
+        self.assertNotIn("enable_styling = st.checkbox", results_source)
         self.assertNotIn("def _sync_selected_ticker_from_table", results_source)
         self.assertNotIn("def _find_row_for_ticker", results_source)
         self.assertNotIn("def _render_watchlist_action", results_source)

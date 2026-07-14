@@ -159,49 +159,11 @@ def render_results(
     if earn_col in df.columns and is_basic:
         st.info("🔒 Pro feature — earnings filters (exclude earnings soon / only within X days)")
 
-    # --- Performance guard: Pandas Styler becomes very slow on large tables ---
-    MAX_STYLED_ROWS = 1500
-    MAX_STYLED_COLS = 25
-
-    # "Fast mode" disables ALL pandas Styler work (df.style / applymap / gradients / to_html).
-    # Even medium-sized tables can feel slow on Streamlit Cloud, so we also provide a manual toggle.
-    auto_fast = (len(df) > MAX_STYLED_ROWS) or (df.shape[1] > MAX_STYLED_COLS)
-
-    # Styling must be OPT-IN. Even ~50–200 rows can feel slow with multiple Styler passes.
-    STYLE_ROW_LIMIT = 40
-
-    default_enable_style = False
-
-    # 🔒 Basic: hide styling toggle entirely (keeps Basic fast + avoids extra UI options)
-    if is_basic:
-        enable_styling = False
-    else:
-        enable_styling = st.checkbox(
-            "🎨 Enable table styling (slower)",
-            value=default_enable_style and (not auto_fast),
-            help="Styling can be slow even on medium tables. Leave off for the fastest results.",
-            key=f"{key_prefix}_enable_styling",
-        )
-
-    # If user enables styling but the table is beyond the safe limit, force fast mode.
-    if enable_styling and len(df) > STYLE_ROW_LIMIT:
-        st.caption(
-            f"⚡ Styling auto-disabled for {len(df):,} rows (limit={STYLE_ROW_LIMIT}). "
-            "Lower Top N Results to re-enable styling."
-        )
-        enable_styling = False
-
-    fast_mode = auto_fast or (not enable_styling)
+    # Always use the fast, non-Styler table path. It is more reliable on Streamlit Cloud
+    # and avoids optional matplotlib/Pandas Styler deployment failures.
+    fast_mode = True
 
     if fast_mode:
-        if auto_fast:
-            st.caption(
-                f"⚡ Fast mode enabled (styling disabled) — {len(df):,} rows × {df.shape[1]} cols. "
-                f"Refine filters / lower Top N Results to re-enable styling."
-            )
-        else:
-            st.caption("⚡ Fast mode enabled (styling disabled) for faster rendering.")
-
         # Render without Styler for speed
         if can_export_csv:
             from ui.result_helpers import RESULTS_HIDDEN_COLUMNS, results_column_config
