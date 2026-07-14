@@ -66,6 +66,33 @@ def render_track_record_badge() -> None:
         "indicative of future results."
     )
 
+# Columns that are model internals / duplicates — hidden from the results grid.
+RESULTS_HIDDEN_COLUMNS = ("PreBreakoutProb", "BreakoutPos20D", "IsBreakout")
+
+
+def results_column_config() -> dict:
+    """Number formats for the fast-mode results grid.
+
+    Rendered by the data grid itself (st.column_config), so fast mode keeps its
+    speed while losing the raw 10-decimal floats.
+    """
+    cc = st.column_config
+    return {
+        "BreakoutScore": cc.NumberColumn("Score", format="%.1f"),
+        "Last": cc.NumberColumn(format="%.2f"),
+        "Volume": cc.NumberColumn(format="localized"),
+        "GapPct": cc.NumberColumn("Gap %", format="%.2f%%"),
+        "Trend10D%": cc.NumberColumn("Trend 10d", format="%.1f%%"),
+        "Trend20D%": cc.NumberColumn("Trend 20d", format="%.1f%%"),
+        "Volatility20D%": cc.NumberColumn("Vol 20d", format="%.1f%%"),
+        "VolRel20": cc.NumberColumn("RVOL", format="%.2fx"),
+        "DollarVol20": cc.NumberColumn("$Vol 20d", format="compact"),
+        "RSvsSPY": cc.NumberColumn("RS vs SPY", format="%.2f"),
+        "PreBreakoutProb%": cc.NumberColumn("PreBreakout", format="%.1f%%"),
+        "AI Confidence": cc.NumberColumn(format="%.1f%%"),
+    }
+
+
 YF_DISABLED_KEY = "yf_disabled"
 YF_DISABLED_REASON_KEY = "yf_disabled_reason"
 YF_WARNED_KEY = "yf_disabled_warned"
