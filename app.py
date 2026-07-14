@@ -664,7 +664,6 @@ def main():
         )
     except Exception:
         pass
-    st.markdown("---")
     st.session_state["active_watchlist_id"] = watch_id
     st.session_state["active_watchlist_tickers"] = watch_tickers
     st.markdown("---")

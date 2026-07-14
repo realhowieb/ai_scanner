@@ -69,7 +69,9 @@ def render_whats_new_strip() -> None:
     st.markdown(header)
     movers = diff["movers"][:4]
     if movers:
-        cols = st.columns(max(len(movers), 1))
+        # Fixed grid: with fewer movers, empty columns keep tiles compact on
+        # the left instead of spreading two tiles across the full width.
+        cols = st.columns(4)
         for col, (ticker, delta, score) in zip(cols, movers):
             col.metric(
                 ticker,
