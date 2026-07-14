@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import streamlit as st
 
@@ -70,6 +70,7 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
     # The watchlist IS the visualization: live stat tiles (price + day move).
     if active_tickers:
         _render_watchlist_tiles(active_tickers)
+        _render_watchlist_intelligence(active_tickers)
 
     # Seed session state for the tools/action handler, then render the tools.
     st.session_state["active_watchlist_id"] = active_id
@@ -107,6 +108,130 @@ def _render_watchlist_tiles(tickers: List[str], per_row: int = 5, max_tiles: int
             )
     if len(tickers) > max_tiles:
         st.caption(f"Showing the first {max_tiles} of {len(tickers)} names.")
+
+
+def _to_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return bool(value)
+
+
+def _symbol_key(row: Any) -> str:
+    for col in ("Ticker", "Symbol", "ticker", "symbol"):
+        try:
+            value = row.get(col)
+        except AttributeError:
+            value = None
+        if str(value or "").strip():
+            return str(value).strip().upper()
+    return ""
+
+
+def classify_watchlist_signal(row: Any) -> tuple[str, str]:
+    """Return a compact signal label and reason for a watchlist row."""
+    pre = _to_float(row.get("PreBreakoutProb%") if hasattr(row, "get") else None)
+    ai_conf = _to_float(row.get("AI Confidence") if hasattr(row, "get") else None)
+    score = _to_float(row.get("BreakoutScore") if hasattr(row, "get") else None)
+    is_breakout = _to_bool(row.get("IsBreakout")) if hasattr(row, "get") else False
+
+    if is_breakout or (ai_conf is not None and ai_conf >= 70):
+        return "Active breakout", "AI confidence or breakout flag is high."
+    if pre is not None and pre >= 60:
+        return "Heating up", "Pre-breakout probability is elevated."
+    if score is not None and score >= 20:
+        return "Strong setup", "Breakout score is elevated."
+    if pre is not None and pre <= 5 and ai_conf is not None and ai_conf <= 5:
+        return "Cooling down", "Both model signals are quiet."
+    return "Watching", "No strong signal in the latest scan yet."
+
+
+def summarize_watchlist_intelligence(tickers: List[str], results_df: Any) -> list[dict[str, Any]]:
+    """Match watchlist symbols against the latest scan results."""
+    if results_df is None or not hasattr(results_df, "iterrows"):
+        return []
+    watch = [str(t).strip().upper() for t in tickers if str(t).strip()]
+    if not watch:
+        return []
+    rows_by_symbol: dict[str, Any] = {}
+    try:
+        iterator = results_df.iterrows()
+    except Exception:
+        return []
+    for _, row in iterator:
+        sym = _symbol_key(row)
+        if sym and sym not in rows_by_symbol:
+            rows_by_symbol[sym] = row
+
+    out: list[dict[str, Any]] = []
+    for sym in watch:
+        row = rows_by_symbol.get(sym)
+        if row is None:
+            out.append(
+                {
+                    "Ticker": sym,
+                    "Signal": "Not in latest scan",
+                    "Reason": "Run a scan including this ticker.",
+                    "PreBreakout": None,
+                    "AI Confidence": None,
+                    "Score": None,
+                }
+            )
+            continue
+        signal, reason = classify_watchlist_signal(row)
+        out.append(
+            {
+                "Ticker": sym,
+                "Signal": signal,
+                "Reason": reason,
+                "PreBreakout": _to_float(row.get("PreBreakoutProb%")),
+                "AI Confidence": _to_float(row.get("AI Confidence")),
+                "Score": _to_float(row.get("BreakoutScore")),
+            }
+        )
+    priority = {"Active breakout": 0, "Heating up": 1, "Strong setup": 2, "Watching": 3, "Cooling down": 4, "Not in latest scan": 5}
+    return sorted(out, key=lambda item: (priority.get(str(item["Signal"]), 9), str(item["Ticker"])))
+
+
+def _render_watchlist_intelligence(tickers: List[str]) -> None:
+    df = st.session_state.get("results_df")
+    rows = summarize_watchlist_intelligence(tickers, df)
+    if not rows:
+        return
+
+    with st.expander("Watchlist intelligence", expanded=False):
+        hot = sum(1 for row in rows if row["Signal"] in {"Active breakout", "Heating up", "Strong setup"})
+        cold = sum(1 for row in rows if row["Signal"] == "Cooling down")
+        missing = sum(1 for row in rows if row["Signal"] == "Not in latest scan")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Actionable", hot)
+        c2.metric("Cooling", cold)
+        c3.metric("Not scanned", missing)
+        try:
+            frame_mod = pd
+            if frame_mod is None:
+                import pandas as frame_mod  # type: ignore
+            table = frame_mod.DataFrame(rows)
+            st.dataframe(
+                table,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "PreBreakout": st.column_config.NumberColumn("PreBreakout", format="%.1f%%"),
+                    "AI Confidence": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Score": st.column_config.NumberColumn(format="%.1f"),
+                },
+            )
+        except Exception:
+            st.write(rows)
 
 
 def build_watchlist_df(tickers: List[str]):

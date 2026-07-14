@@ -36,9 +36,16 @@ def render_results_tabs(
 ) -> None:
     rows = 0 if df is None else len(df)
 
-    if flags.get("can_scan_history") or flags.get("can_early_breakout") or flags.get("can_admin_panel"):
+    if (
+        flags.get("can_track_record")
+        or flags.get("can_scan_history")
+        or flags.get("can_early_breakout")
+        or flags.get("can_admin_panel")
+    ):
         tab_names = [f"📊 Latest scan results ({rows} rows)"]
 
+        if flags.get("can_track_record"):
+            tab_names.append("📈 Track Record")
         if flags.get("can_early_breakout"):
             tab_names.append("🔮 Early Breakout Candidates")
         if flags.get("can_scan_history"):
@@ -50,6 +57,11 @@ def render_results_tabs(
 
         tab_latest = tabs[0]
         idx = 1
+
+        tab_track = None
+        if flags.get("can_track_record"):
+            tab_track = tabs[idx]
+            idx += 1
 
         tab_early = None
         if flags.get("can_early_breakout"):
@@ -66,6 +78,7 @@ def render_results_tabs(
             tab_admin = tabs[idx]
     else:
         (tab_latest,) = st.tabs([f"📊 Latest scan results ({rows} rows)"])
+        tab_track = None
         tab_early = None
         tab_history = None
         tab_admin = None
@@ -84,6 +97,9 @@ def render_results_tabs(
         load_run_results=load_run_results,
         normalize_results_to_df=normalize_results_to_df,
     )
+
+    if tab_track is not None:
+        _render_track_record_tab(tab_track=tab_track)
 
     if tab_early is not None:
         _render_early_breakout_tab(
@@ -114,6 +130,20 @@ def render_results_tabs(
             render_admin_users_panel=render_admin_users_panel,
             get_db_conn=get_db_conn,
         )
+
+
+def _render_track_record_tab(*, tab_track: Any) -> None:
+    with tab_track:
+        try:
+            from ui.track_record import render_track_record_dashboard
+
+            render_track_record_dashboard()
+        except RESULTS_TAB_ERRORS as e:
+            st.error("Track Record failed to render.")
+            try:
+                st.exception(e)
+            except RESULTS_TAB_ERRORS:
+                st.caption(f"{type(e).__name__}: {e}")
 
 
 def _render_latest_results_tab(

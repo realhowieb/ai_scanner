@@ -42,6 +42,7 @@ class AppSessionTests(unittest.TestCase):
         self.assertTrue(flags["can_scan_sp500"])
         self.assertTrue(flags["can_scan_nasdaq"])
         self.assertTrue(flags["can_export_csv"])
+        self.assertTrue(flags["can_track_record"])
         self.assertFalse(flags["can_early_breakout"])
         self.assertFalse(flags["can_admin_panel"])
 
