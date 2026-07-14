@@ -103,6 +103,12 @@ def render_results(
         source_text = f" • source: {ai_source}" if ai_source else ""
         st.caption(f"AI Confidence model trained at: {ai_trained_at}{source_text}")
     render_track_record_badge()
+    try:
+        from ui.score_map import render_score_map
+
+        render_score_map(df)
+    except Exception:
+        pass
     st.caption(
         f"Showing {len(df)} results. Increase 'Top N Results' in the sidebar to see more, "
         "or relax filters (Min Gap %, price range, Unusual Volume Filter). "
