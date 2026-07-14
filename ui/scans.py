@@ -97,52 +97,66 @@ def render_scan_controls(
     # Admin is a ROLE, not a tier: bypass plan-based button disabling.
     is_admin = _is_admin()
 
-    # Scan profile selector (Regular / Aggressive / Conservative)
-    profile_label = st.radio(
-        "Scan profile",
-        ["Regular", "Aggressive", "Conservative"],
-        horizontal=True,
-        key="scan_profile_choice",
-    )
+    # One compact header row: title + scan-profile selector side by side.
+    hq1, hq2 = st.columns([2, 2])
+    hq1.subheader("⚡ Quick Market Scans")
+    with hq2:
+        profile_label = st.radio(
+            "Scan profile",
+            ["Regular", "Aggressive", "Conservative"],
+            horizontal=True,
+            key="scan_profile_choice",
+        )
     scan_profile = profile_label.lower().strip()
-    st.caption(
-        f"Current scan profile: **{profile_label}** "
-        "(tunes min gap and unusual volume behavior)."
-    )
 
-    st.subheader("⚡ Quick Market Scans")
-    st.caption("Run SP500, NASDAQ, and combo scans using your current filters.")
-
-    # Buttons (hard-wired universes)
+    # Buttons (hard-wired universes) — one shared caption instead of one each.
     b1, b2, b3 = st.columns([1, 1, 2])
-
     with b1:
         run_sp500_btn = st.button(
             "Run SP500 Scan",
             width="stretch",
             disabled=(not can_scan_sp500 and not is_admin),
         )
-        st.caption("Runs SP500 regardless of sidebar universe.")
-
     with b2:
         run_nasdaq_btn = st.button(
             "Run NASDAQ Scan",
             width="stretch",
             disabled=(not can_scan_nasdaq and not is_admin),
         )
-        st.caption("Runs NASDAQ regardless of sidebar universe.")
-
     with b3:
         run_combo_btn = st.button(
-            "Run Combo Scan (SP500+NASDAQ)",
+            "Run Combo Scan (SP500+NASDAQ)" + ("" if is_admin else " · Pro+"),
             width="stretch",
             disabled=(not (can_scan_sp500 and can_scan_nasdaq) and not is_admin),
         )
-        if is_admin:
-            st.caption("Runs Combo regardless of plan caps (admin override).")
-        else:
-            st.caption("Pro/Premium only.")
+    st.caption(
+        f"Fixed universes, current filters, **{profile_label}** profile "
+        "(profile tunes min gap and unusual-volume behavior)."
+    )
 
+    # Watchlist tool buttons are now rendered in the unified Watchlists area
+    # (ui/watchlists.py); read their states here for the action handler below.
+    (
+        view_watchlist_btn,
+        run_watchlist_btn,
+        clear_watchlist_btn,
+        add_watchlist_btn,
+        remove_watchlist_btn,
+        watchlist_add_symbol,
+    ) = st.session_state.get(
+        "_wl_tools_state", (False, False, False, False, False, "")
+    )
+
+    single_ticker, show_chart_btn, run_single_scan_btn = render_single_ticker_panel()
+
+    # Ensure results DataFrame exists in session state
+    if "results_df" not in st.session_state:
+        st.session_state.results_df = pd.DataFrame()
+
+    # --- Admin role check and universe cap overrides ---
+    # Admin is a ROLE, not a tier. Admins bypass plan caps in UI + scan limits.
+    if is_admin:
+        st.caption("🛠️ Admin override: universe caps are disabled.")
     # --- Earnings Calendar Debug (admin-only) ---
     # One-click test to verify Yahoo Finance -> DB writes without relying on scan timing or snapshot logic.
     if bool(st.session_state.get("is_admin")):
@@ -172,29 +186,6 @@ def render_scan_controls(
                 except (RuntimeError, TypeError, ValueError, OSError) as e:
                     st.error(f"Earnings debug failed: {e}")
 
-    # Watchlist tool buttons are now rendered in the unified Watchlists area
-    # (ui/watchlists.py); read their states here for the action handler below.
-    (
-        view_watchlist_btn,
-        run_watchlist_btn,
-        clear_watchlist_btn,
-        add_watchlist_btn,
-        remove_watchlist_btn,
-        watchlist_add_symbol,
-    ) = st.session_state.get(
-        "_wl_tools_state", (False, False, False, False, False, "")
-    )
-
-    single_ticker, show_chart_btn, run_single_scan_btn = render_single_ticker_panel()
-
-    # Ensure results DataFrame exists in session state
-    if "results_df" not in st.session_state:
-        st.session_state.results_df = pd.DataFrame()
-
-    # --- Admin role check and universe cap overrides ---
-    # Admin is a ROLE, not a tier. Admins bypass plan caps in UI + scan limits.
-    if is_admin:
-        st.caption("🛠️ Admin override: universe caps are disabled.")
 
     def _manual_combo_liquidity_filter(symbols: List[str]) -> List[str]:
         min_dollar_vol = st.session_state.get("min_dollar_vol")
