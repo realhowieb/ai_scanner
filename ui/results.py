@@ -36,6 +36,12 @@ quiet_provider_loggers()
 EARNINGS_TABLE_COLUMNS = ("earnings_in_days", "Earnings", "📅 Earnings in X days")
 
 
+def _can_use_background_gradient() -> bool:
+    try: import matplotlib  # noqa: F401, E701
+    except ImportError: return False
+    return True
+
+
 def render_results(
     df: Optional[pd.DataFrame],
     can_export_csv: bool,
@@ -449,12 +455,14 @@ def render_results(
 
         styled = styled.map(_earnings_style, subset=["📅 Earnings in X days"])
 
+    can_use_gradient = _can_use_background_gradient()
+
     # Heatmap for BreakoutScore
-    if "BreakoutScore" in table_df.columns:
+    if can_use_gradient and "BreakoutScore" in table_df.columns:
         styled = styled.background_gradient(axis=None, cmap="RdYlGn", subset=["BreakoutScore"])
 
     # Conditional formatting for RS_Rank (0-100)
-    if "RS_Rank" in table_df.columns:
+    if can_use_gradient and "RS_Rank" in table_df.columns:
         styled = styled.background_gradient(axis=None, cmap="Greens", subset=["RS_Rank"])
 
     # Bold / color trend markers
@@ -571,9 +579,9 @@ def render_results(
                 picker_key=f"{key_prefix}_chart_picker",
                 selected_key=f"{key_prefix}_selected_ticker",
             )
-        except (RuntimeError, TypeError, ValueError):
+        except (ImportError, RuntimeError, TypeError, ValueError):
             # Fallback: keep styled rendering without selection
-            st.dataframe(styled, width="stretch", height=420)
+            st.dataframe(table_df, width="stretch", height=420)
     else:
         # Basic: keep the pro styling but render as static HTML (no Streamlit dataframe toolbar/download).
         # Mobile-safe: enable horizontal scroll + prevent vertical letter stacking.
