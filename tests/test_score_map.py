@@ -74,3 +74,33 @@ class BubbleColorTests(unittest.TestCase):
         _, weak = bubble_color(0.5)
         _, strong = bubble_color(10.0)
         self.assertLess(float(weak.split(",")[-1].rstrip(")")), float(strong.split(",")[-1].rstrip(")")))
+
+
+class BubbleHtmlTests(unittest.TestCase):
+    def _html(self):
+        try:
+            import circlify
+        except ModuleNotFoundError:
+            self.skipTest("circlify not installed")
+        from ui.score_map import build_bubble_html
+
+        data = [
+            {"id": "AAA", "datum": 80.0, "chg": 5.0},
+            {"id": "BBB", "datum": 40.0, "chg": -2.0},
+            {"id": "CCC", "datum": 20.0, "chg": None},
+        ]
+        circles = circlify.circlify(
+            [{"id": d["id"], "datum": d["datum"]} for d in data], show_enclosure=False
+        )
+        return build_bubble_html(data, circles)
+
+    def test_bubbles_and_motion_present(self):
+        html = self._html()
+        for t in ("AAA", "BBB", "drift", "prefers-reduced-motion"):
+            self.assertIn(t, html)
+        self.assertEqual(html.count("class='bub'"), 3)
+
+    def test_polarity_colors_in_markup(self):
+        html = self._html()
+        self.assertIn("22,163,74", html)   # green for +5%
+        self.assertIn("220,38,38", html)   # red for -2%

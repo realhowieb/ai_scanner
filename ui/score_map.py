@@ -257,16 +257,75 @@ def bubble_color(chg_pct) -> tuple:
     return f"rgba(220,38,38,{0.10 + alpha * 0.25:.2f})", f"rgba(220,38,38,{0.5 + alpha * 0.5:.2f})"
 
 
+def build_bubble_html(data: List[Dict[str, Any]], circles, height: int = 470) -> str:
+    """Animated bubble field as self-contained HTML/CSS.
+
+    Each bubble drifts on its own gentle loop (duration/delay derived from a
+    hash of the ticker, so layout and motion are stable across reruns) and
+    pops slightly on hover with a native tooltip. No JS needed — pure CSS.
+    """
+    by_id = {d["id"]: d for d in data}
+    bubbles = []
+    for c in circles:
+        d = by_id.get(c.ex["id"])
+        if not d:
+            continue
+        fill, border = bubble_color(d.get("chg"))
+        # unit-circle coords -> percentages of the square container
+        left = (c.x - c.r + 1) / 2 * 100
+        top = (1 - (c.y + c.r)) / 2 * 100
+        dia = c.r * 100
+        chg = d.get("chg")
+        chg_s = f"{chg:+.1f}%" if (chg is not None and chg == chg) else ""
+        h = abs(hash(d["id"]))
+        dur = 4.5 + (h % 40) / 10.0          # 4.5-8.5s
+        delay = (h % 23) / 10.0              # 0-2.2s
+        amp = 3 + (h % 5)                    # 3-7px drift
+        font = max(8, min(20, int(c.r * height * 0.28)))
+        label = (
+            f"<div class='bl' style='font-size:{font}px'>{d['id']}"
+            + (f"<br><span style='font-size:{max(7, int(font * 0.75))}px'>{chg_s}</span>" if dia > 9 else "")
+            + "</div>"
+            if dia > 6.5
+            else ""
+        )
+        title = f"{d['id']} · score {d['datum']:.1f}" + (f" · {chg_s} today" if chg_s else "")
+        bubbles.append(
+            f"<div class='bub' title='{title}' style='left:{left:.2f}%;top:{top:.2f}%;"
+            f"width:{dia:.2f}%;height:{dia:.2f}%;background:radial-gradient(circle at 35% 30%, rgba(255,255,255,0.10), {fill});"
+            f"border:2px solid {border};animation-duration:{dur:.1f}s;animation-delay:-{delay:.1f}s;"
+            f"--amp:{amp}px'>{label}</div>"
+        )
+    return f"""
+<style>
+  .bfield {{ position:relative; width:min(100%, {height}px); height:{height}px;
+             margin:0 auto; font-family:-apple-system, 'Segoe UI', Roboto, sans-serif; }}
+  .bub {{ position:absolute; border-radius:50%; display:flex; align-items:center;
+          justify-content:center; text-align:center; color:#e2e8f0; cursor:default;
+          animation-name:drift; animation-timing-function:ease-in-out;
+          animation-iteration-count:infinite; animation-direction:alternate;
+          transition:transform .18s ease; box-sizing:border-box; }}
+  .bub:hover {{ transform:scale(1.09); z-index:5; }}
+  .bl {{ font-weight:700; line-height:1.15; text-shadow:0 1px 3px rgba(0,0,0,0.6); }}
+  @keyframes drift {{ from {{ margin-top:calc(-1 * var(--amp)); }}
+                      to   {{ margin-top:var(--amp); }} }}
+  @media (prefers-reduced-motion: reduce) {{ .bub {{ animation:none; }} }}
+</style>
+<div class='bfield'>{"".join(bubbles)}</div>
+"""
+
+
 def _render_bubbles(work, max_bubbles: int = 50) -> None:
     """Crypto-bubbles style packed circles: size = BreakoutScore, color = day %.
 
     Size carries the setup's strength (magnitude -> area), the green/red ring
     carries today's direction (polarity), and the ticker + % are printed in
-    text ink so color is never the only encoding.
+    text ink so color is never the only encoding. Animated: each bubble drifts
+    gently (CSS only; honors prefers-reduced-motion).
     """
     try:
         import circlify
-        import plotly.graph_objects as go
+        import streamlit.components.v1 as components
 
         top = work.head(max_bubbles)
         data = []
@@ -282,54 +341,13 @@ def _render_bubbles(work, max_bubbles: int = 50) -> None:
             [{"id": d["id"], "datum": d["datum"]} for d in data],
             show_enclosure=False,
         )
-        by_id = {d["id"]: d for d in data}
-
-        fig = go.Figure()
-        xs, ys, hovers = [], [], []
-        for c in circles:
-            d = by_id.get(c.ex["id"])
-            if not d:
-                continue
-            fill, border = bubble_color(d.get("chg"))
-            fig.add_shape(
-                type="circle", xref="x", yref="y",
-                x0=c.x - c.r, y0=c.y - c.r, x1=c.x + c.r, y1=c.y + c.r,
-                fillcolor=fill, line=dict(color=border, width=2),
-            )
-            chg = d.get("chg")
-            chg_s = f"{chg:+.1f}%" if (chg is not None and chg == chg) else ""
-            # Label only bubbles big enough to hold text.
-            if c.r > 0.07:
-                fig.add_annotation(
-                    x=c.x, y=c.y, showarrow=False,
-                    text=f"<b>{d['id']}</b><br>{chg_s}",
-                    font=dict(size=max(9, min(18, int(c.r * 130)))),
-                )
-            xs.append(c.x)
-            ys.append(c.y)
-            hovers.append(
-                f"{d['id']} · score {d['datum']:.1f}"
-                + (f" · {chg_s} today" if chg_s else "")
-            )
-        fig.add_trace(
-            go.Scatter(
-                x=xs, y=ys, mode="markers",
-                marker=dict(size=18, opacity=0),
-                hovertext=hovers, hoverinfo="text",
-            )
-        )
-        fig.update_layout(
-            height=460, margin=dict(l=0, r=0, t=8, b=0), showlegend=False,
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(visible=False, range=[-1.05, 1.05], scaleanchor="y"),
-            yaxis=dict(visible=False, range=[-1.05, 1.05]),
-        )
-        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+        components.html(build_bubble_html(data, circles), height=480)
         st.caption(
             "Bubble size = BreakoutScore (bigger = stronger setup) · "
-            "color = today's move. Hover any bubble for details."
+            "color = today's move. Hover a bubble for details."
         )
     except ImportError:
         st.caption("Bubbles view needs the `circlify` package (redeploying adds it).")
     except Exception:
         pass
+
