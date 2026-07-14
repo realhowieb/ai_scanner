@@ -82,3 +82,34 @@ class WarmConnTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WarmConnContextManagerTests(unittest.TestCase):
+    def setUp(self):
+        engine._pool_local.conn = None
+
+    def _conn(self, real):
+        with mock.patch.dict(
+            "os.environ", {"NEON_DATABASE_URL": "postgres://x", "AI_SCANNER_DB_POOL": "1"}
+        ), mock.patch.dict(sys.modules, {"psycopg": _fake_psycopg([real])}):
+            return engine.get_neon_conn()
+
+    def test_with_block_commits_and_keeps_connection_open(self):
+        real = FakeConn()
+        real.commits = 0
+        real.commit = lambda: setattr(real, "commits", real.commits + 1)
+        conn = self._conn(real)
+        with conn:
+            pass
+        self.assertEqual(real.commits, 1)
+        self.assertFalse(real.closed)  # psycopg's own __exit__ would close it
+
+    def test_with_block_rolls_back_on_exception(self):
+        real = FakeConn()
+        conn = self._conn(real)
+        before = real.rollbacks
+        with self.assertRaises(ValueError):
+            with conn:
+                raise ValueError("boom")
+        self.assertEqual(real.rollbacks, before + 1)
+        self.assertFalse(real.closed)

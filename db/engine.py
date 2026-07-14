@@ -54,6 +54,24 @@ class _WarmConn:
     def close(self):  # noqa: D102 - deliberate no-op; connection stays warm
         pass
 
+    # Dunder methods bypass __getattr__ (looked up on the class), so the
+    # context-manager protocol must be implemented explicitly. psycopg3's own
+    # `with conn:` CLOSES the connection on exit; here we keep the transaction
+    # semantics (commit on success, rollback on error) but keep the socket warm.
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        conn = object.__getattribute__(self, "_conn")
+        try:
+            if exc_type is None:
+                conn.commit()
+            else:
+                conn.rollback()
+        except Exception:
+            pass
+        return False
+
 
 def _pool_enabled() -> bool:
     return os.environ.get("AI_SCANNER_DB_POOL", "1").strip() != "0"
