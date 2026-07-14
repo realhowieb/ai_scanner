@@ -45,11 +45,25 @@ def render_track_record_badge() -> None:
     top_n = tr.get("top_n") or 5
     if avg is None or win is None:
         return
+    # Hero number + per-horizon tiles: this is the trust asset, give it
+    # visual weight (st.metric polarity arrows; no custom colors needed).
+    hc1, hc2, hc3 = st.columns(3)
+    hc1.metric(
+        f"vs {bench} · {h}d (top-{top_n})",
+        f"{avg:+.1%}",
+        delta=f"{win:.0%} beat the benchmark",
+        delta_color="normal" if avg >= 0 else "inverse",
+    )
+    for col, horizon in ((hc2, 1), (hc3, 20)):
+        try:
+            other = _cached_track_record(horizon)
+        except Exception:
+            other = None
+        if other and other.get("avg_return") is not None and int(other.get("sample_size") or 0) >= TRACK_RECORD_MIN_SAMPLE:
+            col.metric(f"vs {bench} · {horizon}d", f"{other['avg_return']:+.1%}")
     st.caption(
-        f"📈 **Track record:** top-{top_n} scan candidates beat the {bench} by "
-        f"**{avg:+.1%}** over the next {h} trading days on average, **{win:.0%}** "
-        f"beating the benchmark (n={n}). Backtested on saved snapshots — past "
-        "performance is not indicative of future results."
+        f"📈 Backtested on saved snapshots (n={n}) — past performance is not "
+        "indicative of future results."
     )
 
 YF_DISABLED_KEY = "yf_disabled"

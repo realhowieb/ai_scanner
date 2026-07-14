@@ -135,7 +135,7 @@ def _earnings_today() -> set:
 def _movers_table(rows: List[Dict[str, Any]], *, show_gap: bool = True) -> str:
     if not rows:
         return "<p style='color:#888'>No data.</p>"
-    head = "<tr><th align='left'>Ticker</th><th align='right'>Last</th><th align='right'>Chg %</th>"
+    head = "<tr><th align='left'>Ticker</th><th align='right'>Last</th><th align='right'>Chg %</th><th></th>"
     if show_gap:
         head += "<th align='right'>Gap %</th>"
     head += "</tr>"
@@ -144,11 +144,20 @@ def _movers_table(rows: List[Dict[str, Any]], *, show_gap: bool = True) -> str:
         chg = r.get("chg_pct")
         gap = r.get("gap_pct")
         color = "#16a34a" if (chg is not None and chg >= 0) else "#dc2626"
+        # Email-safe inline bar-let: width scales with |move| (capped at 5%).
+        bar = ""
+        if chg is not None:
+            width = int(min(abs(chg) / 5.0, 1.0) * 48) + 2
+            bar = (
+                f"<div style='height:8px;width:{width}px;border-radius:3px;"
+                f"background:{color};display:inline-block'></div>"
+            )
         body += (
             f"<tr><td>{r.get('ticker')}</td>"
             f"<td align='right'>{r.get('last')}</td>"
             f"<td align='right' style='color:{color}'>"
             f"{('%+.2f%%' % chg) if chg is not None else '—'}</td>"
+            f"<td align='left'>{bar}</td>"
         )
         if show_gap:
             body += f"<td align='right'>{('%+.2f%%' % gap) if gap is not None else '—'}</td>"

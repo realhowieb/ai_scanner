@@ -439,6 +439,18 @@ def _styled(df, moved_now: set):
     def _vol(v):
         return "—" if pd.isna(v) else f"{int(v):,}"
 
+    def vwap_heat(val):
+        # Diverging heat: green above VWAP, red below, intensity by magnitude,
+        # neutral at 0 (midpoint stays uncolored per the diverging rule).
+        if val is None or (isinstance(val, float) and pd.isna(val)) or val == 0:
+            return ""
+        alpha = min(abs(float(val)) / 3.0, 1.0) * 0.35
+        return (
+            f"background-color: rgba(22, 163, 74, {alpha:.2f})"
+            if val > 0
+            else f"background-color: rgba(220, 38, 38, {alpha:.2f})"
+        )
+
     def in_play(row):
         chg = row.get("Chg %")
         rvol = row.get("RVOL")
@@ -470,6 +482,8 @@ def _styled(df, moved_now: set):
         for col in ("Chg %", "Gap %", "vs VWAP %", "AH %"):
             if col in df.columns:
                 styler = styler.map(color_pct, subset=[col])
+        if "vs VWAP %" in df.columns:
+            styler = styler.map(vwap_heat, subset=["vs VWAP %"])
         return styler
     except Exception:
         return df

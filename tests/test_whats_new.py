@@ -40,3 +40,32 @@ class DiffSnapshotsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HeatPillTests(unittest.TestCase):
+    def test_polarity_and_neutral_midpoint(self):
+        from ui.heat_strip import pill_color
+
+        self.assertIn("22,163,74", pill_color(2.5))    # green up
+        self.assertIn("220,38,38", pill_color(-2.5))   # red down
+        self.assertIn("128,128,128", pill_color(0.05)) # neutral near zero
+        self.assertIn("128,128,128", pill_color(None))
+
+    def test_intensity_scales_and_caps(self):
+        from ui.heat_strip import pill_color
+
+        small = float(pill_color(0.5).split(",")[-1].rstrip(")"))
+        big = float(pill_color(10.0).split(",")[-1].rstrip(")"))
+        self.assertLess(small, big)
+        self.assertLessEqual(big, 0.56)
+
+
+class DotStripTests(unittest.TestCase):
+    def test_sequence_rendering(self):
+        try:
+            from ui.alerts import dot_strip
+        except ModuleNotFoundError:  # streamlit not installed locally
+            self.skipTest("streamlit not installed")
+
+        self.assertEqual(dot_strip([True, False, True]), "🟢⚪🟢")
+        self.assertEqual(dot_strip([]), "")

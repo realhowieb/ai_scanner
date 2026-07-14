@@ -22,6 +22,18 @@ def _cached_scorecards(user_id: str):
     return scorecards_for_user(user_id)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_sequences(user_id: str):
+    from db.alert_outcomes import outcome_sequences_for_user
+
+    return outcome_sequences_for_user(user_id)
+
+
+def dot_strip(hits: list) -> str:
+    """Hit/miss sequence as a dot strip, oldest -> newest (🟢 hit, ⚪ miss)."""
+    return "".join("🟢" if h else "⚪" for h in hits)
+
+
 def _fmt_alert(a: dict) -> str:
     """One-line human description of an alert row."""
     t = a.get("alert_type")
@@ -266,8 +278,9 @@ def render_alerts_panel(
             from db.alert_outcomes import HIT_TARGET_PCT, HORIZON_DAYS
 
             scorecards = _cached_scorecards(user_id)
+            sequences = _cached_sequences(user_id)
         except Exception:
-            scorecards, HIT_TARGET_PCT, HORIZON_DAYS = {}, 5.0, 3
+            scorecards, sequences, HIT_TARGET_PCT, HORIZON_DAYS = {}, {}, 5.0, 3
 
         st.markdown("**Your alerts**")
         for index, a in enumerate(existing):
@@ -282,9 +295,11 @@ def render_alerts_panel(
             if card and card.get("fires", 0) >= 3:
                 avg = card.get("avg_return_pct")
                 avg_s = f" · avg {avg:+.1f}%/{HORIZON_DAYS}d" if avg is not None else ""
+                dots = dot_strip(sequences.get(a.get("id")) or [])
+                dots_s = f" · {dots}" if dots else ""
                 cols[0].caption(
                     f"🎯 {card['hits']}/{card['fires']} recent fires hit "
-                    f"+{HIT_TARGET_PCT:g}% within {HORIZON_DAYS}d{avg_s}"
+                    f"+{HIT_TARGET_PCT:g}% within {HORIZON_DAYS}d{avg_s}{dots_s}"
                 )
             new_enabled = cols[1].toggle(
                 "On", value=bool(a.get("enabled")), key=f"alert_tog_{a['id']}"
