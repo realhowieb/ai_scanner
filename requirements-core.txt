@@ -3,6 +3,9 @@
 # breaking a deploy. For full reproducibility, replace with exact == pins from
 # `pip freeze` in the deploy environment.
 streamlit==1.49.1
+# Pillow is transitive (matplotlib/streamlit image handling) but pip-audit
+# flagged 11 CVEs in 11.3.0; floor it at the fixed release.
+pillow>=12.3,<14
 pandas>=2.0,<3
 numpy>=1.23,<3
 yfinance>=0.2.27,<0.3
