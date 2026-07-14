@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+# Print the Python stack on hard crashes (SIGSEGV/SIGABRT): the recurring
+# Streamlit Cloud segfault dies without a traceback, so this is the tool that
+# finally names the crashing line in the deploy logs. Must run before any
+# native-heavy imports.
+import faulthandler
+
+faulthandler.enable()
+
 import sys
 from pathlib import Path
 
