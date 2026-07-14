@@ -257,6 +257,16 @@ def render_three_step_scanner() -> None:
 
     _init_scan_session_state()
 
+    # Apply AI-chosen settings BEFORE the widgets render: widget-keyed session
+    # state cannot be modified after the widget is instantiated, so the ✨
+    # handler stashes to a pending key and reruns into this block.
+    _pending = st.session_state.pop("_ai_pending_settings", None)
+    if _pending:
+        st.session_state["scan_market"] = _pending["market"]
+        st.session_state["scan_strategy"] = _pending["strategy"]
+        st.session_state["scan_profile"] = _pending["profile"]
+        st.session_state["_ai_run_pending"] = True
+
     # One control row replaces the old three-expander wizard: the "steps" were
     # just three choices, and the ceremony hid the Run button behind clicks.
     STRATEGIES = {
@@ -311,10 +321,7 @@ def render_three_step_scanner() -> None:
         with st.spinner("Interpreting your scan…"):
             settings = nl_to_scan_settings(ai_desc)
         if settings:
-            st.session_state["scan_market"] = settings["market"]
-            st.session_state["scan_strategy"] = settings["strategy"]
-            st.session_state["scan_profile"] = settings["profile"]
-            st.session_state["_ai_run_pending"] = True
+            st.session_state["_ai_pending_settings"] = settings
             st.rerun()
         else:
             st.warning("Couldn't map that to scan settings — adjust the dropdowns instead.")
