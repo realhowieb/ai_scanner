@@ -204,12 +204,37 @@ def _render_ranking_ab() -> None:
         pass
 
 
+def _render_earnings_debug() -> None:
+    """One-click earnings-calendar write test (moved here from the scan flow)."""
+    with st.expander("🧪 Earnings Calendar Debug", expanded=False):
+        st.caption("Runs a small earnings refresh and shows the returned dates (best-effort).")
+        if st.button(
+            "Fetch earnings for AAPL / MSFT / TSLA",
+            key="btn_earnings_debug",
+            width="stretch",
+        ):
+            try:
+                from db.earnings import populate_earnings_calendar
+
+                with st.spinner("Fetching earnings..."):
+                    result = populate_earnings_calendar(["AAPL", "MSFT", "TSLA"])
+                st.success("Earnings fetch attempted.")
+                st.write(result)
+                st.caption("If all dates are None, this is usually a network/API-key issue.")
+            except (RuntimeError, TypeError, ValueError, OSError) as e:
+                st.error(f"Earnings debug failed: {e}")
+
+
 def render_provider_health() -> None:
     """Render the admin provider-health dashboard. Never raises."""
     try:
         st.markdown("## 🩺 Provider Health")
-        st.caption("Live status of the data sources and infrastructure the app depends on.")
+        st.caption(
+            "Live status of the data sources and infrastructure the app depends "
+            "on. 🛠️ Admin override active: universe caps are disabled."
+        )
         _render_ranking_ab()
+        _render_earnings_debug()
 
         # --- Database + Alpaca latency row ---
         db_status, db_ms = _probe_database()

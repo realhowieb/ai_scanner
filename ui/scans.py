@@ -155,38 +155,6 @@ def render_scan_controls(
 
     # --- Admin role check and universe cap overrides ---
     # Admin is a ROLE, not a tier. Admins bypass plan caps in UI + scan limits.
-    if is_admin:
-        st.caption("🛠️ Admin override: universe caps are disabled.")
-    # --- Earnings Calendar Debug (admin-only) ---
-    # One-click test to verify Yahoo Finance -> DB writes without relying on scan timing or snapshot logic.
-    if bool(st.session_state.get("is_admin")):
-        with st.expander("🧪 Earnings Calendar Debug", expanded=False):
-            st.caption(
-                "Runs a small earnings refresh and shows the returned dates (best-effort)."
-            )
-            if st.button(
-                "Fetch earnings for AAPL / MSFT / TSLA",
-                key="btn_earnings_debug",
-                    width="stretch",
-            ):
-                try:
-                    try:
-                        from earnings import populate_earnings_calendar  # type: ignore
-                    except ImportError:
-                        from db.earnings import populate_earnings_calendar  # type: ignore
-
-                    with st.spinner("Fetching earnings via Yahoo Finance..."):
-                        result = populate_earnings_calendar(["AAPL", "MSFT", "TSLA"])
-
-                    st.success("Earnings fetch attempted.")
-                    st.write(result)
-                    st.caption(
-                        "If all dates are None, this is usually a network/VPN/captive-portal issue."
-                    )
-                except (RuntimeError, TypeError, ValueError, OSError) as e:
-                    st.error(f"Earnings debug failed: {e}")
-
-
     def _manual_combo_liquidity_filter(symbols: List[str]) -> List[str]:
         min_dollar_vol = st.session_state.get("min_dollar_vol")
         if min_dollar_vol is None:
