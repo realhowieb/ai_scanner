@@ -33,22 +33,64 @@ HIGHLIGHT_RVOL = 2.0
 # ------------------------------ pure helpers -------------------------------
 
 
-def market_state(now_utc: Optional[dt.datetime] = None) -> str:
-    """'premarket' | 'open' | 'afterhours' | 'closed' (US equities, ET)."""
+def market_state(
+    now_utc: Optional[dt.datetime] = None,
+    clock_is_open: Optional[bool] = None,
+) -> str:
+    """'premarket' | 'open' | 'afterhours' | 'closed' (US equities, ET).
+
+    `clock_is_open` is the exchange's own answer (Alpaca /v2/clock) and, when
+    provided, overrides the time-based guess for the regular session — the
+    time-only logic is wrong on holidays and early-close days. Time buckets
+    still classify the extended-hours windows.
+    """
     now = now_utc or dt.datetime.now(dt.timezone.utc)
     if now.tzinfo is None:
         now = now.replace(tzinfo=dt.timezone.utc)
     et = now.astimezone(ZoneInfo("America/New_York"))
+    if clock_is_open is True:
+        return "open"
     if et.weekday() >= 5:
         return "closed"
     minutes = et.hour * 60 + et.minute
     if 4 * 60 <= minutes < 9 * 60 + 30:
         return "premarket"
     if 9 * 60 + 30 <= minutes < 16 * 60:
-        return "open"
+        # Would be regular hours by the calendar — but the exchange says
+        # closed (holiday) or already closed (early-close day).
+        return "closed" if clock_is_open is False else "open"
     if 16 * 60 <= minutes < 20 * 60:
         return "afterhours"
     return "closed"
+
+
+def _fetch_clock_is_open() -> Optional[bool]:
+    """Ask Alpaca's trading clock whether the regular session is open."""
+    try:
+        import requests
+
+        from data.alpaca_config import get_alpaca_config, get_alpaca_headers
+
+        cfg = get_alpaca_config()
+        headers = get_alpaca_headers()
+        if not cfg or not headers:
+            return None
+        resp = requests.get(f"{cfg['base_url']}/v2/clock", headers=headers, timeout=5)
+        if resp.status_code != 200:
+            return None
+        return bool((resp.json() or {}).get("is_open"))
+    except Exception:
+        return None
+
+
+if st is not None:  # cached wrapper (the clock changes at minute granularity)
+
+    @st.cache_data(ttl=60, show_spinner=False)
+    def _clock_is_open() -> Optional[bool]:
+        return _fetch_clock_is_open()
+
+else:  # pragma: no cover
+    _clock_is_open = _fetch_clock_is_open
 
 
 def detect_moves(
@@ -66,9 +108,43 @@ def detect_moves(
     return out
 
 
-def _parse_symbols(raw: str) -> List[str]:
+_SYMBOL_RE = None
+
+
+def after_hours_pct(last: Optional[float], close_today: Optional[float]) -> Optional[float]:
+    """Extended-hours move: last trade vs the completed regular-session close.
+
+    On Alpaca's IEX feed the current-day bar stops updating at the regular
+    close, so after hours `dailyBar.c` is the official close and latestTrade
+    carries extended-hours prints. Returns None unless both prices exist and
+    genuinely differ (equal prices mean no AH trade yet — show nothing rather
+    than a fake 0.00%).
+    """
+    try:
+        if not last or not close_today:
+            return None
+        if float(last) == float(close_today):
+            return None
+        return round((float(last) / float(close_today) - 1.0) * 100.0, 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def _parse_symbols(raw: str, max_symbols: int = 200) -> List[str]:
+    """Parse, validate, and dedupe a comma-separated ticker list.
+
+    Accepts 1-8 chars of A-Z / digits / dot / dash (covers class shares like
+    BRK.B and BRK-B); silently drops anything else rather than sending junk to
+    the quotes API.
+    """
+    global _SYMBOL_RE
+    if _SYMBOL_RE is None:
+        import re
+
+        _SYMBOL_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,7}$")
     parts = [p.strip().upper() for p in (raw or "").replace("\n", ",").split(",")]
-    return [p for p in dict.fromkeys(parts) if p]
+    out = [p for p in dict.fromkeys(parts) if p and _SYMBOL_RE.match(p)]
+    return out[:max_symbols]
 
 
 # ----------------------------- symbol sources ------------------------------
@@ -146,13 +222,21 @@ def render_day_trader_panel(
         return
     try:
         from config import DAY_TRADER_ENABLED
-    except Exception:
+    except Exception as e:
+        print(f"[day_trader] config import failed — panel hidden: {type(e).__name__}: {e}")
         return
     if not DAY_TRADER_ENABLED:
         return
     try:
         from market_data import build_day_trader_metrics  # noqa: F401 - availability check
-    except Exception:
+    except Exception as e:
+        print(f"[day_trader] market_data import failed — panel hidden: {type(e).__name__}: {e}")
+        try:
+            from ui.monitoring import capture
+
+            capture(e)
+        except Exception:
+            pass
         return
 
     st.markdown("## ⚡ Day Trader — live")
@@ -173,8 +257,18 @@ def render_day_trader_panel(
     with c3:
         st.write("")
         if st.button("🔄 Refresh now", key="dt_refresh_btn"):
+            # Clear only this page's cached fetches — st.cache_data.clear()
+            # would nuke every app cache (models, history, quotes) and recreate
+            # the slowness the caching work eliminated.
+            for fn in ("fetch_alpaca_snapshots", "fetch_avg_daily_volume"):
+                try:
+                    import market_data
+
+                    getattr(market_data, fn).clear()
+                except Exception:
+                    pass
             try:
-                st.cache_data.clear()
+                _scan_picks_cached.clear()  # type: ignore[attr-defined]
             except Exception:
                 pass
             st.rerun()
@@ -190,7 +284,23 @@ def render_day_trader_panel(
     # Watch-mode movement notifications (session-local; compares each refresh
     # to the price when you started watching, resets per symbol after firing).
     w1, w2 = st.columns([2, 1])
-    notify = w1.checkbox("🔔 Notify me on big moves while watching", key="dt_notify")
+    notify = w1.checkbox(
+        "🔔 Notify me on big moves while watching",
+        key="dt_notify",
+        help=(
+            "This browser tab only, while it stays open — baselines reset on "
+            "refresh/logout. For alerts that persist and email you, use the "
+            "Alerts page."
+        ),
+    )
+    if notify:
+        w1.caption("⏱️ Session-only — for persistent alerts use the 🔔 Alerts page.")
+    # Reset baselines when the watched symbol set changes, so stale entries
+    # from a previous source can't produce confusing move calculations.
+    _sym_sig = ",".join(sorted(symbols))
+    if st.session_state.get("dt_watch_symbols") != _sym_sig:
+        st.session_state["dt_watch_symbols"] = _sym_sig
+        st.session_state.pop("dt_watch_baseline", None)
     move_thr = w2.number_input(
         "Move ≥ %", min_value=0.5, value=2.0, step=0.5, key="dt_notify_thr",
         disabled=not notify,
@@ -219,7 +329,7 @@ def render_day_trader_panel(
 
 
 def _render_state_banner() -> None:
-    state = market_state()
+    state = market_state(clock_is_open=_clock_is_open())
     banner = {
         "premarket": "🌅 **Premarket** — extended-hours trades shown; volume is thin.",
         "open": "🔔 **Market open** — live regular-session data.",
@@ -243,8 +353,14 @@ def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
     if not rows:
         st.caption("No live data (market closed, Alpaca not configured, or symbols not found).")
         return
+    if len(rows) < len(symbols):
+        missing = len(symbols) - len(rows)
+        st.caption(
+            f"⚠️ Showing {len(rows)} of {len(symbols)} symbols — {missing} "
+            "returned no quote (unknown ticker or a partial data fetch)."
+        )
 
-    state = market_state()
+    state = market_state(clock_is_open=_clock_is_open())
 
     # Movement watch: toast symbols that moved past the threshold since the
     # baseline (price at watch start / last notification).
@@ -279,9 +395,7 @@ def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
     # After-hours change: last trade vs today's official close.
     if state in ("afterhours", "closed") and "close_today" in df.columns:
         df["AH %"] = [
-            round((r["Last"] / r["close_today"] - 1) * 100.0, 2)
-            if (r.get("close_today") and r.get("Last") and r["Last"] != r["close_today"])
-            else None
+            after_hours_pct(r.get("Last"), r.get("close_today"))
             for r in df.to_dict(orient="records")
         ]
 

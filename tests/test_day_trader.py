@@ -49,3 +49,77 @@ class ParseSymbolsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarketStateClockTests(unittest.TestCase):
+    def test_clock_open_overrides_time_guess(self):
+        # Early-close day afternoon: time logic says open, exchange says closed.
+        self.assertEqual(
+            market_state(_utc("2026-11-27T19:30:00"), clock_is_open=False), "closed"
+        )
+        # Exchange open wins outright.
+        self.assertEqual(
+            market_state(_utc("2026-07-13T14:00:00"), clock_is_open=True), "open"
+        )
+
+    def test_holiday_midday_closed_with_clock(self):
+        # July 3 2026 (observed July 4th) midday.
+        self.assertEqual(
+            market_state(_utc("2026-07-03T15:00:00"), clock_is_open=False), "closed"
+        )
+
+    def test_extended_hours_unaffected_by_clock_false(self):
+        # Clock says regular session closed at 5pm ET — that's just after-hours.
+        self.assertEqual(
+            market_state(_utc("2026-07-13T21:00:00"), clock_is_open=False), "afterhours"
+        )
+
+    def test_winter_dst(self):
+        # January = EST (UTC-5): 14:35 UTC is 9:35a ET -> open.
+        self.assertEqual(market_state(_utc("2026-01-12T14:35:00")), "open")
+        # 21:05 UTC = 4:05p EST -> afterhours.
+        self.assertEqual(market_state(_utc("2026-01-12T21:05:00")), "afterhours")
+
+    def test_naive_datetime_treated_as_utc(self):
+        naive = dt.datetime(2026, 7, 13, 14, 0, 0)  # 10:00a ET Monday
+        self.assertEqual(market_state(naive), "open")
+
+
+class AfterHoursPctTests(unittest.TestCase):
+    def test_basic_move(self):
+        from ui.day_trader import after_hours_pct
+
+        self.assertEqual(after_hours_pct(101.0, 100.0), 1.0)
+        self.assertEqual(after_hours_pct(98.5, 100.0), -1.5)
+
+    def test_no_ah_trade_or_missing_close_hidden(self):
+        from ui.day_trader import after_hours_pct
+
+        self.assertIsNone(after_hours_pct(100.0, 100.0))  # equal = no AH print
+        self.assertIsNone(after_hours_pct(None, 100.0))
+        self.assertIsNone(after_hours_pct(100.0, None))
+        self.assertIsNone(after_hours_pct(100.0, 0.0))
+
+
+class ParseValidationTests(unittest.TestCase):
+    def test_rejects_junk_and_caps_count(self):
+        raw = "AAPL, not a ticker!!, BRK.B, BRK-B, x" + ", FAKE" * 300
+        out = _parse_symbols(raw)
+        self.assertIn("AAPL", out)
+        self.assertIn("BRK.B", out)
+        self.assertIn("BRK-B", out)
+        self.assertNotIn("NOT A TICKER!!", out)
+        self.assertLessEqual(len(out), 200)
+
+    def test_rejects_overlong(self):
+        self.assertEqual(_parse_symbols("ABCDEFGHIJK"), [])
+
+
+class DetectMovesEdgeTests(unittest.TestCase):
+    def test_zero_threshold_flags_any_change(self):
+        moves = detect_moves({"AAA": 100.0}, {"AAA": 100.01}, 0.0)
+        self.assertEqual(len(moves), 1)
+
+    def test_negative_threshold_behaves_like_zero(self):
+        moves = detect_moves({"AAA": 100.0}, {"AAA": 100.0}, -5.0)
+        self.assertEqual(moves, [("AAA", 0.0)])
