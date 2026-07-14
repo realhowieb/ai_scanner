@@ -7,6 +7,7 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+from ui.arrow_safe import arrow_safe
 from ui.market_heat import fetch_hot_stocks, fetch_most_active_stocks, fetch_trending_stocks
 from ui.page_runners import (
     run_nasdaq_button,
@@ -201,7 +202,7 @@ def _render_runs_table(max_rows: int = 200):
     if "elapsed_s" in view.columns:
         view["elapsed_s"] = pd.to_numeric(view["elapsed_s"], errors="coerce").round(2)
 
-    st.dataframe(view, width="stretch")
+    st.dataframe(arrow_safe(view), width="stretch")
 
     # Details panel
     run_id: Optional[int] = None

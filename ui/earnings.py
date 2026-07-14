@@ -49,6 +49,12 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
         today_ts = pd.Timestamp(date.today())
         # Use timestamps (not .dt.date) so subtraction stays vectorized
         earn_ts = pd.to_datetime(df["earnings_date"], errors="coerce")
+        # CRITICAL: psycopg returns datetime.date objects, leaving this as an
+        # object-dtype column (dates + None mixed). pyarrow's convert_column
+        # SEGFAULTS on that shape during st.dataframe's Arrow serialization —
+        # this line was the app's recurring "first load" crash. datetime64 is
+        # Arrow-native and safe.
+        df["earnings_date"] = earn_ts
         df[EARN_COL_DAYS] = (earn_ts - today_ts).dt.days
 
     cols = []
