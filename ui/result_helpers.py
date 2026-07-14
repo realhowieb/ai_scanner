@@ -70,6 +70,20 @@ def render_track_record_badge() -> None:
 RESULTS_HIDDEN_COLUMNS = ("PreBreakoutProb", "BreakoutPos20D", "IsBreakout")
 
 
+def move_column_after(df: pd.DataFrame, column: str, after: str) -> pd.DataFrame:
+    """Return a copy with `column` placed immediately after `after` when present."""
+    if column not in df.columns or after not in df.columns:
+        return df
+    cols = list(df.columns)
+    try:
+        cols.remove(column)
+        insert_at = cols.index(after) + 1
+    except ValueError:
+        return df
+    cols.insert(insert_at, column)
+    return df.loc[:, cols]
+
+
 def results_column_config() -> dict:
     """Number formats for the fast-mode results grid.
 

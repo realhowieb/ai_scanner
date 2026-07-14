@@ -13,6 +13,7 @@ from ui.result_helpers import (
     auto_details_ticker,
     find_row_for_ticker,
     get_results_df,
+    move_column_after,
     quiet_provider_loggers,
     render_track_record_badge,
     row_to_jsonable_dict,
@@ -202,7 +203,7 @@ def render_results(
             table_df = _format_earnings_for_display(df).drop(
                 columns=list(RESULTS_HIDDEN_COLUMNS), errors="ignore"
             )
-            table_df = _move_column_after(table_df, "Spark10D", "Ticker")
+            table_df = move_column_after(table_df, "Spark10D", "Ticker")
             _tbl = st.dataframe(
                 table_df,
                 width="stretch",
@@ -393,7 +394,7 @@ def render_results(
 
     # --- UI polish: Earnings column (display-only) ---
 
-    df = _move_column_after(df, "Spark10D", "Ticker")
+    df = move_column_after(df, "Spark10D", "Ticker")
 
     # Move earnings column next to Ticker (if present)
     if earn_col in df.columns and "Ticker" in df.columns:
@@ -757,17 +758,3 @@ def _format_earnings_cell(value: object) -> str:
         return str(int(float(value)))
     except (TypeError, ValueError):
         return str(value)
-
-
-def _move_column_after(df: pd.DataFrame, column: str, after: str) -> pd.DataFrame:
-    """Return a copy with `column` placed immediately after `after` when present."""
-    if column not in df.columns or after not in df.columns:
-        return df
-    cols = list(df.columns)
-    try:
-        cols.remove(column)
-        insert_at = cols.index(after) + 1
-    except ValueError:
-        return df
-    cols.insert(insert_at, column)
-    return df.loc[:, cols]
