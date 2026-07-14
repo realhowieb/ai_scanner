@@ -197,7 +197,11 @@ def render_results(
 
         # Render without Styler for speed
         if can_export_csv:
-            table_df = _format_earnings_for_display(df)
+            from ui.result_helpers import RESULTS_HIDDEN_COLUMNS, results_column_config
+
+            table_df = _format_earnings_for_display(df).drop(
+                columns=list(RESULTS_HIDDEN_COLUMNS), errors="ignore"
+            )
             _tbl = st.dataframe(
                 table_df,
                 width="stretch",
@@ -205,6 +209,7 @@ def render_results(
                 selection_mode="single-row",
                 on_select="rerun",
                 key=f"{key_prefix}_table_fast",
+                column_config=results_column_config(),
             )
             sync_selected_ticker_from_table(
                 _tbl,
