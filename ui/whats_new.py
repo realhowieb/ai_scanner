@@ -36,11 +36,11 @@ def diff_snapshots(history: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 
     common = [t for t in t_scores if t in p_scores]
     movers = sorted(
-        ((t, t_scores[t] - p_scores[t]) for t in common),
+        ((t, t_scores[t] - p_scores[t], t_scores[t]) for t in common),
         key=lambda kv: abs(kv[1]),
         reverse=True,
     )[:MOVERS_SHOWN]
-    movers = [(t, d) for t, d in movers if abs(d) >= 1.0]
+    movers = [(t, d, s) for t, d, s in movers if abs(d) >= 1.0]
 
     return {"new": new[:5], "movers": movers, "day": today.get("day")}
 
@@ -57,10 +57,32 @@ def render_whats_new_strip() -> None:
         return
     if not diff or (not diff["new"] and not diff["movers"]):
         return
-    parts: List[str] = []
+
+    # Stat-tile row: each mover is a headline number with polarity, which is
+    # st.metric's exact job — big ticker, today's score, signed delta with the
+    # built-in green/red arrow (theme-correct in dark mode, no custom colors).
+    st.markdown("**Since yesterday**")
+    tiles: List[tuple] = []
     if diff["new"]:
-        parts.append("🆕 New in results: **" + ", ".join(diff["new"]) + "**")
-    if diff["movers"]:
-        moved = ", ".join(f"{t} {d:+.0f}" for t, d in diff["movers"])
-        parts.append(f"📈 Biggest score moves: {moved}")
-    st.caption("**Since yesterday** — " + " · ".join(parts))
+        tiles.append(("new", diff["new"]))
+    for mover in diff["movers"]:
+        tiles.append(("mover", mover))
+    cols = st.columns(max(len(tiles), 1))
+    for col, (kind, payload) in zip(cols, tiles):
+        with col:
+            if kind == "new":
+                first = payload[0]
+                extra = f" +{len(payload) - 1} more" if len(payload) > 1 else ""
+                st.metric(
+                    "🆕 New in results",
+                    first + extra,
+                    help="Entered the top of today's scan: " + ", ".join(payload),
+                )
+            else:
+                ticker, delta, score = payload
+                st.metric(
+                    f"📈 {ticker}",
+                    f"{score:.0f}",
+                    delta=f"{delta:+.0f} score",
+                    help=f"BreakoutScore {score:.0f} today ({delta:+.0f} vs yesterday)",
+                )
