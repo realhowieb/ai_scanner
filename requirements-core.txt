@@ -8,6 +8,11 @@ streamlit==1.54.0
 # Pillow is transitive (matplotlib/streamlit image handling) but pip-audit
 # flagged 11 CVEs in 11.3.0; floor it at the fixed release.
 pillow>=12.3,<14
+# pyarrow 25.0.0 is suspected of a segfault regression in
+# pandas_compat.convert_column (faulthandler traces land there on clean-dtype
+# frames, intermittent per container). Hold the long-stable 21.x line until
+# a fixed 25.x/26 ships.
+pyarrow>=21,<22
 pandas>=2.0,<3
 numpy>=1.23,<3
 yfinance>=0.2.27,<0.3

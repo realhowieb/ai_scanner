@@ -66,10 +66,17 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
     if EARN_COL_DAYS in view.columns:
         view = view.sort_values(EARN_COL_DAYS, na_position="last")
 
-    st.dataframe(
-        view,
-        width="stretch",
-        hide_index=True,
+    # Rendered WITHOUT st.dataframe: this panel is the first Arrow conversion
+    # on the page and pyarrow's convert_column has segfaulted here twice even
+    # after the data was sanitized to clean dtypes — suspected pyarrow 25.0.0
+    # regression. Static HTML costs nothing for a small read-only list and
+    # removes the crash site entirely.
+    show = view.copy()
+    if "earnings_date" in show.columns:
+        show["earnings_date"] = show["earnings_date"].dt.strftime("%Y-%m-%d").fillna("—")
+    st.markdown(
+        show.to_html(index=False, border=0, na_rep="—", justify="left"),
+        unsafe_allow_html=True,
     )
 
 
