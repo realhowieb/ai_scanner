@@ -22,7 +22,9 @@ class ArrowSafeTests(unittest.TestCase):
         self.assertEqual(df["earnings_date"].dtype, object)
         out = arrow_safe(df)
         self.assertTrue(str(out["earnings_date"].dtype).startswith("datetime64"))
-        self.assertEqual(out["symbol"].dtype, object)  # strings untouched
+        # Strings must not become datetimes (dtype may be object or StringDtype
+        # depending on pandas' inference settings).
+        self.assertFalse(str(out["symbol"].dtype).startswith("datetime64"))
 
     def test_datetime_objects_converted_too(self):
         from ui.arrow_safe import arrow_safe
