@@ -112,3 +112,19 @@ jobs:
           python -c "import db.runs"
           python -c "import ui.scans"
           python -c "import ml_prebreakout"
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: pip-audit the locked dependency set
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r requirements.lock --strict || {
+            echo "::warning::pip-audit found vulnerabilities in requirements.lock (non-blocking)"
+            exit 1
+          }
