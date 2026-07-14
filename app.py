@@ -704,7 +704,7 @@ def main():
                 pass
         st.rerun()
 
-    st.markdown("## 🚀 EZ 3-Step AI Scanner")
+    st.markdown("## 🚀 AI Scanner")
     render_three_step_scanner()
     st.markdown("---")
 
