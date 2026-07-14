@@ -209,8 +209,8 @@ def nl_to_scan_settings(description: str) -> dict | None:
 
         from ui.ai import ask_claude
 
-        prompt = (
-            "Map this trading-scan request to JSON with exactly these keys and "
+        system = (
+            "You map trading-scan requests to JSON with exactly these keys and "
             "allowed values.\n"
             'market: one of "SP500", "NASDAQ", "COMBO"\n'
             'strategy: one of "gap_up", "gap_down", "most_active", '
@@ -218,10 +218,15 @@ def nl_to_scan_settings(description: str) -> dict | None:
             'profile: one of "aggressive", "regular", "conservative"\n'
             "Choose the closest fit; COMBO when breadth/small caps are implied; "
             "conservative when safety is implied, aggressive when speed/risk is. "
-            "Reply with ONLY the JSON object.\n\n"
-            f"Request: {description.strip()[:300]}"
+            "Reply with ONLY the JSON object."
         )
-        text, err = ask_claude(prompt, max_tokens=120)
+        text, err = ask_claude(
+            system=system,
+            user=f"Request: {description.strip()[:300]}",
+            max_tokens=120,
+            username=(st.session_state.get("username") or None),
+            feature="nl_scan_setup",
+        )
         if not text:
             return None
         match = re.search(r"\{.*\}", text, re.S)

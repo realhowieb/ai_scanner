@@ -66,7 +66,9 @@ class NlScanSettingsTests(unittest.TestCase):
             import ui.three_step_scanner as tss
         except ModuleNotFoundError:
             self.skipTest("streamlit not installed")
-        with mock.patch("ui.ai.ask_claude", return_value=(reply, None)):
+        # autospec: a positional/renamed-arg call to the real keyword-only
+        # signature must fail here, not silently in production.
+        with mock.patch("ui.ai.ask_claude", autospec=True, return_value=(reply, None)):
             return tss.nl_to_scan_settings("safe momentum everywhere")
 
     def test_valid_json_mapped(self):
