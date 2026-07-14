@@ -56,3 +56,25 @@ class ScanOptionsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NlScanSettingsTests(unittest.TestCase):
+    def _map(self, reply):
+        from unittest import mock
+
+        try:
+            import ui.three_step_scanner as tss
+        except ModuleNotFoundError:
+            self.skipTest("streamlit not installed")
+        with mock.patch("ui.ai.ask_claude", return_value=(reply, None)):
+            return tss.nl_to_scan_settings("safe momentum everywhere")
+
+    def test_valid_json_mapped(self):
+        out = self._map('{"market": "COMBO", "strategy": "momentum", "profile": "conservative"}')
+        self.assertEqual(out, {"market": "COMBO", "strategy": "momentum", "profile": "conservative"})
+
+    def test_out_of_vocabulary_rejected(self):
+        self.assertIsNone(self._map('{"market": "CRYPTO", "strategy": "momentum", "profile": "regular"}'))
+
+    def test_garbage_rejected(self):
+        self.assertIsNone(self._map("sure! here are some stocks I like..."))
