@@ -17,22 +17,49 @@ except Exception:  # pragma: no cover - keeps ML imports resilient in partial de
     save_prebreakout_model = None  # type: ignore[assignment]
     serialize_model_to_bytes = None  # type: ignore[assignment]
 
-try:
-    import joblib
-except Exception:  # pragma: no cover - optional ML dependency
-    joblib = None  # type: ignore
+# ML libraries are loaded LAZILY: this module sits on app.py's boot import
+# chain (via prebreakout_tab / three_step_scanner), and importing xgboost +
+# scikit-learn eagerly added hundreds of MB to boot memory — the standing
+# suspect for the Streamlit Cloud startup segfaults. Placeholders stay module
+# attributes so tests can patch them (patch.object(ml_prebreakout, "joblib"));
+# _load_ml_libs() fills any that are still None on first use.
+# If imports fail they remain None: Install requirements-ml.txt to enable.
+joblib = None  # type: ignore
+roc_auc_score = None  # type: ignore
+train_test_split = None  # type: ignore
+XGBClassifier = None  # type: ignore
+_ML_IMPORT_TRIED = False
 
-try:
-    from sklearn.metrics import roc_auc_score
-    from sklearn.model_selection import train_test_split
-except Exception:  # pragma: no cover - optional ML dependency
-    train_test_split = None  # type: ignore
-    roc_auc_score = None  # type: ignore
 
-try:
-    from xgboost import XGBClassifier
-except Exception:  # pragma: no cover - optional ML dependency
-    XGBClassifier = None  # type: ignore
+def _load_ml_libs() -> None:
+    """Populate the ML globals on first use (no-op when patched or loaded)."""
+    global joblib, roc_auc_score, train_test_split, XGBClassifier, _ML_IMPORT_TRIED
+    if _ML_IMPORT_TRIED:
+        return
+    _ML_IMPORT_TRIED = True
+    if joblib is None:
+        try:
+            import joblib as _joblib
+
+            joblib = _joblib
+        except Exception:  # pragma: no cover - optional ML dependency
+            pass
+    if roc_auc_score is None or train_test_split is None:
+        try:
+            from sklearn.metrics import roc_auc_score as _ras
+            from sklearn.model_selection import train_test_split as _tts
+
+            roc_auc_score = _ras
+            train_test_split = _tts
+        except Exception:  # pragma: no cover - optional ML dependency
+            pass
+    if XGBClassifier is None:
+        try:
+            from xgboost import XGBClassifier as _xgb
+
+            XGBClassifier = _xgb
+        except Exception:  # pragma: no cover - optional ML dependency
+            pass
 
 
 MODEL_PATH = "prebreakout_model.pkl"
@@ -212,6 +239,7 @@ def load_prebreakout_model(model_path: str = MODEL_PATH):
     a best-effort fallback only, so app reboots do not require retraining when
     a saved database model exists. Cached in-process for 15 minutes.
     """
+    _load_ml_libs()
     if joblib is None:
         return None
     import time as _time
@@ -274,6 +302,7 @@ def train_prebreakout_model(
     Train an XGBoost model to predict future breakout likelihood.
     Saves a bundle containing model, features, trained_at, and auc.
     """
+    _load_ml_libs()
     if joblib is None or train_test_split is None or roc_auc_score is None or XGBClassifier is None:
         print(
             "[ml_prebreakout] ML dependencies are not installed. "
