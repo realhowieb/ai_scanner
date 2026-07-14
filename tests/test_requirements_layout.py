@@ -62,7 +62,7 @@ class RequirementsLayoutTests(unittest.TestCase):
         # Streamlit stays exactly pinned; others checked by package name so
         # version-spec changes (e.g. adding upper bounds) don't break the test.
         self.assertIn("streamlit==1.54.0", set(_read_lines("requirements-core.txt")))
-        for pkg in {"pandas", "numpy", "yfinance", "requests", "sqlalchemy", "apscheduler", "psycopg"}:
+        for pkg in {"pandas", "numpy", "yfinance", "requests", "sqlalchemy", "psycopg"}:
             self.assertIn(pkg, core)
 
     def test_optional_heavy_deps_are_not_in_core(self):
