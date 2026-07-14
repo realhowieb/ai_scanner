@@ -196,6 +196,54 @@ def _persist_three_step_run(df: pd.DataFrame | None, duration_sec: float) -> Non
         pass
 
 
+def nl_to_scan_settings(description: str) -> dict | None:
+    """Map a natural-language scan description to {market, strategy, profile}.
+
+    Claude is constrained to a strict JSON object over the allowed values;
+    anything unparseable or out-of-vocabulary returns None (caller keeps the
+    current settings and tells the user).
+    """
+    try:
+        import json
+        import re
+
+        from ui.ai import ask_claude
+
+        prompt = (
+            "Map this trading-scan request to JSON with exactly these keys and "
+            "allowed values.\n"
+            'market: one of "SP500", "NASDAQ", "COMBO"\n'
+            'strategy: one of "gap_up", "gap_down", "most_active", '
+            '"unusual_vol", "momentum", "breakout_only"\n'
+            'profile: one of "aggressive", "regular", "conservative"\n'
+            "Choose the closest fit; COMBO when breadth/small caps are implied; "
+            "conservative when safety is implied, aggressive when speed/risk is. "
+            "Reply with ONLY the JSON object.\n\n"
+            f"Request: {description.strip()[:300]}"
+        )
+        text, err = ask_claude(prompt, max_tokens=120)
+        if not text:
+            return None
+        match = re.search(r"\{.*\}", text, re.S)
+        if not match:
+            return None
+        raw = json.loads(match.group(0))
+        market = str(raw.get("market", "")).upper()
+        strategy = str(raw.get("strategy", "")).lower()
+        profile = str(raw.get("profile", "")).lower()
+        if market not in ("SP500", "NASDAQ", "COMBO"):
+            return None
+        if strategy not in (
+            "gap_up", "gap_down", "most_active", "unusual_vol", "momentum", "breakout_only"
+        ):
+            return None
+        if profile not in ("aggressive", "regular", "conservative"):
+            return None
+        return {"market": market, "strategy": strategy, "profile": profile}
+    except Exception:
+        return None
+
+
 def render_three_step_scanner() -> None:
     """Render the premium three-step scanner layout."""
     tier = st.session_state.get("tier")
@@ -241,6 +289,38 @@ def render_three_step_scanner() -> None:
             key="live_toggle",
         )
 
+    # ✨ AI setup: describe the scan in plain English; Claude picks the
+    # dropdowns and the scan runs on the next pass (chip-prefill pattern —
+    # widget-keyed state must be set before the widgets render).
+    ai1, ai2 = st.columns([4, 1])
+    with ai1:
+        ai_desc = st.text_input(
+            "Describe your scan",
+            key="ai_scan_desc",
+            placeholder='✨ e.g. "safe momentum plays across the whole market"',
+            label_visibility="collapsed",
+        )
+    with ai2:
+        ai_go = st.button("✨ AI setup & run", key="ai_scan_btn", width="stretch")
+    if ai_go and ai_desc.strip():
+        with st.spinner("Interpreting your scan…"):
+            settings = nl_to_scan_settings(ai_desc)
+        if settings:
+            st.session_state["scan_market"] = settings["market"]
+            st.session_state["scan_strategy"] = settings["strategy"]
+            st.session_state["scan_profile"] = settings["profile"]
+            st.session_state["_ai_run_pending"] = True
+            st.rerun()
+        else:
+            st.warning("Couldn't map that to scan settings — adjust the dropdowns instead.")
+    if st.session_state.pop("_ai_run_pending", False):
+        run_clicked = True
+        st.caption(
+            f"✨ AI set: **{MARKETS.get(st.session_state.scan_market)}** · "
+            f"**{STRATEGIES.get(st.session_state.scan_strategy)}** · "
+            f"**{PROFILES.get(st.session_state.scan_profile)}** — running…"
+        )
+
     status_placeholder = st.empty()
     results_placeholder = st.empty()
 
@@ -262,6 +342,15 @@ def render_three_step_scanner() -> None:
             f"Strategy **{st.session_state.scan_strategy.replace('_', ' ').title()}** - "
             f"Profile **{st.session_state.scan_profile.title()}**."
         )
+        # AI read on the results, right where the trader is looking (module is
+        # button-gated + per-scan cached + entitlement/limit aware).
+        try:
+            from ui.ai_summary import render_ai_summary
+
+            if df is not None and len(df):
+                render_ai_summary(df)
+        except Exception:
+            pass
 
         if df is not None and not df.empty:
             results_placeholder.info(
