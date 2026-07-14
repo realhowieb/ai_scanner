@@ -14,15 +14,11 @@ dependencies = [
     "lxml",
     "html5lib",
     "beautifulsoup4",
-    "matplotlib",
-    "mplfinance",
     "SQLAlchemy>=2.0",
-    "apscheduler",
     "plotly",
     "streamlit-authenticator>=0.4.0",
     "bcrypt",
     "streamlit-autorefresh",
-    "extra-streamlit-components",
     "streamlit-cookies-manager>=0.2.0",
     "psycopg[binary]>=3.2"
 ]
