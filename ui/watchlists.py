@@ -22,159 +22,91 @@ ScanFn = Callable[[List[str], str], None]
 
 
 def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
-    """Render the 'My Watchlists' block in the main content area.
+    """Render the 'My Watchlists' block: live card wall + tucked-away management.
 
     Returns:
         (active_watchlist_id, active_watchlist_tickers)
     """
-    st.markdown("### 📋 My Watchlists")
-
     try:
         watchlists = list_watchlists(user_id)
     except Exception as e:
+        st.markdown("### 📋 My Watchlists")
         st.caption("Watchlists require Neon DB (cloud) and may be unavailable.")
-        # Show the underlying error in dev so we can diagnose connection/config issues.
         with st.expander("Watchlist error details", expanded=False):
             st.code(f"{type(e)}\n{str(e)}\n{repr(e)}")
-        # For safety, don't crash the app; just return empty.
         return None, []
 
+    # Header row: title · list selector · new-list popover
+    h1, h2, h3 = st.columns([2, 2, 1])
+    h1.markdown("### 📋 My Watchlists")
     active_id: Optional[int] = None
     active_tickers: List[str] = []
-
     if watchlists:
-        options = {f"{wl['name']} (#{wl['id']})": wl for wl in watchlists}
-        selected_label = st.selectbox(
-            "Active watchlist",
-            list(options.keys()),
-            index=0,
-        )
+        options = {wl["name"]: wl for wl in watchlists}
+        with h2:
+            selected_label = st.selectbox(
+                "Active watchlist", list(options.keys()), index=0,
+                label_visibility="collapsed",
+            )
         active = options[selected_label]
         active_id = active["id"]
         active_tickers = get_watchlist_tickers(active_id, user_id)
-    else:
-        st.caption("No watchlists yet. Create one below.")
+    with h3:
+        try:
+            pop = st.popover("＋ New")
+        except Exception:
+            pop = st.expander("＋ New", expanded=False)
+        with pop:
+            new_name = st.text_input("Watchlist name", key="wl_new_name")
+            if st.button("Create", key="wl_create_btn"):
+                if new_name.strip():
+                    create_watchlist(user_id, new_name.strip())
+                    st.rerun()
+                else:
+                    st.warning("Please enter a name.")
+    if not watchlists:
+        st.caption("No watchlists yet — create one with ＋ New.")
 
-    # If there is an active watchlist with tickers, show a simple table with prices & changes
-    if active_id is not None and active_tickers:
-        with st.expander("View active watchlist (with prices)", expanded=False):
-            rows = []
-            try:
-                import yfinance as yf  # type: ignore
-                for t in active_tickers:
-                    sym = str(t).strip().upper()
-                    price = None
-                    prev_close = None
-                    try:
-                        ticker_obj = yf.Ticker(sym)
-                        fast_info = getattr(ticker_obj, "fast_info", None)
+    # The watchlist IS the visualization: live stat tiles (price + day move).
+    if active_tickers:
+        _render_watchlist_tiles(active_tickers)
 
-                        # Try to get last price
-                        if fast_info is not None:
-                            price = getattr(fast_info, "last_price", None)
-                            prev_close = getattr(fast_info, "previous_close", None)
-
-                        # Fallbacks if fast_info is missing or incomplete
-                        if price is None or prev_close is None:
-                            hist = ticker_obj.history(period="2d")
-                            if not hist.empty and "Close" in hist.columns:
-                                closes = hist["Close"].tolist()
-                                # Last close is current, prior close is previous bar if it exists
-                                if len(closes) >= 1 and price is None:
-                                    price = float(closes[-1])
-                                if len(closes) >= 2 and prev_close is None:
-                                    prev_close = float(closes[-2])
-
-                    except Exception:
-                        price = None
-                        prev_close = None
-
-                    change = None
-                    change_pct = None
-                    if price is not None and prev_close not in (None, 0):
-                        change = float(price) - float(prev_close)
-                        change_pct = (change / float(prev_close)) * 100.0
-
-                    rows.append(
-                        {
-                            "Ticker": sym,
-                            "Price": price,
-                            "$ Change": change,
-                            "% Change": change_pct,
-                        }
-                    )
-            except Exception:
-                # If yfinance or network is unavailable, still show tickers without prices
-                rows = [
-                    {
-                        "Ticker": str(t).strip().upper(),
-                        "Price": None,
-                        "$ Change": None,
-                        "% Change": None,
-                    }
-                    for t in active_tickers
-                ]
-
-            if pd is not None:
-                df = pd.DataFrame(rows)
-                st.dataframe(df, hide_index=True, width="stretch")
-            else:
-                # Fallback: simple text listing
-                for row in rows:
-                    price = row.get("Price")
-                    change = row.get("$ Change")
-                    change_pct = row.get("% Change")
-                    if price is not None:
-                        txt = f"{row['Ticker']}: {price:.2f}"
-                        if change is not None and change_pct is not None:
-                            txt += f" ({change:+.2f}, {change_pct:+.2f}%)"
-                    else:
-                        txt = f"{row['Ticker']}: —"
-                    st.write(txt)
-
-    with st.expander("Manage watchlists", expanded=False):
-        new_name = st.text_input("New watchlist name", key="wl_new_name")
-        if st.button("Create watchlist", key="wl_create_btn"):
-            if new_name.strip():
-                create_watchlist(user_id, new_name.strip())
-                st.rerun()
-            else:
-                st.warning("Please enter a name for your watchlist.")
-
-        if active_id is not None:
-            if st.button("Delete active watchlist", key="wl_delete_btn"):
-                delete_watchlist(active_id, user_id)
-                st.rerun()
-
-            tickers_str = ",".join(active_tickers)
-            edited = st.text_area(
-                "Tickers (comma-separated)",
-                value=tickers_str,
-                key="wl_tickers_edit",
-                help="Example: AAPL, TSLA, NVDA",
-            )
-            if st.button("Save tickers", key="wl_save_tickers"):
-                tickers = [
-                    t.strip().upper()
-                    for t in edited.split(",")
-                    if t.strip()
-                ]
-                set_watchlist_tickers(active_id, user_id, tickers)
-                st.success("Watchlist updated.")
-                st.rerun()
-        else:
-            st.caption("Create a watchlist to add tickers.")
-
-    # Watchlist tools (view / scan / export / add / remove) rendered here so the
-    # whole watchlist lives in one unified area. render_active_watchlist_tools
-    # reads the active list from session_state, so seed it first; the returned
-    # button states are stashed for the scan-action handler in ui/scans.py.
+    # Seed session state for the tools/action handler, then render the tools.
     st.session_state["active_watchlist_id"] = active_id
     st.session_state["active_watchlist_tickers"] = active_tickers
-    st.markdown("**🛠️ Watchlist tools**")
     st.session_state["_wl_tools_state"] = render_active_watchlist_tools()
 
     return active_id, active_tickers
+
+
+def _render_watchlist_tiles(tickers: List[str], per_row: int = 5, max_tiles: int = 20) -> None:
+    """Card wall: each name as a stat tile (price headline, signed day-%)."""
+    try:
+        from market_data import build_day_trader_metrics
+
+        rows = build_day_trader_metrics(
+            [str(t).upper() for t in tickers][:max_tiles], with_rvol=False
+        )
+    except Exception:
+        rows = []
+    if not rows:
+        st.caption("Live quotes unavailable right now — tickers: " + ", ".join(tickers[:20]))
+        return
+    # Preserve the user's list order rather than the movers sort.
+    by_sym = {r["ticker"]: r for r in rows}
+    ordered = [by_sym[t] for t in [str(x).upper() for x in tickers] if t in by_sym]
+    for start in range(0, len(ordered), per_row):
+        chunk = ordered[start : start + per_row]
+        cols = st.columns(per_row)
+        for col, r in zip(cols, chunk):
+            chg = r.get("chg_pct")
+            col.metric(
+                r["ticker"],
+                f"{r['last']:,.2f}" if r.get("last") is not None else "—",
+                delta=f"{chg:+.2f}%" if chg is not None else None,
+            )
+    if len(tickers) > max_tiles:
+        st.caption(f"Showing the first {max_tiles} of {len(tickers)} names.")
 
 
 def build_watchlist_df(tickers: List[str]):
@@ -269,68 +201,92 @@ def _active_watchlist_tickers() -> List[str]:
 
 
 def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
-    """Render center-panel watchlist controls used by the scan page."""
+    """Watchlist actions: one add path up front, destructive ops inside Manage.
+
+    Returns the same (view, run, clear, add, remove, symbol) tuple the scan
+    page's action handler consumes; `symbol` carries the add-input text or the
+    remove-picker choice depending on which button fired.
+    """
     watchlist_tickers = st.session_state.get("active_watchlist_tickers", []) or []
     has_watchlist = isinstance(watchlist_tickers, list) and len(watchlist_tickers) > 0
+    active_id = st.session_state.get("active_watchlist_id")
 
-    cw1, cw2, cw3 = st.columns([1, 1, 1])
-    with cw1:
-        view_watchlist_btn = st.button(
-            "View Watchlist",
-            key="btn_view_watchlist",
-            width="stretch",
-            disabled=not has_watchlist,
+    # Primary action row: add · scan · view · export
+    a1, a2, a3, a4, a5 = st.columns([2, 1, 2, 1.4, 1])
+    with a1:
+        add_text = st.text_input(
+            "Add ticker", key="watchlist_add_symbol", placeholder="＋ Add ticker (e.g. AAPL)",
+            label_visibility="collapsed",
         )
-    with cw2:
+    with a2:
+        add_watchlist_btn = st.button(
+            "Add", key="btn_add_watchlist_symbol", width="stretch",
+            disabled=active_id is None,
+        )
+    with a3:
         run_watchlist_btn = st.button(
-            "Run Watchlist Scan",
-            key="btn_scan_watchlist",
-            width="stretch",
+            "🔎 Run Watchlist Scan", key="btn_scan_watchlist", width="stretch",
             disabled=not has_watchlist,
         )
-    with cw3:
-        export_csv_data = None
+    with a4:
+        view_watchlist_btn = st.button(
+            "View as table", key="btn_view_watchlist", width="stretch",
+            disabled=not has_watchlist,
+        )
+    with a5:
+        export_csv_data = ""
         if has_watchlist:
             frame_mod = pd
             if frame_mod is None:
                 import pandas as frame_mod  # type: ignore
             export_csv_data = frame_mod.DataFrame({"Symbol": watchlist_tickers}).to_csv(index=False)
         st.download_button(
-            "Export CSV",
-            data=export_csv_data if export_csv_data is not None else "",
-            file_name=f"watchlist_{len(watchlist_tickers) or 0}.csv",
-            mime="text/csv",
-            key="btn_export_watchlist",
-            disabled=not has_watchlist,
+            "CSV", data=export_csv_data,
+            file_name=f"watchlist_{len(watchlist_tickers) or 0}.csv", mime="text/csv",
+            key="btn_export_watchlist", disabled=not has_watchlist, width="stretch",
         )
 
-    aw1, aw2, aw3 = st.columns([3, 1, 1])
-    with aw1:
-        watchlist_symbol = st.text_input(
-            "Add or remove ticker",
-            key="watchlist_add_symbol",
-            placeholder="AAPL",
-            label_visibility="collapsed",
-        )
-    with aw2:
-        add_watchlist_btn = st.button("Add", key="btn_add_watchlist_symbol", width="stretch")
-    with aw3:
-        remove_watchlist_btn = st.button(
-            "Remove",
-            key="btn_remove_watchlist_symbol",
-            width="stretch",
-        )
+    # Rare/destructive operations live out of the way.
+    remove_watchlist_btn = False
+    clear_watchlist_btn = False
+    remove_pick = ""
+    with st.expander("⚙️ Manage", expanded=False):
+        if has_watchlist:
+            m1, m2 = st.columns([3, 1])
+            with m1:
+                remove_pick = st.selectbox(
+                    "Remove a ticker",
+                    [""] + [str(t).upper() for t in watchlist_tickers],
+                    key="wl_remove_pick",
+                )
+            with m2:
+                st.write("")
+                remove_watchlist_btn = st.button(
+                    "Remove", key="btn_remove_watchlist_symbol", width="stretch",
+                    disabled=not remove_pick,
+                )
+            edited = st.text_area(
+                "Bulk edit (comma-separated)",
+                value=",".join(watchlist_tickers),
+                key="wl_tickers_edit",
+                help="Paste a full list to replace the watchlist contents.",
+            )
+            if st.button("Save list", key="wl_save_tickers"):
+                tickers = [t.strip().upper() for t in edited.split(",") if t.strip()]
+                set_watchlist_tickers(active_id, st.session_state.get("username", ""), tickers)
+                st.success("Watchlist updated.")
+                st.rerun()
+            clear_watchlist_btn = st.button(
+                "Clear all tickers", key="btn_clear_watchlist", disabled=not has_watchlist
+            )
+        if active_id is not None:
+            if st.button("🗑️ Delete this watchlist", key="wl_delete_btn"):
+                delete_watchlist(active_id, st.session_state.get("username", ""))
+                st.rerun()
+        if not has_watchlist and active_id is None:
+            st.caption("Create a watchlist to manage tickers.")
 
-    clear_watchlist_btn = st.button(
-        "Clear Watchlist",
-        key="btn_clear_watchlist",
-        width="stretch",
-        disabled=not has_watchlist,
-    )
-
-    st.caption("Use your active watchlist for viewing, scanning, and managing symbols.")
-
-    # 🤖 Premium: AI watchlist digest + alert preview.
+    # 🧠 Premium: AI watchlist digest + alert preview.
     ent = st.session_state.get("entitlements") or {}
     if has_watchlist and ent.get("can_ai_notes"):
         try:
@@ -348,13 +304,16 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
         except Exception:
             pass
 
+    # One `symbol` slot serves both actions: the remove picker wins when its
+    # button fired, otherwise the add input.
+    symbol = remove_pick if remove_watchlist_btn else (add_text or "")
     return (
         bool(view_watchlist_btn),
         bool(run_watchlist_btn),
         bool(clear_watchlist_btn),
         bool(add_watchlist_btn),
         bool(remove_watchlist_btn),
-        str(watchlist_symbol or ""),
+        str(symbol or ""),
     )
 
 
