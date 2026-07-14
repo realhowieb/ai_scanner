@@ -22,9 +22,9 @@ class DiffSnapshotsTests(unittest.TestCase):
             )
         )
         self.assertEqual(diff["new"], ["NEWCO"])
-        self.assertEqual(diff["movers"][0], ("AAA", 10.0))
+        self.assertEqual(diff["movers"][0], ("AAA", 10.0, 50.0))
         # BBB moved only -1.0 — at the threshold edge, |d|>=1 keeps it.
-        self.assertIn(("BBB", -1.0), diff["movers"])
+        self.assertIn(("BBB", -1.0, 30.0), diff["movers"])
 
     def test_small_moves_suppressed(self):
         diff = diff_snapshots(
