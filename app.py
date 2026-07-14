@@ -640,6 +640,31 @@ def main():
 
     # -------- Watchlists --------
     watch_id, watch_tickers = render_watchlists_panel(username)
+
+    # -------- Morning pulse: alerts fired · since-yesterday · Day Trader ----
+    # One compact block right under the watchlist card wall (the heat strip was
+    # retired — the card wall shows the same per-name day read).
+    try:
+        from ui.notifications import render_alert_bell
+
+        render_alert_bell(username)
+    except Exception:
+        pass
+    try:
+        from ui.whats_new import render_whats_new_strip
+
+        render_whats_new_strip()
+    except Exception:
+        pass
+    try:
+        st.page_link(
+            "pages/day_trader.py",
+            label="⚡ Day Trader — live (gappers · VWAP · RVOL, real-time)",
+            icon="📈",
+        )
+    except Exception:
+        pass
+    st.markdown("---")
     st.session_state["active_watchlist_id"] = watch_id
     st.session_state["active_watchlist_tickers"] = watch_tickers
     st.markdown("---")
@@ -679,43 +704,6 @@ def main():
             except Exception:
                 pass
         st.rerun()
-
-    # In-app notification line for alerts fired today (email-independent).
-    try:
-        from ui.notifications import render_alert_bell
-
-        render_alert_bell(username)
-    except Exception:
-        pass
-
-    # 'Since yesterday' strip: new entrants + biggest score movers (cheap, cached).
-    try:
-        from ui.whats_new import render_whats_new_strip
-
-        render_whats_new_strip()
-    except Exception:
-        pass
-
-    # Watchlist heat strip: one-glance day read on your names (cached quotes).
-    try:
-        from ui.heat_strip import render_watchlist_heat
-
-        render_watchlist_heat(watch_tickers)
-    except Exception:
-        pass
-
-    # -------- Day Trader live monitor: moved to its own page --------
-    # A dedicated page gets full width and lets auto-refresh poll only that
-    # view instead of rerunning the whole scanner.
-    try:
-        st.page_link(
-            "pages/day_trader.py",
-            label="⚡ Day Trader — live (gappers · VWAP · RVOL, real-time)",
-            icon="📈",
-        )
-        st.markdown("---")
-    except Exception:
-        pass
 
     st.markdown("## 🚀 EZ 3-Step AI Scanner")
     render_three_step_scanner()

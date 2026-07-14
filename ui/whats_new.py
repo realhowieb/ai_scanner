@@ -61,28 +61,19 @@ def render_whats_new_strip() -> None:
     # Stat-tile row: each mover is a headline number with polarity, which is
     # st.metric's exact job — big ticker, today's score, signed delta with the
     # built-in green/red arrow (theme-correct in dark mode, no custom colors).
-    st.markdown("**Since yesterday**")
-    tiles: List[tuple] = []
+    # Header line carries the new entrants as text (a ticker list in a metric
+    # tile rendered as an oversized headline); movers stay as compact tiles.
+    header = "**Since yesterday**"
     if diff["new"]:
-        tiles.append(("new", diff["new"]))
-    for mover in diff["movers"]:
-        tiles.append(("mover", mover))
-    cols = st.columns(max(len(tiles), 1))
-    for col, (kind, payload) in zip(cols, tiles):
-        with col:
-            if kind == "new":
-                first = payload[0]
-                extra = f" +{len(payload) - 1} more" if len(payload) > 1 else ""
-                st.metric(
-                    "🆕 New in results",
-                    first + extra,
-                    help="Entered the top of today's scan: " + ", ".join(payload),
-                )
-            else:
-                ticker, delta, score = payload
-                st.metric(
-                    f"📈 {ticker}",
-                    f"{score:.0f}",
-                    delta=f"{delta:+.0f} score",
-                    help=f"BreakoutScore {score:.0f} today ({delta:+.0f} vs yesterday)",
-                )
+        header += " · 🆕 new in results: **" + ", ".join(diff["new"]) + "**"
+    st.markdown(header)
+    movers = diff["movers"][:4]
+    if movers:
+        cols = st.columns(max(len(movers), 1))
+        for col, (ticker, delta, score) in zip(cols, movers):
+            col.metric(
+                ticker,
+                f"{score:.0f}",
+                delta=f"{delta:+.0f} score",
+                help=f"BreakoutScore {score:.0f} today ({delta:+.0f} vs yesterday)",
+            )
