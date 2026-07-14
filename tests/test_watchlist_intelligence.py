@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 with patch.dict("sys.modules", {"streamlit": MagicMock()}):
     from ui.watchlist_intelligence import (
         classify_watchlist_signal,
+        filter_watchlist_movers,
         summarize_watchlist_intelligence,
         summarize_watchlist_movers,
     )
@@ -71,6 +72,22 @@ class WatchlistIntelligenceTests(unittest.TestCase):
         self.assertEqual(moves["NEW"]["Move"], "New in latest scan")
         self.assertEqual(moves["GONE"]["Move"], "Dropped out")
         self.assertAlmostEqual(moves["HOT"]["Pre Δ"], 32.0)
+
+    def test_filters_stable_movers_by_default(self):
+        rows = [
+            {"Ticker": "HOT", "Move": "Heating up"},
+            {"Ticker": "FLAT", "Move": "Stable"},
+            {"Ticker": "GONE", "Move": "Dropped out"},
+        ]
+
+        self.assertEqual(
+            [row["Ticker"] for row in filter_watchlist_movers(rows)],
+            ["HOT", "GONE"],
+        )
+        self.assertEqual(
+            [row["Ticker"] for row in filter_watchlist_movers(rows, include_stable=True)],
+            ["HOT", "FLAT", "GONE"],
+        )
 
 
 if __name__ == "__main__":

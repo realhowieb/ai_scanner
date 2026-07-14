@@ -133,7 +133,8 @@ def _delta(current: Any, previous: Any, name: str) -> float | None:
     previous_value = _metric(previous, name)
     if current_value is None or previous_value is None:
         return None
-    return current_value - previous_value
+    value = current_value - previous_value
+    return 0.0 if abs(value) < 0.05 else value
 
 
 def _format_delta(value: float | None, suffix: str = "") -> str:
@@ -228,6 +229,17 @@ def summarize_watchlist_movers(
     return sorted(rows, key=lambda item: (priority.get(str(item["Move"]), 9), str(item["Ticker"])))
 
 
+def filter_watchlist_movers(
+    movers: list[dict[str, Any]],
+    *,
+    include_stable: bool = False,
+) -> list[dict[str, Any]]:
+    """Hide low-signal stable rows unless the user asks for the full audit."""
+    if include_stable:
+        return list(movers)
+    return [row for row in movers if row.get("Move") != "Stable"]
+
+
 def _signature_by_symbol(results_df: Any, tickers: List[str]) -> dict[str, tuple[float | None, ...]]:
     rows = _rows_by_symbol(results_df)
     out: dict[str, tuple[float | None, ...]] = {}
@@ -311,10 +323,16 @@ def render_watchlist_intelligence(tickers: List[str]) -> None:
             st.write(rows)
 
         st.markdown("##### Since previous saved scan")
-        if movers:
+        include_stable = st.checkbox(
+            "Show stable rows",
+            value=False,
+            key="watchlist_intelligence_show_stable",
+        )
+        visible_movers = filter_watchlist_movers(movers, include_stable=include_stable)
+        if visible_movers:
             try:
                 st.dataframe(
-                    _dataframe(movers),
+                    _dataframe(visible_movers),
                     width="stretch",
                     hide_index=True,
                     key="watchlist_intelligence_movers",
@@ -325,6 +343,8 @@ def render_watchlist_intelligence(tickers: List[str]) -> None:
                     },
                 )
             except (RuntimeError, TypeError, ValueError, OSError, ImportError, AttributeError):
-                st.write(movers)
+                st.write(visible_movers)
+        elif movers:
+            st.caption("No meaningful movers since the previous saved scan.")
         else:
             st.caption("Run and save another scan to see what is heating up or cooling off.")
