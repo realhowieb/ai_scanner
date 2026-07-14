@@ -2,7 +2,12 @@
 # Upper bounds cap major versions to prevent a surprise breaking release from
 # breaking a deploy. For full reproducibility, replace with exact == pins from
 # `pip freeze` in the deploy environment.
-streamlit==1.49.1
+# 1.54.0: pip-audit flagged PYSEC-2026-212/-2285 in 1.49.1, and 1.49.1's
+# pillow<12 bound blocked the Pillow CVE fixes below — one coupled upgrade.
+streamlit==1.54.0
+# Pillow is transitive (matplotlib/streamlit image handling) but pip-audit
+# flagged 11 CVEs in 11.3.0; floor it at the fixed release.
+pillow>=12.3,<14
 pandas>=2.0,<3
 numpy>=1.23,<3
 yfinance>=0.2.27,<0.3
