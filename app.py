@@ -5,10 +5,20 @@ from __future__ import annotations
 # finally names the crashing line in the deploy logs. Must run before any
 # native-heavy imports.
 import faulthandler
-
-faulthandler.enable()
-
 import sys
+
+# Streamlit Cloud replaces sys.stderr with a wrapper that has no file
+# descriptor, so faulthandler.enable() raises io.UnsupportedOperation there.
+# Target the ORIGINAL stderr (a real fd, and what the platform's deploy logs
+# capture); never let the tracer itself take the app down.
+try:
+    faulthandler.enable(file=sys.__stderr__)
+except Exception:
+    try:
+        faulthandler.enable()
+    except Exception:
+        pass
+
 from pathlib import Path
 
 # Ensure project base directory is importable before local package imports.
