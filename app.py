@@ -696,6 +696,14 @@ def main():
     except Exception:
         pass
 
+    # Watchlist heat strip: one-glance day read on your names (cached quotes).
+    try:
+        from ui.heat_strip import render_watchlist_heat
+
+        render_watchlist_heat(watch_tickers)
+    except Exception:
+        pass
+
     # -------- Day Trader live monitor: moved to its own page --------
     # A dedicated page gets full width and lets auto-refresh poll only that
     # view instead of rerunning the whole scanner.

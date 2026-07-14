@@ -135,6 +135,7 @@ def render_breakout_threshold_insight(threshold: float) -> None:
         f"Last {stats['snapshots']} daily scans: top score median "
         f"**{stats['median_top']:.0f}**, max **{stats['max_top']:.0f}**."
     )
+    _render_threshold_plot(history, threshold)
     if preview["fired"] == 0:
         st.warning(
             f"⚠️ A threshold of {threshold:g} would not have fired once in the "
@@ -154,3 +155,39 @@ def render_breakout_threshold_insight(threshold: float) -> None:
             f"🔔 Would have fired in **{preview['fired']} of the last "
             f"{preview['total']}** daily scans{ex_s}."
         )
+
+
+def _render_threshold_plot(history: List[Dict[str, Any]], threshold: float) -> None:
+    """Daily top scores as dots with the user's threshold as a reference line.
+
+    Shows exactly where the chosen threshold sits in the observed distribution
+    — above every dot = dead alert, below every dot = fires daily.
+    """
+    try:
+        import plotly.graph_objects as go
+
+        days = [h["day"] for h in reversed(history) if h.get("scores")]
+        tops = [h["scores"][0][1] for h in reversed(history) if h.get("scores")]
+        if len(tops) < 2:
+            return
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=days, y=tops, mode="markers", name="Daily top score",
+                marker=dict(size=9, color="#60a5fa"),
+                hovertemplate="%{x|%b %d}: top score %{y:.0f}<extra></extra>",
+            )
+        )
+        fig.add_hline(
+            y=float(threshold), line_color="#f59e0b", line_dash="dash",
+            annotation_text=f"your threshold ({threshold:g})",
+            annotation_font_color="#f59e0b",
+        )
+        fig.update_layout(
+            height=160, margin=dict(l=0, r=0, t=8, b=0), showlegend=False,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=False), yaxis=dict(gridcolor="rgba(128,128,128,0.15)"),
+        )
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+    except Exception:
+        pass

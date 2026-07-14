@@ -50,6 +50,7 @@ def render_journal_panel(user_id: str) -> None:
                 f"Closed: **{stats['wins']}/{stats['closed']}** winners{avg_s}. "
                 "Past performance is not indicative of future results."
             )
+        _render_journal_charts([t for t in trades if t.get("closed_at")])
 
         open_trades = [t for t in trades if not t.get("closed_at")]
         live = _live_prices([t["ticker"] for t in open_trades]) if open_trades else {}
@@ -108,5 +109,70 @@ def log_trade_button(row, *, shares: int, key: str) -> None:
             log_trade(user, ticker, float(entry), int(max(shares, 0)), source="scan")
             st.toast(f"Logged {ticker} to your journal")
             st.rerun()
+    except Exception:
+        pass
+
+
+def _render_journal_charts(closed: list) -> None:
+    """Equity curve + per-trade P&L bars over closed trades. Never raises."""
+    if len(closed) < 2:
+        return
+    try:
+        import plotly.graph_objects as go
+
+        # Chronological (list_trades returns closed newest-last already mixed;
+        # sort by closed_at to be safe).
+        closed = sorted(closed, key=lambda t: t.get("closed_at") or 0)
+        rets = []
+        labels = []
+        for t in closed:
+            entry = float(t.get("entry_price") or 0)
+            exit_px = float(t.get("exit_price") or 0)
+            if entry <= 0:
+                continue
+            rets.append((exit_px - entry) / entry * 100.0)
+            labels.append(str(t.get("ticker")))
+        if len(rets) < 2:
+            return
+        cum = []
+        total = 0.0
+        for r in rets:
+            total += r
+            cum.append(total)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            fig = go.Figure(
+                go.Scatter(
+                    x=list(range(1, len(cum) + 1)), y=cum, mode="lines+markers",
+                    line=dict(color="#60a5fa", width=2), marker=dict(size=7),
+                    hovertemplate="after trade %{x}: %{y:+.1f}%<extra></extra>",
+                )
+            )
+            fig.add_hline(y=0, line_color="rgba(128,128,128,0.4)", line_width=1)
+            fig.update_layout(
+                title=dict(text="Cumulative return (sum of trade %)", font=dict(size=13)),
+                height=180, margin=dict(l=0, r=0, t=28, b=0), showlegend=False,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(showgrid=False, title=None),
+                yaxis=dict(gridcolor="rgba(128,128,128,0.15)", ticksuffix="%"),
+            )
+            st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+        with c2:
+            colors = ["#16a34a" if r > 0 else "#dc2626" for r in rets]
+            fig = go.Figure(
+                go.Bar(
+                    x=labels, y=rets, marker_color=colors,
+                    hovertemplate="%{x}: %{y:+.1f}%<extra></extra>",
+                )
+            )
+            fig.add_hline(y=0, line_color="rgba(128,128,128,0.4)", line_width=1)
+            fig.update_layout(
+                title=dict(text="Per-trade return", font=dict(size=13)),
+                height=180, margin=dict(l=0, r=0, t=28, b=0), showlegend=False,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(showgrid=False), yaxis=dict(gridcolor="rgba(128,128,128,0.15)", ticksuffix="%"),
+            )
+            st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
     except Exception:
         pass

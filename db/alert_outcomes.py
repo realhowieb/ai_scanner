@@ -133,6 +133,37 @@ def save_outcome(
     return True
 
 
+def outcome_sequences_for_user(user_id: str, last_n: int = 10) -> Dict[int, List[bool]]:
+    """Per-alert hit/miss sequence, oldest-first (for the scorecard dot strip)."""
+    conn = get_neon_conn()
+    if conn is None:
+        return {}
+    _ensure_schema(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT alert_id, hit FROM (
+            SELECT alert_id, hit, fired_at,
+                   ROW_NUMBER() OVER (PARTITION BY alert_id ORDER BY fired_at DESC) AS rn
+            FROM alert_outcomes
+            WHERE user_id = %s AND alert_id IS NOT NULL AND hit IS NOT NULL
+        ) recent
+        WHERE rn <= %s
+        ORDER BY alert_id, fired_at ASC
+        """,
+        (user_id, int(last_n)),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    out: Dict[int, List[bool]] = {}
+    for r in rows:
+        aid = int(r["alert_id"] if isinstance(r, dict) else r[0])
+        hit = bool(r["hit"] if isinstance(r, dict) else r[1])
+        out.setdefault(aid, []).append(hit)
+    return out
+
+
 def scorecards_for_user(user_id: str, last_n: int = 10) -> Dict[int, Dict[str, Any]]:
     """Per-alert aggregate over each alert's most recent scored fires.
 

@@ -152,11 +152,64 @@ def _last_scan() -> Optional[dict]:
         return None
 
 
+def _render_ranking_ab() -> None:
+    """Admin view: breakout vs prebreakout excess-vs-SPY per horizon (grouped bars).
+
+    The most decision-relevant internal number — previously visible only in
+    cron logs. Fixed hue per ranking (identity), zero line for polarity.
+    """
+    try:
+        import plotly.graph_objects as go
+
+        from db.track_record import load_latest_track_record
+
+        horizons = (1, 5, 20)
+        series = {"breakout": [], "prebreakout": []}
+        labels = []
+        for h in horizons:
+            row_b = load_latest_track_record(h, ranking="breakout")
+            row_p = load_latest_track_record(h, ranking="prebreakout")
+            if not row_b and not row_p:
+                continue
+            labels.append(f"{h}d")
+            series["breakout"].append(
+                (row_b or {}).get("avg_return") if row_b else None
+            )
+            series["prebreakout"].append(
+                (row_p or {}).get("avg_return") if row_p else None
+            )
+        if not labels:
+            return
+        st.markdown("#### 🥊 Ranking A/B — excess vs SPY (top-5)")
+        fig = go.Figure()
+        for name, color in (("breakout", "#94a3b8"), ("prebreakout", "#60a5fa")):
+            vals = [v * 100 if v is not None else None for v in series[name]]
+            fig.add_trace(
+                go.Bar(
+                    x=labels, y=vals, name=name, marker_color=color,
+                    hovertemplate=name + " %{x}: %{y:+.2f}%<extra></extra>",
+                )
+            )
+        fig.add_hline(y=0, line_color="rgba(128,128,128,0.4)", line_width=1)
+        fig.update_layout(
+            barmode="group", height=220, margin=dict(l=0, r=0, t=8, b=0),
+            legend=dict(orientation="h", y=1.1),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=False),
+            yaxis=dict(gridcolor="rgba(128,128,128,0.15)", ticksuffix="%"),
+        )
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+        st.caption("Small samples early on — direction matters more than magnitude.")
+    except Exception:
+        pass
+
+
 def render_provider_health() -> None:
     """Render the admin provider-health dashboard. Never raises."""
     try:
         st.markdown("## 🩺 Provider Health")
         st.caption("Live status of the data sources and infrastructure the app depends on.")
+        _render_ranking_ab()
 
         # --- Database + Alpaca latency row ---
         db_status, db_ms = _probe_database()
