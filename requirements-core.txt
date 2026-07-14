@@ -27,6 +27,8 @@ beautifulsoup4>=4.12,<5
 # Python 3.14 (Streamlit Cloud runtime). Pin below that until upstream fixes it.
 altair>=5.0,<5.5
 plotly>=5.18,<7
+# Circle-packing layout for the bubbles view of the score map (pure Python).
+circlify>=0.15,<1
 streamlit-authenticator>=0.4.0,<0.5
 bcrypt>=4.0,<5
 streamlit-autorefresh<2

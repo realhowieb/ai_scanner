@@ -55,3 +55,22 @@ class ScoreComponentsTests(unittest.TestCase):
         from ui.trade_plan import score_components
 
         self.assertIsNone(score_components({}))
+
+
+class BubbleColorTests(unittest.TestCase):
+    def test_polarity_and_neutral(self):
+        from ui.score_map import bubble_color
+
+        fill_up, border_up = bubble_color(3.0)
+        self.assertIn("22,163,74", fill_up)
+        fill_dn, border_dn = bubble_color(-3.0)
+        self.assertIn("220,38,38", border_dn)
+        fill_na, _ = bubble_color(None)
+        self.assertIn("100,116,139", fill_na)
+
+    def test_intensity_scales(self):
+        from ui.score_map import bubble_color
+
+        _, weak = bubble_color(0.5)
+        _, strong = bubble_color(10.0)
+        self.assertLess(float(weak.split(",")[-1].rstrip(")")), float(strong.split(",")[-1].rstrip(")")))

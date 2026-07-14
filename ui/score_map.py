@@ -61,6 +61,10 @@ def render_score_map(df) -> None:
         return
     try:
         with st.expander("🗺️ Score map", expanded=False):
+            view = st.radio(
+                "View", ["🗺️ Treemap", "🫧 Bubbles"], horizontal=True,
+                key="score_map_view", label_visibility="collapsed",
+            )
             work = df.copy()
             work["BreakoutScore"] = pd.to_numeric(work["BreakoutScore"], errors="coerce")
             work = work.dropna(subset=["BreakoutScore"]).head(60)
@@ -80,6 +84,12 @@ def render_score_map(df) -> None:
                 "<div style='font-size:13px'>" + " &nbsp; ".join(parts) + "</div>",
                 unsafe_allow_html=True,
             )
+
+            if view == "🫧 Bubbles":
+                _render_bubbles(work)
+                _render_top_multiples(work)
+                _render_rank_bump(work)
+                return
 
             # Tile size: dollar volume when present (importance), else equal.
             if "DollarVol20" in work.columns:
@@ -233,5 +243,93 @@ def _render_rank_bump(work, top_n: int = 8) -> None:
         )
         st.caption("**Rank moves — last 5 scan days** (1 = top of the scan)")
         st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+    except Exception:
+        pass
+
+
+def bubble_color(chg_pct) -> tuple:
+    """(fill, border) diverging by day move; neutral gray when unknown."""
+    if chg_pct is None or chg_pct != chg_pct:
+        return "rgba(100,116,139,0.15)", "rgba(100,116,139,0.6)"
+    alpha = min(abs(float(chg_pct)) / 5.0, 1.0)
+    if chg_pct >= 0:
+        return f"rgba(22,163,74,{0.10 + alpha * 0.25:.2f})", f"rgba(22,163,74,{0.5 + alpha * 0.5:.2f})"
+    return f"rgba(220,38,38,{0.10 + alpha * 0.25:.2f})", f"rgba(220,38,38,{0.5 + alpha * 0.5:.2f})"
+
+
+def _render_bubbles(work, max_bubbles: int = 50) -> None:
+    """Crypto-bubbles style packed circles: size = BreakoutScore, color = day %.
+
+    Size carries the setup's strength (magnitude -> area), the green/red ring
+    carries today's direction (polarity), and the ticker + % are printed in
+    text ink so color is never the only encoding.
+    """
+    try:
+        import circlify
+        import plotly.graph_objects as go
+
+        top = work.head(max_bubbles)
+        data = []
+        for _, r in top.iterrows():
+            score = float(r["BreakoutScore"])
+            if score <= 0:
+                continue
+            data.append({"id": str(r["Ticker"]), "datum": score, "chg": r.get("PctChange")})
+        if len(data) < 3:
+            st.caption("Not enough scored results for bubbles.")
+            return
+        circles = circlify.circlify(
+            [{"id": d["id"], "datum": d["datum"]} for d in data],
+            show_enclosure=False,
+        )
+        by_id = {d["id"]: d for d in data}
+
+        fig = go.Figure()
+        xs, ys, hovers = [], [], []
+        for c in circles:
+            d = by_id.get(c.ex["id"])
+            if not d:
+                continue
+            fill, border = bubble_color(d.get("chg"))
+            fig.add_shape(
+                type="circle", xref="x", yref="y",
+                x0=c.x - c.r, y0=c.y - c.r, x1=c.x + c.r, y1=c.y + c.r,
+                fillcolor=fill, line=dict(color=border, width=2),
+            )
+            chg = d.get("chg")
+            chg_s = f"{chg:+.1f}%" if (chg is not None and chg == chg) else ""
+            # Label only bubbles big enough to hold text.
+            if c.r > 0.07:
+                fig.add_annotation(
+                    x=c.x, y=c.y, showarrow=False,
+                    text=f"<b>{d['id']}</b><br>{chg_s}",
+                    font=dict(size=max(9, min(18, int(c.r * 130)))),
+                )
+            xs.append(c.x)
+            ys.append(c.y)
+            hovers.append(
+                f"{d['id']} · score {d['datum']:.1f}"
+                + (f" · {chg_s} today" if chg_s else "")
+            )
+        fig.add_trace(
+            go.Scatter(
+                x=xs, y=ys, mode="markers",
+                marker=dict(size=18, opacity=0),
+                hovertext=hovers, hoverinfo="text",
+            )
+        )
+        fig.update_layout(
+            height=460, margin=dict(l=0, r=0, t=8, b=0), showlegend=False,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(visible=False, range=[-1.05, 1.05], scaleanchor="y"),
+            yaxis=dict(visible=False, range=[-1.05, 1.05]),
+        )
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+        st.caption(
+            "Bubble size = BreakoutScore (bigger = stronger setup) · "
+            "color = today's move. Hover any bubble for details."
+        )
+    except ImportError:
+        st.caption("Bubbles view needs the `circlify` package (redeploying adds it).")
     except Exception:
         pass
