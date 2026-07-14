@@ -370,12 +370,20 @@ def run_breakout_scan(
             # Fall back to a bounded pct_change score on any error
             score = _clip(pct_change, -30.0, 30.0)
 
+        # 10-day close sparkline captured at scan time — the bars are already
+        # in hand here; fetching them again at render would cost a download.
+        try:
+            spark = [round(float(v), 4) for v in df["Close"].iloc[-10:].tolist()]
+        except Exception:
+            spark = None
+
         rows.append(
             {
                 "Ticker": symbol,
                 "BreakoutScore": score,
                 "Last": close,
                 "Volume": vol_today,
+                "PctChange": pct_change,
                 "GapPct": gap_pct,
                 "BreakoutPos20D": breakout_pos_20d,
                 "Trend20D%": trend_20,
@@ -386,6 +394,7 @@ def run_breakout_scan(
                 "PatternTag": pattern_tag,
                 "RSvsSPY": rs,
                 "IsBreakout": is_breakout,
+                "Spark10D": spark,
             }
         )
         added += 1

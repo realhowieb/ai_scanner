@@ -42,6 +42,76 @@ def _ensure_schema(conn) -> None:
     cur.close()
 
 
+def save_daily_excess(ranking: str, horizon_days: int, daily) -> int:
+    """Upsert per-scan-day mean excess rows (for the calendar heatmap)."""
+    if not daily:
+        return 0
+    conn = get_neon_conn()
+    if conn is None:
+        return 0
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS signal_track_daily (
+            day DATE NOT NULL,
+            ranking TEXT NOT NULL,
+            horizon_days INTEGER NOT NULL,
+            avg_excess DOUBLE PRECISION,
+            n_picks INTEGER,
+            computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (day, ranking, horizon_days)
+        )
+        """
+    )
+    saved = 0
+    for day, avg_excess, n_picks in daily:
+        cur.execute(
+            """
+            INSERT INTO signal_track_daily (day, ranking, horizon_days, avg_excess, n_picks)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (day, ranking, horizon_days)
+            DO UPDATE SET avg_excess = EXCLUDED.avg_excess,
+                          n_picks = EXCLUDED.n_picks,
+                          computed_at = NOW()
+            """,
+            (day, ranking, int(horizon_days), float(avg_excess), int(n_picks)),
+        )
+        saved += 1
+    conn.commit()
+    cur.close()
+    conn.close()
+    return saved
+
+
+def load_daily_excess(ranking: str = "breakout", horizon_days: int = 5, days: int = 120):
+    """[(day, avg_excess)] oldest-first for the calendar heatmap."""
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT day, avg_excess FROM signal_track_daily
+            WHERE ranking = %s AND horizon_days = %s
+              AND day >= CURRENT_DATE - make_interval(days => %s)
+            ORDER BY day ASC
+            """,
+            (ranking, int(horizon_days), int(days)),
+        )
+        rows = cur.fetchall() or []
+    except Exception:
+        rows = []
+    cur.close()
+    conn.close()
+    out = []
+    for r in rows:
+        day = r["day"] if isinstance(r, dict) else r[0]
+        val = r["avg_excess"] if isinstance(r, dict) else r[1]
+        out.append((day, float(val) if val is not None else None))
+    return out
+
+
 def save_track_record(
     *,
     horizon_days: int,

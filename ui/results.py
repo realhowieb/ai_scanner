@@ -219,11 +219,11 @@ def render_results(
             )
         else:
             # Basic: keep non-interactive rendering. Use plain HTML (much faster than styled.to_html).
-            render_static_results_table(_format_earnings_for_display(df), fallback_df=df)
+            render_static_results_table(_format_earnings_for_display(df).drop(columns=["Spark10D"], errors="ignore"), fallback_df=df)
 
         # Export (tier-gated) still available even in fast mode
         if can_export_csv:
-            csv = df.to_csv(index=False).encode("utf-8")
+            csv = df.drop(columns=["Spark10D"], errors="ignore").to_csv(index=False).encode("utf-8")
             st.download_button(
                 "⬇️ Download CSV",
                 data=csv,

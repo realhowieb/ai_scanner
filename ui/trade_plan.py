@@ -36,6 +36,46 @@ def _num(row: Mapping[str, Any], *keys: str) -> Optional[float]:
     return None
 
 
+def score_components(row: Mapping[str, Any]) -> Optional[Dict[str, float]]:
+    """Decompose a BreakoutScore into its scoring contributions.
+
+    Mirrors scan/breakout's clipped formula; anything not reconstructable from
+    the row lands in 'other' so the parts always sum to the printed score.
+    """
+    score = _num(row, "BreakoutScore")
+    if score is None:
+        return None
+
+    def clip(v, lo, hi):
+        return max(lo, min(hi, v))
+
+    parts: Dict[str, float] = {}
+    pct = _num(row, "PctChange")
+    if pct is not None:
+        parts["Day move"] = clip(pct, -30.0, 30.0)
+    t20 = _num(row, "Trend20D%")
+    if t20 is not None and t20 > 0:
+        parts["Trend 20d"] = clip(t20, 0.0, 50.0) * 0.4
+    t10 = _num(row, "Trend10D%")
+    if t10 is not None and t10 > 0:
+        parts["Trend 10d"] = clip(t10, 0.0, 50.0) * 0.6
+    pos = _num(row, "BreakoutPos20D")
+    if pos is not None:
+        parts["Near 20d high"] = (pos - 0.9) * 50.0
+    gap = _num(row, "GapPct")
+    if gap is not None:
+        parts["Gap"] = clip(gap, -30.0, 30.0) * 0.5
+    rv = _num(row, "VolRel20", "RelVol")
+    if rv is not None and rv > 0:
+        parts["Rel volume"] = (clip(rv, 1.0, 5.0) - 1.0) * 10.0
+    if row.get("IsBreakout"):
+        parts["Breakout bonus"] = 5.0
+    residual = score - sum(parts.values())
+    if abs(residual) >= 0.5:
+        parts["Other"] = residual
+    return {k: round(v, 1) for k, v in parts.items()}
+
+
 def build_trade_plan(
     row: Mapping[str, Any],
     *,
@@ -105,6 +145,8 @@ def render_trade_plan(row: Mapping[str, Any], *, locked: bool = False) -> None:
             f"(${plan['risk_per_share']:,.2f}/share). Educational only — not "
             "financial advice; adjust for your own strategy."
         )
+        _render_plan_chart(row, plan)
+        _render_score_waterfall(row)
         try:
             from ui.journal import log_trade_button
 
@@ -132,5 +174,105 @@ def _render_alert_quick_action(row: Mapping[str, Any]) -> None:
             st.session_state["alert_price_tk"] = ticker
             st.session_state["alert_price_val"] = round(float(last), 2)
             st.switch_page("pages/alerts.py")
+    except Exception:
+        pass
+
+
+def _render_plan_chart(row: Mapping[str, Any], plan: Dict[str, Any]) -> None:
+    """Draw the plan as risk geometry: 60d closes + entry/stop/target lines."""
+    try:
+        ticker = str(row.get("Ticker") or "").upper()
+        if not ticker:
+            return
+        import plotly.graph_objects as go
+
+        bars = _plan_bars(ticker)
+        if bars is None or len(bars) < 10:
+            return
+        closes = bars["Close"].dropna()
+        fig = go.Figure(
+            go.Scatter(
+                x=list(closes.index), y=closes.tolist(), mode="lines",
+                line=dict(color="#94a3b8", width=2), name=ticker,
+                hovertemplate="%{x|%b %d}: %{y:,.2f}<extra></extra>",
+            )
+        )
+        for label, y, color in (
+            ("entry", plan["entry"], "#60a5fa"),
+            ("stop", plan["stop"], "#dc2626"),
+            (f"{plan['target_r'][0]:g}R", plan["targets"][0], "#16a34a"),
+            (f"{plan['target_r'][1]:g}R", plan["targets"][1], "#16a34a"),
+        ):
+            fig.add_hline(
+                y=y, line_color=color, line_dash="dot", line_width=1,
+                annotation_text=f"{label} {y:,.2f}", annotation_font_size=11,
+                annotation_font_color=color,
+            )
+        fig.update_layout(
+            height=220, margin=dict(l=0, r=0, t=8, b=0), showlegend=False,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=False),
+            yaxis=dict(gridcolor="rgba(128,128,128,0.12)"),
+        )
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+    except Exception:
+        pass
+
+
+def _plan_bars(ticker: str):
+    """60d daily bars for one symbol, cached (Alpaca)."""
+    try:
+        return _plan_bars_cached(ticker)
+    except Exception:
+        return None
+
+
+if st is not None:
+
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _plan_bars_cached(ticker: str):
+        from data.price_alpaca import download_multi_alpaca
+
+        frames = download_multi_alpaca([ticker], period="60d", interval="1d",
+                                       prepost=False, timeout_s=10.0)
+        return frames.get(ticker)
+
+else:  # pragma: no cover
+    def _plan_bars_cached(ticker: str):
+        return None
+
+
+def _render_score_waterfall(row: Mapping[str, Any]) -> None:
+    """Where the BreakoutScore came from, as a waterfall."""
+    try:
+        parts = score_components(row)
+        if not parts or len(parts) < 2:
+            return
+        import plotly.graph_objects as go
+
+        labels = list(parts.keys()) + ["Score"]
+        values = list(parts.values()) + [0]
+        fig = go.Figure(
+            go.Waterfall(
+                x=labels,
+                y=values,
+                measure=["relative"] * len(parts) + ["total"],
+                increasing=dict(marker=dict(color="#16a34a")),
+                decreasing=dict(marker=dict(color="#dc2626")),
+                totals=dict(marker=dict(color="#60a5fa")),
+                connector=dict(line=dict(color="rgba(128,128,128,0.3)", width=1)),
+                text=[f"{v:+.1f}" for v in parts.values()] + [""],
+                textposition="outside",
+                hovertemplate="%{x}: %{y:+.1f}<extra></extra>",
+            )
+        )
+        fig.update_layout(
+            title=dict(text="Where the score comes from", font=dict(size=13)),
+            height=220, margin=dict(l=0, r=0, t=28, b=0), showlegend=False,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=False),
+            yaxis=dict(gridcolor="rgba(128,128,128,0.12)"),
+        )
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
     except Exception:
         pass

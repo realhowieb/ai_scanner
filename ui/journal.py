@@ -174,5 +174,36 @@ def _render_journal_charts(closed: list) -> None:
                 xaxis=dict(showgrid=False), yaxis=dict(gridcolor="rgba(128,128,128,0.15)", ticksuffix="%"),
             )
             st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+        if len(rets) >= 8:
+            _render_return_histogram(rets)
+    except Exception:
+        pass
+
+
+def _render_return_histogram(rets: list) -> None:
+    """Distribution of closed-trade returns with zero and average marked."""
+    try:
+        import plotly.graph_objects as go
+
+        fig = go.Figure(
+            go.Histogram(
+                x=rets, nbinsx=12, marker_color="#60a5fa",
+                hovertemplate="%{x}: %{y} trades<extra></extra>",
+            )
+        )
+        fig.add_vline(x=0, line_color="rgba(128,128,128,0.5)", line_dash="dash")
+        avg = sum(rets) / len(rets)
+        fig.add_vline(
+            x=avg, line_color="#f59e0b", line_dash="dot",
+            annotation_text=f"avg {avg:+.1f}%", annotation_font_color="#f59e0b",
+        )
+        fig.update_layout(
+            title=dict(text="Return distribution (closed trades)", font=dict(size=13)),
+            height=180, margin=dict(l=0, r=0, t=28, b=0), showlegend=False,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(ticksuffix="%", showgrid=False),
+            yaxis=dict(gridcolor="rgba(128,128,128,0.12)"),
+        )
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
     except Exception:
         pass
