@@ -37,8 +37,10 @@ EARNINGS_TABLE_COLUMNS = ("earnings_in_days", "Earnings", "📅 Earnings in X da
 
 
 def _can_use_background_gradient() -> bool:
-    try: import matplotlib  # noqa: F401, E701
-    except ImportError: return False
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        return False
     return True
 
 
