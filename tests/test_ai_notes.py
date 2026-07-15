@@ -40,6 +40,22 @@ class GenerateAiNoteTest(unittest.TestCase):
         self.assertIn("XYZ", note)
         self.assertIn("no scan metrics", note)
 
+    def test_breakout_row_with_nan_metrics(self):
+        """Thin symbols can have NaN trend/rvol/vol; the note must say n/a, never 'nan'."""
+        import numpy as np
+        import pandas as pd
+
+        from ui.ai_notes import generate_ai_note
+        note = generate_ai_note(pd.Series({
+            "Ticker": "SKDD", "BreakoutScore": 36.3, "GapPct": 12.49,
+            "Trend20D%": np.nan, "VolRel20": np.nan,
+            "DollarVol20": 1_650_513, "Volatility20D%": np.nan,
+        }))
+        self.assertIn("SKDD", note)
+        self.assertNotIn("nan", note.lower())
+        self.assertIn("n/a", note)
+        self.assertIn("$1,650,513", note)  # a present value still renders
+
 
 if __name__ == "__main__":
     unittest.main()

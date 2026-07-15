@@ -9,13 +9,22 @@ Trend20D%, …) get a setup analysis; watchlist quote rows (Last, Change,
 import pandas as pd
 
 
-def _num(row, key, default=0.0):
-    """Best-effort float from a row value."""
+def _numopt(row, key):
+    """Float from a row value, or None when missing/NaN (so callers can say 'n/a')."""
     try:
         v = row.get(key)
-        return float(v) if v is not None else float(default)
+        if v is None:
+            return None
+        f = float(v)
+        return f if f == f else None  # drop NaN
     except (TypeError, ValueError):
-        return float(default)
+        return None
+
+
+def _num(row, key, default=0.0):
+    """Best-effort float from a row value; NaN and missing both fall back to default."""
+    v = _numopt(row, key)
+    return float(default) if v is None else v
 
 
 def _ticker(row) -> str:
@@ -26,17 +35,30 @@ def _breakout_note(row) -> str:
     ticker = _ticker(row)
     score = _num(row, "BreakoutScore")
     # Scan engine emits the gap column as "GapPct"; fall back to "Gap%".
-    gap = _num(row, "GapPct", _num(row, "Gap%"))
-    trend = _num(row, "Trend20D%")
-    volrel = _num(row, "VolRel20")
-    dvol = _num(row, "DollarVol20")
-    vol20 = _num(row, "Volatility20D%")
-    direction = "bullish" if trend > 0 else "bearish" if trend < 0 else "neutral"
+    gap = _numopt(row, "GapPct")
+    if gap is None:
+        gap = _numopt(row, "Gap%")
+    trend = _numopt(row, "Trend20D%")
+    volrel = _numopt(row, "VolRel20")
+    dvol = _numopt(row, "DollarVol20")
+    vol20 = _numopt(row, "Volatility20D%")
+
+    def pct(v):
+        return "n/a" if v is None else f"{v:.2f}%"
+
+    gap_s = pct(gap)
+    if trend is None:
+        direction = "flat"
+    else:
+        direction = "bullish" if trend > 0 else "bearish" if trend < 0 else "neutral"
+    trend_s = "20‑day trend of n/a" if trend is None else f"{direction} 20‑day trend of {trend:.2f}%"
+    volrel_s = "n/a" if volrel is None else f"{volrel:.2f}×"
+    dvol_s = "n/a" if dvol is None else f"${dvol:,.0f}"
     return (
         f"{ticker} shows a breakout score of {score:.1f}. "
-        f"Gap is {gap:.2f}%, with a {direction} 20‑day trend of {trend:.2f}%. "
-        f"Volume relative is {volrel:.2f}× and dollar volume is ${dvol:,.0f}. "
-        f"Volatility (20D) sits at {vol20:.2f}%."
+        f"Gap is {gap_s}, with a {trend_s}. "
+        f"Volume relative is {volrel_s} and dollar volume is {dvol_s}. "
+        f"Volatility (20D) sits at {pct(vol20)}."
     )
 
 

@@ -390,8 +390,8 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertNotIn("except Exception:\n            st.caption(\"AI notes are unavailable", results_source)
         self.assertIn("st.plotly_chart(fig, width=\"stretch\", key=key)", charts_source)
         self.assertIn("key=f\"single_ticker_chart_{_safe_chart_key(sym)}\"", single_ticker_source)
-        self.assertIn("key=f\"{key_prefix}_chart_{st.session_state[picker_key]}_fast\"", results_source)
-        self.assertIn("key=f\"{key_prefix}_chart_{st.session_state[picker_key]}_styled\"", results_source)
+        self.assertIn("key=f\"{key_prefix}_chart_{auto_pick}_fast\"", results_source)
+        self.assertIn("key=f\"{key_prefix}_chart_{auto_pick}_styled\"", results_source)
 
     def test_plaintext_demo_auth_config_is_removed(self):
         self.assertFalse((ROOT / "ui" / "config.yaml").exists())

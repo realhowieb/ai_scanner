@@ -44,6 +44,41 @@ def _can_use_background_gradient() -> bool:
     return True
 
 
+def _resolve_chart_pick(tickers, selected_key: str, picker_key: str) -> str:
+    """Resolve which ticker to chart, reconciling row-clicks and the manual override.
+
+    The row-click writes ``selected_key`` and is authoritative. The hidden
+    "Change chart ticker" selectbox keeps its own widget state, which otherwise
+    goes stale and clobbers the row-click; we sync it to the resolved pick
+    before rendering and let its on_change write back to ``selected_key`` so a
+    manual choice also sticks. Returns the resolved, persisted ticker.
+    """
+    auto_pick = str(
+        st.session_state.get(selected_key)
+        or st.session_state.get(picker_key)
+        or tickers[0]
+    ).strip().upper()
+    if auto_pick not in tickers:
+        auto_pick = tickers[0]
+    st.session_state[picker_key] = auto_pick
+    st.session_state[selected_key] = auto_pick
+
+    manual_key = f"{picker_key}_manual"
+
+    def _on_manual() -> None:
+        choice = st.session_state.get(manual_key)
+        if choice:
+            st.session_state[selected_key] = str(choice).strip().upper()
+
+    with st.expander("Change chart ticker", expanded=False):
+        # Seed the widget to the resolved pick BEFORE it renders, so a row-click
+        # is reflected here instead of stale widget state winning.
+        st.session_state[manual_key] = auto_pick
+        st.selectbox("Ticker", tickers, key=manual_key, on_change=_on_manual)
+
+    return auto_pick
+
+
 def render_results(
     df: Optional[pd.DataFrame],
     can_export_csv: bool,
@@ -270,24 +305,13 @@ def render_results(
                 else:
                     picker_key = f"{key_prefix}_chart_picker_fast"
                     selected_key = f"{key_prefix}_selected_ticker"
-                    auto_pick = (st.session_state.get(selected_key) or st.session_state.get(picker_key) or tickers[0])
-                    auto_pick = str(auto_pick).strip().upper()
-                    if auto_pick not in tickers:
-                        auto_pick = tickers[0]
-
-                    # Persist the current chart ticker so it survives reruns.
-                    st.session_state[picker_key] = auto_pick
+                    auto_pick = _resolve_chart_pick(tickers, selected_key, picker_key)
 
                     st.caption(f"Charting: **{auto_pick}** — click a row in the table to change the chart.")
 
-                    # Optional manual override (kept but hidden by default)
-                    with st.expander("Change chart ticker", expanded=False):
-                        pick = st.selectbox("Ticker", tickers, index=tickers.index(auto_pick), key=f"{picker_key}_manual")
-                        st.session_state[picker_key] = str(pick).strip().upper()
-
                     render_chart_for_ticker(
-                        st.session_state[picker_key],
-                        key=f"{key_prefix}_chart_{st.session_state[picker_key]}_fast",
+                        auto_pick,
+                        key=f"{key_prefix}_chart_{auto_pick}_fast",
                     )
 
         pick = st.session_state.get(f"{key_prefix}_chart_picker_fast")
@@ -344,7 +368,8 @@ def render_results(
             st.subheader("AI Notes")
             st.caption("⭐ Premium feature")
             try:
-                row = find_row_for_ticker(df, pick)
+                note_ticker = selected_ticker or pick
+                row = find_row_for_ticker(df, note_ticker)
                 if row is None:
                     raise ValueError("No matching row for selected ticker")
                 auto_note = generate_ai_note(row)
@@ -353,7 +378,7 @@ def render_results(
                     "Edit or copy these notes (Premium only):",
                     value=auto_note,
                     height=220,
-                    key=f"{key_prefix}_ai_notes_fast",
+                    key=f"{key_prefix}_ai_notes_fast_{note_ticker}",
                 )
             except (RuntimeError, TypeError, ValueError):
                 st.caption("AI notes are unavailable for the selected row.")
@@ -627,23 +652,13 @@ def render_results(
                 else:
                     picker_key = f"{key_prefix}_chart_picker"
                     selected_key = f"{key_prefix}_selected_ticker"
-                    auto_pick = (st.session_state.get(selected_key) or st.session_state.get(picker_key) or tickers[0])
-                    auto_pick = str(auto_pick).strip().upper()
-                    if auto_pick not in tickers:
-                        auto_pick = tickers[0]
-
-                    st.session_state[picker_key] = auto_pick
+                    auto_pick = _resolve_chart_pick(tickers, selected_key, picker_key)
 
                     st.caption(f"Charting: **{auto_pick}** — click a row in the table to change the chart.")
 
-                    # Optional manual override (kept but hidden by default)
-                    with st.expander("Change chart ticker", expanded=False):
-                        pick = st.selectbox("Ticker", tickers, index=tickers.index(auto_pick), key=f"{picker_key}_manual")
-                        st.session_state[picker_key] = str(pick).strip().upper()
-
                     render_chart_for_ticker(
-                        st.session_state[picker_key],
-                        key=f"{key_prefix}_chart_{st.session_state[picker_key]}_styled",
+                        auto_pick,
+                        key=f"{key_prefix}_chart_{auto_pick}_styled",
                     )
 
         pick = st.session_state.get(f"{key_prefix}_chart_picker")
@@ -688,9 +703,10 @@ def render_results(
         st.subheader("AI Notes")
         st.caption("⭐ Premium feature")
         try:
-            # Use the same ticker the user selected for the chart
-            pick = st.session_state.get(f"{key_prefix}_chart_picker")
-            row = find_row_for_ticker(df, pick)
+            # Use the same ticker the user selected (row-click), matching the
+            # details panel — not just the chart picker.
+            note_ticker = st.session_state.get(f"{key_prefix}_selected_ticker") or st.session_state.get(f"{key_prefix}_chart_picker")
+            row = find_row_for_ticker(df, note_ticker)
             if row is None:
                 raise ValueError("No matching row for selected ticker")
             auto_note = generate_ai_note(row)
@@ -699,7 +715,7 @@ def render_results(
                 "Edit or copy these notes (Premium only):",
                 value=auto_note,
                 height=220,
-                key=f"{key_prefix}_ai_notes_styled",
+                key=f"{key_prefix}_ai_notes_styled_{note_ticker}",
             )
         except (RuntimeError, TypeError, ValueError):
             st.caption("AI notes are unavailable for the selected row.")
