@@ -5,6 +5,8 @@ with patch.dict("sys.modules", {"streamlit": MagicMock()}):
     from ui.watchlist_intelligence import (
         _change_summary,
         _delta_display,
+        _to_bool,
+        _to_float,
         classify_watchlist_signal,
         filter_watchlist_movers,
         summarize_watchlist_intelligence,
@@ -90,6 +92,27 @@ class WatchlistIntelligenceTests(unittest.TestCase):
             [row["Ticker"] for row in filter_watchlist_movers(rows, include_stable=True)],
             ["HOT", "FLAT", "GONE"],
         )
+
+
+class NanSafetyTests(unittest.TestCase):
+    def test_to_float_drops_nan(self):
+        self.assertIsNone(_to_float(float("nan")))
+        self.assertEqual(_to_float(3.5), 3.5)
+        self.assertIsNone(_to_float(None))
+
+    def test_to_bool_treats_nan_as_false(self):
+        # bool(nan) is True in Python; a missing IsBreakout flag must read False.
+        self.assertFalse(_to_bool(float("nan")))
+        self.assertTrue(_to_bool(True))
+        self.assertFalse(_to_bool(0))
+
+    def test_nan_is_breakout_flag_does_not_force_active_breakout(self):
+        row = {
+            "PreBreakoutProb%": 2.0, "AI Confidence": 1.0,
+            "BreakoutScore": 5.0, "IsBreakout": float("nan"),
+        }
+        signal, _ = classify_watchlist_signal(row)
+        self.assertEqual(signal, "Cooling down")
 
 
 class StableRowDisplayTests(unittest.TestCase):

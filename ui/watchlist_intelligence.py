@@ -23,7 +23,8 @@ def _to_float(value: Any) -> float | None:
     try:
         if value is None:
             return None
-        return float(value)
+        f = float(value)
+        return f if f == f else None  # drop NaN — else it renders as "nan"
     except (TypeError, ValueError):
         return None
 
@@ -31,6 +32,8 @@ def _to_float(value: Any) -> float | None:
 def _to_bool(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "y"}
+    if isinstance(value, float) and value != value:
+        return False  # NaN is truthy in Python; treat a missing flag as False
     return bool(value)
 
 
