@@ -110,8 +110,13 @@ def build_trade_plan(
     }
 
 
-def render_trade_plan(row: Mapping[str, Any], *, locked: bool = False) -> None:
-    """Trade-plan block inside the ticker details expander. Never raises."""
+def render_trade_plan(row: Mapping[str, Any], *, locked: bool = False, key: str = "main") -> None:
+    """Trade-plan block inside the ticker details expander. Never raises.
+
+    ``key`` namespaces the account/risk inputs so the plan can render on more
+    than one tab in a single script run (Latest results + Scan History) without
+    a duplicate-widget-id collision.
+    """
     if st is None:
         return
     try:
@@ -125,11 +130,11 @@ def render_trade_plan(row: Mapping[str, Any], *, locked: bool = False) -> None:
         c1, c2 = st.columns(2)
         account = c1.number_input(
             "Account size ($)", min_value=100.0, value=10_000.0, step=500.0,
-            key="tp_account",
+            key=f"tp_account_{key}",
         )
         risk = c2.number_input(
             "Risk per trade (%)", min_value=0.1, max_value=10.0, value=1.0,
-            step=0.25, key="tp_risk",
+            step=0.25, key=f"tp_risk_{key}",
         )
         plan = build_trade_plan(row, account_size=account, risk_pct=risk)
         if not plan:
@@ -145,20 +150,20 @@ def render_trade_plan(row: Mapping[str, Any], *, locked: bool = False) -> None:
             f"(${plan['risk_per_share']:,.2f}/share). Educational only — not "
             "financial advice; adjust for your own strategy."
         )
-        _render_plan_chart(row, plan)
-        _render_score_waterfall(row)
+        _render_plan_chart(row, plan, key=key)
+        _render_score_waterfall(row, key=key)
         try:
             from ui.journal import log_trade_button
 
-            log_trade_button(row, shares=plan["shares"], key=f"tp_log_{row.get('Ticker')}")
+            log_trade_button(row, shares=plan["shares"], key=f"tp_log_{key}_{row.get('Ticker')}")
         except Exception:
             pass
-        _render_alert_quick_action(row)
+        _render_alert_quick_action(row, key=key)
     except Exception:
         pass
 
 
-def _render_alert_quick_action(row: Mapping[str, Any]) -> None:
+def _render_alert_quick_action(row: Mapping[str, Any], *, key: str = "main") -> None:
     """'Alert me on this' — pre-fill the price-alert form and jump to Alerts.
 
     Keeps in-context alert creation alive now that alert management lives on
@@ -170,7 +175,7 @@ def _render_alert_quick_action(row: Mapping[str, Any]) -> None:
         last = _num(row, "Last", "Close")
         if not ticker or last is None:
             return
-        if st.button(f"🔔 Alert me on {ticker}", key=f"tp_alert_{ticker}"):
+        if st.button(f"🔔 Alert me on {ticker}", key=f"tp_alert_{key}_{ticker}"):
             st.session_state["alert_price_tk"] = ticker
             st.session_state["alert_price_val"] = round(float(last), 2)
             st.switch_page("pages/alerts.py")
@@ -178,7 +183,7 @@ def _render_alert_quick_action(row: Mapping[str, Any]) -> None:
         pass
 
 
-def _render_plan_chart(row: Mapping[str, Any], plan: Dict[str, Any]) -> None:
+def _render_plan_chart(row: Mapping[str, Any], plan: Dict[str, Any], *, key: str = "main") -> None:
     """Draw the plan as risk geometry: 60d closes + entry/stop/target lines."""
     try:
         ticker = str(row.get("Ticker") or "").upper()
@@ -214,7 +219,8 @@ def _render_plan_chart(row: Mapping[str, Any], plan: Dict[str, Any]) -> None:
             xaxis=dict(showgrid=False),
             yaxis=dict(gridcolor="rgba(128,128,128,0.12)"),
         )
-        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch",
+                        key=f"tp_plan_chart_{key}_{row.get('Ticker')}")
     except Exception:
         pass
 
@@ -242,7 +248,7 @@ else:  # pragma: no cover
         return None
 
 
-def _render_score_waterfall(row: Mapping[str, Any]) -> None:
+def _render_score_waterfall(row: Mapping[str, Any], *, key: str = "main") -> None:
     """Where the BreakoutScore came from, as a waterfall."""
     try:
         parts = score_components(row)
@@ -273,6 +279,7 @@ def _render_score_waterfall(row: Mapping[str, Any]) -> None:
             xaxis=dict(showgrid=False),
             yaxis=dict(gridcolor="rgba(128,128,128,0.12)"),
         )
-        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch",
+                        key=f"tp_waterfall_{key}_{row.get('Ticker')}")
     except Exception:
         pass

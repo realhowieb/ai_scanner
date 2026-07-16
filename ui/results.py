@@ -337,7 +337,7 @@ def render_results(
                     c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
                     from ui.trade_plan import render_trade_plan
 
-                    render_trade_plan(r0, locked=is_basic)
+                    render_trade_plan(r0, locked=is_basic, key=key_prefix)
 
                     # Earnings (only when enrichment is enabled)
                     if show_earnings_in_cards:
