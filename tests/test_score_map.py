@@ -11,6 +11,13 @@ class BucketCountsTests(unittest.TestCase):
         self.assertEqual(counts["Warm (20-40)"], 2)
         self.assertEqual(counts["Hot (40+)"], 2)
 
+    def test_negative_scores_count_as_quiet(self):
+        # Weak setups score below zero; they must still land in Quiet, not vanish.
+        counts = bucket_counts([-2.1, -11.9, -30.0, 5.0])
+        self.assertEqual(counts["Quiet (<20)"], 4)
+        self.assertEqual(counts["Warm (20-40)"], 0)
+        self.assertEqual(counts["Hot (40+)"], 0)
+
     def test_junk_ignored(self):
         counts = bucket_counts([None, "x", 25.0])
         self.assertEqual(sum(counts.values()), 1)
@@ -99,6 +106,35 @@ class BubbleHtmlTests(unittest.TestCase):
         for t in ("AAA", "BBB", "drift", "prefers-reduced-motion"):
             self.assertIn(t, html)
         self.assertEqual(html.count("class='bub'"), 3)
+
+    def test_all_negative_scores_still_render_with_shift(self):
+        try:
+            import circlify
+        except ModuleNotFoundError:
+            self.skipTest("circlify not installed")
+        from ui.score_map import build_bubble_html
+
+        # Every score negative (weak-setup scan) — previously dropped to "not
+        # enough". Shift to positive areas; true scores stay in the tooltip.
+        data = [
+            {"id": "AMD", "datum": -2.0, "chg": -3.5},
+            {"id": "KLAC", "datum": -9.6, "chg": -2.5},
+            {"id": "AAOI", "datum": -30.0, "chg": -13.0},
+        ]
+        lo = min(d["datum"] for d in data)
+        hi = max(d["datum"] for d in data)
+        floor = max((hi - lo) * 0.12, 1.0)
+        circles = circlify.circlify(
+            [{"id": d["id"], "datum": d["datum"] - lo + floor} for d in data],
+            show_enclosure=False,
+        )
+        html = build_bubble_html(data, circles)
+        self.assertEqual(html.count("class='bub'"), 3)
+        self.assertIn("score -2.0", html)   # true (negative) score shown
+        # Highest score (AMD) is the biggest circle.
+        radii = {c.ex["id"]: c.r for c in circles}
+        self.assertEqual(max(radii, key=radii.get), "AMD")
+        self.assertEqual(min(radii, key=radii.get), "AAOI")
 
     def test_polarity_colors_in_markup(self):
         html = self._html()

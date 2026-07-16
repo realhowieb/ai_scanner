@@ -18,7 +18,7 @@ except Exception:  # pragma: no cover - headless envs
 
 # Score buckets for the breadth strip (clipped ceiling is ~145).
 BUCKETS = (
-    ("Quiet (<20)", 0.0, 20.0, "#64748b"),
+    ("Quiet (<20)", float("-inf"), 20.0, "#64748b"),
     ("Warm (20-40)", 20.0, 40.0, "#60a5fa"),
     ("Hot (40+)", 40.0, float("inf"), "#16a34a"),
 )
@@ -331,14 +331,21 @@ def _render_bubbles(work, max_bubbles: int = 50) -> None:
         data = []
         for _, r in top.iterrows():
             score = float(r["BreakoutScore"])
-            if score <= 0:
+            if score != score:  # NaN — genuinely unscored
                 continue
             data.append({"id": str(r["Ticker"]), "datum": score, "chg": r.get("PctChange")})
         if len(data) < 3:
             st.caption("Not enough scored results for bubbles.")
             return
+        # circlify needs positive areas, but BreakoutScore can be negative (weak
+        # setups). Shift the whole field so the lowest score maps to a small but
+        # visible floor and the highest stays biggest — ordering and relative
+        # gaps are preserved; the true score still shows in the label/tooltip.
+        lo = min(d["datum"] for d in data)
+        hi = max(d["datum"] for d in data)
+        floor = max((hi - lo) * 0.12, 1.0)
         circles = circlify.circlify(
-            [{"id": d["id"], "datum": d["datum"]} for d in data],
+            [{"id": d["id"], "datum": d["datum"] - lo + floor} for d in data],
             show_enclosure=False,
         )
         components.html(build_bubble_html(data, circles), height=480)
