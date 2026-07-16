@@ -150,7 +150,7 @@ def render_results(
     try:
         from ui.score_map import render_score_map
 
-        render_score_map(df)
+        render_score_map(df, key=key_prefix)
     except Exception:
         pass
     st.caption(

@@ -53,8 +53,13 @@ def rank_history(history: List[Dict[str, Any]], tickers: List[str], days: int = 
     return out
 
 
-def render_score_map(df) -> None:
-    """Treemap + breadth strip for a results DataFrame. Never raises."""
+def render_score_map(df, key: str = "main") -> None:
+    """Treemap + breadth strip for a results DataFrame. Never raises.
+
+    ``key`` namespaces every stateful widget so the same score map can render
+    on more than one tab in a single script run (e.g. the live Results tab and
+    the Scan History tab) without a duplicate-widget-id collision.
+    """
     if st is None or df is None or getattr(df, "empty", True):
         return
     if "BreakoutScore" not in df.columns or "Ticker" not in df.columns:
@@ -63,7 +68,7 @@ def render_score_map(df) -> None:
         with st.expander("🗺️ Score map", expanded=False):
             view = st.radio(
                 "View", ["🗺️ Treemap", "🫧 Bubbles"], horizontal=True,
-                key="score_map_view", label_visibility="collapsed",
+                key=f"score_map_view_{key}", label_visibility="collapsed",
             )
             work = df.copy()
             work["BreakoutScore"] = pd.to_numeric(work["BreakoutScore"], errors="coerce")
@@ -87,8 +92,8 @@ def render_score_map(df) -> None:
 
             if view == "🫧 Bubbles":
                 _render_bubbles(work)
-                _render_top_multiples(work)
-                _render_rank_bump(work)
+                _render_top_multiples(work, key=key)
+                _render_rank_bump(work, key=key)
                 return
 
             # Tile size: dollar volume when present (importance), else equal.
@@ -138,7 +143,8 @@ def render_score_map(df) -> None:
                 margin=dict(l=0, r=0, t=8, b=0),
                 paper_bgcolor="rgba(0,0,0,0)",
             )
-            st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+            st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch",
+                            key=f"score_map_treemap_{key}")
             st.caption(
                 "Tile size = 20-day dollar volume (liquidity) · color = BreakoutScore. "
                 "Big bright tiles = strong setups in tradable names."
@@ -149,7 +155,7 @@ def render_score_map(df) -> None:
         pass
 
 
-def _render_top_multiples(work, top_n: int = 5) -> None:
+def _render_top_multiples(work, top_n: int = 5, key: str = "main") -> None:
     """Small multiples: the top picks' 10-day shapes side by side.
 
     Uses the Spark10D closes captured at scan time — zero extra downloads.
@@ -195,12 +201,13 @@ def _render_top_multiples(work, top_n: int = 5) -> None:
         fig.update_yaxes(visible=False)
         fig.update_annotations(font_size=12)
         st.caption("**Top picks — last 10 days** (indexed to day 1)")
-        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch",
+                        key=f"score_map_multiples_{key}")
     except Exception:
         pass
 
 
-def _render_rank_bump(work, top_n: int = 8) -> None:
+def _render_rank_bump(work, top_n: int = 8, key: str = "main") -> None:
     """Bump chart: how today's top tickers' RANKS moved over recent snapshots."""
     try:
         from ui.alert_preview import load_score_history
@@ -242,7 +249,8 @@ def _render_rank_bump(work, top_n: int = 8) -> None:
             ),
         )
         st.caption("**Rank moves — last 5 scan days** (1 = top of the scan)")
-        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch")
+        st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch",
+                        key=f"score_map_bump_{key}")
     except Exception:
         pass
 
