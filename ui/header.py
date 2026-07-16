@@ -56,6 +56,44 @@ def render_header() -> None:
 
 # ---------------- Price ticker strip ----------------
 TICKER_STRIP = ["SPY", "QQQ", "IWM", "DIA", "VIX", "AAPL", "MSFT", "NVDA", "TSLA"]
+# Market context always leads the tape; today's top scan picks follow.
+TICKER_ANCHORS = ["SPY", "QQQ"]
+
+
+def top_scan_symbols(limit: int = 8) -> list[str]:
+    """Top tickers from the latest scan, highest BreakoutScore first."""
+    try:
+        df = st.session_state.get("results_df")
+        if df is None or getattr(df, "empty", True) or "Ticker" not in getattr(df, "columns", []):
+            return []
+        work = df
+        if "BreakoutScore" in df.columns:
+            import pandas as pd
+
+            scores = pd.to_numeric(df["BreakoutScore"], errors="coerce")
+            work = df.assign(_score=scores).sort_values("_score", ascending=False)
+        out: list[str] = []
+        for t in work["Ticker"].tolist():
+            s = str(t).strip().upper()
+            if s and s not in out:
+                out.append(s)
+            if len(out) >= limit:
+                break
+        return out
+    except Exception:
+        return []
+
+
+def default_ticker_symbols() -> list[str]:
+    """Market anchors + today's top scan picks; static strip when no scan yet."""
+    picks = top_scan_symbols()
+    if not picks:
+        return TICKER_STRIP
+    out = list(TICKER_ANCHORS)
+    for s in picks:
+        if s not in out:
+            out.append(s)
+    return out
 
 
 @st.cache_data(ttl=180, show_spinner=False)
@@ -104,8 +142,12 @@ def _fetch_ticker_quotes(symbols: list[str]) -> list[dict[str, float]]:
 
 
 def render_price_ticker(symbols: list[str] | None = None) -> None:
-    """Render the scrolling ticker strip."""
-    data = _fetch_ticker_quotes(symbols or TICKER_STRIP)
+    """Render the scrolling ticker strip.
+
+    Defaults to market anchors + today's top scan picks so the tape reflects
+    what the scanner just surfaced; falls back to the static strip pre-scan.
+    """
+    data = _fetch_ticker_quotes(symbols or default_ticker_symbols())
     if not data:
         return
 
