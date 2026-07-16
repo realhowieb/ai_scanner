@@ -1,8 +1,25 @@
 from __future__ import annotations
 
+import re
 from typing import Callable, List, Optional, Tuple
 
 import streamlit as st
+
+# One or more tickers from free text: split on commas/whitespace, validate the
+# shape, upper-case, and de-dupe while preserving order. Lets the Add field take
+# either "AAPL" or "VLO, SKHY, KLAC" without storing the whole string as one row.
+_TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,7}$")
+
+
+def _parse_symbols(text: object, *, cap: int = 200) -> List[str]:
+    seen: List[str] = []
+    for tok in re.split(r"[,\s]+", str(text or "").strip().upper()):
+        tok = tok.strip()
+        if tok and _TICKER_RE.match(tok) and tok not in seen:
+            seen.append(tok)
+            if len(seen) >= cap:
+                break
+    return seen
 
 try:
     import pandas as pd  # type: ignore
@@ -364,7 +381,9 @@ def handle_active_watchlist_actions(
 
     sym = str(symbol or "").strip().upper()
     if add_symbol:
-        if not sym:
+        # Accept a single ticker or a comma/space-separated list in one go.
+        syms = _parse_symbols(symbol)
+        if not syms:
             banner("Please enter a ticker to add.", "warning")
         else:
             active_watchlist_id = st.session_state.get("active_watchlist_id")
@@ -374,13 +393,17 @@ def handle_active_watchlist_actions(
                 try:
                     existing = get_watchlist_tickers(active_watchlist_id, username) or []
                     norm_existing = {str(t).strip().upper() for t in existing}
-                    if sym not in norm_existing:
-                        updated = sorted(norm_existing | {sym})
+                    added = [s for s in syms if s not in norm_existing]
+                    if added:
+                        updated = sorted(norm_existing | set(added))
                         set_watchlist_tickers(active_watchlist_id, username, list(updated))
                         st.session_state["active_watchlist_tickers"] = list(updated)
-                        banner(f"Added {sym} to the active watchlist.", "success")
+                        if len(added) == 1:
+                            banner(f"Added {added[0]} to the active watchlist.", "success")
+                        else:
+                            banner(f"Added {len(added)} tickers: {', '.join(added)}.", "success")
                     else:
-                        banner(f"{sym} is already in the active watchlist.", "info")
+                        banner("Those tickers are already in the active watchlist.", "info")
                 except Exception:
                     banner("Failed to update active watchlist (database unavailable).", "error")
 
