@@ -144,15 +144,30 @@ def _format_delta(value: float | None, suffix: str = "") -> str:
     return f"{sign}{value:.1f}{suffix}"
 
 
+def _delta_display(value: float | None) -> str:
+    """Δ-cell text: '—' for no/zero change, signed otherwise (avoids '+0.0' noise)."""
+    if value is None:
+        return ""
+    if abs(value) < 0.05:
+        return "—"
+    return f"{value:+.1f}"
+
+
 def _change_summary(pre_delta: float | None, ai_delta: float | None, score_delta: float | None) -> str:
+    present = [d for d in (pre_delta, ai_delta, score_delta) if d is not None]
+    if not present:
+        return "No comparable model metrics."
+    # All present deltas are effectively zero → say so once, don't recite "0.0".
+    if all(abs(d) < 0.05 for d in present):
+        return "No change since the previous saved scan."
     parts = []
-    if pre_delta is not None:
+    if pre_delta is not None and abs(pre_delta) >= 0.05:
         parts.append(f"PreBreakout {_format_delta(pre_delta, ' pts')}")
-    if ai_delta is not None:
+    if ai_delta is not None and abs(ai_delta) >= 0.05:
         parts.append(f"AI {_format_delta(ai_delta, ' pts')}")
-    if score_delta is not None:
+    if score_delta is not None and abs(score_delta) >= 0.05:
         parts.append(f"Score {_format_delta(score_delta)}")
-    return "; ".join(parts) or "No comparable model metrics."
+    return "; ".join(parts)
 
 
 def _movement_status(pre_delta: float | None, ai_delta: float | None, score_delta: float | None) -> str:
@@ -330,17 +345,21 @@ def render_watchlist_intelligence(tickers: List[str]) -> None:
         )
         visible_movers = filter_watchlist_movers(movers, include_stable=include_stable)
         if visible_movers:
+            # Render Δ as text so a zero shows as '—' rather than a noisy '+0.0';
+            # NumberColumn's printf format can't suppress the sign on zero.
+            display_movers = []
+            for row in visible_movers:
+                out = dict(row)
+                out["Pre Δ"] = _delta_display(row.get("Pre Δ"))
+                out["AI Δ"] = _delta_display(row.get("AI Δ"))
+                out["Score Δ"] = _delta_display(row.get("Score Δ"))
+                display_movers.append(out)
             try:
                 st.dataframe(
-                    _dataframe(visible_movers),
+                    _dataframe(display_movers),
                     width="stretch",
                     hide_index=True,
                     key="watchlist_intelligence_movers",
-                    column_config={
-                        "Pre Δ": st.column_config.NumberColumn(format="%+.1f"),
-                        "AI Δ": st.column_config.NumberColumn(format="%+.1f"),
-                        "Score Δ": st.column_config.NumberColumn(format="%+.1f"),
-                    },
                 )
             except (RuntimeError, TypeError, ValueError, OSError, ImportError, AttributeError):
                 st.write(visible_movers)

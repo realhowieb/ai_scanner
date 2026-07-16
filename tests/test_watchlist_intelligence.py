@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, patch
 
 with patch.dict("sys.modules", {"streamlit": MagicMock()}):
     from ui.watchlist_intelligence import (
+        _change_summary,
+        _delta_display,
         classify_watchlist_signal,
         filter_watchlist_movers,
         summarize_watchlist_intelligence,
@@ -88,6 +90,26 @@ class WatchlistIntelligenceTests(unittest.TestCase):
             [row["Ticker"] for row in filter_watchlist_movers(rows, include_stable=True)],
             ["HOT", "FLAT", "GONE"],
         )
+
+
+class StableRowDisplayTests(unittest.TestCase):
+    def test_delta_display_hides_zero_and_none(self):
+        self.assertEqual(_delta_display(0.0), "—")   # not "+0.0"
+        self.assertEqual(_delta_display(None), "")
+        self.assertEqual(_delta_display(1.24), "+1.2")
+        self.assertEqual(_delta_display(-0.4), "-0.4")
+
+    def test_change_summary_collapses_all_zero_to_one_line(self):
+        self.assertEqual(
+            _change_summary(0.0, 0.0, 0.0),
+            "No change since the previous saved scan.",
+        )
+
+    def test_change_summary_lists_only_nonzero_moves(self):
+        self.assertEqual(_change_summary(1.2, 0.0, -3.0), "PreBreakout +1.2 pts; Score -3.0")
+
+    def test_change_summary_no_metrics(self):
+        self.assertEqual(_change_summary(None, None, None), "No comparable model metrics.")
 
 
 if __name__ == "__main__":
