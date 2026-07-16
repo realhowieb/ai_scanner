@@ -30,6 +30,15 @@ class ParseSymbolsTest(unittest.TestCase):
     def test_dotted_symbol_allowed(self):
         self.assertEqual(self._parse("BRK.B"), ["BRK.B"])
 
+    def test_bulk_edit_with_duplicates_is_deduped(self):
+        # Save-list path: a pasted box carrying duplicate/garbage-derived tokens
+        # must collapse to unique symbols, not re-store duplicates.
+        box = "ABT,GE,PLD,TSM,UAL,UNH,USB,USB,PLD,ABT,GE,TSM,UNH,UAL"
+        self.assertEqual(
+            self._parse(box),
+            ["ABT", "GE", "PLD", "TSM", "UAL", "UNH", "USB"],
+        )
+
     def test_empty_and_none(self):
         self.assertEqual(self._parse(""), [])
         self.assertEqual(self._parse(None), [])

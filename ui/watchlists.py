@@ -309,14 +309,20 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
                     "Remove", key="btn_remove_watchlist_symbol", width="stretch",
                     disabled=not remove_pick,
                 )
+            # Key the box by a signature of the current list so it re-seeds when
+            # the list changes (e.g. after a self-heal) instead of a sticky
+            # widget value pinning stale/garbage text.
+            edit_sig = "-".join(watchlist_tickers)
             edited = st.text_area(
                 "Bulk edit (comma-separated)",
                 value=",".join(watchlist_tickers),
-                key="wl_tickers_edit",
+                key=f"wl_tickers_edit_{edit_sig}",
                 help="Paste a full list to replace the watchlist contents.",
             )
             if st.button("Save list", key="wl_save_tickers"):
-                tickers = [t.strip().upper() for t in edited.split(",") if t.strip()]
+                # Parse splits on commas/whitespace, validates, upper-cases, and
+                # de-dupes — so a pasted list with dupes can't recreate garbage.
+                tickers = _parse_symbols(edited)
                 set_watchlist_tickers(active_id, st.session_state.get("username", ""), tickers)
                 st.success("Watchlist updated.")
                 st.rerun()
