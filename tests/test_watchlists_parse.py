@@ -39,5 +39,41 @@ class ParseSymbolsTest(unittest.TestCase):
         self.assertEqual(len(self._parse(many, cap=200)), 200)
 
 
+@unittest.skipUnless(_STREAMLIT, "ui.watchlists imports streamlit")
+class NormalizeStoredTickersTest(unittest.TestCase):
+    def test_legacy_concatenated_row_is_flattened_and_healed(self):
+        import ui.watchlists as wl
+
+        # A watchlist that already contains the pre-fix garbage row.
+        stored = ["ABT", "TSM", "UNH", "GE", "PLD", "UAL", "USB",
+                  "USB,PLD,ABT,GE,TSM,UNH,UAL"]
+        writes = []
+        orig = wl.set_watchlist_tickers
+        wl.set_watchlist_tickers = lambda wid, user, tickers: writes.append(tickers)
+        try:
+            cleaned = wl._normalize_stored_tickers(stored, 1, "u@example.com")
+        finally:
+            wl.set_watchlist_tickers = orig
+
+        # Garbage row dropped; each symbol appears once, order preserved.
+        self.assertEqual(cleaned, ["ABT", "TSM", "UNH", "GE", "PLD", "UAL", "USB"])
+        # Self-heal: the cleaned list was written back exactly once.
+        self.assertEqual(writes, [["ABT", "TSM", "UNH", "GE", "PLD", "UAL", "USB"]])
+
+    def test_already_clean_list_is_not_rewritten(self):
+        import ui.watchlists as wl
+
+        writes = []
+        orig = wl.set_watchlist_tickers
+        wl.set_watchlist_tickers = lambda wid, user, tickers: writes.append(tickers)
+        try:
+            cleaned = wl._normalize_stored_tickers(["AAPL", "MSFT"], 1, "u")
+        finally:
+            wl.set_watchlist_tickers = orig
+
+        self.assertEqual(cleaned, ["AAPL", "MSFT"])
+        self.assertEqual(writes, [])  # no needless DB write
+
+
 if __name__ == "__main__":
     unittest.main()

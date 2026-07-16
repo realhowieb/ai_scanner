@@ -21,6 +21,30 @@ def _parse_symbols(text: object, *, cap: int = 200) -> List[str]:
                 break
     return seen
 
+
+def _normalize_stored_tickers(
+    stored: Optional[List[str]], watchlist_id: object, username: str
+) -> List[str]:
+    """Flatten legacy malformed entries (e.g. a whole 'A,B,C' string saved as one
+    ticker before the Add-field fix) into individual symbols, de-duped in order.
+
+    Self-heals: when normalization actually changes the list, the cleaned
+    version is written back so the garbage row disappears for good.
+    """
+    stored = stored or []
+    cleaned: List[str] = []
+    for entry in stored:
+        for sym in _parse_symbols(entry):
+            if sym not in cleaned:
+                cleaned.append(sym)
+    orig = [str(t).strip().upper() for t in stored]
+    if cleaned != orig:
+        try:
+            set_watchlist_tickers(watchlist_id, username, cleaned)
+        except Exception:
+            pass  # display still uses the cleaned list even if the write fails
+    return cleaned
+
 try:
     import pandas as pd  # type: ignore
 except Exception:  # pragma: no cover
@@ -68,7 +92,9 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
             )
         active = options[selected_label]
         active_id = active["id"]
-        active_tickers = get_watchlist_tickers(active_id, user_id)
+        active_tickers = _normalize_stored_tickers(
+            get_watchlist_tickers(active_id, user_id), active_id, user_id
+        )
     with h3:
         try:
             pop = st.popover("＋ New")
