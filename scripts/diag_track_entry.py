@@ -89,10 +89,10 @@ def main() -> None:
 
     # Per-day 5D excess distribution: regime blip vs persistent drag.
     print("\n" + "=" * 78)
-    print("5D per-day excess (prebreakout, close entry) — oldest→newest")
+    print("5D per-day excess (breakout, close entry) — oldest→newest")
     print("=" * 78)
     res = compute_track_record(horizon_days=5, entry_mode="close") or {}
-    daily = (res.get("prebreakout") or {}).get("daily") or []
+    daily = (res.get("breakout") or {}).get("daily") or []
     if not daily:
         print("  (no daily series)")
     else:
