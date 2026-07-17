@@ -35,6 +35,25 @@ class ForwardReturnTests(unittest.TestCase):
         r = tr._forward_return(bars, dt.date(2025, 1, 4), horizon_days=2)
         self.assertAlmostEqual(r, (103.0 - 100.0) / 100.0)
 
+    def test_open_entry_captures_signal_day_move(self):
+        # Open-entry enters at the signal-day OPEN; close-entry misses that move.
+        idx = pd.date_range(start="2025-01-06", periods=4, freq="B")
+        bars = pd.DataFrame(
+            {"Open": [100.0, 108.0, 109.0, 110.0], "Close": [107.0, 108.0, 109.0, 110.0]},
+            index=idx,
+        )
+        rd = dt.date(2025, 1, 6)
+        close_r = tr._forward_return(bars, rd, horizon_days=1, entry_mode="close")
+        open_r = tr._forward_return(bars, rd, horizon_days=1, entry_mode="open")
+        self.assertAlmostEqual(close_r, (108.0 - 107.0) / 107.0)  # close→close
+        self.assertAlmostEqual(open_r, (108.0 - 100.0) / 100.0)   # open→close
+        self.assertGreater(open_r, close_r)
+
+    def test_open_entry_falls_back_to_close_when_no_open_column(self):
+        bars = _bars("2025-01-06", [100.0, 102.0, 103.0])
+        r = tr._forward_return(bars, dt.date(2025, 1, 6), horizon_days=1, entry_mode="open")
+        self.assertAlmostEqual(r, (102.0 - 100.0) / 100.0)  # uses Close, no crash
+
     def test_incomplete_forward_window_returns_none(self):
         bars = _bars("2025-01-06", [100.0, 102.0, 103.0])
         self.assertIsNone(tr._forward_return(bars, dt.date(2025, 1, 7), horizon_days=5))

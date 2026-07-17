@@ -104,8 +104,17 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
     return out
 
 
-def _forward_return(bars, run_date, horizon_days: int) -> Optional[float]:
-    """Return over `horizon` trading days from the first bar on/after run_date."""
+def _forward_return(bars, run_date, horizon_days: int, entry_mode: str = "close") -> Optional[float]:
+    """Return over `horizon` trading days from the first bar on/after run_date.
+
+    entry_mode:
+      "close" — enter at the signal-day close (default; original behavior).
+      "open"  — enter at the signal-day open. For premarket signals this is the
+                realistic actionable fill and captures the signal-day move,
+                which the close-entry convention discards.
+    Exit is always the close `horizon_days` bars later. The same mode is applied
+    to the benchmark by the caller, so excess stays apples-to-apples.
+    """
     try:
         closes = bars["Close"].dropna()
         if closes.empty:
@@ -122,7 +131,13 @@ def _forward_return(bars, run_date, horizon_days: int) -> Optional[float]:
         exit_pos = entry_pos + int(horizon_days)
         if exit_pos >= len(closes):
             return None
-        entry = float(closes.iloc[entry_pos])
+        if entry_mode == "open" and "Open" in getattr(bars, "columns", []):
+            entry_series = bars["Open"].reindex(closes.index)
+            entry = float(entry_series.iloc[entry_pos])
+            if entry != entry or entry <= 0:  # NaN/invalid open → fall back to close
+                entry = float(closes.iloc[entry_pos])
+        else:
+            entry = float(closes.iloc[entry_pos])
         exit_ = float(closes.iloc[exit_pos])
         if entry <= 0:
             return None
@@ -143,6 +158,7 @@ def compute_track_record(
     horizon_days: int = 5,
     lookback_days: int = 45,
     max_snapshots: int = 30,
+    entry_mode: str = "close",
 ) -> Optional[Dict[str, Dict[str, Any]]]:
     """A/B forward performance of both rankings across recent snapshots.
 
@@ -190,7 +206,7 @@ def compute_track_record(
         daily: List[tuple] = []  # (run_date, mean_excess, n_picks)
         runs_counted = 0
         for run_date, picks in per_snapshot:
-            spy_ret = _forward_return(spy_bars, run_date, horizon_days)
+            spy_ret = _forward_return(spy_bars, run_date, horizon_days, entry_mode)
             if spy_ret is None:
                 continue
             day_vals: List[float] = []
@@ -198,7 +214,7 @@ def compute_track_record(
                 bars = _bars_for(bars_by_symbol, sym)
                 if bars is None:
                     continue
-                r = _forward_return(bars, run_date, horizon_days)
+                r = _forward_return(bars, run_date, horizon_days, entry_mode)
                 if r is not None:
                     excess.append(r - spy_ret)
                     day_vals.append(r - spy_ret)
