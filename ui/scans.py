@@ -143,8 +143,9 @@ def render_scan_controls(
         add_watchlist_btn,
         remove_watchlist_btn,
         watchlist_add_symbol,
+        watchlist_scan_all,
     ) = st.session_state.get(
-        "_wl_tools_state", (False, False, False, False, False, "")
+        "_wl_tools_state", (False, False, False, False, False, "", False)
     )
 
     single_ticker, show_chart_btn, run_single_scan_btn = render_single_ticker_panel()
@@ -195,9 +196,20 @@ def render_scan_controls(
         tickers: List[str],
         label: str,
         profile_override: Optional[str] = None,
+        bypass_filters: bool = False,
     ):
         # Final safety net: regardless of caller, sanitize tickers before scanning.
         tickers = sanitize_universe_symbols(tickers)
+        # "Score all" mode (watchlist): run the models on every symbol regardless
+        # of the sidebar Min-Gap / price / Unusual-Volume screens, so nothing
+        # silently drops to "Not in latest scan".
+        eff_unusual_vol = False if bypass_filters else unusual_vol
+        eff_min_gap = 0.0 if bypass_filters else min_gap
+        eff_min_price = 0.0 if bypass_filters else min_price
+        eff_max_price = 1_000_000.0 if bypass_filters else max_price
+        eff_apply_gap_filter = False if bypass_filters else apply_gap_filter
+        # Don't let Top-N cap a "score all" run below the watchlist size.
+        eff_top_n = max(top_n, len(tickers)) if bypass_filters else top_n
         def _run_scan_body():
             n_input = len(tickers)
             t0 = time.time()
@@ -315,20 +327,23 @@ def render_scan_controls(
                 # Apply the sidebar "Min Dollar Volume" as a liquidity floor so
                 # in-app scans screen out illiquid micro-caps (same filter the
                 # scheduled cron uses).
-                sidebar_min_dollar_vol = float(st.session_state.get("min_dollar_vol") or 0.0)
+                sidebar_min_dollar_vol = (
+                    0.0 if bypass_filters
+                    else float(st.session_state.get("min_dollar_vol") or 0.0)
+                )
 
                 df = run_manual_scan_execution(
                     runner=run_breakout_scan,
                     tickers=list(tickers),
                     premarket=premarket,
                     afterhours=afterhours,
-                    unusual_volume=unusual_vol,
-                    min_gap=min_gap,
-                    min_price=min_price,
-                    max_price=max_price,
-                    top_n=top_n,
+                    unusual_volume=eff_unusual_vol,
+                    min_gap=eff_min_gap,
+                    min_price=eff_min_price,
+                    max_price=eff_max_price,
+                    top_n=eff_top_n,
                     profile=effective_profile,
-                    apply_gap_filter=apply_gap_filter,
+                    apply_gap_filter=eff_apply_gap_filter,
                     diagnostics=engine_diagnostics,
                     progress_cb=progress_cb,
                     snapshot_id=snapshot_id,
@@ -423,6 +438,7 @@ def render_scan_controls(
         username=username,
         do_scan=do_scan,
         banner=_banner,
+        scan_all=watchlist_scan_all,
     )
 
     if run_sp500_btn:

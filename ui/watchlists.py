@@ -272,6 +272,13 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
             "🔎 Run Watchlist Scan", key="btn_scan_watchlist", width="stretch",
             disabled=not has_watchlist,
         )
+        scan_all = st.checkbox(
+            "Score every ticker (ignore filters)",
+            key="wl_scan_all",
+            help="Run the models on all watchlist names regardless of the sidebar "
+            "Min Gap / price / Unusual-Volume filters, so none silently drop out.",
+            disabled=not has_watchlist,
+        )
     with a4:
         view_watchlist_btn = st.button(
             "View as table", key="btn_view_watchlist", width="stretch",
@@ -364,6 +371,7 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
         bool(add_watchlist_btn),
         bool(remove_watchlist_btn),
         str(symbol or ""),
+        bool(scan_all),
     )
 
 
@@ -378,6 +386,7 @@ def handle_active_watchlist_actions(
     username: str,
     do_scan: ScanFn,
     banner: BannerFn,
+    scan_all: bool = False,
 ) -> None:
     """Handle center-panel watchlist actions used by the scan page."""
     if view_watchlist:
@@ -397,7 +406,10 @@ def handle_active_watchlist_actions(
         if not tickers:
             banner("Active watchlist has no tickers to scan.", "warning")
         else:
-            do_scan(tickers, f"Watchlist ({len(tickers)} tickers)")
+            label = f"Watchlist ({len(tickers)} tickers)"
+            if scan_all:
+                label += " · all"
+            do_scan(tickers, label, bypass_filters=scan_all)
 
     if clear_watchlist:
         active_watchlist_id = st.session_state.get("active_watchlist_id")
