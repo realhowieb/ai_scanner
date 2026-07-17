@@ -27,4 +27,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           AI_SCANNER_SQLITE_FALLBACK: "false"
+          # Some diagnostics (e.g. track-record forward returns) need price bars.
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
         run: python "scripts/${{ inputs.script }}"
