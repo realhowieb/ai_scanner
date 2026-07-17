@@ -68,6 +68,48 @@ class ForwardReturnTests(unittest.TestCase):
 
 
 @requires_pandas
+class EligibleSnapshotsTests(unittest.TestCase):
+    """Dedup same-day snapshots and fence out pre-epoch runs."""
+
+    def _run(self, runs):
+        # Complete forward window + within lookback: base runs a few days back.
+        payloads = {r["id"]: [{"Ticker": "AAA", "BreakoutScore": 1.0}] for r in runs}
+
+        def fake_normalize(raw):
+            return pd.DataFrame(raw) if raw else None
+
+        with mock.patch("db.runs.list_snapshot_runs", return_value=runs), \
+             mock.patch("db.runs.load_many_run_results", return_value=payloads), \
+             mock.patch("ui.app_runtime.normalize_results_to_df", side_effect=fake_normalize):
+            return tr._eligible_snapshots(horizon_days=5, lookback_days=45, max_snapshots=30)
+
+    def test_same_day_snapshots_deduped_and_preepoch_fenced(self):
+        # Build now-relative dates so the test isn't tied to a wall-clock era:
+        # base = 13 days ago (inside the 5D "complete window" + 45d lookback).
+        now = dt.datetime.now(dt.timezone.utc)
+        base = (now - dt.timedelta(days=13)).date()
+        nxt = (now - dt.timedelta(days=12)).date()
+        pre = base - dt.timedelta(days=1)
+
+        def at(d, h):
+            return dt.datetime(d.year, d.month, d.day, h, tzinfo=dt.timezone.utc)
+
+        runs = [
+            # three snapshots on the SAME day → collapse to one
+            {"id": 1, "created_at": at(base, 20)},
+            {"id": 2, "created_at": at(base, 13)},
+            {"id": 3, "created_at": at(base, 6)},
+            {"id": 4, "created_at": at(nxt, 12)},   # distinct day → kept
+            {"id": 5, "created_at": at(pre, 12)},   # pre-epoch → fenced
+        ]
+        with mock.patch.object(tr, "SCORE_EPOCH", base):
+            out = self._run(runs)
+        dates = sorted(d for d, _df in out)
+        self.assertEqual(dates, [base, nxt])          # one per day, pre fenced
+        self.assertTrue(all(d >= base for d in dates))
+
+
+@requires_pandas
 class RankedSymbolsTests(unittest.TestCase):
     def _df(self):
         return pd.DataFrame(

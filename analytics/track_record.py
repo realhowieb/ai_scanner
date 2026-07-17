@@ -8,13 +8,16 @@ render. Deterministic and best-effort; returns None rather than raising.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from statistics import mean, median
 from typing import Any, Dict, List, Optional
 
 TOP_N = 5
 BENCHMARK = "SPY"
 RANKINGS = ("breakout", "prebreakout")
+# Snapshots before this date predate the BreakoutScore clipping fix; including
+# them poisons forward-return stats. Keep in sync with ui/alert_preview.py.
+SCORE_EPOCH = date(2026, 7, 1)
 
 
 def _symbol_column(df) -> Optional[str]:
@@ -73,6 +76,7 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
         return []
 
     chosen: List[dict] = []
+    seen_dates: set = set()
     for r in runs:  # newest-first
         created = r.get("created_at")
         if not isinstance(created, datetime):
@@ -83,6 +87,19 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
             break
         if created > complete_before:
             continue
+        run_date = created.date()
+        # Fence out pre-epoch snapshots (they carry the old un-clipped
+        # BreakoutScore ceiling; mixing them in poisons the track record).
+        if run_date < SCORE_EPOCH:
+            continue
+        # One snapshot per trading day. Multiple same-day snapshots (premarket /
+        # regular / postmarket sessions + forced runs) share near-identical picks
+        # and would otherwise be counted as independent observations, inflating n
+        # and letting a single bad day dominate. Newest-first, so the first seen
+        # for a date is that day's latest (most complete) snapshot.
+        if run_date in seen_dates:
+            continue
+        seen_dates.add(run_date)
         r["_created"] = created
         chosen.append(r)
         if len(chosen) >= max_snapshots:
