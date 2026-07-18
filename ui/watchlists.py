@@ -153,12 +153,50 @@ def _render_watchlist_tiles(tickers: List[str], per_row: int = 5, max_tiles: int
     if len(tickers) > max_tiles:
         st.caption(f"Showing the first {max_tiles} of {len(tickers)} names.")
 
+_WATCHLIST_DF_COLUMNS = (
+    "Symbol", "Name", "Last", "Change", "% Change", "Prev Close", "Open", "High", "Low",
+)
+
+
 def build_watchlist_df(tickers: List[str]):
-    """Build a rich watchlist DataFrame for the center 'View Watchlist' table."""
+    """Watchlist quote table for the center 'View Watchlist' view.
+
+    Alpaca-first (one batched snapshot call), consistent with the rest of the
+    app's data layer and fast. Falls back to the per-ticker yfinance path only
+    when Alpaca returns nothing — yfinance is flaky, rate-limited, and disabled
+    in some sessions, and its get_info() name lookup is slow per ticker.
+    """
     frame_mod = pd
     if frame_mod is None:
         import pandas as frame_mod  # type: ignore
 
+    syms = [str(s).strip().upper() for s in tickers if str(s).strip()]
+
+    # --- Alpaca batched quotes (preferred) ---
+    try:
+        from market_data import get_latest_quotes
+
+        quotes = get_latest_quotes(syms) or {}
+    except Exception:
+        quotes = {}
+    if quotes:
+        rows = []
+        for sym in syms:
+            q = quotes.get(sym) or {}
+            last = q.get("last")
+            prev = q.get("prev_close")
+            change = change_pct = None
+            if last is not None and prev not in (None, 0):
+                change = float(last) - float(prev)
+                change_pct = (change / float(prev)) * 100.0
+            rows.append({
+                "Symbol": sym, "Name": None, "Last": last, "Change": change,
+                "% Change": change_pct, "Prev Close": prev,
+                "Open": q.get("open"), "High": q.get("high"), "Low": q.get("low"),
+            })
+        return frame_mod.DataFrame(rows, columns=list(_WATCHLIST_DF_COLUMNS))
+
+    # --- yfinance fallback (only when Alpaca returned nothing) ---
     try:
         import yfinance as yf  # type: ignore
     except Exception:
