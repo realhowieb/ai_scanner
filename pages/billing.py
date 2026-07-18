@@ -307,6 +307,12 @@ def render_billing_page() -> None:
     email = _logged_in_email()
     if not email or "@" not in email:
         st.warning("Please sign in before upgrading. Upgrades are tied to your account.")
+        # TEMP DIAGNOSTIC (remove after one look): reveal what the gate is seeing.
+        _raw = st.session_state.get("username")
+        _dn = st.session_state.get("display_name")
+        st.caption(
+            f"🔧 debug — username={_raw!r} · display_name={_dn!r} · resolved={email!r}"
+        )
         st.stop()
 
     st.info(f"Upgrading account: **{email}**")
