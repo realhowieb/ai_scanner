@@ -132,9 +132,56 @@ def save_daily_snapshot(
     row_count: Optional[int] = None,
     duration_sec: Optional[float] = None,
 ) -> None:
+    """Save (or refresh) the daily snapshot for this (name, username, UTC day).
+
+    Idempotent per calendar day: if a snapshot for the same universe/user
+    already exists today, update it in place (latest wins) instead of inserting
+    a duplicate. Multiple in-app scans of the same universe before noon UTC used
+    to each create a snapshot row, inflating every per-day analytic (track
+    record, calendar heatmap). Best-effort — any failure falls back to a plain
+    insert so a snapshot is never lost.
     """
-    Convenience wrapper to save a daily snapshot.
-    """
+    try:
+        from datetime import datetime, timezone
+
+        day_start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        conn = get_neon_conn()
+        if conn is not None:
+            ensure_neon_runs_schema(conn)
+            cur = conn.cursor()
+            if username is None:
+                user_clause, user_params = "username IS NULL", ()
+            else:
+                user_clause, user_params = "username = %s", (username,)
+            cur.execute(
+                f"""
+                UPDATE runs
+                   SET results_json = %s, row_count = %s, duration_sec = %s,
+                       name = %s, created_at = NOW()
+                 WHERE id = (
+                     SELECT id FROM runs
+                      WHERE is_snapshot = TRUE AND label = 'daily_snapshot'
+                        AND name = %s AND {user_clause}
+                        AND created_at >= %s
+                      ORDER BY created_at DESC
+                      LIMIT 1
+                 )
+                RETURNING id
+                """,
+                (results_json, row_count, duration_sec, name, name,
+                 *user_params, day_start),
+            )
+            updated = cur.fetchone()
+            conn.commit()
+            cur.close()
+            conn.close()
+            if updated:
+                return
+    except Exception:
+        pass  # fall through to a plain insert below
+
     save_run(
         name=name,
         results_json=results_json,
