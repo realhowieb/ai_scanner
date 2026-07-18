@@ -29,6 +29,70 @@ def _cached_sequences(user_id: str):
     return outcome_sequences_for_user(user_id)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_edge(user_id: str):
+    """Which alert TYPES pay off, cached 5 min."""
+    from db.alert_outcomes import scorecards_by_type
+
+    return scorecards_by_type(user_id)
+
+
+_ALERT_TYPE_LABELS = {
+    "breakout": "🚀 Breakout",
+    "watchlist": "👁️ Watchlist",
+    "price": "🎯 Price",
+    "move": "⚡ Move",
+    "rvol": "📊 Rel. volume",
+}
+
+
+def render_alert_edge(user_id: str, min_fires: int = 5) -> None:
+    """Edge scorecard: hit rate + avg return by alert type. Never raises.
+
+    Sample-gated (>=min_fires scored fires per type) so a couple of lucky fires
+    can't masquerade as an edge. Sorted best hit-rate first.
+    """
+    try:
+        edge = _cached_edge(user_id)
+    except Exception:
+        return
+    rows = [
+        (t, d) for t, d in edge.items()
+        if int(d.get("fires", 0)) >= min_fires
+    ]
+    if not rows:
+        return
+    rows.sort(key=lambda kv: kv[1].get("hit_rate", 0.0), reverse=True)
+
+    try:
+        try:
+            from db.alert_outcomes import HIT_TARGET_PCT, HORIZON_DAYS
+        except Exception:
+            HIT_TARGET_PCT, HORIZON_DAYS = 5.0, 3
+
+        with st.expander("📈 Which alerts pay off (by type)", expanded=False):
+            st.caption(
+                f"Share of fires that reached +{HIT_TARGET_PCT:g}% within "
+                f"{HORIZON_DAYS} trading days, and the average {HORIZON_DAYS}-day "
+                "return after firing. Educational only — past performance isn't "
+                "indicative of future results."
+            )
+            for alert_type, d in rows:
+                label = _ALERT_TYPE_LABELS.get(alert_type, alert_type)
+                hit_rate = d.get("hit_rate", 0.0)
+                avg = d.get("avg_return_pct")
+                c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+                c1.markdown(f"**{label}**")
+                c2.metric("Hit rate", f"{hit_rate:.0%}")
+                c3.metric(
+                    f"Avg {HORIZON_DAYS}d",
+                    "—" if avg is None else f"{avg:+.1f}%",
+                )
+                c4.metric("Fires", int(d.get("fires", 0)))
+    except Exception:
+        pass
+
+
 def dot_strip(hits: list) -> str:
     """Hit/miss sequence as a dot strip, oldest -> newest (🟢 hit, ⚪ miss)."""
     return "".join("🟢" if h else "⚪" for h in hits)
@@ -281,6 +345,9 @@ def render_alerts_panel(
             sequences = _cached_sequences(user_id)
         except Exception:
             scorecards, sequences, HIT_TARGET_PCT, HORIZON_DAYS = {}, {}, 5.0, 3
+
+        # Edge scorecard: which alert TYPES actually pay off (aggregate view).
+        render_alert_edge(user_id)
 
         st.markdown("**Your alerts**")
         for index, a in enumerate(existing):

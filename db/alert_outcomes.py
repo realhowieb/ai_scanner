@@ -164,6 +164,58 @@ def outcome_sequences_for_user(user_id: str, last_n: int = 10) -> Dict[int, List
     return out
 
 
+def scorecards_by_type(user_id: str) -> Dict[str, Dict[str, Any]]:
+    """Aggregate scored outcomes by alert TYPE — the 'which kind of alert pays
+    off' edge scorecard.
+
+    Joins outcomes to user_alerts for the type. Returns
+    {alert_type: {"fires": n, "hits": k, "hit_rate": k/n,
+                  "avg_return_pct": x, "avg_max_gain_pct": y}} for each type with
+    at least one scored (hit IS NOT NULL) outcome. Deleted alerts drop out of the
+    join and simply aren't counted.
+    """
+    conn = get_neon_conn()
+    if conn is None:
+        return {}
+    _ensure_schema(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT a.alert_type AS alert_type,
+               COUNT(*) AS fires,
+               COUNT(*) FILTER (WHERE o.hit) AS hits,
+               AVG(o.horizon_return_pct) AS avg_return_pct,
+               AVG(o.max_gain_pct) AS avg_max_gain_pct
+        FROM alert_outcomes o
+        JOIN user_alerts a ON a.id = o.alert_id
+        WHERE o.user_id = %s AND o.hit IS NOT NULL
+        GROUP BY a.alert_type
+        """,
+        (user_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    out: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        d = r if isinstance(r, dict) else {
+            "alert_type": r[0], "fires": r[1], "hits": r[2],
+            "avg_return_pct": r[3], "avg_max_gain_pct": r[4],
+        }
+        fires = int(d["fires"] or 0)
+        if fires <= 0:
+            continue
+        hits = int(d["hits"] or 0)
+        out[str(d["alert_type"])] = {
+            "fires": fires,
+            "hits": hits,
+            "hit_rate": hits / fires,
+            "avg_return_pct": float(d["avg_return_pct"]) if d["avg_return_pct"] is not None else None,
+            "avg_max_gain_pct": float(d["avg_max_gain_pct"]) if d["avg_max_gain_pct"] is not None else None,
+        }
+    return out
+
+
 def scorecards_for_user(user_id: str, last_n: int = 10) -> Dict[int, Dict[str, Any]]:
     """Per-alert aggregate over each alert's most recent scored fires.
 
