@@ -8,6 +8,10 @@ import streamlit as st
 # Brand logo: prefer the HSFinest.AI logo; fall back to the legacy asset so the
 # header never breaks if the new file hasn't been added yet.
 _LOGO_CANDIDATES = (
+    # Optimized 512px logo first (~83 KB vs ~1.1 MB) — same look, far faster
+    # first paint on the login page, especially on mobile. Full-res originals
+    # remain as fallbacks.
+    "assets/hsfailogo_transparent_opt.png",
     "assets/hsfailogo_transparent.png",
     "assets/hsfailogo.png",
     "assets/market_ai_logo_tighter.png",
