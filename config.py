@@ -3,6 +3,14 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import date
+
+# Snapshots before this date predate the BreakoutScore clipping fix; their
+# scores are on a different (un-clipped) scale, so including them poisons any
+# forward-return / track-record aggregate. Single source of truth — imported by
+# analytics.track_record and ui.alert_preview. Bump this only when a scoring
+# change invalidates earlier snapshots.
+SCORE_EPOCH = date(2026, 7, 1)
 
 
 def _get(name: str, default: str|None=None):

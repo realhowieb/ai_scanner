@@ -14,14 +14,9 @@ try:
 except Exception:  # pragma: no cover - headless envs; pure functions still work
     st = None  # type: ignore[assignment]
 
+from config import SCORE_EPOCH  # single source of truth
+
 _TOP_SCORES_PER_SNAPSHOT = 50
-
-# Snapshots saved before input clipping shipped carry absurd BreakoutScores
-# (observed up to 3289); mixing them into the distribution poisons the
-# median/max and the would-have-fired counts. The clipped ceiling is ~145.
-import datetime as _dt
-
-SCORE_EPOCH = _dt.date(2026, 7, 1)
 
 
 def _score_history_uncached(max_days: int = 12) -> List[Dict[str, Any]]:

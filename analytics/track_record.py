@@ -8,16 +8,15 @@ render. Deterministic and best-effort; returns None rather than raising.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from statistics import mean, median
 from typing import Any, Dict, List, Optional
+
+from config import SCORE_EPOCH  # single source of truth
 
 TOP_N = 5
 BENCHMARK = "SPY"
 RANKINGS = ("breakout", "prebreakout")
-# Snapshots before this date predate the BreakoutScore clipping fix; including
-# them poisons forward-return stats. Keep in sync with ui/alert_preview.py.
-SCORE_EPOCH = date(2026, 7, 1)
 
 
 def _symbol_column(df) -> Optional[str]:

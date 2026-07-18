@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
@@ -65,6 +66,29 @@ def _diag_exception(diagnostics: bool, context: str, exc: BaseException) -> None
 
 
 # --- DB cache helpers for admin full-universe scans ---
+def _db_cache_max_age_minutes(default: int = 30) -> int:
+    """Staleness window for the DB price cache.
+
+    Env var wins (operator-tunable and works in headless/non-Streamlit contexts
+    where session_state doesn't exist), then session_state, then the default.
+    NOTE: cached frames include today's still-forming daily bar, so a long
+    window can serve a stale intraday bar — keep this modest during market hours.
+    """
+    try:
+        raw = os.getenv("DB_PRICE_CACHE_MAX_AGE_MINUTES")
+        if raw is not None and str(raw).strip():
+            return max(0, int(float(raw)))
+    except (TypeError, ValueError):
+        pass
+    try:
+        ss = getattr(st, "session_state", None)
+        if ss:
+            return int(ss.get("db_price_cache_max_age_minutes", default))
+    except _ENGINE_BOUNDARY_ERRORS:
+        pass
+    return default
+
+
 def _db_cache_allowed_for_run(*, tickers_count: int, diagnostics: bool) -> bool:
     """Admin-only DB cache for full-universe scans.
 
@@ -429,7 +453,7 @@ def run_breakout_scan(
     if use_db_cache:
         cached, stale = _db_load_price_cache(
             tickers_plus_spy,
-            max_age_minutes=int(getattr(st.session_state, "get", lambda *_a, **_k: 30)("db_price_cache_max_age_minutes", 30)),
+            max_age_minutes=_db_cache_max_age_minutes(),
             diagnostics=diagnostics,
         )
         if cached:
