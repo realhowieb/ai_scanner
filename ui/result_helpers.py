@@ -21,6 +21,31 @@ def _cached_track_record(horizon_days: int = 5):
     return load_latest_track_record(horizon_days=horizon_days)
 
 
+def _render_track_record_building(runs_used: int, sample_size: int) -> None:
+    """Honest 'accumulating' state shown while the track record is still too thin.
+
+    Progress tracks whichever gate is furthest from being met (runs or sample),
+    so the bar reflects the real remaining wait.
+    """
+    try:
+        frac = min(
+            runs_used / TRACK_RECORD_MIN_RUNS,
+            sample_size / TRACK_RECORD_MIN_SAMPLE,
+            1.0,
+        )
+        frac = max(0.0, frac)
+        st.caption("📈 **Track record — building**")
+        st.progress(frac)
+        st.caption(
+            f"{runs_used} of {TRACK_RECORD_MIN_RUNS}+ scan days recorded "
+            f"(n={sample_size} of {TRACK_RECORD_MIN_SAMPLE}+ picks). Forward-return "
+            "stats vs SPY unlock once there's enough clean history — past "
+            "performance is not indicative of future results."
+        )
+    except Exception:
+        pass
+
+
 def render_track_record_badge() -> None:
     """Show the latest signal track record (forward-return performance).
 
@@ -33,9 +58,13 @@ def render_track_record_badge() -> None:
         tr = None
     if not tr or not tr.get("sample_size"):
         return
-    if int(tr.get("sample_size") or 0) < TRACK_RECORD_MIN_SAMPLE or int(
-        tr.get("runs_used") or 0
-    ) < TRACK_RECORD_MIN_RUNS:
+    runs_used = int(tr.get("runs_used") or 0)
+    sample_size = int(tr.get("sample_size") or 0)
+    if sample_size < TRACK_RECORD_MIN_SAMPLE or runs_used < TRACK_RECORD_MIN_RUNS:
+        # Data exists but isn't statistically meaningful yet. Rather than hide
+        # it (which reads as "broken"/missing), show an honest accumulating
+        # state so users know real stats are coming as clean history builds.
+        _render_track_record_building(runs_used, sample_size)
         return
     avg = tr.get("avg_return")
     win = tr.get("win_rate")
