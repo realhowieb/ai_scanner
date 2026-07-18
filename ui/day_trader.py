@@ -392,23 +392,17 @@ def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
     df["vs VWAP"] = df["vs VWAP %"].apply(
         lambda v: "▲ above" if (v is not None and v >= 0) else ("▼ below" if v is not None else "—")
     )
-    # After-hours change: last trade vs today's official close. Coerce to a
-    # numeric (float) column — a list of Python None/float is object dtype, and
-    # Streamlit's Arrow grid renders those None cells as the literal "None"
-    # instead of letting the "—" formatter apply. NaN in a float column renders
-    # cleanly via the styler.
+    # After-hours change: last trade vs today's official close. Rendered as a
+    # pre-formatted STRING column ("—" when missing). Streamlit's grid shows a
+    # NaN/None cell as the literal "None" regardless of the styler's formatter,
+    # so the only reliable way to get an em-dash is to put the display string in
+    # the data itself. Colored below by parsing the sign.
     if state in ("afterhours", "closed") and "close_today" in df.columns:
-        df["AH %"] = pd.to_numeric(
-            pd.Series(
-                [
-                    after_hours_pct(r.get("Last"), r.get("close_today"))
-                    for r in df.to_dict(orient="records")
-                ],
-                index=df.index,
-                dtype="float64",
-            ),
-            errors="coerce",
-        )
+        df["AH %"] = [
+            "—" if (v := after_hours_pct(r.get("Last"), r.get("close_today"))) is None
+            else f"{v:+.2f}%"
+            for r in df.to_dict(orient="records")
+        ]
 
     compact = st.checkbox("📱 Compact view", value=False, key="dt_compact")
     if compact:
@@ -437,6 +431,16 @@ def _styled(df, moved_now: set):
         if val is None or (isinstance(val, float) and pd.isna(val)):
             return ""
         return "color: #16a34a" if val >= 0 else "color: #dc2626"
+
+    def color_pct_str(val):
+        # AH % is a pre-formatted string ("+1.2%" / "-0.5%" / "—"); color by sign.
+        if not isinstance(val, str):
+            return ""
+        if val.startswith("-"):
+            return "color: #dc2626"
+        if val.startswith("+"):
+            return "color: #16a34a"
+        return ""
 
     def _pct(v):
         return "—" if pd.isna(v) else f"{v:+.2f}%"
@@ -477,7 +481,7 @@ def _styled(df, moved_now: set):
         return [style] * len(row)
 
     fmt = {}
-    for col in ("Chg %", "Gap %", "vs VWAP %", "AH %"):
+    for col in ("Chg %", "Gap %", "vs VWAP %"):  # AH % is pre-formatted to strings
         if col in df.columns:
             fmt[col] = _pct
     for col in ("Last", "VWAP"):
@@ -490,9 +494,11 @@ def _styled(df, moved_now: set):
 
     try:
         styler = df.style.format(fmt).apply(in_play, axis=1)
-        for col in ("Chg %", "Gap %", "vs VWAP %", "AH %"):
+        for col in ("Chg %", "Gap %", "vs VWAP %"):
             if col in df.columns:
                 styler = styler.map(color_pct, subset=[col])
+        if "AH %" in df.columns:
+            styler = styler.map(color_pct_str, subset=["AH %"])
         if "vs VWAP %" in df.columns:
             styler = styler.map(vwap_heat, subset=["vs VWAP %"])
         return styler
