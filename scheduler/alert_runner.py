@@ -171,7 +171,75 @@ def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
         if crossed:
             lines.append(f"{tk}: Last {last:.2f} is {direction} {target:.2f}")
 
+    elif atype == "ema_cross":
+        line = _evaluate_ema_cross_alert(alert)
+        if line:
+            lines.append(line)
+
     return lines
+
+
+def _evaluate_ema_cross_alert(alert: Dict[str, Any]) -> Optional[str]:
+    tk = str(alert.get("ticker") or "").strip().upper()
+    if not tk:
+        return None
+    direction = str(alert.get("direction") or "bullish").strip().lower()
+    if direction not in {"bullish", "bearish"}:
+        direction = "bullish"
+
+    frame = _load_ema_history(tk)
+    signal = _ema_cross_signal(frame)
+    if signal is None or signal["direction"] != direction:
+        return None
+
+    label = "Golden Cross" if direction == "bullish" else "Death Cross"
+    return (
+        f"{tk}: EMA 9/21 {label} "
+        f"(EMA9 {signal['ema9']:.2f}, EMA21 {signal['ema21']:.2f})"
+    )
+
+
+def _load_ema_history(ticker: str):
+    try:
+        from data.prices import fetch_price_data_parallel
+
+        data, _skipped = fetch_price_data_parallel(
+            [ticker],
+            period="90d",
+            interval="1d",
+            max_workers=1,
+            chunk_size=1,
+            timeout_s=10.0,
+            rescue_missing=False,
+            use_cache=True,
+        )
+        return data.get(str(ticker).upper())
+    except Exception as e:
+        print(f"[alert_runner] EMA history failed for {ticker}: {type(e).__name__}: {e}")
+        _capture(e)
+        return None
+
+
+def _ema_cross_signal(frame) -> Optional[Dict[str, float | str]]:
+    if frame is None or not hasattr(frame, "columns") or "Close" not in frame.columns:
+        return None
+    try:
+        import pandas as pd
+
+        closes = pd.to_numeric(frame["Close"], errors="coerce").dropna()
+        if len(closes) < 23:
+            return None
+        ema9 = closes.ewm(span=9, adjust=False).mean()
+        ema21 = closes.ewm(span=21, adjust=False).mean()
+        prev_delta = float(ema9.iloc[-2] - ema21.iloc[-2])
+        curr_delta = float(ema9.iloc[-1] - ema21.iloc[-1])
+        if prev_delta <= 0 < curr_delta:
+            return {"direction": "bullish", "ema9": float(ema9.iloc[-1]), "ema21": float(ema21.iloc[-1])}
+        if prev_delta >= 0 > curr_delta:
+            return {"direction": "bearish", "ema9": float(ema9.iloc[-1]), "ema21": float(ema21.iloc[-1])}
+    except (ImportError, TypeError, ValueError, KeyError, AttributeError):
+        return None
+    return None
 
 
 def _live_quote(ticker: str) -> Optional[float]:
@@ -322,6 +390,7 @@ def run_alerts() -> None:
                 "breakout": "Breakout alert",
                 "watchlist": "Watchlist alert",
                 "price": "Price alert",
+                "ema_cross": "EMA cross alert",
             }.get(alert.get("alert_type"), "Alert")
 
             first_ticker = alert.get("ticker") or (

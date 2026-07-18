@@ -1,12 +1,14 @@
 """Per-user price/scan alerts: storage + CRUD + fired-event log.
 
-Three launch alert types (alert_type column):
+Alert types (alert_type column):
 - 'breakout'  : fire when any ticker's BreakoutScore >= threshold in the latest
                 snapshot (optionally limited to the user's watchlist).
 - 'watchlist' : fire when any of the user's watchlist tickers appears in the
                 latest scan results (i.e. it passed the scan).
 - 'price'     : fire when ticker's Last crosses `direction` ('above'/'below')
                 the `threshold` price.
+- 'ema_cross' : fire when EMA 9 crosses EMA 21 for `ticker`; direction is
+                'bullish' or 'bearish'.
 
 Backed by Neon/PostgreSQL (psycopg, dict_row). Mirrors the proven connection
 pattern in db/watchlists.py: plain cursor + conn.commit() + cur.close(). Rows
@@ -20,7 +22,7 @@ from db.engine import get_neon_conn
 
 # 'move' (abs % change today >= threshold) and 'rvol' (today's volume vs 20d
 # avg >= threshold) are evaluated by the real-time worker, not the cron.
-ALERT_TYPES = ("breakout", "watchlist", "price", "move", "rvol")
+ALERT_TYPES = ("breakout", "watchlist", "price", "move", "rvol", "ema_cross")
 
 
 def _ensure_alerts_schema(conn) -> None:

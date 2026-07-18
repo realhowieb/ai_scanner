@@ -43,6 +43,7 @@ _ALERT_TYPE_LABELS = {
     "price": "🎯 Price",
     "move": "⚡ Move",
     "rvol": "📊 Rel. volume",
+    "ema_cross": "📈 EMA cross",
 }
 
 
@@ -115,6 +116,10 @@ def _fmt_alert(a: dict) -> str:
         return f"⚡ {a.get('ticker')} moves ±{float(a.get('threshold') or 0):g}% today (live)"
     if t == "rvol":
         return f"📊 {a.get('ticker')} RVOL ≥ {float(a.get('threshold') or 0):g}× (live)"
+    if t == "ema_cross":
+        direction = str(a.get("direction") or "bullish").lower()
+        label = "Golden Cross" if direction == "bullish" else "Death Cross"
+        return f"📈 {a.get('ticker')} EMA 9/21 {label} ({direction})"
     return str(t)
 
 
@@ -187,8 +192,8 @@ def render_alerts_panel(
         st.caption(f"Using {used} of {max_alerts} alert slots on your plan.")
 
     with st.expander("➕ Create an alert", expanded=True):
-        tab_break, tab_watch, tab_price, tab_move, tab_rvol = st.tabs(
-            ["🚀 Breakout", "📋 Watchlist", "💲 Price", "⚡ % Move", "📊 RVOL"]
+        tab_break, tab_watch, tab_price, tab_move, tab_rvol, tab_ema = st.tabs(
+            ["🚀 Breakout", "📋 Watchlist", "💲 Price", "⚡ % Move", "📊 RVOL", "📈 EMA Cross"]
         )
 
         # NOTE: plain widgets (not st.form) — st.form rendered empty inside the
@@ -330,6 +335,34 @@ def render_alerts_panel(
                         max_alerts,
                         lambda: create_alert(
                             user_id, "rvol", ticker=rv_tk.strip().upper(), threshold=float(rv_thr)
+                        ),
+                    )
+
+        with tab_ema:
+            st.caption(
+                "Fire when EMA 9 crosses EMA 21. Bullish is a short-term Golden Cross; "
+                "bearish is a short-term Death Cross."
+            )
+            ec1, ec2 = st.columns([2, 2])
+            ema_tk = ec1.text_input("Ticker", value="", placeholder="e.g. AMD", key="alert_ema_tk")
+            ema_dir = ec2.selectbox(
+                "Cross direction",
+                ["bullish", "bearish"],
+                format_func=lambda v: "Golden Cross (bullish)" if v == "bullish" else "Death Cross (bearish)",
+                key="alert_ema_dir",
+            )
+            if st.button("Create EMA cross alert", key="alert_ema_btn"):
+                if not ema_tk.strip():
+                    st.warning("Enter a ticker symbol.")
+                else:
+                    _guarded_create(
+                        existing,
+                        max_alerts,
+                        lambda: create_alert(
+                            user_id,
+                            "ema_cross",
+                            ticker=ema_tk.strip().upper(),
+                            direction=str(ema_dir),
                         ),
                     )
 

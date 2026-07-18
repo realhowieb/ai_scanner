@@ -81,6 +81,38 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertIn("TSLA", lines[0])
 
+    def test_ema_cross_signal_detects_bullish_and_bearish_crosses(self):
+        from scheduler.alert_runner import _ema_cross_signal
+
+        bullish = pd.DataFrame({"Close": [10.0] * 25 + [20.0]})
+        bearish = pd.DataFrame({"Close": [20.0] * 25 + [10.0]})
+
+        self.assertEqual(_ema_cross_signal(bullish)["direction"], "bullish")
+        self.assertEqual(_ema_cross_signal(bearish)["direction"], "bearish")
+
+    def test_ema_cross_alert_respects_requested_direction(self):
+        from unittest.mock import patch
+
+        from scheduler.alert_runner import _evaluate
+
+        history = pd.DataFrame({"Close": [10.0] * 25 + [20.0]})
+        with patch("scheduler.alert_runner._load_ema_history", return_value=history):
+            bullish = _evaluate(
+                {"alert_type": "ema_cross", "ticker": "AMD", "direction": "bullish"},
+                self._df(),
+                set(),
+            )
+            bearish = _evaluate(
+                {"alert_type": "ema_cross", "ticker": "AMD", "direction": "bearish"},
+                self._df(),
+                set(),
+            )
+
+        self.assertEqual(len(bullish), 1)
+        self.assertIn("AMD", bullish[0])
+        self.assertIn("Golden Cross", bullish[0])
+        self.assertEqual(bearish, [])
+
 
 class ThrottleTest(unittest.TestCase):
     def test_none_never_throttled(self):
