@@ -16,9 +16,20 @@ It is intentionally written to be:
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-import streamlit as st
+try:
+    import streamlit as st
+except ImportError:  # pragma: no cover - exercised by lean CI/test environments
+    class _StreamlitFallback:
+        @staticmethod
+        def cache_data(*_args, **_kwargs):
+            def _decorator(fn):
+                return fn
+
+            return _decorator
+
+    st = _StreamlitFallback()  # type: ignore[assignment]
 
 try:
     import requests  # type: ignore
@@ -162,11 +173,67 @@ def fetch_avg_daily_volume(symbols: List[str], lookback: int = 20) -> Dict[str, 
     return out
 
 
+def ema_cross_label(frame: Any) -> Optional[str]:
+    """Return a short EMA 9/21 cross label from the latest daily close."""
+    if frame is None or not hasattr(frame, "columns") or "Close" not in frame.columns:
+        return None
+    try:
+        import pandas as pd
+
+        closes = pd.to_numeric(frame["Close"], errors="coerce").dropna()
+        if len(closes) < 23:
+            return None
+        ema9 = closes.ewm(span=9, adjust=False).mean()
+        ema21 = closes.ewm(span=21, adjust=False).mean()
+        prev_delta = float(ema9.iloc[-2] - ema21.iloc[-2])
+        curr_delta = float(ema9.iloc[-1] - ema21.iloc[-1])
+        if prev_delta <= 0 < curr_delta:
+            return "Golden"
+        if prev_delta >= 0 > curr_delta:
+            return "Death"
+    except (ImportError, TypeError, ValueError, KeyError, AttributeError):
+        return None
+    return None
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_ema_crosses(symbols: List[str]) -> Dict[str, str]:
+    """Detect fresh daily EMA 9/21 crosses for a symbol list.
+
+    Cached separately from live snapshots because this only needs daily bars and
+    should not add repeated API pressure to the intraday monitor.
+    """
+    if not symbols:
+        return {}
+    try:
+        from data.prices import fetch_price_data_parallel
+
+        frames, _skipped = fetch_price_data_parallel(
+            [s.upper() for s in symbols],
+            period="90d",
+            interval="1d",
+            max_workers=4,
+            chunk_size=25,
+            timeout_s=10.0,
+            rescue_missing=False,
+            use_cache=True,
+        )
+    except Exception:
+        return {}
+
+    out: Dict[str, str] = {}
+    for sym, frame in (frames or {}).items():
+        label = ema_cross_label(frame)
+        if label:
+            out[str(sym).upper()] = label
+    return out
+
+
 def build_day_trader_metrics(
     symbols: List[str],
     *,
     with_rvol: bool = True,
-) -> List[Dict[str, Optional[float]]]:
+) -> List[Dict[str, Any]]:
     """Return per-symbol intraday day-trader metrics from Alpaca snapshots.
 
     One cached snapshot call yields today's move, gap, VWAP, and volume — no
@@ -183,6 +250,7 @@ def build_day_trader_metrics(
         return []
 
     avg_vol = fetch_avg_daily_volume(syms) if with_rvol else {}
+    ema_crosses = fetch_ema_crosses(syms)
 
     rows: List[Dict[str, Optional[float]]] = []
     for sym in syms:
@@ -224,6 +292,7 @@ def build_day_trader_metrics(
                 "volume": int(volume) if volume else None,
                 "rvol": round(rvol, 2) if rvol is not None else None,
                 "close_today": round(close_today, 2) if close_today is not None else None,
+                "ema_cross": ema_crosses.get(sym),
             }
         )
 

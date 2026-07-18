@@ -387,6 +387,7 @@ def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
         columns={
             "ticker": "Ticker", "last": "Last", "chg_pct": "Chg %", "gap_pct": "Gap %",
             "vwap": "VWAP", "vs_vwap_pct": "vs VWAP %", "volume": "Volume", "rvol": "RVOL",
+            "ema_cross": "EMA Cross",
         }
     )
     df["vs VWAP"] = df["vs VWAP %"].apply(
@@ -410,7 +411,7 @@ def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
     else:
         ordered = [
             "Ticker", "Last", "Chg %", "AH %", "Gap %", "VWAP", "vs VWAP",
-            "vs VWAP %", "RVOL", "Volume",
+            "vs VWAP %", "RVOL", "EMA Cross", "Volume",
         ]
     df = df[[c for c in ordered if c in df.columns]]
 

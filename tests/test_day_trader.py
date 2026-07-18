@@ -123,3 +123,23 @@ class DetectMovesEdgeTests(unittest.TestCase):
     def test_negative_threshold_behaves_like_zero(self):
         moves = detect_moves({"AAA": 100.0}, {"AAA": 100.0}, -5.0)
         self.assertEqual(moves, [("AAA", 0.0)])
+
+
+class EmaCrossLabelTests(unittest.TestCase):
+    def test_detects_bullish_and_bearish_cross_labels(self):
+        import pandas as pd
+
+        from market_data import ema_cross_label
+
+        bullish = pd.DataFrame({"Close": [10.0] * 25 + [20.0]})
+        bearish = pd.DataFrame({"Close": [20.0] * 25 + [10.0]})
+
+        self.assertEqual(ema_cross_label(bullish), "Golden")
+        self.assertEqual(ema_cross_label(bearish), "Death")
+
+    def test_missing_close_has_no_cross_label(self):
+        import pandas as pd
+
+        from market_data import ema_cross_label
+
+        self.assertIsNone(ema_cross_label(pd.DataFrame({"Open": [10.0] * 30})))
