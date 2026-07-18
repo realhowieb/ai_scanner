@@ -14,23 +14,35 @@ ScanFn = Callable[[list[str], str], None]
 
 @st.cache_data(ttl=60)
 def get_live_quote(ticker: str) -> Optional[float]:
-    """Best-effort live quote lookup for a single ticker."""
+    """Best-effort live quote for a single ticker.
+
+    Alpaca-first (centralized batched snapshot), yfinance only as a fallback.
+    """
     if not ticker:
         return None
+    sym = str(ticker).strip().upper()
+
+    # --- Alpaca (preferred) ---
+    try:
+        from market_data import get_latest_quotes
+
+        q = (get_latest_quotes([sym]) or {}).get(sym) or {}
+        last = q.get("last")
+        if last is not None:
+            return float(last)
+    except Exception:
+        pass
+
+    # --- yfinance fallback ---
     try:
         import yfinance as yf  # type: ignore
-    except Exception:
-        return None
 
-    try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(sym)
         fast_info = getattr(t, "fast_info", None)
-        last_price = None
         if fast_info is not None:
             last_price = getattr(fast_info, "last_price", None)
-        if last_price is not None:
-            return float(last_price)
-
+            if last_price is not None:
+                return float(last_price)
         hist = t.history(period="1d")
         if not hist.empty and "Close" in hist.columns:
             return float(hist["Close"].iloc[-1])
@@ -47,18 +59,20 @@ def render_single_symbol_chart(symbol: str, days: int = 90) -> None:
 
     try:
         import plotly.graph_objects as go  # type: ignore
-        import yfinance as yf  # type: ignore
     except Exception:
-        st.info("Charting libraries (yfinance/plotly) are not available.")
+        st.info("Charting library (plotly) is not available.")
         return
 
     sym = str(symbol).strip().upper()
     if not sym:
         return
 
+    # Centralized OHLC fetch (Alpaca-first, yfinance fallback) — same source the
+    # rest of the app's charts use.
     try:
-        t = yf.Ticker(sym)
-        hist = t.history(period="6mo", interval="1d")
+        from ui.charts import _fetch_unadjusted_ohlc
+
+        hist = _fetch_unadjusted_ohlc(sym, period="6mo", interval="1d")
     except Exception as e:
         st.error(f"Failed to load price history for {sym}: {e}")
         return

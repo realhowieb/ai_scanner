@@ -48,13 +48,30 @@ def _fetch_unadjusted_ohlc(
 ) -> pd.DataFrame:
     """Fetch recent OHLC data for a single ticker.
 
-    This is intentionally self-contained so charts.py does not depend on
-    the rest of the app. If yfinance is unavailable, returns an empty
-    DataFrame and callers should handle that gracefully.
+    Alpaca-first, consistent with the app's centralized data layer, falling
+    back to yfinance only when Alpaca is unavailable or returns nothing (e.g.
+    not configured locally). Returns an empty DataFrame on total failure;
+    callers handle that gracefully.
     """
-    if _get_yf() is None or not ticker:
+    if not ticker:
         return pd.DataFrame()
 
+    # --- Alpaca (preferred) ---
+    try:
+        from data.price_alpaca import download_multi_alpaca
+
+        frames = download_multi_alpaca(
+            [ticker], period=period, interval=interval, prepost=False, timeout_s=10.0
+        )
+        df = frames.get(str(ticker).upper()) if frames else None
+        if df is not None and not df.empty and "Close" in df.columns:
+            return df
+    except Exception:
+        pass  # fall through to yfinance
+
+    # --- yfinance fallback ---
+    if _get_yf() is None:
+        return pd.DataFrame()
     try:
         df = _get_yf().download(
             tickers=ticker,
