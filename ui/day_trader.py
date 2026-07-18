@@ -392,12 +392,23 @@ def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
     df["vs VWAP"] = df["vs VWAP %"].apply(
         lambda v: "▲ above" if (v is not None and v >= 0) else ("▼ below" if v is not None else "—")
     )
-    # After-hours change: last trade vs today's official close.
+    # After-hours change: last trade vs today's official close. Coerce to a
+    # numeric (float) column — a list of Python None/float is object dtype, and
+    # Streamlit's Arrow grid renders those None cells as the literal "None"
+    # instead of letting the "—" formatter apply. NaN in a float column renders
+    # cleanly via the styler.
     if state in ("afterhours", "closed") and "close_today" in df.columns:
-        df["AH %"] = [
-            after_hours_pct(r.get("Last"), r.get("close_today"))
-            for r in df.to_dict(orient="records")
-        ]
+        df["AH %"] = pd.to_numeric(
+            pd.Series(
+                [
+                    after_hours_pct(r.get("Last"), r.get("close_today"))
+                    for r in df.to_dict(orient="records")
+                ],
+                index=df.index,
+                dtype="float64",
+            ),
+            errors="coerce",
+        )
 
     compact = st.checkbox("📱 Compact view", value=False, key="dt_compact")
     if compact:

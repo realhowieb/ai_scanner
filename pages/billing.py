@@ -120,8 +120,34 @@ def _create_portal_url(*, email: str) -> str:
 # =========================
 
 def _logged_in_email() -> str:
-    """Lock billing to the authenticated account. In this app, username is the email."""
-    return (st.session_state.get("username") or "").strip().lower()
+    """Resolve the authenticated account's email (the DB username / primary key).
+
+    Login accepts either an email or a user-chosen display name, so
+    session_state['username'] may hold a display name with no '@'. Treating that
+    as the email wrongly blocked upgrades ("Please sign in") for anyone who
+    logged in by username. Resolve the display name to the account email; cache
+    the result for the session.
+    """
+    ident = (st.session_state.get("username") or "").strip().lower()
+    if not ident:
+        return ""
+    if "@" in ident:
+        return ident
+
+    cached = (st.session_state.get("_billing_email") or "").strip().lower()
+    if "@" in cached:
+        return cached
+
+    try:
+        from db.users import find_username_by_display_name
+
+        resolved = (find_username_by_display_name(ident) or "").strip().lower()
+    except Exception:
+        resolved = ""
+    if "@" in resolved:
+        st.session_state["_billing_email"] = resolved
+        return resolved
+    return ident  # unresolved — no worse than before (still gated on '@')
 
 
 def _current_plan_label(tier_key: str) -> str:
