@@ -101,6 +101,15 @@ class AfterHoursPctTests(unittest.TestCase):
         self.assertIsNone(after_hours_pct(100.0, 0.0))
 
 
+class EmaCrossDisplayTests(unittest.TestCase):
+    def test_formats_ema_cross_for_day_trader_table(self):
+        from ui.day_trader import _ema_cross_display
+
+        self.assertEqual(_ema_cross_display("Golden"), "Golden Cross")
+        self.assertEqual(_ema_cross_display("Death"), "Death Cross")
+        self.assertEqual(_ema_cross_display(None), "—")
+
+
 class ParseValidationTests(unittest.TestCase):
     def test_rejects_junk_and_caps_count(self):
         raw = "AAPL, not a ticker!!, BRK.B, BRK-B, x" + ", FAKE" * 300

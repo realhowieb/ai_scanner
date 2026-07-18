@@ -130,6 +130,15 @@ def after_hours_pct(last: Optional[float], close_today: Optional[float]) -> Opti
         return None
 
 
+def _ema_cross_display(value: object) -> str:
+    text = str(value or "").strip().lower()
+    if text == "golden":
+        return "Golden Cross"
+    if text == "death":
+        return "Death Cross"
+    return "—"
+
+
 def _parse_symbols(raw: str, max_symbols: int = 200) -> List[str]:
     """Parse, validate, and dedupe a comma-separated ticker list.
 
@@ -393,6 +402,8 @@ def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
     df["vs VWAP"] = df["vs VWAP %"].apply(
         lambda v: "▲ above" if (v is not None and v >= 0) else ("▼ below" if v is not None else "—")
     )
+    if "EMA Cross" in df.columns:
+        df["EMA Cross"] = df["EMA Cross"].apply(_ema_cross_display)
     # After-hours change: last trade vs today's official close. Rendered as a
     # pre-formatted STRING column ("—" when missing). Streamlit's grid shows a
     # NaN/None cell as the literal "None" regardless of the styler's formatter,
