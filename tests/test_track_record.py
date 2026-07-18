@@ -72,15 +72,21 @@ class EligibleSnapshotsTests(unittest.TestCase):
     """Dedup same-day snapshots and fence out pre-epoch runs."""
 
     def _run(self, runs):
-        # Complete forward window + within lookback: base runs a few days back.
+        # _eligible_snapshots does local `from db.runs import ...` and
+        # `from ui.app_runtime import ...`. Inject fakes via sys.modules so the
+        # test doesn't depend on those (heavy) modules being importable in CI.
+        import sys
+        import types
+
         payloads = {r["id"]: [{"Ticker": "AAA", "BreakoutScore": 1.0}] for r in runs}
 
-        def fake_normalize(raw):
-            return pd.DataFrame(raw) if raw else None
+        fake_runs = types.ModuleType("db.runs")
+        fake_runs.list_snapshot_runs = lambda **kw: runs
+        fake_runs.load_many_run_results = lambda ids: payloads
+        fake_ar = types.ModuleType("ui.app_runtime")
+        fake_ar.normalize_results_to_df = lambda raw: pd.DataFrame(raw) if raw else None
 
-        with mock.patch("db.runs.list_snapshot_runs", return_value=runs), \
-             mock.patch("db.runs.load_many_run_results", return_value=payloads), \
-             mock.patch("ui.app_runtime.normalize_results_to_df", side_effect=fake_normalize):
+        with mock.patch.dict(sys.modules, {"db.runs": fake_runs, "ui.app_runtime": fake_ar}):
             return tr._eligible_snapshots(horizon_days=5, lookback_days=45, max_snapshots=30)
 
     def test_same_day_snapshots_deduped_and_preepoch_fenced(self):
