@@ -9,15 +9,6 @@ import streamlit as st
 
 st.set_page_config(page_title="Day Trader — live", page_icon="⚡", layout="wide")
 
-# Restore the login from the cookie so a direct link / refresh doesn't show
-# "please log in" despite a valid session.
-try:
-    from ui.auth import restore_session_from_cookie
-
-    restore_session_from_cookie()
-except Exception:
-    pass
-
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:
     st.info("Please log in on the main page to use the Day Trader monitor.")
