@@ -1,190 +1,160 @@
+"""Neon-backed OHLCV price cache shared across processes.
+
+The scan engine fetches daily OHLCV history for the whole universe every run.
+This stores each symbol's fetched DataFrame in Neon so separate processes — the
+Streamlit app, and each cold-start cron run — can reuse a recent fetch instead
+of re-hitting the price provider. In-process caches (data/prices.py) don't span
+processes; this does.
+
+psycopg throughout (matching the rest of db/*). Each DataFrame is stored as an
+opaque serialized blob keyed by symbol, with an updated_at stamp for staleness.
+All operations are best-effort: any failure degrades to "no cache" (the engine
+then fetches fresh), never raising into a scan.
+"""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Dict, Iterable
-
-from sqlalchemy import text
+from datetime import datetime
+from io import StringIO
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 from db.engine import get_neon_conn
 
 
 def normalize_symbol(symbol: str) -> str:
-    """Normalize symbols for caching + Yahoo compatibility.
-
-    - Uppercase
-    - Strip whitespace
-    - Remove '$' prefix/markers sometimes present in symbol lists
-    - Drop preferred/warrant suffixes like 'ADC-A' -> 'ADC'
-    """
-    s = (symbol or "").strip().upper()
-    s = s.replace("$", "")
-    if "-" in s:
-        s = s.split("-", 1)[0]
-    return s
+    """Upper/strip only — class shares (BRK-B vs BRK-A) must stay distinct so a
+    cached frame is never served for the wrong security."""
+    return (symbol or "").strip().upper()
 
 
-def upsert_price_snapshot(
-    symbol: str,
-    price: float | None,
-    as_of: datetime | None = None,
-) -> None:
-    """
-    Store the latest known price for a symbol.
-    Used for admin full-universe scans to avoid repeated yfinance calls.
-    """
-    if not symbol:
-        return
-
-    if as_of is None:
-        as_of = datetime.now(timezone.utc)
-
-    conn = get_neon_conn()
-    if conn is None:
-        return
-
-    with conn.begin():
-        conn.execute(
-            text(
-                """
-                INSERT INTO price_snapshots (symbol, price, as_of)
-                VALUES (:symbol, :price, :as_of)
-                ON CONFLICT (symbol)
-                DO UPDATE SET
-                    price = EXCLUDED.price,
-                    as_of = EXCLUDED.as_of
-                """
-            ),
-            {
-                "symbol": normalize_symbol(symbol),
-                "price": price,
-                "as_of": as_of,
-            },
+def _ensure_schema(conn) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS price_data_cache (
+            symbol TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
-
-
-def get_price_snapshots(
-    symbols: Iterable[str],
-) -> Dict[str, float | None]:
-    """
-    Fetch cached prices for a list of symbols.
-    Returns a dict: {SYMBOL: price}
-    """
-    symbols = [normalize_symbol(s) for s in symbols if s]
-    if not symbols:
-        return {}
-
-    conn = get_neon_conn()
-    if conn is None:
-        return {}
-
-    result = conn.execute(
-        text(
-            """
-            SELECT symbol, price
-            FROM price_snapshots
-            WHERE symbol = ANY(:symbols::text[])
-            """
-        ),
-        {"symbols": symbols},
+        """
     )
+    conn.commit()
+    cur.close()
 
-    return {row.symbol: row.price for row in result.fetchall()}
+
+def _serialize(df) -> Optional[str]:
+    """DataFrame → JSON blob (split orient preserves index + columns)."""
+    try:
+        import pandas as pd
+
+        if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+            return None
+        return df.to_json(orient="split", date_format="iso")
+    except Exception:
+        return None
 
 
-def get_stale_symbols(
-    symbols: Iterable[str],
-    max_age_minutes: int = 15,
-) -> list[str]:
-    """
-    Identify which symbols need fresh pricing.
-    """
-    symbols = [normalize_symbol(s) for s in symbols if s]
-    if not symbols:
-        return []
+def _deserialize(payload: Any):
+    """JSON blob → DataFrame with a restored DatetimeIndex, or None."""
+    try:
+        import pandas as pd
 
-    conn = get_neon_conn()
-    if conn is None:
-        return symbols
-
-    result = conn.execute(
-        text(
-            """
-            SELECT symbol
-            FROM price_snapshots
-            WHERE symbol = ANY(:symbols::text[])
-              AND as_of >= NOW() - (:mins * INTERVAL '1 minute')
-            """
-        ),
-        {"symbols": symbols, "mins": max_age_minutes},
-    )
-
-    fresh = {row.symbol for row in result.fetchall()}
-    return [s for s in symbols if s not in fresh]
+        df = pd.read_json(StringIO(str(payload)), orient="split")
+        if df is None or df.empty:
+            return None
+        try:
+            df.index = pd.to_datetime(df.index)
+        except Exception:
+            pass
+        return df
+    except Exception:
+        return None
 
 
 def get_price_data_snapshot(
     symbols: Iterable[str],
     max_age_minutes: int = 15,
-) -> tuple[Dict[str, float | None], set[str]]:
-    """Engine-compatible snapshot loader.
+) -> Tuple[Dict[str, Any], set]:
+    """Load cached OHLCV frames fresher than `max_age_minutes`.
 
-    Returns:
-      - price_data: {SYMBOL: price}
-      - stale: set of SYMBOLs that are missing or older than `max_age_minutes`
-
-    Note: This module currently stores *latest price only* in `price_snapshots`.
+    Returns ({original_symbol: DataFrame}, stale_set) where stale_set is every
+    requested symbol without a fresh cached frame (missing or too old). Keys are
+    the caller's original symbols so the engine's set math lines up.
     """
-    norm_symbols = [normalize_symbol(s) for s in symbols if s]
-    if not norm_symbols:
+    orig_by_key: Dict[str, str] = {}
+    keys = []
+    for s in symbols:
+        if not s:
+            continue
+        k = normalize_symbol(s)
+        if k and k not in orig_by_key:
+            orig_by_key[k] = s
+            keys.append(k)
+    if not keys:
         return {}, set()
 
-    cached = get_price_snapshots(norm_symbols)
+    conn = get_neon_conn()
+    if conn is None:
+        return {}, set(orig_by_key.values())
 
-    # Stale means: missing from cache OR older than max_age_minutes
-    stale_list = get_stale_symbols(norm_symbols, max_age_minutes=max_age_minutes)
-    missing = [s for s in norm_symbols if s not in cached]
-    stale = set(stale_list) | set(missing)
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT symbol, payload
+            FROM price_data_cache
+            WHERE symbol = ANY(%s)
+              AND updated_at >= NOW() - (%s * INTERVAL '1 minute')
+            """,
+            (keys, int(max_age_minutes)),
+        )
+        rows = cur.fetchall()
+        cur.close()
+    except Exception:
+        return {}, set(orig_by_key.values())
 
+    cached: Dict[str, Any] = {}
+    for r in rows:
+        key = r["symbol"] if isinstance(r, dict) else r[0]
+        payload = r["payload"] if isinstance(r, dict) else r[1]
+        df = _deserialize(payload)
+        if df is not None and not df.empty:
+            cached[orig_by_key.get(key, key)] = df
+    stale = set(orig_by_key.values()) - set(cached.keys())
     return cached, stale
 
 
 def upsert_price_data_snapshot(
-    data_dict: Dict[str, object],
-    as_of: datetime | None = None,
+    data_dict: Dict[str, Any],
+    as_of: Optional[datetime] = None,  # accepted for compat; write time is NOW()
 ) -> None:
-    """Engine-compatible snapshot writer.
-
-    Accepts a dict keyed by symbol. Values may be:
-      - float/int price
-      - dict with 'price' key
-      - None
-
-    Examples:
-      {'AAPL': 191.23, 'MSFT': {'price': 412.5}}
-    """
+    """Persist {symbol: DataFrame} OHLCV frames (best-effort, batched upsert)."""
+    del as_of
     if not data_dict:
         return
-
-    if as_of is None:
-        as_of = datetime.now(timezone.utc)
-
-    for sym, val in data_dict.items():
-        price: float | None
-        if val is None:
-            price = None
-        elif isinstance(val, (int, float)):
-            price = float(val)
-        elif isinstance(val, dict):
-            p = val.get("price")
-            if p is None:
-                price = None
-            elif isinstance(p, (int, float)):
-                price = float(p)
-            else:
-                # Unknown payload; skip quietly
-                continue
-        else:
-            # Unknown payload; skip quietly
-            continue
-
-        upsert_price_snapshot(sym, price, as_of=as_of)
+    conn = get_neon_conn()
+    if conn is None:
+        return
+    try:
+        _ensure_schema(conn)
+        params = []
+        for sym, df in data_dict.items():
+            key = normalize_symbol(sym)
+            payload = _serialize(df)
+            if key and payload is not None:
+                params.append((key, payload))
+        if params:
+            cur = conn.cursor()
+            cur.executemany(
+                """
+                INSERT INTO price_data_cache (symbol, payload, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (symbol) DO UPDATE
+                    SET payload = EXCLUDED.payload, updated_at = NOW()
+                """,
+                params,
+            )
+            conn.commit()
+            cur.close()
+    except Exception:
+        pass
