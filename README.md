@@ -2,6 +2,10 @@
 
 AI Scanner is a Streamlit stock scanner with scheduled market scans, optional Neon/Postgres storage, and Stripe-backed billing helpers.
 
+User guide:
+
+- [HS Finest AI App Tutorial](APP_TUTORIAL.md)
+
 ## Run the Streamlit App
 
 Install dependencies:
