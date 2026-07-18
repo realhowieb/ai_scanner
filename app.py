@@ -544,8 +544,8 @@ def main():
     )
     #st.markdown("---")
 
-    # -------- DB Status --------
-    db_status = render_db_status_badge()
+    # -------- DB Status (admin-only badge; status still computed for all) --------
+    db_status = render_db_status_badge(show_badge=bool(st.session_state.get("is_admin")))
 
     # -------- Provider Health (admin diagnostics) --------
     if flags.get("can_diagnostics"):
