@@ -1,0 +1,6 @@
+# Production client chrome. "minimal" hides Streamlit's developer toolbar
+# (Fork button, GitHub link, Deploy, and the hamburger's dev options) so the
+# deployed app reads as a product, not a Streamlit demo. Owner tools ("Manage
+# app", logs) are unaffected — those come from Streamlit Cloud, not this config.
+[client]
+toolbarMode = "minimal"
