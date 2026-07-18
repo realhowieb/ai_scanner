@@ -186,6 +186,43 @@ def _resolve_tier_key(username: str) -> str | None:
     return str(result) if result else None
 
 
+def restore_session_from_cookie() -> str | None:
+    """Hydrate session_state['username'] (+ tier) from the login cookie.
+
+    Sub-pages (Day Trader, Alerts) only read session_state, which is empty on a
+    fresh load — so a direct link, bookmark, or refresh showed "please log in"
+    despite a valid session cookie. Call this at the top of a sub-page (after
+    set_page_config) to restore the session the way the main app does.
+
+    Best-effort and idempotent; returns the username or None.
+    """
+    existing = (st.session_state.get("username") or "").strip().lower()
+    if existing:
+        return existing
+    try:
+        cookies = _cookies_ready_or_stop()
+    except _AUTH_BACKEND_ERRORS:
+        return None
+    if cookies is None:
+        return None
+    try:
+        sid = cookies.get(COOKIE_NAME)
+    except _AUTH_BACKEND_ERRORS:
+        return None
+    if not sid:
+        return None
+    u = _get_username_for_session(str(sid))
+    if not u:
+        return None
+    username = (u or "").strip().lower()
+    st.session_state["username"] = username
+    t = _resolve_tier_key(username)
+    if t:
+        st.session_state["tier"] = t
+        st.session_state["plan"] = t
+    return username
+
+
 def auth_ui():
     # Reset the once-per-run cookie-save guard at the start of each run.
     _reset_cookie_save_guard()
