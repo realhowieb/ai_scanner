@@ -1,8 +1,11 @@
 """Tests for the Day Trader panel's pure helpers."""
 import datetime as dt
+import importlib.util
 import unittest
 
 from ui.day_trader import _parse_symbols, detect_moves, market_state
+
+_PANDAS = importlib.util.find_spec("pandas") is not None
 
 
 def _utc(iso: str) -> dt.datetime:
@@ -134,6 +137,7 @@ class DetectMovesEdgeTests(unittest.TestCase):
         self.assertEqual(moves, [("AAA", 0.0)])
 
 
+@unittest.skipUnless(_PANDAS, "ema_cross_label needs pandas")
 class EmaCrossLabelTests(unittest.TestCase):
     def test_detects_bullish_and_bearish_cross_labels(self):
         import pandas as pd

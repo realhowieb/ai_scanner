@@ -272,8 +272,9 @@ def render_results(
                         c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
                         # Basic: do not show earnings in the details card
 
-                        with st.expander("Show row fields", expanded=False):
-                            st.json(row_to_jsonable_dict(r0))
+                        if is_admin_view:
+                            with st.expander("Show row fields", expanded=False):
+                                st.json(row_to_jsonable_dict(r0))
                     else:
                         st.caption("No row details available for this ticker.")
             else:
@@ -364,8 +365,9 @@ def render_results(
                             pass
 
                     # Optional: show a tiny raw row preview for debugging (collapsed)
-                    with st.expander("Show row fields", expanded=False):
-                        st.json(row_to_jsonable_dict(r0))
+                    if is_admin_view:
+                        with st.expander("Show row fields", expanded=False):
+                            st.json(row_to_jsonable_dict(r0))
                 else:
                     st.caption("No row details available for this ticker.")
 
@@ -620,8 +622,9 @@ def render_results(
 
                     # Basic: do not show earnings in the details card
 
-                    with st.expander("Show row fields", expanded=False):
-                        st.json(row_to_jsonable_dict(r0))
+                    if is_admin_view:
+                        with st.expander("Show row fields", expanded=False):
+                            st.json(row_to_jsonable_dict(r0))
                 else:
                     st.caption("No row details available for this ticker.")
         else:
@@ -698,8 +701,9 @@ def render_results(
                     # ⭐ Add to watchlist action
                     render_watchlist_action(str(selected_ticker), key_prefix=key_prefix)
 
-                    with st.expander("Show row fields", expanded=False):
-                        st.json(row_to_jsonable_dict(r0))
+                    if is_admin_view:
+                        with st.expander("Show row fields", expanded=False):
+                            st.json(row_to_jsonable_dict(r0))
                 else:
                     st.caption("No row details available for this ticker.")
 
