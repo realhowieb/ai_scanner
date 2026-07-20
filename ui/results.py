@@ -203,11 +203,16 @@ def render_results(
     if fast_mode:
         # Render without Styler for speed
         if can_export_csv:
-            from ui.result_helpers import RESULTS_HIDDEN_COLUMNS, results_column_config
+            from ui.result_helpers import (
+                RESULTS_HIDDEN_COLUMNS,
+                format_ema_cross_column,
+                results_column_config,
+            )
 
             table_df = _format_earnings_for_display(df).drop(
                 columns=list(RESULTS_HIDDEN_COLUMNS), errors="ignore"
             )
+            table_df = format_ema_cross_column(table_df)
             table_df = move_column_after(table_df, "Spark10D", "Ticker")
             _tbl = st.dataframe(
                 table_df,

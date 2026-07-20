@@ -36,6 +36,37 @@ def ema(data: pd.Series | pd.DataFrame, span: int = 14) -> pd.Series:
     return s.ewm(span=span, adjust=False).mean()
 
 
+def ema_cross_detail(frame, fast: int = 9, slow: int = 21, min_bars: int = 23):
+    """Fresh EMA fast/slow cross on the latest daily bar (shared core).
+
+    Accepts a DataFrame with a 'Close' column or a Close Series. Returns
+    {"direction": "bullish"|"bearish", "ema_fast": float, "ema_slow": float} when
+    the fast EMA just crossed the slow one (golden/death), else None. Single
+    source of truth for the day-trader label, the alert evaluator, and the
+    scanner column.
+    """
+    try:
+        if isinstance(frame, pd.Series):
+            closes = pd.to_numeric(frame, errors="coerce").dropna()
+        elif frame is not None and hasattr(frame, "columns") and "Close" in frame.columns:
+            closes = pd.to_numeric(frame["Close"], errors="coerce").dropna()
+        else:
+            return None
+        if len(closes) < min_bars:
+            return None
+        ef = closes.ewm(span=fast, adjust=False).mean()
+        es = closes.ewm(span=slow, adjust=False).mean()
+        prev = float(ef.iloc[-2] - es.iloc[-2])
+        curr = float(ef.iloc[-1] - es.iloc[-1])
+        if prev <= 0 < curr:
+            return {"direction": "bullish", "ema_fast": float(ef.iloc[-1]), "ema_slow": float(es.iloc[-1])}
+        if prev >= 0 > curr:
+            return {"direction": "bearish", "ema_fast": float(ef.iloc[-1]), "ema_slow": float(es.iloc[-1])}
+        return None
+    except (ImportError, TypeError, ValueError, KeyError, AttributeError):
+        return None
+
+
 def rsi(data: pd.Series | pd.DataFrame, period: int = 14) -> pd.Series:
     """
     Wilder's RSI on Close.

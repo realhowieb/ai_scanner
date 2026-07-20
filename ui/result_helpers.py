@@ -135,7 +135,24 @@ def results_column_config() -> dict:
         "AI Confidence": cc.NumberColumn(format="%.1f%%"),
         "PctChange": cc.NumberColumn("Day %", format="%.2f%%"),
         "Spark10D": cc.LineChartColumn("10-day", width="small"),
+        "EMACross": cc.TextColumn("EMA 9/21", width="small"),
     }
+
+
+_EMA_CROSS_DISPLAY = {"Golden": "🟢 Golden", "Death": "🔴 Death"}
+
+
+def format_ema_cross_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Map the raw EMACross values ('Golden'/'Death'/None) to display strings.
+
+    A fresh 9/21 golden/death cross is highlighted; everything else shows '—'.
+    Returns the same df when the column is absent (older snapshots).
+    """
+    if df is None or "EMACross" not in df.columns:
+        return df
+    out = df.copy()
+    out["EMACross"] = out["EMACross"].map(_EMA_CROSS_DISPLAY).fillna("—")
+    return out
 
 
 YF_DISABLED_KEY = "yf_disabled"

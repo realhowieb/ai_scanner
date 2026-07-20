@@ -377,6 +377,16 @@ def run_breakout_scan(
         except Exception:
             spark = None
 
+        # EMA 9/21 cross ("Golden"/"Death") from the same bars — the shared core
+        # the day-trader label and alert evaluator use.
+        try:
+            from scan.indicators import ema_cross_detail
+
+            _ema = ema_cross_detail(df)
+            ema_cross = ("Golden" if _ema["direction"] == "bullish" else "Death") if _ema else None
+        except Exception:
+            ema_cross = None
+
         rows.append(
             {
                 "Ticker": symbol,
@@ -395,6 +405,7 @@ def run_breakout_scan(
                 "RSvsSPY": rs,
                 "IsBreakout": is_breakout,
                 "Spark10D": spark,
+                "EMACross": ema_cross,
             }
         )
         added += 1

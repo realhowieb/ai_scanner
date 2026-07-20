@@ -174,26 +174,13 @@ def fetch_avg_daily_volume(symbols: List[str], lookback: int = 20) -> Dict[str, 
 
 
 def ema_cross_label(frame: Any) -> Optional[str]:
-    """Return a short EMA 9/21 cross label from the latest daily close."""
-    if frame is None or not hasattr(frame, "columns") or "Close" not in frame.columns:
-        return None
-    try:
-        import pandas as pd
+    """Return a short EMA 9/21 cross label ('Golden'/'Death') from daily closes."""
+    from scan.indicators import ema_cross_detail
 
-        closes = pd.to_numeric(frame["Close"], errors="coerce").dropna()
-        if len(closes) < 23:
-            return None
-        ema9 = closes.ewm(span=9, adjust=False).mean()
-        ema21 = closes.ewm(span=21, adjust=False).mean()
-        prev_delta = float(ema9.iloc[-2] - ema21.iloc[-2])
-        curr_delta = float(ema9.iloc[-1] - ema21.iloc[-1])
-        if prev_delta <= 0 < curr_delta:
-            return "Golden"
-        if prev_delta >= 0 > curr_delta:
-            return "Death"
-    except (ImportError, TypeError, ValueError, KeyError, AttributeError):
+    detail = ema_cross_detail(frame)
+    if not detail:
         return None
-    return None
+    return "Golden" if detail["direction"] == "bullish" else "Death"
 
 
 @st.cache_data(ttl=1800, show_spinner=False)

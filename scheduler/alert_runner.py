@@ -221,25 +221,16 @@ def _load_ema_history(ticker: str):
 
 
 def _ema_cross_signal(frame) -> Optional[Dict[str, float | str]]:
-    if frame is None or not hasattr(frame, "columns") or "Close" not in frame.columns:
-        return None
-    try:
-        import pandas as pd
+    from scan.indicators import ema_cross_detail
 
-        closes = pd.to_numeric(frame["Close"], errors="coerce").dropna()
-        if len(closes) < 23:
-            return None
-        ema9 = closes.ewm(span=9, adjust=False).mean()
-        ema21 = closes.ewm(span=21, adjust=False).mean()
-        prev_delta = float(ema9.iloc[-2] - ema21.iloc[-2])
-        curr_delta = float(ema9.iloc[-1] - ema21.iloc[-1])
-        if prev_delta <= 0 < curr_delta:
-            return {"direction": "bullish", "ema9": float(ema9.iloc[-1]), "ema21": float(ema21.iloc[-1])}
-        if prev_delta >= 0 > curr_delta:
-            return {"direction": "bearish", "ema9": float(ema9.iloc[-1]), "ema21": float(ema21.iloc[-1])}
-    except (ImportError, TypeError, ValueError, KeyError, AttributeError):
+    detail = ema_cross_detail(frame)
+    if not detail:
         return None
-    return None
+    return {
+        "direction": detail["direction"],
+        "ema9": detail["ema_fast"],
+        "ema21": detail["ema_slow"],
+    }
 
 
 def _live_quote(ticker: str) -> Optional[float]:
