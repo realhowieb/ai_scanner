@@ -18,16 +18,10 @@ if not _username:
     st.stop()
 
 
-def _watch_tickers(user_id: str) -> list[str]:
-    try:
-        from db.watchlists import get_watchlist_tickers, list_watchlists
-
-        tickers: list[str] = []
-        for wl in list_watchlists(user_id) or []:
-            tickers.extend(get_watchlist_tickers(wl.get("id"), user_id) or [])
-        return sorted({str(t).strip().upper() for t in tickers if t})
-    except Exception:
-        return []
+def _session_watch_tickers() -> list[str]:
+    """Use tickers already loaded on the main page; avoid DB work before first paint."""
+    tickers = st.session_state.get("active_watchlist_tickers") or []
+    return sorted({str(t).strip().upper() for t in tickers if str(t).strip()})
 
 
 def _tier_limits() -> tuple[int, bool]:
@@ -58,7 +52,7 @@ try:
     _max_alerts, _email_ok = _tier_limits()
     render_alerts_panel(
         _username,
-        watch_tickers=_watch_tickers(_username),
+        watch_tickers=_session_watch_tickers(),
         max_alerts=_max_alerts,
         email_enabled=_email_ok,
     )
