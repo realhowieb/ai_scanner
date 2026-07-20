@@ -23,8 +23,10 @@ def _session_watch_tickers() -> list[str]:
 
 
 try:
+    from ui.header import render_page_logo
     from ui.day_trader import render_day_trader_panel
 
+    render_page_logo()
     render_day_trader_panel(watch_tickers=_session_watch_tickers())
 except Exception as e:
     st.error("Day Trader monitor failed to load.")

@@ -103,6 +103,12 @@ def _set_new_password_form(token: str) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Reset Password | HSFinest.AI", page_icon="🔑")
+    try:
+        from ui.header import render_page_logo
+
+        render_page_logo()
+    except Exception:
+        pass
     st.title("🔑 Password Reset")
 
     raw_token = st.query_params.get("token", "")

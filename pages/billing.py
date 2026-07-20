@@ -272,6 +272,12 @@ def _upgrade_buttons(current_tier_key: str) -> None:
 # =========================
 
 def render_billing_page() -> None:
+    try:
+        from ui.header import render_page_logo
+
+        render_page_logo()
+    except Exception:
+        pass
     st.title("💳 Plans & Billing")
     st.caption("Upgrade anytime. Downgrade anytime. No lock-in.")
 

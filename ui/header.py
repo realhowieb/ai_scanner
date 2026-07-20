@@ -8,6 +8,7 @@ import streamlit as st
 # Brand logo: prefer the HSFinest.AI logo; fall back to the legacy asset so the
 # header never breaks if the new file hasn't been added yet.
 _LOGO_CANDIDATES = (
+    "assets/hsfinest_logo_512.png",
     # Optimized 512px logo first (~83 KB vs ~1.1 MB) — same look, far faster
     # first paint on the login page, especially on mobile. Full-res originals
     # remain as fallbacks.
@@ -56,6 +57,16 @@ def render_header() -> None:
             width="content",
         )
         st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_page_logo(width: int = 150) -> None:
+    """Render a compact centered logo for standalone Streamlit pages."""
+    try:
+        left, center, right = st.columns([2, 1, 2])
+        with center:
+            st.image(_logo_path(), width=width)
+    except Exception:
+        pass
 
 
 # ---------------- Price ticker strip ----------------

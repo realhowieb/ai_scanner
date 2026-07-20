@@ -32,6 +32,12 @@ def _render_resend_box() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Verify Email | HSFinest.AI", page_icon="✉️")
+    try:
+        from ui.header import render_page_logo
+
+        render_page_logo()
+    except Exception:
+        pass
     st.title("✉️ Email Verification")
 
     raw_token = (st.query_params.get("token", "") or "").strip()
