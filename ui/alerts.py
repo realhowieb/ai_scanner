@@ -47,6 +47,19 @@ _ALERT_TYPE_LABELS = {
 }
 
 
+def _default_value_kwargs(key: str, value):
+    return {} if key in st.session_state else {"value": value}
+
+
+def _default_index_kwargs(key: str, options: list[str], default: str):
+    if key in st.session_state:
+        return {}
+    try:
+        return {"index": options.index(default)}
+    except ValueError:
+        return {"index": 0}
+
+
 def render_alert_edge(user_id: str, min_fires: int = 5) -> None:
     """Edge scorecard: hit rate + avg return by alert type. Never raises.
 
@@ -204,9 +217,9 @@ def render_alerts_panel(
             thr = st.number_input(
                 "Breakout score ≥",
                 min_value=0.0,
-                value=8.0,
                 step=0.5,
                 key="alert_break_thr",
+                **_default_value_kwargs("alert_break_thr", 8.0),
             )
             # Smart create: show the observed score distribution and how often
             # this threshold would have fired, so dead/spam thresholds are
@@ -218,7 +231,9 @@ def render_alerts_panel(
             except Exception:
                 pass
             wl_only = st.checkbox(
-                "Limit to my watchlist tickers", value=False, key="alert_break_wl"
+                "Limit to my watchlist tickers",
+                key="alert_break_wl",
+                **_default_value_kwargs("alert_break_wl", False),
             )
             if st.button("Create breakout alert", key="alert_break_btn"):
                 _guarded_create(
@@ -250,15 +265,26 @@ def render_alerts_panel(
             c1, c2, c3 = st.columns([2, 1, 2])
             with c1:
                 tk = st.text_input(
-                    "Ticker", value="", placeholder="e.g. AAPL", key="alert_price_tk"
+                    "Ticker",
+                    placeholder="e.g. AAPL",
+                    key="alert_price_tk",
+                    **_default_value_kwargs("alert_price_tk", ""),
                 )
             with c2:
+                price_directions = ["above", "below"]
                 direction = st.selectbox(
-                    "Direction", ["above", "below"], key="alert_price_dir"
+                    "Direction",
+                    price_directions,
+                    key="alert_price_dir",
+                    **_default_index_kwargs("alert_price_dir", price_directions, "above"),
                 )
             with c3:
                 target = st.number_input(
-                    "Price", min_value=0.0, value=0.0, step=1.0, key="alert_price_val"
+                    "Price",
+                    min_value=0.0,
+                    step=1.0,
+                    key="alert_price_val",
+                    **_default_value_kwargs("alert_price_val", 0.0),
                 )
             # Immediate-fire check: if the condition is already true at the
             # current price, say so before the user creates it.
@@ -300,9 +326,18 @@ def render_alerts_panel(
                 "Checked live (~60s) during extended hours."
             )
             mc1, mc2 = st.columns([2, 2])
-            mv_tk = mc1.text_input("Ticker", value="", placeholder="e.g. NVDA", key="alert_move_tk")
+            mv_tk = mc1.text_input(
+                "Ticker",
+                placeholder="e.g. NVDA",
+                key="alert_move_tk",
+                **_default_value_kwargs("alert_move_tk", ""),
+            )
             mv_thr = mc2.number_input(
-                "Move % ≥", min_value=0.5, value=5.0, step=0.5, key="alert_move_thr"
+                "Move % ≥",
+                min_value=0.5,
+                step=0.5,
+                key="alert_move_thr",
+                **_default_value_kwargs("alert_move_thr", 5.0),
             )
             if st.button("Create % move alert", key="alert_move_btn"):
                 if not mv_tk.strip():
@@ -322,9 +357,18 @@ def render_alerts_panel(
                 "Checked live (~60s) during extended hours."
             )
             rc1, rc2 = st.columns([2, 2])
-            rv_tk = rc1.text_input("Ticker", value="", placeholder="e.g. TSLA", key="alert_rvol_tk")
+            rv_tk = rc1.text_input(
+                "Ticker",
+                placeholder="e.g. TSLA",
+                key="alert_rvol_tk",
+                **_default_value_kwargs("alert_rvol_tk", ""),
+            )
             rv_thr = rc2.number_input(
-                "RVOL ≥", min_value=1.0, value=2.0, step=0.5, key="alert_rvol_thr"
+                "RVOL ≥",
+                min_value=1.0,
+                step=0.5,
+                key="alert_rvol_thr",
+                **_default_value_kwargs("alert_rvol_thr", 2.0),
             )
             if st.button("Create RVOL alert", key="alert_rvol_btn"):
                 if not rv_tk.strip():
@@ -344,12 +388,19 @@ def render_alerts_panel(
                 "bearish is a short-term Death Cross."
             )
             ec1, ec2 = st.columns([2, 2])
-            ema_tk = ec1.text_input("Ticker", value="", placeholder="e.g. AMD", key="alert_ema_tk")
+            ema_tk = ec1.text_input(
+                "Ticker",
+                placeholder="e.g. AMD",
+                key="alert_ema_tk",
+                **_default_value_kwargs("alert_ema_tk", ""),
+            )
+            ema_directions = ["bullish", "bearish"]
             ema_dir = ec2.selectbox(
                 "Cross direction",
-                ["bullish", "bearish"],
+                ema_directions,
                 format_func=lambda v: "Golden Cross (bullish)" if v == "bullish" else "Death Cross (bearish)",
                 key="alert_ema_dir",
+                **_default_index_kwargs("alert_ema_dir", ema_directions, "bullish"),
             )
             if st.button("Create EMA cross alert", key="alert_ema_btn"):
                 if not ema_tk.strip():
