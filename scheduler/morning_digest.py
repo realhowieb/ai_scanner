@@ -67,17 +67,56 @@ def _prebreakout_pick(df) -> Optional[Dict[str, Any]]:
 
 
 def _market_gappers(df, limit: int = 5) -> List[Dict[str, Any]]:
-    """Top gappers computed from live snapshots over the snapshot universe."""
+    """Top gappers over the snapshot universe.
+
+    Prefer live premarket snapshots (freshest overnight move), but the snapshot
+    universe is often low-liquidity names Alpaca has no premarket quote for, so
+    that path can come back empty. Fall back to the snapshot's own stored GapPct
+    (computed at scan time) so the digest's gappers section is never blank.
+    """
     try:
         from market_data import build_day_trader_metrics
 
         sym_col = _symbol_column(df) if df is not None else None
-        if df is None or not sym_col:
+        if df is not None and sym_col:
+            symbols = [str(s).upper() for s in df[sym_col].tolist() if str(s).strip()][:60]
+            rows = build_day_trader_metrics(symbols, with_rvol=False)
+            rows = [r for r in rows if r.get("gap_pct") is not None]
+            if rows:
+                rows.sort(key=lambda r: abs(r["gap_pct"]), reverse=True)
+                return rows[:limit]
+    except Exception:
+        pass
+    return _gappers_from_snapshot(df, limit)
+
+
+def _gappers_from_snapshot(df, limit: int = 5) -> List[Dict[str, Any]]:
+    """Gappers from the snapshot's stored GapPct/Last/PctChange columns."""
+    try:
+        sym_col = _symbol_column(df) if df is not None else None
+        if df is None or not sym_col or "GapPct" not in df.columns:
             return []
-        symbols = [str(s).upper() for s in df[sym_col].tolist() if str(s).strip()][:60]
-        rows = build_day_trader_metrics(symbols, with_rvol=False)
-        rows = [r for r in rows if r.get("gap_pct") is not None]
-        rows.sort(key=lambda r: abs(r["gap_pct"]), reverse=True)
+
+        def _f(row, col):
+            try:
+                v = float(row.get(col))
+                return v if v == v else None  # drop NaN
+            except (TypeError, ValueError):
+                return None
+
+        rows: List[Dict[str, Any]] = []
+        for _, r in df.iterrows():
+            gap = _f(r, "GapPct")
+            if gap is None:
+                continue
+            last = _f(r, "Last")
+            rows.append({
+                "ticker": str(r.get(sym_col) or "").upper(),
+                "last": None if last is None else round(last, 2),
+                "chg_pct": _f(r, "PctChange"),
+                "gap_pct": gap,
+            })
+        rows.sort(key=lambda x: abs(x["gap_pct"]), reverse=True)
         return rows[:limit]
     except Exception:
         return []

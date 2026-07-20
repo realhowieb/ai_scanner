@@ -189,3 +189,37 @@ class EarningsRailTests(unittest.TestCase):
             "db.earnings.load_earnings_map", side_effect=RuntimeError("db down")
         ):
             self.assertEqual(_annotate_earnings(lines), lines)
+
+
+import importlib.util as _ilu  # noqa: E402
+
+_PANDAS = _ilu.find_spec("pandas") is not None
+
+
+@unittest.skipUnless(_PANDAS, "gappers fallback iterates a DataFrame")
+class GappersFallbackTests(unittest.TestCase):
+    def _df(self):
+        import numpy as np
+        import pandas as pd
+
+        return pd.DataFrame({
+            "Ticker": ["SKHY", "AAOI", "VLO", "DEAD"],
+            "Last": [154.023, 102.2, 309.64, 5.0],
+            "PctChange": [0.83, 2.04, 3.11, np.nan],
+            "GapPct": [-0.50, 4.05, 1.86, np.nan],  # DEAD: no gap -> dropped
+        })
+
+    def test_fallback_from_snapshot_gappct(self):
+        from scheduler.morning_digest import _gappers_from_snapshot
+
+        out = _gappers_from_snapshot(self._df(), limit=5)
+        self.assertEqual([r["ticker"] for r in out], ["AAOI", "VLO", "SKHY"])
+        self.assertEqual(out[0]["gap_pct"], 4.05)
+        self.assertEqual(out[0]["last"], 102.2)  # rounded
+
+    def test_market_gappers_falls_back_when_live_empty(self):
+        from scheduler.morning_digest import _market_gappers
+
+        with mock.patch("market_data.build_day_trader_metrics", return_value=[]):
+            out = _market_gappers(self._df(), limit=3)
+        self.assertEqual([r["ticker"] for r in out], ["AAOI", "VLO", "SKHY"])
