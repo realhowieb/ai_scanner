@@ -5,6 +5,7 @@ import importlib.util
 import unittest
 
 _PANDAS = importlib.util.find_spec("pandas") is not None
+_STREAMLIT = importlib.util.find_spec("streamlit") is not None
 
 
 @unittest.skipUnless(_PANDAS, "EMA cross needs pandas")
@@ -46,6 +47,7 @@ class EmaCrossDetailTests(unittest.TestCase):
         d = ema_cross_detail(pd.Series([100.0] * 24 + [200.0]))
         self.assertEqual(d["direction"], "bullish")
 
+    @unittest.skipUnless(_STREAMLIT, "market_data imports streamlit")
     def test_callers_delegate_and_preserve_shapes(self):
         from market_data import ema_cross_label
         from scheduler.alert_runner import _ema_cross_signal
@@ -58,7 +60,7 @@ class EmaCrossDetailTests(unittest.TestCase):
         self.assertIn("ema21", sig)
 
 
-@unittest.skipUnless(_PANDAS, "display mapping needs pandas")
+@unittest.skipUnless(_PANDAS and _STREAMLIT, "display mapping needs pandas + streamlit")
 class EmaCrossColumnDisplayTests(unittest.TestCase):
     def test_maps_values_and_dashes_the_rest(self):
         import pandas as pd
