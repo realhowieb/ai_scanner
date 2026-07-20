@@ -93,10 +93,10 @@ def build_ticker_strip_html(
             f"<span class='{_item_class(change)}'>"
             f"<span>{escape(symbol)}</span>{change_html}</span>"
         )
-    groups = "".join(
-        f"<div class='symbol-tape__group'{' aria-hidden=\"true\"' if i else ''}>{items}</div>"
-        for i in range(TAPE_GROUP_COUNT)
-    )
+    groups = ""
+    for i in range(TAPE_GROUP_COUNT):
+        aria_hidden = ' aria-hidden="true"' if i else ""
+        groups += f"<div class='symbol-tape__group'{aria_hidden}>{items}</div>"
     safe_label = escape(label)
     return f"""
     <style>
