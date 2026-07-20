@@ -11,10 +11,12 @@ class TickerStripTests(unittest.TestCase):
         )
 
     def test_build_ticker_strip_html_has_scroll_and_escapes_symbols(self):
-        from ui.ticker_strip import build_ticker_strip_html
+        from ui.ticker_strip import TAPE_GROUP_COUNT, build_ticker_strip_html
 
         html = build_ticker_strip_html(["AAPL", "<BAD>"], label="Alerts")
         self.assertIn("symbol-tape-scroll", html)
+        self.assertIn(f"calc(-100% / {TAPE_GROUP_COUNT})", html)
+        self.assertEqual(html.count("class='symbol-tape__group'"), TAPE_GROUP_COUNT)
         self.assertIn("AAPL", html)
         self.assertIn("&lt;BAD&gt;", html)
         self.assertNotIn("<BAD>", html)

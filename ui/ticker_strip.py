@@ -13,6 +13,8 @@ try:
 except Exception:  # pragma: no cover - headless envs
     st = None  # type: ignore[assignment]
 
+TAPE_GROUP_COUNT = 8
+
 
 def normalize_tickers(tickers: Iterable[object] | None, limit: int = 80) -> list[str]:
     """Return uppercase, deduped ticker symbols safe for display."""
@@ -91,6 +93,10 @@ def build_ticker_strip_html(
             f"<span class='{_item_class(change)}'>"
             f"<span>{escape(symbol)}</span>{change_html}</span>"
         )
+    groups = "".join(
+        f"<div class='symbol-tape__group'{' aria-hidden=\"true\"' if i else ''}>{items}</div>"
+        for i in range(TAPE_GROUP_COUNT)
+    )
     safe_label = escape(label)
     return f"""
     <style>
@@ -156,7 +162,7 @@ def build_ticker_strip_html(
     }}
     @keyframes symbol-tape-scroll {{
         0% {{ transform: translate3d(0, 0, 0); }}
-        100% {{ transform: translate3d(-50%, 0, 0); }}
+        100% {{ transform: translate3d(calc(-100% / {TAPE_GROUP_COUNT}), 0, 0); }}
     }}
     @media (prefers-reduced-motion: reduce) {{
         .symbol-tape__track {{ animation: none; overflow-x: auto; max-width: 100%; }}
@@ -165,10 +171,7 @@ def build_ticker_strip_html(
     <div class="symbol-tape-wrap" aria-label="{safe_label} ticker strip">
       <span class="symbol-tape__label">{safe_label}</span>
       <div style="overflow:hidden; width:100%;">
-        <div class="symbol-tape__track">
-          <div class="symbol-tape__group">{items}</div>
-          <div class="symbol-tape__group" aria-hidden="true">{items}</div>
-        </div>
+        <div class="symbol-tape__track">{groups}</div>
       </div>
     </div>
     """
