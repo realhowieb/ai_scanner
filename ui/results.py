@@ -30,6 +30,7 @@ from ui.result_helpers import (
 )
 from ui.result_tables import render_static_results_table
 from ui.result_watchlist import render_watchlist_action
+from ui.smart_alerts import render_smart_alert_suggestions
 
 quiet_provider_loggers()
 
@@ -158,6 +159,7 @@ def render_results(
         "or relax filters (Min Gap %, price range, Unusual Volume Filter). "
         "If you see 0 results, try lowering Min Gap or turning off the Unusual Volume Filter."
     )
+    render_smart_alert_suggestions(df, key_prefix=key_prefix)
 
     # ─────────────────────────────
     # 📅 Earnings Filters (fast)
