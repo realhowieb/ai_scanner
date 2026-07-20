@@ -237,6 +237,12 @@ def render_day_trader_panel(
     if not DAY_TRADER_ENABLED:
         return
     st.markdown("## ⚡ Day Trader — live")
+    try:
+        from ui.ticker_strip import render_ticker_strip
+
+        render_ticker_strip(watch_tickers, label="Watchlist")
+    except Exception:
+        pass
     _render_state_banner()
 
     c1, c2, c3 = st.columns([2, 1, 1])

@@ -182,6 +182,12 @@ def render_alerts_panel(
         return
 
     st.markdown("## 🔔 Alerts")
+    try:
+        from ui.ticker_strip import render_ticker_strip
+
+        render_ticker_strip(watch_tickers, label="Watchlist")
+    except Exception:
+        pass
     if email_enabled:
         st.caption(
             "Get notified (in-app + email) when your conditions hit. "
