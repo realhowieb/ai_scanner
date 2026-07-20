@@ -6,7 +6,7 @@ or load watchlists, so pages can paint quickly before slower DB/API work starts.
 from __future__ import annotations
 
 from html import escape
-from typing import Iterable
+from typing import Iterable, Mapping
 
 try:
     import streamlit as st
@@ -29,18 +29,68 @@ def normalize_tickers(tickers: Iterable[object] | None, limit: int = 80) -> list
     return out
 
 
+def ticker_change_map(rows: Iterable[Mapping[str, object]] | None) -> dict[str, float]:
+    """Build {TICKER: day_change_pct} from cached quote/scan rows."""
+    out: dict[str, float] = {}
+    for row in rows or []:
+        symbol = str(
+            row.get("ticker") or row.get("symbol") or row.get("Ticker") or row.get("Symbol") or ""
+        ).strip().upper()
+        if not symbol:
+            continue
+        raw = (
+            row.get("chg_pct")
+            if row.get("chg_pct") is not None
+            else row.get("change_pct")
+            if row.get("change_pct") is not None
+            else row.get("% Change")
+            if row.get("% Change") is not None
+            else row.get("Chg %")
+        )
+        try:
+            if raw is None:
+                continue
+            if isinstance(raw, str):
+                raw = raw.strip().replace("%", "").replace("+", "")
+                if raw in ("", "—", "-"):
+                    continue
+            out[symbol] = float(raw)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _item_class(change: float | None) -> str:
+    if change is None:
+        return "symbol-tape__item symbol-tape__item--flat"
+    if change > 0:
+        return "symbol-tape__item symbol-tape__item--up"
+    if change < 0:
+        return "symbol-tape__item symbol-tape__item--down"
+    return "symbol-tape__item symbol-tape__item--flat"
+
+
 def build_ticker_strip_html(
     tickers: Iterable[object] | None,
     *,
     label: str = "Watchlist",
+    changes: Mapping[str, float] | None = None,
 ) -> str:
     symbols = normalize_tickers(tickers)
     if not symbols:
         return ""
 
-    items = "".join(
-        f"<span class='symbol-tape__item'>{escape(symbol)}</span>" for symbol in symbols
-    )
+    change_by_symbol = {str(k).upper(): v for k, v in (changes or {}).items()}
+    items = ""
+    for symbol in symbols:
+        change = change_by_symbol.get(symbol)
+        change_html = ""
+        if change is not None:
+            change_html = f"<span class='symbol-tape__move'>{float(change):+.2f}%</span>"
+        items += (
+            f"<span class='{_item_class(change)}'>"
+            f"<span>{escape(symbol)}</span>{change_html}</span>"
+        )
     safe_label = escape(label)
     return f"""
     <style>
@@ -65,14 +115,19 @@ def build_ticker_strip_html(
     }}
     .symbol-tape__track {{
         display: inline-flex;
-        gap: 10px;
         min-width: max-content;
         white-space: nowrap;
-        animation: symbol-tape-scroll 38s linear infinite;
+        animation: symbol-tape-scroll 32s linear infinite;
+    }}
+    .symbol-tape__group {{
+        display: inline-flex;
+        gap: 10px;
+        padding-right: 10px;
     }}
     .symbol-tape__item {{
         display: inline-flex;
         align-items: center;
+        gap: 6px;
         min-height: 26px;
         padding: 3px 10px;
         border: 1px solid rgba(148, 163, 184, 0.28);
@@ -81,6 +136,23 @@ def build_ticker_strip_html(
         color: #e5e7eb;
         font-size: 13px;
         font-weight: 700;
+    }}
+    .symbol-tape__item--up {{
+        border-color: rgba(34, 197, 94, 0.48);
+        background: rgba(22, 163, 74, 0.20);
+        color: #dcfce7;
+    }}
+    .symbol-tape__item--down {{
+        border-color: rgba(248, 113, 113, 0.48);
+        background: rgba(220, 38, 38, 0.20);
+        color: #fee2e2;
+    }}
+    .symbol-tape__move {{
+        font-size: 12px;
+        opacity: 0.9;
+    }}
+    .symbol-tape-wrap:hover .symbol-tape__track {{
+        animation-play-state: paused;
     }}
     @keyframes symbol-tape-scroll {{
         0% {{ transform: translate3d(0, 0, 0); }}
@@ -93,7 +165,10 @@ def build_ticker_strip_html(
     <div class="symbol-tape-wrap" aria-label="{safe_label} ticker strip">
       <span class="symbol-tape__label">{safe_label}</span>
       <div style="overflow:hidden; width:100%;">
-        <div class="symbol-tape__track">{items}{items}</div>
+        <div class="symbol-tape__track">
+          <div class="symbol-tape__group">{items}</div>
+          <div class="symbol-tape__group" aria-hidden="true">{items}</div>
+        </div>
       </div>
     </div>
     """
@@ -103,10 +178,11 @@ def render_ticker_strip(
     tickers: Iterable[object] | None,
     *,
     label: str = "Watchlist",
+    quote_rows: Iterable[Mapping[str, object]] | None = None,
 ) -> None:
     """Render a non-blocking ticker symbol strip when symbols are available."""
     if st is None:
         return
-    html = build_ticker_strip_html(tickers, label=label)
+    html = build_ticker_strip_html(tickers, label=label, changes=ticker_change_map(quote_rows))
     if html:
         st.markdown(html, unsafe_allow_html=True)

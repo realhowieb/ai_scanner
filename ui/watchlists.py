@@ -135,11 +135,13 @@ def _render_watchlist_tiles(tickers: List[str], per_row: int = 5, max_tiles: int
     except Exception:
         rows = []
     if not rows:
+        st.session_state["active_watchlist_quote_rows"] = []
         st.caption("Live quotes unavailable right now — tickers: " + ", ".join(tickers[:20]))
         return
     # Preserve the user's list order rather than the movers sort.
     by_sym = {r["ticker"]: r for r in rows}
     ordered = [by_sym[t] for t in [str(x).upper() for x in tickers] if t in by_sym]
+    st.session_state["active_watchlist_quote_rows"] = ordered
     for start in range(0, len(ordered), per_row):
         chunk = ordered[start : start + per_row]
         cols = st.columns(per_row)

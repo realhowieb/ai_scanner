@@ -240,7 +240,12 @@ def render_day_trader_panel(
     try:
         from ui.ticker_strip import render_ticker_strip
 
-        render_ticker_strip(watch_tickers, label="Watchlist")
+        render_ticker_strip(
+            watch_tickers,
+            label="Watchlist",
+            quote_rows=st.session_state.get("dt_rows")
+            or st.session_state.get("active_watchlist_quote_rows"),
+        )
     except Exception:
         pass
     _render_state_banner()

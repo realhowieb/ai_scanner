@@ -19,13 +19,33 @@ class TickerStripTests(unittest.TestCase):
         self.assertIn("&lt;BAD&gt;", html)
         self.assertNotIn("<BAD>", html)
 
+    def test_build_ticker_strip_html_colors_known_changes(self):
+        from ui.ticker_strip import build_ticker_strip_html, ticker_change_map
+
+        changes = ticker_change_map(
+            [
+                {"ticker": "AAPL", "chg_pct": 1.25},
+                {"Symbol": "MSFT", "% Change": "-0.5%"},
+                {"Ticker": "FLAT", "Chg %": 0},
+            ]
+        )
+        html = build_ticker_strip_html(["AAPL", "MSFT", "FLAT"], changes=changes)
+        self.assertIn("symbol-tape__item--up", html)
+        self.assertIn("symbol-tape__item--down", html)
+        self.assertIn("+1.25%", html)
+        self.assertIn("-0.50%", html)
+
     def test_alerts_and_day_trader_render_symbol_tape(self):
         from pathlib import Path
 
         alerts_source = Path("ui/alerts.py").read_text()
         day_trader_source = Path("ui/day_trader.py").read_text()
-        self.assertIn("render_ticker_strip(watch_tickers", alerts_source)
-        self.assertIn("render_ticker_strip(watch_tickers", day_trader_source)
+        self.assertIn("render_ticker_strip(", alerts_source)
+        self.assertIn("watch_tickers", alerts_source)
+        self.assertIn("render_ticker_strip(", day_trader_source)
+        self.assertIn("watch_tickers", day_trader_source)
+        self.assertIn("active_watchlist_quote_rows", alerts_source)
+        self.assertIn("dt_rows", day_trader_source)
 
 
 if __name__ == "__main__":

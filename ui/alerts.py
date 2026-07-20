@@ -185,7 +185,11 @@ def render_alerts_panel(
     try:
         from ui.ticker_strip import render_ticker_strip
 
-        render_ticker_strip(watch_tickers, label="Watchlist")
+        render_ticker_strip(
+            watch_tickers,
+            label="Watchlist",
+            quote_rows=st.session_state.get("active_watchlist_quote_rows"),
+        )
     except Exception:
         pass
     if email_enabled:
