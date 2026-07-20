@@ -60,6 +60,18 @@ def _default_index_kwargs(key: str, options: list[str], default: str):
         return {"index": 0}
 
 
+def _has_alert_prefill() -> bool:
+    prefill_keys = (
+        "alert_break_thr",
+        "alert_price_tk",
+        "alert_price_val",
+        "alert_move_tk",
+        "alert_rvol_tk",
+        "alert_ema_tk",
+    )
+    return any(key in st.session_state for key in prefill_keys)
+
+
 def render_alert_edge(user_id: str, min_fires: int = 5) -> None:
     """Edge scorecard: hit rate + avg return by alert type. Never raises.
 
@@ -204,7 +216,7 @@ def render_alerts_panel(
     else:
         st.caption(f"Using {used} of {max_alerts} alert slots on your plan.")
 
-    with st.expander("➕ Create an alert", expanded=True):
+    with st.expander("➕ Create an alert", expanded=_has_alert_prefill()):
         tab_break, tab_watch, tab_price, tab_move, tab_rvol, tab_ema = st.tabs(
             ["🚀 Breakout", "📋 Watchlist", "💲 Price", "⚡ % Move", "📊 RVOL", "📈 EMA Cross"]
         )
@@ -221,15 +233,21 @@ def render_alerts_panel(
                 key="alert_break_thr",
                 **_default_value_kwargs("alert_break_thr", 8.0),
             )
-            # Smart create: show the observed score distribution and how often
-            # this threshold would have fired, so dead/spam thresholds are
-            # caught before the alert exists. Guarded — insight is optional.
-            try:
-                from ui.alert_preview import render_breakout_threshold_insight
+            if st.checkbox(
+                "Show threshold history",
+                value=False,
+                key="alert_break_show_history",
+                help="Loads recent saved scans to estimate whether this threshold is too quiet or too noisy.",
+            ):
+                # Smart create: show the observed score distribution and how
+                # often this threshold would have fired. This is intentionally
+                # opt-in because it reads recent saved snapshots from the DB.
+                try:
+                    from ui.alert_preview import render_breakout_threshold_insight
 
-                render_breakout_threshold_insight(float(thr))
-            except Exception:
-                pass
+                    render_breakout_threshold_insight(float(thr))
+                except Exception:
+                    pass
             wl_only = st.checkbox(
                 "Limit to my watchlist tickers",
                 key="alert_break_wl",

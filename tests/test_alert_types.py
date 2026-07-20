@@ -15,6 +15,17 @@ class AlertTypesTests(unittest.TestCase):
         self.assertIn("Golden Cross (bullish)", source)
         self.assertIn("Death Cross (bearish)", source)
 
+    def test_breakout_history_preview_is_opt_in(self):
+        from pathlib import Path
+
+        source = Path("ui/alerts.py").read_text()
+        self.assertIn("Show threshold history", source)
+        self.assertIn("expanded=_has_alert_prefill()", source)
+        self.assertLess(
+            source.index("Show threshold history"),
+            source.index("render_breakout_threshold_insight(float(thr))"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
