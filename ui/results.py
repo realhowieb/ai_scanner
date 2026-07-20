@@ -31,6 +31,7 @@ from ui.result_helpers import (
 from ui.result_tables import render_static_results_table
 from ui.result_watchlist import render_watchlist_action
 from ui.smart_alerts import render_smart_alert_suggestions
+from ui.header import render_logo_heading
 
 quiet_provider_loggers()
 
@@ -138,7 +139,7 @@ def render_results(
         ):
             st.session_state.pop(k, None)
 
-    st.subheader("Results")
+    render_logo_heading("Results")
     ai_warning = df.attrs.get(WARNING_ATTR)
     ai_trained_at = df.attrs.get(TRAINED_AT_ATTR)
     ai_source = df.attrs.get(SOURCE_ATTR)

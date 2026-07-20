@@ -9,9 +9,15 @@ class LogoBrandingTests(unittest.TestCase):
     def test_logo_candidate_prefers_uploaded_asset(self):
         source = Path("ui/header.py").read_text()
         self.assertIn("def render_page_logo", source)
+        self.assertIn("def render_logo_heading", source)
         first_candidate = source.index('"assets/hsfinest_logo_512.png"')
         fallback_candidate = source.index('"assets/hsfailogo_transparent_opt.png"')
         self.assertLess(first_candidate, fallback_candidate)
+
+    def test_results_section_uses_logo_heading(self):
+        source = Path("ui/results.py").read_text()
+        self.assertIn("from ui.header import render_logo_heading", source)
+        self.assertIn('render_logo_heading("Results")', source)
 
     def test_standalone_pages_render_shared_logo(self):
         for path in (

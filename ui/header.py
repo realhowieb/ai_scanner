@@ -69,6 +69,18 @@ def render_page_logo(width: int = 150) -> None:
         pass
 
 
+def render_logo_heading(title: str, *, logo_width: int = 44) -> None:
+    """Render a compact logo next to a section heading."""
+    try:
+        logo_col, title_col = st.columns([0.08, 0.92], vertical_alignment="center")
+        with logo_col:
+            st.image(_logo_path(), width=logo_width)
+        with title_col:
+            st.subheader(title)
+    except Exception:
+        st.subheader(title)
+
+
 # ---------------- Price ticker strip ----------------
 TICKER_STRIP = ["SPY", "QQQ", "IWM", "DIA", "VIX", "AAPL", "MSFT", "NVDA", "TSLA"]
 # Market context always leads the tape; today's top scan picks follow.
