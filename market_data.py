@@ -97,11 +97,22 @@ def fetch_alpaca_snapshots(symbols: List[str]) -> Dict[str, dict]:
     cfg = _get_alpaca_base_urls()
     url = f"{cfg['data_url']}/v2/stocks/snapshots"
 
+    # Alpaca uses a dot for class shares (BRK.B) while our universe uses Yahoo's
+    # dash form (BRK-B). Send the dot form and map responses back — otherwise a
+    # single class-share symbol 400s the whole request and every ticker in that
+    # chunk silently returns no quote.
+    alpaca_syms: List[str] = []
+    orig_by_alpaca: Dict[str, str] = {}
+    for s in symbols:
+        a = s.replace("-", ".")
+        alpaca_syms.append(a)
+        orig_by_alpaca[a] = s
+
     # Chunk the symbol list (~100 per call keeps URLs and responses sane) so
     # callers aren't capped by a single request's practical limit.
     normalized: Dict[str, dict] = {}
-    for start in range(0, len(symbols), 100):
-        chunk = symbols[start : start + 100]
+    for start in range(0, len(alpaca_syms), 100):
+        chunk = alpaca_syms[start : start + 100]
         try:
             resp = requests.get(
                 url, headers=headers, params={"symbols": ",".join(chunk)}, timeout=10
@@ -118,7 +129,8 @@ def fetch_alpaca_snapshots(symbols: List[str]) -> Dict[str, dict]:
             continue
         for k, v in data.items():
             if isinstance(v, dict):
-                normalized[k.upper()] = v
+                key = orig_by_alpaca.get(k.upper(), k.upper())  # map BRK.B -> BRK-B
+                normalized[key] = v
 
     return normalized
 
