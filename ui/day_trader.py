@@ -236,18 +236,6 @@ def render_day_trader_panel(
         return
     if not DAY_TRADER_ENABLED:
         return
-    try:
-        from market_data import build_day_trader_metrics  # noqa: F401 - availability check
-    except Exception as e:
-        print(f"[day_trader] market_data import failed — panel hidden: {type(e).__name__}: {e}")
-        try:
-            from ui.monitoring import capture
-
-            capture(e)
-        except Exception:
-            pass
-        return
-
     st.markdown("## ⚡ Day Trader — live")
     _render_state_banner()
 
