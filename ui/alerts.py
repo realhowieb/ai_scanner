@@ -37,6 +37,14 @@ def _cached_edge(user_id: str):
     return scorecards_by_type(user_id)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_fire_counts(user_id: str):
+    """Recent fire count per alert (incl. unscored), cached 5 min."""
+    from db.alerts import recent_fire_counts_for_user
+
+    return recent_fire_counts_for_user(user_id)
+
+
 _ALERT_TYPE_LABELS = {
     "breakout": "🚀 Breakout",
     "watchlist": "👁️ Watchlist",
@@ -455,8 +463,10 @@ def render_alerts_panel(
 
             scorecards = _cached_scorecards(user_id)
             sequences = _cached_sequences(user_id)
+            fire_counts = _cached_fire_counts(user_id)
         except Exception:
             scorecards, sequences, HIT_TARGET_PCT, HORIZON_DAYS = {}, {}, 5.0, 3
+            fire_counts = {}
 
         # Edge scorecard: which alert TYPES actually pay off (aggregate view).
         render_alert_edge(user_id)
@@ -480,6 +490,18 @@ def render_alerts_panel(
                     f"🎯 {card['hits']}/{card['fires']} recent fires hit "
                     f"+{HIT_TARGET_PCT:g}% within {HORIZON_DAYS}d{avg_s}{dots_s}"
                 )
+            else:
+                # Not enough scored fires yet — show it's building so an empty
+                # spot doesn't read as "this alert never does anything".
+                fired_n = int(fire_counts.get(a.get("id"), 0))
+                scored_n = int(card.get("fires", 0)) if card else 0
+                if fired_n > 0:
+                    fires_word = "fire" if fired_n == 1 else "fires"
+                    cols[0].caption(
+                        f"🕒 {fired_n} recent {fires_word} · {scored_n}/3 scored — a "
+                        f"scorecard appears once 3 fires finish their "
+                        f"{HORIZON_DAYS}-day outcome window."
+                    )
             new_enabled = cols[1].toggle(
                 "On", value=bool(a.get("enabled")), key=f"alert_tog_{a['id']}"
             )

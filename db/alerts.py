@@ -262,3 +262,33 @@ def list_recent_events(user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
                 }
             )
     return out
+
+
+def recent_fire_counts_for_user(user_id: str, days: int = 30) -> Dict[int, int]:
+    """{alert_id: number of fires in the last `days`}, including not-yet-scored
+    ones — lets the UI show a 'scoring pending' hint for young alerts instead of
+    a blank where a scorecard will eventually appear."""
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT alert_id, COUNT(*) AS n
+            FROM alert_events
+            WHERE user_id = %s AND alert_id IS NOT NULL
+              AND fired_at >= NOW() - (%s * INTERVAL '1 day')
+            GROUP BY alert_id
+            """,
+            (user_id, int(days)),
+        )
+        rows = cur.fetchall()
+        cur.close()
+    except Exception:
+        return {}
+    out: Dict[int, int] = {}
+    for r in rows:
+        aid = r.get("alert_id") if isinstance(r, dict) else r[0]
+        n = r.get("n") if isinstance(r, dict) else r[1]
+        if aid is not None:
+            out[int(aid)] = int(n or 0)
+    return out

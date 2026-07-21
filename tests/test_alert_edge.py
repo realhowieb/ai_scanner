@@ -73,3 +73,21 @@ class ScorecardsByTypeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecentFireCountsTests(unittest.TestCase):
+    def test_aggregates_fire_counts_by_alert(self):
+        from db import alerts as A
+
+        conn = _FakeConn([{"alert_id": 5, "n": 4}, {"alert_id": 7, "n": 1}])
+        with mock.patch.object(A, "_get_conn", return_value=conn):
+            out = A.recent_fire_counts_for_user("u@example.com")
+        self.assertEqual(out, {5: 4, 7: 1})
+
+    def test_tuple_rows_and_null_alert_id(self):
+        from db import alerts as A
+
+        conn = _FakeConn([(5, 3), (None, 9)])  # null alert_id ignored
+        with mock.patch.object(A, "_get_conn", return_value=conn):
+            out = A.recent_fire_counts_for_user("u")
+        self.assertEqual(out, {5: 3})
