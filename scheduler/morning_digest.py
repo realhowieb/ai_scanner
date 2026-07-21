@@ -24,17 +24,41 @@ _DIGEST_REFRESH_KEY = "morning_digest"
 
 
 def _latest_snapshot_df():
-    """Load the most recent saved snapshot as a DataFrame, or None."""
+    """Load the most recent meaningful scan as a DataFrame, or None.
+
+    Prefers a real daily snapshot, then the most recent run that actually
+    produced results. The cron's session scans can log 0-row premarket/postmarket
+    runs, and picking the newest run blindly (or a snapshot that loads empty)
+    would blank the whole digest — so we load candidates in priority order and
+    return the first that yields a non-empty DataFrame.
+    """
     try:
         from db.runs import list_runs, load_run_results
         from ui.app_runtime import normalize_results_to_df
 
-        runs = list_runs(limit=10) or []
-        snap = next((r for r in runs if r.get("is_snapshot")), None) or (runs[0] if runs else None)
-        if not snap:
+        runs = list_runs(limit=25) or []
+        if not runs:
             return None
-        raw = load_run_results(snap["id"])
-        return normalize_results_to_df(raw) if raw else None
+        # Snapshots first (newest→oldest), then any run reporting results, then
+        # the newest run as a last resort.
+        candidates = [r for r in runs if r.get("is_snapshot")]
+        candidates += [
+            r for r in runs
+            if not r.get("is_snapshot") and (r.get("row_count") or 0) > 0
+        ]
+        candidates.append(runs[0])
+
+        seen: set = set()
+        for snap in candidates:
+            rid = snap.get("id")
+            if rid in seen:
+                continue
+            seen.add(rid)
+            raw = load_run_results(rid)
+            df = normalize_results_to_df(raw) if raw else None
+            if df is not None and len(df) > 0:
+                return df
+        return None
     except Exception:
         return None
 

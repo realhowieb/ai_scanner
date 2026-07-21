@@ -223,3 +223,38 @@ class GappersFallbackTests(unittest.TestCase):
         with mock.patch("market_data.build_day_trader_metrics", return_value=[]):
             out = _market_gappers(self._df(), limit=3)
         self.assertEqual([r["ticker"] for r in out], ["AAOI", "VLO", "SKHY"])
+
+
+@unittest.skipUnless(_PANDAS, "_latest_snapshot_df loads DataFrames")
+class LatestSnapshotDfTests(unittest.TestCase):
+    def test_skips_empty_runs_and_uses_last_run_with_results(self):
+        import sys
+        import types
+
+        import pandas as pd
+
+        import scheduler.morning_digest as md
+
+        runs = [
+            {"id": 1938, "is_snapshot": False, "row_count": 0},    # empty premarket (newest)
+            {"id": 1937, "is_snapshot": False, "row_count": 0},    # empty postmarket
+            {"id": 1900, "is_snapshot": False, "row_count": 100},  # good scan (older)
+        ]
+
+        def fake_load(rid):
+            if rid == 1900:
+                return [{"Ticker": "AAA", "GapPct": 2.0}]
+            return []  # empty runs
+
+        fr = types.ModuleType("db.runs")
+        fr.list_runs = lambda **k: runs
+        fr.load_run_results = fake_load
+        ar = types.ModuleType("ui.app_runtime")
+        ar.normalize_results_to_df = lambda raw: pd.DataFrame(raw) if raw else None
+
+        with mock.patch.dict(sys.modules, {"db.runs": fr, "ui.app_runtime": ar}):
+            df = md._latest_snapshot_df()
+
+        self.assertIsNotNone(df)
+        self.assertEqual(len(df), 1)
+        self.assertEqual(df.iloc[0]["Ticker"], "AAA")
