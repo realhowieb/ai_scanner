@@ -36,6 +36,28 @@ def main() -> None:
     except Exception as e:
         print(f"universe load error: {type(e).__name__}: {e}")
 
+    # Inspect the actual fetched frames — downloaded_count only counts keys, not
+    # whether each frame is usable (non-empty, has Close, enough history).
+    try:
+        from scan.headless_common import build_filtered_price_data, fetch_headless_prices
+
+        price_data, skipped, elapsed = fetch_headless_prices(
+            list(UNIVERSE), period="60d", interval="1d",
+            use_parallel=True, parallel_chunk=800, parallel_workers=4,
+        )
+        print(f"\nfetch_headless_prices: {len(price_data)} frames, {len(skipped)} skipped, {elapsed:.2f}s")
+        nonempty = {k: v for k, v in price_data.items() if v is not None and len(v) > 0}
+        print(f"  non-empty frames: {len(nonempty)} / {len(price_data)}")
+        for k, v in list(price_data.items())[:4]:
+            cols = list(getattr(v, "columns", []))
+            print(f"    {k}: rows={0 if v is None else len(v)} cols={cols[:6]}")
+        filtered = build_filtered_price_data(
+            price_data, min_price=5.0, max_price=1000.0, min_dollar_vol=2_000_000,
+        )
+        print(f"  after price/liquidity filter: {len(filtered)} frames")
+    except Exception as e:
+        print(f"fetch/filter probe error: {type(e).__name__}: {e}")
+
     for session in ("regular", "premarket", "postmarket"):
         print(f"\n### session_label = {session!r}")
         try:
