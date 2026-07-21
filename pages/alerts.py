@@ -47,8 +47,8 @@ def _tier_limits() -> tuple[int, bool]:
 
 
 try:
-    from ui.header import render_page_logo
     from ui.alerts import render_alerts_panel
+    from ui.header import render_page_logo
 
     render_page_logo()
     _max_alerts, _email_ok = _tier_limits()
