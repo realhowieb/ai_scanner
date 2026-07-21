@@ -36,16 +36,26 @@ class EarningsSourcesTest(unittest.TestCase):
         self.assertIsNone(m["NOTIME"][1])
 
     def test_finnhub_fallback_when_no_fmp(self):
+        from datetime import date, timedelta
+
         from data import earnings_sources as es
+
+        # Dates relative to today so the test doesn't rot as the clock advances
+        # (earnings sources filter out already-reported dates).
+        today = date.today()
+        msft_d = (today + timedelta(days=6)).isoformat()
+        tsla_d = (today + timedelta(days=3)).isoformat()
+        win_start = (today - timedelta(days=20)).isoformat()
+        win_end = (today + timedelta(days=90)).isoformat()
 
         os.environ["FINNHUB_API_KEY"] = "test"
         es._get_json = lambda url, timeout=20.0: {
             "earningsCalendar": [
-                {"symbol": "MSFT", "date": "2026-07-25", "hour": "amc"},
-                {"symbol": "TSLA", "date": "2026-07-20", "hour": "bmo"},
+                {"symbol": "MSFT", "date": msft_d, "hour": "amc"},
+                {"symbol": "TSLA", "date": tsla_d, "hour": "bmo"},
             ]
         }
-        m, src = es.fetch_earnings_window("2026-06-28", "2026-10-28")
+        m, src = es.fetch_earnings_window(win_start, win_end)
         self.assertEqual(src, "finnhub")
         self.assertEqual(m["MSFT"][1], "AMC")
         self.assertEqual(m["TSLA"][1], "BMO")
