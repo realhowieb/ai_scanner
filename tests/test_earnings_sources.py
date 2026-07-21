@@ -1,4 +1,3 @@
-import datetime as dt
 import os
 import unittest
 
@@ -19,19 +18,32 @@ class EarningsSourcesTest(unittest.TestCase):
         self.assertEqual(es.fetch_earnings_window("2026-06-28", "2026-10-28"), ({}, "none"))
 
     def test_fmp_parsing(self):
+        from datetime import date, timedelta
+
         from data import earnings_sources as es
+
+        # Relative to today — the source keeps only future (>= today) dates, so
+        # hardcoded dates rot as the clock crosses them.
+        today = date.today()
+        aapl_early = today + timedelta(days=9)
+        aapl_late = today + timedelta(days=100)   # later -> ignored (earliest wins)
+        brkb_d = today + timedelta(days=12)
+        notime_d = today + timedelta(days=40)
+        old_d = today - timedelta(days=2000)       # past -> ignored
+        win_start = (today - timedelta(days=20)).isoformat()
+        win_end = (today + timedelta(days=150)).isoformat()
 
         os.environ["FMP_API_KEY"] = "test"
         es._get_json = lambda url, timeout=20.0: [
-            {"symbol": "AAPL", "date": "2026-07-30", "time": "amc"},
-            {"symbol": "AAPL", "date": "2026-10-29", "time": "amc"},  # later -> ignored
-            {"symbol": "BRK.B", "date": "2026-08-02", "time": "bmo"},  # dot -> dash
-            {"symbol": "OLD", "date": "2020-01-01", "time": "amc"},  # past -> ignored
-            {"symbol": "NOTIME", "date": "2026-09-01"},  # missing time -> None
+            {"symbol": "AAPL", "date": aapl_early.isoformat(), "time": "amc"},
+            {"symbol": "AAPL", "date": aapl_late.isoformat(), "time": "amc"},
+            {"symbol": "BRK.B", "date": brkb_d.isoformat(), "time": "bmo"},  # dot -> dash
+            {"symbol": "OLD", "date": old_d.isoformat(), "time": "amc"},
+            {"symbol": "NOTIME", "date": notime_d.isoformat()},  # missing time -> None
         ]
-        m = es.fetch_earnings_window_fmp("2026-06-28", "2026-10-28")
-        self.assertEqual(m["AAPL"], (dt.date(2026, 7, 30), "AMC"))
-        self.assertEqual(m["BRK-B"], (dt.date(2026, 8, 2), "BMO"))
+        m = es.fetch_earnings_window_fmp(win_start, win_end)
+        self.assertEqual(m["AAPL"], (aapl_early, "AMC"))
+        self.assertEqual(m["BRK-B"], (brkb_d, "BMO"))
         self.assertNotIn("OLD", m)
         self.assertIsNone(m["NOTIME"][1])
 
