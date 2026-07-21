@@ -176,9 +176,15 @@ def run_and_save(
     max_price: float | None = None,
     top_n: int | None = None,
     profile: str | None = None,
+    save_snapshot: bool = False,
 ) -> ScanRunSummary:
-    """Run one universe scan and save results to the configured database."""
-    from db.runs import save_run
+    """Run one universe scan and save results to the configured database.
+
+    save_snapshot=True also promotes the results to the day's daily snapshot
+    (idempotent per universe/day) — the track record and morning digest read
+    is_snapshot rows, and the cron is the only reliable daily producer.
+    """
+    from db.runs import save_daily_snapshot, save_run
     from scan.engine import run_breakout_scan
 
     print(f"\n=== Running {universe} scan @ {dt.datetime.now(dt.timezone.utc).isoformat()} ===")
@@ -228,17 +234,30 @@ def run_and_save(
                 error=f"SkippedSave: {msg}",
             )
 
+        results_json = _results_to_json(results)
         save_run(
             name=run_name,
             label=universe,
             username=username,
             row_count=row_count,
             duration_sec=duration,
-            results_json=_results_to_json(results),
+            results_json=results_json,
             is_snapshot=False,
             allow_sqlite_fallback=False,
         )
         print(f"Saved {row_count} rows for {universe}.")
+
+        # Promote to the day's snapshot so the track record + digest have a
+        # reliable daily is_snapshot row (idempotent per universe/day).
+        if save_snapshot:
+            try:
+                save_daily_snapshot(
+                    universe, results_json, username=username,
+                    row_count=row_count, duration_sec=duration,
+                )
+                print(f"Saved daily snapshot for {universe}.")
+            except Exception as e:
+                print(f"[cron] snapshot save failed for {universe}: {e}")
         return ScanRunSummary(
             universe=universe,
             ok=True,
@@ -468,7 +487,8 @@ def main():
     else:
         universes = _configured_universes()
         print(f"Configured universes: {', '.join(universes)}")
-        runs = [run_and_save(universe) for universe in universes]
+        # Regular slots also produce the day's snapshot (per-universe, idempotent).
+        runs = [run_and_save(universe, save_snapshot=True) for universe in universes]
 
     # Evaluate per-user alerts against the fresh snapshot (best-effort; never
     # let alert failures fail the scan run).

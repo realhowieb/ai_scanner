@@ -76,10 +76,18 @@ def build_filtered_price_data(
     max_price: float,
     min_dollar_vol: int,
 ) -> dict[str, pd.DataFrame]:
-    """Apply the shared price and liquidity filters for headless scans."""
-    filtered = filter_tickers_by_price(price_data, min_price, max_price)
-    liquid = filter_by_dollar_volume(price_data, min_dollar_vol)
-    return {ticker: price_data[ticker] for ticker in filtered if ticker in liquid and ticker in price_data}
+    """Apply the shared price and liquidity filters for headless scans.
+
+    Both filters take (tickers, lookup, thresholds) — the symbols to check and a
+    lookup of their frames. Passing the price_data dict as `tickers` and the
+    threshold as the `lookup` made every per-symbol lookup fail, so the filters
+    returned nothing and headless (premarket/postmarket) scans always produced 0
+    results.
+    """
+    symbols = list(price_data.keys())
+    priced = set(filter_tickers_by_price(symbols, price_data, min_price, max_price))
+    liquid = set(filter_by_dollar_volume(symbols, price_data, min_dollar_vol))
+    return {t: price_data[t] for t in symbols if t in priced and t in liquid}
 
 
 def maybe_run_gap_filter(price_data: dict[str, pd.DataFrame], *, enabled: bool) -> None:
