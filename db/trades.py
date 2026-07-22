@@ -31,6 +31,16 @@ def _ensure_schema(conn) -> None:
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_user_trades_user ON user_trades (user_id, entered_at DESC)"
     )
+    # Paper-trading + provenance columns (added over time; all nullable so
+    # existing manual trades are untouched).
+    for col, ddl in (
+        ("alpaca_order_id", "TEXT"),
+        ("stop_price", "DOUBLE PRECISION"),
+        ("target_price", "DOUBLE PRECISION"),
+        ("breakout_score", "DOUBLE PRECISION"),
+        ("ai_confidence", "DOUBLE PRECISION"),
+    ):
+        cur.execute(f"ALTER TABLE user_trades ADD COLUMN IF NOT EXISTS {col} {ddl}")
     conn.commit()
     cur.close()
 
@@ -44,16 +54,41 @@ def _get_conn():
 
 
 def log_trade(
-    user_id: str, ticker: str, entry_price: float, shares: int, source: str = "scan"
+    user_id: str,
+    ticker: str,
+    entry_price: float,
+    shares: int,
+    source: str = "scan",
+    *,
+    alpaca_order_id: Optional[str] = None,
+    stop_price: Optional[float] = None,
+    target_price: Optional[float] = None,
+    breakout_score: Optional[float] = None,
+    ai_confidence: Optional[float] = None,
 ) -> None:
+    """Record a trade. The keyword fields carry paper-order + provenance data
+    (Alpaca order id, plan stop/target, and the scanner score / AI confidence at
+    entry); all optional so manual logging is unchanged."""
+    def _f(v):
+        try:
+            return None if v is None else float(v)
+        except (TypeError, ValueError):
+            return None
+
     conn = _get_conn()
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO user_trades (user_id, ticker, entry_price, shares, source)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO user_trades
+            (user_id, ticker, entry_price, shares, source,
+             alpaca_order_id, stop_price, target_price, breakout_score, ai_confidence)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
-        (user_id, (ticker or "").upper(), float(entry_price), int(shares), source),
+        (
+            user_id, (ticker or "").upper(), float(entry_price), int(shares), source,
+            (str(alpaca_order_id) if alpaca_order_id else None),
+            _f(stop_price), _f(target_price), _f(breakout_score), _f(ai_confidence),
+        ),
     )
     conn.commit()
     cur.close()
