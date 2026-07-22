@@ -158,6 +158,12 @@ def render_trade_plan(row: Mapping[str, Any], *, locked: bool = False, key: str 
             log_trade_button(row, shares=plan["shares"], key=f"tp_log_{key}_{row.get('Ticker')}")
         except Exception:
             pass
+        try:
+            from ui.paper_trade import render_paper_trade_button
+
+            render_paper_trade_button(row, shares=plan["shares"], plan=plan, key=key)
+        except Exception:
+            pass
         _render_alert_quick_action(row, key=key)
     except Exception:
         pass

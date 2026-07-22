@@ -768,6 +768,14 @@ def main():
     except Exception:
         pass
 
+    # Alpaca paper-trading account connection (Premium; hidden otherwise).
+    try:
+        from ui.paper_trade import render_connect_panel
+
+        render_connect_panel(username)
+    except Exception:
+        pass
+
     # Trade journal (positions logged from trade plans; hidden until first log).
     try:
         render_journal_panel(username)

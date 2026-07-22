@@ -142,3 +142,76 @@ class OrderClientTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _FakeSt:
+    """Minimal streamlit stand-in: swallows UI calls, records spinner/messages."""
+    def __init__(self):
+        self.errors = []
+        self.successes = []
+        self.session_state = {}
+
+    def error(self, msg, *a, **k):
+        self.errors.append(str(msg))
+
+    def success(self, msg, *a, **k):
+        self.successes.append(str(msg))
+
+    def rerun(self, *a, **k):
+        pass
+
+    def spinner(self, *a, **k):
+        from contextlib import nullcontext
+        return nullcontext()
+
+
+class SubmitAndImportTests(unittest.TestCase):
+    def _row(self):
+        return {"Ticker": "cnta", "Last": 12.45, "BreakoutScore": 58.0,
+                "AI Confidence": 71.5}
+
+    def test_success_imports_with_score_and_ai(self):
+        import data.alpaca_trading as at
+        import db.paper_trading as pt
+        import db.trades as tr
+        import ui.paper_trade as ptui
+
+        logged = {}
+        plan = {"stop": 11.90, "targets": [13.80, 15.0]}
+        with mock.patch.object(ptui, "st", _FakeSt()), \
+             mock.patch.object(pt, "get_paper_account",
+                               return_value={"api_key": "K", "api_secret": "S"}), \
+             mock.patch.object(at, "submit_market_order",
+                               return_value={"ok": True, "order_id": "o1",
+                                             "status": "filled",
+                                             "filled_avg_price": 12.50}), \
+             mock.patch.object(tr, "log_trade",
+                               side_effect=lambda *a, **k: logged.update(
+                                   {"args": a, "kw": k})):
+            ptui._submit_and_import("u@x.com", self._row(), "CNTA", 20, plan)
+
+        self.assertEqual(logged["args"][1], "CNTA")
+        self.assertEqual(logged["args"][3], 20)                    # qty
+        self.assertEqual(logged["args"][2], 12.50)                 # filled entry
+        self.assertEqual(logged["kw"]["alpaca_order_id"], "o1")
+        self.assertEqual(logged["kw"]["breakout_score"], 58.0)
+        self.assertEqual(logged["kw"]["ai_confidence"], 71.5)
+        self.assertEqual(logged["kw"]["stop_price"], 11.90)
+        self.assertEqual(logged["kw"]["target_price"], 13.80)
+
+    def test_rejected_order_does_not_import(self):
+        import data.alpaca_trading as at
+        import db.paper_trading as pt
+        import db.trades as tr
+        import ui.paper_trade as ptui
+
+        fake = _FakeSt()
+        with mock.patch.object(ptui, "st", fake), \
+             mock.patch.object(pt, "get_paper_account",
+                               return_value={"api_key": "K", "api_secret": "S"}), \
+             mock.patch.object(at, "submit_market_order",
+                               return_value={"ok": False, "error": "boom"}), \
+             mock.patch.object(tr, "log_trade",
+                               side_effect=AssertionError("must not import")):
+            ptui._submit_and_import("u@x.com", self._row(), "CNTA", 20, {})
+        self.assertTrue(any("boom" in e for e in fake.errors))
