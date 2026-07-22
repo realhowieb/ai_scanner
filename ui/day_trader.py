@@ -225,31 +225,68 @@ def day_trade_score(row: Dict[str, Any]) -> float:
     return round(score, 3)
 
 
-def _sp500_universe() -> List[str]:
-    """S&P 500 tickers (shared loader; sp500.txt fallback)."""
+def _movers_universe() -> List[str]:
+    """S&P 500 + NASDAQ tickers (deduped), for the top-movers screen."""
+    from pathlib import Path
+
+    seen: set = set()
+    out: List[str] = []
+
+    def _add(sym) -> None:
+        u = str(sym or "").strip().upper()
+        if u and not u.startswith("#") and u not in seen:
+            seen.add(u)
+            out.append(u)
+
     try:
         from scan.pre_post import _load_sp500
 
-        return [str(t).upper() for t in (_load_sp500() or []) if str(t).strip()]
+        for t in (_load_sp500() or []):
+            _add(t)
     except Exception:
-        return []
+        pass
+    try:
+        nasdaq_file = Path(__file__).resolve().parents[1] / "nasdaq.txt"
+        if nasdaq_file.exists():
+            for line in nasdaq_file.read_text(encoding="utf-8").splitlines():
+                _add(line)
+    except Exception:
+        pass
+    return out
+
+
+_MOVERS_MIN_DOLLAR_VOL = 1_000_000  # skip illiquid micro-caps you can't day-trade
 
 
 def _top_movers_symbols(limit: int = 40) -> List[str]:
-    """S&P 500 names ranked by intraday day-trade momentum (no 20-day)."""
+    """S&P 500 + NASDAQ names ranked by intraday day-trade momentum (no 20-day).
+
+    with_rvol=False on purpose — the universe spans the full NASDAQ composite
+    (thousands of names), and RVOL needs a per-symbol daily-bar fetch that would
+    be far too heavy here. The snapshot alone gives gap/change/VWAP (the momentum
+    signals we lead with); a dollar-volume floor drops illiquid junk.
+    """
     try:
         from market_data import build_day_trader_metrics
 
-        universe = _sp500_universe()
+        universe = _movers_universe()
         if not universe:
             return []
-        rows = build_day_trader_metrics(universe, with_rvol=True) or []
-        scored = [
-            (day_trade_score(r), str(r.get("ticker")).upper())
-            for r in rows if r.get("ticker")
-        ]
-        # Require real activity so dead/flat names don't fill the list.
-        scored = [(s, t) for s, t in scored if s > 0]
+        rows = build_day_trader_metrics(universe, with_rvol=False) or []
+        scored: List[tuple] = []
+        for r in rows:
+            t = r.get("ticker")
+            if not t:
+                continue
+            try:
+                dvol = float(r.get("last") or 0) * float(r.get("volume") or 0)
+            except (TypeError, ValueError):
+                dvol = 0.0
+            if dvol < _MOVERS_MIN_DOLLAR_VOL:
+                continue
+            s = day_trade_score(r)
+            if s > 0:  # require real intraday activity
+                scored.append((s, str(t).upper()))
         scored.sort(key=lambda x: x[0], reverse=True)
         seen: set = set()
         out: List[str] = []
@@ -266,7 +303,7 @@ def _top_movers_symbols(limit: int = 40) -> List[str]:
 
 if st is not None:
 
-    @st.cache_data(ttl=120, show_spinner="Screening S&P 500 for today's movers…")
+    @st.cache_data(ttl=120, show_spinner="Screening S&P 500 + NASDAQ for today's movers…")
     def _top_movers_cached() -> List[str]:
         return _top_movers_symbols()
 
@@ -275,7 +312,7 @@ else:  # pragma: no cover - headless fallback
 
 
 def _resolve_symbols(source: str, watch_tickers: List[str] | None) -> List[str]:
-    if source == "🔥 Top movers (S&P 500)":
+    if source == "🔥 Top movers (S&P 500 + NASDAQ)":
         movers = _top_movers_cached()
         if movers:
             return movers
@@ -337,7 +374,7 @@ def render_day_trader_panel(
     with c1:
         source = st.selectbox(
             "Symbols source",
-            ["My watchlist", "🔥 Top movers (S&P 500)", "Today's scan picks",
+            ["My watchlist", "🔥 Top movers (S&P 500 + NASDAQ)", "Today's scan picks",
              "Mega-caps", "Custom"],
             index=0 if watch_tickers else 3,
             key="dt_source",
@@ -400,8 +437,10 @@ def render_day_trader_panel(
 
     interval_s = {"Off": 0, "15s": 15, "30s": 30, "60s": 60}.get(refresh_label, 0)
 
+    show_score = source.startswith("🔥 Top movers")
+
     def _body() -> None:
-        _render_table(symbols, notify=notify, move_thr=float(move_thr))
+        _render_table(symbols, notify=notify, move_thr=float(move_thr), show_score=show_score)
 
     if interval_s and hasattr(st, "fragment"):
         # Fragment re-renders only the table on each tick — the rest of the
@@ -432,7 +471,9 @@ def _render_state_banner() -> None:
         st.caption(banner)
 
 
-def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
+def _render_table(
+    symbols: List[str], *, notify: bool, move_thr: float, show_score: bool = False
+) -> None:
     from market_data import build_day_trader_metrics
 
     try:
@@ -482,6 +523,10 @@ def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
             "ema_cross": "EMA Cross",
         }
     )
+    # Intraday day-trade momentum score — shown for the movers screen so you can
+    # see *why* each name ranked (computed from the same raw metric rows).
+    if show_score:
+        df["DT Score"] = [round(day_trade_score(r), 1) for r in rows]
     df["vs VWAP"] = df["vs VWAP %"].apply(
         lambda v: "▲ above" if (v is not None and v >= 0) else ("▼ below" if v is not None else "—")
     )
@@ -501,13 +546,13 @@ def _render_table(symbols: List[str], *, notify: bool, move_thr: float) -> None:
 
     compact = st.checkbox("📱 Compact view", value=False, key="dt_compact")
     if compact:
-        ordered = ["Ticker", "Last", "Chg %", "AH %", "vs VWAP", "RVOL"]
+        ordered = ["Ticker", "DT Score", "Last", "Chg %", "AH %", "vs VWAP", "RVOL"]
     else:
         ordered = [
-            "Ticker", "Last", "Chg %", "AH %", "Gap %", "VWAP", "vs VWAP",
+            "Ticker", "DT Score", "Last", "Chg %", "AH %", "Gap %", "VWAP", "vs VWAP",
             "vs VWAP %", "RVOL", "EMA Cross", "Volume",
         ]
-    df = df[[c for c in ordered if c in df.columns]]
+    df = df[[c for c in ordered if c in df.columns]]  # "DT Score" only when present
 
     st.dataframe(_styled(df, moved_now), hide_index=True, width="stretch")
 

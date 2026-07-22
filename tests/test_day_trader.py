@@ -200,15 +200,23 @@ class DayTradeMoversTests(unittest.TestCase):
 
         import ui.day_trader as dt
 
+        # last*volume must clear the liquidity floor ($1M) to be considered.
         rows = [
-            {"ticker": "MOVE", "chg_pct": 8.0, "gap_pct": 5.0, "rvol": 4.0, "vs_vwap_pct": 3.0},
-            {"ticker": "MILD", "chg_pct": 1.0, "gap_pct": 0.5, "rvol": 1.2, "vs_vwap_pct": 0.4},
-            {"ticker": "DEAD", "chg_pct": 0.0, "gap_pct": 0.0, "rvol": 0.0, "vs_vwap_pct": 0.0},
+            {"ticker": "MOVE", "chg_pct": 8.0, "gap_pct": 5.0, "vs_vwap_pct": 3.0,
+             "last": 100.0, "volume": 5_000_000},
+            {"ticker": "MILD", "chg_pct": 1.0, "gap_pct": 0.5, "vs_vwap_pct": 0.4,
+             "last": 50.0, "volume": 2_000_000},
+            {"ticker": "DEAD", "chg_pct": 0.0, "gap_pct": 0.0, "vs_vwap_pct": 0.0,
+             "last": 20.0, "volume": 3_000_000},  # liquid but flat (score 0) -> excluded
+            {"ticker": "THIN", "chg_pct": 9.0, "gap_pct": 6.0, "vs_vwap_pct": 4.0,
+             "last": 3.0, "volume": 10_000},  # big move but illiquid ($30k) -> excluded
         ]
-        with mock.patch.object(dt, "_sp500_universe", return_value=["MOVE", "MILD", "DEAD"]), \
+        with mock.patch.object(dt, "_movers_universe",
+                               return_value=["MOVE", "MILD", "DEAD", "THIN"]), \
              mock.patch("market_data.build_day_trader_metrics", return_value=rows):
             out = dt._top_movers_symbols(limit=10)
-        self.assertEqual(out, ["MOVE", "MILD"])  # DEAD (score 0) excluded, ranked desc
+        # Ranked by score desc; flat and illiquid names dropped.
+        self.assertEqual(out, ["MOVE", "MILD"])
 
 
 if __name__ == "__main__":
