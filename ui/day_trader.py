@@ -197,7 +197,90 @@ else:  # pragma: no cover - headless fallback
     _scan_picks_cached = _scan_pick_symbols
 
 
+def day_trade_score(row: Dict[str, Any]) -> float:
+    """Pure-intraday day-trade momentum score — no 20-day factors.
+
+    Leads with today's move + VWAP alignment (intraday momentum), with the gap
+    and relative volume as supporting signals, so it surfaces names moving *now*
+    regardless of where they sit in a 20-day range. Reads the intraday fields
+    build_day_trader_metrics already computes.
+    """
+    def _n(v) -> float:
+        try:
+            f = float(v)
+            return f if f == f else 0.0  # drop NaN
+        except (TypeError, ValueError):
+            return 0.0
+
+    chg = _n(row.get("chg_pct"))
+    gap = _n(row.get("gap_pct"))
+    rvol = _n(row.get("rvol"))
+    vsvwap = _n(row.get("vs_vwap_pct"))
+
+    score = abs(chg) * 2.0                      # intraday momentum (primary)
+    aligned = (chg >= 0) == (vsvwap >= 0)       # on the right side of VWAP for the move
+    score += (abs(vsvwap) if aligned else -abs(vsvwap)) * 1.0  # VWAP alignment
+    score += abs(gap) * 0.8                     # gap (support)
+    score += min(max(rvol, 0.0), 5.0) * 1.5     # volume surge (support, capped)
+    return round(score, 3)
+
+
+def _sp500_universe() -> List[str]:
+    """S&P 500 tickers (shared loader; sp500.txt fallback)."""
+    try:
+        from scan.pre_post import _load_sp500
+
+        return [str(t).upper() for t in (_load_sp500() or []) if str(t).strip()]
+    except Exception:
+        return []
+
+
+def _top_movers_symbols(limit: int = 40) -> List[str]:
+    """S&P 500 names ranked by intraday day-trade momentum (no 20-day)."""
+    try:
+        from market_data import build_day_trader_metrics
+
+        universe = _sp500_universe()
+        if not universe:
+            return []
+        rows = build_day_trader_metrics(universe, with_rvol=True) or []
+        scored = [
+            (day_trade_score(r), str(r.get("ticker")).upper())
+            for r in rows if r.get("ticker")
+        ]
+        # Require real activity so dead/flat names don't fill the list.
+        scored = [(s, t) for s, t in scored if s > 0]
+        scored.sort(key=lambda x: x[0], reverse=True)
+        seen: set = set()
+        out: List[str] = []
+        for _s, t in scored:
+            if t and t not in seen:
+                seen.add(t)
+                out.append(t)
+            if len(out) >= limit:
+                break
+        return out
+    except Exception:
+        return []
+
+
+if st is not None:
+
+    @st.cache_data(ttl=120, show_spinner="Screening S&P 500 for today's movers…")
+    def _top_movers_cached() -> List[str]:
+        return _top_movers_symbols()
+
+else:  # pragma: no cover - headless fallback
+    _top_movers_cached = _top_movers_symbols
+
+
 def _resolve_symbols(source: str, watch_tickers: List[str] | None) -> List[str]:
+    if source == "🔥 Top movers (S&P 500)":
+        movers = _top_movers_cached()
+        if movers:
+            return movers
+        st.caption("Couldn't screen movers right now — using your watchlist.")
+        return _parse_symbols(_default_symbols(watch_tickers))
     if source == "Today's scan picks":
         picks = _scan_picks_cached()
         if picks:
@@ -254,8 +337,9 @@ def render_day_trader_panel(
     with c1:
         source = st.selectbox(
             "Symbols source",
-            ["My watchlist", "Today's scan picks", "Mega-caps", "Custom"],
-            index=0 if watch_tickers else 2,
+            ["My watchlist", "🔥 Top movers (S&P 500)", "Today's scan picks",
+             "Mega-caps", "Custom"],
+            index=0 if watch_tickers else 3,
             key="dt_source",
         )
     with c2:

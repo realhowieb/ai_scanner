@@ -62,13 +62,13 @@ class ParseSymbolsTests(unittest.TestCase):
         from pathlib import Path
 
         source = Path("ui/day_trader.py").read_text()
-        header_idx = source.index('st.markdown("## ⚡ Day Trader — live")')
-        table_import_idx = source.index("from market_data import build_day_trader_metrics")
+        # Scope the check to the render function — helper functions (e.g. the
+        # movers screen) may lazily import market_data earlier in the file, but
+        # those only execute when called, after the header renders.
+        render = source[source.index("def render_day_trader_panel"):]
+        header_idx = render.index('st.markdown("## ⚡ Day Trader — live")')
+        table_import_idx = render.index("from market_data import build_day_trader_metrics")
         self.assertLess(header_idx, table_import_idx)
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class MarketStateClockTests(unittest.TestCase):
@@ -173,3 +173,43 @@ class EmaCrossLabelTests(unittest.TestCase):
         from market_data import ema_cross_label
 
         self.assertIsNone(ema_cross_label(pd.DataFrame({"Open": [10.0] * 30})))
+
+
+@unittest.skipUnless(_PANDAS, "top movers screen needs pandas/market_data")
+class DayTradeMoversTests(unittest.TestCase):
+    def test_score_leads_with_momentum_and_vwap_alignment(self):
+        from ui.day_trader import day_trade_score
+
+        up_aligned = {"chg_pct": 6.0, "gap_pct": 4.0, "rvol": 3.0, "vs_vwap_pct": 2.0}
+        up_misaligned = {"chg_pct": 6.0, "gap_pct": 4.0, "rvol": 3.0, "vs_vwap_pct": -2.0}
+        flat = {"chg_pct": 0.1, "gap_pct": 0.0, "rvol": 1.0, "vs_vwap_pct": 0.0}
+        self.assertGreater(day_trade_score(up_aligned), day_trade_score(up_misaligned))
+        self.assertGreater(day_trade_score(up_misaligned), day_trade_score(flat))
+
+    def test_score_is_nan_safe(self):
+        from ui.day_trader import day_trade_score
+
+        self.assertEqual(
+            day_trade_score({"chg_pct": None, "gap_pct": float("nan"),
+                             "rvol": None, "vs_vwap_pct": None}),
+            0.0,
+        )
+
+    def test_top_movers_ranks_by_intraday_score(self):
+        from unittest import mock
+
+        import ui.day_trader as dt
+
+        rows = [
+            {"ticker": "MOVE", "chg_pct": 8.0, "gap_pct": 5.0, "rvol": 4.0, "vs_vwap_pct": 3.0},
+            {"ticker": "MILD", "chg_pct": 1.0, "gap_pct": 0.5, "rvol": 1.2, "vs_vwap_pct": 0.4},
+            {"ticker": "DEAD", "chg_pct": 0.0, "gap_pct": 0.0, "rvol": 0.0, "vs_vwap_pct": 0.0},
+        ]
+        with mock.patch.object(dt, "_sp500_universe", return_value=["MOVE", "MILD", "DEAD"]), \
+             mock.patch("market_data.build_day_trader_metrics", return_value=rows):
+            out = dt._top_movers_symbols(limit=10)
+        self.assertEqual(out, ["MOVE", "MILD"])  # DEAD (score 0) excluded, ranked desc
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -71,10 +71,6 @@ class ScorecardsByTypeTests(unittest.TestCase):
             self.assertEqual(ao.scorecards_by_type("u"), {})
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class RecentFireCountsTests(unittest.TestCase):
     def test_aggregates_fire_counts_by_alert(self):
         from db import alerts as A
@@ -91,3 +87,7 @@ class RecentFireCountsTests(unittest.TestCase):
         with mock.patch.object(A, "_get_conn", return_value=conn):
             out = A.recent_fire_counts_for_user("u")
         self.assertEqual(out, {5: 3})
+
+
+if __name__ == "__main__":
+    unittest.main()
