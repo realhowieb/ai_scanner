@@ -776,6 +776,14 @@ def main():
     except Exception:
         pass
 
+    # Live paper-account activity feed (positions + orders; poll-on-refresh).
+    try:
+        from ui.paper_events import render_activity_feed
+
+        render_activity_feed(username)
+    except Exception:
+        pass
+
     # Trade journal (positions logged from trade plans; hidden until first log).
     try:
         render_journal_panel(username)

@@ -413,6 +413,43 @@ def _refresh_track_record() -> None:
         mark_earnings_refreshed_today(key)
 
 
+def _refresh_signal_leaderboard() -> None:
+    """Recompute + persist the signal leaderboard once per day (throttled).
+
+    Ranks the whole slate of scanner signals by benchmark-excess forward return
+    (Strategy Lab). CRON_FORCE=1 bypasses the daily throttle. Reuses the same
+    eligible-snapshot machinery as the track record.
+    """
+    from db.earnings import mark_earnings_refreshed_today, should_refresh_earnings_today
+
+    key = "cron_signal_leaderboard"
+    forced = os.getenv("CRON_FORCE", "").strip() == "1"
+    if not forced and not should_refresh_earnings_today(key):
+        print("[leaderboard] already computed today; skipping")
+        return
+
+    from analytics.signal_leaderboard import compute_signal_leaderboard
+    from db.signal_leaderboard import save_leaderboard
+
+    any_saved = False
+    for horizon in (1, 5, 20):
+        rows = compute_signal_leaderboard(horizon_days=horizon)
+        if not rows:
+            print(f"[leaderboard] horizon={horizon}: insufficient history")
+            continue
+        saved = save_leaderboard(horizon, rows)
+        any_saved = any_saved or bool(saved)
+        best = rows[0]
+        print(
+            f"[leaderboard] h={horizon}: {saved} signals; "
+            f"best={best['signal']} excess={best['avg_excess']:+.2%} "
+            f"beat={best['win_rate']:.0%} n={best['sample_size']}"
+        )
+
+    if any_saved:
+        mark_earnings_refreshed_today(key)
+
+
 def _refresh_earnings() -> None:
     """Once-per-day earnings-calendar refresh over the full universe (FMP/Finnhub).
 
@@ -515,6 +552,14 @@ def main():
         _refresh_track_record()
     except Exception as e:
         print(f"[cron] track record refresh failed: {e}")
+        _capture(e)
+
+    # Recompute the signal leaderboard once per day (Strategy Lab: which signal
+    # actually predicted forward moves). Best-effort; never fail the scan run.
+    try:
+        _refresh_signal_leaderboard()
+    except Exception as e:
+        print(f"[cron] signal leaderboard refresh failed: {e}")
         _capture(e)
 
     # Score fired alerts against what happened next (per-alert scorecards).

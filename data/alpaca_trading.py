@@ -56,6 +56,79 @@ def get_account(api_key: str, api_secret: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def get_positions(api_key: str, api_secret: str) -> Optional[list]:
+    """Open positions as a list of dicts, or None on failure.
+
+    Each dict: {symbol, qty, avg_entry_price, current_price, market_value,
+    unrealized_pl, unrealized_plpc}. Best-effort; never raises.
+    """
+    if requests is None or not api_key or not api_secret:
+        return None
+    try:
+        r = requests.get(
+            f"{_base_url()}/v2/positions",
+            headers=_headers(api_key, api_secret), timeout=_TIMEOUT,
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json() or []
+    except Exception:
+        return None
+    out = []
+    for p in data:
+        if not isinstance(p, dict):
+            continue
+        out.append({
+            "symbol": p.get("symbol"),
+            "qty": p.get("qty"),
+            "avg_entry_price": p.get("avg_entry_price"),
+            "current_price": p.get("current_price"),
+            "market_value": p.get("market_value"),
+            "unrealized_pl": p.get("unrealized_pl"),
+            "unrealized_plpc": p.get("unrealized_plpc"),
+        })
+    return out
+
+
+def get_orders(api_key: str, api_secret: str, status: str = "all", limit: int = 25) -> Optional[list]:
+    """Recent orders (newest first) as a list of dicts, or None on failure.
+
+    Each dict: {id, symbol, side, qty, filled_qty, type, status,
+    filled_avg_price, submitted_at, filled_at}. Best-effort; never raises.
+    """
+    if requests is None or not api_key or not api_secret:
+        return None
+    try:
+        r = requests.get(
+            f"{_base_url()}/v2/orders",
+            headers=_headers(api_key, api_secret),
+            params={"status": status, "limit": int(limit), "direction": "desc"},
+            timeout=_TIMEOUT,
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json() or []
+    except Exception:
+        return None
+    out = []
+    for o in data:
+        if not isinstance(o, dict):
+            continue
+        out.append({
+            "id": o.get("id"),
+            "symbol": o.get("symbol"),
+            "side": o.get("side"),
+            "qty": o.get("qty"),
+            "filled_qty": o.get("filled_qty"),
+            "type": o.get("type"),
+            "status": o.get("status"),
+            "filled_avg_price": o.get("filled_avg_price"),
+            "submitted_at": o.get("submitted_at"),
+            "filled_at": o.get("filled_at"),
+        })
+    return out
+
+
 def submit_market_order(
     api_key: str, api_secret: str, symbol: str, qty: int, side: str = "buy"
 ) -> Dict[str, Any]:

@@ -233,3 +233,11 @@ def render_track_record_dashboard() -> None:
     with c2:
         horizon = st.selectbox("Horizon", [1, 3, 5, 10, 20], index=2, key="track_record_heatmap_horizon")
     _render_daily_heatmap(str(ranking), int(horizon))
+
+    st.markdown("---")
+    try:
+        from ui.strategy_lab import render_signal_leaderboard
+
+        render_signal_leaderboard()
+    except Exception:
+        pass
