@@ -201,9 +201,15 @@ class SymbolSourceTests(unittest.TestCase):
                         return _H()
                 return _Col()
 
+        import sys
+        import types
+
+        fake_runtime = types.ModuleType("ui.app_runtime")
+        fake_runtime.normalize_results_to_df = lambda raw: _DF()
+
         with mock.patch("db.runs.list_runs", return_value=runs), \
              mock.patch("db.runs.load_run_results", return_value="[]") as load, \
-             mock.patch("ui.app_runtime.normalize_results_to_df", return_value=_DF()):
+             mock.patch.dict(sys.modules, {"ui.app_runtime": fake_runtime}):
             out = d._session_scan_symbols("premarket")
         # loaded the premarket run (id=1), not the regular one (id=2)
         load.assert_called_once_with(1)
