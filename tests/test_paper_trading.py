@@ -1,9 +1,15 @@
 """Backend for per-user Alpaca paper trading: crypto, account store, order client."""
 from __future__ import annotations
 
+import importlib.util
 import os
 import unittest
 from unittest import mock
+
+# Fernet encryption (round-trip / store) needs the `cryptography` package, which
+# isn't present in the bare python3.9 interpreter. Gate the positive-path crypto
+# tests the same way pandas/streamlit tests are gated elsewhere.
+_CRYPTO = importlib.util.find_spec("cryptography") is not None
 
 
 class SecretBoxTests(unittest.TestCase):
@@ -15,6 +21,7 @@ class SecretBoxTests(unittest.TestCase):
         importlib.reload(sb)
         self.sb = sb
 
+    @unittest.skipUnless(_CRYPTO, "cryptography required")
     def test_round_trip_and_opacity(self):
         tok = self.sb.encrypt_secret("PKPAPERKEY_SECRET")
         self.assertIsNotNone(tok)
@@ -65,6 +72,7 @@ class PaperAccountStoreTests(unittest.TestCase):
     def setUp(self):
         os.environ["APP_ENCRYPTION_KEY"] = "unit-test-app-secret"
 
+    @unittest.skipUnless(_CRYPTO, "cryptography required")
     def test_save_encrypts_then_get_decrypts(self):
         import db.paper_trading as pt
         # save: capture the encrypted values written
