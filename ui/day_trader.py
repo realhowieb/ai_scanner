@@ -187,14 +187,50 @@ def _scan_pick_symbols(limit: int = 40) -> List[str]:
         return []
 
 
+def _session_scan_symbols(label: str, limit: int = 40) -> List[str]:
+    """Tickers from the most recent headless scan for a session ('premarket' /
+    'postmarket'), so the monitor can watch that session's picks live.
+
+    These runs are produced by the scheduler (scan.pre_post) and stored with the
+    session as their run label. Returns [] when none is available yet.
+    """
+    try:
+        from db.runs import list_runs, load_run_results
+        from ui.app_runtime import normalize_results_to_df
+
+        runs = list_runs(limit=60, include_snapshots=False) or []
+        target = str(label).strip().lower()
+        run = next(
+            (r for r in runs if str(r.get("label") or "").strip().lower() == target),
+            None,
+        )
+        if not run:
+            return []
+        raw = load_run_results(int(run["id"]))
+        df = normalize_results_to_df(raw) if raw else None
+        if df is None or len(df) == 0:
+            return []
+        col = "Ticker" if "Ticker" in df.columns else ("Symbol" if "Symbol" in df.columns else None)
+        if not col:
+            return []
+        return [str(t).upper() for t in df[col].head(limit).tolist() if str(t).strip()]
+    except Exception:
+        return []
+
+
 if st is not None:
 
     @st.cache_data(ttl=900, show_spinner=False)
     def _scan_picks_cached() -> List[str]:
         return _scan_pick_symbols()
 
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _session_scan_cached(label: str) -> List[str]:
+        return _session_scan_symbols(label)
+
 else:  # pragma: no cover - headless fallback
     _scan_picks_cached = _scan_pick_symbols
+    _session_scan_cached = _session_scan_symbols
 
 
 def day_trade_score(row: Dict[str, Any]) -> float:
@@ -225,43 +261,53 @@ def day_trade_score(row: Dict[str, Any]) -> float:
     return round(score, 3)
 
 
-def _movers_universe() -> List[str]:
-    """S&P 500 + NASDAQ tickers (deduped), for the top-movers screen."""
-    from pathlib import Path
-
+def _dedupe_syms(raw) -> List[str]:
     seen: set = set()
     out: List[str] = []
-
-    def _add(sym) -> None:
+    for sym in raw or []:
         u = str(sym or "").strip().upper()
         if u and not u.startswith("#") and u not in seen:
             seen.add(u)
             out.append(u)
+    return out
 
+
+def _sp500_universe() -> List[str]:
+    """S&P 500 tickers (deduped)."""
     try:
         from scan.pre_post import _load_sp500
 
-        for t in (_load_sp500() or []):
-            _add(t)
+        return _dedupe_syms(_load_sp500() or [])
     except Exception:
-        pass
+        return []
+
+
+def _nasdaq_universe() -> List[str]:
+    """NASDAQ-listed tickers from the bundled nasdaq.txt (deduped)."""
+    from pathlib import Path
+
     try:
-        nasdaq_file = Path(__file__).resolve().parents[1] / "nasdaq.txt"
-        if nasdaq_file.exists():
-            for line in nasdaq_file.read_text(encoding="utf-8").splitlines():
-                _add(line)
+        f = Path(__file__).resolve().parents[1] / "nasdaq.txt"
+        if f.exists():
+            return _dedupe_syms(f.read_text(encoding="utf-8").splitlines())
     except Exception:
         pass
-    return out
+    return []
+
+
+def _movers_universe() -> List[str]:
+    """S&P 500 + NASDAQ tickers (deduped), for the top-movers screen."""
+    return _dedupe_syms([*_sp500_universe(), *_nasdaq_universe()])
 
 
 _MOVERS_MIN_DOLLAR_VOL = 1_000_000  # skip illiquid micro-caps you can't day-trade
 
 
-def _top_movers_symbols(limit: int = 40) -> List[str]:
-    """S&P 500 + NASDAQ names ranked by intraday day-trade momentum (no 20-day).
+def _top_movers_symbols(limit: int = 40, universe: List[str] | None = None) -> List[str]:
+    """Names ranked by intraday day-trade momentum (no 20-day), over ``universe``
+    (defaults to S&P 500 + NASDAQ).
 
-    with_rvol=False on purpose — the universe spans the full NASDAQ composite
+    with_rvol=False on purpose — the universe can span the full NASDAQ composite
     (thousands of names), and RVOL needs a per-symbol daily-bar fetch that would
     be far too heavy here. The snapshot alone gives gap/change/VWAP (the momentum
     signals we lead with); a dollar-volume floor drops illiquid junk.
@@ -269,7 +315,7 @@ def _top_movers_symbols(limit: int = 40) -> List[str]:
     try:
         from market_data import build_day_trader_metrics
 
-        universe = _movers_universe()
+        universe = universe if universe is not None else _movers_universe()
         if not universe:
             return []
         rows = build_day_trader_metrics(universe, with_rvol=False) or []
@@ -307,8 +353,18 @@ if st is not None:
     def _top_movers_cached() -> List[str]:
         return _top_movers_symbols()
 
+    @st.cache_data(ttl=120, show_spinner="Screening S&P 500 for today's movers…")
+    def _sp500_movers_cached() -> List[str]:
+        return _top_movers_symbols(universe=_sp500_universe())
+
+    @st.cache_data(ttl=120, show_spinner="Screening NASDAQ for today's movers…")
+    def _nasdaq_movers_cached() -> List[str]:
+        return _top_movers_symbols(universe=_nasdaq_universe())
+
 else:  # pragma: no cover - headless fallback
     _top_movers_cached = _top_movers_symbols
+    _sp500_movers_cached = lambda: _top_movers_symbols(universe=_sp500_universe())  # noqa: E731
+    _nasdaq_movers_cached = lambda: _top_movers_symbols(universe=_nasdaq_universe())  # noqa: E731
 
 
 def _resolve_symbols(source: str, watch_tickers: List[str] | None) -> List[str]:
@@ -317,6 +373,25 @@ def _resolve_symbols(source: str, watch_tickers: List[str] | None) -> List[str]:
         if movers:
             return movers
         st.caption("Couldn't screen movers right now — using your watchlist.")
+        return _parse_symbols(_default_symbols(watch_tickers))
+    if source == "🔥 Top movers (S&P 500)":
+        movers = _sp500_movers_cached()
+        if movers:
+            return movers
+        st.caption("Couldn't screen S&P 500 movers right now — using your watchlist.")
+        return _parse_symbols(_default_symbols(watch_tickers))
+    if source == "🔥 Top movers (NASDAQ)":
+        movers = _nasdaq_movers_cached()
+        if movers:
+            return movers
+        st.caption("Couldn't screen NASDAQ movers right now — using your watchlist.")
+        return _parse_symbols(_default_symbols(watch_tickers))
+    if source in ("🌅 Premarket movers", "🌙 Postmarket movers"):
+        label = "premarket" if source.startswith("🌅") else "postmarket"
+        picks = _session_scan_cached(label)
+        if picks:
+            return picks
+        st.caption(f"No recent {label} scan found — using your watchlist.")
         return _parse_symbols(_default_symbols(watch_tickers))
     if source == "Today's scan picks":
         picks = _scan_picks_cached()
@@ -380,11 +455,21 @@ def render_day_trader_panel(
 
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
+        source_options = [
+            "My watchlist",
+            "🔥 Top movers (S&P 500 + NASDAQ)",
+            "🔥 Top movers (S&P 500)",
+            "🔥 Top movers (NASDAQ)",
+            "🌅 Premarket movers",
+            "🌙 Postmarket movers",
+            "Today's scan picks",
+            "Mega-caps",
+            "Custom",
+        ]
         source = st.selectbox(
             "Symbols source",
-            ["My watchlist", "🔥 Top movers (S&P 500 + NASDAQ)", "Today's scan picks",
-             "Mega-caps", "Custom"],
-            index=0 if watch_tickers else 3,
+            source_options,
+            index=0 if watch_tickers else source_options.index("Mega-caps"),
             key="dt_source",
         )
     with c2:

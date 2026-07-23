@@ -154,6 +154,70 @@ class DetectMovesEdgeTests(unittest.TestCase):
         self.assertEqual(moves, [("AAA", 0.0)])
 
 
+class SymbolSourceTests(unittest.TestCase):
+    def test_top_movers_respects_passed_universe(self):
+        """SP500/NASDAQ movers scope the screen to the given universe rather than
+        the full S&P 500 + NASDAQ union."""
+        from unittest import mock
+
+        import ui.day_trader as d
+
+        captured = {}
+
+        def fake_metrics(universe, **kw):
+            captured["universe"] = list(universe)
+            return [{"ticker": "AAA", "last": 10.0, "volume": 1_000_000,
+                     "chg_pct": 5.0, "gap_pct": 1.0, "rvol": 2.0, "vs_vwap_pct": 1.0}]
+
+        with mock.patch("market_data.build_day_trader_metrics", side_effect=fake_metrics):
+            out = d._top_movers_symbols(universe=["AAA", "BBB"])
+        self.assertEqual(captured["universe"], ["AAA", "BBB"])
+        self.assertIn("AAA", out)
+
+    def test_session_scan_picks_selected_by_label(self):
+        """Premarket/postmarket sources load the most recent run whose label
+        matches the session, not any other scan."""
+        from unittest import mock
+
+        import ui.day_trader as d
+
+        runs = [
+            {"id": 2, "label": "regular"},
+            {"id": 1, "label": "premarket"},
+        ]
+
+        class _DF:
+            columns = ["Ticker"]
+
+            def __len__(self):
+                return 2
+
+            def __getitem__(self, k):
+                class _Col:
+                    def head(self, n):
+                        class _H:
+                            def tolist(self_inner):
+                                return ["GAPR", "MOVR"]
+                        return _H()
+                return _Col()
+
+        with mock.patch("db.runs.list_runs", return_value=runs), \
+             mock.patch("db.runs.load_run_results", return_value="[]") as load, \
+             mock.patch("ui.app_runtime.normalize_results_to_df", return_value=_DF()):
+            out = d._session_scan_symbols("premarket")
+        # loaded the premarket run (id=1), not the regular one (id=2)
+        load.assert_called_once_with(1)
+        self.assertEqual(out, ["GAPR", "MOVR"])
+
+    def test_session_scan_none_when_label_absent(self):
+        from unittest import mock
+
+        import ui.day_trader as d
+
+        with mock.patch("db.runs.list_runs", return_value=[{"id": 2, "label": "regular"}]):
+            self.assertEqual(d._session_scan_symbols("postmarket"), [])
+
+
 @unittest.skipUnless(_PANDAS, "ema_cross_label needs pandas")
 class EmaCrossLabelTests(unittest.TestCase):
     def test_detects_bullish_and_bearish_cross_labels(self):
