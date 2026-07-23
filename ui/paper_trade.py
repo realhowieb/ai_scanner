@@ -111,12 +111,19 @@ def render_connect_panel(user_id: str) -> None:
             "API Keys. Keys are encrypted at rest; we never place an order without "
             "your explicit confirmation."
         )
-        with st.form("pt_connect_form", clear_on_submit=False):
+        # Plain widgets (no st.form): a form here was rendering the caption but
+        # not the fields on some deploys, and any error inside was swallowed by
+        # the caller. Surface failures visibly instead of vanishing.
+        try:
             api_key = st.text_input("Paper API key ID", key="pt_key")
             api_secret = st.text_input(
                 "Paper API secret", type="password", key="pt_secret"
             )
-            submitted = st.form_submit_button("Validate & connect")
+            submitted = st.button("Validate & connect", key="pt_connect_btn")
+        except Exception as e:
+            st.error("Couldn't render the connect form.")
+            st.caption(f"{type(e).__name__}: {e}")
+            return
         if not submitted:
             return
         key = (api_key or "").strip()

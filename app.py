@@ -773,8 +773,11 @@ def main():
         from ui.paper_trade import render_connect_panel
 
         render_connect_panel(username)
-    except Exception:
-        pass
+    except Exception as e:
+        # Don't vanish silently — a swallowed error here previously left the
+        # connect panel showing its intro caption but no input fields.
+        st.error("Alpaca paper-trading panel failed to render.")
+        st.caption(f"{type(e).__name__}: {e}")
 
     # Live paper-account activity feed (positions + orders; poll-on-refresh).
     try:
