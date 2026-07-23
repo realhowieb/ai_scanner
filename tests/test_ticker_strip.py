@@ -37,6 +37,31 @@ class TickerStripTests(unittest.TestCase):
         self.assertIn("+1.25%", html)
         self.assertIn("-0.50%", html)
 
+    def test_change_map_merges_watchlist_base_with_live_overlay(self):
+        """Watchlist chips keep a % for non-table symbols; table quotes override
+        overlapping ones. Regression: the Day Trader strip used to read ONLY the
+        table rows, so watchlist tickers absent from the table showed blank and
+        reshuffled on every table refresh."""
+        from ui.ticker_strip import ticker_change_map
+
+        # Watchlist snapshot (base) has all watchlist symbols; the day-trader
+        # table (Mega-caps) overlaps on MSFT only, with a fresher quote.
+        watchlist_rows = [
+            {"Ticker": "MRVL", "Chg %": -1.0},
+            {"Ticker": "MU", "Chg %": 2.5},
+            {"Ticker": "MSFT", "Chg %": -2.0},
+        ]
+        table_rows = [
+            {"Ticker": "MSFT", "Chg %": -2.31},
+            {"Ticker": "TSLA", "Chg %": -14.34},
+        ]
+        merged = ticker_change_map(list(watchlist_rows) + list(table_rows))
+        # non-table watchlist symbols still populated (were blank before the fix)
+        self.assertEqual(merged["MRVL"], -1.0)
+        self.assertEqual(merged["MU"], 2.5)
+        # overlapping symbol takes the fresher table quote (later wins)
+        self.assertEqual(merged["MSFT"], -2.31)
+
     def test_alerts_and_day_trader_render_symbol_tape(self):
         from pathlib import Path
 

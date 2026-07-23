@@ -360,11 +360,19 @@ def render_day_trader_panel(
     try:
         from ui.ticker_strip import render_ticker_strip
 
+        # The "Watchlist" strip shows watchlist symbols, so drive its % changes
+        # from the watchlist's own quotes — NOT the day-trader table (dt_rows),
+        # whose symbols depend on the selected source (Mega-caps, Top movers, …)
+        # and would leave non-overlapping watchlist tickers blank and reshuffle
+        # which chips light up on every table refresh. The table rows are layered
+        # on top only as a fresher quote for tickers that appear in both.
         render_ticker_strip(
             watch_tickers,
             label="Watchlist",
-            quote_rows=st.session_state.get("dt_rows")
-            or st.session_state.get("active_watchlist_quote_rows"),
+            quote_rows=(
+                list(st.session_state.get("active_watchlist_quote_rows") or [])
+                + list(st.session_state.get("dt_rows") or [])
+            ),
         )
     except Exception:
         pass
