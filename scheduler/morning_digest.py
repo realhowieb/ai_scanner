@@ -70,24 +70,40 @@ def _symbol_column(df) -> Optional[str]:
     return None
 
 
-def _prebreakout_pick(df) -> Optional[Dict[str, Any]]:
-    """Return the top PreBreakout candidate {symbol, prob} from the snapshot."""
+def _prebreakout_picks(df, limit: int = 3) -> List[Dict[str, Any]]:
+    """Top PreBreakout candidates [{symbol, prob}] from the snapshot (best first)."""
     try:
         from ml_prebreakout import score_prebreakout
 
         scored = score_prebreakout(df)
         if scored is None or len(scored) == 0 or "PreBreakoutProb%" not in scored.columns:
-            return None
+            return []
         sym_col = _symbol_column(scored)
         if not sym_col:
-            return None
-        top = scored.sort_values("PreBreakoutProb%", ascending=False).iloc[0]
-        prob = float(top.get("PreBreakoutProb%") or 0.0)
-        if prob <= 0:
-            return None
-        return {"symbol": str(top.get(sym_col)).upper(), "prob": round(prob, 1)}
+            return []
+        top = scored.sort_values("PreBreakoutProb%", ascending=False).head(limit)
+        out: List[Dict[str, Any]] = []
+        for _, r in top.iterrows():
+            prob = float(r.get("PreBreakoutProb%") or 0.0)
+            if prob <= 0:
+                continue
+            out.append({"symbol": str(r.get(sym_col)).upper(), "prob": round(prob, 1)})
+        return out
     except Exception:
-        return None
+        return []
+
+
+def _todays_setups(df, limit: int = 6) -> tuple:
+    """(golden_crosses, top_breakout_scores) for the open, from the latest snapshot.
+
+    Reuses the evening wrap's setup extractor so the two emails stay consistent.
+    """
+    try:
+        from scheduler.evening_wrap import _tomorrow_setups
+
+        return _tomorrow_setups(df, limit=limit)
+    except Exception:
+        return [], []
 
 
 def _market_gappers(df, limit: int = 5) -> List[Dict[str, Any]]:
@@ -278,9 +294,17 @@ def _watchlist_notes(
     notes: List[str] = []
     movers = [r for r in watch_rows if r.get("chg_pct") is not None]
     if movers:
-        top = max(movers, key=lambda r: abs(r["chg_pct"]))
-        base = str(top["ticker"]).split(" ")[0]
-        notes.append(f"Biggest mover: {base} {top['chg_pct']:+.1f}%")
+        ranked = sorted(movers, key=lambda r: r["chg_pct"], reverse=True)
+        best, worst = ranked[0], ranked[-1]
+        up = sum(1 for r in movers if r["chg_pct"] >= 0)
+        down = len(movers) - up
+        # split off any '⚠️E{n}d' earnings flag so the recap stays clean
+        bn = str(best["ticker"]).split(" ")[0]
+        wn = str(worst["ticker"]).split(" ")[0]
+        notes.append(
+            f"Best {bn} {best['chg_pct']:+.1f}% · Worst {wn} {worst['chg_pct']:+.1f}% · "
+            f"{up} up / {down} down"
+        )
     for sym, days in sorted(week_earnings.items(), key=lambda kv: kv[1]):
         when = "today" if days == 0 else ("tomorrow" if days == 1 else f"in {days}d")
         notes.append(f"{sym} reports {when}")
@@ -292,8 +316,10 @@ def _compose(
     watch_rows: List[Dict[str, Any]],
     gappers: List[Dict[str, Any]],
     earnings_hits: List[str],
-    pick: Optional[Dict[str, Any]],
+    picks: Optional[List[Dict[str, Any]]],
     notes: Optional[List[str]] = None,
+    golden: Optional[List[str]] = None,
+    top_setups: Optional[List[tuple]] = None,
 ) -> tuple[str, str]:
     """Return (html_inner, text_inner) for one user's digest."""
     date_s = datetime.now(timezone.utc).strftime("%A, %b %d")
@@ -325,12 +351,38 @@ def _compose(
         )
         text += ["Earnings today (your watchlist):", f"  {names}", ""]
 
-    if pick:
+    # 🎯 Today's setups — actionable candidates for the open (mirrors the evening
+    # wrap's forward-looking section).
+    if golden or top_setups:
+        html.append("<h3 style='margin:16px 0 6px'>🎯 Today's setups</h3>")
+        text += ["Today's setups:"]
+        if golden:
+            names = ", ".join(golden)
+            html.append(f"<p><b>📈 Fresh EMA 9/21 golden crosses:</b> {names}</p>")
+            text += [f"  Fresh golden crosses: {names}"]
+        if top_setups:
+            ts = ", ".join(f"{t} ({s:g})" for t, s in top_setups)
+            html.append(f"<p><b>🚀 Top breakout scores:</b> {ts}</p>")
+            text += [f"  Top breakout scores: {ts}"]
         html.append(
-            "<h3 style='margin:16px 0 6px'>🧠 PreBreakout pick</h3>"
-            f"<p><strong>{pick['symbol']}</strong> — {pick['prob']}% model confidence</p>"
+            "<p style='color:#888;font-size:12px'>Educational only — not financial "
+            "advice; confirm setups yourself at the open.</p>"
         )
-        text += ["PreBreakout pick:", f"  {pick['symbol']} — {pick['prob']}%", ""]
+        text += [""]
+
+    if picks:
+        items = "".join(
+            f"<li><strong>{p['symbol']}</strong> — {p['prob']}% model confidence</li>"
+            for p in picks
+        )
+        label = "🧠 PreBreakout picks" if len(picks) > 1 else "🧠 PreBreakout pick"
+        html.append(
+            f"<h3 style='margin:16px 0 6px'>{label}</h3>"
+            f"<ul style='margin:4px 0 0;padding-left:18px'>{items}</ul>"
+        )
+        text += ["PreBreakout picks:"]
+        text += [f"  {p['symbol']} — {p['prob']}%" for p in picks]
+        text += [""]
 
     return "".join(html), "\n".join(text)
 
@@ -366,17 +418,20 @@ def run_morning_digest(force: bool = False) -> None:
 
     df = _latest_snapshot_df()
     gappers = _market_gappers(df)
-    pick = _prebreakout_pick(df) if df is not None else None
+    picks = _prebreakout_picks(df) if df is not None else []
+    golden, top_setups = _todays_setups(df) if df is not None else ([], [])
     earnings_today = _earnings_today()
 
-    # Earnings safety rail (shared across all users): flag gappers and the pick
+    # Earnings safety rail (shared across all users): flag gappers and the picks
     # when they report within days, so nobody trades the digest blind to it.
     gapper_edays = _earnings_days_map([r.get("ticker") for r in gappers])
     _flag_earnings_rows(gappers, gapper_edays)
-    if pick:
-        pick_days = _earnings_days_map([pick["symbol"]]).get(pick["symbol"])
-        if pick_days is not None:
-            pick["symbol"] = f"{pick['symbol']} ⚠️E{pick_days}d"
+    if picks:
+        pick_edays = _earnings_days_map([p["symbol"] for p in picks])
+        for p in picks:
+            d = pick_edays.get(p["symbol"])
+            if d is not None:
+                p["symbol"] = f"{p['symbol']} ⚠️E{d}d"
 
     try:
         users = load_users() or {}
@@ -428,7 +483,8 @@ def run_morning_digest(force: bool = False) -> None:
             notes = _watchlist_notes(watch_rows, week_earnings)
 
             html_inner, text_inner = _compose(
-                email, watch_rows, gappers, earnings_hits, pick, notes=notes
+                email, watch_rows, gappers, earnings_hits, picks, notes=notes,
+                golden=golden, top_setups=top_setups,
             )
             send_digest_email(
                 to_address=email,

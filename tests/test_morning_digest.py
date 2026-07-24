@@ -53,16 +53,24 @@ class ComposeTests(unittest.TestCase):
                 watch_rows=[_row()],
                 gappers=[_row(ticker="NVDA", chg=4.0, gap=3.0)],
                 earnings_hits=["AAPL"],
-                pick={"symbol": "ACLX", "prob": 93.5},
+                picks=[{"symbol": "ACLX", "prob": 93.5}],
+                golden=["DLR", "SW"],
+                top_setups=[("GGLS", 54.2), ("SLB", 43.4)],
             )
-        for fragment in ("Your watchlist", "Top market gappers", "Earnings today", "PreBreakout pick"):
+        for fragment in (
+            "Your watchlist", "Top market gappers", "Earnings today",
+            "PreBreakout pick", "Today's setups", "golden crosses", "Top breakout scores",
+        ):
             self.assertIn(fragment, html)
         self.assertIn("ACLX", html)
         self.assertIn("93.5", html)
+        self.assertIn("DLR", html)
+        self.assertIn("GGLS", html)
         self.assertIn("TR", html)
         # Text fallback mirrors the sections.
         self.assertIn("Your watchlist", text)
         self.assertIn("ACLX", text)
+        self.assertIn("Today's setups", text)
 
     def test_compose_omits_conditional_sections(self):
         with mock.patch(
@@ -73,10 +81,13 @@ class ComposeTests(unittest.TestCase):
                 watch_rows=[_row()],
                 gappers=[],
                 earnings_hits=[],
-                pick=None,
+                picks=None,
+                golden=[],
+                top_setups=[],
             )
         self.assertNotIn("Earnings today", html)
         self.assertNotIn("PreBreakout pick", html)
+        self.assertNotIn("Today's setups", html)
         self.assertNotIn("Track record", html)
 
 
