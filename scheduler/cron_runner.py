@@ -432,19 +432,23 @@ def _refresh_signal_leaderboard() -> None:
     from db.signal_leaderboard import save_leaderboard
 
     any_saved = False
-    for horizon in (1, 5, 20):
-        rows = compute_signal_leaderboard(horizon_days=horizon)
-        if not rows:
-            print(f"[leaderboard] horizon={horizon}: insufficient history")
-            continue
-        saved = save_leaderboard(horizon, rows)
-        any_saved = any_saved or bool(saved)
-        best = rows[0]
-        print(
-            f"[leaderboard] h={horizon}: {saved} signals; "
-            f"best={best['signal']} excess={best['avg_excess']:+.2%} "
-            f"beat={best['win_rate']:.0%} n={best['sample_size']}"
-        )
+    # Both entry conventions: 'close' (enter at signal-day close) and 'open'
+    # (enter at signal-day open — the realistic fill for an early signal). Users
+    # compare them in the Strategy Lab.
+    for entry_mode in ("close", "open"):
+        for horizon in (1, 5, 20):
+            rows = compute_signal_leaderboard(horizon_days=horizon, entry_mode=entry_mode)
+            if not rows:
+                print(f"[leaderboard] {entry_mode} h={horizon}: insufficient history")
+                continue
+            saved = save_leaderboard(horizon, rows, entry_mode=entry_mode)
+            any_saved = any_saved or bool(saved)
+            best = rows[0]
+            print(
+                f"[leaderboard] {entry_mode} h={horizon}: {saved} signals; "
+                f"best={best['signal']} excess={best['avg_excess']:+.2%} "
+                f"beat={best['win_rate']:.0%} n={best['sample_size']}"
+            )
 
     if any_saved:
         mark_earnings_refreshed_today(key)

@@ -46,11 +46,21 @@ def render_signal_leaderboard() -> None:
 
         horizons = leaderboard_horizons() or [1, 5, 20]
         default_idx = horizons.index(DEFAULT_HORIZON) if DEFAULT_HORIZON in horizons else 0
-        horizon = st.selectbox(
+        c1, c2 = st.columns(2)
+        horizon = c1.selectbox(
             "Holding period (trading days)", horizons, index=default_idx,
             key="strategy_lab_horizon",
         )
-        rows = load_leaderboard(int(horizon))
+        entry_label = c2.selectbox(
+            "Entry", ["Close", "Open"], index=0, key="strategy_lab_entry",
+            help=(
+                "Close: enter at the signal-day close. Open: enter at the next "
+                "open — the realistic fill for an early/premarket signal, which "
+                "usually reads very differently for momentum picks."
+            ),
+        )
+        entry_mode = "open" if entry_label == "Open" else "close"
+        rows = load_leaderboard(int(horizon), entry_mode=entry_mode)
         if not rows:
             st.info(
                 "The leaderboard is still gathering history — it populates once "

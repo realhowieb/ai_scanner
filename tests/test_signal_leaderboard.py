@@ -37,6 +37,9 @@ class _Conn:
     def commit(self):
         pass
 
+    def rollback(self):
+        pass
+
     def close(self):
         pass
 
@@ -53,20 +56,25 @@ class LeaderboardStoreTests(unittest.TestCase):
              "median_excess": 0.0, "win_rate": 0.45, "sample_size": 40,
              "runs_used": 8, "benchmark": "SPY", "top_n": 5},
         ]
-        save_conn = _Conn()
+        # fetch=(1,) → the schema's PK-migration check sees entry_mode already
+        # present and skips the ALTER path.
+        save_conn = _Conn(fetch=(1,))
         with mock.patch.object(lb, "get_neon_conn", return_value=save_conn):
-            n = lb.save_leaderboard(5, rows)
+            n = lb.save_leaderboard(5, rows, entry_mode="open")
         self.assertEqual(n, 2)
         # one INSERT ... ON CONFLICT per signal row (plus the CREATE TABLE)
         inserts = [c for c in save_conn.cur.calls if "INSERT INTO signal_leaderboard" in c[0]]
         self.assertEqual(len(inserts), 2)
+        # entry_mode is the 3rd bound param on each insert
+        self.assertEqual(inserts[0][1][2], "open")
 
-        # load maps tuple rows to dicts in the declared column order
-        tup = ("breakout", 5, "Breakout score", 0.03, 0.02, 0.6, 40, 8, "SPY", 5, None)
-        load_conn = _Conn(fetchall=[tup])
+        # load maps tuple rows to dicts in the declared column order (now with entry_mode)
+        tup = ("breakout", 5, "close", "Breakout score", 0.03, 0.02, 0.6, 40, 8, "SPY", 5, None)
+        load_conn = _Conn(fetch=(1,), fetchall=[tup])
         with mock.patch.object(lb, "get_neon_conn", return_value=load_conn):
-            out = lb.load_leaderboard(5)
+            out = lb.load_leaderboard(5, entry_mode="close")
         self.assertEqual(out[0]["signal"], "breakout")
+        self.assertEqual(out[0]["entry_mode"], "close")
         self.assertEqual(out[0]["avg_excess"], 0.03)
         self.assertEqual(out[0]["sample_size"], 40)
 

@@ -546,6 +546,12 @@ def main():
 
     # -------- DB Status (admin-only badge; status still computed for all) --------
     db_status = render_db_status_badge(show_badge=bool(st.session_state.get("is_admin")))
+    # Market-data health banner (visible when Alpaca creds are rejected/down).
+    try:
+        from ui.data_health import render_data_health_banner
+        render_data_health_banner(is_admin=bool(st.session_state.get("is_admin")))
+    except Exception:
+        pass
 
     # -------- Provider Health (admin diagnostics) --------
     if flags.get("can_diagnostics"):
