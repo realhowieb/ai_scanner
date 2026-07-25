@@ -90,11 +90,15 @@ class EligibleSnapshotsTests(unittest.TestCase):
             return tr._eligible_snapshots(horizon_days=5, lookback_days=45, max_snapshots=30)
 
     def test_same_day_snapshots_deduped_and_preepoch_fenced(self):
-        # Build now-relative dates so the test isn't tied to a wall-clock era:
-        # base = 13 days ago (inside the 5D "complete window" + 45d lookback).
+        # Build now-relative dates inside the 5D "complete window" + 45d lookback.
+        # Use two WEEKDAYS so the weekend-snapshot filter doesn't drop them.
         now = dt.datetime.now(dt.timezone.utc)
-        base = (now - dt.timedelta(days=13)).date()
-        nxt = (now - dt.timedelta(days=12)).date()
+        weekdays = [
+            (now - dt.timedelta(days=delta)).date()
+            for delta in range(12, 30)
+            if (now - dt.timedelta(days=delta)).date().weekday() < 5
+        ]
+        nxt, base = weekdays[0], weekdays[3]  # nxt more recent than base; both weekdays
         pre = base - dt.timedelta(days=1)
 
         def at(d, h):
@@ -113,6 +117,75 @@ class EligibleSnapshotsTests(unittest.TestCase):
         dates = sorted(d for d, _df in out)
         self.assertEqual(dates, [base, nxt])          # one per day, pre fenced
         self.assertTrue(all(d >= base for d in dates))
+
+    def test_weekend_snapshots_are_skipped(self):
+        # A weekend (forced) snapshot enters on the next session and duplicates
+        # that day — it must be dropped so it can't double-count or paint a
+        # spurious weekend heatmap cell.
+        now = dt.datetime.now(dt.timezone.utc)
+        fri = sat = None
+        for delta in range(11, 40):  # inside the eligible window (~10–45d ago)
+            d = (now - dt.timedelta(days=delta)).date()
+            if d.weekday() == 4 and fri is None:
+                fri = d
+            if d.weekday() == 5 and sat is None:
+                sat = d
+        self.assertIsNotNone(fri)
+        self.assertIsNotNone(sat)
+
+        def at(d, h):
+            return dt.datetime(d.year, d.month, d.day, h, tzinfo=dt.timezone.utc)
+
+        runs = [
+            {"id": 1, "created_at": at(fri, 12)},   # weekday → kept
+            {"id": 2, "created_at": at(sat, 12)},   # weekend → skipped
+        ]
+        with mock.patch.object(tr, "SCORE_EPOCH", min(fri, sat) - dt.timedelta(days=1)):
+            out = self._run(runs)
+        dates = [d for d, _df in out]
+        self.assertIn(fri, dates)
+        self.assertNotIn(sat, dates)
+
+
+class LoadDailyExcessTests(unittest.TestCase):
+    """Read-time weekend filter cleans pre-fix rows without a data migration."""
+
+    class _Cur:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def execute(self, *a, **k):
+            pass
+
+        def fetchall(self):
+            return self._rows
+
+        def close(self):
+            pass
+
+    class _Conn:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def cursor(self, *a, **k):
+            return LoadDailyExcessTests._Cur(self._rows)
+
+        def close(self):
+            pass
+
+    def test_weekend_rows_are_dropped_at_read(self):
+        from db import track_record as dbtr
+
+        rows = [
+            (dt.date(2026, 6, 26), -0.02),   # Friday   → kept
+            (dt.date(2026, 6, 27), 0.05),    # Saturday → dropped
+            (dt.date(2026, 6, 28), -0.10),   # Sunday   → dropped
+            (dt.date(2026, 6, 29), 0.01),    # Monday   → kept
+        ]
+        with mock.patch.object(dbtr, "get_neon_conn", return_value=self._Conn(rows)):
+            out = dbtr.load_daily_excess("prebreakout", 5, 120)
+        days = [d for d, _v in out]
+        self.assertEqual(days, [dt.date(2026, 6, 26), dt.date(2026, 6, 29)])
 
 
 @requires_pandas

@@ -91,6 +91,11 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
         # BreakoutScore ceiling; mixing them in poisons the track record).
         if run_date < SCORE_EPOCH:
             continue
+        # Skip weekend (forced/manual) snapshots. Their picks enter on the next
+        # session, so they duplicate that trading day's result — double-counting
+        # the sample and painting spurious weekend cells in the daily heatmap.
+        if run_date.weekday() >= 5:  # Saturday=5, Sunday=6
+            continue
         # One snapshot per trading day. Multiple same-day snapshots (premarket /
         # regular / postmarket sessions + forced runs) share near-identical picks
         # and would otherwise be counted as independent observations, inflating n

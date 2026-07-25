@@ -108,6 +108,13 @@ def load_daily_excess(ranking: str = "breakout", horizon_days: int = 5, days: in
     for r in rows:
         day = r["day"] if isinstance(r, dict) else r[0]
         val = r["avg_excess"] if isinstance(r, dict) else r[1]
+        # Drop weekend rows written before the weekend-snapshot fix — they
+        # duplicate the adjacent trading day and shouldn't paint their own cell.
+        try:
+            if day is not None and day.weekday() >= 5:
+                continue
+        except Exception:
+            pass
         out.append((day, float(val) if val is not None else None))
     return out
 
