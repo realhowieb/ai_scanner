@@ -42,18 +42,38 @@ class NormalizeTests(unittest.TestCase):
 
 
 class NearestTheMoneyTests(unittest.TestCase):
-    def test_picks_closest_directional_skipping_ranges(self):
+    def test_picks_genuinely_closest_strike_any_type(self):
         from data.kalshi_markets import _normalize, nearest_the_money
 
         markets = [
             _normalize(_raw("KXBTC-1", "$70,000 or above", "70000", "0.4", "0.5")),
-            _normalize(_raw("KXBTC-2", "$64,500 to 64,599.99", "64500", "0.4", "0.5")),  # range, closest
+            _normalize(_raw("KXBTC-2", "$64,500 to 64,599.99", "64500", "0.4", "0.5")),  # closest
             _normalize(_raw("KXBTC-3", "$64,000 or above", "64000", "0.4", "0.5")),
         ]
         atm = nearest_the_money(markets, 64300)
-        # closest strike is the range bucket, but ranges are skipped → picks 64000
-        self.assertEqual(atm["floor_strike"], 64000.0)
-        self.assertEqual(atm["kind"], "above")
+        # genuinely closest strike wins (range bucket at 64,500), not a far
+        # directional boundary — this was the "$73k while spot ~$64k" bug.
+        self.assertEqual(atm["floor_strike"], 64500.0)
+        self.assertEqual(atm["kind"], "range")
+
+
+class Btc15MinTests(unittest.TestCase):
+    def test_picks_window_contract_nearest_spot_with_up_down(self):
+        import data.kalshi_markets as km
+
+        raws = [
+            _raw("KXBTC15M-w1-a", None, "64350", "0.55", "0.60", close="2026-07-31T05:30:00Z"),
+            _raw("KXBTC15M-w1-b", None, "65000", "0.20", "0.25", close="2026-07-31T05:30:00Z"),
+            _raw("KXBTC15M-w2-a", None, "64280", "0.50", "0.52", close="2026-07-31T05:45:00Z"),
+        ]
+        with mock.patch.object(km, "_fetch_series", return_value=raws):
+            m = km.fetch_btc_15min(64300)
+        # soonest window (05:30) + strike nearest 64,300 → the 64,350 contract
+        self.assertEqual(m["floor_strike"], 64350.0)
+        self.assertEqual(m["kind"], "above")
+        self.assertEqual(m["up_prob_pct"], 57.5)          # YES mid ×100
+        self.assertEqual(m["down_prob_pct"], 42.5)        # 100 − up
+        self.assertEqual(m["strike_vs_spot"], 50.0)
 
 
 class FetchTests(unittest.TestCase):

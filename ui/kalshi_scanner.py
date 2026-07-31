@@ -35,6 +35,12 @@ if st is not None:
 
         return fetch_btc_markets()
 
+    @st.cache_data(ttl=10, show_spinner=False)
+    def _btc15_cached(spot_bucket: float):
+        from data.kalshi_markets import fetch_btc_15min
+
+        return fetch_btc_15min(spot_bucket)
+
 else:  # pragma: no cover
     def _bars_cached(timeframe: str):
         from data.crypto_btc import fetch_btc_bars
@@ -45,6 +51,11 @@ else:  # pragma: no cover
         from data.kalshi_markets import fetch_btc_markets
 
         return fetch_btc_markets()
+
+    def _btc15_cached(spot_bucket: float):
+        from data.kalshi_markets import fetch_btc_15min
+
+        return fetch_btc_15min(spot_bucket)
 
 
 def render_kalshi_scanner() -> None:
@@ -93,6 +104,7 @@ def render_kalshi_scanner() -> None:
                 st.warning("Not enough data to compute a signal on this timeframe.")
                 return
             _render_call(sig)
+            _render_15min(sig)
             _render_indicators(sig)
             _render_plan(sig)
             _render_reasons(sig)
@@ -175,6 +187,53 @@ def _render_reasons(sig: Dict[str, Any]) -> None:
             st.markdown(f"- {r}")
 
 
+def _render_15min(sig: Dict[str, Any]) -> None:
+    """Focused 'next 15 minutes: BTC higher?' read on the KXBTC15M market."""
+    try:
+        # Bucket spot to $50 so the cache key is stable between ticks.
+        spot = float(sig["price"])
+        m = _btc15_cached(round(spot / 50.0) * 50.0)
+        st.markdown("### ⏱️ Next 15 minutes — BTC higher?")
+        if not m:
+            st.caption("No open KXBTC15M market right now (between windows).")
+            return
+        up_p = m.get("up_prob_pct")
+        strike = m.get("floor_strike")
+        gap = m.get("strike_vs_spot")
+        closes = _fmt_close(m.get("close_time"))
+        # The scanner's own directional read for this horizon.
+        scanner_up = sig["direction"] == "up"
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Contract", f"BTC ≥ ${strike:,.0f}" if strike else "—",
+                  f"{gap:+,.0f} vs spot" if gap is not None else None)
+        c2.metric("Market: BTC up", f"{up_p:.0f}%" if up_p is not None else "—",
+                  help="YES implied probability that BTC is at/above the level at "
+                       "the window close — i.e. the market's 'up' odds.")
+        c3.metric("Closes in", closes)
+
+        market_up = (up_p is not None and up_p >= 50)
+        if up_p is None:
+            agree = None
+        else:
+            agree = (scanner_up == market_up)
+        scan_txt = "UP" if scanner_up else "DOWN"
+        if agree is True:
+            note = (f"✅ Scanner ({scan_txt}) **agrees** with the market's lean. "
+                    f"Your directional side: **{'YES' if scanner_up else 'NO'}**.")
+        elif agree is False:
+            note = (f"⚠️ Scanner reads **{scan_txt}** but the market leans the other "
+                    f"way ({up_p:.0f}% up). Contrarian — size accordingly.")
+        else:
+            note = f"Scanner reads **{scan_txt}**."
+        st.caption(
+            note + "  YES = BTC ends at/above the level (up); NO = below (down). "
+            "Educational only — not financial advice."
+        )
+    except Exception:
+        pass
+
+
 def _fmt_close(ct) -> str:
     try:
         from datetime import datetime, timezone
@@ -210,18 +269,38 @@ def _render_kalshi_markets(sig: Dict[str, Any]) -> None:
         except Exception:
             atm = None
         if atm:
-            side = "YES" if atm.get("kind") == aligned_kind else "NO"
-            st.caption(
-                f"Scanner read **{sig['action']}**. Nearest-the-money contract: "
-                f"*{atm.get('threshold') or atm.get('title')}* (YES ~{atm.get('yes_prob_pct')}%, "
-                f"closes in {_fmt_close(atm.get('close_time'))}). "
-                f"A **{sig['direction']}** read favors **{side}** on this "
-                f"**{atm.get('kind')}** contract."
-            )
+            label = atm.get("threshold") or atm.get("title")
+            closes = _fmt_close(atm.get("close_time"))
+            yesp = atm.get("yes_prob_pct")
+            if atm.get("kind") == "range":
+                st.caption(
+                    f"BTC is currently in **{label}** — the market gives that "
+                    f"bucket ~{yesp}% (closes in {closes}). Scanner read: "
+                    f"**{sig['action']}**. For a clean up/down bet, see the "
+                    f"15-minute panel above."
+                )
+            else:
+                side = "YES" if atm.get("kind") == aligned_kind else "NO"
+                st.caption(
+                    f"Scanner read **{sig['action']}**. Nearest directional "
+                    f"contract: *{label}* (YES ~{yesp}%, closes in {closes}). "
+                    f"A **{sig['direction']}** read favors **{side}** on this "
+                    f"**{atm.get('kind')}** contract."
+                )
+
+        # Show the contracts nearest the current price (most relevant), not a
+        # far-OTM soonest-close slice — that's what made the table show $73k
+        # buckets while spot was ~$64k.
+        price = float(sig["price"])
+        near = sorted(
+            (m for m in markets if m.get("floor_strike") is not None),
+            key=lambda m: abs(m["floor_strike"] - price),
+        )[:12]
+        near.sort(key=lambda m: m["floor_strike"], reverse=True)  # high→low ladder
 
         kind_icon = {"above": "▲ above", "below": "▼ below", "range": "◆ range"}
         rows = []
-        for m in markets[:12]:
+        for m in near:
             rows.append({
                 "Contract": m.get("threshold") or m.get("title"),
                 "Type": kind_icon.get(m.get("kind"), m.get("kind")),
