@@ -1,0 +1,39 @@
+name: BTC 15m Outcome Logger
+
+# Collects training data for the 15-minute Kalshi BTC model (#9): logs the
+# current window's decision-engine features + prediction, and settles past
+# windows against Kalshi's ground-truth result. No-auth data sources (Coinbase,
+# Kalshi) — only needs the Neon DATABASE_URL.
+#
+# Runs every 15 minutes to match the contract cadence. Disable by commenting the
+# `schedule` block (or turning the workflow off in the Actions tab) — the cron
+# runner also calls the logger best-effort, so some data still trickles in.
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [btc_outcome_logger]
+  schedule:
+    - cron: "*/15 * * * *"
+
+concurrency:
+  group: btc-outcome-logger
+  cancel-in-progress: false
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Log + settle 15m BTC outcomes
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+        run: python -m analytics.btc_outcome_logger

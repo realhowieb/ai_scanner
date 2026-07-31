@@ -566,6 +566,17 @@ def main():
         print(f"[cron] signal leaderboard refresh failed: {e}")
         _capture(e)
 
+    # Log + settle 15-min Kalshi BTC outcomes (training data for the model).
+    # Best-effort; the dedicated btc_outcome_logger workflow runs this on a
+    # 15-min cadence, this just captures extra windows at scan time.
+    try:
+        from analytics.btc_outcome_logger import run_btc_outcome_logger
+
+        run_btc_outcome_logger()
+    except Exception as e:
+        print(f"[cron] btc outcome logger failed: {e}")
+        _capture(e)
+
     # Score fired alerts against what happened next (per-alert scorecards).
     # Best-effort; the unscored-events query is naturally incremental.
     try:

@@ -146,6 +146,41 @@ def fetch_btc_15min(spot: Optional[float]) -> Optional[Dict[str, Any]]:
     return pick
 
 
+def fetch_market(ticker: str) -> Optional[Dict[str, Any]]:
+    """Fetch a single market by ticker, incl. its settled result (ground truth).
+
+    Returns {ticker, status, result ('yes'/'no'/None), result_up (bool/None),
+    expiration_value (actual settle price), floor_strike, close_time, settled}.
+    For an above-threshold BTC contract, result 'yes' == BTC finished ≥ strike
+    == 'up'. Best-effort; None on failure.
+    """
+    if requests is None or not ticker:
+        return None
+    try:
+        r = requests.get(
+            f"{_BASE}/markets/{ticker}",
+            headers={"User-Agent": "hsfinest-kalshi-scanner"}, timeout=_TIMEOUT,
+        )
+        if r.status_code != 200:
+            return None
+        m = (r.json() or {}).get("market") or {}
+    except Exception:
+        return None
+    if not m:
+        return None
+    res = (m.get("result") or "").lower() or None
+    return {
+        "ticker": m.get("ticker"),
+        "status": m.get("status"),
+        "result": res,
+        "result_up": True if res == "yes" else False if res == "no" else None,
+        "expiration_value": _d(m.get("expiration_value")),
+        "floor_strike": _d(m.get("floor_strike")),
+        "close_time": _ts(m.get("close_time")),
+        "settled": res in ("yes", "no"),
+    }
+
+
 def nearest_the_money(markets: List[Dict[str, Any]], price: float) -> Optional[Dict[str, Any]]:
     """The open market whose strike is genuinely closest to the current price.
 
