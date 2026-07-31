@@ -29,11 +29,22 @@ if st is not None:
 
         return fetch_btc_bars(timeframe)
 
+    @st.cache_data(ttl=60, show_spinner=False)
+    def _markets_cached():
+        from data.kalshi_markets import fetch_btc_markets
+
+        return fetch_btc_markets()
+
 else:  # pragma: no cover
     def _bars_cached(timeframe: str):
         from data.crypto_btc import fetch_btc_bars
 
         return fetch_btc_bars(timeframe)
+
+    def _markets_cached():
+        from data.kalshi_markets import fetch_btc_markets
+
+        return fetch_btc_markets()
 
 
 def render_kalshi_scanner() -> None:
@@ -77,6 +88,7 @@ def render_kalshi_scanner() -> None:
         _render_plan(sig)
         _render_reasons(sig)
         _render_chart(df, sig, timeframe)
+        _render_kalshi_markets(sig)
         st.caption(
             "Buy Up = bet BTC finishes higher (YES on an up-market); Buy Down = "
             "the opposite. Educational only — not financial advice."
@@ -137,6 +149,71 @@ def _render_reasons(sig: Dict[str, Any]) -> None:
     with st.expander("Why this call", expanded=False):
         for r in reasons:
             st.markdown(f"- {r}")
+
+
+def _fmt_close(ct) -> str:
+    try:
+        from datetime import datetime, timezone
+
+        mins = (ct - datetime.now(timezone.utc)).total_seconds() / 60.0
+        if mins < 60:
+            return f"{mins:.0f}m"
+        if mins < 60 * 24:
+            return f"{mins / 60:.1f}h"
+        return f"{mins / 1440:.0f}d"
+    except Exception:
+        return "—"
+
+
+def _render_kalshi_markets(sig: Dict[str, Any]) -> None:
+    """Live open Kalshi BTC markets, paired with the scanner's directional read."""
+    try:
+        markets = _markets_cached()
+        st.markdown("### 📈 Live Kalshi BTC markets")
+        if not markets:
+            st.caption("No open Kalshi BTC markets returned right now.")
+            return
+
+        up = sig["direction"] == "up"
+        # 'above' contracts: YES is bullish. 'below': YES is bearish. So the
+        # scanner's read maps to YES on 'above' when up, YES on 'below' when down.
+        aligned_kind = "above" if up else "below"
+        atm = None
+        try:
+            from data.kalshi_markets import nearest_the_money
+
+            atm = nearest_the_money(markets, sig["price"])
+        except Exception:
+            atm = None
+        if atm:
+            side = "YES" if atm.get("kind") == aligned_kind else "NO"
+            st.caption(
+                f"Scanner read **{sig['action']}**. Nearest-the-money contract: "
+                f"*{atm.get('threshold') or atm.get('title')}* (YES ~{atm.get('yes_prob_pct')}%, "
+                f"closes in {_fmt_close(atm.get('close_time'))}). "
+                f"A **{sig['direction']}** read favors **{side}** on this "
+                f"**{atm.get('kind')}** contract."
+            )
+
+        kind_icon = {"above": "▲ above", "below": "▼ below", "range": "◆ range"}
+        rows = []
+        for m in markets[:12]:
+            rows.append({
+                "Contract": m.get("threshold") or m.get("title"),
+                "Type": kind_icon.get(m.get("kind"), m.get("kind")),
+                "Strike": f"${m['floor_strike']:,.0f}" if m.get("floor_strike") else "—",
+                "YES %": f"{m['yes_prob_pct']:.0f}%" if m.get("yes_prob_pct") is not None else "—",
+                "Spread": f"{m['spread_cents']:.0f}¢" if m.get("spread_cents") is not None else "—",
+                "Closes in": _fmt_close(m.get("close_time")),
+            })
+        st.dataframe(rows, hide_index=True, width="stretch")
+        st.caption(
+            "YES % is the market's implied probability (mid of YES bid/ask). "
+            "▲ above = YES bullish, ▼ below = YES bearish, ◆ range = a price bucket. "
+            "Live from Kalshi's public API — read-only, not a recommendation."
+        )
+    except Exception:
+        pass
 
 
 def _render_chart(df, sig: Dict[str, Any], timeframe: str) -> None:
