@@ -67,6 +67,44 @@ def ema_cross_detail(frame, fast: int = 9, slow: int = 21, min_bars: int = 23):
         return None
 
 
+def ewo(data: pd.Series | pd.DataFrame, fast: int = 5, slow: int = 35) -> pd.Series:
+    """Elliott Wave Oscillator = SMA(close, fast) - SMA(close, slow)."""
+    s = _to_series_close(data)
+    return s.rolling(fast).mean() - s.rolling(slow).mean()
+
+
+def ewo_cross_detail(frame, fast: int = 5, slow: int = 35, min_bars: int = 37):
+    """Fresh EWO zero-line cross on the latest daily bar (shared core).
+
+    The Elliott Wave Oscillator is SMA(close, fast) - SMA(close, slow). Returns
+    {"direction": "up"|"down", "ewo": float, "ewo_prev": float} when the
+    oscillator just crossed the zero line ('up' = crossed above zero / bullish,
+    'down' = crossed below / bearish), else None. Single source of truth for the
+    alert evaluator (and any future scanner column).
+    """
+    try:
+        if isinstance(frame, pd.Series):
+            closes = pd.to_numeric(frame, errors="coerce").dropna()
+        elif frame is not None and hasattr(frame, "columns") and "Close" in frame.columns:
+            closes = pd.to_numeric(frame["Close"], errors="coerce").dropna()
+        else:
+            return None
+        if len(closes) < min_bars:
+            return None
+        osc = closes.rolling(fast).mean() - closes.rolling(slow).mean()
+        prev = float(osc.iloc[-2])
+        curr = float(osc.iloc[-1])
+        if prev != prev or curr != curr:  # NaN guard
+            return None
+        if prev <= 0 < curr:
+            return {"direction": "up", "ewo": curr, "ewo_prev": prev}
+        if prev >= 0 > curr:
+            return {"direction": "down", "ewo": curr, "ewo_prev": prev}
+        return None
+    except (ImportError, TypeError, ValueError, KeyError, AttributeError):
+        return None
+
+
 def rsi(data: pd.Series | pd.DataFrame, period: int = 14) -> pd.Series:
     """
     Wilder's RSI on Close.

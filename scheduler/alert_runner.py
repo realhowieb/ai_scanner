@@ -176,6 +176,11 @@ def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
         if line:
             lines.append(line)
 
+    elif atype == "ewo_cross":
+        line = _evaluate_ewo_cross_alert(alert)
+        if line:
+            lines.append(line)
+
     return lines
 
 
@@ -197,6 +202,32 @@ def _evaluate_ema_cross_alert(alert: Dict[str, Any]) -> Optional[str]:
         f"{tk}: EMA 9/21 {label} "
         f"(EMA9 {signal['ema9']:.2f}, EMA21 {signal['ema21']:.2f})"
     )
+
+
+def _evaluate_ewo_cross_alert(alert: Dict[str, Any]) -> Optional[str]:
+    tk = str(alert.get("ticker") or "").strip().upper()
+    if not tk:
+        return None
+    direction = str(alert.get("direction") or "up").strip().lower()
+    if direction not in {"up", "down"}:
+        direction = "up"
+
+    frame = _load_ema_history(tk)  # 90d daily bars — enough for SMA35
+    signal = _ewo_cross_signal(frame)
+    if signal is None or signal["direction"] != direction:
+        return None
+
+    label = "crossed up through 0" if direction == "up" else "crossed down through 0"
+    return f"{tk}: EWO {label} (EWO {signal['ewo']:+.2f})"
+
+
+def _ewo_cross_signal(frame) -> Optional[Dict[str, float | str]]:
+    from scan.indicators import ewo_cross_detail
+
+    detail = ewo_cross_detail(frame)
+    if not detail:
+        return None
+    return {"direction": detail["direction"], "ewo": detail["ewo"]}
 
 
 def _load_ema_history(ticker: str):
@@ -382,6 +413,7 @@ def run_alerts() -> None:
                 "watchlist": "Watchlist alert",
                 "price": "Price alert",
                 "ema_cross": "EMA cross alert",
+                "ewo_cross": "EWO cross alert",
             }.get(alert.get("alert_type"), "Alert")
 
             first_ticker = alert.get("ticker") or (

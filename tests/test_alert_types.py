@@ -15,6 +15,19 @@ class AlertTypesTests(unittest.TestCase):
         self.assertIn("Golden Cross (bullish)", source)
         self.assertIn("Death Cross (bearish)", source)
 
+    def test_ewo_cross_is_allowed_alert_type(self):
+        from db.alerts import ALERT_TYPES
+
+        self.assertIn("ewo_cross", ALERT_TYPES)
+
+    def test_ewo_cross_is_visible_in_alert_ui_source(self):
+        from pathlib import Path
+
+        source = Path("ui/alerts.py").read_text()
+        self.assertIn("EWO Cross", source)
+        self.assertIn("Crossing up 0 (bullish)", source)
+        self.assertIn("Crossing down 0 (bearish)", source)
+
     def test_breakout_history_preview_is_opt_in(self):
         from pathlib import Path
 

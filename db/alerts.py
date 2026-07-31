@@ -9,6 +9,8 @@ Alert types (alert_type column):
                 the `threshold` price.
 - 'ema_cross' : fire when EMA 9 crosses EMA 21 for `ticker`; direction is
                 'bullish' or 'bearish'.
+- 'ewo_cross' : fire when the Elliott Wave Oscillator (SMA5-SMA35) crosses the
+                zero line for `ticker`; direction is 'up' or 'down'.
 
 Backed by Neon/PostgreSQL (psycopg, dict_row). Mirrors the proven connection
 pattern in db/watchlists.py: plain cursor + conn.commit() + cur.close(). Rows
@@ -22,7 +24,7 @@ from db.engine import get_neon_conn
 
 # 'move' (abs % change today >= threshold) and 'rvol' (today's volume vs 20d
 # avg >= threshold) are evaluated by the real-time worker, not the cron.
-ALERT_TYPES = ("breakout", "watchlist", "price", "move", "rvol", "ema_cross")
+ALERT_TYPES = ("breakout", "watchlist", "price", "move", "rvol", "ema_cross", "ewo_cross")
 
 
 def _ensure_alerts_schema(conn) -> None:

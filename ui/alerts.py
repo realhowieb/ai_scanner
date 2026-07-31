@@ -52,6 +52,7 @@ _ALERT_TYPE_LABELS = {
     "move": "⚡ Move",
     "rvol": "📊 Rel. volume",
     "ema_cross": "📈 EMA cross",
+    "ewo_cross": "📉 EWO cross",
 }
 
 
@@ -153,6 +154,10 @@ def _fmt_alert(a: dict) -> str:
         direction = str(a.get("direction") or "bullish").lower()
         label = "Golden Cross" if direction == "bullish" else "Death Cross"
         return f"📈 {a.get('ticker')} EMA 9/21 {label} ({direction})"
+    if t == "ewo_cross":
+        direction = str(a.get("direction") or "up").lower()
+        arrow = "crossing up" if direction == "up" else "crossing down"
+        return f"📉 {a.get('ticker')} EWO {arrow} 0"
     return str(t)
 
 
@@ -235,8 +240,9 @@ def render_alerts_panel(
         st.caption(f"Using {used} of {max_alerts} alert slots on your plan.")
 
     with st.expander("➕ Create an alert", expanded=_has_alert_prefill()):
-        tab_break, tab_watch, tab_price, tab_move, tab_rvol, tab_ema = st.tabs(
-            ["🚀 Breakout", "📋 Watchlist", "💲 Price", "⚡ % Move", "📊 RVOL", "📈 EMA Cross"]
+        tab_break, tab_watch, tab_price, tab_move, tab_rvol, tab_ema, tab_ewo = st.tabs(
+            ["🚀 Breakout", "📋 Watchlist", "💲 Price", "⚡ % Move", "📊 RVOL",
+             "📈 EMA Cross", "📉 EWO Cross"]
         )
 
         # NOTE: plain widgets (not st.form) — st.form rendered empty inside the
@@ -450,6 +456,43 @@ def render_alerts_panel(
                             "ema_cross",
                             ticker=ema_tk.strip().upper(),
                             direction=str(ema_dir),
+                        ),
+                    )
+
+        with tab_ewo:
+            st.caption(
+                "Fire when the Elliott Wave Oscillator (SMA 5 − SMA 35 of close) "
+                "crosses the zero line. Crossing up is a bullish momentum flip; "
+                "crossing down is bearish."
+            )
+            ew1, ew2 = st.columns([2, 2])
+            ewo_tk = ew1.text_input(
+                "Ticker",
+                placeholder="e.g. AMD",
+                key="alert_ewo_tk",
+                **_default_value_kwargs("alert_ewo_tk", ""),
+            )
+            ewo_directions = ["up", "down"]
+            ewo_dir = ew2.selectbox(
+                "Zero-line cross",
+                ewo_directions,
+                format_func=lambda v: "Crossing up 0 (bullish)" if v == "up"
+                else "Crossing down 0 (bearish)",
+                key="alert_ewo_dir",
+                **_default_index_kwargs("alert_ewo_dir", ewo_directions, "up"),
+            )
+            if st.button("Create EWO cross alert", key="alert_ewo_btn"):
+                if not ewo_tk.strip():
+                    st.warning("Enter a ticker symbol.")
+                else:
+                    _guarded_create(
+                        existing,
+                        max_alerts,
+                        lambda: create_alert(
+                            user_id,
+                            "ewo_cross",
+                            ticker=ewo_tk.strip().upper(),
+                            direction=str(ewo_dir),
                         ),
                     )
 

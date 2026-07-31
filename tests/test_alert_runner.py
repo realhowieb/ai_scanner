@@ -111,7 +111,39 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(len(bullish), 1)
         self.assertIn("AMD", bullish[0])
         self.assertIn("Golden Cross", bullish[0])
-        self.assertEqual(bearish, [])
+        self.assertEqual(bearish, [])  # bullish cross doesn't satisfy a bearish alert
+
+    def test_ewo_cross_signal_detects_zero_line_crosses(self):
+        from scheduler.alert_runner import _ewo_cross_signal
+
+        # 36 flat bars then a jump/drop → EWO (SMA5-SMA35) crosses 0 up/down.
+        up = pd.DataFrame({"Close": [10.0] * 36 + [20.0]})
+        down = pd.DataFrame({"Close": [10.0] * 36 + [2.0]})
+        none = pd.DataFrame({"Close": [10.0] * 40})
+
+        self.assertEqual(_ewo_cross_signal(up)["direction"], "up")
+        self.assertEqual(_ewo_cross_signal(down)["direction"], "down")
+        self.assertIsNone(_ewo_cross_signal(none))
+
+    def test_ewo_cross_alert_respects_requested_direction(self):
+        from unittest.mock import patch
+
+        from scheduler.alert_runner import _evaluate
+
+        history = pd.DataFrame({"Close": [10.0] * 36 + [20.0]})  # crosses up
+        with patch("scheduler.alert_runner._load_ema_history", return_value=history):
+            up = _evaluate(
+                {"alert_type": "ewo_cross", "ticker": "AMD", "direction": "up"},
+                self._df(), set(),
+            )
+            down = _evaluate(
+                {"alert_type": "ewo_cross", "ticker": "AMD", "direction": "down"},
+                self._df(), set(),
+            )
+        self.assertEqual(len(up), 1)
+        self.assertIn("AMD", up[0])
+        self.assertIn("EWO", up[0])
+        self.assertEqual(down, [])  # up-cross doesn't satisfy a down alert
 
 
 class ThrottleTest(unittest.TestCase):
