@@ -15,21 +15,21 @@ except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
 _TIMEFRAMES = ["1m", "5m", "15m", "1h", "6h", "1d"]
-
-
-def _cache():
-    return st.cache_data(ttl=60, show_spinner=False) if st is not None else (lambda f: f)
+# Auto-refresh cadences. Kept short because the 15-min BTC contracts churn fast.
+_AUTO = {"Off": 0, "15s": 15, "30s": 30, "60s": 60}
 
 
 if st is not None:
 
-    @st.cache_data(ttl=60, show_spinner="Fetching BTC bars…")
+    # Short TTLs so an auto-refresh tick (fragment run_every) actually re-pulls
+    # fresh data instead of serving a stale cache entry.
+    @st.cache_data(ttl=30, show_spinner="Fetching BTC bars…")
     def _bars_cached(timeframe: str):
         from data.crypto_btc import fetch_btc_bars
 
         return fetch_btc_bars(timeframe)
 
-    @st.cache_data(ttl=60, show_spinner=False)
+    @st.cache_data(ttl=15, show_spinner=False)
     def _markets_cached():
         from data.kalshi_markets import fetch_btc_markets
 
@@ -58,41 +58,65 @@ def render_kalshi_scanner() -> None:
             "contracts. Educational only — not financial advice; the probability "
             "is a heuristic, not a forecast."
         )
-        c1, c2 = st.columns([1, 1])
+        c1, c2, c3 = st.columns([1, 1, 1])
         timeframe = c1.selectbox(
             "Timeframe", _TIMEFRAMES, index=1, key="kalshi_tf",
             help="Bar size for the indicators. Match it to the contract's window "
                  "(e.g. 5m/15m for hourly BTC markets, 1h/6h for daily).",
         )
-        if c2.button("🔄 Refresh", key="kalshi_refresh"):
-            _bars_cached.clear()
-            st.rerun()
-
-        df = _bars_cached(timeframe)
-        if df is None or len(df) < 35:
-            st.warning(
-                "Couldn't fetch enough BTC data right now (Coinbase). Try another "
-                "timeframe or refresh."
-            )
-            return
-
-        from scan.kalshi_signal import compute_kalshi_signal
-
-        sig = compute_kalshi_signal(df)
-        if not sig:
-            st.warning("Not enough data to compute a signal on this timeframe.")
-            return
-
-        _render_call(sig)
-        _render_indicators(sig)
-        _render_plan(sig)
-        _render_reasons(sig)
-        _render_chart(df, sig, timeframe)
-        _render_kalshi_markets(sig)
-        st.caption(
-            "Buy Up = bet BTC finishes higher (YES on an up-market); Buy Down = "
-            "the opposite. Educational only — not financial advice."
+        auto = c2.selectbox(
+            "Auto-refresh", list(_AUTO.keys()), index=0, key="kalshi_auto",
+            help="Re-pull BTC bars + Kalshi markets on a timer — handy for the "
+                 "fast-churning 15-minute BTC contracts.",
         )
+        with c3:
+            st.write("")
+            if st.button("🔄 Refresh", key="kalshi_refresh"):
+                _bars_cached.clear()
+                _markets_cached.clear()
+                st.rerun()
+
+        interval = _AUTO.get(auto, 0)
+
+        def _body() -> None:
+            df = _bars_cached(timeframe)
+            if df is None or len(df) < 35:
+                st.warning(
+                    "Couldn't fetch enough BTC data right now (Coinbase). Try "
+                    "another timeframe or refresh."
+                )
+                return
+            from scan.kalshi_signal import compute_kalshi_signal
+
+            sig = compute_kalshi_signal(df)
+            if not sig:
+                st.warning("Not enough data to compute a signal on this timeframe.")
+                return
+            _render_call(sig)
+            _render_indicators(sig)
+            _render_plan(sig)
+            _render_reasons(sig)
+            _render_chart(df, sig, timeframe)
+            _render_kalshi_markets(sig)
+            st.caption(
+                "Buy Up = bet BTC finishes higher (YES on an up-market); Buy Down "
+                "= the opposite. Educational only — not financial advice."
+            )
+
+        # Auto-refresh re-renders just this block on a timer (short cache TTLs
+        # above make each tick a fresh pull). Falls back to a full-page timer
+        # when st.fragment isn't available.
+        if interval and hasattr(st, "fragment"):
+            st.fragment(run_every=f"{interval}s")(_body)()
+        else:
+            if interval:
+                try:
+                    from streamlit_autorefresh import st_autorefresh
+
+                    st_autorefresh(interval=interval * 1000, key="kalshi_autorefresh")
+                except Exception:
+                    st.caption("Auto-refresh unavailable here; use 🔄 Refresh.")
+            _body()
     except Exception:
         pass
 
