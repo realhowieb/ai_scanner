@@ -358,28 +358,65 @@ def _render_kalshi_markets(sig: Dict[str, Any]) -> None:
 
 
 def _render_chart(df, sig: Dict[str, Any], timeframe: str) -> None:
+    """Live BTC candlestick with EMA9/21 + VWAP overlays and a volume subplot."""
     try:
         import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
 
-        closes = df["Close"].tail(120)
-        fig = go.Figure(
-            go.Scatter(x=list(closes.index), y=closes.tolist(), mode="lines",
-                       line=dict(color="#f59e0b", width=2), name="BTC")
+        from scan.indicators import ema
+
+        st.markdown(f"### 🟠 Live BTC — {timeframe} candles")
+        d = df.tail(120)
+        x = list(d.index)
+        fig = make_subplots(
+            rows=2, cols=1, shared_xaxes=True,
+            row_heights=[0.78, 0.22], vertical_spacing=0.03,
         )
-        for label, y, col in (
-            ("target", sig["target"], "#16a34a"),
-            ("entry", sig["entry_zone"][1], "#60a5fa"),
-            ("stop", sig["stop"], "#dc2626"),
-        ):
-            fig.add_hline(y=y, line_color=col, line_dash="dot", line_width=1,
-                          annotation_text=f"{label} {y:,.0f}",
-                          annotation_font_color=col, annotation_font_size=11)
+        # --- price candles ---
+        fig.add_trace(
+            go.Candlestick(
+                x=x, open=d["Open"], high=d["High"], low=d["Low"], close=d["Close"],
+                increasing_line_color="#16a34a", decreasing_line_color="#dc2626",
+                name="BTC", showlegend=False,
+            ),
+            row=1, col=1,
+        )
+        # --- EMA 9 / 21 + running VWAP overlays ---
+        ema9 = ema(df["Close"], 9).tail(120)
+        ema21 = ema(df["Close"], 21).tail(120)
+        fig.add_trace(go.Scatter(x=x, y=ema9, line=dict(color="#60a5fa", width=1),
+                                 name="EMA9"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=x, y=ema21, line=dict(color="#a78bfa", width=1),
+                                 name="EMA21"), row=1, col=1)
+        tp = (d["High"] + d["Low"] + d["Close"]) / 3.0
+        denom = d["Volume"].cumsum()
+        vwap = (tp * d["Volume"]).cumsum() / denom.where(denom > 0)
+        fig.add_trace(go.Scatter(x=x, y=vwap, line=dict(color="#f59e0b", width=1, dash="dot"),
+                                 name="VWAP"), row=1, col=1)
+        # --- plan lines (only when tradeable) ---
+        if sig.get("tradeable") and sig.get("entry_zone"):
+            for label, y, col in (
+                ("target", sig["target"], "#16a34a"),
+                ("entry", sig["entry_zone"][1], "#60a5fa"),
+                ("stop", sig["stop"], "#dc2626"),
+            ):
+                fig.add_hline(y=y, line_color=col, line_dash="dot", line_width=1,
+                              annotation_text=f"{label} {y:,.0f}",
+                              annotation_font_color=col, annotation_font_size=10,
+                              row=1, col=1)
+        # --- volume, colored by candle direction ---
+        vcolors = ["#16a34a" if c >= o else "#dc2626"
+                   for o, c in zip(d["Open"], d["Close"])]
+        fig.add_trace(go.Bar(x=x, y=d["Volume"], marker_color=vcolors, name="Vol",
+                             showlegend=False), row=2, col=1)
         fig.update_layout(
-            height=260, margin=dict(l=0, r=0, t=8, b=0), showlegend=False,
+            height=440, margin=dict(l=0, r=0, t=8, b=0),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(showgrid=False),
-            yaxis=dict(gridcolor="rgba(128,128,128,0.12)"),
+            legend=dict(orientation="h", y=1.02, x=0, font=dict(size=11)),
+            xaxis_rangeslider_visible=False,
         )
+        fig.update_xaxes(showgrid=False)
+        fig.update_yaxes(gridcolor="rgba(128,128,128,0.12)")
         st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch",
                         key=f"kalshi_chart_{timeframe}")
     except Exception:
