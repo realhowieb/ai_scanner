@@ -99,20 +99,24 @@ def render_kalshi_scanner() -> None:
                 return
             from scan.kalshi_signal import compute_kalshi_signal
 
-            sig = compute_kalshi_signal(df)
+            # Higher-timeframe confirmation (#4): the 1h trend. Skipped implicitly
+            # if the fetch fails (htf_df=None).
+            htf = _bars_cached("1h") if timeframe not in ("1h", "6h", "1d") else None
+            sig = compute_kalshi_signal(df, htf_df=htf)
             if not sig:
                 st.warning("Not enough data to compute a signal on this timeframe.")
                 return
             _render_call(sig)
             _render_15min(sig)
             _render_indicators(sig)
-            _render_plan(sig)
+            if sig.get("tradeable") and sig.get("entry_zone"):
+                _render_plan(sig)
             _render_reasons(sig)
             _render_chart(df, sig, timeframe)
             _render_kalshi_markets(sig)
             st.caption(
-                "Buy Up = bet BTC finishes higher (YES on an up-market); Buy Down "
-                "= the opposite. Educational only — not financial advice."
+                "A decision engine, not a signal: it says No Trade when signals "
+                "don't align. Educational only — not financial advice."
             )
 
         # Auto-refresh re-renders just this block on a timer (short cache TTLs
@@ -134,20 +138,39 @@ def render_kalshi_scanner() -> None:
 
 
 def _render_call(sig: Dict[str, Any]) -> None:
-    up = sig["direction"] == "up"
-    badge = "🟢 **Buy Up**" if up else "🔴 **Buy Down**"
-    color = "#16a34a" if up else "#dc2626"
+    rec = sig["recommendation"]
+    direction = sig["direction"]
+    if direction == "up":
+        icon, color = "🟢", "#16a34a"
+    elif direction == "down":
+        icon, color = "🔴", "#dc2626"
+    else:
+        icon, color = "⚪", "#64748b"
     st.markdown(
         f"<div style='padding:12px 16px;border-radius:10px;border:1px solid {color};"
         f"background:{color}22'>"
-        f"<span style='font-size:22px'>{badge}</span> &nbsp; "
+        f"<span style='font-size:22px'>{icon} <b>{rec}</b></span> &nbsp; "
         f"<span style='color:#94a3b8'>BTC ${sig['price']:,.0f}</span></div>",
         unsafe_allow_html=True,
     )
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Confidence", f"{sig['confidence']}/100")
-    m2.metric("Est. probability", f"{sig['probability']}%")
-    m3.metric("Volume", f"{sig['rvol']:.2f}× avg" + (" 🔥" if sig["volume_spike"] else ""))
+    m2.metric("Win prob", f"{sig['win_probability']}%" if sig.get("win_probability") else "—")
+    m3.metric("Size", sig.get("position_size") or "—")
+    m4.metric("Volume", f"{sig['rvol']:.2f}×" + (" 🔥" if sig["volume_spike"] else ""))
+    # Gate checklist — what the decision required.
+    def _mk(ok):
+        return "✅" if ok else "❌"
+    htf = sig.get("htf_agree")
+    htf_txt = "—" if htf is None else (_mk(True) if htf else _mk(False))
+    st.caption(
+        f"Trend aligned {_mk(sig['trend_aligned'])} · "
+        f"Volume ≥ 0.7× {_mk(sig['volume_ok'])} · "
+        f"Volatility ok {_mk(sig['volatility_ok'])} · "
+        f"1h agrees {htf_txt}"
+    )
+    if not sig.get("tradeable") and sig.get("gate_reasons"):
+        st.caption("⚪ No Trade — " + "; ".join(sig["gate_reasons"]))
 
 
 def _render_indicators(sig: Dict[str, Any]) -> None:
@@ -179,12 +202,15 @@ def _render_plan(sig: Dict[str, Any]) -> None:
 
 
 def _render_reasons(sig: Dict[str, Any]) -> None:
-    reasons = sig.get("reasons") or []
-    if not reasons:
+    contribs = sig.get("contributions") or []
+    if not contribs:
         return
-    with st.expander("Why this call", expanded=False):
-        for r in reasons:
-            st.markdown(f"- {r}")
+    with st.expander("What drove this — indicator contributions", expanded=False):
+        for name, pts in contribs:
+            arrow = "＋" if pts >= 0 else "－"
+            st.markdown(f"- {arrow} **{name}**: {pts:+.0f} pts")
+        st.caption("Positive points push conviction up; negative (e.g. a 1h-trend "
+                   "disagreement) pull it down toward No Trade.")
 
 
 def _render_15min(sig: Dict[str, Any]) -> None:
@@ -201,8 +227,6 @@ def _render_15min(sig: Dict[str, Any]) -> None:
         strike = m.get("floor_strike")
         gap = m.get("strike_vs_spot")
         closes = _fmt_close(m.get("close_time"))
-        # The scanner's own directional read for this horizon.
-        scanner_up = sig["direction"] == "up"
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Contract", f"BTC ≥ ${strike:,.0f}" if strike else "—",
@@ -212,24 +236,38 @@ def _render_15min(sig: Dict[str, Any]) -> None:
                        "the window close — i.e. the market's 'up' odds.")
         c3.metric("Closes in", closes)
 
-        market_up = (up_p is not None and up_p >= 50)
-        if up_p is None:
-            agree = None
+        # --- Expected value vs Kalshi's price (#8, #10) ---
+        # If the scanner has No Trade, there's no directional read to price.
+        if not sig.get("tradeable"):
+            st.caption("⚪ Scanner says **No Trade** — no edge to price against the "
+                       "market this window.")
+            return
+        from scan.kalshi_signal import evaluate_ev
+
+        ev = evaluate_ev(sig["direction"], sig.get("win_probability"), up_p)
+        if not ev:
+            st.caption("Market price unavailable — can't compute EV.")
+            return
+        e1, e2, e3, e4 = st.columns(4)
+        e1.metric("Our win prob", f"{ev['win_prob_pct']:.0f}%")
+        e2.metric(f"Kalshi {ev['side']} price", f"{ev['entry_price_pct']:.0f}%")
+        e3.metric("Edge (EV)", f"{ev['edge_pts']:+.0f} pts", f"{ev['ev_return_pct']:+.0f}% /$")
+        e4.metric("Call", "BUY" if ev["recommend"] else "PASS")
+        if ev["recommend"]:
+            st.success(
+                f"✅ **BUY {ev['side']}** — our {ev['win_prob_pct']:.0f}% win prob "
+                f"beats the {ev['entry_price_pct']:.0f}% you'd pay (edge "
+                f"{ev['edge_pts']:+.0f} pts). Size: {sig.get('position_size')}."
+            )
         else:
-            agree = (scanner_up == market_up)
-        scan_txt = "UP" if scanner_up else "DOWN"
-        if agree is True:
-            note = (f"✅ Scanner ({scan_txt}) **agrees** with the market's lean. "
-                    f"Your directional side: **{'YES' if scanner_up else 'NO'}**.")
-        elif agree is False:
-            note = (f"⚠️ Scanner reads **{scan_txt}** but the market leans the other "
-                    f"way ({up_p:.0f}% up). Contrarian — size accordingly.")
-        else:
-            note = f"Scanner reads **{scan_txt}**."
-        st.caption(
-            note + "  YES = BTC ends at/above the level (up); NO = below (down). "
-            "Educational only — not financial advice."
-        )
+            st.info(
+                f"➖ **PASS** — {'the market already prices this' if ev['edge_pts'] < 4 else 'thin edge'} "
+                f"(our {ev['win_prob_pct']:.0f}% vs {ev['entry_price_pct']:.0f}% price, "
+                f"edge {ev['edge_pts']:+.0f} pts). Directionally {sig['direction']}, "
+                f"but not worth it at this price."
+            )
+        st.caption("EV = our win probability − the price you pay. Educational only "
+                   "— not financial advice.")
     except Exception:
         pass
 

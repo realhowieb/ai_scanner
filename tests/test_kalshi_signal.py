@@ -78,6 +78,78 @@ class KalshiSignalTests(unittest.TestCase):
         self.assertIsNone(compute_kalshi_signal(_frame([60000.0] * 10)))
         self.assertIsNone(compute_kalshi_signal(None))
 
+    def test_thin_volume_forces_no_trade(self):
+        from scan.kalshi_signal import compute_kalshi_signal
+
+        closes = list(np.linspace(60000, 66000, 60))     # clean uptrend…
+        vols = [100.0] * 59 + [10.0]                      # …but last bar 0.1× avg
+        sig = compute_kalshi_signal(_frame(closes, vols))
+        self.assertEqual(sig["recommendation"], "No Trade")
+        self.assertFalse(sig["tradeable"])
+        self.assertFalse(sig["volume_ok"])
+        self.assertIsNone(sig["entry_zone"])
+        self.assertTrue(any("Volume" in r for r in sig["gate_reasons"]))
+
+    def test_flat_choppy_market_is_no_trade(self):
+        from scan.kalshi_signal import compute_kalshi_signal
+
+        closes = [64000.0 + (5.0 if i % 2 else 0.0) for i in range(60)]  # dead flat
+        sig = compute_kalshi_signal(_frame(closes))
+        self.assertEqual(sig["recommendation"], "No Trade")
+        self.assertIsNone(sig["win_probability"])
+
+    def test_higher_timeframe_disagreement_lowers_confidence(self):
+        from scan.kalshi_signal import compute_kalshi_signal
+
+        closes = list(np.linspace(60000, 66000, 60))      # 15m uptrend
+        agree = compute_kalshi_signal(_frame(closes), htf_df=_frame(list(np.linspace(58000, 66000, 40))))
+        disagree = compute_kalshi_signal(_frame(closes), htf_df=_frame(list(np.linspace(68000, 60000, 40))))
+        self.assertTrue(agree["htf_agree"])
+        self.assertFalse(disagree["htf_agree"])
+        self.assertLess(disagree["confidence"], agree["confidence"])
+
+    def test_strong_trend_is_tradeable_with_size(self):
+        from scan.kalshi_signal import compute_kalshi_signal
+
+        sig = compute_kalshi_signal(_frame(list(np.linspace(60000, 70000, 60))))
+        self.assertTrue(sig["tradeable"])
+        self.assertIn(sig["position_size"], ("Small", "Medium", "Large"))
+        self.assertIn("Buy Up", sig["recommendation"])
+
+
+@unittest.skipUnless(_PANDAS, "pandas required")
+class EvaluateEvTests(unittest.TestCase):
+    def test_up_edge_recommends_buy(self):
+        from scan.kalshi_signal import evaluate_ev
+
+        ev = evaluate_ev("up", win_prob_pct=85, yes_price_pct=52)
+        self.assertEqual(ev["side"], "YES")
+        self.assertEqual(ev["entry_price_pct"], 52.0)
+        self.assertEqual(ev["edge_pts"], 33.0)            # 85 − 52
+        self.assertTrue(ev["recommend"])
+
+    def test_marginal_edge_passes(self):
+        from scan.kalshi_signal import evaluate_ev
+
+        ev = evaluate_ev("up", win_prob_pct=53, yes_price_pct=54)
+        self.assertEqual(ev["edge_pts"], -1.0)
+        self.assertFalse(ev["recommend"])                 # market already prices it
+
+    def test_down_buys_no_side(self):
+        from scan.kalshi_signal import evaluate_ev
+
+        ev = evaluate_ev("down", win_prob_pct=70, yes_price_pct=40)
+        self.assertEqual(ev["side"], "NO")
+        self.assertEqual(ev["entry_price_pct"], 60.0)     # NO = 1 − YES = 0.60
+        self.assertEqual(ev["edge_pts"], 10.0)            # 70 − 60
+        self.assertTrue(ev["recommend"])
+
+    def test_missing_inputs_returns_none(self):
+        from scan.kalshi_signal import evaluate_ev
+
+        self.assertIsNone(evaluate_ev("up", None, 52))
+        self.assertIsNone(evaluate_ev("none", 80, 52))
+
 
 if __name__ == "__main__":
     unittest.main()
