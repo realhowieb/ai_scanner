@@ -207,12 +207,29 @@ def _render_outcome_log() -> None:
         m3.metric("Engine correct",
                   f"{s['correct']}/{s['decided']}" if s["decided"] else "—",
                   acc_txt if s["decided"] else None)
-        st.caption(
-            "Every 15-min window's features + prediction, settled against Kalshi's "
-            "result. Accuracy counts only windows where the engine made a "
-            "directional call (No-Trade windows are excluded). Building toward a "
-            "calibrated model — needs a few hundred settled windows."
-        )
+
+        # Paper P&L — the honest scoreboard: does buying at Kalshi's price pay?
+        bets = s.get("bets") or 0
+        if bets:
+            pnl = s.get("pnl") or 0.0
+            roi = s.get("roi")
+            roi_txt = f"{roi * 100:+.1f}%" if roi is not None else "—"
+            p1, p2, p3 = st.columns(3)
+            p1.metric("Paper trades", f"{s.get('bet_wins', 0)}/{bets} won")
+            p2.metric("P&L", f"{pnl:+.2f} u", help="Units of $1 stake per trade.")
+            p3.metric("ROI", roi_txt)
+            st.caption(
+                "Paper P&L assumes a $1 stake per BUY at Kalshi's price, settled "
+                "$1/$0. This is the real test — accuracy ≠ profit against a sharp "
+                "market. Educational only."
+            )
+        else:
+            st.caption(
+                "Every 15-min window's features + prediction, settled against "
+                "Kalshi's result. Paper-P&L appears once the engine places its "
+                "first BUY. Building toward a calibrated model — needs a few "
+                "hundred settled windows."
+            )
     except Exception:
         pass
 

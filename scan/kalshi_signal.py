@@ -22,7 +22,11 @@ except Exception:  # pragma: no cover
 MIN_BARS = 35
 MIN_VOLUME_RATIO = 0.5      # reject setups below this RVOL (#5); BTC's quiet
                             # overnight hours run thin, so 0.7 over-suppressed
-MIN_ATR_PCT = 0.05          # skip when volatility is dead-flat (#7)
+# Volatility gate (#7) is adaptive: skip only when the tape is frozen (absolute
+# floor) OR volatility is contracting well below its own recent norm — so calm
+# regimes aren't blanket-blocked, but a sudden lull is.
+MIN_ATR_PCT_FLOOR = 0.02    # below this ATR% the tape is effectively frozen
+MIN_ATR_RATIO = 0.6         # skip when ATR < 60% of its recent (30-bar) median
 CONF_SMALL, CONF_NORMAL, CONF_STRONG = 40, 70, 85  # conviction tiers (#1)
 
 
@@ -83,13 +87,22 @@ def compute_kalshi_signal(df, *, sr_lookback: int = 30, htf_df=None) -> Optional
         _ml, _sig, hist = macd(closes)
         macd_hist = float(hist.iloc[-1])
         vwap = _vwap(df)
+        atr_series = None
         try:
-            atr14 = float(atr(df, 14).iloc[-1])
+            atr_series = atr(df, 14)
+            atr14 = float(atr_series.iloc[-1])
         except Exception:
             atr14 = price * 0.01
         if atr14 != atr14 or atr14 <= 0:
             atr14 = price * 0.01
         atr_pct = atr14 / price * 100.0
+        # Recent volatility norm (median ATR of the prior ~30 bars) → ratio.
+        try:
+            norm = (float(atr_series.iloc[-31:-1].median())
+                    if atr_series is not None and len(atr_series) >= 31 else atr14)
+        except Exception:
+            norm = atr14
+        atr_ratio = (atr14 / norm) if norm and norm > 0 else 1.0
 
         vol = pd.to_numeric(df["Volume"], errors="coerce").fillna(0.0)
         avg_vol = float(vol.tail(20).mean() or 0.0)
@@ -106,9 +119,9 @@ def compute_kalshi_signal(df, *, sr_lookback: int = 30, htf_df=None) -> Optional
         down_ok = (ema9 < ema21) and (macd_hist < 0) and (price_vs_vwap is not True)
         direction = "up" if up_ok else "down" if down_ok else "none"
 
-        # --- gates (#5 volume, #7 volatility) ---
+        # --- gates (#5 volume, #7 adaptive volatility) ---
         volume_ok = rvol >= MIN_VOLUME_RATIO
-        volatility_ok = atr_pct >= MIN_ATR_PCT
+        volatility_ok = (atr_pct >= MIN_ATR_PCT_FLOOR) and (atr_ratio >= MIN_ATR_RATIO)
 
         # --- #4 higher-timeframe confirmation ---
         htf_dir = _htf_direction(htf_df)
@@ -135,7 +148,7 @@ def compute_kalshi_signal(df, *, sr_lookback: int = 30, htf_df=None) -> Optional
                 contributions.append(("1h trend agrees", 10.0))
             elif htf_agree is False:
                 contributions.append(("1h trend disagrees", -15.0))
-            if atr_pct >= 0.20:
+            if atr_ratio >= 1.3:
                 contributions.append(("Volatility expanding", 5.0))
 
         confidence = round(_clip(sum(pts for _n, pts in contributions), 0, 100))
@@ -179,7 +192,9 @@ def compute_kalshi_signal(df, *, sr_lookback: int = 30, htf_df=None) -> Optional
         if not volume_ok:
             gate_reasons.append(f"Volume too thin ({rvol:.2f}× < {MIN_VOLUME_RATIO}×)")
         if not volatility_ok:
-            gate_reasons.append(f"Volatility too low (ATR {atr_pct:.2f}%)")
+            gate_reasons.append(
+                f"Volatility too low (ATR {atr_pct:.2f}%, {atr_ratio:.2f}× recent)"
+            )
         if tradeable and confidence < CONF_SMALL:
             gate_reasons.append("Confidence below trade threshold")
 
@@ -207,6 +222,7 @@ def compute_kalshi_signal(df, *, sr_lookback: int = 30, htf_df=None) -> Optional
             "volume_spike": bool(rvol >= 1.5),
             "atr": round(atr14, 2),
             "atr_pct": round(atr_pct, 2),
+            "atr_ratio": round(atr_ratio, 2),
             "support": round(support, 2),
             "resistance": round(resistance, 2),
             "trend_aligned": direction != "none",

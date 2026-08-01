@@ -11,13 +11,13 @@ if _PANDAS:
     import pandas as pd
 
 
-def _frame(closes, vols=None):
-    """OHLCV frame from a close path (H/L bracket the close by ~0.2%)."""
+def _frame(closes, vols=None, band=0.002):
+    """OHLCV frame from a close path (H/L bracket the close by ±band)."""
     closes = [float(c) for c in closes]
     n = len(closes)
     idx = pd.date_range("2026-01-01", periods=n, freq="5min", tz="UTC")
-    high = [c * 1.002 for c in closes]
-    low = [c * 0.998 for c in closes]
+    high = [c * (1 + band) for c in closes]
+    low = [c * (1 - band) for c in closes]
     opens = [closes[0]] + closes[:-1]
     volume = vols if vols is not None else [100.0] * n
     return pd.DataFrame(
@@ -115,6 +115,16 @@ class KalshiSignalTests(unittest.TestCase):
         self.assertTrue(sig["tradeable"])
         self.assertIn(sig["position_size"], ("Small", "Medium", "Large"))
         self.assertIn("Buy Up", sig["recommendation"])
+
+    def test_frozen_tape_fails_adaptive_volatility(self):
+        from scan.kalshi_signal import compute_kalshi_signal
+
+        # Gentle uptrend but a near-zero high/low band → ATR% under the floor.
+        closes = list(np.linspace(64000, 64050, 60))
+        sig = compute_kalshi_signal(_frame(closes, band=0.00002))
+        self.assertFalse(sig["volatility_ok"])
+        self.assertEqual(sig["recommendation"], "No Trade")
+        self.assertTrue(any("Volatility" in r for r in sig["gate_reasons"]))
 
 
 @unittest.skipUnless(_PANDAS, "pandas required")

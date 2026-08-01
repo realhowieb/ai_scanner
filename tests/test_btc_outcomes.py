@@ -52,16 +52,44 @@ class StorageTests(unittest.TestCase):
         self.assertIn("ON CONFLICT (window_ticker) DO NOTHING", ins[0][0])
         self.assertEqual(ins[0][1][0], "KXBTC15M-w1")   # window ticker bound first
 
-    def test_stats_computes_accuracy(self):
+    def test_log_window_records_bet_side_and_price(self):
         import db.btc_outcomes as bo
 
-        # logged=10, settled=6, decided=4, correct=3 → 75%
-        conn = _Conn(fetchone=(10, 6, 4, 3))
+        conn = _Conn()
+        with mock.patch.object(bo, "get_neon_conn", return_value=conn):
+            bo.log_window(
+                "KXBTC15M-w2", close_time=None, strike=64000.0, spot=63950.0,
+                pred_direction="up", pred_confidence=80, pred_win_prob=78,
+                kalshi_yes_pct=55.0, features={}, bet_side="YES", bet_price=0.55,
+            )
+        ins = [c for c in conn.cur.calls if "INSERT INTO btc_outcomes" in c[0]][0]
+        self.assertIn("YES", ins[1])            # bet_side bound
+        self.assertIn(0.55, ins[1])             # bet_price bound
+
+    def test_record_result_scores_pnl_in_sql(self):
+        import db.btc_outcomes as bo
+
+        conn = _Conn()
+        with mock.patch.object(bo, "get_neon_conn", return_value=conn):
+            bo.record_result("KXBTC15M-w2", True, 64120.0)
+        upd = [c for c in conn.cur.calls if "UPDATE btc_outcomes" in c[0]][0]
+        # P&L computed in SQL from the stored bet side (payout − price).
+        self.assertIn("bet_pnl = CASE", upd[0])
+        self.assertIn("1.0 - bet_price", upd[0])
+
+    def test_stats_computes_accuracy_and_pnl(self):
+        import db.btc_outcomes as bo
+
+        # logged, settled, decided, correct, bets, bet_wins, pnl, staked
+        conn = _Conn(fetchone=(20, 12, 8, 5, 4, 2, 0.30, 2.10))
         with mock.patch.object(bo, "get_neon_conn", return_value=conn):
             s = bo.outcome_stats()
-        self.assertEqual(s["settled"], 6)
-        self.assertEqual(s["decided"], 4)
-        self.assertAlmostEqual(s["accuracy"], 0.75)
+        self.assertEqual(s["decided"], 8)
+        self.assertAlmostEqual(s["accuracy"], 5 / 8)
+        self.assertEqual(s["bets"], 4)
+        self.assertEqual(s["bet_wins"], 2)
+        self.assertAlmostEqual(s["pnl"], 0.30)
+        self.assertAlmostEqual(s["roi"], 0.30 / 2.10)
 
 
 class SettleTests(unittest.TestCase):

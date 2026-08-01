@@ -48,7 +48,7 @@ def log_current() -> bool:
         from data.crypto_btc import fetch_btc_bars, latest_btc_price
         from data.kalshi_markets import fetch_btc_15min
         from db.btc_outcomes import log_window
-        from scan.kalshi_signal import compute_kalshi_signal
+        from scan.kalshi_signal import compute_kalshi_signal, evaluate_ev
 
         spot = latest_btc_price()
         df = fetch_btc_bars("5m")
@@ -61,6 +61,17 @@ def log_current() -> bool:
         if not sig or not market or not market.get("ticker"):
             print("[btc_logger] no signal/market; skip log")
             return False
+
+        # Would-be paper trade: only when the engine is tradeable AND the EV vs
+        # the Kalshi price says BUY. Records the side + price paid for P&L.
+        bet_side = bet_price = None
+        if sig.get("tradeable"):
+            ev = evaluate_ev(sig.get("direction"), sig.get("win_probability"),
+                             market.get("up_prob_pct"))
+            if ev and ev.get("recommend"):
+                bet_side = ev["side"]
+                bet_price = round(ev["entry_price_pct"] / 100.0, 4)
+
         ok = log_window(
             market["ticker"],
             close_time=market.get("close_time"),
@@ -71,9 +82,12 @@ def log_current() -> bool:
             pred_win_prob=sig.get("win_probability"),
             kalshi_yes_pct=market.get("up_prob_pct"),
             features=_features(sig, market, spot),
+            bet_side=bet_side,
+            bet_price=bet_price,
         )
+        bet_txt = f" BET {bet_side}@{bet_price}" if bet_side else ""
         print(f"[btc_logger] logged window {market['ticker']} "
-              f"pred={sig.get('recommendation')} yes={market.get('up_prob_pct')}%")
+              f"pred={sig.get('recommendation')} yes={market.get('up_prob_pct')}%{bet_txt}")
         return ok
     except Exception as e:
         print(f"[btc_logger] log_current failed: {type(e).__name__}: {e}")
