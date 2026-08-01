@@ -41,6 +41,12 @@ if st is not None:
 
         return fetch_btc_15min(spot_bucket)
 
+    @st.cache_data(ttl=60, show_spinner=False)
+    def _outcome_stats_cached():
+        from db.btc_outcomes import outcome_stats
+
+        return outcome_stats()
+
 else:  # pragma: no cover
     def _bars_cached(timeframe: str):
         from data.crypto_btc import fetch_btc_bars
@@ -56,6 +62,11 @@ else:  # pragma: no cover
         from data.kalshi_markets import fetch_btc_15min
 
         return fetch_btc_15min(spot_bucket)
+
+    def _outcome_stats_cached():
+        from db.btc_outcomes import outcome_stats
+
+        return outcome_stats()
 
 
 def render_kalshi_scanner() -> None:
@@ -133,6 +144,34 @@ def render_kalshi_scanner() -> None:
                 except Exception:
                     st.caption("Auto-refresh unavailable here; use 🔄 Refresh.")
             _body()
+
+        # Slow-changing; render once (outside the auto-refresh fragment).
+        _render_outcome_log()
+    except Exception:
+        pass
+
+
+def _render_outcome_log() -> None:
+    """Live readout of the 15-min outcome dataset + the engine's realized hit rate."""
+    try:
+        s = _outcome_stats_cached()
+        if not s or not s.get("logged"):
+            return
+        acc = s.get("accuracy")
+        acc_txt = f"{acc * 100:.0f}%" if acc is not None else "—"
+        st.markdown("### 📊 Outcome log — model training data")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Windows logged", s["logged"])
+        m2.metric("Settled", s["settled"])
+        m3.metric("Engine correct",
+                  f"{s['correct']}/{s['decided']}" if s["decided"] else "—",
+                  acc_txt if s["decided"] else None)
+        st.caption(
+            "Every 15-min window's features + prediction, settled against Kalshi's "
+            "result. Accuracy counts only windows where the engine made a "
+            "directional call (No-Trade windows are excluded). Building toward a "
+            "calibrated model — needs a few hundred settled windows."
+        )
     except Exception:
         pass
 
@@ -165,7 +204,7 @@ def _render_call(sig: Dict[str, Any]) -> None:
     htf_txt = "—" if htf is None else (_mk(True) if htf else _mk(False))
     st.caption(
         f"Trend aligned {_mk(sig['trend_aligned'])} · "
-        f"Volume ≥ 0.7× {_mk(sig['volume_ok'])} · "
+        f"Volume ≥ 0.5× {_mk(sig['volume_ok'])} · "
         f"Volatility ok {_mk(sig['volatility_ok'])} · "
         f"1h agrees {htf_txt}"
     )

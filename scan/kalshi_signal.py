@@ -20,7 +20,8 @@ except Exception:  # pragma: no cover
     pd = None  # type: ignore[assignment]
 
 MIN_BARS = 35
-MIN_VOLUME_RATIO = 0.7      # reject setups below this RVOL (#5)
+MIN_VOLUME_RATIO = 0.5      # reject setups below this RVOL (#5); BTC's quiet
+                            # overnight hours run thin, so 0.7 over-suppressed
 MIN_ATR_PCT = 0.05          # skip when volatility is dead-flat (#7)
 CONF_SMALL, CONF_NORMAL, CONF_STRONG = 40, 70, 85  # conviction tiers (#1)
 
