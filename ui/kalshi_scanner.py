@@ -47,6 +47,12 @@ if st is not None:
 
         return outcome_stats()
 
+    @st.cache_data(ttl=8, show_spinner=False)
+    def _btc_stats_cached():
+        from data.crypto_btc import btc_24h_stats
+
+        return btc_24h_stats()
+
 else:  # pragma: no cover
     def _bars_cached(timeframe: str):
         from data.crypto_btc import fetch_btc_bars
@@ -67,6 +73,40 @@ else:  # pragma: no cover
         from db.btc_outcomes import outcome_stats
 
         return outcome_stats()
+
+    def _btc_stats_cached():
+        from data.crypto_btc import btc_24h_stats
+
+        return btc_24h_stats()
+
+
+def _render_price_header() -> None:
+    """Big live BTC-USD price + 24h change. Updates each auto-refresh tick."""
+    try:
+        s = _btc_stats_cached() or {}
+        price = s.get("price")
+        if price is None:
+            from data.crypto_btc import latest_btc_price
+
+            price = latest_btc_price()
+        if price is None:
+            return
+        chg = s.get("change_pct")
+        color = "#16a34a" if (chg is None or chg >= 0) else "#dc2626"
+        arrow = "▲" if (chg is not None and chg >= 0) else "▼" if chg is not None else ""
+        chg_txt = f"{arrow} {chg:+.2f}% 24h" if chg is not None else ""
+        st.markdown(
+            "<div style='display:flex;align-items:baseline;gap:14px;margin:2px 0 6px'>"
+            "<span style='font-size:15px;color:#94a3b8'>₿ BTC-USD</span>"
+            f"<span style='font-size:30px;font-weight:700'>${price:,.0f}</span>"
+            f"<span style='font-size:16px;font-weight:600;color:{color}'>{chg_txt}</span>"
+            "<span style='font-size:11px;color:#64748b'>● live</span></div>",
+            unsafe_allow_html=True,
+        )
+        if s.get("high_24h") and s.get("low_24h"):
+            st.caption(f"24h range ${s['low_24h']:,.0f} – ${s['high_24h']:,.0f}")
+    except Exception:
+        pass
 
 
 def render_kalshi_scanner() -> None:
@@ -101,6 +141,7 @@ def render_kalshi_scanner() -> None:
         interval = _AUTO.get(auto, 0)
 
         def _body() -> None:
+            _render_price_header()
             df = _bars_cached(timeframe)
             if df is None or len(df) < 35:
                 st.warning(

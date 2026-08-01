@@ -68,6 +68,42 @@ def fetch_btc_bars(timeframe: str = "5m"):
     return _to_frame(_fetch(gran))
 
 
+def btc_24h_stats() -> Optional[dict]:
+    """Live BTC-USD snapshot: {price, open_24h, change_pct, high_24h, low_24h}.
+
+    Coinbase's 24-hour stats endpoint; used for the live price header. None on
+    failure.
+    """
+    if requests is None:
+        return None
+    try:
+        r = requests.get(
+            f"{_BASE}/products/BTC-USD/stats",
+            headers={"User-Agent": "hsfinest-kalshi-scanner"}, timeout=_TIMEOUT,
+        )
+        if r.status_code != 200:
+            return None
+        d = r.json() or {}
+    except Exception:
+        return None
+
+    def _f(x):
+        try:
+            return None if x is None else float(x)
+        except (TypeError, ValueError):
+            return None
+
+    last, op = _f(d.get("last")), _f(d.get("open"))
+    chg = ((last - op) / op * 100.0) if (last and op) else None
+    return {
+        "price": last,
+        "open_24h": op,
+        "change_pct": chg,
+        "high_24h": _f(d.get("high")),
+        "low_24h": _f(d.get("low")),
+    }
+
+
 def latest_btc_price() -> Optional[float]:
     """Spot BTC-USD price, or None. Cheap ticker endpoint."""
     if requests is None:
