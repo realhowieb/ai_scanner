@@ -637,9 +637,15 @@ def _render_table(
             for r in df.to_dict(orient="records")
         ]
 
-    compact = st.checkbox("📱 Compact view", value=False, key="dt_compact")
+    # Compact defaults ON so the table fits a phone — the full 12-column grid
+    # overflows a mobile screen and shows only the Ticker column (the rest scroll
+    # off-screen). Desktop users can untick for every column.
+    compact = st.checkbox(
+        "📱 Compact view (fewer columns — best on mobile)", value=True, key="dt_compact"
+    )
     if compact:
-        ordered = ["Ticker", "DT Score", "Last", "Chg %", "AH %", "vs VWAP", "RVOL"]
+        # A phone-fittable set: the momentum essentials, no horizontal scroll.
+        ordered = ["Ticker", "DT Score", "Chg %", "Last", "AH %", "RVOL"]
     else:
         ordered = [
             "Ticker", "DT Score", "Last", "Chg %", "AH %", "Gap %", "VWAP", "vs VWAP",
@@ -647,7 +653,16 @@ def _render_table(
         ]
     df = df[[c for c in ordered if c in df.columns]]  # "DT Score" only when present
 
-    st.dataframe(_styled(df, moved_now), hide_index=True, width="stretch")
+    # Pin Ticker so it stays put while the rest scrolls; degrade gracefully on
+    # older Streamlit that lacks column_config/pinned.
+    try:
+        col_cfg = {"Ticker": st.column_config.Column(width="small", pinned=True)}
+        st.dataframe(_styled(df, moved_now), hide_index=True, width="stretch",
+                     column_config=col_cfg)
+    except Exception:
+        st.dataframe(_styled(df, moved_now), hide_index=True, width="stretch")
+    if not compact:
+        st.caption("↔ Swipe the table sideways to see all columns on mobile.")
 
     # Stash for the row-action picker rendered outside the fragment.
     st.session_state["dt_rows"] = rows
