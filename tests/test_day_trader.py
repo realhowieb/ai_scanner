@@ -215,6 +215,38 @@ class SymbolSourceTests(unittest.TestCase):
         load.assert_called_once_with(1)
         self.assertEqual(out, ["GAPR", "MOVR"])
 
+    def test_stale_delisted_tickers_dropped_from_movers(self):
+        """A delisted name (old last trade, e.g. QMMM) must not appear as a mover."""
+        import datetime as dt
+        from unittest import mock
+
+        import ui.day_trader as d
+
+        fresh = dt.datetime.now(dt.timezone.utc).isoformat()
+        old = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=30)).isoformat()
+        metrics = [
+            {"ticker": "LIVE", "last": 10.0, "volume": 5_000_000, "chg_pct": 8.0,
+             "gap_pct": 2.0, "rvol": 2.0, "vs_vwap_pct": 1.0, "trade_ts": fresh},
+            {"ticker": "QMMM", "last": 116.0, "volume": 5_000_000, "chg_pct": 17.0,
+             "gap_pct": 5.0, "rvol": 0.0, "vs_vwap_pct": 1.0, "trade_ts": old},
+        ]
+        with mock.patch("market_data.build_day_trader_metrics", return_value=metrics):
+            out = d._top_movers_symbols(universe=["LIVE", "QMMM"])
+        self.assertIn("LIVE", out)
+        self.assertNotIn("QMMM", out)          # stale → filtered
+
+    def test_is_stale_bounds(self):
+        import datetime as dt
+
+        import ui.day_trader as d
+
+        recent = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).isoformat()
+        old = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=20)).isoformat()
+        self.assertFalse(d._is_stale(recent))
+        self.assertTrue(d._is_stale(old))
+        self.assertFalse(d._is_stale(None))     # unknown → never over-filter
+        self.assertFalse(d._is_stale("garbage"))
+
     def test_session_scan_none_when_label_absent(self):
         from unittest import mock
 

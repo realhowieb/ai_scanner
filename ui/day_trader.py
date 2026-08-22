@@ -301,6 +301,26 @@ def _movers_universe() -> List[str]:
 
 
 _MOVERS_MIN_DOLLAR_VOL = 1_000_000  # skip illiquid micro-caps you can't day-trade
+_MOVERS_MAX_STALE_DAYS = 6          # drop delisted/halted names (stale last trade)
+
+
+def _is_stale(trade_ts, max_days: int = _MOVERS_MAX_STALE_DAYS) -> bool:
+    """True when a snapshot's latest trade is older than ``max_days`` — the
+    signature of a delisted/halted ticker (e.g. QMMM leaking in from a static
+    universe file). Unknown/unparseable timestamps are treated as NOT stale so
+    we never over-filter a live name on a data quirk.
+    """
+    if not trade_ts:
+        return False
+    try:
+        import datetime as _dt
+
+        d = _dt.datetime.fromisoformat(str(trade_ts).replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=_dt.timezone.utc)
+        return (_dt.datetime.now(_dt.timezone.utc) - d).days > max_days
+    except Exception:
+        return False
 
 
 def _top_movers_symbols(limit: int = 40, universe: List[str] | None = None) -> List[str]:
@@ -324,6 +344,8 @@ def _top_movers_symbols(limit: int = 40, universe: List[str] | None = None) -> L
             t = r.get("ticker")
             if not t:
                 continue
+            if _is_stale(r.get("trade_ts")):
+                continue  # delisted / halted — last trade too old to be a "mover"
             try:
                 dvol = float(r.get("last") or 0) * float(r.get("volume") or 0)
             except (TypeError, ValueError):

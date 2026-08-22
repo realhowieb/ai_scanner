@@ -292,6 +292,9 @@ def build_day_trader_metrics(
                 "rvol": round(rvol, 2) if rvol is not None else None,
                 "close_today": round(close_today, 2) if close_today is not None else None,
                 "ema_cross": ema_crosses.get(sym),
+                # Latest activity timestamp — lets callers drop stale/delisted
+                # names (a delisted ticker's last trade is days/weeks old).
+                "trade_ts": latest_trade.get("t") or minute_bar.get("t") or daily_bar.get("t"),
             }
         )
 
