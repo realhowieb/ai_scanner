@@ -114,11 +114,11 @@ def render_kalshi_scanner() -> None:
     if st is None:
         return
     try:
-        st.markdown("## 🪙 Kalshi BTC Scanner")
+        st.markdown("## 🪙 Kalshi BTC Monitor")
         st.caption(
-            "A directional read on Bitcoin for Kalshi's up/down BTC event "
-            "contracts. Educational only — not financial advice; the probability "
-            "is a heuristic, not a forecast."
+            "Live Bitcoin price + chart and Kalshi's open BTC event markets with "
+            "their implied odds. A monitor, not a trading signal — testing showed "
+            "short-horizon BTC direction isn't predictable from TA. Educational only."
         )
         c1, c2, c3 = st.columns([1, 1, 1])
         timeframe = c1.selectbox(
@@ -151,24 +151,20 @@ def render_kalshi_scanner() -> None:
                 return
             from scan.kalshi_signal import compute_kalshi_signal
 
-            # Higher-timeframe confirmation (#4): the 1h trend. Skipped implicitly
-            # if the fetch fails (htf_df=None).
-            htf = _bars_cached("1h") if timeframe not in ("1h", "6h", "1d") else None
-            sig = compute_kalshi_signal(df, htf_df=htf)
+            # Indicator readings only (no directional call — see caption). The
+            # background outcome-logger still records the experimental engine's
+            # prediction for research; the UI just monitors the market.
+            sig = compute_kalshi_signal(df)
             if not sig:
-                st.warning("Not enough data to compute a signal on this timeframe.")
+                st.warning("Not enough data on this timeframe.")
                 return
-            _render_call(sig)
             _render_15min(sig)
             _render_indicators(sig)
-            if sig.get("tradeable") and sig.get("entry_zone"):
-                _render_plan(sig)
-            _render_reasons(sig)
             _render_chart(df, sig, timeframe)
             _render_kalshi_markets(sig)
             st.caption(
-                "A decision engine, not a signal: it says No Trade when signals "
-                "don't align. Educational only — not financial advice."
+                "Odds shown are Kalshi's own implied probabilities. Monitor only "
+                "— not a recommendation. Educational only."
             )
 
         # Auto-refresh re-renders just this block on a timer (short cache TTLs
@@ -193,81 +189,38 @@ def render_kalshi_scanner() -> None:
 
 
 def _render_outcome_log() -> None:
-    """Live readout of the 15-min outcome dataset + the engine's realized hit rate."""
+    """Collapsed research panel — the background logger keeps collecting even
+    though the disproven directional engine is no longer shown."""
     try:
         s = _outcome_stats_cached()
         if not s or not s.get("logged"):
             return
-        acc = s.get("accuracy")
-        acc_txt = f"{acc * 100:.0f}%" if acc is not None else "—"
-        st.markdown("### 📊 Outcome log — model training data")
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Windows logged", s["logged"])
-        m2.metric("Settled", s["settled"])
-        m3.metric("Engine correct",
-                  f"{s['correct']}/{s['decided']}" if s["decided"] else "—",
-                  acc_txt if s["decided"] else None)
-
-        # Paper P&L — the honest scoreboard: does buying at Kalshi's price pay?
-        bets = s.get("bets") or 0
-        if bets:
-            pnl = s.get("pnl") or 0.0
-            roi = s.get("roi")
-            roi_txt = f"{roi * 100:+.1f}%" if roi is not None else "—"
-            p1, p2, p3 = st.columns(3)
-            p1.metric("Paper trades", f"{s.get('bet_wins', 0)}/{bets} won")
-            p2.metric("P&L", f"{pnl:+.2f} u", help="Units of $1 stake per trade.")
-            p3.metric("ROI", roi_txt)
-            st.caption(
-                "Paper P&L assumes a $1 stake per BUY at Kalshi's price, settled "
-                "$1/$0. This is the real test — accuracy ≠ profit against a sharp "
-                "market. Educational only."
-            )
-        else:
-            st.caption(
-                "Every 15-min window's features + prediction, settled against "
-                "Kalshi's result. Paper-P&L appears once the engine places its "
-                "first BUY. Building toward a calibrated model — needs a few "
-                "hundred settled windows."
-            )
+        with st.expander("🔬 Research log (experimental — not a signal)", expanded=False):
+            acc = s.get("accuracy")
+            acc_txt = f"{acc * 100:.0f}%" if acc is not None else "—"
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Windows logged", s["logged"])
+            m2.metric("Settled", s["settled"])
+            m3.metric("Engine correct",
+                      f"{s['correct']}/{s['decided']}" if s["decided"] else "—",
+                      acc_txt if s["decided"] else None)
+            bets = s.get("bets") or 0
+            if bets:
+                roi = s.get("roi")
+                roi_txt = f"{roi * 100:+.1f}%" if roi is not None else "—"
+                st.caption(
+                    f"Paper P&L (experimental engine): {s.get('bet_wins', 0)}/{bets} "
+                    f"won · {s.get('pnl', 0):+.2f}u · ROI {roi_txt}. Testing showed "
+                    "no directional edge — kept for research only, not shown as a "
+                    "trading signal."
+                )
+            else:
+                st.caption(
+                    "Background data collection for research. The directional "
+                    "engine was retired from the UI after testing found no edge."
+                )
     except Exception:
         pass
-
-
-def _render_call(sig: Dict[str, Any]) -> None:
-    rec = sig["recommendation"]
-    direction = sig["direction"]
-    if direction == "up":
-        icon, color = "🟢", "#16a34a"
-    elif direction == "down":
-        icon, color = "🔴", "#dc2626"
-    else:
-        icon, color = "⚪", "#64748b"
-    st.markdown(
-        f"<div style='padding:12px 16px;border-radius:10px;border:1px solid {color};"
-        f"background:{color}22'>"
-        f"<span style='font-size:22px'>{icon} <b>{rec}</b></span> &nbsp; "
-        f"<span style='color:#94a3b8'>BTC ${sig['price']:,.0f}</span></div>",
-        unsafe_allow_html=True,
-    )
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Confidence", f"{sig['confidence']}/100")
-    m2.metric("Win prob", f"{sig['win_probability']}%" if sig.get("win_probability") else "—")
-    m3.metric("Size", sig.get("position_size") or "—")
-    m4.metric("Volume", f"{sig['rvol']:.2f}×" + (" 🔥" if sig["volume_spike"] else ""))
-    # Gate checklist — what the decision required.
-    def _mk(ok):
-        return "✅" if ok else "❌"
-    htf = sig.get("htf_agree")
-    htf_txt = "—" if htf is None else (_mk(True) if htf else _mk(False))
-    st.caption(
-        f"Trend aligned {_mk(sig['trend_aligned'])} · "
-        f"Volume ≥ 0.5× {_mk(sig['volume_ok'])} · "
-        f"Volatility ok {_mk(sig['volatility_ok'])} · "
-        f"1h agrees {htf_txt}"
-    )
-    if not sig.get("tradeable") and sig.get("gate_reasons"):
-        st.caption("⚪ No Trade — " + "; ".join(sig["gate_reasons"]))
 
 
 def _render_indicators(sig: Dict[str, Any]) -> None:
@@ -290,33 +243,13 @@ def _render_indicators(sig: Dict[str, Any]) -> None:
     st.dataframe(rows, hide_index=True, width="stretch")
 
 
-def _render_plan(sig: Dict[str, Any]) -> None:
-    lo, hi = sig["entry_zone"]
-    p1, p2, p3 = st.columns(3)
-    p1.metric("Entry zone", f"${lo:,.0f}–${hi:,.0f}")
-    p2.metric("Target / cash-out", f"${sig['target']:,.0f}")
-    p3.metric("Stop", f"${sig['stop']:,.0f}")
-
-
-def _render_reasons(sig: Dict[str, Any]) -> None:
-    contribs = sig.get("contributions") or []
-    if not contribs:
-        return
-    with st.expander("What drove this — indicator contributions", expanded=False):
-        for name, pts in contribs:
-            arrow = "＋" if pts >= 0 else "－"
-            st.markdown(f"- {arrow} **{name}**: {pts:+.0f} pts")
-        st.caption("Positive points push conviction up; negative (e.g. a 1h-trend "
-                   "disagreement) pull it down toward No Trade.")
-
-
 def _render_15min(sig: Dict[str, Any]) -> None:
-    """Focused 'next 15 minutes: BTC higher?' read on the KXBTC15M market."""
+    """The current 15-min market's own odds — market data, no prediction."""
     try:
         # Bucket spot to $50 so the cache key is stable between ticks.
         spot = float(sig["price"])
         m = _btc15_cached(round(spot / 50.0) * 50.0)
-        st.markdown("### ⏱️ Next 15 minutes — BTC higher?")
+        st.markdown("### ⏱️ Next 15-minute market")
         if not m:
             st.caption("No open KXBTC15M market right now (between windows).")
             return
@@ -329,42 +262,10 @@ def _render_15min(sig: Dict[str, Any]) -> None:
         c1.metric("Contract", f"BTC ≥ ${strike:,.0f}" if strike else "—",
                   f"{gap:+,.0f} vs spot" if gap is not None else None)
         c2.metric("Market: BTC up", f"{up_p:.0f}%" if up_p is not None else "—",
-                  help="YES implied probability that BTC is at/above the level at "
-                       "the window close — i.e. the market's 'up' odds.")
+                  help="Kalshi's own YES implied probability that BTC is at/above "
+                       "the level at the window close.")
         c3.metric("Closes in", closes)
-
-        # --- Expected value vs Kalshi's price (#8, #10) ---
-        # If the scanner has No Trade, there's no directional read to price.
-        if not sig.get("tradeable"):
-            st.caption("⚪ Scanner says **No Trade** — no edge to price against the "
-                       "market this window.")
-            return
-        from scan.kalshi_signal import evaluate_ev
-
-        ev = evaluate_ev(sig["direction"], sig.get("win_probability"), up_p)
-        if not ev:
-            st.caption("Market price unavailable — can't compute EV.")
-            return
-        e1, e2, e3, e4 = st.columns(4)
-        e1.metric("Our win prob", f"{ev['win_prob_pct']:.0f}%")
-        e2.metric(f"Kalshi {ev['side']} price", f"{ev['entry_price_pct']:.0f}%")
-        e3.metric("Edge (EV)", f"{ev['edge_pts']:+.0f} pts", f"{ev['ev_return_pct']:+.0f}% /$")
-        e4.metric("Call", "BUY" if ev["recommend"] else "PASS")
-        if ev["recommend"]:
-            st.success(
-                f"✅ **BUY {ev['side']}** — our {ev['win_prob_pct']:.0f}% win prob "
-                f"beats the {ev['entry_price_pct']:.0f}% you'd pay (edge "
-                f"{ev['edge_pts']:+.0f} pts). Size: {sig.get('position_size')}."
-            )
-        else:
-            st.info(
-                f"➖ **PASS** — {'the market already prices this' if ev['edge_pts'] < 4 else 'thin edge'} "
-                f"(our {ev['win_prob_pct']:.0f}% vs {ev['entry_price_pct']:.0f}% price, "
-                f"edge {ev['edge_pts']:+.0f} pts). Directionally {sig['direction']}, "
-                f"but not worth it at this price."
-            )
-        st.caption("EV = our win probability − the price you pay. Educational only "
-                   "— not financial advice.")
+        st.caption("These are Kalshi's implied odds, not a prediction of ours.")
     except Exception:
         pass
 
@@ -392,10 +293,6 @@ def _render_kalshi_markets(sig: Dict[str, Any]) -> None:
             st.caption("No open Kalshi BTC markets returned right now.")
             return
 
-        up = sig["direction"] == "up"
-        # 'above' contracts: YES is bullish. 'below': YES is bearish. So the
-        # scanner's read maps to YES on 'above' when up, YES on 'below' when down.
-        aligned_kind = "above" if up else "below"
         atm = None
         try:
             from data.kalshi_markets import nearest_the_money
@@ -407,21 +304,10 @@ def _render_kalshi_markets(sig: Dict[str, Any]) -> None:
             label = atm.get("threshold") or atm.get("title")
             closes = _fmt_close(atm.get("close_time"))
             yesp = atm.get("yes_prob_pct")
-            if atm.get("kind") == "range":
-                st.caption(
-                    f"BTC is currently in **{label}** — the market gives that "
-                    f"bucket ~{yesp}% (closes in {closes}). Scanner read: "
-                    f"**{sig['action']}**. For a clean up/down bet, see the "
-                    f"15-minute panel above."
-                )
-            else:
-                side = "YES" if atm.get("kind") == aligned_kind else "NO"
-                st.caption(
-                    f"Scanner read **{sig['action']}**. Nearest directional "
-                    f"contract: *{label}* (YES ~{yesp}%, closes in {closes}). "
-                    f"A **{sig['direction']}** read favors **{side}** on this "
-                    f"**{atm.get('kind')}** contract."
-                )
+            st.caption(
+                f"Nearest the money: *{label}* — the market gives it "
+                f"~{yesp}% (closes in {closes})."
+            )
 
         # Show the contracts nearest the current price (most relevant), not a
         # far-OTM soonest-close slice — that's what made the table show $73k
@@ -490,17 +376,7 @@ def _render_chart(df, sig: Dict[str, Any], timeframe: str) -> None:
         vwap = (tp * d["Volume"]).cumsum() / denom.where(denom > 0)
         fig.add_trace(go.Scatter(x=x, y=vwap, line=dict(color="#f59e0b", width=1, dash="dot"),
                                  name="VWAP"), row=1, col=1)
-        # --- plan lines (only when tradeable) ---
-        if sig.get("tradeable") and sig.get("entry_zone"):
-            for label, y, col in (
-                ("target", sig["target"], "#16a34a"),
-                ("entry", sig["entry_zone"][1], "#60a5fa"),
-                ("stop", sig["stop"], "#dc2626"),
-            ):
-                fig.add_hline(y=y, line_color=col, line_dash="dot", line_width=1,
-                              annotation_text=f"{label} {y:,.0f}",
-                              annotation_font_color=col, annotation_font_size=10,
-                              row=1, col=1)
+        # (No entry/target/stop lines — this is a monitor, not a trade plan.)
         # --- volume, colored by candle direction ---
         vcolors = ["#16a34a" if c >= o else "#dc2626"
                    for o, c in zip(d["Open"], d["Close"])]

@@ -1,4 +1,4 @@
-"""🪙 Kalshi BTC Scanner — dedicated page.
+"""🪙 Kalshi BTC Monitor — dedicated page.
 
 Read-only directional scanner for Kalshi's up/down BTC event contracts. Its own
 page so it can auto-refresh independently of the stock scanner.
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-st.set_page_config(page_title="Kalshi BTC Scanner", page_icon="🪙", layout="wide")
+st.set_page_config(page_title="Kalshi BTC Monitor", page_icon="🪙", layout="wide")
 
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:
