@@ -195,6 +195,12 @@ def ema_cross_label(frame: Any) -> Optional[str]:
     return "Golden" if detail["direction"] == "bullish" else "Death"
 
 
+# Daily-bar enrichments run only for a display-sized symbol set (the Day Trader
+# table caps at 150). Anything larger is a screening/universe call that must not
+# trigger a universe-wide daily-bar fetch.
+_DAILY_ENRICH_MAX = 200
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_ema_crosses(symbols: List[str]) -> Dict[str, str]:
     """Detect fresh daily EMA 9/21 crosses for a symbol list.
@@ -202,7 +208,9 @@ def fetch_ema_crosses(symbols: List[str]) -> Dict[str, str]:
     Cached separately from live snapshots because this only needs daily bars and
     should not add repeated API pressure to the intraday monitor.
     """
-    if not symbols:
+    # Never fetch daily bars for more than a display-sized set — a hard stop
+    # against any path accidentally requesting the whole universe.
+    if not symbols or len(symbols) > _DAILY_ENRICH_MAX:
         return {}
     try:
         from data.prices import fetch_price_data_parallel
@@ -281,7 +289,7 @@ def _range_metrics(frame) -> Optional[Dict[str, Any]]:
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_daily_range_metrics(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
     """ATR/Donchian/Bollinger per symbol from daily bars. Cached like EMA crosses."""
-    if not symbols:
+    if not symbols or len(symbols) > _DAILY_ENRICH_MAX:
         return {}
     try:
         from data.prices import fetch_price_data_parallel
@@ -322,9 +330,12 @@ def build_day_trader_metrics(
         return []
 
     avg_vol = fetch_avg_daily_volume(syms) if with_rvol else {}
-    ema_crosses = fetch_ema_crosses(syms)
-    # ATR / Donchian / Bollinger from daily bars — display path only (with_rvol),
-    # so the thousands-wide movers *screening* pass doesn't pay for it.
+    # Daily-bar enrichments (EMA cross + ATR/Donchian/Bollinger) run on the
+    # DISPLAY path only. The universe-wide movers *screening* pass (with_rvol=
+    # False) scores from snapshots alone and never uses these — fetching daily
+    # bars for thousands of tickers there was pure waste and, when Alpaca is slow,
+    # a flood of timeouts.
+    ema_crosses = fetch_ema_crosses(syms) if with_rvol else {}
     range_metrics = fetch_daily_range_metrics(syms) if with_rvol else {}
 
     rows: List[Dict[str, Optional[float]]] = []
