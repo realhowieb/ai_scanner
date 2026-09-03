@@ -228,6 +228,79 @@ def fetch_ema_crosses(symbols: List[str]) -> Dict[str, str]:
     return out
 
 
+def _range_metrics(frame) -> Optional[Dict[str, Any]]:
+    """ATR% + Donchian position/breakout + Bollinger %B/squeeze from daily bars."""
+    try:
+        import pandas as pd
+
+        from scan.indicators import atr, bollinger, donchian
+
+        if frame is None or "Close" not in getattr(frame, "columns", []):
+            return None
+        close = pd.to_numeric(frame["Close"], errors="coerce").dropna()
+        if len(close) < 25:
+            return None
+        last = float(close.iloc[-1])
+        if last <= 0:
+            return None
+
+        try:
+            atr_pct = float(atr(frame, 14).iloc[-1]) / last * 100.0
+        except Exception:
+            atr_pct = None
+
+        # Donchian: position within the 20-day range + fresh-breakout flag
+        # (today's high/low vs the *prior* 20-day channel).
+        up, lo = donchian(frame, 20)
+        u, low_b = float(up.iloc[-1]), float(lo.iloc[-1])
+        donch_pos = ((last - low_b) / (u - low_b) * 100.0) if u > low_b else None
+        prior_up = float(up.iloc[-2]) if len(up) >= 2 and up.iloc[-2] == up.iloc[-2] else u
+        prior_lo = float(lo.iloc[-2]) if len(lo) >= 2 and lo.iloc[-2] == lo.iloc[-2] else low_b
+        hi_t = float(pd.to_numeric(frame["High"], errors="coerce").iloc[-1])
+        lo_t = float(pd.to_numeric(frame["Low"], errors="coerce").iloc[-1])
+        breakout = "up" if hi_t >= prior_up else "down" if lo_t <= prior_lo else None
+
+        # Bollinger %B + squeeze (band-width in its own recent low quantile).
+        mid, bu, bl = bollinger(close, 20, 2.0)
+        bu_l, bl_l = float(bu.iloc[-1]), float(bl.iloc[-1])
+        pctb = ((last - bl_l) / (bu_l - bl_l) * 100.0) if bu_l > bl_l else None
+        width = ((bu - bl) / mid * 100.0).dropna()
+        squeeze = bool(len(width) >= 20 and float(width.iloc[-1]) <= float(width.tail(100).quantile(0.15)))
+
+        return {
+            "atr_pct": round(atr_pct, 2) if atr_pct is not None else None,
+            "donchian_pos": round(donch_pos) if donch_pos is not None else None,
+            "donchian_breakout": breakout,
+            "bb_pctb": round(pctb) if pctb is not None else None,
+            "bb_squeeze": squeeze,
+        }
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_daily_range_metrics(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+    """ATR/Donchian/Bollinger per symbol from daily bars. Cached like EMA crosses."""
+    if not symbols:
+        return {}
+    try:
+        from data.prices import fetch_price_data_parallel
+
+        frames, _skipped = fetch_price_data_parallel(
+            [s.upper() for s in symbols],
+            period="150d", interval="1d", max_workers=4, chunk_size=25,
+            timeout_s=10.0, rescue_missing=False, use_cache=True,
+        )
+    except Exception:
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for sym, frame in (frames or {}).items():
+        m = _range_metrics(frame)
+        if m:
+            out[str(sym).upper()] = m
+    return out
+
+
 def build_day_trader_metrics(
     symbols: List[str],
     *,
@@ -250,6 +323,9 @@ def build_day_trader_metrics(
 
     avg_vol = fetch_avg_daily_volume(syms) if with_rvol else {}
     ema_crosses = fetch_ema_crosses(syms)
+    # ATR / Donchian / Bollinger from daily bars — display path only (with_rvol),
+    # so the thousands-wide movers *screening* pass doesn't pay for it.
+    range_metrics = fetch_daily_range_metrics(syms) if with_rvol else {}
 
     rows: List[Dict[str, Optional[float]]] = []
     for sym in syms:
@@ -295,6 +371,8 @@ def build_day_trader_metrics(
                 # Latest activity timestamp — lets callers drop stale/delisted
                 # names (a delisted ticker's last trade is days/weeks old).
                 "trade_ts": latest_trade.get("t") or minute_bar.get("t") or daily_bar.get("t"),
+                # ATR% / Donchian / Bollinger (daily). Empty dict when not fetched.
+                **(range_metrics.get(sym) or {}),
             }
         )
 

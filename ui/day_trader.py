@@ -635,9 +635,18 @@ def _render_table(
         columns={
             "ticker": "Ticker", "last": "Last", "chg_pct": "Chg %", "gap_pct": "Gap %",
             "vwap": "VWAP", "vs_vwap_pct": "vs VWAP %", "volume": "Volume", "rvol": "RVOL",
-            "ema_cross": "EMA Cross",
+            "ema_cross": "EMA Cross", "atr_pct": "ATR %", "donchian_pos": "Range %",
+            "bb_pctb": "%B",
         }
     )
+    # Donchian breakout + Bollinger squeeze as pre-formatted string columns
+    # (icons/em-dash), so a None cell never renders as the literal "None".
+    if "donchian_breakout" in df.columns:
+        df["20d B/O"] = df["donchian_breakout"].apply(
+            lambda v: "🔼 high" if v == "up" else ("🔽 low" if v == "down" else "—")
+        )
+    if "bb_squeeze" in df.columns:
+        df["Squeeze"] = df["bb_squeeze"].apply(lambda v: "🎯" if bool(v) else "—")
     # Intraday day-trade momentum score — shown for the movers screen so you can
     # see *why* each name ranked (computed from the same raw metric rows).
     if show_score:
@@ -666,12 +675,13 @@ def _render_table(
         "📱 Compact view (fewer columns — best on mobile)", value=True, key="dt_compact"
     )
     if compact:
-        # A phone-fittable set: the momentum essentials, no horizontal scroll.
-        ordered = ["Ticker", "DT Score", "Chg %", "Last", "AH %", "RVOL"]
+        # A phone-fittable set: the momentum essentials + ATR% for volatility.
+        ordered = ["Ticker", "DT Score", "Chg %", "Last", "ATR %", "AH %", "RVOL"]
     else:
         ordered = [
-            "Ticker", "DT Score", "Last", "Chg %", "AH %", "Gap %", "VWAP", "vs VWAP",
-            "vs VWAP %", "RVOL", "EMA Cross", "Volume",
+            "Ticker", "DT Score", "Last", "Chg %", "AH %", "Gap %", "ATR %",
+            "Range %", "20d B/O", "%B", "Squeeze", "VWAP", "vs VWAP", "vs VWAP %",
+            "RVOL", "EMA Cross", "Volume",
         ]
     df = df[[c for c in ordered if c in df.columns]]  # "DT Score" only when present
 
@@ -750,10 +760,16 @@ def _styled(df, moved_now: set):
             style = "background-color: rgba(59, 130, 246, 0.12)"
         return [style] * len(row)
 
+    def _pct_pos(v):  # ATR % / Range % / %B — plain single-sided percent
+        return "—" if pd.isna(v) else f"{v:.1f}%"
+
     fmt = {}
     for col in ("Chg %", "Gap %", "vs VWAP %"):  # AH % is pre-formatted to strings
         if col in df.columns:
             fmt[col] = _pct
+    for col in ("ATR %", "Range %", "%B"):
+        if col in df.columns:
+            fmt[col] = _pct_pos
     for col in ("Last", "VWAP"):
         if col in df.columns:
             fmt[col] = _price

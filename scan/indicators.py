@@ -164,6 +164,24 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return atr_wilder
 
 
+def donchian(df: pd.DataFrame, period: int = 20):
+    """Donchian channel: (upper, lower) = rolling max High / min Low.
+
+    Requires High/Low columns. Returns two Series aligned to df.
+    """
+    high = pd.to_numeric(df["High"], errors="coerce")
+    low = pd.to_numeric(df["Low"], errors="coerce")
+    return high.rolling(period).max(), low.rolling(period).min()
+
+
+def bollinger(data: pd.Series | pd.DataFrame, period: int = 20, k: float = 2.0):
+    """Bollinger Bands on Close: (mid, upper, lower) with a k-σ (population) width."""
+    s = _to_series_close(data)
+    mid = s.rolling(period).mean()
+    sd = s.rolling(period).std(ddof=0)
+    return mid, mid + k * sd, mid - k * sd
+
+
 def rs_20d_vs_spy(df_ticker: pd.DataFrame, df_spy: pd.DataFrame) -> float:
     """
     Relative strength vs SPY over last ~20 trading days, in percent.

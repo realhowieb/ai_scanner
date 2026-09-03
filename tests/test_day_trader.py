@@ -323,3 +323,37 @@ class DayTradeMoversTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(_PANDAS, "range metrics need pandas")
+class RangeMetricsTests(unittest.TestCase):
+    def _df(self, closes):
+        import pandas as pd
+        c = pd.Series([float(x) for x in closes])
+        return pd.DataFrame({"High": c * 1.01, "Low": c * 0.99, "Close": c})
+
+    def test_donchian_and_bollinger_shapes(self):
+        from scan.indicators import bollinger, donchian
+
+        df = self._df(range(100, 160))
+        u, low_b = donchian(df, 20)
+        mid, bu, bl = bollinger(df["Close"], 20, 2)
+        self.assertGreater(float(u.iloc[-1]), float(low_b.iloc[-1]))
+        self.assertGreater(float(bu.iloc[-1]), float(bl.iloc[-1]))
+        self.assertAlmostEqual(float(mid.iloc[-1]), (float(bu.iloc[-1]) + float(bl.iloc[-1])) / 2, places=4)
+
+    def test_range_metrics_uptrend(self):
+        from market_data import _range_metrics
+
+        m = _range_metrics(self._df(range(100, 160)))  # steady uptrend
+        self.assertIsNotNone(m)
+        self.assertGreater(m["donchian_pos"], 70)          # near the 20d high
+        self.assertEqual(m["donchian_breakout"], "up")     # fresh 20d high
+        self.assertIn("atr_pct", m)
+        self.assertIsInstance(m["bb_squeeze"], bool)
+
+    def test_range_metrics_insufficient_bars(self):
+        from market_data import _range_metrics
+
+        self.assertIsNone(_range_metrics(self._df(range(100, 110))))
+        self.assertIsNone(_range_metrics(None))
