@@ -83,9 +83,14 @@ class MarketBriefExtrasTests(unittest.TestCase):
             {"id": 2, "created_at": dt.datetime(2026, 9, 9, 12, tzinfo=dt.timezone.utc)},
             {"id": 1, "created_at": dt.datetime(2026, 9, 8, 12, tzinfo=dt.timezone.utc)},
         ]
+        import sys
+        import types
+
+        fake_runtime = types.ModuleType("ui.app_runtime")
+        fake_runtime.normalize_results_to_df = lambda raw: _DF()
         with mock.patch("db.runs.list_snapshot_runs", return_value=runs), \
              mock.patch("db.runs.load_many_run_results", return_value={1: "[]"}), \
-             mock.patch("ui.app_runtime.normalize_results_to_df", return_value=_DF()), \
+             mock.patch.dict(sys.modules, {"ui.app_runtime": fake_runtime}), \
              mock.patch.object(md, "_todays_setups", return_value=([], [("EA", 51.0)])), \
              mock.patch("market_data.get_latest_quotes", return_value={"EA": {"last": 105.0}}):
             y = mb._yesterday_performance()
