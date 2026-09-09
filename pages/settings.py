@@ -11,6 +11,14 @@ if not _username:
     st.page_link("app.py", label="Go to login", icon="🔐")
     st.stop()
 
+# Sidebar nav (this page doesn't use render_page_logo, so render it directly).
+try:
+    from ui.nav import render_sidebar_nav
+
+    render_sidebar_nav()
+except Exception:
+    pass
+
 try:
     from ui.app_session import tier_key
 
