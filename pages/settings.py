@@ -33,12 +33,15 @@ st.markdown("## ⚙️ Settings")
 
 # --- Account ---
 st.markdown("#### 👤 Account")
+_display = (st.session_state.get("display_name") or "").strip()
 ver_txt = "✅ Verified" if verified else ("— unknown" if verified is None else "❌ Not verified")
-st.markdown(
-    f"- **Email:** {_username}\n"
-    f"- **Plan:** {tier}\n"
-    f"- **Email status:** {ver_txt}"
-)
+lines = []
+if _display and _display.lower() != _username:
+    lines.append(f"- **Name:** {_display}")
+lines.append(f"- **Username:** {_username}")
+lines.append(f"- **Plan:** {tier}")
+lines.append(f"- **Email:** {ver_txt}")
+st.markdown("\n".join(lines))
 try:
     st.page_link("pages/billing.py", label="Manage plan & billing", icon="💳")
 except Exception:

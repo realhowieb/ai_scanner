@@ -26,12 +26,47 @@ _NAV = [
 ]
 
 
-def render_sidebar_nav() -> None:
-    """Render the curated sidebar navigation. Safe to call on every page."""
+def _render_identity() -> None:
+    """Compact account header (name · plan · log out) from session state.
+
+    Gives sub-pages the same identity block the main app renders, so the sidebar
+    is consistent everywhere. Never raises.
+    """
+    try:
+        name = (st.session_state.get("display_name")
+                or st.session_state.get("username") or "").strip()
+        if "@" in name:
+            name = name.split("@")[0]
+        if not name:
+            return
+        is_admin = bool(st.session_state.get("is_admin"))
+        plan = "Admin" if is_admin else str(st.session_state.get("tier_key") or "basic").title()
+        st.markdown(f"### 👤 {name}")
+        st.markdown(f"**Plan:** `{plan}`")
+        if st.button("Log out", key="nav_logout"):
+            try:
+                from ui.auth import logout_and_reset_session
+
+                logout_and_reset_session()
+            except Exception:
+                pass
+        st.divider()
+    except Exception:
+        pass
+
+
+def render_sidebar_nav(*, with_header: bool = True) -> None:
+    """Render the curated sidebar navigation. Safe to call on every page.
+
+    with_header adds the identity block; the main app passes False because it
+    renders its own (richer) account sidebar.
+    """
     if st is None:
         return
     try:
         with st.sidebar:
+            if with_header:
+                _render_identity()
             for path, label, icon in _NAV:
                 try:
                     st.page_link(path, label=label, icon=icon)

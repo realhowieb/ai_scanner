@@ -546,10 +546,11 @@ def main():
 
     # -------- DB Status (admin-only badge; status still computed for all) --------
     db_status = render_db_status_badge(show_badge=bool(st.session_state.get("is_admin")))
-    # Curated sidebar nav (auto page list is disabled in config).
+    # Curated sidebar nav (auto page list is disabled in config). The main app
+    # renders its own richer account header, so skip the nav's identity block.
     try:
         from ui.nav import render_sidebar_nav
-        render_sidebar_nav()
+        render_sidebar_nav(with_header=False)
     except Exception:
         pass
 
