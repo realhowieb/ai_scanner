@@ -82,10 +82,36 @@ def _write_summary(summary: dict, path: Path | None = None) -> None:
     target.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def _market_closed_today(now_utc: dt.datetime) -> bool:
+    """True only when Alpaca's calendar confirms today is NOT a trading day
+    (a weekday market holiday). Fails safe: on missing creds or any API error it
+    returns False, so a real trading day is never skipped by mistake."""
+    try:
+        import requests
+
+        from data.alpaca_config import get_alpaca_config, get_alpaca_headers
+
+        cfg = get_alpaca_config()
+        headers = get_alpaca_headers()
+        if not cfg or not headers:
+            return False
+        day = now_utc.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+        base = (cfg.get("base_url") or "https://paper-api.alpaca.markets").rstrip("/")
+        r = requests.get(
+            f"{base}/v2/calendar", params={"start": day, "end": day},
+            headers=headers, timeout=8,
+        )
+        if r.status_code != 200:
+            return False
+        return len(r.json() or []) == 0        # empty calendar → market closed today
+    except Exception:
+        return False
+
+
 def _skip_reason(now_utc: dt.datetime | None = None) -> str | None:
     """Return a reason to skip scheduled scans, or None when scans may run."""
-    # CRON_FORCE=1 bypasses the weekend/premarket skip — used by the manual
-    # "Run workflow" trigger so the pipeline can be tested any time.
+    # CRON_FORCE=1 bypasses the weekend/premarket/holiday skip — used by the
+    # manual "Run workflow" trigger so the pipeline can be tested any time.
     if os.getenv("CRON_FORCE", "").strip() == "1":
         return None
 
@@ -99,6 +125,8 @@ def _skip_reason(now_utc: dt.datetime | None = None) -> str | None:
         return "Weekend detected - skipping scans."
     if now_et.hour < 6:
         return "Too early (premarket) - skipping scans."
+    if _market_closed_today(now_utc):
+        return "Market holiday - skipping scans."
     return None
 
 

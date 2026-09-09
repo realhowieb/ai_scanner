@@ -229,3 +229,35 @@ class SessionResolutionTests(unittest.TestCase):
 
     def test_invalid_explicit_falls_back_to_auto(self):
         self.assertEqual(self._resolve("2026-07-13T14:35:00", "bogus"), "regular")
+
+
+class MarketHolidaySkipTests(unittest.TestCase):
+    def test_holiday_skips_when_calendar_empty(self):
+        import datetime as dt
+        from unittest import mock
+
+        from scheduler import cron_runner
+
+        weekday_10am_et = dt.datetime(2026, 9, 7, 14, 0, tzinfo=dt.timezone.utc)  # Labor Day
+        with mock.patch.object(cron_runner, "_market_closed_today", return_value=True):
+            self.assertIn("holiday", (cron_runner._skip_reason(weekday_10am_et) or "").lower())
+
+    def test_trading_day_runs_when_calendar_open(self):
+        import datetime as dt
+        from unittest import mock
+
+        from scheduler import cron_runner
+
+        weekday_10am_et = dt.datetime(2026, 9, 9, 14, 0, tzinfo=dt.timezone.utc)
+        with mock.patch.object(cron_runner, "_market_closed_today", return_value=False):
+            self.assertIsNone(cron_runner._skip_reason(weekday_10am_et))
+
+    def test_market_closed_today_fails_safe_without_creds(self):
+        import datetime as dt
+        from unittest import mock
+
+        from scheduler import cron_runner
+
+        with mock.patch("data.alpaca_config.get_alpaca_config", return_value=None):
+            self.assertFalse(cron_runner._market_closed_today(
+                dt.datetime(2026, 9, 9, 14, 0, tzinfo=dt.timezone.utc)))
