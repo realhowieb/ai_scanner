@@ -145,5 +145,39 @@ class StandoutsTests(unittest.TestCase):
         self.assertEqual(mb._standouts(data), [])
 
 
+class SummaryAndPositionsTests(unittest.TestCase):
+    def test_market_summary_synthesizes(self):
+        import ui.market_brief as mb
+
+        data = {
+            "market_close": [("S&P 500 (SPY)", 660.0, 0.6)],
+            "breadth": (312, 188), "sectors": [("Tech", 1.2), ("Energy", -0.8)],
+            "gappers": [{"ticker": "CRWV"}], "golden": ["CRWV"],
+            "top_setups": [("CRWV", 39)], "picks": [], "gainers": [], "losers": [],
+            "earnings_today": ["EA", "QCOM"],
+        }
+        s = mb._market_summary(data)
+        self.assertIn("Risk-on", s)
+        self.assertIn("breadth 312/188", s)
+        self.assertIn("Tech leading", s)
+        self.assertIn("1 standout", s)
+
+    def test_open_positions_marks_to_now(self):
+        from unittest import mock
+
+        import ui.market_brief as mb
+
+        trades = [
+            {"ticker": "AAPL", "entry_price": 100.0, "closed_at": None},
+            {"ticker": "OLD", "entry_price": 50.0, "closed_at": "2026-01-01"},
+        ]
+        with mock.patch("db.trades.list_trades", return_value=trades),              mock.patch("market_data.get_latest_quotes",
+                        return_value={"AAPL": {"last": 102.0}}):
+            pos = mb._open_positions("u@x.com")
+        self.assertEqual(len(pos), 1)                 # closed trade excluded
+        self.assertEqual(pos[0][0], "AAPL")
+        self.assertAlmostEqual(pos[0][1], 2.0)        # 100 → 102 = +2%
+
+
 if __name__ == "__main__":
     unittest.main()

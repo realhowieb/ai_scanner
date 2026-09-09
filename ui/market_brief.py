@@ -129,6 +129,17 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
         gainers, losers = _day_movers(df)
     except Exception:
         market_close, gainers, losers = [], [], []
+    # Breadth from the snapshot's own PctChange, plus sector-ETF leaders.
+    breadth = None
+    try:
+        import pandas as pd
+
+        if "PctChange" in df.columns:
+            pc = pd.to_numeric(df["PctChange"], errors="coerce").dropna()
+            if len(pc):
+                breadth = (int((pc > 0).sum()), int((pc < 0).sum()))
+    except Exception:
+        breadth = None
     return {
         "gappers": gappers,
         "golden": golden,
@@ -138,9 +149,36 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
         "market_close": market_close,
         "gainers": gainers,
         "losers": losers,
+        "breadth": breadth,
+        "sectors": _sector_leaders(),
         "snapshot_time": _snapshot_time(),
         "yesterday": _yesterday_performance(),
     }
+
+
+_SECTOR_ETFS = {
+    "XLK": "Tech", "XLF": "Financials", "XLE": "Energy", "XLV": "Health",
+    "XLY": "Cons Disc", "XLP": "Staples", "XLI": "Industrials", "XLU": "Utilities",
+    "XLB": "Materials", "XLRE": "Real Estate", "XLC": "Comm",
+}
+
+
+def _sector_leaders() -> list:
+    """[(sector, chg_pct)] for the S&P sector ETFs, best-first. Or []."""
+    try:
+        from market_data import build_day_trader_metrics
+
+        rows = build_day_trader_metrics(list(_SECTOR_ETFS), with_rvol=False) or []
+        out = []
+        for r in rows:
+            t = str(r.get("ticker") or "").upper()
+            chg = r.get("chg_pct")
+            if t in _SECTOR_ETFS and chg is not None:
+                out.append((_SECTOR_ETFS[t], float(chg)))
+        out.sort(key=lambda x: x[1], reverse=True)
+        return out
+    except Exception:
+        return []
 
 
 if st is not None:
@@ -229,34 +267,134 @@ def render_market_brief() -> None:
             pass
 
     phase = _market_phase()
+
+    # ---- glance layer (always on) ----
+    summary = _market_summary(data)
+    if summary:
+        st.markdown(f"**🧭 {summary}.**")
     _render_phase_banner(phase)
     _render_market_pulse(data.get("market_close") or [])
+    _render_breadth_sectors(data)
     _render_standouts(data)
 
-    # #4 — time-aware ordering: after the close, lead with what happened
-    # (movers, fired alerts); pre-open/open, lead with what to watch.
-    sections = {
+    # ---- detail sections: user-toggleable, time-aware order ----
+    keys = [k for k, _ in _TOGGLEABLE]
+    labels = {k: lbl for k, lbl in _TOGGLEABLE}
+    with st.expander("⚙️ Customize sections", expanded=False):
+        chosen = st.multiselect(
+            "Sections to show", keys, default=keys,
+            format_func=lambda k: labels.get(k, k), key="brief_sections",
+        )
+    chosen = set(chosen) if chosen else set(keys)
+
+    if phase in ("afterhours", "closed"):
+        order = ["movers", "alerts", "gappers", "setups", "picks", "positions",
+                 "watchlist", "catalysts", "yesterday"]
+    else:
+        order = ["gappers", "movers", "setups", "picks", "positions",
+                 "watchlist", "alerts", "catalysts", "yesterday"]
+    render_map = {
         "gappers": lambda: _render_gappers(data.get("gappers") or []),
         "movers": lambda: _render_day_movers(data.get("gainers") or [], data.get("losers") or []),
         "setups": lambda: _render_setups(data.get("golden") or [], data.get("top_setups") or []),
         "picks": lambda: _render_picks(data.get("picks") or []),
+        "positions": lambda: _render_open_positions(user),
         "watchlist": lambda: _render_watchlist(data.get("earnings_today") or []),
         "alerts": lambda: _render_fired_alerts(user),
         "catalysts": lambda: _render_catalysts(data),
         "yesterday": lambda: _render_yesterday(data.get("yesterday")),
     }
-    if phase in ("afterhours", "closed"):
-        order = ["movers", "alerts", "gappers", "setups", "picks",
-                 "watchlist", "catalysts", "yesterday"]
-    else:
-        order = ["gappers", "movers", "setups", "picks", "watchlist",
-                 "alerts", "catalysts", "yesterday"]
     for name in order:
-        sections[name]()
+        if name in chosen:
+            render_map[name]()
 
     st.markdown("---")
     _render_email_button(user, data)
     _render_actions(data)
+
+
+_TOGGLEABLE = [
+    ("gappers", "🚀 Gappers"), ("movers", "📊 Movers"), ("setups", "🎯 Setups"),
+    ("picks", "🧠 PreBreakout"), ("positions", "💼 Open positions"),
+    ("watchlist", "📋 Watchlist"), ("alerts", "🔔 Fired alerts"),
+    ("catalysts", "📅 Catalysts"), ("yesterday", "📊 Yesterday"),
+]
+
+
+def _market_summary(data: Dict[str, Any]) -> Optional[str]:
+    """A one-line, deterministic synthesis of the brief for the top of the page."""
+    bits: List[str] = []
+    spy = next((c for (lbl, _last, c) in (data.get("market_close") or [])
+                if "SPY" in str(lbl) and c is not None), None)
+    if spy is not None:
+        tone = "Risk-on" if spy >= 0.15 else "Risk-off" if spy <= -0.15 else "Mixed"
+        bits.append(f"{tone} — SPY {spy:+.1f}%")
+    b = data.get("breadth")
+    if b:
+        bits.append(f"breadth {b[0]}/{b[1]}")
+    sec = data.get("sectors") or []
+    if sec:
+        bits.append(f"{sec[0][0]} leading")
+    n = len(_standouts(data))
+    if n:
+        bits.append(f"{n} standout{'s' if n != 1 else ''}")
+    et = len(data.get("earnings_today") or [])
+    if et:
+        bits.append(f"{et} earnings today")
+    return " · ".join(bits) if bits else None
+
+
+def _render_breadth_sectors(data: Dict[str, Any]) -> None:
+    b = data.get("breadth")
+    sec = data.get("sectors") or []
+    if not b and not sec:
+        return
+    c1, c2 = st.columns([1, 2])
+    if b:
+        c1.metric("Breadth (adv/dec)", f"{b[0]} / {b[1]}")
+    if sec:
+        lead, lag = sec[0], sec[-1]
+        c2.caption(
+            f"🟢 Leading: **{lead[0]}** {lead[1]:+.1f}%   ·   "
+            f"🔴 Lagging: **{lag[0]}** {lag[1]:+.1f}%"
+        )
+
+
+def _open_positions(user: str) -> List[tuple]:
+    """[(ticker, pnl_pct)] for open journal trades marked to now. Or []."""
+    try:
+        from db.trades import list_trades
+        from market_data import get_latest_quotes
+
+        trades = [t for t in (list_trades(user) or []) if not t.get("closed_at")]
+        if not trades:
+            return []
+        quotes = get_latest_quotes(sorted({t["ticker"] for t in trades})) or {}
+        out = []
+        for t in trades:
+            try:
+                entry = float(t.get("entry_price") or 0)
+            except (TypeError, ValueError):
+                entry = 0.0
+            cur = (quotes.get(t["ticker"]) or {}).get("last")
+            if entry > 0 and cur:
+                out.append((t["ticker"], (float(cur) - entry) / entry * 100.0))
+        return out
+    except Exception:
+        return []
+
+
+def _render_open_positions(user: str) -> None:
+    if not user:
+        return
+    pos = _open_positions(user)
+    if not pos:
+        return
+    st.markdown("### 💼 Your open positions")
+    st.markdown("  ·  ".join(
+        f"{'🟢' if r >= 0 else '🔴'} {t} {r:+.1f}%" for t, r in pos
+    ))
+    st.caption("Open journal positions, marked to the latest quote.")
 
 
 def _market_phase() -> Optional[str]:
