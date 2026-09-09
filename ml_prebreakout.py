@@ -61,12 +61,15 @@ def _load_ml_libs() -> None:
 
 
 MODEL_PATH = "prebreakout_model.pkl"
-MODEL_VERSION = "prebreakout-xgb-v1"
+MODEL_VERSION = "prebreakout-xgb-v2"
 TARGET_COLUMN = "ForwardReturnHit"
 RETURN_COLUMN = "Return_5D"
 RETURN_HORIZON_DAYS = 5
 UPSIDE_HIT_THRESHOLD = 0.04
 DOWNSIDE_STOP_THRESHOLD = -0.02
+PREBREAKOUT_TARGET_COLUMN = "FutureQualitySetupHit"
+PREBREAKOUT_SETUP_SCORE_THRESHOLD = 8.0
+PREBREAKOUT_LEAD_DAYS = 3
 
 
 def _utc_now() -> datetime:
@@ -206,6 +209,56 @@ def _run_date(value):
     return ts.date() if ts is not None else None
 
 
+def _as_bool(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    try:
+        return bool(value) and value == value
+    except Exception:
+        return False
+
+
+def _numeric_series(frame: pd.DataFrame, column: str, default=np.nan) -> pd.Series:
+    if column in frame.columns:
+        return pd.to_numeric(frame[column], errors="coerce")
+    return pd.Series([default] * len(frame), index=frame.index)
+
+
+def _price_below_20d_high(frame: pd.DataFrame) -> pd.Series:
+    if "BreakoutPos20D" in frame.columns:
+        pos = pd.to_numeric(frame["BreakoutPos20D"], errors="coerce")
+        return pos < 0.999
+    high = _numeric_series(frame, "High20")
+    last_col = "Last" if "Last" in frame.columns else "Close"
+    last = _numeric_series(frame, last_col)
+    return (high > 0) & (last < 0.999 * high)
+
+
+def _future_setup_window_days(start, candidate) -> bool:
+    start_date = _run_date(start)
+    candidate_date = _run_date(candidate)
+    if start_date is None or candidate_date is None or candidate_date <= start_date:
+        return False
+    days = pd.bdate_range(start_date, candidate_date)
+    return 1 <= max(0, len(days) - 1) <= PREBREAKOUT_LEAD_DAYS
+
+
+def _high_quality_setup_mask(frame: pd.DataFrame) -> pd.Series:
+    score = _numeric_series(frame, "BreakoutScore", default=0.0).fillna(0.0)
+    breakout = frame.get("IsBreakout", pd.Series([False] * len(frame), index=frame.index)).apply(_as_bool)
+    return breakout | (score >= PREBREAKOUT_SETUP_SCORE_THRESHOLD)
+
+
+def prebreakout_candidate_mask(frame: pd.DataFrame) -> pd.Series:
+    """Rows eligible for PreBreakout training: not yet a strong HSF setup."""
+    if frame.empty:
+        return pd.Series(dtype=bool)
+    score = _numeric_series(frame, "BreakoutScore", default=0.0).fillna(0.0)
+    breakout = frame.get("IsBreakout", pd.Series([False] * len(frame), index=frame.index)).apply(_as_bool)
+    below_high = _price_below_20d_high(frame)
+    return (~breakout) & (score < PREBREAKOUT_SETUP_SCORE_THRESHOLD) & below_high.fillna(False)
+
+
 def _forward_path_hit(
     bars,
     run_date,
@@ -287,6 +340,7 @@ def add_forward_return_labels(
 
     if RETURN_COLUMN in out.columns:
         out[RETURN_COLUMN] = pd.to_numeric(out[RETURN_COLUMN], errors="coerce")
+        out = out[out[RETURN_COLUMN].notna()].reset_index(drop=True)
         out[TARGET_COLUMN] = (out[RETURN_COLUMN] >= float(hit_threshold)).astype(int)
         return out
     out[RETURN_COLUMN] = np.nan
@@ -330,6 +384,44 @@ def add_forward_return_labels(
     return labeled
 
 
+def add_prebreakout_target_label(
+    df: pd.DataFrame,
+    *,
+    lookback_days: int = 90,
+) -> pd.DataFrame:
+    """
+    Build the PreBreakout objective:
+      eligible rows are not broken out, below the alert score threshold, and
+      still below the 20-day high.
+      y=1 only if the same symbol produces a high-quality setup within the next
+      1-3 trading days and that future setup subsequently hits the economic
+      ForwardReturnHit target.
+    """
+    if df.empty:
+        return df
+
+    labeled = add_forward_return_labels(df, lookback_days=lookback_days)
+    if labeled.empty:
+        return labeled
+
+    labeled = labeled.sort_values(["Symbol", "Timestamp"]).reset_index(drop=True)
+    setup_mask = _high_quality_setup_mask(labeled) & (labeled[TARGET_COLUMN].astype(int) == 1)
+    candidate_mask = prebreakout_candidate_mask(labeled)
+    labeled[PREBREAKOUT_TARGET_COLUMN] = 0
+
+    for idx, row in labeled[candidate_mask].iterrows():
+        sym = str(row.get("Symbol") or "").upper()
+        future = labeled[
+            (labeled["Symbol"].astype(str).str.upper() == sym)
+            & setup_mask
+            & labeled["Timestamp"].apply(lambda ts: _future_setup_window_days(row.get("Timestamp"), ts))
+        ]
+        if not future.empty:
+            labeled.at[idx, PREBREAKOUT_TARGET_COLUMN] = 1
+
+    return labeled.loc[candidate_mask].reset_index(drop=True)
+
+
 def build_ml_dataset(df: pd.DataFrame):
     """
     Select feature columns and target column.
@@ -346,7 +438,9 @@ def build_ml_dataset(df: pd.DataFrame):
     X = df[feature_cols].copy()
     X = X.fillna(0.0)
 
-    if TARGET_COLUMN in df.columns:
+    if PREBREAKOUT_TARGET_COLUMN in df.columns:
+        y = df[PREBREAKOUT_TARGET_COLUMN].astype(int)
+    elif TARGET_COLUMN in df.columns:
         y = df[TARGET_COLUMN].astype(int)
     elif RETURN_COLUMN in df.columns:
         y = (pd.to_numeric(df[RETURN_COLUMN], errors="coerce").fillna(0.0) >= UPSIDE_HIT_THRESHOLD).astype(int)
@@ -502,15 +596,12 @@ def train_prebreakout_model(
         print("[ml_prebreakout] No history data found.")
         return {}
 
-    df_labeled = add_forward_return_labels(
+    df_labeled = add_prebreakout_target_label(
         df,
-        horizon_days=RETURN_HORIZON_DAYS,
-        hit_threshold=UPSIDE_HIT_THRESHOLD,
-        stop_threshold=DOWNSIDE_STOP_THRESHOLD,
         lookback_days=days_back,
     )
     if df_labeled.empty:
-        print("[ml_prebreakout] No complete forward-return labels available.")
+        print("[ml_prebreakout] No eligible prebreakout rows with complete labels available.")
         return {}
 
     X, y = build_ml_dataset(df_labeled)
@@ -518,7 +609,7 @@ def train_prebreakout_model(
         print("[ml_prebreakout] No features available.")
         return {}
     if y.nunique(dropna=True) < 2:
-        print("[ml_prebreakout] Forward-return labels have only one class; cannot train AUC model.")
+        print("[ml_prebreakout] PreBreakout labels have only one class; cannot train AUC model.")
         return {}
 
     X_train, X_val, y_train, y_val = walk_forward_split(X, y, df_labeled)
@@ -552,8 +643,15 @@ def train_prebreakout_model(
         "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
         "auc": float(auc),
         "validation_method": "walk_forward",
-        "target": TARGET_COLUMN,
-        "target_rule": "+4% before -2% in 5 trading days; fallback Return_5D >= +4%",
+        "target": PREBREAKOUT_TARGET_COLUMN,
+        "target_rule": (
+            "Eligible rows are not broken out, BreakoutScore < 8, and below the 20-day high; "
+            "positive when a high-quality setup appears within 1-3 trading days and then hits "
+            "the +4% before -2% economic target."
+        ),
+        "candidate_rule": "IsBreakout is false, BreakoutScore < 8, price below 20-day high",
+        "lead_days": PREBREAKOUT_LEAD_DAYS,
+        "setup_score_threshold": PREBREAKOUT_SETUP_SCORE_THRESHOLD,
         "return_column": RETURN_COLUMN,
         "calibration": calibration,
         "rows": int(len(X)),

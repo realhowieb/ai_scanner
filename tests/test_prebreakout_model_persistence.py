@@ -75,7 +75,7 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         labeled = pd.DataFrame(
             {
                 "Timestamp": pd.date_range("2026-01-01", periods=4, freq="D", tz="UTC"),
-                "ForwardReturnHit": y,
+                "FutureQualitySetupHit": y,
             }
         )
         fake_joblib = types.SimpleNamespace(dump=MagicMock())
@@ -91,7 +91,7 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                 patch.object(ml_prebreakout, "load_run_history", return_value=pd.DataFrame({"Symbol": ["A", "B"]})),
                 patch.object(
                     ml_prebreakout,
-                    "add_forward_return_labels",
+                    "add_prebreakout_target_label",
                     return_value=labeled,
                 ),
                 patch.object(ml_prebreakout, "build_ml_dataset", return_value=(x, y)),
@@ -105,7 +105,9 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(bundle["features"], ["Trend10D%", "VolRel20"])
         self.assertEqual(bundle["model_version"], ml_prebreakout.MODEL_VERSION)
         self.assertEqual(bundle["validation_method"], "walk_forward")
-        self.assertEqual(bundle["target"], "ForwardReturnHit")
+        self.assertEqual(bundle["target"], "FutureQualitySetupHit")
+        self.assertEqual(bundle["lead_days"], 3)
+        self.assertEqual(bundle["setup_score_threshold"], 8.0)
         self.assertIn("calibration", bundle)
         self.assertEqual(bundle["rows"], 4)
         self.assertEqual(bundle["positive_rows"], 2)
@@ -129,6 +131,53 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
 
         self.assertEqual(list(labeled["ForwardReturnHit"]), [1, 0])
         self.assertEqual(list(labeled["Return_5D"]), [0.05, -0.01])
+
+    def test_add_prebreakout_target_requires_future_quality_setup_and_outcome(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-01-01T15:00:00Z"),
+                    "IsBreakout": False,
+                    "BreakoutScore": 5.0,
+                    "Last": 90.0,
+                    "High20": 100.0,
+                    "Return_5D": 0.0,
+                },
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-01-02T15:00:00Z"),
+                    "IsBreakout": True,
+                    "BreakoutScore": 9.0,
+                    "Last": 101.0,
+                    "High20": 101.0,
+                    "Return_5D": 0.05,
+                },
+                {
+                    "Symbol": "BBB",
+                    "Timestamp": pd.Timestamp("2026-01-01T15:00:00Z"),
+                    "IsBreakout": False,
+                    "BreakoutScore": 5.0,
+                    "Last": 90.0,
+                    "High20": 100.0,
+                    "Return_5D": 0.0,
+                },
+                {
+                    "Symbol": "BBB",
+                    "Timestamp": pd.Timestamp("2026-01-02T15:00:00Z"),
+                    "IsBreakout": True,
+                    "BreakoutScore": 9.0,
+                    "Last": 101.0,
+                    "High20": 101.0,
+                    "Return_5D": -0.01,
+                },
+            ]
+        )
+
+        labeled = ml_prebreakout.add_prebreakout_target_label(df)
+
+        by_symbol = {row["Symbol"]: row["FutureQualitySetupHit"] for _, row in labeled.iterrows()}
+        self.assertEqual(by_symbol, {"AAA": 1, "BBB": 0})
 
     def test_walk_forward_split_validates_on_later_rows(self):
         x = pd.DataFrame({"feature": [10, 20, 30, 40, 50]})

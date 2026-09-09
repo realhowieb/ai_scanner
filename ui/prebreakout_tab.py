@@ -100,7 +100,7 @@ def render_prebreakout_tab() -> None:
             else:
                 st.error(
                     "Training failed. Check the app logs for details "
-                    "(e.g., missing history or missing IsBreakout column)."
+                    "(e.g., missing history, no eligible prebreakout rows, or incomplete outcome windows)."
                 )
 
     st.caption(
