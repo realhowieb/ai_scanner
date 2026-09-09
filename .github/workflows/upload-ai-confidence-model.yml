@@ -38,7 +38,10 @@ permissions:
 jobs:
   upload-model:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Forward-return labels download ~105d of daily bars for every unique ticker
+    # across the scan-history window; with large max_runs that batch can exceed
+    # 15 min. Give it headroom (also cap max_runs when dispatching).
+    timeout-minutes: 30
 
     env:
       NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
