@@ -220,6 +220,7 @@ def render_market_brief() -> None:
         )
         return
 
+    user = (st.session_state.get("username") or "").strip().lower()
     ts = data.get("snapshot_time")
     if ts is not None:
         try:
@@ -227,15 +228,148 @@ def render_market_brief() -> None:
         except Exception:
             pass
 
+    phase = _market_phase()
+    _render_phase_banner(phase)
     _render_market_pulse(data.get("market_close") or [])
-    _render_gappers(data.get("gappers") or [])
-    _render_day_movers(data.get("gainers") or [], data.get("losers") or [])
-    _render_setups(data.get("golden") or [], data.get("top_setups") or [])
-    _render_picks(data.get("picks") or [])
-    _render_watchlist(data.get("earnings_today") or [])
-    _render_fired_alerts((st.session_state.get("username") or "").strip().lower())
-    _render_yesterday(data.get("yesterday"))
+    _render_standouts(data)
+
+    # #4 — time-aware ordering: after the close, lead with what happened
+    # (movers, fired alerts); pre-open/open, lead with what to watch.
+    sections = {
+        "gappers": lambda: _render_gappers(data.get("gappers") or []),
+        "movers": lambda: _render_day_movers(data.get("gainers") or [], data.get("losers") or []),
+        "setups": lambda: _render_setups(data.get("golden") or [], data.get("top_setups") or []),
+        "picks": lambda: _render_picks(data.get("picks") or []),
+        "watchlist": lambda: _render_watchlist(data.get("earnings_today") or []),
+        "alerts": lambda: _render_fired_alerts(user),
+        "catalysts": lambda: _render_catalysts(data),
+        "yesterday": lambda: _render_yesterday(data.get("yesterday")),
+    }
+    if phase in ("afterhours", "closed"):
+        order = ["movers", "alerts", "gappers", "setups", "picks",
+                 "watchlist", "catalysts", "yesterday"]
+    else:
+        order = ["gappers", "movers", "setups", "picks", "watchlist",
+                 "alerts", "catalysts", "yesterday"]
+    for name in order:
+        sections[name]()
+
+    st.markdown("---")
+    _render_email_button(user, data)
     _render_actions(data)
+
+
+def _market_phase() -> Optional[str]:
+    try:
+        import datetime as _dt
+
+        from ui.day_trader import market_state
+
+        return market_state(_dt.datetime.now(_dt.timezone.utc))
+    except Exception:
+        return None
+
+
+def _render_phase_banner(phase: Optional[str]) -> None:
+    banner = {
+        "premarket": "🌅 **Premarket** — focus on today's setups & gappers.",
+        "open": "🔔 **Market open** — live gainers/losers below.",
+        "afterhours": "🌙 **After the close** — here's how the day went.",
+        "closed": "🌙 **Market closed** — recap of the last session.",
+    }.get(phase or "", "")
+    if banner:
+        st.caption(banner)
+
+
+def _standouts(data: Dict[str, Any]) -> List[tuple]:
+    """[(ticker, [tags])] for names appearing across ≥2 brief lists, most first."""
+    tags: Dict[str, List[str]] = {}
+
+    def add(raw, tag):
+        t = _base_ticker(raw)
+        if not t:
+            return
+        tags.setdefault(t, [])
+        if tag not in tags[t]:
+            tags[t].append(tag)
+
+    for g in (data.get("gappers") or []):
+        add(g.get("ticker"), "gapper")
+    for t in (data.get("golden") or []):
+        add(t, "golden cross")
+    for t, _s in (data.get("top_setups") or []):
+        add(t, "breakout")
+    for p in (data.get("picks") or []):
+        add(p.get("symbol"), "prebreakout")
+    for t, _c in (data.get("gainers") or []):
+        add(t, "gainer")
+    for t, _c in (data.get("losers") or []):
+        add(t, "loser")
+
+    out = [(t, tg) for t, tg in tags.items() if len(tg) >= 2]
+    out.sort(key=lambda x: len(x[1]), reverse=True)
+    return out
+
+
+def _render_standouts(data: Dict[str, Any]) -> None:
+    rows = _standouts(data)
+    if not rows:
+        return
+    st.markdown("### ⭐ Standouts — multiple signals")
+    for t, tg in rows[:8]:
+        st.markdown(f"- **{t}** — {' + '.join(tg)}")
+    st.caption("Names showing up across more than one list — where the day's "
+               "action clusters. Not a prediction; just where to look first.")
+
+
+def _render_catalysts(data: Dict[str, Any]) -> None:
+    et = set(data.get("earnings_today") or [])
+    if not et:
+        return
+    brief: set = set()
+    for g in (data.get("gappers") or []):
+        brief.add(_base_ticker(g.get("ticker")))
+    for t, _s in (data.get("top_setups") or []):
+        brief.add(_base_ticker(t))
+    for p in (data.get("picks") or []):
+        brief.add(_base_ticker(p.get("symbol")))
+    for t, _c in (data.get("gainers") or []) + (data.get("losers") or []):
+        brief.add(_base_ticker(t))
+    hits = sorted(brief & et)
+    st.markdown("### 📅 Today's catalysts")
+    if hits:
+        st.markdown(f"**Reporting earnings today (in this brief):** {', '.join(hits)}")
+    st.caption(f"{len(et)} companies report earnings today market-wide — mind the gaps.")
+
+
+def _render_email_button(user: str, data: Dict[str, Any]) -> None:
+    if not user:
+        return
+    ent = st.session_state.get("entitlements") or {}
+    if not ent.get("can_email_alerts"):
+        st.caption("📧 Emailing this brief on demand is a Pro feature.")
+        return
+    if not st.button("📧 Email me this brief", key="brief_email"):
+        return
+    try:
+        from scheduler.morning_digest import _compose
+        from ui.email_utils import send_digest_email
+
+        watch_rows = _watchlist_rows(user)
+        et = set(data.get("earnings_today") or [])
+        earnings_hits = [
+            tk for r in watch_rows
+            if (tk := str(r.get("ticker") or r.get("Ticker") or "").upper()) in et
+        ]
+        html_inner, text_inner = _compose(
+            user, watch_rows, data.get("gappers") or [], earnings_hits,
+            data.get("picks") or [], golden=data.get("golden") or [],
+            top_setups=data.get("top_setups") or [],
+        )
+        ok = send_digest_email(user, "Your market brief", html_inner, text_inner)
+        st.toast("📧 Brief sent to your inbox" if ok else "Couldn't send the email.")
+    except Exception:
+        st.warning("Could not send the brief right now.")
 
 
 def _render_market_pulse(market_close: List[tuple]) -> None:

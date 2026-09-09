@@ -120,5 +120,30 @@ class EveningContentTests(unittest.TestCase):
         self.assertEqual(data["losers"], [("HIG", -1.2)])
 
 
+class StandoutsTests(unittest.TestCase):
+    def test_confluence_across_lists(self):
+        import ui.market_brief as mb
+
+        data = {
+            "gappers": [{"ticker": "CRWV"}, {"ticker": "QCOM"}],
+            "golden": ["CRWV", "VST"],
+            "top_setups": [("CRWV", 39.4), ("EA", 51.0)],
+            "picks": [{"symbol": "CNTA"}],
+            "gainers": [("EA", 9.9)],
+            "losers": [("QCOM ⚠️E1d", -2.0)],
+        }
+        out = dict(mb._standouts(data))
+        self.assertEqual(out["CRWV"], ["gapper", "golden cross", "breakout"])  # 3 lists, first
+        self.assertIn("loser", out["QCOM"])          # earnings flag stripped, still matched
+        self.assertNotIn("VST", out)                 # only 1 list → not a standout
+        self.assertNotIn("CNTA", out)                # only 1 list
+
+    def test_no_standouts_when_no_overlap(self):
+        import ui.market_brief as mb
+
+        data = {"gappers": [{"ticker": "AAA"}], "golden": ["BBB"], "picks": []}
+        self.assertEqual(mb._standouts(data), [])
+
+
 if __name__ == "__main__":
     unittest.main()
