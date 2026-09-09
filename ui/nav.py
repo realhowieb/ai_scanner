@@ -67,6 +67,10 @@ def render_sidebar_nav(*, with_header: bool = True) -> None:
         with st.sidebar:
             if with_header:
                 _render_identity()
+            else:
+                # Main app renders its own identity block above us; add the
+                # divider here so the nav is visually separated everywhere.
+                st.divider()
             for path, label, icon in _NAV:
                 try:
                     st.page_link(path, label=label, icon=icon)
