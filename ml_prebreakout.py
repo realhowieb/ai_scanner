@@ -556,6 +556,9 @@ def train_prebreakout_model(
         "target_rule": "+4% before -2% in 5 trading days; fallback Return_5D >= +4%",
         "return_column": RETURN_COLUMN,
         "calibration": calibration,
+        "rows": int(len(X)),
+        "positive_rows": int(y.sum()),
+        "validation_rows": int(len(X_val)),
         "model_version": MODEL_VERSION,
         "source": "local",
     }

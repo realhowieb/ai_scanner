@@ -1,0 +1,106 @@
+name: Train PreBreakout Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: "Training lookback days"
+        required: true
+        default: "90"
+      artifact_name:
+        description: "Optional debug artifact name for the local .pkl"
+        required: true
+        default: "prebreakout-model-debug"
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-ml.txt
+            requirements.lock
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements.txt
+          python -m pip install --prefer-binary -r requirements-ml.txt -c requirements.lock
+
+      - name: Check required secrets
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+        run: |
+          if [ -z "$NEON_DATABASE_URL" ]; then
+            echo "NEON_DATABASE_URL or DATABASE_URL GitHub Actions secret is required."
+            exit 1
+          fi
+          if [ -z "$ALPACA_API_KEY_ID" ] || [ -z "$ALPACA_API_SECRET_KEY" ]; then
+            echo "ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY GitHub Actions secrets are required."
+            exit 1
+          fi
+
+      - name: Train and save PreBreakout model
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from ml_prebreakout import MODEL_PATH, train_prebreakout_model
+
+          days_back = int("${{ inputs.days_back }}")
+          model_path = Path(MODEL_PATH)
+          bundle = train_prebreakout_model(days_back=days_back, model_path=str(model_path))
+          if not bundle or bundle.get("model") is None:
+              print(json.dumps({"trained": False, "days_back": days_back}, indent=2, sort_keys=True))
+              raise SystemExit("PreBreakout training returned no model.")
+
+          summary = {
+              "auc": bundle.get("auc"),
+              "calibration": bundle.get("calibration") or [],
+              "model_path": str(model_path),
+              "positive_rows": bundle.get("positive_rows"),
+              "rows": bundle.get("rows"),
+              "source": bundle.get("source"),
+              "target": bundle.get("target"),
+              "target_rule": bundle.get("target_rule"),
+              "trained_at": bundle.get("trained_at"),
+              "validation_method": bundle.get("validation_method"),
+              "validation_rows": bundle.get("validation_rows"),
+          }
+          print(json.dumps(summary, indent=2, sort_keys=True, default=str))
+          if bundle.get("source") != "database":
+              raise SystemExit("PreBreakout model trained locally but was not saved to Neon.")
+          PY
+
+      - name: Upload debug model artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: prebreakout_model.pkl
+          if-no-files-found: warn
