@@ -55,12 +55,29 @@ def render_prebreakout_tab() -> None:
             st.success(
                 f"Current model loaded.\n\n"
                 f"- AUC: **{bundle.get('auc', 0):.3f}**\n"
+                f"- Validation: **{bundle.get('validation_method', 'unknown')}**\n"
+                f"- Target: **{bundle.get('target_rule', bundle.get('target', 'unknown'))}**\n"
                 f"- Trained at: **{bundle.get('trained_at', 'unknown')}**\n"
                 f"- Source: **{bundle.get('source', 'unknown')}**\n"
                 f"- Features: `{feature_preview}`"
             )
             if bundle.get("db_save_error"):
                 st.caption(f"⚠️ Last database save warning: {bundle.get('db_save_error')}")
+            calibration = bundle.get("calibration") or []
+            if calibration:
+                st.markdown("#### Calibration")
+                calibration_df = pd.DataFrame(calibration)
+                st.dataframe(
+                    calibration_df,
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "bucket": st.column_config.TextColumn("Confidence"),
+                        "n": st.column_config.NumberColumn("Signals", format="%d"),
+                        "mean_confidence": st.column_config.NumberColumn("Avg confidence", format="%.1%%"),
+                        "hit_rate": st.column_config.NumberColumn("Hit rate", format="%.1%%"),
+                    },
+                )
         else:
             st.warning(
                 "No pre-breakout model is currently loaded. "
@@ -71,7 +88,6 @@ def render_prebreakout_tab() -> None:
             with st.spinner("Training pre-breakout model from DB history..."):
                 trained_bundle = train_prebreakout_model(
                     days_back=90,
-                    horizon_scans=3,
                 )
             if trained_bundle:
                 st.success(

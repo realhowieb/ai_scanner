@@ -70,8 +70,14 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         fake_joblib.load.assert_not_called()
 
     def test_train_prebreakout_model_saves_active_database_model(self):
-        x = pd.DataFrame({"Trend10D%": [1.0, 2.0], "VolRel20": [1.5, 3.0]})
-        y = pd.Series([0, 1])
+        x = pd.DataFrame({"Trend10D%": [1.0, 2.0, 3.0, 4.0], "VolRel20": [1.5, 3.0, 2.0, 4.0]})
+        y = pd.Series([0, 1, 0, 1])
+        labeled = pd.DataFrame(
+            {
+                "Timestamp": pd.date_range("2026-01-01", periods=4, freq="D", tz="UTC"),
+                "ForwardReturnHit": y,
+            }
+        )
         fake_joblib = types.SimpleNamespace(dump=MagicMock())
         fake_classifier = FakePrebreakoutClassifier()
         save_mock = MagicMock(return_value=True)
@@ -80,16 +86,16 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with (
                 patch.object(ml_prebreakout, "joblib", fake_joblib),
-                patch.object(ml_prebreakout, "train_test_split", return_value=(x, x, y, y)),
                 patch.object(ml_prebreakout, "roc_auc_score", return_value=0.77),
                 patch.object(ml_prebreakout, "XGBClassifier", return_value=fake_classifier),
-                patch.object(ml_prebreakout, "load_run_history", return_value=pd.DataFrame({"IsBreakout": [0, 1]})),
+                patch.object(ml_prebreakout, "load_run_history", return_value=pd.DataFrame({"Symbol": ["A", "B"]})),
                 patch.object(
                     ml_prebreakout,
-                    "add_future_breakout_label",
-                    return_value=pd.DataFrame({"FutureBreakout": [0, 1]}),
+                    "add_forward_return_labels",
+                    return_value=labeled,
                 ),
                 patch.object(ml_prebreakout, "build_ml_dataset", return_value=(x, y)),
+                patch.object(ml_prebreakout, "walk_forward_split", return_value=(x.iloc[:2], x.iloc[2:], y.iloc[:2], y.iloc[2:])),
                 patch.object(ml_prebreakout, "serialize_model_to_bytes", serialize_mock),
                 patch.object(ml_prebreakout, "save_prebreakout_model", save_mock),
             ):
@@ -98,11 +104,51 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(bundle["source"], "database")
         self.assertEqual(bundle["features"], ["Trend10D%", "VolRel20"])
         self.assertEqual(bundle["model_version"], ml_prebreakout.MODEL_VERSION)
+        self.assertEqual(bundle["validation_method"], "walk_forward")
+        self.assertEqual(bundle["target"], "ForwardReturnHit")
+        self.assertIn("calibration", bundle)
         serialize_mock.assert_called_once_with(fake_classifier, fake_joblib)
         save_mock.assert_called_once()
         self.assertEqual(save_mock.call_args.kwargs["model_bytes"], b"model-bytes")
         self.assertEqual(save_mock.call_args.kwargs["feature_names"], ["Trend10D%", "VolRel20"])
         self.assertEqual(save_mock.call_args.kwargs["auc"], 0.77)
+
+    def test_add_forward_return_labels_uses_existing_return_column(self):
+        df = pd.DataFrame(
+            {
+                "Symbol": ["AAA", "BBB"],
+                "Timestamp": pd.date_range("2026-01-01", periods=2, freq="D", tz="UTC"),
+                "Return_5D": [0.05, -0.01],
+            }
+        )
+
+        labeled = ml_prebreakout.add_forward_return_labels(df)
+
+        self.assertEqual(list(labeled["ForwardReturnHit"]), [1, 0])
+        self.assertEqual(list(labeled["Return_5D"]), [0.05, -0.01])
+
+    def test_walk_forward_split_validates_on_later_rows(self):
+        x = pd.DataFrame({"feature": [10, 20, 30, 40, 50]})
+        y = pd.Series([0, 1, 0, 1, 1])
+        labeled = pd.DataFrame({"Timestamp": pd.date_range("2026-01-01", periods=5, freq="D", tz="UTC")})
+
+        x_train, x_val, y_train, y_val = ml_prebreakout.walk_forward_split(x, y, labeled, validation_fraction=0.4)
+
+        self.assertEqual(list(x_train["feature"]), [10, 20, 30])
+        self.assertEqual(list(x_val["feature"]), [40, 50])
+        self.assertEqual(list(y_train), [0, 1, 0])
+        self.assertEqual(list(y_val), [1, 1])
+
+    def test_confidence_bucket_diagnostics_reports_hit_rate(self):
+        rows = ml_prebreakout.confidence_bucket_diagnostics(
+            pd.Series([0, 1, 1]),
+            pd.Series([0.25, 0.72, 0.78]),
+        )
+
+        by_bucket = {row["bucket"]: row for row in rows}
+        self.assertEqual(by_bucket["20-30%"]["n"], 1)
+        self.assertEqual(by_bucket["70-80%"]["n"], 2)
+        self.assertEqual(by_bucket["70-80%"]["hit_rate"], 1.0)
 
 
 if __name__ == "__main__":

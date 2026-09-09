@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
+from statistics import mean
 
 import numpy as np
 import pandas as pd
@@ -26,14 +27,13 @@ except Exception:  # pragma: no cover - keeps ML imports resilient in partial de
 # If imports fail they remain None: Install requirements-ml.txt to enable.
 joblib = None  # type: ignore
 roc_auc_score = None  # type: ignore
-train_test_split = None  # type: ignore
 XGBClassifier = None  # type: ignore
 _ML_IMPORT_TRIED = False
 
 
 def _load_ml_libs() -> None:
     """Populate the ML globals on first use (no-op when patched or loaded)."""
-    global joblib, roc_auc_score, train_test_split, XGBClassifier, _ML_IMPORT_TRIED
+    global joblib, roc_auc_score, XGBClassifier, _ML_IMPORT_TRIED
     if _ML_IMPORT_TRIED:
         return
     _ML_IMPORT_TRIED = True
@@ -44,13 +44,11 @@ def _load_ml_libs() -> None:
             joblib = _joblib
         except Exception:  # pragma: no cover - optional ML dependency
             pass
-    if roc_auc_score is None or train_test_split is None:
+    if roc_auc_score is None:
         try:
             from sklearn.metrics import roc_auc_score as _ras
-            from sklearn.model_selection import train_test_split as _tts
 
             roc_auc_score = _ras
-            train_test_split = _tts
         except Exception:  # pragma: no cover - optional ML dependency
             pass
     if XGBClassifier is None:
@@ -64,6 +62,11 @@ def _load_ml_libs() -> None:
 
 MODEL_PATH = "prebreakout_model.pkl"
 MODEL_VERSION = "prebreakout-xgb-v1"
+TARGET_COLUMN = "ForwardReturnHit"
+RETURN_COLUMN = "Return_5D"
+RETURN_HORIZON_DAYS = 5
+UPSIDE_HIT_THRESHOLD = 0.04
+DOWNSIDE_STOP_THRESHOLD = -0.02
 
 
 def _utc_now() -> datetime:
@@ -198,6 +201,135 @@ def add_future_breakout_label(df: pd.DataFrame, horizon_scans: int = 3) -> pd.Da
     return df
 
 
+def _run_date(value):
+    ts = _normalize_datetime(value)
+    return ts.date() if ts is not None else None
+
+
+def _forward_path_hit(
+    bars,
+    run_date,
+    horizon_days: int,
+    hit_threshold: float = UPSIDE_HIT_THRESHOLD,
+    stop_threshold: float = DOWNSIDE_STOP_THRESHOLD,
+) -> bool | None:
+    """True when +4% is reached before -2%; None when path data is incomplete."""
+    try:
+        if "Close" not in getattr(bars, "columns", []):
+            return None
+        closes = bars["Close"].dropna()
+        if closes.empty:
+            return None
+        entry_pos = None
+        for pos, ts in enumerate(closes.index):
+            d = ts.date() if hasattr(ts, "date") else ts
+            if d >= run_date:
+                entry_pos = pos
+                break
+        if entry_pos is None:
+            return None
+        end_pos = entry_pos + int(horizon_days)
+        if end_pos >= len(closes):
+            return None
+        entry = float(closes.iloc[entry_pos])
+        if entry <= 0:
+            return None
+
+        highs = bars["High"].reindex(closes.index) if "High" in bars.columns else closes
+        lows = bars["Low"].reindex(closes.index) if "Low" in bars.columns else closes
+        for pos in range(entry_pos + 1, end_pos + 1):
+            high_ret = (float(highs.iloc[pos]) - entry) / entry
+            low_ret = (float(lows.iloc[pos]) - entry) / entry
+            if low_ret <= float(stop_threshold):
+                return False
+            if high_ret >= float(hit_threshold):
+                return True
+        return False
+    except Exception:
+        return None
+
+
+def _download_label_bars(symbols: list[str], lookback_days: int):
+    try:
+        from data.price_alpaca import download_multi_alpaca
+
+        return download_multi_alpaca(
+            symbols,
+            period=f"{max(RETURN_HORIZON_DAYS + 15, lookback_days + RETURN_HORIZON_DAYS + 10)}d",
+            interval="1d",
+            prepost=False,
+            timeout_s=25.0,
+        )
+    except Exception as e:
+        print(f"[ml_prebreakout] Failed to download label bars: {e}")
+        return {}
+
+
+def add_forward_return_labels(
+    df: pd.DataFrame,
+    horizon_days: int = RETURN_HORIZON_DAYS,
+    hit_threshold: float = UPSIDE_HIT_THRESHOLD,
+    stop_threshold: float = DOWNSIDE_STOP_THRESHOLD,
+    lookback_days: int = 90,
+) -> pd.DataFrame:
+    """
+    Add money-based labels:
+      - Return_5D: forward close-to-close return over horizon_days.
+      - ForwardReturnHit: 1 when +4% is reached before -2% within horizon_days.
+
+    If full path data is unavailable, the hit label falls back to Return_5D >= +4%.
+    """
+    if df.empty:
+        return df
+
+    out = df.sort_values(["Symbol", "Timestamp"]).reset_index(drop=True).copy()
+    out[TARGET_COLUMN] = np.nan
+
+    if RETURN_COLUMN in out.columns:
+        out[RETURN_COLUMN] = pd.to_numeric(out[RETURN_COLUMN], errors="coerce")
+        out[TARGET_COLUMN] = (out[RETURN_COLUMN] >= float(hit_threshold)).astype(int)
+        return out
+    out[RETURN_COLUMN] = np.nan
+
+    symbols = sorted({str(s).upper() for s in out.get("Symbol", pd.Series(dtype=str)).dropna() if str(s).strip()})
+    bars_by_symbol = _download_label_bars(symbols, lookback_days=lookback_days) if symbols else {}
+    if not bars_by_symbol:
+        print("[ml_prebreakout] No price bars available for forward-return labels.")
+        return out.iloc[0:0].copy()
+
+    try:
+        from analytics.track_record import _bars_for, _forward_return
+    except Exception:
+        _bars_for = lambda bars, sym: bars.get(sym)  # type: ignore[assignment]
+        _forward_return = None  # type: ignore[assignment]
+
+    keep = []
+    for idx, row in out.iterrows():
+        run_date = _run_date(row.get("Timestamp") or row.get("run_time"))
+        sym = str(row.get("Symbol") or "").upper()
+        bars = _bars_for(bars_by_symbol, sym)
+        if run_date is None or bars is None or _forward_return is None:
+            continue
+        ret = _forward_return(bars, run_date, int(horizon_days), entry_mode="close")
+        if ret is None:
+            continue
+        path_hit = _forward_path_hit(
+            bars,
+            run_date,
+            int(horizon_days),
+            hit_threshold=float(hit_threshold),
+            stop_threshold=float(stop_threshold),
+        )
+        out.at[idx, RETURN_COLUMN] = float(ret)
+        out.at[idx, TARGET_COLUMN] = int(path_hit if path_hit is not None else ret >= float(hit_threshold))
+        keep.append(idx)
+
+    labeled = out.loc[keep].reset_index(drop=True)
+    if labeled.empty:
+        print("[ml_prebreakout] No rows had complete forward-return labels.")
+    return labeled
+
+
 def build_ml_dataset(df: pd.DataFrame):
     """
     Select feature columns and target column.
@@ -214,9 +346,64 @@ def build_ml_dataset(df: pd.DataFrame):
     X = df[feature_cols].copy()
     X = X.fillna(0.0)
 
-    y = df.get("FutureBreakout", pd.Series([0] * len(df)))
+    if TARGET_COLUMN in df.columns:
+        y = df[TARGET_COLUMN].astype(int)
+    elif RETURN_COLUMN in df.columns:
+        y = (pd.to_numeric(df[RETURN_COLUMN], errors="coerce").fillna(0.0) >= UPSIDE_HIT_THRESHOLD).astype(int)
+    else:
+        y = df.get("FutureBreakout", pd.Series([0] * len(df))).astype(int)
 
     return X, y
+
+
+def walk_forward_split(X: pd.DataFrame, y: pd.Series, df_labeled: pd.DataFrame, validation_fraction: float = 0.2):
+    """Chronological split that validates on later scans, matching live usage."""
+    if X.empty or len(X) < 2:
+        return X, X, y, y
+    if "Timestamp" in df_labeled.columns:
+        order = pd.to_datetime(df_labeled["Timestamp"], errors="coerce", utc=True).sort_values().index
+    else:
+        order = X.index
+    ordered_index = [i for i in order if i in X.index]
+    if len(ordered_index) < 2:
+        ordered_index = list(X.index)
+    split_at = max(1, int(len(ordered_index) * (1.0 - validation_fraction)))
+    if split_at >= len(ordered_index):
+        split_at = len(ordered_index) - 1
+    train_idx = ordered_index[:split_at]
+    val_idx = ordered_index[split_at:]
+    return X.loc[train_idx], X.loc[val_idx], y.loc[train_idx], y.loc[val_idx]
+
+
+def confidence_bucket_diagnostics(y_true, y_proba, bucket_size: float = 0.1) -> list[dict]:
+    """Calibration-style hit rate by confidence bucket."""
+    rows = []
+    frame = pd.DataFrame(
+        {
+            "actual": pd.Series(y_true).reset_index(drop=True).astype(float),
+            "predicted": pd.Series(y_proba).reset_index(drop=True).astype(float),
+        }
+    )
+    frame = frame.dropna()
+    if frame.empty:
+        return rows
+    edges = np.arange(0.0, 1.0 + bucket_size, bucket_size)
+    for low, high in zip(edges[:-1], edges[1:]):
+        if high >= 1.0:
+            bucket = frame[(frame["predicted"] >= low) & (frame["predicted"] <= high)]
+        else:
+            bucket = frame[(frame["predicted"] >= low) & (frame["predicted"] < high)]
+        if bucket.empty:
+            continue
+        rows.append(
+            {
+                "bucket": f"{int(low * 100)}-{int(high * 100)}%",
+                "n": int(len(bucket)),
+                "mean_confidence": float(mean(bucket["predicted"].tolist())),
+                "hit_rate": float(mean(bucket["actual"].tolist())),
+            }
+        )
+    return rows
 
 
 # Process-level model cache: every scan was re-downloading the model BYTEA from
@@ -303,7 +490,7 @@ def train_prebreakout_model(
     Saves a bundle containing model, features, trained_at, and auc.
     """
     _load_ml_libs()
-    if joblib is None or train_test_split is None or roc_auc_score is None or XGBClassifier is None:
+    if joblib is None or roc_auc_score is None or XGBClassifier is None:
         print(
             "[ml_prebreakout] ML dependencies are not installed. "
             "Install requirements-ml.txt to train the prebreakout model."
@@ -315,19 +502,29 @@ def train_prebreakout_model(
         print("[ml_prebreakout] No history data found.")
         return {}
 
-    if "IsBreakout" not in df.columns:
-        print("[ml_prebreakout] History missing 'IsBreakout'; cannot label.")
+    df_labeled = add_forward_return_labels(
+        df,
+        horizon_days=RETURN_HORIZON_DAYS,
+        hit_threshold=UPSIDE_HIT_THRESHOLD,
+        stop_threshold=DOWNSIDE_STOP_THRESHOLD,
+        lookback_days=days_back,
+    )
+    if df_labeled.empty:
+        print("[ml_prebreakout] No complete forward-return labels available.")
         return {}
 
-    df_labeled = add_future_breakout_label(df, horizon_scans=horizon_scans)
     X, y = build_ml_dataset(df_labeled)
     if X.empty:
         print("[ml_prebreakout] No features available.")
         return {}
+    if y.nunique(dropna=True) < 2:
+        print("[ml_prebreakout] Forward-return labels have only one class; cannot train AUC model.")
+        return {}
 
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    X_train, X_val, y_train, y_val = walk_forward_split(X, y, df_labeled)
+    if y_train.nunique(dropna=True) < 2 or y_val.nunique(dropna=True) < 2:
+        print("[ml_prebreakout] Walk-forward split has only one class in train or validation.")
+        return {}
 
     clf = XGBClassifier(
         n_estimators=400,
@@ -346,13 +543,19 @@ def train_prebreakout_model(
 
     y_proba = clf.predict_proba(X_val)[:, 1]
     auc = roc_auc_score(y_val, y_proba)
-    print(f"[ml_prebreakout] XGBoost Validation AUC: {auc:.3f}")
+    calibration = confidence_bucket_diagnostics(y_val, y_proba)
+    print(f"[ml_prebreakout] XGBoost Walk-forward AUC: {auc:.3f}")
 
     bundle = {
         "model": clf,
         "features": list(X.columns),
         "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
         "auc": float(auc),
+        "validation_method": "walk_forward",
+        "target": TARGET_COLUMN,
+        "target_rule": "+4% before -2% in 5 trading days; fallback Return_5D >= +4%",
+        "return_column": RETURN_COLUMN,
+        "calibration": calibration,
         "model_version": MODEL_VERSION,
         "source": "local",
     }
