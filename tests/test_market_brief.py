@@ -56,5 +56,44 @@ class MarketBriefTests(unittest.TestCase):
         self.assertIn('st.session_state.get("username")', src)
 
 
+class MarketBriefExtrasTests(unittest.TestCase):
+    def test_base_ticker_strips_earnings_flag(self):
+        import ui.market_brief as mb
+
+        self.assertEqual(mb._base_ticker("CNTA ⚠️E2d"), "CNTA")
+        self.assertEqual(mb._base_ticker("qcom"), "QCOM")
+        self.assertEqual(mb._base_ticker(None), "")
+
+    def test_yesterday_performance_marks_picks_to_now(self):
+        import datetime as dt
+
+        import scheduler.morning_digest as md
+        import ui.market_brief as mb
+
+        class _DF:
+            columns = ["Ticker", "Last"]
+
+            def __len__(self):
+                return 1
+
+            def iterrows(self):
+                return iter([(0, {"Ticker": "EA", "Last": 100.0})])
+
+        runs = [
+            {"id": 2, "created_at": dt.datetime(2026, 9, 9, 12, tzinfo=dt.timezone.utc)},
+            {"id": 1, "created_at": dt.datetime(2026, 9, 8, 12, tzinfo=dt.timezone.utc)},
+        ]
+        with mock.patch("db.runs.list_snapshot_runs", return_value=runs), \
+             mock.patch("db.runs.load_many_run_results", return_value={1: "[]"}), \
+             mock.patch("ui.app_runtime.normalize_results_to_df", return_value=_DF()), \
+             mock.patch.object(md, "_todays_setups", return_value=([], [("EA", 51.0)])), \
+             mock.patch("market_data.get_latest_quotes", return_value={"EA": {"last": 105.0}}):
+            y = mb._yesterday_performance()
+
+        self.assertEqual(y["date"], dt.date(2026, 9, 8))
+        self.assertEqual(y["rows"][0][0], "EA")
+        self.assertAlmostEqual(y["rows"][0][1], 5.0)      # 100 → 105 = +5%
+
+
 if __name__ == "__main__":
     unittest.main()
