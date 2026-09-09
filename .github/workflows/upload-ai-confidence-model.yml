@@ -89,6 +89,11 @@ jobs:
         if: ${{ inputs.source == 'train' }}
         env:
           AI_SCANNER_SQLITE_FALLBACK: "false"
+          # Forward-return labels (+4% before -2% in 5d) download daily bars from
+          # Alpaca; without these the label set is empty and training aborts.
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
         run: |
           python scripts/train_ai_confidence_model.py \
             --days-back "${{ inputs.days_back }}" \
