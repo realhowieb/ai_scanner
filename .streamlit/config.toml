@@ -4,3 +4,6 @@
 # app", logs) are unaffected — those come from Streamlit Cloud, not this config.
 [client]
 toolbarMode = "minimal"
+# Hide Streamlit's auto page list; we render a curated sidebar nav (ui/nav.py)
+# so auth-utility pages (reset password / verify email) stay out of the menu.
+showSidebarNavigation = false

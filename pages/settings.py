@@ -54,6 +54,15 @@ try:
 except Exception:
     pass
 
+# --- Security ---
+st.markdown("### 🔒 Security")
+try:
+    st.page_link("pages/reset_password.py", label="Reset password", icon="🔑")
+    if not verified:
+        st.page_link("pages/verify_email.py", label="Verify email", icon="✉️")
+except Exception:
+    pass
+
 # --- Connected accounts (Alpaca paper) ---
 st.markdown("### 🔗 Connected accounts")
 try:

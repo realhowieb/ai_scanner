@@ -546,6 +546,13 @@ def main():
 
     # -------- DB Status (admin-only badge; status still computed for all) --------
     db_status = render_db_status_badge(show_badge=bool(st.session_state.get("is_admin")))
+    # Curated sidebar nav (auto page list is disabled in config).
+    try:
+        from ui.nav import render_sidebar_nav
+        render_sidebar_nav()
+    except Exception:
+        pass
+
     # Market-data health banner (visible when Alpaca creds are rejected/down).
     try:
         from ui.data_health import render_data_health_banner

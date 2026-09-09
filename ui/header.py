@@ -60,7 +60,13 @@ def render_header() -> None:
 
 
 def render_page_logo(width: int = 150) -> None:
-    """Render a compact centered logo for standalone Streamlit pages."""
+    """Render a compact centered logo (and the custom sidebar nav) for pages."""
+    try:
+        from ui.nav import render_sidebar_nav
+
+        render_sidebar_nav()
+    except Exception:
+        pass
     try:
         left, center, right = st.columns([2, 1, 2])
         with center:

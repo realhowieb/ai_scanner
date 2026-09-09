@@ -29,6 +29,16 @@ class NewPagesTests(unittest.TestCase):
         self.assertIn("render_connect_panel", src)
         self.assertIn("pages/billing.py", src)
         self.assertIn("tier_key", src)
+        self.assertIn("pages/reset_password.py", src)   # grouped under Settings
+        self.assertIn("pages/verify_email.py", src)
+
+    def test_custom_nav_excludes_auth_utility_pages(self):
+        from ui.nav import _NAV
+
+        paths = [p for p, _l, _i in _NAV]
+        self.assertIn("pages/settings.py", paths)
+        self.assertNotIn("pages/reset_password.py", paths)  # reachable via URL, not nav
+        self.assertNotIn("pages/verify_email.py", paths)
 
 
 if __name__ == "__main__":
