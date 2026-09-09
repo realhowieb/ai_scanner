@@ -148,6 +148,17 @@ def render_scan_controls(
         "_wl_tools_state", (False, False, False, False, False, "", False)
     )
 
+    # The standalone Watchlists page (pages/watchlists.py) has no scan pipeline,
+    # so its "Run Watchlist Scan" / "View as table" buttons hand off here via a
+    # durable flag and switch to the scanner. Consume it once. (The fresh
+    # _wl_tools_state written on this page load is all-False, so we OR it in.)
+    _pending_wl = st.session_state.pop("_wl_pending_scan", None)
+    if _pending_wl == "run":
+        run_watchlist_btn = True
+        watchlist_scan_all = bool(st.session_state.pop("_wl_pending_scan_all", False))
+    elif _pending_wl == "view":
+        view_watchlist_btn = True
+
     single_ticker, show_chart_btn, run_single_scan_btn = render_single_ticker_panel()
 
     # Ensure results DataFrame exists in session state
