@@ -239,8 +239,8 @@ def _future_setup_window_days(start, candidate) -> bool:
     candidate_date = _run_date(candidate)
     if start_date is None or candidate_date is None or candidate_date <= start_date:
         return False
-    days = pd.bdate_range(start_date, candidate_date)
-    return 1 <= max(0, len(days) - 1) <= PREBREAKOUT_LEAD_DAYS
+    trading_days = int(np.busday_count(start_date, candidate_date))
+    return 1 <= trading_days <= PREBREAKOUT_LEAD_DAYS
 
 
 def _high_quality_setup_mask(frame: pd.DataFrame) -> pd.Series:
@@ -409,15 +409,35 @@ def add_prebreakout_target_label(
     candidate_mask = prebreakout_candidate_mask(labeled)
     labeled[PREBREAKOUT_TARGET_COLUMN] = 0
 
-    for idx, row in labeled[candidate_mask].iterrows():
-        sym = str(row.get("Symbol") or "").upper()
-        future = labeled[
-            (labeled["Symbol"].astype(str).str.upper() == sym)
-            & setup_mask
-            & labeled["Timestamp"].apply(lambda ts: _future_setup_window_days(row.get("Timestamp"), ts))
-        ]
-        if not future.empty:
-            labeled.at[idx, PREBREAKOUT_TARGET_COLUMN] = 1
+    timestamps = pd.to_datetime(labeled["Timestamp"], errors="coerce", utc=True)
+    symbols = labeled["Symbol"].astype(str).str.upper()
+    for _, group_idx in labeled.groupby(symbols, sort=False).groups.items():
+        ordered_idx = list(group_idx)
+        setup_idx = [idx for idx in ordered_idx if bool(setup_mask.loc[idx])]
+        if not setup_idx:
+            continue
+        setup_pos = 0
+        for idx in ordered_idx:
+            if not bool(candidate_mask.loc[idx]):
+                continue
+            start_ts = timestamps.loc[idx]
+            if pd.isna(start_ts):
+                continue
+            while setup_pos < len(setup_idx) and timestamps.loc[setup_idx[setup_pos]] <= start_ts:
+                setup_pos += 1
+            probe = setup_pos
+            while probe < len(setup_idx):
+                future_ts = timestamps.loc[setup_idx[probe]]
+                if pd.isna(future_ts):
+                    probe += 1
+                    continue
+                lead_days = int(np.busday_count(start_ts.date(), future_ts.date()))
+                if lead_days > PREBREAKOUT_LEAD_DAYS:
+                    break
+                if lead_days >= 1:
+                    labeled.at[idx, PREBREAKOUT_TARGET_COLUMN] = 1
+                    break
+                probe += 1
 
     return labeled.loc[candidate_mask].reset_index(drop=True)
 

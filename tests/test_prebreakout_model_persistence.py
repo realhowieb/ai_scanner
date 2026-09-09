@@ -179,6 +179,34 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         by_symbol = {row["Symbol"]: row["FutureQualitySetupHit"] for _, row in labeled.iterrows()}
         self.assertEqual(by_symbol, {"AAA": 1, "BBB": 0})
 
+    def test_add_prebreakout_target_rejects_late_future_setup(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Symbol": "LATE",
+                    "Timestamp": pd.Timestamp("2026-01-05T15:00:00Z"),
+                    "IsBreakout": False,
+                    "BreakoutScore": 5.0,
+                    "Last": 90.0,
+                    "High20": 100.0,
+                    "Return_5D": 0.0,
+                },
+                {
+                    "Symbol": "LATE",
+                    "Timestamp": pd.Timestamp("2026-01-12T15:00:00Z"),
+                    "IsBreakout": True,
+                    "BreakoutScore": 9.0,
+                    "Last": 101.0,
+                    "High20": 101.0,
+                    "Return_5D": 0.05,
+                },
+            ]
+        )
+
+        labeled = ml_prebreakout.add_prebreakout_target_label(df)
+
+        self.assertEqual(list(labeled["FutureQualitySetupHit"]), [0])
+
     def test_walk_forward_split_validates_on_later_rows(self):
         x = pd.DataFrame({"feature": [10, 20, 30, 40, 50]})
         y = pd.Series([0, 1, 0, 1, 1])
