@@ -1,8 +1,4 @@
-"""⚙️ Settings — account, connected accounts, notifications, quick links.
-
-A consolidated control panel that surfaces things previously scattered across
-the app (paper-account connection, tier, billing). Reuses existing panels.
-"""
+"""⚙️ Settings — account, security, connected accounts, and quick links."""
 from __future__ import annotations
 
 import streamlit as st
@@ -15,9 +11,6 @@ if not _username:
     st.page_link("app.py", label="Go to login", icon="🔐")
     st.stop()
 
-st.markdown("## ⚙️ Settings")
-
-# --- Account ---
 try:
     from ui.app_session import tier_key
 
@@ -31,31 +24,30 @@ try:
     verified = is_email_verified(_username)
 except Exception:
     verified = None
+try:
+    can_paper = bool((st.session_state.get("entitlements") or {}).get("can_paper_trade"))
+except Exception:
+    can_paper = False
 
-st.markdown("### 👤 Account")
-c1, c2, c3 = st.columns(3)
-c1.metric("Email", _username)
-c2.metric("Plan", tier)
-c3.metric("Email verified", "✅ Yes" if verified else ("—" if verified is None else "❌ No"))
+st.markdown("## ⚙️ Settings")
+
+# --- Account ---
+st.markdown("#### 👤 Account")
+ver_txt = "✅ Verified" if verified else ("— unknown" if verified is None else "❌ Not verified")
+st.markdown(
+    f"- **Email:** {_username}\n"
+    f"- **Plan:** {tier}\n"
+    f"- **Email status:** {ver_txt}"
+)
 try:
     st.page_link("pages/billing.py", label="Manage plan & billing", icon="💳")
 except Exception:
     pass
 
-# --- Notifications ---
-st.markdown("### 🔔 Notifications")
-st.caption(
-    "Morning & evening briefs and email alerts are sent to **Pro+ verified** "
-    "accounts. You can also pull the brief any time on the 📬 Brief page."
-)
-try:
-    st.page_link("pages/brief.py", label="Open Market Brief", icon="📬")
-    st.page_link("pages/alerts.py", label="Manage alerts", icon="🔔")
-except Exception:
-    pass
+st.divider()
 
-# --- Security ---
-st.markdown("### 🔒 Security")
+# --- Security (auth-utility pages, grouped here instead of the sidebar) ---
+st.markdown("#### 🔒 Security")
 try:
     st.page_link("pages/reset_password.py", label="Reset password", icon="🔑")
     if not verified:
@@ -63,27 +55,38 @@ try:
 except Exception:
     pass
 
+st.divider()
+
 # --- Connected accounts (Alpaca paper) ---
-st.markdown("### 🔗 Connected accounts")
-try:
-    from ui.paper_trade import render_connect_panel
+st.markdown("#### 🔗 Connected accounts")
+if can_paper:
+    try:
+        from ui.paper_trade import render_connect_panel
 
-    render_connect_panel(_username)
-except Exception:
-    pass
-
-# --- Active watchlist ---
-st.markdown("### 📋 Watchlist")
-active = st.session_state.get("active_watchlist_tickers") or []
-if active:
-    st.caption(f"Active watchlist: {len(active)} tickers — {', '.join(active[:12])}"
-               + ("…" if len(active) > 12 else ""))
+        render_connect_panel(_username)
+    except Exception:
+        st.caption("Paper-account connection is unavailable right now.")
 else:
-    st.caption("No active watchlist yet.")
+    st.caption("Connect an Alpaca **paper** account to place practice trades — a "
+               "Premium feature.")
+
+st.divider()
+
+# --- Notifications & watchlist ---
+st.markdown("#### 🔔 Notifications & data")
+st.caption("Morning/evening briefs and email alerts go to Pro+ verified accounts.")
+active = st.session_state.get("active_watchlist_tickers") or []
+st.caption(
+    f"Active watchlist: {len(active)} tickers"
+    + (f" — {', '.join(active[:10])}{'…' if len(active) > 10 else ''}" if active else " (none set)")
+)
 try:
-    st.page_link("pages/watchlists.py", label="Manage watchlists", icon="📋")
+    a, b, c = st.columns(3)
+    a.page_link("pages/brief.py", label="Market Brief", icon="📬")
+    b.page_link("pages/alerts.py", label="Alerts", icon="🔔")
+    c.page_link("pages/watchlists.py", label="Watchlists", icon="📋")
 except Exception:
     pass
 
-st.markdown("---")
+st.divider()
 st.page_link("app.py", label="← Back to scanner", icon="🏠")
