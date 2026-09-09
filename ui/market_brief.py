@@ -120,12 +120,24 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
         earnings_today = sorted(_earnings_today())
     except Exception:
         earnings_today = []
+    # From the evening wrap: market backdrop + full gainers/losers (the down side
+    # the gap-based gappers don't show).
+    try:
+        from scheduler.evening_wrap import _day_movers, _market_close_context
+
+        market_close = _market_close_context()
+        gainers, losers = _day_movers(df)
+    except Exception:
+        market_close, gainers, losers = [], [], []
     return {
         "gappers": gappers,
         "golden": golden,
         "top_setups": top_setups,
         "picks": picks,
         "earnings_today": earnings_today,
+        "market_close": market_close,
+        "gainers": gainers,
+        "losers": losers,
         "snapshot_time": _snapshot_time(),
         "yesterday": _yesterday_performance(),
     }
@@ -215,12 +227,64 @@ def render_market_brief() -> None:
         except Exception:
             pass
 
+    _render_market_pulse(data.get("market_close") or [])
     _render_gappers(data.get("gappers") or [])
+    _render_day_movers(data.get("gainers") or [], data.get("losers") or [])
     _render_setups(data.get("golden") or [], data.get("top_setups") or [])
     _render_picks(data.get("picks") or [])
     _render_watchlist(data.get("earnings_today") or [])
+    _render_fired_alerts((st.session_state.get("username") or "").strip().lower())
     _render_yesterday(data.get("yesterday"))
     _render_actions(data)
+
+
+def _render_market_pulse(market_close: List[tuple]) -> None:
+    if not market_close:
+        return
+    cols = st.columns(len(market_close))
+    for col, (label, last, chg) in zip(cols, market_close):
+        try:
+            col.metric(label, f"{float(last):,.2f}",
+                       f"{float(chg):+.2f}%" if chg is not None else None)
+        except Exception:
+            pass
+
+
+def _render_day_movers(gainers: List[tuple], losers: List[tuple]) -> None:
+    if not gainers and not losers:
+        return
+    st.markdown("### 📊 Today's movers")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**📈 Gainers**")
+        if gainers:
+            for t, chg in gainers:
+                st.markdown(f"- 🟢 {t} {chg:+.1f}%")
+        else:
+            st.caption("—")
+    with c2:
+        st.markdown("**📉 Losers**")
+        if losers:
+            for t, chg in losers:
+                st.markdown(f"- 🔴 {t} {chg:+.1f}%")
+        else:
+            st.caption("—")
+
+
+def _render_fired_alerts(user: str) -> None:
+    if not user:
+        return
+    try:
+        from scheduler.evening_wrap import _todays_events
+
+        events = _todays_events(user)
+    except Exception:
+        events = []
+    if not events:
+        return
+    st.markdown("### 🔔 Alerts that fired today")
+    for msg in events:
+        st.markdown(f"- {msg}")
 
 
 def _render_gappers(gappers: List[Dict[str, Any]]) -> None:
@@ -324,6 +388,11 @@ def _render_actions(data: Dict[str, Any]) -> None:
             seen.add(t)
             tickers.append(t)
     for t, _s in (data.get("top_setups") or []):
+        tt = _base_ticker(t)
+        if tt and tt not in seen:
+            seen.add(tt)
+            tickers.append(tt)
+    for t, _c in (data.get("gainers") or []) + (data.get("losers") or []):
         tt = _base_ticker(t)
         if tt and tt not in seen:
             seen.add(tt)

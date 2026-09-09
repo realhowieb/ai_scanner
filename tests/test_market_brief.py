@@ -95,5 +95,30 @@ class MarketBriefExtrasTests(unittest.TestCase):
         self.assertAlmostEqual(y["rows"][0][1], 5.0)      # 100 → 105 = +5%
 
 
+
+class EveningContentTests(unittest.TestCase):
+    def test_compute_includes_evening_wrap_content(self):
+        import scheduler.evening_wrap as ew
+        import scheduler.morning_digest as md
+        import ui.market_brief as mb
+
+        with mock.patch.object(md, "_latest_snapshot_df", return_value=object()), \
+             mock.patch.object(md, "_market_gappers", return_value=[]), \
+             mock.patch.object(md, "_todays_setups", return_value=([], [])), \
+             mock.patch.object(md, "_prebreakout_picks", return_value=[]), \
+             mock.patch.object(md, "_earnings_days_map", return_value={}), \
+             mock.patch.object(md, "_flag_earnings_rows", return_value=None), \
+             mock.patch.object(md, "_earnings_today", return_value=set()), \
+             mock.patch.object(ew, "_market_close_context",
+                               return_value=[("S&P 500 (SPY)", 660.0, 0.3)]), \
+             mock.patch.object(ew, "_day_movers",
+                               return_value=([("DLR", 11.3)], [("HIG", -1.2)])):
+            data = mb._compute_brief()
+
+        self.assertEqual(data["market_close"][0][0], "S&P 500 (SPY)")
+        self.assertEqual(data["gainers"], [("DLR", 11.3)])
+        self.assertEqual(data["losers"], [("HIG", -1.2)])
+
+
 if __name__ == "__main__":
     unittest.main()
