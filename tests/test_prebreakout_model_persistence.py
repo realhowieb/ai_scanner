@@ -207,6 +207,39 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
 
         self.assertEqual(list(labeled["FutureQualitySetupHit"]), [0])
 
+    def test_add_prebreakout_features_adds_price_slopes_from_sparkline(self):
+        df = pd.DataFrame(
+            {
+                "Symbol": ["AAA"],
+                "Timestamp": [pd.Timestamp("2026-01-08T15:00:00Z")],
+                "Spark10D": [[95.0, 96.0, 97.0, 98.0, 99.0, 100.0]],
+                "BreakoutScore": [5.0],
+            }
+        )
+
+        featured = ml_prebreakout.add_prebreakout_features(df)
+
+        self.assertAlmostEqual(float(featured.loc[0, "PriceReturn1D"]), 0.010101, places=6)
+        self.assertAlmostEqual(float(featured.loc[0, "PriceReturn3D"]), 0.030928, places=6)
+        self.assertAlmostEqual(float(featured.loc[0, "PriceSlope5D"]), 0.010526, places=6)
+
+    def test_add_prebreakout_features_adds_symbol_history_deltas(self):
+        df = pd.DataFrame(
+            {
+                "Symbol": ["AAA", "AAA", "AAA", "AAA"],
+                "Timestamp": pd.date_range("2026-01-01", periods=4, freq="B", tz="UTC"),
+                "BreakoutScore": [2.0, 4.0, 5.0, 8.0],
+                "Trend10D%": [1.0, 2.0, 4.0, 7.0],
+            }
+        )
+
+        featured = ml_prebreakout.add_prebreakout_features(df)
+
+        self.assertEqual(float(featured.loc[3, "BreakoutScoreDelta1D"]), 3.0)
+        self.assertEqual(float(featured.loc[3, "BreakoutScoreDelta3D"]), 6.0)
+        self.assertEqual(float(featured.loc[3, "BreakoutScoreSlope3D"]), 2.0)
+        self.assertEqual(float(featured.loc[3, "Trend10DDelta1D"]), 3.0)
+
     def test_walk_forward_split_validates_on_later_rows(self):
         x = pd.DataFrame({"feature": [10, 20, 30, 40, 50]})
         y = pd.Series([0, 1, 0, 1, 1])

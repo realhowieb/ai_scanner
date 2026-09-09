@@ -61,7 +61,7 @@ def _load_ml_libs() -> None:
 
 
 MODEL_PATH = "prebreakout_model.pkl"
-MODEL_VERSION = "prebreakout-xgb-v2"
+MODEL_VERSION = "prebreakout-xgb-v3"
 TARGET_COLUMN = "ForwardReturnHit"
 RETURN_COLUMN = "Return_5D"
 RETURN_HORIZON_DAYS = 5
@@ -70,6 +70,42 @@ DOWNSIDE_STOP_THRESHOLD = -0.02
 PREBREAKOUT_TARGET_COLUMN = "FutureQualitySetupHit"
 PREBREAKOUT_SETUP_SCORE_THRESHOLD = 8.0
 PREBREAKOUT_LEAD_DAYS = 3
+BASE_FEATURE_COLS = [
+    "Trend10D%",
+    "Trend20D%",
+    "VolRel20",
+    "DollarVol20",
+    "BreakoutScore",
+    "GapPct",
+]
+ENGINEERED_HISTORY_COLS = [
+    "BreakoutScore",
+    "Trend10D%",
+    "Trend20D%",
+    "VolRel20",
+    "GapPct",
+    "BreakoutPos20D",
+]
+ENGINEERED_WINDOWS = (1, 3, 5)
+
+
+def _feature_safe_name(name: str) -> str:
+    return "".join(ch for ch in str(name) if ch.isalnum())
+
+
+def _engineered_feature_names() -> list[str]:
+    names = []
+    for window in ENGINEERED_WINDOWS:
+        names.extend([f"PriceReturn{window}D", f"PriceSlope{window}D"])
+    for col in ENGINEERED_HISTORY_COLS:
+        safe = _feature_safe_name(col)
+        for window in ENGINEERED_WINDOWS:
+            names.extend([f"{safe}Delta{window}D", f"{safe}Slope{window}D"])
+    return names
+
+
+ENGINEERED_FEATURE_COLS = _engineered_feature_names()
+FEATURE_COLS = BASE_FEATURE_COLS + ENGINEERED_FEATURE_COLS
 
 
 def _utc_now() -> datetime:
@@ -442,6 +478,68 @@ def add_prebreakout_target_label(
     return labeled.loc[candidate_mask].reset_index(drop=True)
 
 
+def _spark_price_return(value, window: int):
+    if not isinstance(value, (list, tuple)) or len(value) <= window:
+        return np.nan
+    try:
+        start = float(value[-(window + 1)])
+        end = float(value[-1])
+        if start <= 0:
+            return np.nan
+        return (end - start) / start
+    except (TypeError, ValueError):
+        return np.nan
+
+
+def add_prebreakout_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add 1/3/5-day slopes and deltas without changing the target."""
+    if df is None or df.empty:
+        return df
+
+    out = df.copy()
+    if "Spark10D" in out.columns:
+        for window in ENGINEERED_WINDOWS:
+            ret_col = f"PriceReturn{window}D"
+            slope_col = f"PriceSlope{window}D"
+            out[ret_col] = out["Spark10D"].apply(lambda value, w=window: _spark_price_return(value, w))
+            out[slope_col] = out[ret_col] / float(window)
+    else:
+        price_col = "Last" if "Last" in out.columns else "Close"
+        if price_col in out.columns and "Symbol" in out.columns:
+            prices = pd.to_numeric(out[price_col], errors="coerce")
+            symbols = out["Symbol"].astype(str).str.upper()
+            for window in ENGINEERED_WINDOWS:
+                prior = prices.groupby(symbols, sort=False).shift(window)
+                ret_col = f"PriceReturn{window}D"
+                slope_col = f"PriceSlope{window}D"
+                out[ret_col] = np.where(prior > 0, (prices - prior) / prior, np.nan)
+                out[slope_col] = out[ret_col] / float(window)
+
+    if "Symbol" not in out.columns:
+        for name in ENGINEERED_FEATURE_COLS:
+            if name not in out.columns:
+                out[name] = 0.0
+        return out
+
+    symbols = out["Symbol"].astype(str).str.upper()
+    for col in ENGINEERED_HISTORY_COLS:
+        if col not in out.columns:
+            continue
+        values = pd.to_numeric(out[col], errors="coerce")
+        safe = _feature_safe_name(col)
+        for window in ENGINEERED_WINDOWS:
+            prior = values.groupby(symbols, sort=False).shift(window)
+            delta_col = f"{safe}Delta{window}D"
+            slope_col = f"{safe}Slope{window}D"
+            out[delta_col] = values - prior
+            out[slope_col] = out[delta_col] / float(window)
+
+    for name in ENGINEERED_FEATURE_COLS:
+        if name not in out.columns:
+            out[name] = 0.0
+    return out
+
+
 def build_ml_dataset(df: pd.DataFrame):
     """
     Select feature columns and target column.
@@ -449,10 +547,8 @@ def build_ml_dataset(df: pd.DataFrame):
     if df.empty:
         return pd.DataFrame(), pd.Series(dtype=int)
 
-    feature_cols = [
-        "Trend10D%", "Trend20D%", "VolRel20", "DollarVol20",
-        "BreakoutScore", "GapPct",
-    ]
+    df = add_prebreakout_features(df)
+    feature_cols = FEATURE_COLS
     feature_cols = [c for c in feature_cols if c in df.columns]
 
     X = df[feature_cols].copy()
@@ -582,7 +678,7 @@ def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.Data
     model = bundle["model"]
     feature_cols = bundle["features"]
 
-    X = df.copy()
+    X = add_prebreakout_features(df.copy())
     for col in feature_cols:
         if col not in X.columns:
             X[col] = 0.0
