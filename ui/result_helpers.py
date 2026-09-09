@@ -14,6 +14,24 @@ TRACK_RECORD_MIN_SAMPLE = 150
 TRACK_RECORD_MIN_RUNS = 8
 
 
+def render_calibration_table(calibration, *, title: str) -> None:
+    """Render confidence-bucket hit rates for admin diagnostics."""
+    if not calibration:
+        return
+    with st.expander(title, expanded=False):
+        st.dataframe(
+            pd.DataFrame(calibration),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "bucket": st.column_config.TextColumn("Confidence"),
+                "n": st.column_config.NumberColumn("Signals", format="%d"),
+                "mean_confidence": st.column_config.NumberColumn("Avg confidence", format="%.1%%"),
+                "hit_rate": st.column_config.NumberColumn("Hit rate", format="%.1%%"),
+            },
+        )
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _cached_track_record(horizon_days: int = 5):
     from db.track_record import load_latest_track_record

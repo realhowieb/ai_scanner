@@ -7,7 +7,7 @@ from typing import Callable, Optional
 import pandas as pd
 import streamlit as st
 
-from scan.ai_confidence import CONFIDENCE_COL, SOURCE_ATTR, TRAINED_AT_ATTR, WARNING_ATTR
+from scan import ai_confidence as aic
 from ui.result_helpers import (
     as_optional_float,
     auto_details_ticker,
@@ -15,6 +15,7 @@ from ui.result_helpers import (
     get_results_df,
     move_column_after,
     quiet_provider_loggers,
+    render_calibration_table,
     render_track_record_badge,
     row_to_jsonable_dict,
     sync_selected_ticker_from_table,
@@ -115,8 +116,8 @@ def render_results(
     # to admins for A/B evaluation, but hide the column (and its caption) from
     # everyone else so users see one clean signal.
     is_admin_view = bool(ent.get("can_diagnostics"))
-    if not is_admin_view and CONFIDENCE_COL in df.columns:
-        df = df.drop(columns=[CONFIDENCE_COL])
+    if not is_admin_view and aic.CONFIDENCE_COL in df.columns:
+        df = df.drop(columns=[aic.CONFIDENCE_COL])
 
     # Option A: Basic = auto-details only, no selection
     is_basic = not can_export_csv
@@ -139,14 +140,20 @@ def render_results(
             st.session_state.pop(k, None)
 
     st.subheader("Results")
-    ai_warning = df.attrs.get(WARNING_ATTR)
-    ai_trained_at = df.attrs.get(TRAINED_AT_ATTR)
-    ai_source = df.attrs.get(SOURCE_ATTR)
+    ai_warning = df.attrs.get(aic.WARNING_ATTR)
+    ai_trained_at = df.attrs.get(aic.TRAINED_AT_ATTR)
+    ai_source = df.attrs.get(aic.SOURCE_ATTR)
+    ai_calibration = df.attrs.get(aic.CALIBRATION_ATTR) or []
+    ai_target_rule = df.attrs.get(aic.TARGET_RULE_ATTR)
     if is_admin_view and ai_warning:
         st.caption(f"⚠️ {ai_warning}")
     if is_admin_view and ai_trained_at:
         source_text = f" • source: {ai_source}" if ai_source else ""
         st.caption(f"AI Confidence model trained at: {ai_trained_at}{source_text}")
+    if is_admin_view and ai_target_rule:
+        st.caption(f"AI Confidence target: {ai_target_rule}")
+    if is_admin_view:
+        render_calibration_table(ai_calibration, title="AI Confidence calibration")
     render_track_record_badge()
     try:
         from ui.score_map import render_score_map

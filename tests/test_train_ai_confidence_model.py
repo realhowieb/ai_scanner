@@ -20,11 +20,11 @@ class FakeXGBClassifier:
 
 
 class TrainAiConfidenceModelTests(unittest.TestCase):
-    def test_build_dataset_uses_expected_feature_order_and_binary_labels(self):
+    def test_build_dataset_uses_expected_feature_order_and_forward_hit_labels(self):
         frame = pd.DataFrame(
             [
-                {"Trend10D%": "1.5", "Trend20D%": 2, "VolRel20": 3, "IsBreakout": "true"},
-                {"Trend10D%": None, "DollarVol20": 1000, "BreakoutScore": 4, "GapPct": 5, "IsBreakout": "False"},
+                {"Trend10D%": "1.5", "Trend20D%": 2, "VolRel20": 3, "ForwardReturnHit": 1},
+                {"Trend10D%": None, "DollarVol20": 1000, "BreakoutScore": 4, "GapPct": 5, "ForwardReturnHit": 0},
             ]
         )
 
@@ -44,16 +44,18 @@ class TrainAiConfidenceModelTests(unittest.TestCase):
                 "DollarVol20": [100.0, 200.0, 300.0, 400.0],
                 "BreakoutScore": [2.0, 3.0, 4.0, 5.0],
                 "GapPct": [0.1, 0.2, 0.3, 0.4],
-                "IsBreakout": [0, 1, 0, 1],
+                "Timestamp": pd.date_range("2026-01-01", periods=4, freq="D", tz="UTC"),
             }
         )
+        labeled = history.copy()
+        labeled["ForwardReturnHit"] = [0, 1, 0, 1]
         fake_joblib = types.SimpleNamespace(dump=MagicMock(side_effect=lambda _model, path: Path(path).write_bytes(b"model")))
         upload_mock = MagicMock(return_value=True)
         split_result = (
-            history[trainer.FEATURE_NAMES],
-            history[trainer.FEATURE_NAMES],
-            history["IsBreakout"],
-            history["IsBreakout"],
+            labeled[trainer.FEATURE_NAMES].iloc[:2],
+            labeled[trainer.FEATURE_NAMES].iloc[2:],
+            labeled["ForwardReturnHit"].iloc[:2],
+            labeled["ForwardReturnHit"].iloc[2:],
         )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -63,7 +65,8 @@ class TrainAiConfidenceModelTests(unittest.TestCase):
                 patch.object(trainer, "pd", pd),
                 patch.object(trainer, "joblib", fake_joblib),
                 patch.object(trainer, "load_run_history", return_value=history),
-                patch.object(trainer, "train_test_split", return_value=split_result),
+                patch.object(trainer, "add_forward_return_labels", return_value=labeled),
+                patch.object(trainer, "walk_forward_split", return_value=split_result),
                 patch.object(trainer, "roc_auc_score", return_value=0.82),
                 patch.object(trainer, "XGBClassifier", return_value=FakeXGBClassifier()),
                 patch.object(trainer, "save_ai_confidence_model_from_files", upload_mock),
@@ -79,6 +82,9 @@ class TrainAiConfidenceModelTests(unittest.TestCase):
         self.assertTrue(summary["saved_to_db"])
         self.assertEqual(metadata["feature_names"], trainer.FEATURE_NAMES)
         self.assertEqual(metadata["auc"], 0.82)
+        self.assertEqual(metadata["validation_method"], "walk_forward")
+        self.assertEqual(metadata["target"], "ForwardReturnHit")
+        self.assertIn("calibration", metadata)
         self.assertEqual(metadata["positive_rows"], 2)
         self.assertEqual(metadata["model_version"], trainer.MODEL_VERSION)
         upload_mock.assert_called_once()

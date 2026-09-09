@@ -22,6 +22,20 @@ except Exception:  # pragma: no cover - fallback when monitoring is unavailable
 
 
 EARNINGS_FLAG_DAYS = 5
+SIGNAL_INDICATOR_COLUMNS = (
+    "Trend10D%",
+    "Trend20D%",
+    "VolRel20",
+    "DollarVol20",
+    "GapPct",
+    "% Change",
+    "Change",
+    "RelVolume",
+    "RSI",
+    "EMA9",
+    "EMA21",
+    "EWO",
+)
 
 
 def _annotate_earnings(lines: List[str]) -> List[str]:
@@ -81,6 +95,91 @@ def _col(df, *candidates: str) -> Optional[str]:
         if hit is not None:
             return hit
     return None
+
+
+def _num(value) -> Optional[float]:
+    try:
+        if value is None:
+            return None
+        val = float(value)
+        return None if val != val else val
+    except (TypeError, ValueError):
+        return None
+
+
+def _jsonable_row(row) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    try:
+        items = row.to_dict().items() if hasattr(row, "to_dict") else dict(row).items()
+    except Exception:
+        return out
+    for key, value in items:
+        if hasattr(value, "item"):
+            try:
+                value = value.item()
+            except Exception:
+                pass
+        out[str(key)] = value
+    return out
+
+
+def _freeze_signal_outcomes(event_id: Optional[int], alert: Dict[str, Any], df, lines: List[str]) -> None:
+    """Persist fire-time context for each scan-result ticker that triggered."""
+    if event_id is None or df is None or len(df) == 0:
+        return
+    ticker_col = _col(df, "Ticker", "Symbol")
+    if ticker_col is None:
+        return
+    tickers = []
+    for line in lines:
+        tk = line.split(":", 1)[0].strip().upper() if ":" in line else ""
+        if tk:
+            tickers.append(tk)
+    if not tickers:
+        return
+    try:
+        from db.signal_outcomes import freeze_signal
+    except Exception:
+        return
+
+    last_col = _col(df, "Last", "Close", "Price")
+    score_col = _col(df, "BreakoutScore")
+    ai_col = _col(df, "AI Confidence")
+    pre_col = _col(df, "PreBreakoutProb%", "PreBreakoutProb")
+    fired_at = _dt.datetime.now(_dt.timezone.utc)
+    seen: set[str] = set()
+    for tk in tickers:
+        if tk in seen:
+            continue
+        seen.add(tk)
+        try:
+            match = df[df[ticker_col].astype(str).str.upper() == tk]
+            if match.empty:
+                continue
+            row = match.iloc[0]
+            indicators = {
+                col: _jsonable_row(row).get(col)
+                for col in SIGNAL_INDICATOR_COLUMNS
+                if col in getattr(df, "columns", [])
+            }
+            freeze_signal(
+                source="alert_event",
+                source_event_id=int(event_id),
+                signal_type=str(alert.get("alert_type") or "alert"),
+                user_id=str(alert.get("user_id") or "") or None,
+                alert_id=alert.get("id"),
+                ticker=tk,
+                fired_at=fired_at,
+                entry_price=_num(row.get(last_col)) if last_col else None,
+                setup_score=_num(row.get(score_col)) if score_col else None,
+                ai_confidence=_num(row.get(ai_col)) if ai_col else None,
+                prebreakout_prob=_num(row.get(pre_col)) if pre_col else None,
+                indicators=indicators,
+                raw_signal=_jsonable_row(row),
+            )
+        except Exception as e:
+            print(f"[alert_runner] signal freeze failed for {tk}: {type(e).__name__}: {e}")
+            _capture(e)
 
 
 def _throttled(last_fired_at, throttle_hours: float) -> bool:
@@ -419,7 +518,8 @@ def run_alerts() -> None:
             first_ticker = alert.get("ticker") or (
                 lines[0].split(":", 1)[0] if lines else None
             )
-            record_alert_event(user_id, alert.get("id"), first_ticker, f"{label}: {body}")
+            event_id = record_alert_event(user_id, alert.get("id"), first_ticker, f"{label}: {body}")
+            _freeze_signal_outcomes(event_id, alert, df, lines)
             mark_alert_fired(alert.get("id"))
             fired += 1
 

@@ -9,8 +9,10 @@ import numpy as np
 import pandas as pd
 
 from scan.ai_confidence import (
+    CALIBRATION_ATTR,
     CONFIDENCE_COL,
     SOURCE_ATTR,
+    TARGET_RULE_ATTR,
     TRAINED_AT_ATTR,
     WARNING_ATTR,
     save_ai_confidence_model_from_files,
@@ -39,11 +41,13 @@ class AiConfidenceTests(unittest.TestCase):
 
         clear_bundle_cache()
 
-    def _metadata_path(self, tmp: str, feature_names=None) -> Path:
+    def _metadata_path(self, tmp: str, feature_names=None, extra=None) -> Path:
         path = Path(tmp) / "xgb_breakout_metadata.json"
         payload = {"trained_at": "2026-06-30T15:00:00Z"}
         if feature_names is not None:
             payload["feature_names"] = feature_names
+        if extra:
+            payload.update(extra)
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path
 
@@ -89,7 +93,14 @@ class AiConfidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             model_path = Path(tmp) / "model.joblib"
             model_path.write_text("placeholder", encoding="utf-8")
-            metadata_path = self._metadata_path(tmp, ["VolRel20", "Trend10D%"])
+            metadata_path = self._metadata_path(
+                tmp,
+                ["VolRel20", "Trend10D%"],
+                {
+                    "target_rule": "+4% before -2%",
+                    "calibration": [{"bucket": "70-80%", "n": 3, "mean_confidence": 0.75, "hit_rate": 0.67}],
+                },
+            )
 
             fake_joblib = types.SimpleNamespace(load=lambda _path: model)
             with patch("scan.ai_confidence.joblib", fake_joblib):
@@ -99,6 +110,8 @@ class AiConfidenceTests(unittest.TestCase):
         self.assertEqual(list(result["Ticker"]), ["HIGH", "LOW"])
         self.assertEqual(list(result[CONFIDENCE_COL]), [90.0, 20.0])
         self.assertEqual(result.attrs[TRAINED_AT_ATTR], "2026-06-30T15:00:00Z")
+        self.assertEqual(result.attrs[TARGET_RULE_ATTR], "+4% before -2%")
+        self.assertEqual(result.attrs[CALIBRATION_ATTR][0]["bucket"], "70-80%")
 
     def test_successful_scoring_prefers_database_model(self):
         frame = pd.DataFrame(

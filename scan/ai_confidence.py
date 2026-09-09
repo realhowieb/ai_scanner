@@ -30,6 +30,8 @@ CONFIDENCE_COL = "AI Confidence"
 WARNING_ATTR = "ai_confidence_warning"
 TRAINED_AT_ATTR = "ai_confidence_trained_at"
 SOURCE_ATTR = "ai_confidence_source"
+CALIBRATION_ATTR = "ai_confidence_calibration"
+TARGET_RULE_ATTR = "ai_confidence_target_rule"
 
 
 def load_ai_confidence_metadata(metadata_path: Path = METADATA_PATH) -> dict[str, Any]:
@@ -200,6 +202,10 @@ def score_ai_confidence(
             frame.attrs[TRAINED_AT_ATTR] = trained_at
         if metadata.get("source"):
             frame.attrs[SOURCE_ATTR] = metadata.get("source")
+        if metadata.get("calibration"):
+            frame.attrs[CALIBRATION_ATTR] = metadata.get("calibration")
+        if metadata.get("target_rule") or metadata.get("target"):
+            frame.attrs[TARGET_RULE_ATTR] = metadata.get("target_rule") or metadata.get("target")
         return frame.sort_values(CONFIDENCE_COL, ascending=False).reset_index(drop=True)
     except (AttributeError, IndexError, RuntimeError, TypeError, ValueError) as exc:
         return _warn(frame, f"AI confidence scoring failed: {type(exc).__name__}.", trained_at=trained_at)

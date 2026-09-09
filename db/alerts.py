@@ -215,7 +215,7 @@ def mark_alert_fired(alert_id: int) -> None:
 
 def record_alert_event(
     user_id: str, alert_id: Optional[int], ticker: Optional[str], message: str
-) -> None:
+) -> Optional[int]:
     """Append a fired-event row for the in-app 'Recently triggered' feed."""
     conn = _get_conn()
     cur = conn.cursor()
@@ -223,11 +223,16 @@ def record_alert_event(
         """
         INSERT INTO alert_events (user_id, alert_id, ticker, message)
         VALUES (%s, %s, %s, %s)
+        RETURNING id
         """,
         (user_id, alert_id, (ticker or "").upper() or None, message),
     )
+    row = cur.fetchone()
     conn.commit()
     cur.close()
+    if isinstance(row, dict):
+        return row.get("id")
+    return row[0] if row else None
 
 
 def list_recent_events(user_id: str, limit: int = 20) -> List[Dict[str, Any]]:

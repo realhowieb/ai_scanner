@@ -11,7 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ml_prebreakout import load_run_history  # noqa: E402
+from ml_prebreakout import (  # noqa: E402
+    TARGET_COLUMN,
+    add_forward_return_labels,
+    confidence_bucket_diagnostics,
+    load_run_history,
+    walk_forward_split,
+)
 from scan.ai_confidence import (  # noqa: E402
     METADATA_PATH,
     MODEL_PATH,
@@ -31,10 +37,8 @@ except Exception:  # pragma: no cover - optional dependency in import smoke jobs
 
 try:
     from sklearn.metrics import roc_auc_score
-    from sklearn.model_selection import train_test_split
 except Exception:  # pragma: no cover - optional ML dependency
     roc_auc_score = None  # type: ignore[assignment]
-    train_test_split = None  # type: ignore[assignment]
 
 try:
     from xgboost import XGBClassifier
@@ -52,12 +56,6 @@ FEATURE_NAMES = [
 ]
 
 
-def _as_binary_label(value: Any) -> int:
-    if isinstance(value, str):
-        return 1 if value.strip().lower() in {"1", "true", "yes", "y"} else 0
-    return 1 if bool(value) else 0
-
-
 def _utc_timestamp() -> str:
     from datetime import datetime, timezone
 
@@ -68,7 +66,7 @@ def build_ai_confidence_dataset(frame: Any) -> tuple[Any, Any]:
     """Build the model matrix from historical scan rows."""
     if pd is None or frame is None or frame.empty:
         return pd.DataFrame(columns=FEATURE_NAMES) if pd is not None else None, None
-    if "IsBreakout" not in frame.columns:
+    if TARGET_COLUMN not in frame.columns:
         return pd.DataFrame(columns=FEATURE_NAMES), pd.Series(dtype=int)
 
     working = frame.copy()
@@ -77,14 +75,9 @@ def build_ai_confidence_dataset(frame: Any) -> tuple[Any, Any]:
             working[col] = 0.0
 
     x = working.loc[:, FEATURE_NAMES].apply(pd.to_numeric, errors="coerce").fillna(0.0)
-    y = working["IsBreakout"].apply(_as_binary_label).astype(int)
+    y = working[TARGET_COLUMN].astype(int)
     valid = y.notna()
     return x.loc[valid].reset_index(drop=True), y.loc[valid].reset_index(drop=True)
-
-
-def _can_stratify(y: Any) -> bool:
-    counts = y.value_counts()
-    return len(counts) == 2 and int(counts.min()) >= 2
 
 
 def train_ai_confidence_model(
@@ -96,24 +89,20 @@ def train_ai_confidence_model(
     upload_db: bool = False,
 ) -> dict[str, Any]:
     """Train the XGBoost model and write the expected model/metadata files."""
-    if joblib is None or pd is None or roc_auc_score is None or train_test_split is None or XGBClassifier is None:
+    if joblib is None or pd is None or roc_auc_score is None or XGBClassifier is None:
         raise RuntimeError("ML dependencies are not installed. Install requirements-ml.txt first.")
 
     history = load_run_history(days_back=days_back, max_runs=max_runs)
-    x, y = build_ai_confidence_dataset(history)
+    labeled = add_forward_return_labels(history, lookback_days=days_back)
+    x, y = build_ai_confidence_dataset(labeled)
     if x is None or y is None or x.empty:
         raise RuntimeError("No training rows are available from scan history.")
     if y.nunique() < 2:
-        raise RuntimeError("Training data needs both breakout and non-breakout rows.")
+        raise RuntimeError("Training data needs both forward-hit and non-hit rows.")
 
-    stratify = y if _can_stratify(y) else None
-    x_train, x_val, y_train, y_val = train_test_split(
-        x,
-        y,
-        test_size=0.2,
-        random_state=42,
-        stratify=stratify,
-    )
+    x_train, x_val, y_train, y_val = walk_forward_split(x, y, labeled)
+    if y_train.nunique() < 2 or y_val.nunique() < 2:
+        raise RuntimeError("Walk-forward split needs both classes in train and validation rows.")
 
     model = XGBClassifier(
         n_estimators=400,
@@ -130,13 +119,20 @@ def train_ai_confidence_model(
     model.fit(x_train, y_train)
 
     auc = None
+    calibration = []
+    y_val_proba = model.predict_proba(x_val)[:, 1]
     if y_val.nunique() >= 2:
-        auc = float(roc_auc_score(y_val, model.predict_proba(x_val)[:, 1]))
+        auc = float(roc_auc_score(y_val, y_val_proba))
+        calibration = confidence_bucket_diagnostics(y_val, y_val_proba)
 
     metadata = {
         "feature_names": FEATURE_NAMES,
         "trained_at": _utc_timestamp(),
         "auc": auc,
+        "validation_method": "walk_forward",
+        "target": TARGET_COLUMN,
+        "target_rule": "+4% before -2% in 5 trading days; fallback Return_5D >= +4%",
+        "calibration": calibration,
         "rows": int(len(x)),
         "positive_rows": int(y.sum()),
         "model_version": MODEL_VERSION,

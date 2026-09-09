@@ -617,6 +617,17 @@ def main():
         print(f"[cron] alert outcome scoring failed: {e}")
         _capture(e)
 
+    # Settle immutable fired-signal rows with 1/3/5D return plus MFE/MAE.
+    try:
+        from analytics.signal_outcomes import score_pending_signal_outcomes
+
+        scored = score_pending_signal_outcomes()
+        if scored:
+            print(f"[signal_outcomes] scored {scored} fired signal(s)")
+    except Exception as e:
+        print(f"[cron] signal outcome scoring failed: {e}")
+        _capture(e)
+
     # Postmarket slots additionally send the evening wrap (throttled once/day).
     if session == "postmarket":
         try:
