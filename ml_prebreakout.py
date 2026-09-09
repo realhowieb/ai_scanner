@@ -27,13 +27,17 @@ except Exception:  # pragma: no cover - keeps ML imports resilient in partial de
 # If imports fail they remain None: Install requirements-ml.txt to enable.
 joblib = None  # type: ignore
 roc_auc_score = None  # type: ignore
+average_precision_score = None  # type: ignore
+brier_score_loss = None  # type: ignore
+log_loss = None  # type: ignore
 XGBClassifier = None  # type: ignore
 _ML_IMPORT_TRIED = False
 
 
 def _load_ml_libs() -> None:
     """Populate the ML globals on first use (no-op when patched or loaded)."""
-    global joblib, roc_auc_score, XGBClassifier, _ML_IMPORT_TRIED
+    global joblib, roc_auc_score, average_precision_score, brier_score_loss, log_loss
+    global XGBClassifier, _ML_IMPORT_TRIED
     if _ML_IMPORT_TRIED:
         return
     _ML_IMPORT_TRIED = True
@@ -51,6 +55,17 @@ def _load_ml_libs() -> None:
             roc_auc_score = _ras
         except Exception:  # pragma: no cover - optional ML dependency
             pass
+    if average_precision_score is None or brier_score_loss is None or log_loss is None:
+        try:
+            from sklearn.metrics import average_precision_score as _aps
+            from sklearn.metrics import brier_score_loss as _bsl
+            from sklearn.metrics import log_loss as _ll
+
+            average_precision_score = _aps
+            brier_score_loss = _bsl
+            log_loss = _ll
+        except Exception:  # pragma: no cover - optional ML dependency
+            pass
     if XGBClassifier is None:
         try:
             from xgboost import XGBClassifier as _xgb
@@ -61,7 +76,7 @@ def _load_ml_libs() -> None:
 
 
 MODEL_PATH = "prebreakout_model.pkl"
-MODEL_VERSION = "prebreakout-xgb-v3"
+MODEL_VERSION = "prebreakout-xgb-v4"
 TARGET_COLUMN = "ForwardReturnHit"
 RETURN_COLUMN = "Return_5D"
 RETURN_HORIZON_DAYS = 5
@@ -371,7 +386,7 @@ def add_forward_return_labels(
     if df.empty:
         return df
 
-    out = df.sort_values(["Symbol", "Timestamp"]).reset_index(drop=True).copy()
+    out = sort_symbol_history(df).reset_index(drop=True).copy()
     out[TARGET_COLUMN] = np.nan
 
     if RETURN_COLUMN in out.columns:
@@ -440,7 +455,7 @@ def add_prebreakout_target_label(
     if labeled.empty:
         return labeled
 
-    labeled = labeled.sort_values(["Symbol", "Timestamp"]).reset_index(drop=True)
+    labeled = sort_symbol_history(labeled).reset_index(drop=True)
     setup_mask = _high_quality_setup_mask(labeled) & (labeled[TARGET_COLUMN].astype(int) == 1)
     candidate_mask = prebreakout_candidate_mask(labeled)
     labeled[PREBREAKOUT_TARGET_COLUMN] = 0
@@ -478,6 +493,19 @@ def add_prebreakout_target_label(
     return labeled.loc[candidate_mask].reset_index(drop=True)
 
 
+def sort_symbol_history(df: pd.DataFrame) -> pd.DataFrame:
+    """Sort each ticker by Symbol + Timestamp for repeatable history features."""
+    if df is None or df.empty:
+        return df
+    sort_cols = [col for col in ["Symbol", "Timestamp"] if col in df.columns]
+    if not sort_cols:
+        return df
+    out = df.copy()
+    if "Timestamp" in out.columns:
+        out["Timestamp"] = pd.to_datetime(out["Timestamp"], errors="coerce", utc=True)
+    return out.sort_values(sort_cols, kind="mergesort")
+
+
 def _spark_price_return(value, window: int):
     if not isinstance(value, (list, tuple)) or len(value) <= window:
         return np.nan
@@ -497,6 +525,9 @@ def add_prebreakout_features(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     out = df.copy()
+    order_col = "__prebreakout_original_order"
+    out[order_col] = np.arange(len(out))
+    out = sort_symbol_history(out)
     if "Spark10D" in out.columns:
         for window in ENGINEERED_WINDOWS:
             ret_col = f"PriceReturn{window}D"
@@ -519,7 +550,7 @@ def add_prebreakout_features(df: pd.DataFrame) -> pd.DataFrame:
         for name in ENGINEERED_FEATURE_COLS:
             if name not in out.columns:
                 out[name] = 0.0
-        return out
+        return out.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
 
     symbols = out["Symbol"].astype(str).str.upper()
     for col in ENGINEERED_HISTORY_COLS:
@@ -537,7 +568,7 @@ def add_prebreakout_features(df: pd.DataFrame) -> pd.DataFrame:
     for name in ENGINEERED_FEATURE_COLS:
         if name not in out.columns:
             out[name] = 0.0
-    return out
+    return out.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
 
 
 def build_ml_dataset(df: pd.DataFrame):
@@ -583,6 +614,139 @@ def walk_forward_split(X: pd.DataFrame, y: pd.Series, df_labeled: pd.DataFrame, 
     train_idx = ordered_index[:split_at]
     val_idx = ordered_index[split_at:]
     return X.loc[train_idx], X.loc[val_idx], y.loc[train_idx], y.loc[val_idx]
+
+
+def _chronological_order(df_labeled: pd.DataFrame, index) -> list:
+    if "Timestamp" not in df_labeled.columns:
+        return list(index)
+    timestamps = pd.to_datetime(df_labeled["Timestamp"], errors="coerce", utc=True)
+    symbols = (
+        df_labeled["Symbol"].astype(str).str.upper()
+        if "Symbol" in df_labeled.columns
+        else pd.Series([""] * len(df_labeled), index=df_labeled.index)
+    )
+    ordered = pd.DataFrame({"Timestamp": timestamps, "Symbol": symbols}, index=df_labeled.index)
+    ordered = ordered.loc[[idx for idx in ordered.index if idx in index]]
+    ordered = ordered.sort_values(["Timestamp", "Symbol"], kind="mergesort")
+    return list(ordered.index)
+
+
+def expanding_window_folds(
+    X: pd.DataFrame,
+    y: pd.Series,
+    df_labeled: pd.DataFrame,
+    *,
+    n_splits: int = 5,
+    purge_days: int = 5,
+) -> list[dict]:
+    """Build chronological expanding-window folds with a trading-day purge before validation."""
+    if X.empty or len(X) < n_splits + 1:
+        return []
+    ordered_index = _chronological_order(df_labeled, X.index)
+    if len(ordered_index) < n_splits + 1 or "Timestamp" not in df_labeled.columns:
+        return []
+
+    timestamps = pd.to_datetime(df_labeled["Timestamp"], errors="coerce", utc=True)
+    ordered_index = [idx for idx in ordered_index if idx in timestamps.index and pd.notna(timestamps.loc[idx])]
+    if len(ordered_index) < n_splits + 1:
+        return []
+
+    boundaries = np.linspace(0, len(ordered_index), n_splits + 2, dtype=int)
+    folds = []
+    for fold_num in range(1, n_splits + 1):
+        test_start_pos = int(boundaries[fold_num])
+        test_end_pos = int(boundaries[fold_num + 1])
+        if test_start_pos <= 0 or test_end_pos <= test_start_pos:
+            continue
+
+        test_idx = ordered_index[test_start_pos:test_end_pos]
+        test_start_ts = timestamps.loc[test_idx[0]]
+        train_candidates = ordered_index[:test_start_pos]
+        train_idx = [
+            idx
+            for idx in train_candidates
+            if int(np.busday_count(timestamps.loc[idx].date(), test_start_ts.date())) > int(purge_days)
+        ]
+        if not train_idx or not test_idx:
+            continue
+
+        folds.append(
+            {
+                "fold": fold_num,
+                "train_idx": train_idx,
+                "val_idx": test_idx,
+                "train_rows": int(len(train_idx)),
+                "validation_rows": int(len(test_idx)),
+                "validation_start": test_start_ts.isoformat().replace("+00:00", "Z"),
+                "validation_end": timestamps.loc[test_idx[-1]].isoformat().replace("+00:00", "Z"),
+                "purge_days": int(purge_days),
+            }
+        )
+    return folds
+
+
+def _top_decile_hit_rate(y_true, y_proba) -> tuple[float, int]:
+    frame = pd.DataFrame(
+        {
+            "actual": pd.Series(y_true).reset_index(drop=True).astype(float),
+            "predicted": pd.Series(y_proba).reset_index(drop=True).astype(float),
+        }
+    ).dropna()
+    if frame.empty:
+        return 0.0, 0
+    top_n = max(1, int(np.ceil(len(frame) * 0.10)))
+    top = frame.sort_values("predicted", ascending=False).head(top_n)
+    return float(top["actual"].mean()), int(len(top))
+
+
+def classification_diagnostics(y_true, y_proba) -> dict:
+    """Validation metrics for rare-event model credibility."""
+    actual = pd.Series(y_true).reset_index(drop=True).astype(int)
+    predicted = pd.Series(y_proba).reset_index(drop=True).astype(float).clip(1e-9, 1.0 - 1e-9)
+    baseline = float(actual.mean()) if len(actual) else 0.0
+    top_hit_rate, top_n = _top_decile_hit_rate(actual, predicted)
+    metrics = {
+        "baseline_hit_rate": baseline,
+        "top_10pct_hit_rate": top_hit_rate,
+        "top_10pct_n": top_n,
+        "lift_over_baseline": float(top_hit_rate / baseline) if baseline > 0 else 0.0,
+    }
+    if actual.nunique(dropna=True) >= 2:
+        metrics["auc"] = float(roc_auc_score(actual, predicted))
+        metrics["pr_auc"] = float(average_precision_score(actual, predicted))
+        metrics["log_loss"] = float(log_loss(actual, predicted, labels=[0, 1]))
+    else:
+        metrics["auc"] = None
+        metrics["pr_auc"] = None
+        metrics["log_loss"] = None
+    metrics["brier_score"] = float(brier_score_loss(actual, predicted)) if len(actual) else None
+    return metrics
+
+
+def summarize_fold_metrics(fold_metrics: list[dict]) -> dict:
+    summary = {}
+    metric_names = ["auc", "pr_auc", "brier_score", "log_loss", "top_10pct_hit_rate", "lift_over_baseline"]
+    for name in metric_names:
+        values = [float(row[name]) for row in fold_metrics if row.get(name) is not None]
+        if values:
+            summary[f"{name}_mean"] = float(np.mean(values))
+            summary[f"{name}_std"] = float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
+    return summary
+
+
+def _new_prebreakout_classifier():
+    return XGBClassifier(
+        n_estimators=400,
+        max_depth=5,
+        learning_rate=0.05,
+        subsample=0.9,
+        colsample_bytree=0.9,
+        objective="binary:logistic",
+        eval_metric="auc",
+        tree_method="hist",
+        n_jobs=-1,
+        random_state=42,
+    )
 
 
 def confidence_bucket_diagnostics(y_true, y_proba, bucket_size: float = 0.1) -> list[dict]:
@@ -700,7 +864,14 @@ def train_prebreakout_model(
     Saves a bundle containing model, features, trained_at, and auc.
     """
     _load_ml_libs()
-    if joblib is None or roc_auc_score is None or XGBClassifier is None:
+    if (
+        joblib is None
+        or roc_auc_score is None
+        or average_precision_score is None
+        or brier_score_loss is None
+        or log_loss is None
+        or XGBClassifier is None
+    ):
         print(
             "[ml_prebreakout] ML dependencies are not installed. "
             "Install requirements-ml.txt to train the prebreakout model."
@@ -728,37 +899,80 @@ def train_prebreakout_model(
         print("[ml_prebreakout] PreBreakout labels have only one class; cannot train AUC model.")
         return {}
 
-    X_train, X_val, y_train, y_val = walk_forward_split(X, y, df_labeled)
-    if y_train.nunique(dropna=True) < 2 or y_val.nunique(dropna=True) < 2:
-        print("[ml_prebreakout] Walk-forward split has only one class in train or validation.")
+    folds = expanding_window_folds(X, y, df_labeled, n_splits=5, purge_days=RETURN_HORIZON_DAYS)
+    if not folds:
+        print("[ml_prebreakout] No valid expanding-window validation folds available.")
         return {}
 
-    clf = XGBClassifier(
-        n_estimators=400,
-        max_depth=5,
-        learning_rate=0.05,
-        subsample=0.9,
-        colsample_bytree=0.9,
-        objective="binary:logistic",
-        eval_metric="auc",
-        tree_method="hist",
-        n_jobs=-1,
-        random_state=42,
+    fold_metrics = []
+    validation_proba = []
+    validation_actual = []
+    for fold in folds:
+        X_train = X.loc[fold["train_idx"]]
+        X_val = X.loc[fold["val_idx"]]
+        y_train = y.loc[fold["train_idx"]]
+        y_val = y.loc[fold["val_idx"]]
+        if y_train.nunique(dropna=True) < 2 or y_val.nunique(dropna=True) < 2:
+            continue
+
+        fold_clf = _new_prebreakout_classifier()
+        fold_clf.fit(X_train, y_train)
+        y_proba = fold_clf.predict_proba(X_val)[:, 1]
+        metrics = classification_diagnostics(y_val, y_proba)
+        metrics.update(
+            {
+                "fold": int(fold["fold"]),
+                "train_rows": int(len(X_train)),
+                "validation_rows": int(len(X_val)),
+                "validation_start": fold["validation_start"],
+                "validation_end": fold["validation_end"],
+                "purge_days": int(fold["purge_days"]),
+                "positive_validation_rows": int(y_val.sum()),
+            }
+        )
+        fold_metrics.append(metrics)
+        validation_proba.extend([float(value) for value in y_proba])
+        validation_actual.extend([int(value) for value in y_val])
+
+    if not fold_metrics:
+        print("[ml_prebreakout] Expanding-window folds have only one class in train or validation.")
+        return {}
+
+    validation_summary = summarize_fold_metrics(fold_metrics)
+    auc = validation_summary.get("auc_mean")
+    if auc is None:
+        print("[ml_prebreakout] Expanding-window validation could not compute AUC.")
+        return {}
+
+    clf = _new_prebreakout_classifier()
+    clf.fit(X, y)
+
+    calibration = confidence_bucket_diagnostics(validation_actual, validation_proba)
+    print(
+        "[ml_prebreakout] XGBoost expanding-window AUC: "
+        f"{auc:.3f} +/- {validation_summary.get('auc_std', 0.0):.3f}"
     )
+    for metrics in fold_metrics:
+        print(
+            "[ml_prebreakout] Fold "
+            f"{metrics['fold']}: AUC={metrics['auc']:.3f}, "
+            f"PR-AUC={metrics['pr_auc']:.3f}, "
+            f"Brier={metrics['brier_score']:.3f}, "
+            f"LogLoss={metrics['log_loss']:.3f}, "
+            f"Top10Hit={metrics['top_10pct_hit_rate']:.3f}, "
+            f"Lift={metrics['lift_over_baseline']:.2f}x"
+        )
 
-    clf.fit(X_train, y_train)
-
-    y_proba = clf.predict_proba(X_val)[:, 1]
-    auc = roc_auc_score(y_val, y_proba)
-    calibration = confidence_bucket_diagnostics(y_val, y_proba)
-    print(f"[ml_prebreakout] XGBoost Walk-forward AUC: {auc:.3f}")
+    validation_rows = int(sum(row["validation_rows"] for row in fold_metrics))
 
     bundle = {
         "model": clf,
         "features": list(X.columns),
         "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
         "auc": float(auc),
-        "validation_method": "walk_forward",
+        "validation_method": "expanding_window_5fold_purged",
+        "validation_folds": fold_metrics,
+        "validation_summary": validation_summary,
         "target": PREBREAKOUT_TARGET_COLUMN,
         "target_rule": (
             "Eligible rows are not broken out, BreakoutScore < 8, and below the 20-day high; "
@@ -772,7 +986,7 @@ def train_prebreakout_model(
         "calibration": calibration,
         "rows": int(len(X)),
         "positive_rows": int(y.sum()),
-        "validation_rows": int(len(X_val)),
+        "validation_rows": validation_rows,
         "model_version": MODEL_VERSION,
         "source": "local",
     }
