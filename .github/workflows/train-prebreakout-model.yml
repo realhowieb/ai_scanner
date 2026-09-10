@@ -1,4 +1,4 @@
-name: Train PreBreakout Model - Run #14
+name: Train PreBreakout Model - Run #16
 
 on:
   workflow_dispatch:
@@ -77,7 +77,7 @@ jobs:
           bundle = train_prebreakout_model(days_back=days_back, model_path=str(model_path))
           if not bundle:
               print(json.dumps({"trained": False, "days_back": days_back}, indent=2, sort_keys=True))
-              raise SystemExit("PreBreakout Run #14 training returned no report.")
+              raise SystemExit("PreBreakout Run #16 training returned no report.")
 
           summary = {
               "auc": bundle.get("auc"),
@@ -88,9 +88,12 @@ jobs:
               "feature_ablation": bundle.get("feature_ablation") or [],
               "feature_list": bundle.get("feature_list") or bundle.get("features") or [],
               "feature_names": bundle.get("feature_names") or bundle.get("features") or [],
+              "feature_stability_report": bundle.get("feature_stability_report") or [],
               "features_added": bundle.get("features_added") or [],
               "features_removed": bundle.get("features_removed") or [],
               "final_feature_count": bundle.get("final_feature_count"),
+              "distillation_recommendation": bundle.get("distillation_recommendation") or {},
+              "leakage_audit": bundle.get("leakage_audit") or {},
               "fold_metrics": bundle.get("fold_metrics") or bundle.get("validation_folds") or [],
               "market_feature_names": bundle.get("market_feature_names") or [],
               "market_regime_result": bundle.get("market_regime_result"),
@@ -111,9 +114,11 @@ jobs:
               "run11_dataset_audit": bundle.get("run11_dataset_audit") or {},
               "run12_dataset_audit": bundle.get("run12_dataset_audit") or {},
               "run14_dataset_audit": bundle.get("run14_dataset_audit") or {},
+              "run16_dataset_audit": bundle.get("run16_dataset_audit") or {},
               "run11_result": bundle.get("run11_result"),
               "run12_result": bundle.get("run12_result"),
               "run14_result": bundle.get("run14_result"),
+              "run16_result": bundle.get("run16_result"),
               "selected_feature_set": bundle.get("selected_feature_set"),
               "source": bundle.get("source"),
               "std_auc": bundle.get("std_auc"),
@@ -130,7 +135,7 @@ jobs:
           if promoted and bundle.get("source") != "database":
               raise SystemExit("PreBreakout model trained locally but was not saved to Neon.")
           if not promoted:
-              print("PreBreakout Run #14 did not promote a new champion; current champion remains in Neon.")
+              print("PreBreakout Run #16 did not promote a new champion; current champion remains in Neon.")
           PY
 
       - name: Upload debug model artifact
@@ -140,5 +145,5 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: |
             prebreakout_model.pkl
-            prebreakout_run14_results.json
+            prebreakout_run16_results.json
           if-no-files-found: warn

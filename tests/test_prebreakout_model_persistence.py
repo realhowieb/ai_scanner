@@ -18,6 +18,12 @@ class FakePrebreakoutClassifier:
         return np.array([[0.4, 0.6] for _ in range(len(frame))])
 
 
+class ImportancePrebreakoutClassifier(FakePrebreakoutClassifier):
+    def fit(self, x, _y):
+        self.feature_importances_ = np.linspace(0.0, 1.0, num=len(x.columns))
+        return self
+
+
 class PrebreakoutModelPersistenceTests(unittest.TestCase):
     def setUp(self):
         # The loader caches bundles module-wide; clear so per-test mocks apply.
@@ -495,6 +501,35 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertGreater(float(featured.loc[11, "LowSlopeAcceleration"]), -1.0)
         self.assertAlmostEqual(float(featured.loc[11, "LowConsistency10D"]), 1.0)
 
+    def test_run16_structural_interaction_features_are_time_safe(self):
+        rows = []
+        for day in range(25):
+            rows.append(
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-06-01T15:00:00Z") + pd.Timedelta(day, unit="D"),
+                    "Close": 100.0 + day * 0.1,
+                    "High": 104.0 - day * 0.03,
+                    "Low": 95.0 + day * 0.2,
+                    "RSvsSPY10D": 2.0,
+                    "RSvsQQQ10D": 1.5,
+                }
+            )
+        df = pd.DataFrame(rows).sample(frac=1.0, random_state=11)
+
+        featured = ml_prebreakout.add_prebreakout_features(df, include_market_features=False)
+        last_idx = df.sort_values(["Symbol", "Timestamp"], kind="mergesort").index[-1]
+
+        for col in [
+            "HigherLowRatio10D_x_RangeCompression10D",
+            "LowConsistency10D_x_RangeCompression10D",
+            "LowSlope10DPct_x_RangeCompression20D",
+            "LowSlopeAcceleration_x_RangeCompression10D",
+            "HigherLowRatio10D_x_RangeCompression20D",
+        ]:
+            self.assertIn(col, featured.columns)
+            self.assertFalse(pd.isna(featured.loc[last_idx, col]))
+
     def test_run10_rejects_empty_feature_experiment(self):
         x = pd.DataFrame({"Trend10D%": [1.0, 2.0]})
         y = pd.Series([0, 1])
@@ -541,9 +576,9 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         folds = [
             {
                 "fold": 1,
-                "train_idx": [0, 1, 2],
-                "val_idx": [3],
-                "validation_start": "2026-01-04T00:00:00Z",
+                "train_idx": [0, 1],
+                "val_idx": [2, 3],
+                "validation_start": "2026-01-03T00:00:00Z",
                 "validation_end": "2026-01-04T00:00:00Z",
                 "purge_days": 5,
             }
@@ -581,6 +616,55 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(features, ["keep", "keepMissing"])
         self.assertEqual(float(transformed.loc[2, "keep"]), 2.0)
         self.assertEqual(float(transformed.loc[1, "keepMissing"]), 1.0)
+
+    def test_run16_prune_to_count_uses_training_fold_importance(self):
+        x = pd.DataFrame({f"f{i}": [i, i + 1, i + 2, 999.0] for i in range(6)})
+        y = pd.Series([0, 1, 0, 1])
+        labeled = pd.DataFrame({"Timestamp": pd.date_range("2026-01-01", periods=4, tz="UTC")})
+        folds = [
+            {
+                "fold": 1,
+                "train_idx": [0, 1],
+                "val_idx": [2, 3],
+                "validation_start": "2026-01-03T00:00:00Z",
+                "validation_end": "2026-01-04T00:00:00Z",
+                "purge_days": 5,
+            }
+        ]
+
+        with (
+            patch.object(ml_prebreakout, "roc_auc_score", return_value=0.7),
+            patch.object(ml_prebreakout, "average_precision_score", return_value=0.4),
+            patch.object(ml_prebreakout, "brier_score_loss", return_value=0.2),
+            patch.object(ml_prebreakout, "log_loss", return_value=0.5),
+            patch.object(ml_prebreakout, "XGBClassifier", return_value=ImportancePrebreakoutClassifier()),
+        ):
+            result = ml_prebreakout.evaluate_prebreakout_feature_set(
+                x,
+                y,
+                labeled,
+                folds,
+                list(x.columns),
+                transform={"prune_to_count": 3},
+            )
+
+        notes = result["fold_metrics"][0]["transform_notes"]
+        self.assertEqual(result["fold_metrics"][0]["feature_count"], 3)
+        self.assertEqual(notes["features_removed"], ["f0", "f1", "f2"])
+
+    def test_run16_feature_stability_report_ranks_consistent_importance(self):
+        x = pd.DataFrame({f"f{i}": np.arange(10) + i for i in range(4)})
+        y = pd.Series([0, 1] * 5)
+        folds = [
+            {"fold": 1, "train_idx": [0, 1, 2, 3], "val_idx": [4, 5], "validation_start": "", "validation_end": "", "purge_days": 5},
+            {"fold": 2, "train_idx": [0, 1, 2, 3, 4, 5], "val_idx": [6, 7], "validation_start": "", "validation_end": "", "purge_days": 5},
+        ]
+
+        with patch.object(ml_prebreakout, "XGBClassifier", return_value=ImportancePrebreakoutClassifier()):
+            report = ml_prebreakout.feature_importance_stability_report(x, y, folds, list(x.columns))
+
+        self.assertEqual(report[0]["feature"], "f3")
+        self.assertEqual(report[0]["fold_presence"], 2)
 
     def test_run14_insufficient_qualifiers_status(self):
         evaluation = ml_prebreakout._insufficient_qualifiers_experiment(
