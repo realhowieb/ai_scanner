@@ -1434,6 +1434,9 @@ RUN9_CHAMPION_TOP10_LIFT = 1.608
 RUN9_EXPECTED_ROWS = 21445
 RUN9_EXPECTED_POSITIVE_ROWS = 3381
 RUN9_EXPECTED_VALIDATION_ROWS = 7149
+RUN11_ROW_TOLERANCE = 0.02
+RUN11_POSITIVE_TOLERANCE = 0.02
+RUN11_VALIDATION_ROW_TOLERANCE = 0.02
 RUN10_MIN_PROMOTION_DELTA = 0.003
 RUN10_STRONG_PROMOTION_DELTA = 0.005
 
@@ -1502,6 +1505,18 @@ def validate_run9_dataset_audit(audit: dict) -> list[str]:
         failures.append(f"positive_rows {audit['positive_rows']} != expected {RUN9_EXPECTED_POSITIVE_ROWS}")
     if int(audit["validation_rows"]) != RUN9_EXPECTED_VALIDATION_ROWS:
         failures.append(f"validation_rows {audit['validation_rows']} != expected {RUN9_EXPECTED_VALIDATION_ROWS}")
+    return failures
+
+
+def validate_run11_dataset_audit(audit: dict) -> list[str]:
+    """Run #11 allows small 90-day history drift but blocks material dataset changes."""
+    failures = []
+    if not _within_tolerance(audit["eligible_rows"], RUN9_EXPECTED_ROWS, RUN11_ROW_TOLERANCE):
+        failures.append(f"eligible_rows {audit['eligible_rows']} materially differs from expected ~{RUN9_EXPECTED_ROWS}")
+    if not _within_tolerance(audit["positive_rows"], RUN9_EXPECTED_POSITIVE_ROWS, RUN11_POSITIVE_TOLERANCE):
+        failures.append(f"positive_rows {audit['positive_rows']} materially differs from expected ~{RUN9_EXPECTED_POSITIVE_ROWS}")
+    if not _within_tolerance(audit["validation_rows"], RUN9_EXPECTED_VALIDATION_ROWS, RUN11_VALIDATION_ROW_TOLERANCE):
+        failures.append(f"validation_rows {audit['validation_rows']} materially differs from expected ~{RUN9_EXPECTED_VALIDATION_ROWS}")
     return failures
 
 
@@ -2218,9 +2233,9 @@ def train_prebreakout_model(
         for failure in run6_reproduction["failures"]:
             print(f"[ml_prebreakout] RUN #6 REPRODUCTION FAILURE: {failure}")
         return {}
-    run11_dataset_failures = validate_run9_dataset_audit(run6_reproduction["audit"])
+    run11_dataset_failures = validate_run11_dataset_audit(run6_reproduction["audit"])
     if run11_dataset_failures:
-        print("[ml_prebreakout] Run #11 exact dataset audit failed; refusing ablation.")
+        print("[ml_prebreakout] Run #11 material dataset audit failed; refusing ablation.")
         for failure in run11_dataset_failures:
             print(f"[ml_prebreakout] RUN #11 DATASET AUDIT FAILURE: {failure}")
         return {}

@@ -113,7 +113,7 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                 ),
                 patch.object(ml_prebreakout, "build_ml_dataset", return_value=(x, y)),
                 patch.object(ml_prebreakout, "validate_run6_reproduction_audit", return_value=[]),
-                patch.object(ml_prebreakout, "validate_run9_dataset_audit", return_value=[]),
+                patch.object(ml_prebreakout, "validate_run11_dataset_audit", return_value=[]),
                 patch.object(ml_prebreakout, "_run10_promotion_decision", return_value=("PROMOTE", [])),
                 patch.object(
                     ml_prebreakout,
@@ -187,6 +187,28 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         failures = ml_prebreakout.validate_run9_dataset_audit(audit)
 
         self.assertEqual(failures, ["validation_rows 7150 != expected 7149"])
+
+    def test_run11_dataset_audit_allows_small_live_history_drift(self):
+        audit = {
+            "eligible_rows": 21694,
+            "positive_rows": 3392,
+            "validation_rows": 7232,
+        }
+
+        failures = ml_prebreakout.validate_run11_dataset_audit(audit)
+
+        self.assertEqual(failures, [])
+
+    def test_run11_dataset_audit_blocks_material_live_history_drift(self):
+        audit = {
+            "eligible_rows": 23000,
+            "positive_rows": 3700,
+            "validation_rows": 7600,
+        }
+
+        failures = ml_prebreakout.validate_run11_dataset_audit(audit)
+
+        self.assertGreaterEqual(len(failures), 3)
 
     def test_market_regime_merge_preserves_index_for_existing_masks(self):
         df = pd.DataFrame(
