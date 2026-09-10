@@ -102,6 +102,8 @@ jobs:
               "run6_reproduction_audit": bundle.get("run6_reproduction_audit") or {},
               "run8_champion_auc": bundle.get("run8_champion_auc"),
               "run9_dataset_audit": bundle.get("run9_dataset_audit") or {},
+              "run9_champion_auc": bundle.get("run9_champion_auc"),
+              "run10_dataset_audit": bundle.get("run10_dataset_audit") or {},
               "selected_feature_set": bundle.get("selected_feature_set"),
               "source": bundle.get("source"),
               "std_auc": bundle.get("std_auc"),
@@ -114,10 +116,11 @@ jobs:
               "validation_rows": bundle.get("validation_rows"),
           }
           print(json.dumps(summary, indent=2, sort_keys=True, default=str))
-          if bundle.get("promotion_result") == "PROMOTE" and bundle.get("source") != "database":
+          promoted = bundle.get("promotion_result") in {"PROMOTE", "STRONG_PROMOTION"}
+          if promoted and bundle.get("source") != "database":
               raise SystemExit("PreBreakout model trained locally but was not saved to Neon.")
-          if bundle.get("promotion_result") != "PROMOTE":
-              print("PreBreakout Run #9 did not promote a new champion; no Neon save required.")
+          if not promoted:
+              print("PreBreakout Run #10 did not promote a new champion; no Neon save required.")
           PY
 
       - name: Upload debug model artifact
@@ -125,5 +128,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact_name }}
-          path: prebreakout_model.pkl
+          path: |
+            prebreakout_model.pkl
+            prebreakout_run10_results.json
           if-no-files-found: warn

@@ -75,6 +75,14 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                 "Trend10D%": [1.0, 2.0, 3.0, 4.0],
                 "VolRel20": [1.5, 3.0, 2.0, 4.0],
                 "SPYTrend10D": [0.5, 0.6, 0.7, 0.8],
+                "RSvsSPY10D": [0.5, 1.4, 2.3, 3.2],
+                "RSvsSPY20D": [0.4, 1.3, 2.2, 3.1],
+                "RSvsQQQ10D": [0.3, 1.2, 2.1, 3.0],
+                "RSvsQQQ20D": [0.2, 1.1, 2.0, 2.9],
+                "RVOLChange1D": [0.0, 1.5, -1.0, 2.0],
+                "RVOLChange3D": [0.0, 0.0, 0.0, 2.5],
+                "RVOLSlope3D": [0.0, 0.0, 0.0, 0.8],
+                "RVOLSlope5D": [0.0, 0.0, 0.0, 0.5],
             }
         )
         y = pd.Series([0, 1, 0, 1])
@@ -106,7 +114,7 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                 patch.object(ml_prebreakout, "build_ml_dataset", return_value=(x, y)),
                 patch.object(ml_prebreakout, "validate_run6_reproduction_audit", return_value=[]),
                 patch.object(ml_prebreakout, "validate_run9_dataset_audit", return_value=[]),
-                patch.object(ml_prebreakout, "_promotion_decision", return_value=("PROMOTE", [])),
+                patch.object(ml_prebreakout, "_run10_promotion_decision", return_value=("PROMOTE", [])),
                 patch.object(
                     ml_prebreakout,
                     "expanding_window_folds",
@@ -127,8 +135,10 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                 bundle = ml_prebreakout.train_prebreakout_model(model_path=str(Path(tmp) / "model.pkl"))
 
         self.assertEqual(bundle["source"], "database")
-        self.assertEqual(bundle["features"], ["Trend10D%", "VolRel20", "SPYTrend10D"])
-        self.assertEqual(bundle["market_feature_names"], ["SPYTrend10D"])
+        expected_features = list(x.columns)
+        expected_market_features = ["SPYTrend10D", "RSvsSPY10D", "RSvsSPY20D", "RSvsQQQ10D", "RSvsQQQ20D"]
+        self.assertEqual(bundle["features"], expected_features)
+        self.assertEqual(bundle["market_feature_names"], expected_market_features)
         self.assertEqual(bundle["model_version"], ml_prebreakout.MODEL_VERSION)
         self.assertEqual(bundle["validation_method"], "expanding_window_5fold_purged")
         self.assertEqual(bundle["market_regime_result"], "PROMOTE")
@@ -146,10 +156,10 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         serialize_mock.assert_called_once_with(fake_classifier, fake_joblib)
         save_mock.assert_called_once()
         self.assertEqual(save_mock.call_args.kwargs["model_bytes"], b"model-bytes")
-        self.assertEqual(save_mock.call_args.kwargs["feature_names"], ["Trend10D%", "VolRel20", "SPYTrend10D"])
+        self.assertEqual(save_mock.call_args.kwargs["feature_names"], expected_features)
         self.assertEqual(save_mock.call_args.kwargs["auc"], 0.77)
         self.assertEqual(save_mock.call_args.kwargs["metadata"]["target"], "FutureQualitySetupHit")
-        self.assertEqual(save_mock.call_args.kwargs["metadata"]["market_feature_names"], ["SPYTrend10D"])
+        self.assertEqual(save_mock.call_args.kwargs["metadata"]["market_feature_names"], expected_market_features)
 
     def test_run6_reproduction_audit_rejects_target_distribution_drift(self):
         audit = {
@@ -274,6 +284,102 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertAlmostEqual(featured.loc[10, "ATRPercent"], 4.0 / 104.0 * 100.0)
         self.assertTrue(pd.isna(featured.loc[11, "EMA9_21SpreadChange1D"]))
         self.assertTrue(pd.isna(featured.loc[13, "EMA9_21SpreadChange1D"]))
+
+    def test_compression_features_use_current_and_past_rows_only(self):
+        rows = []
+        for day in range(25):
+            close = 100.0 + float(day)
+            rows.append(
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-01-01T15:00:00Z") + pd.Timedelta(day, unit="D"),
+                    "Close": close,
+                    "High": close + 2.0,
+                    "Low": close - 2.0,
+                    "High20": close + 4.0,
+                    "BreakoutPos20D": day / 25.0,
+                }
+            )
+        df = pd.DataFrame(rows).iloc[::-1].reset_index(drop=True)
+
+        featured = ml_prebreakout.add_prebreakout_features(df, include_market_features=False)
+        last_idx = int(featured.index[0])
+        chronological = df.sort_values(["Symbol", "Timestamp"], kind="mergesort")
+        close = chronological["Close"]
+        sma20 = close.rolling(20, min_periods=20).mean().iloc[-1]
+        std20 = close.rolling(20, min_periods=20).std().iloc[-1]
+        expected_bb_width = (4.0 * std20) / sma20 * 100.0
+
+        self.assertAlmostEqual(featured.loc[last_idx, "BBWidth20Pct"], expected_bb_width)
+        self.assertGreater(float(featured.loc[last_idx, "ATR14Pct"]), 0.0)
+        self.assertIn("ATRCompression5D", featured.columns)
+
+    def test_structure_features_higher_lows_and_resistance_touches(self):
+        rows = []
+        for day in range(10):
+            rows.append(
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-02-01T15:00:00Z") + pd.Timedelta(day, unit="D"),
+                    "Close": 95.0 + day,
+                    "High": 99.4 if day >= 5 else 96.0 + day,
+                    "Low": 90.0 + day,
+                    "High20": 100.0,
+                    "BreakoutPos20D": day / 10.0,
+                }
+            )
+        df = pd.DataFrame(rows)
+
+        featured = ml_prebreakout.add_prebreakout_features(df, include_market_features=False)
+
+        self.assertAlmostEqual(featured.loc[9, "DistanceToHigh20Pct"], 100.0 - 104.0)
+        self.assertAlmostEqual(featured.loc[9, "BreakoutPosSlope5D"], 0.1)
+        self.assertEqual(float(featured.loc[9, "HigherLowCount5D"]), 5.0)
+        self.assertAlmostEqual(featured.loc[9, "HigherLowRatio5D"], 1.0)
+        self.assertEqual(float(featured.loc[9, "ResistanceTouchCount10D"]), 7.0)
+
+    def test_run10_rejects_empty_feature_experiment(self):
+        x = pd.DataFrame({"Trend10D%": [1.0, 2.0]})
+        y = pd.Series([0, 1])
+        labeled = pd.DataFrame({"Timestamp": pd.date_range("2026-01-01", periods=2, tz="UTC")})
+
+        evaluation = ml_prebreakout._run10_eval(
+            "Missing family",
+            x,
+            y,
+            labeled,
+            [],
+            ["Trend10D%"],
+            ["MissingFeature"],
+            "missing_family",
+        )
+
+        self.assertEqual(evaluation["experiment_status"], "INVALID_EMPTY_FEATURES")
+        self.assertEqual(evaluation["features_added"], [])
+
+    def test_run10_promotion_requires_meaningful_auc_delta(self):
+        champion = {
+            "validation_summary": {
+                "auc_mean": 0.591993,
+                "min_fold_auc": 0.562,
+                "lift_over_baseline_mean": 1.608,
+            }
+        }
+        candidate = {
+            "experiment_status": "VALID",
+            "requested_features": ["BBWidth20Pct"],
+            "features_added": ["BBWidth20Pct"],
+            "validation_summary": {
+                "auc_mean": 0.5924,
+                "min_fold_auc": 0.562,
+                "lift_over_baseline_mean": 1.61,
+            },
+        }
+
+        result, reasons = ml_prebreakout._run10_promotion_decision(candidate, champion, [])
+
+        self.assertEqual(result, "TIE")
+        self.assertTrue(any("below +0.003" in reason for reason in reasons))
 
     def test_add_forward_return_labels_uses_existing_return_column(self):
         df = pd.DataFrame(
