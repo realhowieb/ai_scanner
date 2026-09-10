@@ -93,6 +93,7 @@ jobs:
               "model_version": bundle.get("model_version"),
               "positive_rows": bundle.get("positive_rows"),
               "rows": bundle.get("rows"),
+              "run6_reproduction_audit": bundle.get("run6_reproduction_audit") or {},
               "selected_feature_set": bundle.get("selected_feature_set"),
               "source": bundle.get("source"),
               "target": bundle.get("target"),

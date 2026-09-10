@@ -104,6 +104,7 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                     return_value=labeled,
                 ),
                 patch.object(ml_prebreakout, "build_ml_dataset", return_value=(x, y)),
+                patch.object(ml_prebreakout, "validate_run6_reproduction_audit", return_value=[]),
                 patch.object(
                     ml_prebreakout,
                     "expanding_window_folds",
@@ -147,6 +148,61 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(save_mock.call_args.kwargs["auc"], 0.77)
         self.assertEqual(save_mock.call_args.kwargs["metadata"]["target"], "FutureQualitySetupHit")
         self.assertEqual(save_mock.call_args.kwargs["metadata"]["market_feature_names"], ["SPYTrend10D"])
+
+    def test_run6_reproduction_audit_rejects_target_distribution_drift(self):
+        audit = {
+            "eligible_rows": 21445,
+            "positive_rows": 547,
+            "negative_rows": 20898,
+            "positive_rate": 547 / 21445,
+            "valid_fold_count": 4,
+            "validation_rows": 14297,
+        }
+
+        failures = ml_prebreakout.validate_run6_reproduction_audit(audit)
+
+        self.assertTrue(any("positive rows" in failure for failure in failures))
+        self.assertTrue(any("valid fold count" in failure for failure in failures))
+        self.assertTrue(any("validation rows" in failure for failure in failures))
+
+    def test_market_regime_merge_preserves_index_for_existing_masks(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-01-03T15:00:00Z"),
+                    "FutureQualitySetupHit": 1,
+                    "BreakoutScore": 5.0,
+                    "Last": 104.0,
+                },
+                {
+                    "Symbol": "SPY",
+                    "Timestamp": pd.Timestamp("2026-01-01T21:00:00Z"),
+                    "Trend10D%": 1.0,
+                    "Trend20D%": 2.0,
+                    "EMA9": 100.0,
+                    "EMA21": 99.0,
+                    "ATR14": 2.0,
+                    "Last": 100.0,
+                },
+                {
+                    "Symbol": "BBB",
+                    "Timestamp": pd.Timestamp("2026-01-02T15:00:00Z"),
+                    "FutureQualitySetupHit": 0,
+                    "BreakoutScore": 4.0,
+                    "Last": 50.0,
+                },
+            ]
+        )
+        candidate_mask = pd.Series([True, False, True], index=df.index)
+
+        featured = ml_prebreakout.add_market_regime_features(df)
+        selected = featured.loc[candidate_mask]
+
+        self.assertEqual(list(featured.index), list(df.index))
+        self.assertEqual(list(featured["Symbol"]), ["AAA", "SPY", "BBB"])
+        self.assertEqual(list(selected["Symbol"]), ["AAA", "BBB"])
+        self.assertEqual(list(selected["FutureQualitySetupHit"]), [1, 0])
 
     def test_add_forward_return_labels_uses_existing_return_column(self):
         df = pd.DataFrame(

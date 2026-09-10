@@ -158,7 +158,8 @@ def _engineered_feature_names() -> list[str]:
 
 
 ENGINEERED_FEATURE_COLS = _engineered_feature_names()
-FEATURE_COLS = BASE_FEATURE_COLS + ENGINEERED_FEATURE_COLS + REGIME_FEATURE_COLS
+RUN6_FEATURE_COLS = BASE_FEATURE_COLS + ENGINEERED_FEATURE_COLS
+FEATURE_COLS = RUN6_FEATURE_COLS + REGIME_FEATURE_COLS
 
 
 def _utc_now() -> datetime:
@@ -477,7 +478,6 @@ def add_prebreakout_target_label(
     df: pd.DataFrame,
     *,
     lookback_days: int = 90,
-    benchmark_context: dict[str, pd.DataFrame] | None = None,
 ) -> pd.DataFrame:
     """
     Build the PreBreakout objective:
@@ -529,7 +529,6 @@ def add_prebreakout_target_label(
                     break
                 probe += 1
 
-    labeled = add_market_regime_features(labeled, benchmark_context=benchmark_context)
     return labeled.loc[candidate_mask].reset_index(drop=True)
 
 
@@ -666,15 +665,19 @@ def _merge_benchmark_asof(out: pd.DataFrame, benchmark: pd.DataFrame) -> pd.Data
     if benchmark.empty or "Timestamp" not in out.columns:
         return out
     order_col = "__regime_original_order"
+    index_col = "__regime_original_index"
     left = out.copy()
     left[order_col] = np.arange(len(left))
+    left[index_col] = left.index
     left["Timestamp"] = pd.to_datetime(left["Timestamp"], errors="coerce", utc=True)
     left_sorted = left.sort_values("Timestamp", kind="mergesort")
     right_sorted = benchmark.copy()
     right_sorted["Timestamp"] = pd.to_datetime(right_sorted["Timestamp"], errors="coerce", utc=True)
     right_sorted = right_sorted.dropna(subset=["Timestamp"]).sort_values("Timestamp", kind="mergesort")
     merged = pd.merge_asof(left_sorted, right_sorted, on="Timestamp", direction="backward")
-    return merged.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
+    restored = merged.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
+    restored.index = pd.Index(restored.pop(index_col))
+    return restored
 
 
 def _market_breadth_above_ema21(group: pd.DataFrame) -> float:
@@ -756,6 +759,7 @@ def _spark_price_return(value, window: int):
 def add_prebreakout_features(
     df: pd.DataFrame,
     benchmark_context: dict[str, pd.DataFrame] | None = None,
+    include_market_features: bool = True,
 ) -> pd.DataFrame:
     """Add 1/3/5-day slopes and deltas without changing the target."""
     if df is None or df.empty:
@@ -765,7 +769,7 @@ def add_prebreakout_features(
     order_col = "__prebreakout_original_order"
     out[order_col] = np.arange(len(out))
     out = sort_symbol_history(out)
-    if any(col not in out.columns for col in REGIME_FEATURE_COLS):
+    if include_market_features and any(col not in out.columns for col in REGIME_FEATURE_COLS):
         out = add_market_regime_features(out, benchmark_context=benchmark_context)
     if "Spark10D" in out.columns:
         for window in ENGINEERED_WINDOWS:
@@ -810,18 +814,27 @@ def add_prebreakout_features(
     return out.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
 
 
-def build_ml_dataset(df: pd.DataFrame, benchmark_context: dict[str, pd.DataFrame] | None = None):
+def build_ml_dataset(
+    df: pd.DataFrame,
+    benchmark_context: dict[str, pd.DataFrame] | None = None,
+    include_market_features: bool = True,
+    feature_cols: list[str] | None = None,
+):
     """
     Select feature columns and target column.
     """
     if df.empty:
         return pd.DataFrame(), pd.Series(dtype=int)
 
-    df = add_prebreakout_features(df, benchmark_context=benchmark_context)
-    feature_cols = FEATURE_COLS
-    feature_cols = [c for c in feature_cols if c in df.columns]
+    df = add_prebreakout_features(
+        df,
+        benchmark_context=benchmark_context,
+        include_market_features=include_market_features,
+    )
+    selected_cols = feature_cols or (FEATURE_COLS if include_market_features else RUN6_FEATURE_COLS)
+    selected_cols = [c for c in selected_cols if c in df.columns]
 
-    X = df[feature_cols].copy()
+    X = df[selected_cols].copy()
     X = X.fillna(0.0)
 
     if PREBREAKOUT_TARGET_COLUMN in df.columns:
@@ -990,6 +1003,123 @@ def _new_prebreakout_classifier():
 
 RUN6_BASELINE_MEAN_AUC = 0.5819816609896494
 RUN6_BASELINE_STD_AUC = 0.043
+RUN6_EXPECTED_ROWS = 21445
+RUN6_EXPECTED_POSITIVE_ROWS = 3381
+RUN6_EXPECTED_VALIDATION_ROWS = 7149
+RUN6_EXPECTED_VALID_FOLDS = 2
+RUN6_ROW_TOLERANCE = 0.02
+RUN6_POSITIVE_TOLERANCE = 0.10
+RUN6_VALIDATION_ROW_TOLERANCE = 0.05
+
+
+def target_audit(y: pd.Series) -> dict:
+    positives = int(pd.Series(y).sum())
+    total = int(len(y))
+    negatives = total - positives
+    return {
+        "eligible_rows": total,
+        "positive_rows": positives,
+        "negative_rows": negatives,
+        "positive_rate": float(positives / total) if total else 0.0,
+    }
+
+
+def fold_audit(y: pd.Series, df_labeled: pd.DataFrame, folds: list[dict]) -> list[dict]:
+    rows = []
+    for fold in folds:
+        train_idx = fold["train_idx"]
+        val_idx = fold["val_idx"]
+        y_train = y.loc[train_idx]
+        y_val = y.loc[val_idx]
+        train_start, train_end = _date_range_for_indices(df_labeled, train_idx)
+        val_start, val_end = _date_range_for_indices(df_labeled, val_idx)
+        rows.append(
+            {
+                "fold": int(fold["fold"]),
+                "train_rows": int(len(train_idx)),
+                "validation_rows": int(len(val_idx)),
+                "train_positives": int(y_train.sum()),
+                "validation_positives": int(y_val.sum()),
+                "train_start": train_start,
+                "train_end": train_end,
+                "validation_start": val_start or fold.get("validation_start"),
+                "validation_end": val_end or fold.get("validation_end"),
+                "train_has_two_classes": bool(y_train.nunique(dropna=True) >= 2),
+                "validation_has_two_classes": bool(y_val.nunique(dropna=True) >= 2),
+            }
+        )
+    return rows
+
+
+def _within_tolerance(actual: int, expected: int, tolerance: float) -> bool:
+    return abs(int(actual) - int(expected)) <= max(1, int(round(int(expected) * float(tolerance))))
+
+
+def validate_run6_reproduction_audit(audit: dict) -> list[str]:
+    failures = []
+    if not _within_tolerance(audit["eligible_rows"], RUN6_EXPECTED_ROWS, RUN6_ROW_TOLERANCE):
+        failures.append(f"eligible rows {audit['eligible_rows']} != expected ~{RUN6_EXPECTED_ROWS}")
+    if not _within_tolerance(audit["positive_rows"], RUN6_EXPECTED_POSITIVE_ROWS, RUN6_POSITIVE_TOLERANCE):
+        failures.append(f"positive rows {audit['positive_rows']} != expected ~{RUN6_EXPECTED_POSITIVE_ROWS}")
+    if audit["valid_fold_count"] != RUN6_EXPECTED_VALID_FOLDS:
+        failures.append(f"valid fold count {audit['valid_fold_count']} != expected {RUN6_EXPECTED_VALID_FOLDS}")
+    if not _within_tolerance(audit["validation_rows"], RUN6_EXPECTED_VALIDATION_ROWS, RUN6_VALIDATION_ROW_TOLERANCE):
+        failures.append(f"validation rows {audit['validation_rows']} != expected ~{RUN6_EXPECTED_VALIDATION_ROWS}")
+    return failures
+
+
+def print_target_and_fold_audit(name: str, audit: dict) -> None:
+    print(f"[ml_prebreakout] {name} TARGET AUDIT")
+    print(f"[ml_prebreakout] total rows before eligibility: {audit.get('total_rows_before_eligibility')}")
+    print(f"[ml_prebreakout] eligible rows: {audit['eligible_rows']}")
+    print(f"[ml_prebreakout] positive rows: {audit['positive_rows']}")
+    print(f"[ml_prebreakout] negative rows: {audit['negative_rows']}")
+    print(f"[ml_prebreakout] positive rate: {_fmt_metric(audit['positive_rate'], 6)}")
+    for fold in audit.get("folds", []):
+        print(
+            "[ml_prebreakout] Audit Fold "
+            f"{fold['fold']}: train_rows={fold['train_rows']}, "
+            f"validation_rows={fold['validation_rows']}, "
+            f"train_positives={fold['train_positives']}, "
+            f"validation_positives={fold['validation_positives']}, "
+            f"train_range={fold['train_start']}..{fold['train_end']}, "
+            f"validation_range={fold['validation_start']}..{fold['validation_end']}"
+        )
+
+
+def build_run6_reproduction(
+    df_labeled: pd.DataFrame,
+    total_rows_before_eligibility: int | None = None,
+) -> dict:
+    X_run6, y_run6 = build_ml_dataset(
+        df_labeled,
+        include_market_features=False,
+        feature_cols=RUN6_FEATURE_COLS,
+    )
+    folds = expanding_window_folds(X_run6, y_run6, df_labeled, n_splits=5, purge_days=RETURN_HORIZON_DAYS)
+    all_folds = fold_audit(y_run6, df_labeled, folds)
+    valid_folds = [
+        fold
+        for fold in all_folds
+        if fold["train_has_two_classes"] and fold["validation_has_two_classes"]
+    ]
+    audit = target_audit(y_run6)
+    audit.update(
+        {
+            "total_rows_before_eligibility": int(total_rows_before_eligibility or len(df_labeled)),
+            "folds": all_folds,
+            "valid_fold_count": int(len(valid_folds)),
+            "validation_rows": int(sum(fold["validation_rows"] for fold in valid_folds)),
+            "features": list(X_run6.columns),
+        }
+    )
+    return {
+        "X": X_run6,
+        "y": y_run6,
+        "folds": folds,
+        "audit": audit,
+        "failures": validate_run6_reproduction_audit(audit),
+    }
 
 
 def prebreakout_feature_sets(all_features: list[str]) -> list[dict]:
@@ -1300,39 +1430,62 @@ def train_prebreakout_model(
         print("[ml_prebreakout] No history data found.")
         return {}
 
-    benchmark_context = load_benchmark_regime_context(days_back)
-    benchmark_context_source = {
-        symbol: "alpaca_daily_prior_completed_bar" if not context.empty else "missing"
-        for symbol, context in benchmark_context.items()
-    }
     df_labeled = add_prebreakout_target_label(
         df,
         lookback_days=days_back,
-        benchmark_context=benchmark_context,
     )
     if df_labeled.empty:
         print("[ml_prebreakout] No eligible prebreakout rows with complete labels available.")
         return {}
 
-    X, y = build_ml_dataset(df_labeled, benchmark_context=benchmark_context)
-    if X.empty:
+    run6_reproduction = build_run6_reproduction(df_labeled, total_rows_before_eligibility=len(df))
+    print_target_and_fold_audit("RUN #6 REPRODUCTION", run6_reproduction["audit"])
+    if run6_reproduction["failures"]:
+        print("[ml_prebreakout] Run #6 reproduction failed; refusing market-regime evaluation.")
+        for failure in run6_reproduction["failures"]:
+            print(f"[ml_prebreakout] RUN #6 REPRODUCTION FAILURE: {failure}")
+        return {}
+
+    X_run6 = run6_reproduction["X"]
+    y = run6_reproduction["y"]
+    folds = run6_reproduction["folds"]
+    if X_run6.empty:
         print("[ml_prebreakout] No features available.")
         return {}
     if y.nunique(dropna=True) < 2:
         print("[ml_prebreakout] PreBreakout labels have only one class; cannot train AUC model.")
         return {}
 
-    folds = expanding_window_folds(X, y, df_labeled, n_splits=5, purge_days=RETURN_HORIZON_DAYS)
     if not folds:
         print("[ml_prebreakout] No valid expanding-window validation folds available.")
         return {}
 
-    ablation_results = []
-    for feature_set in prebreakout_feature_sets(list(X.columns)):
-        features = [col for col in feature_set["features"] if col in X.columns]
+    benchmark_context = load_benchmark_regime_context(days_back)
+    benchmark_context_source = {
+        symbol: "alpaca_daily_prior_completed_bar" if not context.empty else "missing"
+        for symbol, context in benchmark_context.items()
+    }
+    X_market, _ = build_ml_dataset(df_labeled, benchmark_context=benchmark_context, include_market_features=True)
+    if X_market.empty:
+        print("[ml_prebreakout] No challenger features available.")
+        return {}
+
+    baseline_evaluation = evaluate_prebreakout_feature_set(X_run6, y, df_labeled, folds, list(X_run6.columns))
+    baseline_evaluation.update(
+        {
+            "name": "Baseline",
+            "features": list(X_run6.columns),
+            "market_features": [],
+        }
+    )
+    ablation_results = [baseline_evaluation]
+    for feature_set in prebreakout_feature_sets(list(X_market.columns)):
+        if feature_set["name"] == "Baseline":
+            continue
+        features = [col for col in feature_set["features"] if col in X_market.columns]
         if not features:
             continue
-        evaluation = evaluate_prebreakout_feature_set(X, y, df_labeled, folds, features)
+        evaluation = evaluate_prebreakout_feature_set(X_market, y, df_labeled, folds, features)
         if not evaluation["fold_metrics"]:
             continue
         evaluation.update(
@@ -1375,8 +1528,9 @@ def train_prebreakout_model(
         return {}
 
     selected_features = selected_eval["features"]
+    training_matrix = X_market if selected_eval["market_features"] else X_run6
     clf = _new_prebreakout_classifier()
-    clf.fit(X[selected_features], y)
+    clf.fit(training_matrix[selected_features], y)
 
     calibration = confidence_bucket_diagnostics(best_market_eval["validation_actual"], best_market_eval["validation_proba"])
     validation_rows = int(sum(row["validation_rows"] for row in fold_metrics))
@@ -1433,10 +1587,11 @@ def train_prebreakout_model(
         "setup_score_threshold": PREBREAKOUT_SETUP_SCORE_THRESHOLD,
         "return_column": RETURN_COLUMN,
         "calibration": calibration,
-        "rows": int(len(X)),
-        "training_rows": int(len(X)),
+        "rows": int(len(X_run6)),
+        "training_rows": int(len(X_run6)),
         "positive_rows": int(y.sum()),
         "validation_rows": validation_rows,
+        "run6_reproduction_audit": run6_reproduction["audit"],
         "benchmark_context_source": benchmark_context_source,
         "model_version": MODEL_VERSION,
         "source": "local",
