@@ -75,27 +75,36 @@ jobs:
           days_back = int("${{ inputs.days_back }}")
           model_path = Path(MODEL_PATH)
           bundle = train_prebreakout_model(days_back=days_back, model_path=str(model_path))
-          if not bundle or bundle.get("model") is None:
+          if not bundle:
               print(json.dumps({"trained": False, "days_back": days_back}, indent=2, sort_keys=True))
-              raise SystemExit("PreBreakout training returned no model.")
+              raise SystemExit("PreBreakout Run #9 training returned no report.")
 
           summary = {
               "auc": bundle.get("auc"),
               "baseline_comparison": bundle.get("baseline_comparison") or {},
               "benchmark_context_source": bundle.get("benchmark_context_source") or {},
               "calibration": bundle.get("calibration") or [],
+              "eligible_rows": bundle.get("eligible_rows") or bundle.get("rows"),
               "feature_ablation": bundle.get("feature_ablation") or [],
+              "feature_list": bundle.get("feature_list") or bundle.get("features") or [],
               "feature_names": bundle.get("feature_names") or bundle.get("features") or [],
               "fold_metrics": bundle.get("fold_metrics") or bundle.get("validation_folds") or [],
               "market_feature_names": bundle.get("market_feature_names") or [],
               "market_regime_result": bundle.get("market_regime_result"),
+              "mean_auc": bundle.get("mean_auc"),
               "model_path": str(model_path),
               "model_version": bundle.get("model_version"),
               "positive_rows": bundle.get("positive_rows"),
+              "purge_days": bundle.get("purge_days"),
+              "promotion_reasons": bundle.get("promotion_reasons") or [],
+              "promotion_result": bundle.get("promotion_result"),
               "rows": bundle.get("rows"),
               "run6_reproduction_audit": bundle.get("run6_reproduction_audit") or {},
+              "run8_champion_auc": bundle.get("run8_champion_auc"),
+              "run9_dataset_audit": bundle.get("run9_dataset_audit") or {},
               "selected_feature_set": bundle.get("selected_feature_set"),
               "source": bundle.get("source"),
+              "std_auc": bundle.get("std_auc"),
               "target": bundle.get("target"),
               "target_rule": bundle.get("target_rule"),
               "trained_at": bundle.get("trained_at"),
@@ -105,8 +114,10 @@ jobs:
               "validation_rows": bundle.get("validation_rows"),
           }
           print(json.dumps(summary, indent=2, sort_keys=True, default=str))
-          if bundle.get("source") != "database":
+          if bundle.get("promotion_result") == "PROMOTE" and bundle.get("source") != "database":
               raise SystemExit("PreBreakout model trained locally but was not saved to Neon.")
+          if bundle.get("promotion_result") != "PROMOTE":
+              print("PreBreakout Run #9 did not promote a new champion; no Neon save required.")
           PY
 
       - name: Upload debug model artifact

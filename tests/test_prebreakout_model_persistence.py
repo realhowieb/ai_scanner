@@ -105,6 +105,8 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                 ),
                 patch.object(ml_prebreakout, "build_ml_dataset", return_value=(x, y)),
                 patch.object(ml_prebreakout, "validate_run6_reproduction_audit", return_value=[]),
+                patch.object(ml_prebreakout, "validate_run9_dataset_audit", return_value=[]),
+                patch.object(ml_prebreakout, "_promotion_decision", return_value=("PROMOTE", [])),
                 patch.object(
                     ml_prebreakout,
                     "expanding_window_folds",
@@ -165,6 +167,17 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertTrue(any("valid fold count" in failure for failure in failures))
         self.assertTrue(any("validation rows" in failure for failure in failures))
 
+    def test_run9_dataset_audit_requires_exact_controlled_counts(self):
+        audit = {
+            "eligible_rows": 21445,
+            "positive_rows": 3381,
+            "validation_rows": 7150,
+        }
+
+        failures = ml_prebreakout.validate_run9_dataset_audit(audit)
+
+        self.assertEqual(failures, ["validation_rows 7150 != expected 7149"])
+
     def test_market_regime_merge_preserves_index_for_existing_masks(self):
         df = pd.DataFrame(
             [
@@ -203,6 +216,64 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(list(featured["Symbol"]), ["AAA", "SPY", "BBB"])
         self.assertEqual(list(selected["Symbol"]), ["AAA", "BBB"])
         self.assertEqual(list(selected["FutureQualitySetupHit"]), [1, 0])
+
+    def test_setup_evolution_features_are_chronological_and_restore_alignment(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-01-03T15:00:00Z"),
+                    "Last": 104.0,
+                    "High20": 110.0,
+                    "EMA9": 101.0,
+                    "EMA21": 100.0,
+                    "VolRel20": 2.0,
+                    "ATR14": 4.0,
+                },
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-01-01T15:00:00Z"),
+                    "Last": 100.0,
+                    "High20": 110.0,
+                    "EMA9": 98.0,
+                    "EMA21": 100.0,
+                    "VolRel20": 1.0,
+                    "ATR14": 3.0,
+                },
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-01-02T15:00:00Z"),
+                    "Last": 102.0,
+                    "High20": 110.0,
+                    "EMA9": 99.0,
+                    "EMA21": 100.0,
+                    "VolRel20": 1.5,
+                    "ATR14": 3.5,
+                },
+                {
+                    "Symbol": "BBB",
+                    "Timestamp": pd.Timestamp("2026-01-03T15:00:00Z"),
+                    "Last": 50.0,
+                    "High20": 55.0,
+                    "EMA9": 48.0,
+                    "EMA21": 49.0,
+                    "VolRel20": 0.8,
+                    "ATR14": 1.0,
+                },
+            ],
+            index=[10, 11, 12, 13],
+        )
+
+        featured = ml_prebreakout.add_prebreakout_features(df, include_market_features=False)
+
+        self.assertEqual(list(featured.index), [10, 11, 12, 13])
+        self.assertAlmostEqual(featured.loc[10, "EMA9_21Spread"], 1.0)
+        self.assertAlmostEqual(featured.loc[10, "EMA9_21SpreadChange1D"], 2.0)
+        self.assertAlmostEqual(featured.loc[10, "DistanceTo20DHighChange1D"], (104.0 - 110.0) / 110.0 * 100.0 - ((102.0 - 110.0) / 110.0 * 100.0))
+        self.assertAlmostEqual(featured.loc[10, "RVOLChange1D"], 0.5)
+        self.assertAlmostEqual(featured.loc[10, "ATRPercent"], 4.0 / 104.0 * 100.0)
+        self.assertTrue(pd.isna(featured.loc[11, "EMA9_21SpreadChange1D"]))
+        self.assertTrue(pd.isna(featured.loc[13, "EMA9_21SpreadChange1D"]))
 
     def test_add_forward_return_labels_uses_existing_return_column(self):
         df = pd.DataFrame(

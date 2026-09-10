@@ -76,7 +76,7 @@ def _load_ml_libs() -> None:
 
 
 MODEL_PATH = "prebreakout_model.pkl"
-MODEL_VERSION = "prebreakout-xgb-v5"
+MODEL_VERSION = "prebreakout-xgb-v6"
 TARGET_COLUMN = "ForwardReturnHit"
 RETURN_COLUMN = "Return_5D"
 RETURN_HORIZON_DAYS = 5
@@ -139,6 +139,37 @@ RELATIVE_STRENGTH_FEATURE_COLS = [
     "RSvsQQQ10D",
     "RSvsQQQ20D",
 ]
+SPY_RELATIVE_STRENGTH_FEATURE_COLS = ["RSvsSPY10D", "RSvsSPY20D"]
+QQQ_RELATIVE_STRENGTH_FEATURE_COLS = ["RSvsQQQ10D", "RSvsQQQ20D"]
+EMA_SETUP_EVOLUTION_FEATURE_COLS = [
+    "EMA9_21Spread",
+    "EMA9_21SpreadPct",
+    "EMA9_21SpreadChange1D",
+    "EMA9_21SpreadChange3D",
+    "EMA9_21SpreadSlope3D",
+    "EMA9_21SpreadSlope5D",
+]
+BREAKOUT_POSITION_EVOLUTION_FEATURE_COLS = [
+    "DistanceTo20DHighPct",
+    "DistanceTo20DHighChange1D",
+    "DistanceTo20DHighChange3D",
+    "DistanceTo20DHighSlope3D",
+    "DistanceTo20DHighSlope5D",
+]
+VOLUME_VOLATILITY_EVOLUTION_FEATURE_COLS = [
+    "RVOLChange1D",
+    "RVOLChange3D",
+    "RVOLSlope3D",
+    "RVOLSlope5D",
+    "ATRPercent",
+    "ATRPercentChange3D",
+    "Volatility20DChange3D",
+]
+RUN9_EXPERIMENTAL_FEATURE_COLS = (
+    EMA_SETUP_EVOLUTION_FEATURE_COLS
+    + BREAKOUT_POSITION_EVOLUTION_FEATURE_COLS
+    + VOLUME_VOLATILITY_EVOLUTION_FEATURE_COLS
+)
 OPTIONAL_MARKET_CONTEXT_COLS = ["MarketBreadthAboveEMA21"]
 
 
@@ -159,7 +190,7 @@ def _engineered_feature_names() -> list[str]:
 
 ENGINEERED_FEATURE_COLS = _engineered_feature_names()
 RUN6_FEATURE_COLS = BASE_FEATURE_COLS + ENGINEERED_FEATURE_COLS
-FEATURE_COLS = RUN6_FEATURE_COLS + REGIME_FEATURE_COLS
+FEATURE_COLS = RUN6_FEATURE_COLS + REGIME_FEATURE_COLS + RUN9_EXPERIMENTAL_FEATURE_COLS
 
 
 def _utc_now() -> datetime:
@@ -592,6 +623,27 @@ def _numeric_group_column(group: pd.DataFrame, name: str) -> pd.Series:
     return pd.to_numeric(group[name], errors="coerce")
 
 
+def _first_existing_column(df: pd.DataFrame, names: list[str]) -> str | None:
+    for name in names:
+        if name in df.columns:
+            return name
+    return None
+
+
+def _pct_change_from_prior(values: pd.Series, symbols: pd.Series, window: int) -> pd.Series:
+    prior = values.groupby(symbols, sort=False).shift(window)
+    return np.where(prior > 0, (values - prior) / prior, np.nan)
+
+
+def _change_from_prior(values: pd.Series, symbols: pd.Series, window: int) -> pd.Series:
+    prior = values.groupby(symbols, sort=False).shift(window)
+    return values - prior
+
+
+def _unique_feature_list(features: list[str]) -> list[str]:
+    return list(dict.fromkeys(str(feature) for feature in features))
+
+
 def _all_benchmark_context(df: pd.DataFrame, symbol: str, prefix: str) -> pd.DataFrame:
     if "Symbol" not in df.columns or "Timestamp" not in df.columns:
         return pd.DataFrame()
@@ -796,6 +848,49 @@ def add_prebreakout_features(
         return out.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
 
     symbols = out["Symbol"].astype(str).str.upper()
+    price_col = _first_existing_column(out, ["Last", "Close"])
+    price = pd.to_numeric(out[price_col], errors="coerce") if price_col else pd.Series(np.nan, index=out.index)
+    ema9_col = _first_existing_column(out, ["EMA9", "Ema9", "ema9"])
+    ema21_col = _first_existing_column(out, ["EMA21", "Ema21", "ema21"])
+    if ema9_col and ema21_col:
+        ema9 = pd.to_numeric(out[ema9_col], errors="coerce")
+        ema21 = pd.to_numeric(out[ema21_col], errors="coerce")
+        out["EMA9_21Spread"] = ema9 - ema21
+        out["EMA9_21SpreadPct"] = np.where(price > 0, out["EMA9_21Spread"] / price * 100.0, np.nan)
+        for window in (1, 3):
+            out[f"EMA9_21SpreadChange{window}D"] = _change_from_prior(out["EMA9_21Spread"], symbols, window)
+        for window in (3, 5):
+            change = _change_from_prior(out["EMA9_21Spread"], symbols, window)
+            out[f"EMA9_21SpreadSlope{window}D"] = change / float(window)
+
+    high20_col = _first_existing_column(out, ["High20", "High_20D", "High20D"])
+    if price_col and high20_col:
+        high20 = pd.to_numeric(out[high20_col], errors="coerce")
+        out["DistanceTo20DHighPct"] = np.where(high20 > 0, (price - high20) / high20 * 100.0, np.nan)
+        for window in (1, 3):
+            out[f"DistanceTo20DHighChange{window}D"] = _change_from_prior(out["DistanceTo20DHighPct"], symbols, window)
+        for window in (3, 5):
+            change = _change_from_prior(out["DistanceTo20DHighPct"], symbols, window)
+            out[f"DistanceTo20DHighSlope{window}D"] = change / float(window)
+
+    if "VolRel20" in out.columns:
+        rvol = pd.to_numeric(out["VolRel20"], errors="coerce")
+        for window in (1, 3):
+            out[f"RVOLChange{window}D"] = _change_from_prior(rvol, symbols, window)
+        for window in (3, 5):
+            out[f"RVOLSlope{window}D"] = _change_from_prior(rvol, symbols, window) / float(window)
+
+    atr_col = _first_existing_column(out, ["ATR14", "ATR", "Atr14", "atr14"])
+    if price_col and atr_col:
+        atr = pd.to_numeric(out[atr_col], errors="coerce")
+        out["ATRPercent"] = np.where(price > 0, atr / price * 100.0, np.nan)
+        out["ATRPercentChange3D"] = _change_from_prior(out["ATRPercent"], symbols, 3)
+
+    volatility_col = _first_existing_column(out, ["Volatility20D%", "Volatility20D", "Volatility20"])
+    if volatility_col:
+        volatility = pd.to_numeric(out[volatility_col], errors="coerce")
+        out["Volatility20DChange3D"] = _change_from_prior(volatility, symbols, 3)
+
     for col in ENGINEERED_HISTORY_COLS:
         if col not in out.columns:
             continue
@@ -1010,6 +1105,11 @@ RUN6_EXPECTED_VALID_FOLDS = 2
 RUN6_ROW_TOLERANCE = 0.02
 RUN6_POSITIVE_TOLERANCE = 0.10
 RUN6_VALIDATION_ROW_TOLERANCE = 0.05
+RUN8_CONTROL_AUC = 0.581982
+RUN8_CHAMPION_AUC = 0.591574
+RUN9_EXPECTED_ROWS = 21445
+RUN9_EXPECTED_POSITIVE_ROWS = 3381
+RUN9_EXPECTED_VALIDATION_ROWS = 7149
 
 
 def target_audit(y: pd.Series) -> dict:
@@ -1065,6 +1165,17 @@ def validate_run6_reproduction_audit(audit: dict) -> list[str]:
         failures.append(f"valid fold count {audit['valid_fold_count']} != expected {RUN6_EXPECTED_VALID_FOLDS}")
     if not _within_tolerance(audit["validation_rows"], RUN6_EXPECTED_VALIDATION_ROWS, RUN6_VALIDATION_ROW_TOLERANCE):
         failures.append(f"validation rows {audit['validation_rows']} != expected ~{RUN6_EXPECTED_VALIDATION_ROWS}")
+    return failures
+
+
+def validate_run9_dataset_audit(audit: dict) -> list[str]:
+    failures = []
+    if int(audit["eligible_rows"]) != RUN9_EXPECTED_ROWS:
+        failures.append(f"eligible_rows {audit['eligible_rows']} != expected {RUN9_EXPECTED_ROWS}")
+    if int(audit["positive_rows"]) != RUN9_EXPECTED_POSITIVE_ROWS:
+        failures.append(f"positive_rows {audit['positive_rows']} != expected {RUN9_EXPECTED_POSITIVE_ROWS}")
+    if int(audit["validation_rows"]) != RUN9_EXPECTED_VALIDATION_ROWS:
+        failures.append(f"validation_rows {audit['validation_rows']} != expected {RUN9_EXPECTED_VALIDATION_ROWS}")
     return failures
 
 
@@ -1174,15 +1285,36 @@ def evaluate_prebreakout_feature_set(
         X_val = X.loc[fold["val_idx"], feature_cols]
         y_train = y.loc[fold["train_idx"]]
         y_val = y.loc[fold["val_idx"]]
+        train_start, train_end = _date_range_for_indices(df_labeled, fold["train_idx"])
+        val_start, val_end = _date_range_for_indices(df_labeled, fold["val_idx"])
         if y_train.nunique(dropna=True) < 2 or y_val.nunique(dropna=True) < 2:
+            fold_metrics.append(
+                {
+                    "fold": int(fold["fold"]),
+                    "train_rows": int(len(X_train)),
+                    "validation_rows": int(len(X_val)),
+                    "train_start": train_start,
+                    "train_end": train_end,
+                    "validation_start": val_start or fold["validation_start"],
+                    "validation_end": val_end or fold["validation_end"],
+                    "purge_days": int(fold["purge_days"]),
+                    "positive_validation_rows": int(y_val.sum()),
+                    "positive_rate": float(y_val.mean()) if len(y_val) else 0.0,
+                    "auc": None,
+                    "pr_auc": None,
+                    "brier_score": None,
+                    "log_loss": None,
+                    "top_10pct_hit_rate": None,
+                    "lift_over_baseline": None,
+                    "skipped": "one_class_train_or_validation",
+                }
+            )
             continue
 
         fold_clf = _new_prebreakout_classifier()
         fold_clf.fit(X_train, y_train)
         y_proba = fold_clf.predict_proba(X_val)[:, 1]
         metrics = classification_diagnostics(y_val, y_proba)
-        train_start, train_end = _date_range_for_indices(df_labeled, fold["train_idx"])
-        val_start, val_end = _date_range_for_indices(df_labeled, fold["val_idx"])
         metrics.update(
             {
                 "fold": int(fold["fold"]),
@@ -1278,6 +1410,129 @@ def _print_feature_ablation(ablation: list[dict]) -> None:
             f"AUC={_fmt_metric(summary.get('auc_mean'), 6)} "
             f"Top10Lift={_fmt_metric(summary.get('lift_over_baseline_mean'), 6)}"
         )
+
+
+def _valid_validation_rows(fold_metrics: list[dict]) -> int:
+    return int(sum(row.get("validation_rows", 0) for row in fold_metrics if row.get("auc") is not None))
+
+
+def _available_features(all_features: list[str], requested: list[str]) -> list[str]:
+    available = set(all_features)
+    return [feature for feature in requested if feature in available]
+
+
+def _run9_eval(
+    name: str,
+    X: pd.DataFrame,
+    y: pd.Series,
+    df_labeled: pd.DataFrame,
+    folds: list[dict],
+    features: list[str],
+    added_features: list[str],
+    family: str,
+) -> dict:
+    feature_cols = _unique_feature_list([feature for feature in features if feature in X.columns])
+    evaluation = evaluate_prebreakout_feature_set(X, y, df_labeled, folds, feature_cols)
+    evaluation.update(
+        {
+            "name": name,
+            "features": feature_cols,
+            "feature_list": feature_cols,
+            "features_added": [feature for feature in added_features if feature in feature_cols],
+            "market_features": [feature for feature in feature_cols if feature in REGIME_FEATURE_COLS],
+            "family": family,
+            "validation_rows": _valid_validation_rows(evaluation["fold_metrics"]),
+        }
+    )
+    return evaluation
+
+
+def _auc_by_fold(evaluation: dict) -> dict[int, float | None]:
+    return {int(row["fold"]): row.get("auc") for row in evaluation.get("fold_metrics", [])}
+
+
+def _fold_improvement_count(candidate: dict, baseline: dict) -> int:
+    candidate_auc = _auc_by_fold(candidate)
+    baseline_auc = _auc_by_fold(baseline)
+    improved = 0
+    for fold, auc in candidate_auc.items():
+        base_auc = baseline_auc.get(fold)
+        if auc is not None and base_auc is not None and float(auc) > float(base_auc):
+            improved += 1
+    return improved
+
+
+def _print_run9_experiment(name: str, evaluation: dict) -> None:
+    summary = evaluation.get("validation_summary") or {}
+    print(f"[ml_prebreakout] {name}: {evaluation['name']}")
+    print(f"[ml_prebreakout] Feature list: {json.dumps(evaluation.get('features') or [])}")
+    for metrics in evaluation.get("fold_metrics", []):
+        skipped = f", skipped={metrics['skipped']}" if metrics.get("skipped") else ""
+        print(
+            "[ml_prebreakout] "
+            f"Fold {metrics['fold']} AUC={_fmt_metric(metrics.get('auc'), 6)}, "
+            f"PR-AUC={_fmt_metric(metrics.get('pr_auc'), 6)}, "
+            f"Brier={_fmt_metric(metrics.get('brier_score'), 6)}, "
+            f"LogLoss={_fmt_metric(metrics.get('log_loss'), 6)}, "
+            f"Top10Hit={_fmt_metric(metrics.get('top_10pct_hit_rate'), 6)}, "
+            f"Top10Lift={_fmt_metric(metrics.get('lift_over_baseline'), 6)}{skipped}"
+        )
+    print(
+        "[ml_prebreakout] "
+        f"Mean AUC={_fmt_metric(summary.get('auc_mean'), 6)}, "
+        f"Std={_fmt_metric(summary.get('auc_std'), 6)}, "
+        f"PR-AUC={_fmt_metric(summary.get('pr_auc_mean'), 6)}, "
+        f"Brier={_fmt_metric(summary.get('brier_score_mean'), 6)}, "
+        f"LogLoss={_fmt_metric(summary.get('log_loss_mean'), 6)}, "
+        f"Top10Hit={_fmt_metric(summary.get('top_10pct_hit_rate_mean'), 6)}, "
+        f"Top10Lift={_fmt_metric(summary.get('lift_over_baseline_mean'), 6)}"
+    )
+
+
+def _print_run9_summary(ablation: list[dict], baseline_auc: float | None) -> None:
+    print("[ml_prebreakout] === RUN #9 FINAL COMPARISON ===")
+    print("[ml_prebreakout] Experiment | Features Added | Mean AUC | Std | PR-AUC | Brier | Top10Lift | Delta vs Baseline")
+    for row in ablation:
+        summary = row.get("validation_summary") or {}
+        auc = summary.get("auc_mean")
+        delta = float(auc) - float(baseline_auc) if auc is not None and baseline_auc is not None else None
+        print(
+            "[ml_prebreakout] "
+            f"{row['name']} | {', '.join(row.get('features_added') or []) or 'none'} | "
+            f"{_fmt_metric(auc, 6)} | "
+            f"{_fmt_metric(summary.get('auc_std'), 6)} | "
+            f"{_fmt_metric(summary.get('pr_auc_mean'), 6)} | "
+            f"{_fmt_metric(summary.get('brier_score_mean'), 6)} | "
+            f"{_fmt_metric(summary.get('lift_over_baseline_mean'), 6)} | "
+            f"{_fmt_metric(delta, 6)}"
+        )
+
+
+def _promotion_decision(candidate: dict, baseline: dict, dataset_failures: list[str]) -> tuple[str, list[str]]:
+    reasons = []
+    candidate_summary = candidate.get("validation_summary") or {}
+    baseline_summary = baseline.get("validation_summary") or {}
+    auc = candidate_summary.get("auc_mean")
+    baseline_auc = baseline_summary.get("auc_mean")
+    candidate_top_lift = candidate_summary.get("lift_over_baseline_mean")
+    baseline_top_lift = baseline_summary.get("lift_over_baseline_mean")
+    if dataset_failures:
+        reasons.extend(dataset_failures)
+    if auc is None:
+        reasons.append("candidate mean AUC is unavailable")
+    elif float(auc) <= RUN8_CHAMPION_AUC:
+        reasons.append(f"candidate mean AUC {_fmt_metric(auc, 6)} <= Run #8 champion {RUN8_CHAMPION_AUC}")
+    if auc is not None and float(auc) >= 0.80:
+        reasons.append("candidate AUC is unexpectedly high; investigate leakage before promotion")
+    if baseline_auc is not None and _fold_improvement_count(candidate, baseline) < 2:
+        reasons.append("improvement is not present in at least two valid folds")
+    if (
+        candidate_top_lift is not None
+        and baseline_top_lift is not None
+        and float(candidate_top_lift) < float(baseline_top_lift) * 0.95
+    ):
+        reasons.append("mean Top10 lift materially deteriorated versus control")
+    return ("REJECT" if reasons else "PROMOTE", reasons)
 
 
 def _feature_importance_rows(model, feature_cols: list[str], top_n: int = 20) -> list[dict]:
@@ -1439,11 +1694,18 @@ def train_prebreakout_model(
         return {}
 
     run6_reproduction = build_run6_reproduction(df_labeled, total_rows_before_eligibility=len(df))
+    print("[ml_prebreakout] === RUN #9 DATASET AUDIT ===")
     print_target_and_fold_audit("RUN #6 REPRODUCTION", run6_reproduction["audit"])
     if run6_reproduction["failures"]:
         print("[ml_prebreakout] Run #6 reproduction failed; refusing market-regime evaluation.")
         for failure in run6_reproduction["failures"]:
             print(f"[ml_prebreakout] RUN #6 REPRODUCTION FAILURE: {failure}")
+        return {}
+    run9_dataset_failures = validate_run9_dataset_audit(run6_reproduction["audit"])
+    if run9_dataset_failures:
+        print("[ml_prebreakout] Run #9 exact dataset audit failed; refusing ablation.")
+        for failure in run9_dataset_failures:
+            print(f"[ml_prebreakout] RUN #9 DATASET AUDIT FAILURE: {failure}")
         return {}
 
     X_run6 = run6_reproduction["X"]
@@ -1470,72 +1732,148 @@ def train_prebreakout_model(
         print("[ml_prebreakout] No challenger features available.")
         return {}
 
-    baseline_evaluation = evaluate_prebreakout_feature_set(X_run6, y, df_labeled, folds, list(X_run6.columns))
-    baseline_evaluation.update(
-        {
-            "name": "Baseline",
-            "features": list(X_run6.columns),
-            "market_features": [],
-        }
+    ablation_results = []
+    baseline_evaluation = _run9_eval(
+        "Run #9 Control",
+        X_run6,
+        y,
+        df_labeled,
+        folds,
+        list(X_run6.columns),
+        [],
+        "control",
     )
-    ablation_results = [baseline_evaluation]
-    for feature_set in prebreakout_feature_sets(list(X_market.columns)):
-        if feature_set["name"] == "Baseline":
-            continue
-        features = [col for col in feature_set["features"] if col in X_market.columns]
-        if not features:
-            continue
-        evaluation = evaluate_prebreakout_feature_set(X_market, y, df_labeled, folds, features)
-        if not evaluation["fold_metrics"]:
-            continue
-        evaluation.update(
-            {
-                "name": feature_set["name"],
-                "features": features,
-                "market_features": feature_set["market_features"],
-            }
+    ablation_results.append(baseline_evaluation)
+    print("[ml_prebreakout] === RUN #9 CONTROL ===")
+    _print_run9_experiment("CONTROL", baseline_evaluation)
+
+    if not baseline_evaluation["validation_summary"].get("auc_mean"):
+        print("[ml_prebreakout] Control experiment could not compute AUC.")
+        return {}
+
+    all_market_features = list(X_market.columns)
+    print("[ml_prebreakout] === RUN #9 RELATIVE STRENGTH ABLATION ===")
+    rs_experiments = [
+        ("B1 +SPY Relative Strength", SPY_RELATIVE_STRENGTH_FEATURE_COLS),
+        ("B2 +QQQ Relative Strength", QQQ_RELATIVE_STRENGTH_FEATURE_COLS),
+        ("B3 +SPY+QQQ Relative Strength", RELATIVE_STRENGTH_FEATURE_COLS),
+    ]
+    rs_results = []
+    for name, added in rs_experiments:
+        available_added = _available_features(all_market_features, added)
+        evaluation = _run9_eval(
+            name,
+            X_market,
+            y,
+            df_labeled,
+            folds,
+            list(X_run6.columns) + available_added,
+            available_added,
+            "relative_strength",
         )
+        rs_results.append(evaluation)
         ablation_results.append(evaluation)
+        _print_run9_experiment("RELATIVE STRENGTH", evaluation)
 
-    if not ablation_results:
-        print("[ml_prebreakout] Expanding-window folds have only one class in train or validation.")
-        return {}
-
-    _print_feature_ablation(ablation_results)
-    baseline_eval = next((row for row in ablation_results if row["name"] == "Baseline"), None)
-    market_candidates = [row for row in ablation_results if row["name"] != "Baseline"]
-    if not baseline_eval or not market_candidates:
-        print("[ml_prebreakout] Missing baseline or market ablation results.")
-        return {}
-
-    best_market_eval = max(
-        market_candidates,
+    best_rs_eval = max(
+        rs_results,
         key=lambda row: row["validation_summary"].get("auc_mean", float("-inf")),
     )
-    baseline_auc = baseline_eval["validation_summary"].get("auc_mean")
-    best_market_auc = best_market_eval["validation_summary"].get("auc_mean")
-    selected_eval = (
-        best_market_eval
-        if best_market_auc is not None and baseline_auc is not None and float(best_market_auc) >= float(baseline_auc)
-        else baseline_eval
+    best_so_far = max(
+        [baseline_evaluation, best_rs_eval],
+        key=lambda row: row["validation_summary"].get("auc_mean", float("-inf")),
     )
 
-    fold_metrics = best_market_eval["fold_metrics"]
-    validation_summary = best_market_eval["validation_summary"]
+    print("[ml_prebreakout] === RUN #9 EMA EVOLUTION ABLATION ===")
+    ema_added = _available_features(all_market_features, EMA_SETUP_EVOLUTION_FEATURE_COLS)
+    ema_eval = _run9_eval(
+        "C +EMA Setup Evolution",
+        X_market,
+        y,
+        df_labeled,
+        folds,
+        best_rs_eval["features"] + ema_added,
+        ema_added,
+        "ema_setup_evolution",
+    )
+    ablation_results.append(ema_eval)
+    _print_run9_experiment("EMA EVOLUTION", ema_eval)
+    if ema_eval["validation_summary"].get("auc_mean", float("-inf")) > best_so_far["validation_summary"].get(
+        "auc_mean", float("-inf")
+    ):
+        best_so_far = ema_eval
+
+    print("[ml_prebreakout] === RUN #9 BREAKOUT POSITION ABLATION ===")
+    breakout_added = _available_features(all_market_features, BREAKOUT_POSITION_EVOLUTION_FEATURE_COLS)
+    breakout_eval = _run9_eval(
+        "D +Breakout Position Evolution",
+        X_market,
+        y,
+        df_labeled,
+        folds,
+        best_so_far["features"] + breakout_added,
+        breakout_added,
+        "breakout_position_evolution",
+    )
+    ablation_results.append(breakout_eval)
+    _print_run9_experiment("BREAKOUT POSITION", breakout_eval)
+    if breakout_eval["validation_summary"].get("auc_mean", float("-inf")) > best_so_far["validation_summary"].get(
+        "auc_mean", float("-inf")
+    ):
+        best_so_far = breakout_eval
+
+    print("[ml_prebreakout] === RUN #9 VOLUME/VOLATILITY ABLATION ===")
+    vol_added = _available_features(all_market_features, VOLUME_VOLATILITY_EVOLUTION_FEATURE_COLS)
+    skipped_vol_features = [
+        feature for feature in VOLUME_VOLATILITY_EVOLUTION_FEATURE_COLS if feature not in vol_added
+    ]
+    if skipped_vol_features:
+        print(f"[ml_prebreakout] Skipped unavailable volume/volatility features: {skipped_vol_features}")
+    vol_eval = _run9_eval(
+        "E +Volume/Volatility Evolution",
+        X_market,
+        y,
+        df_labeled,
+        folds,
+        best_so_far["features"] + vol_added,
+        vol_added,
+        "volume_volatility_evolution",
+    )
+    ablation_results.append(vol_eval)
+    _print_run9_experiment("VOLUME/VOLATILITY", vol_eval)
+    if vol_eval["validation_summary"].get("auc_mean", float("-inf")) > best_so_far["validation_summary"].get(
+        "auc_mean", float("-inf")
+    ):
+        best_so_far = vol_eval
+
+    baseline_auc = baseline_evaluation["validation_summary"].get("auc_mean")
+    _print_run9_summary(ablation_results, baseline_auc)
+
+    selected_eval = best_so_far
+    fold_metrics = selected_eval["fold_metrics"]
+    validation_summary = selected_eval["validation_summary"]
     auc = validation_summary.get("auc_mean")
     if auc is None:
         print("[ml_prebreakout] Expanding-window validation could not compute AUC.")
         return {}
 
     selected_features = selected_eval["features"]
-    training_matrix = X_market if selected_eval["market_features"] else X_run6
+    training_matrix = X_market if selected_eval is not baseline_evaluation else X_run6
+    promotion_result, promotion_reasons = _promotion_decision(selected_eval, baseline_evaluation, run9_dataset_failures)
+    print("[ml_prebreakout] === RUN #9 PROMOTION DECISION ===")
+    print(f"[ml_prebreakout] Run #8 champion AUC: {RUN8_CHAMPION_AUC}")
+    print(f"[ml_prebreakout] Run #9 selected experiment: {selected_eval['name']}")
+    print(f"[ml_prebreakout] Run #9 selected mean AUC: {_fmt_metric(auc, 6)}")
+    print(f"[ml_prebreakout] Run #9 delta vs Run #8: {_fmt_metric(float(auc) - RUN8_CHAMPION_AUC, 6)}")
+    print(f"[ml_prebreakout] RUN #9 PROMOTION RESULT: {promotion_result}")
+    for reason in promotion_reasons:
+        print(f"[ml_prebreakout] RUN #9 PROMOTION REASON: {reason}")
+
     clf = _new_prebreakout_classifier()
     clf.fit(training_matrix[selected_features], y)
 
-    calibration = confidence_bucket_diagnostics(best_market_eval["validation_actual"], best_market_eval["validation_proba"])
-    validation_rows = int(sum(row["validation_rows"] for row in fold_metrics))
-    _print_validation_report("Best market-regime feature set: " + best_market_eval["name"], fold_metrics, validation_summary, validation_rows)
-    market_regime_result = _print_baseline_comparison(validation_summary, fold_metrics, baseline_auc)
+    calibration = confidence_bucket_diagnostics(selected_eval["validation_actual"], selected_eval["validation_proba"])
+    validation_rows = _valid_validation_rows(fold_metrics)
 
     feature_importances = _feature_importance_rows(clf, selected_features)
     if feature_importances:
@@ -1552,6 +1890,7 @@ def train_prebreakout_model(
         "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
         "auc": float(auc),
         "validation_method": "expanding_window_5fold_purged",
+        "purge_days": RETURN_HORIZON_DAYS,
         "validation_metrics": validation_summary,
         "validation_folds": fold_metrics,
         "fold_metrics": fold_metrics,
@@ -1560,21 +1899,50 @@ def train_prebreakout_model(
             {
                 "name": row["name"],
                 "features": row["features"],
+                "feature_list": row["feature_list"],
+                "features_added": row["features_added"],
                 "market_features": row["market_features"],
+                "family": row["family"],
+                "validation_summary": row["validation_summary"],
+                "fold_metrics": row["fold_metrics"],
+            }
+            for row in ablation_results
+        ],
+        "ablation_results": [
+            {
+                "name": row["name"],
+                "features_added": row["features_added"],
                 "validation_summary": row["validation_summary"],
             }
             for row in ablation_results
         ],
         "selected_feature_set": selected_eval["name"],
-        "best_market_feature_set": best_market_eval["name"],
-        "market_regime_result": market_regime_result,
+        "best_market_feature_set": selected_eval["name"],
+        "market_regime_result": promotion_result,
+        "promotion_result": promotion_result,
+        "promotion_reasons": promotion_reasons,
         "baseline_comparison": {
             "run6_mean_auc": RUN6_BASELINE_MEAN_AUC,
             "run6_std_auc": RUN6_BASELINE_STD_AUC,
             "challenger_mean_auc": validation_summary.get("auc_mean"),
             "challenger_std_auc": validation_summary.get("auc_std"),
             "same_run_baseline_mean_auc": baseline_auc,
+            "run8_champion_auc": RUN8_CHAMPION_AUC,
+            "delta_vs_run8": float(auc) - RUN8_CHAMPION_AUC,
         },
+        "eligible_rows": int(len(X_run6)),
+        "feature_list": list(selected_features),
+        "mean_auc": validation_summary.get("auc_mean"),
+        "std_auc": validation_summary.get("auc_std"),
+        "mean_pr_auc": validation_summary.get("pr_auc_mean"),
+        "mean_brier": validation_summary.get("brier_score_mean"),
+        "mean_logloss": validation_summary.get("log_loss_mean"),
+        "mean_top10_hit": validation_summary.get("top_10pct_hit_rate_mean"),
+        "mean_top10_lift": validation_summary.get("lift_over_baseline_mean"),
+        "baseline_auc": baseline_auc,
+        "delta_vs_baseline": float(auc) - float(baseline_auc) if baseline_auc is not None else None,
+        "run8_champion_auc": RUN8_CHAMPION_AUC,
+        "delta_vs_run8": float(auc) - RUN8_CHAMPION_AUC,
         "feature_importances": feature_importances,
         "target": PREBREAKOUT_TARGET_COLUMN,
         "target_rule": (
@@ -1592,12 +1960,13 @@ def train_prebreakout_model(
         "positive_rows": int(y.sum()),
         "validation_rows": validation_rows,
         "run6_reproduction_audit": run6_reproduction["audit"],
+        "run9_dataset_audit": run6_reproduction["audit"],
         "benchmark_context_source": benchmark_context_source,
         "model_version": MODEL_VERSION,
         "source": "local",
     }
 
-    if save_prebreakout_model is not None and serialize_model_to_bytes is not None:
+    if promotion_result == "PROMOTE" and save_prebreakout_model is not None and serialize_model_to_bytes is not None:
         try:
             saved = save_prebreakout_model(
                 model_bytes=serialize_model_to_bytes(clf, joblib),
@@ -1616,6 +1985,8 @@ def train_prebreakout_model(
         except Exception as e:
             bundle["db_save_error"] = str(e)
             print(f"[ml_prebreakout] DB model save failed: {e}")
+    elif promotion_result != "PROMOTE":
+        print("[ml_prebreakout] Run #9 rejected; not saving challenger to Neon.")
 
     joblib.dump(bundle, model_path)
     print(f"[ml_prebreakout] Saved XGBoost model to {model_path}")
