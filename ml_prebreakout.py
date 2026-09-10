@@ -77,7 +77,7 @@ def _load_ml_libs() -> None:
 
 
 MODEL_PATH = "prebreakout_model.pkl"
-MODEL_VERSION = "prebreakout-xgb-v8"
+MODEL_VERSION = "prebreakout-xgb-v9"
 TARGET_COLUMN = "ForwardReturnHit"
 RETURN_COLUMN = "Return_5D"
 RETURN_HORIZON_DAYS = 5
@@ -232,6 +232,76 @@ VOLUME_DRY_UP_FEATURE_COLS = [
     "VolumeChange5D",
     "VolumeDryUp20D",
 ]
+RUN11_CHAMPION_FEATURE_COLS = (
+    RUN9_CHAMPION_FEATURE_COLS
+    + RANGE_COMPRESSION_FEATURE_COLS
+    + HIGHER_LOW_FEATURE_COLS
+)
+RANGE_CONTRACTION_QUALITY_FEATURE_COLS = [
+    "RangePct3D",
+    "RangePct5D",
+    "RangePct10D",
+    "RangeContractionRatio3v10",
+    "RangeContractionRatio5v20",
+    "RangeCompressionAcceleration",
+    "ConsecutiveContractingRangeDays",
+    "RangePctStd5D",
+    "RangePctStd10D",
+]
+INSIDE_TIGHT_DAY_FEATURE_COLS = [
+    "InsideDay",
+    "InsideDayCount3D",
+    "InsideDayCount5D",
+    "NR4",
+    "NR7",
+    "TightDayCount5D",
+]
+HIGHER_LOW_QUALITY_FEATURE_COLS = [
+    "HigherLowRatio5D",
+    "HigherLowRatio10D",
+    "LowSlope5D",
+    "LowSlope10D",
+    "LowSlope20D",
+    "LowSlope5DPct",
+    "LowSlope10DPct",
+    "LowSlope20DPct",
+    "LowSlopeAcceleration",
+    "LowConsistency10D",
+]
+PRICE_STRUCTURE_TIGHTNESS_FEATURE_COLS = [
+    "HighLowChannelWidth5D",
+    "HighLowChannelWidth10D",
+    "HighLowChannelWidth20D",
+    "ChannelCompression5v20",
+    "ChannelCompression10v20",
+    "CloseLocationInRange",
+    "CloseLocation5DAvg",
+    "RecentHighDistancePct",
+]
+VOLUME_COMPRESSION_INTERACTION_FEATURE_COLS = [
+    "VolumeTrend5D",
+    "VolumeTrend10D",
+    "VolumeDryUp5D",
+    "VolumeDryUp10D",
+    "VolumeCompressionRatio5v20",
+    "RangeVolumeInteraction",
+    "CompressionWithVolumeDryUp",
+]
+RS_COMPRESSION_INTERACTION_FEATURE_COLS = [
+    "Compression_x_RS10",
+    "Compression_x_RS20",
+    "RangePct_x_RS10",
+    "HigherLow_x_RS10",
+    "StructureCompressionRS",
+]
+RUN12_EXPERIMENTAL_FEATURE_COLS = (
+    RANGE_CONTRACTION_QUALITY_FEATURE_COLS
+    + INSIDE_TIGHT_DAY_FEATURE_COLS
+    + HIGHER_LOW_QUALITY_FEATURE_COLS
+    + PRICE_STRUCTURE_TIGHTNESS_FEATURE_COLS
+    + VOLUME_COMPRESSION_INTERACTION_FEATURE_COLS
+    + RS_COMPRESSION_INTERACTION_FEATURE_COLS
+)
 RUN10_EXPERIMENTAL_FEATURE_COLS = (
     BOLLINGER_COMPRESSION_FEATURE_COLS
     + ATR_COMPRESSION_FEATURE_COLS
@@ -267,7 +337,13 @@ def _engineered_feature_names() -> list[str]:
 
 ENGINEERED_FEATURE_COLS = _engineered_feature_names()
 RUN6_FEATURE_COLS = BASE_FEATURE_COLS + ENGINEERED_FEATURE_COLS
-FEATURE_COLS = RUN6_FEATURE_COLS + REGIME_FEATURE_COLS + RUN9_EXPERIMENTAL_FEATURE_COLS + RUN10_EXPERIMENTAL_FEATURE_COLS
+FEATURE_COLS = (
+    RUN6_FEATURE_COLS
+    + REGIME_FEATURE_COLS
+    + RUN9_EXPERIMENTAL_FEATURE_COLS
+    + RUN10_EXPERIMENTAL_FEATURE_COLS
+    + RUN12_EXPERIMENTAL_FEATURE_COLS
+)
 
 
 def _utc_now() -> datetime:
@@ -760,6 +836,24 @@ def _rolling_max_by_symbol(values: pd.Series, symbols: pd.Series, window: int, m
     )
 
 
+def _consecutive_true_by_symbol(values: pd.Series, symbols: pd.Series) -> pd.Series:
+    result = pd.Series(np.nan, index=values.index, dtype=float)
+    numeric = pd.to_numeric(values, errors="coerce")
+    for _, group in numeric.groupby(symbols, sort=False):
+        streak = 0
+        for idx, value in group.items():
+            if pd.isna(value):
+                result.loc[idx] = np.nan
+                streak = 0
+            elif float(value) > 0:
+                streak += 1
+                result.loc[idx] = float(streak)
+            else:
+                streak = 0
+                result.loc[idx] = 0.0
+    return result
+
+
 def _unique_feature_list(features: list[str]) -> list[str]:
     return list(dict.fromkeys(str(feature) for feature in features))
 
@@ -1027,22 +1121,26 @@ def add_prebreakout_features(
     if include_market_features and any(col not in out.columns for col in REGIME_FEATURE_COLS):
         out = add_market_regime_features(out, benchmark_context=benchmark_context)
     if "Spark10D" in out.columns:
+        generated = {}
         for window in ENGINEERED_WINDOWS:
             ret_col = f"PriceReturn{window}D"
             slope_col = f"PriceSlope{window}D"
-            out[ret_col] = out["Spark10D"].apply(lambda value, w=window: _spark_price_return(value, w))
-            out[slope_col] = out[ret_col] / float(window)
+            generated[ret_col] = out["Spark10D"].apply(lambda value, w=window: _spark_price_return(value, w))
+            generated[slope_col] = generated[ret_col] / float(window)
+        out = pd.concat([out, pd.DataFrame(generated, index=out.index)], axis=1)
     else:
         price_col = "Last" if "Last" in out.columns else "Close"
         if price_col in out.columns and "Symbol" in out.columns:
             prices = pd.to_numeric(out[price_col], errors="coerce")
             symbols = out["Symbol"].astype(str).str.upper()
+            generated = {}
             for window in ENGINEERED_WINDOWS:
                 prior = prices.groupby(symbols, sort=False).shift(window)
                 ret_col = f"PriceReturn{window}D"
                 slope_col = f"PriceSlope{window}D"
-                out[ret_col] = np.where(prior > 0, (prices - prior) / prior, np.nan)
-                out[slope_col] = out[ret_col] / float(window)
+                generated[ret_col] = pd.Series(np.where(prior > 0, (prices - prior) / prior, np.nan), index=out.index)
+                generated[slope_col] = generated[ret_col] / float(window)
+            out = pd.concat([out, pd.DataFrame(generated, index=out.index)], axis=1)
 
     if "Symbol" not in out.columns:
         for name in ENGINEERED_FEATURE_COLS:
@@ -1053,46 +1151,59 @@ def add_prebreakout_features(
     symbols = out["Symbol"].astype(str).str.upper()
     price_col = _first_existing_column(out, ["Last", "Close"])
     price = pd.to_numeric(out[price_col], errors="coerce") if price_col else pd.Series(np.nan, index=out.index)
+    generated = {}
+
+    def add_feature(name: str, values) -> pd.Series:
+        series = values if isinstance(values, pd.Series) else pd.Series(values, index=out.index)
+        series = series.reindex(out.index)
+        generated[name] = series
+        return series
+
+    def get_feature(name: str) -> pd.Series:
+        if name in generated:
+            return generated[name]
+        return pd.to_numeric(out[name], errors="coerce") if name in out.columns else pd.Series(np.nan, index=out.index)
+
     ema9_col = _first_existing_column(out, ["EMA9", "Ema9", "ema9"])
     ema21_col = _first_existing_column(out, ["EMA21", "Ema21", "ema21"])
     if ema9_col and ema21_col:
         ema9 = pd.to_numeric(out[ema9_col], errors="coerce")
         ema21 = pd.to_numeric(out[ema21_col], errors="coerce")
-        out["EMA9_21Spread"] = ema9 - ema21
-        out["EMA9_21SpreadPct"] = np.where(price > 0, out["EMA9_21Spread"] / price * 100.0, np.nan)
+        ema_spread = add_feature("EMA9_21Spread", ema9 - ema21)
+        add_feature("EMA9_21SpreadPct", np.where(price > 0, ema_spread / price * 100.0, np.nan))
         for window in (1, 3):
-            out[f"EMA9_21SpreadChange{window}D"] = _change_from_prior(out["EMA9_21Spread"], symbols, window)
+            add_feature(f"EMA9_21SpreadChange{window}D", _change_from_prior(ema_spread, symbols, window))
         for window in (3, 5):
-            change = _change_from_prior(out["EMA9_21Spread"], symbols, window)
-            out[f"EMA9_21SpreadSlope{window}D"] = change / float(window)
+            change = _change_from_prior(ema_spread, symbols, window)
+            add_feature(f"EMA9_21SpreadSlope{window}D", change / float(window))
 
     high20_col = _first_existing_column(out, ["High20", "High_20D", "High20D"])
     if price_col and high20_col:
         high20 = pd.to_numeric(out[high20_col], errors="coerce")
-        out["DistanceTo20DHighPct"] = np.where(high20 > 0, (price - high20) / high20 * 100.0, np.nan)
+        distance_to_20d_high = add_feature("DistanceTo20DHighPct", np.where(high20 > 0, (price - high20) / high20 * 100.0, np.nan))
         for window in (1, 3):
-            out[f"DistanceTo20DHighChange{window}D"] = _change_from_prior(out["DistanceTo20DHighPct"], symbols, window)
+            add_feature(f"DistanceTo20DHighChange{window}D", _change_from_prior(distance_to_20d_high, symbols, window))
         for window in (3, 5):
-            change = _change_from_prior(out["DistanceTo20DHighPct"], symbols, window)
-            out[f"DistanceTo20DHighSlope{window}D"] = change / float(window)
+            change = _change_from_prior(distance_to_20d_high, symbols, window)
+            add_feature(f"DistanceTo20DHighSlope{window}D", change / float(window))
 
     if "VolRel20" in out.columns:
         rvol = pd.to_numeric(out["VolRel20"], errors="coerce")
         for window in (1, 3):
-            out[f"RVOLChange{window}D"] = _change_from_prior(rvol, symbols, window)
+            add_feature(f"RVOLChange{window}D", _change_from_prior(rvol, symbols, window))
         for window in (3, 5):
-            out[f"RVOLSlope{window}D"] = _change_from_prior(rvol, symbols, window) / float(window)
+            add_feature(f"RVOLSlope{window}D", _change_from_prior(rvol, symbols, window) / float(window))
 
     atr_col = _first_existing_column(out, ["ATR14", "ATR", "Atr14", "atr14"])
     if price_col and atr_col:
         atr = pd.to_numeric(out[atr_col], errors="coerce")
-        out["ATRPercent"] = np.where(price > 0, atr / price * 100.0, np.nan)
-        out["ATRPercentChange3D"] = _change_from_prior(out["ATRPercent"], symbols, 3)
+        atr_percent = add_feature("ATRPercent", np.where(price > 0, atr / price * 100.0, np.nan))
+        add_feature("ATRPercentChange3D", _change_from_prior(atr_percent, symbols, 3))
 
     volatility_col = _first_existing_column(out, ["Volatility20D%", "Volatility20D", "Volatility20"])
     if volatility_col:
         volatility = pd.to_numeric(out[volatility_col], errors="coerce")
-        out["Volatility20DChange3D"] = _change_from_prior(volatility, symbols, 3)
+        add_feature("Volatility20DChange3D", _change_from_prior(volatility, symbols, 3))
 
     close_col = _first_existing_column(out, ["Close", "Last"])
     high_col = _first_existing_column(out, ["High", "DayHigh", "HighPrice"])
@@ -1103,62 +1214,96 @@ def add_prebreakout_features(
         bb_std = _rolling_std_by_symbol(close, symbols, 20, min_periods=20)
         bb_upper = bb_middle + 2.0 * bb_std
         bb_lower = bb_middle - 2.0 * bb_std
-        out["BBWidth20Pct"] = np.where(bb_middle > 0, (bb_upper - bb_lower) / bb_middle * 100.0, np.nan)
+        bb_width = add_feature("BBWidth20Pct", np.where(bb_middle > 0, (bb_upper - bb_lower) / bb_middle * 100.0, np.nan))
         for window in (3, 5):
-            out[f"BBWidthChange{window}D"] = _change_from_prior(out["BBWidth20Pct"], symbols, window)
-        prior_bb = out["BBWidth20Pct"].groupby(symbols, sort=False).shift(1)
+            add_feature(f"BBWidthChange{window}D", _change_from_prior(bb_width, symbols, window))
+        prior_bb = bb_width.groupby(symbols, sort=False).shift(1)
         bb_mean5 = _rolling_mean_by_symbol(prior_bb, symbols, 5, min_periods=3)
         bb_mean20 = _rolling_mean_by_symbol(prior_bb, symbols, 20, min_periods=10)
-        out["BBWidthRatio5D"] = np.where(bb_mean5 > 0, out["BBWidth20Pct"] / bb_mean5, np.nan)
-        out["BBWidthRatio20D"] = np.where(bb_mean20 > 0, out["BBWidth20Pct"] / bb_mean20, np.nan)
+        add_feature("BBWidthRatio5D", np.where(bb_mean5 > 0, bb_width / bb_mean5, np.nan))
+        add_feature("BBWidthRatio20D", np.where(bb_mean20 > 0, bb_width / bb_mean20, np.nan))
 
     if high_col and low_col and close_col:
         high = pd.to_numeric(out[high_col], errors="coerce")
         low = pd.to_numeric(out[low_col], errors="coerce")
         prev_close = close.groupby(symbols, sort=False).shift(1)
-        out["TrueRange"] = pd.concat(
+        true_range = add_feature(
+            "TrueRange",
+            pd.concat(
             [
                 high - low,
                 (high - prev_close).abs(),
                 (low - prev_close).abs(),
             ],
             axis=1,
-        ).max(axis=1)
-        out["ATR14"] = _rolling_mean_by_symbol(out["TrueRange"], symbols, 14, min_periods=14)
-        out["ATR14Pct"] = np.where(close > 0, out["ATR14"] / close * 100.0, np.nan)
+            ).max(axis=1),
+        )
+        atr14 = add_feature("ATR14", _rolling_mean_by_symbol(true_range, symbols, 14, min_periods=14))
+        atr14_pct = add_feature("ATR14Pct", np.where(close > 0, atr14 / close * 100.0, np.nan))
         for window in (3, 5):
-            out[f"ATRChange{window}D"] = _change_from_prior(out["ATR14"], symbols, window)
+            add_feature(f"ATRChange{window}D", _change_from_prior(atr14, symbols, window))
         for window in (3, 5):
-            out[f"ATR14PctChange{window}D"] = _change_from_prior(out["ATR14Pct"], symbols, window)
-        prior_atr_pct = out["ATR14Pct"].groupby(symbols, sort=False).shift(1)
+            add_feature(f"ATR14PctChange{window}D", _change_from_prior(atr14_pct, symbols, window))
+        prior_atr_pct = atr14_pct.groupby(symbols, sort=False).shift(1)
         atr_mean5 = _rolling_mean_by_symbol(prior_atr_pct, symbols, 5, min_periods=3)
         atr_mean20 = _rolling_mean_by_symbol(prior_atr_pct, symbols, 20, min_periods=10)
-        out["ATRCompression5D"] = np.where(atr_mean5 > 0, out["ATR14Pct"] / atr_mean5, np.nan)
-        out["ATRCompression20D"] = np.where(atr_mean20 > 0, out["ATR14Pct"] / atr_mean20, np.nan)
-        prior_atr = out["ATR14"].groupby(symbols, sort=False).shift(1)
+        add_feature("ATRCompression5D", np.where(atr_mean5 > 0, atr14_pct / atr_mean5, np.nan))
+        add_feature("ATRCompression20D", np.where(atr_mean20 > 0, atr14_pct / atr_mean20, np.nan))
+        prior_atr = atr14.groupby(symbols, sort=False).shift(1)
         atr14_mean5 = _rolling_mean_by_symbol(prior_atr, symbols, 5, min_periods=3)
         atr14_mean20 = _rolling_mean_by_symbol(prior_atr, symbols, 20, min_periods=10)
-        out["ATRRatio5D"] = np.where(atr14_mean5 > 0, out["ATR14"] / atr14_mean5, np.nan)
-        out["ATRRatio20D"] = np.where(atr14_mean20 > 0, out["ATR14"] / atr14_mean20, np.nan)
+        add_feature("ATRRatio5D", np.where(atr14_mean5 > 0, atr14 / atr14_mean5, np.nan))
+        add_feature("ATRRatio20D", np.where(atr14_mean20 > 0, atr14 / atr14_mean20, np.nan))
 
-        out["RangePct"] = np.where(close > 0, (high - low) / close, np.nan)
-        prior_range = out["RangePct"].groupby(symbols, sort=False).shift(1)
+        range_pct = add_feature("RangePct", np.where(close > 0, (high - low) / close, np.nan))
+        prior_range = range_pct.groupby(symbols, sort=False).shift(1)
         for window in (5, 10, 20):
             range_mean = _rolling_mean_by_symbol(prior_range, symbols, window, min_periods=max(3, window // 2))
-            out[f"RangeCompression{window}D"] = np.where(range_mean > 0, out["RangePct"] / range_mean, np.nan)
+            add_feature(f"RangeCompression{window}D", np.where(range_mean > 0, range_pct / range_mean, np.nan))
+        range_mean3 = _rolling_mean_by_symbol(range_pct, symbols, 3, min_periods=2)
+        range_mean5 = _rolling_mean_by_symbol(range_pct, symbols, 5, min_periods=3)
+        range_mean10 = _rolling_mean_by_symbol(range_pct, symbols, 10, min_periods=5)
+        range_mean20 = _rolling_mean_by_symbol(range_pct, symbols, 20, min_periods=10)
+        add_feature("RangePct3D", range_mean3)
+        add_feature("RangePct5D", range_mean5)
+        add_feature("RangePct10D", range_mean10)
+        add_feature("RangeContractionRatio3v10", np.where(range_mean10 > 0, range_mean3 / range_mean10, np.nan))
+        add_feature("RangeContractionRatio5v20", np.where(range_mean20 > 0, range_mean5 / range_mean20, np.nan))
+        add_feature("RangeCompressionAcceleration", get_feature("RangeCompression5D") - get_feature("RangeCompression20D"))
+        contracting = (range_pct < range_pct.groupby(symbols, sort=False).shift(1)).astype(float)
+        contracting = contracting.where(range_pct.notna() & range_pct.groupby(symbols, sort=False).shift(1).notna())
+        add_feature("ConsecutiveContractingRangeDays", _consecutive_true_by_symbol(contracting, symbols))
+        add_feature("RangePctStd5D", _rolling_std_by_symbol(range_pct, symbols, 5, min_periods=3))
+        add_feature("RangePctStd10D", _rolling_std_by_symbol(range_pct, symbols, 10, min_periods=5))
+
+        prev_high = high.groupby(symbols, sort=False).shift(1)
+        prev_low = low.groupby(symbols, sort=False).shift(1)
+        inside_day = ((high < prev_high) & (low > prev_low)).astype(float)
+        inside_day = inside_day.where(high.notna() & low.notna() & prev_high.notna() & prev_low.notna())
+        add_feature("InsideDay", inside_day)
+        add_feature("InsideDayCount3D", _rolling_sum_by_symbol(inside_day, symbols, 3, min_periods=1))
+        add_feature("InsideDayCount5D", _rolling_sum_by_symbol(inside_day, symbols, 5, min_periods=1))
+        rolling_min_range4 = range_pct.groupby(symbols, sort=False).rolling(4, min_periods=4).min().reset_index(level=0, drop=True).reindex(range_pct.index)
+        rolling_min_range7 = range_pct.groupby(symbols, sort=False).rolling(7, min_periods=7).min().reset_index(level=0, drop=True).reindex(range_pct.index)
+        add_feature("NR4", ((range_pct <= rolling_min_range4) & rolling_min_range4.notna()).astype(float))
+        add_feature("NR7", ((range_pct <= rolling_min_range7) & rolling_min_range7.notna()).astype(float))
+        tight_threshold = _rolling_mean_by_symbol(prior_range, symbols, 20, min_periods=10) * 0.75
+        tight_day = ((tight_threshold > 0) & (range_pct <= tight_threshold)).astype(float)
+        tight_day = tight_day.where(range_pct.notna() & tight_threshold.notna())
+        add_feature("TightDayCount5D", _rolling_sum_by_symbol(tight_day, symbols, 5, min_periods=1))
 
     if close_col and high20_col:
         high20 = pd.to_numeric(out[high20_col], errors="coerce")
-        out["DistanceToHigh20Pct"] = np.where(high20 > 0, (high20 - close) / high20 * 100.0, np.nan)
+        distance_to_high20 = add_feature("DistanceToHigh20Pct", np.where(high20 > 0, (high20 - close) / high20 * 100.0, np.nan))
         for window in (1, 3, 5):
-            out[f"DistanceToHighChange{window}D"] = _change_from_prior(out["DistanceToHigh20Pct"], symbols, window)
+            add_feature(f"DistanceToHighChange{window}D", _change_from_prior(distance_to_high20, symbols, window))
 
     if high_col and close_col:
         high = pd.to_numeric(out[high_col], errors="coerce")
-        out["High20D"] = _rolling_max_by_symbol(high, symbols, 20, min_periods=3)
-        out["High50D"] = _rolling_max_by_symbol(high, symbols, 50, min_periods=10)
-        out["DistanceTo20DHighPct"] = np.where(out["High20D"] > 0, close / out["High20D"] - 1.0, np.nan)
-        out["DistanceTo50DHighPct"] = np.where(out["High50D"] > 0, close / out["High50D"] - 1.0, np.nan)
+        high20d = add_feature("High20D", _rolling_max_by_symbol(high, symbols, 20, min_periods=3))
+        high50d = add_feature("High50D", _rolling_max_by_symbol(high, symbols, 50, min_periods=10))
+        add_feature("DistanceTo20DHighPct", np.where(high20d > 0, close / high20d - 1.0, np.nan))
+        add_feature("DistanceTo50DHighPct", np.where(high50d > 0, close / high50d - 1.0, np.nan))
 
         prior_high = high.groupby(symbols, sort=False).shift(1)
         prior_resistance20 = _rolling_max_by_symbol(prior_high, symbols, 20, min_periods=3)
@@ -1167,51 +1312,100 @@ def add_prebreakout_features(
         touch20 = touch20.where(high.notna() & prior_resistance20.notna())
         touch50 = ((prior_resistance50 > 0) & (high >= prior_resistance50 * 0.98) & (high <= prior_resistance50 * 1.02)).astype(float)
         touch50 = touch50.where(high.notna() & prior_resistance50.notna())
-        out["ResistanceTouches20D"] = _rolling_sum_by_symbol(touch20, symbols, 20, min_periods=1)
-        out["ResistanceTouches50D"] = _rolling_sum_by_symbol(touch50, symbols, 50, min_periods=1)
+        add_feature("ResistanceTouches20D", _rolling_sum_by_symbol(touch20, symbols, 20, min_periods=1))
+        add_feature("ResistanceTouches50D", _rolling_sum_by_symbol(touch50, symbols, 50, min_periods=1))
 
     if "BreakoutPos20D" in out.columns:
         breakout_pos = pd.to_numeric(out["BreakoutPos20D"], errors="coerce")
         for window in (1, 3, 5):
-            out[f"BreakoutPosChange{window}D"] = _change_from_prior(breakout_pos, symbols, window)
+            add_feature(f"BreakoutPosChange{window}D", _change_from_prior(breakout_pos, symbols, window))
         for window in (3, 5):
-            out[f"BreakoutPosSlope{window}D"] = _change_from_prior(breakout_pos, symbols, window) / float(window)
+            add_feature(f"BreakoutPosSlope{window}D", _change_from_prior(breakout_pos, symbols, window) / float(window))
 
     if low_col:
         low = pd.to_numeric(out[low_col], errors="coerce")
         for window in (3, 5, 10, 20):
-            out[f"LowSlope{window}D"] = _change_from_prior(low, symbols, window) / float(window)
-        out["LowSlope5DPct"] = np.where(close > 0, out["LowSlope5D"] / close * 100.0, np.nan)
+            add_feature(f"LowSlope{window}D", _change_from_prior(low, symbols, window) / float(window))
+        for window in (5, 10, 20):
+            add_feature(f"LowSlope{window}DPct", np.where(close > 0, get_feature(f"LowSlope{window}D") / close * 100.0, np.nan))
+        add_feature("LowSlopeAcceleration", get_feature("LowSlope5D") - get_feature("LowSlope10D"))
         higher_low = (low > low.groupby(symbols, sort=False).shift(1)).astype(float)
         higher_low = higher_low.where(low.notna() & low.groupby(symbols, sort=False).shift(1).notna())
-        out["HigherLowCount5D"] = _rolling_sum_by_symbol(higher_low, symbols, 5, min_periods=1)
-        valid_low_comparisons = _rolling_sum_by_symbol(higher_low.notna().astype(float), symbols, 5, min_periods=1)
-        out["HigherLowRatio5D"] = np.where(valid_low_comparisons > 0, out["HigherLowCount5D"] / valid_low_comparisons, np.nan)
-        out["HigherLowCount10D"] = _rolling_sum_by_symbol(higher_low, symbols, 10, min_periods=1)
-        out["HigherLowCount20D"] = _rolling_sum_by_symbol(higher_low, symbols, 20, min_periods=1)
+        add_feature("HigherLowCount5D", _rolling_sum_by_symbol(higher_low, symbols, 5, min_periods=1))
+        add_feature("HigherLowCount10D", _rolling_sum_by_symbol(higher_low, symbols, 10, min_periods=1))
+        add_feature("HigherLowCount20D", _rolling_sum_by_symbol(higher_low, symbols, 20, min_periods=1))
+        valid_low_5 = _rolling_sum_by_symbol(higher_low.notna().astype(float), symbols, 5, min_periods=1)
+        valid_low_10 = _rolling_sum_by_symbol(higher_low.notna().astype(float), symbols, 10, min_periods=1)
+        add_feature("HigherLowRatio5D", np.where(valid_low_5 > 0, get_feature("HigherLowCount5D") / valid_low_5, np.nan))
+        add_feature("HigherLowRatio10D", np.where(valid_low_10 > 0, get_feature("HigherLowCount10D") / valid_low_10, np.nan))
+        add_feature("LowConsistency10D", get_feature("HigherLowRatio10D"))
 
     if high_col:
         high = pd.to_numeric(out[high_col], errors="coerce")
         higher_high = (high > high.groupby(symbols, sort=False).shift(1)).astype(float)
         higher_high = higher_high.where(high.notna() & high.groupby(symbols, sort=False).shift(1).notna())
-        out["HigherHighCount10D"] = _rolling_sum_by_symbol(higher_high, symbols, 10, min_periods=1)
-        out["HigherHighCount20D"] = _rolling_sum_by_symbol(higher_high, symbols, 20, min_periods=1)
+        add_feature("HigherHighCount10D", _rolling_sum_by_symbol(higher_high, symbols, 10, min_periods=1))
+        add_feature("HigherHighCount20D", _rolling_sum_by_symbol(higher_high, symbols, 20, min_periods=1))
 
     if high_col and high20_col:
         high = pd.to_numeric(out[high_col], errors="coerce")
         high20 = pd.to_numeric(out[high20_col], errors="coerce")
         touches_resistance = ((high20 > 0) & ((high20 - high).abs() / high20 <= 0.01)).astype(float)
         touches_resistance = touches_resistance.where(high.notna() & high20.notna())
-        out["ResistanceTouchCount10D"] = _rolling_sum_by_symbol(touches_resistance, symbols, 10, min_periods=1)
-        out["ResistanceTouchCount20D"] = _rolling_sum_by_symbol(touches_resistance, symbols, 20, min_periods=1)
+        add_feature("ResistanceTouchCount10D", _rolling_sum_by_symbol(touches_resistance, symbols, 10, min_periods=1))
+        add_feature("ResistanceTouchCount20D", _rolling_sum_by_symbol(touches_resistance, symbols, 20, min_periods=1))
+
+    if high_col and low_col and close_col:
+        high = pd.to_numeric(out[high_col], errors="coerce")
+        low = pd.to_numeric(out[low_col], errors="coerce")
+        range_pct = get_feature("RangePct")
+        for window in (5, 10, 20):
+            channel_high = _rolling_max_by_symbol(high, symbols, window, min_periods=max(3, window // 2))
+            channel_low = (
+                low.groupby(symbols, sort=False)
+                .rolling(window, min_periods=max(3, window // 2))
+                .min()
+                .reset_index(level=0, drop=True)
+                .reindex(low.index)
+            )
+            add_feature(f"HighLowChannelWidth{window}D", np.where(close > 0, (channel_high - channel_low) / close, np.nan))
+        add_feature(
+            "ChannelCompression5v20",
+            np.where(get_feature("HighLowChannelWidth20D") > 0, get_feature("HighLowChannelWidth5D") / get_feature("HighLowChannelWidth20D"), np.nan),
+        )
+        add_feature(
+            "ChannelCompression10v20",
+            np.where(get_feature("HighLowChannelWidth20D") > 0, get_feature("HighLowChannelWidth10D") / get_feature("HighLowChannelWidth20D"), np.nan),
+        )
+        add_feature("CloseLocationInRange", np.where(high > low, (close - low) / (high - low), np.nan))
+        add_feature("CloseLocation5DAvg", _rolling_mean_by_symbol(get_feature("CloseLocationInRange"), symbols, 5, min_periods=3))
+        add_feature("RecentHighDistancePct", get_feature("DistanceTo20DHighPct"))
+
+        rs10 = get_feature("RSvsSPY10D")
+        rs20 = get_feature("RSvsSPY20D")
+        add_feature("Compression_x_RS10", get_feature("RangeCompression10D") * rs10)
+        add_feature("Compression_x_RS20", get_feature("RangeCompression20D") * rs20)
+        add_feature("RangePct_x_RS10", range_pct * rs10)
+        add_feature("HigherLow_x_RS10", get_feature("HigherLowRatio10D") * rs10)
+        add_feature("StructureCompressionRS", get_feature("ChannelCompression10v20") * get_feature("HigherLowRatio10D") * rs10)
 
     if "Volume" in out.columns:
         volume = pd.to_numeric(out["Volume"], errors="coerce")
         vol_mean5 = _rolling_mean_by_symbol(volume, symbols, 5, min_periods=3)
         vol_mean20 = _rolling_mean_by_symbol(volume, symbols, 20, min_periods=10)
-        out["VolumeRatio5D20D"] = np.where(vol_mean20 > 0, vol_mean5 / vol_mean20, np.nan)
-        out["VolumeChange5D"] = _change_from_prior(volume, symbols, 5)
-        out["VolumeDryUp20D"] = np.where(vol_mean20 > 0, volume / vol_mean20, np.nan)
+        add_feature("VolumeRatio5D20D", np.where(vol_mean20 > 0, vol_mean5 / vol_mean20, np.nan))
+        add_feature("VolumeChange5D", _change_from_prior(volume, symbols, 5))
+        add_feature("VolumeDryUp20D", np.where(vol_mean20 > 0, volume / vol_mean20, np.nan))
+        add_feature("VolumeTrend5D", _change_from_prior(volume, symbols, 5) / 5.0)
+        add_feature("VolumeTrend10D", _change_from_prior(volume, symbols, 10) / 10.0)
+        prior_volume = volume.groupby(symbols, sort=False).shift(1)
+        prior_vol_mean5 = _rolling_mean_by_symbol(prior_volume, symbols, 5, min_periods=3)
+        prior_vol_mean10 = _rolling_mean_by_symbol(prior_volume, symbols, 10, min_periods=5)
+        add_feature("VolumeDryUp5D", np.where(prior_vol_mean5 > 0, volume / prior_vol_mean5, np.nan))
+        add_feature("VolumeDryUp10D", np.where(prior_vol_mean10 > 0, volume / prior_vol_mean10, np.nan))
+        add_feature("VolumeCompressionRatio5v20", np.where(vol_mean20 > 0, vol_mean5 / vol_mean20, np.nan))
+        add_feature("RangeVolumeInteraction", get_feature("RangeCompression10D") * get_feature("VolumeCompressionRatio5v20"))
+        add_feature("CompressionWithVolumeDryUp", get_feature("RangeCompression10D") * get_feature("VolumeDryUp10D"))
 
     for col in ENGINEERED_HISTORY_COLS:
         if col not in out.columns:
@@ -1222,12 +1416,20 @@ def add_prebreakout_features(
             prior = values.groupby(symbols, sort=False).shift(window)
             delta_col = f"{safe}Delta{window}D"
             slope_col = f"{safe}Slope{window}D"
-            out[delta_col] = values - prior
-            out[slope_col] = out[delta_col] / float(window)
+            delta = values - prior
+            add_feature(delta_col, delta)
+            add_feature(slope_col, delta / float(window))
 
-    for name in ENGINEERED_FEATURE_COLS:
-        if name not in out.columns:
-            out[name] = 0.0
+    if generated:
+        out = out.drop(columns=[col for col in generated if col in out.columns], errors="ignore")
+        out = pd.concat([out, pd.DataFrame(generated, index=out.index)], axis=1)
+    missing_engineered = {
+        name: pd.Series(0.0, index=out.index)
+        for name in ENGINEERED_FEATURE_COLS
+        if name not in out.columns
+    }
+    if missing_engineered:
+        out = pd.concat([out, pd.DataFrame(missing_engineered, index=out.index)], axis=1)
     return out.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
 
 
@@ -1354,7 +1556,7 @@ def expanding_window_folds(
     return folds
 
 
-def _top_decile_hit_rate(y_true, y_proba) -> tuple[float, int]:
+def _top_fraction_hit_rate(y_true, y_proba, fraction: float) -> tuple[float, int]:
     frame = pd.DataFrame(
         {
             "actual": pd.Series(y_true).reset_index(drop=True).astype(float),
@@ -1363,9 +1565,13 @@ def _top_decile_hit_rate(y_true, y_proba) -> tuple[float, int]:
     ).dropna()
     if frame.empty:
         return 0.0, 0
-    top_n = max(1, int(np.ceil(len(frame) * 0.10)))
+    top_n = max(1, int(np.ceil(len(frame) * float(fraction))))
     top = frame.sort_values("predicted", ascending=False).head(top_n)
     return float(top["actual"].mean()), int(len(top))
+
+
+def _top_decile_hit_rate(y_true, y_proba) -> tuple[float, int]:
+    return _top_fraction_hit_rate(y_true, y_proba, 0.10)
 
 
 def classification_diagnostics(y_true, y_proba) -> dict:
@@ -1374,11 +1580,15 @@ def classification_diagnostics(y_true, y_proba) -> dict:
     predicted = pd.Series(y_proba).reset_index(drop=True).astype(float).clip(1e-9, 1.0 - 1e-9)
     baseline = float(actual.mean()) if len(actual) else 0.0
     top_hit_rate, top_n = _top_decile_hit_rate(actual, predicted)
+    top20_hit_rate, top20_n = _top_fraction_hit_rate(actual, predicted, 0.20)
     metrics = {
         "baseline_hit_rate": baseline,
         "top_10pct_hit_rate": top_hit_rate,
         "top_10pct_n": top_n,
         "lift_over_baseline": float(top_hit_rate / baseline) if baseline > 0 else 0.0,
+        "top_20pct_hit_rate": top20_hit_rate,
+        "top_20pct_n": top20_n,
+        "top_20pct_lift_over_baseline": float(top20_hit_rate / baseline) if baseline > 0 else 0.0,
     }
     if actual.nunique(dropna=True) >= 2:
         metrics["auc"] = float(roc_auc_score(actual, predicted))
@@ -1394,11 +1604,22 @@ def classification_diagnostics(y_true, y_proba) -> dict:
 
 def summarize_fold_metrics(fold_metrics: list[dict]) -> dict:
     summary = {}
-    metric_names = ["auc", "pr_auc", "brier_score", "log_loss", "top_10pct_hit_rate", "lift_over_baseline"]
+    metric_names = [
+        "auc",
+        "pr_auc",
+        "brier_score",
+        "log_loss",
+        "top_10pct_hit_rate",
+        "lift_over_baseline",
+        "top_20pct_hit_rate",
+        "top_20pct_lift_over_baseline",
+    ]
     for name in metric_names:
         values = [float(row[name]) for row in fold_metrics if row.get(name) is not None]
         if values:
             summary[f"{name}_mean"] = float(np.mean(values))
+            if name == "auc":
+                summary["auc_median"] = float(np.median(values))
             summary[f"{name}_std"] = float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
     return summary
 
@@ -1431,6 +1652,9 @@ RUN8_CONTROL_AUC = 0.581982
 RUN8_CHAMPION_AUC = 0.591574
 RUN9_CHAMPION_AUC = 0.591993
 RUN9_CHAMPION_TOP10_LIFT = 1.608
+RUN11_CHAMPION_AUC = 0.6602646969335696
+RUN11_CHAMPION_STD_AUC = 0.031093046669267016
+RUN11_CHAMPION_TOP10_LIFT = 1.6489196579132515
 RUN9_EXPECTED_ROWS = 21445
 RUN9_EXPECTED_POSITIVE_ROWS = 3381
 RUN9_EXPECTED_VALIDATION_ROWS = 7149
@@ -1906,13 +2130,17 @@ def _run10_eval(
     missing_columns: list[str] | None = None,
 ) -> dict:
     available_added = _available_features(list(X.columns), requested_features)
-    if requested_features and not available_added:
+    base_set = set(base_features)
+    new_added = [feature for feature in available_added if feature not in base_set]
+    if requested_features and not new_added:
         reason = "intended features were not generated"
         if missing_columns:
             reason = f"required source columns missing: {', '.join(missing_columns)}"
+        elif available_added:
+            reason = "requested features are already present in the control feature set"
         print(f"[ml_prebreakout] {name} skipped: {reason}; features_added=[]")
         return _skipped_experiment(name, requested_features, reason, family, missing_columns)
-    evaluation = _run9_eval(name, X, y, df_labeled, folds, list(base_features) + available_added, available_added, family)
+    evaluation = _run9_eval(name, X, y, df_labeled, folds, list(base_features) + new_added, new_added, family)
     evaluation["requested_features"] = list(requested_features)
     evaluation["experiment_status"] = "VALID"
     evaluation["skip_reason"] = None
@@ -1966,7 +2194,7 @@ def _print_run9_experiment(name: str, evaluation: dict) -> None:
 
 
 def _print_run9_summary(ablation: list[dict], baseline_auc: float | None) -> None:
-    print("[ml_prebreakout] === RUN #11 FINAL COMPARISON ===")
+    print("[ml_prebreakout] === RUN #12 FINAL COMPARISON ===")
     print(
         "[ml_prebreakout] "
         "Experiment | Features Added | Mean AUC | Std | Min Fold | PR-AUC | Brier | Top10Lift | Delta vs Baseline | Status"
@@ -2003,6 +2231,18 @@ def _best_valid_experiment(rows: list[dict], champion_auc: float, champion_lift:
     return max(valid, key=lambda row: row["validation_summary"].get("auc_mean", float("-inf")))
 
 
+def _best_valid_experiments(rows: list[dict], champion_auc: float, champion_lift: float, limit: int = 2) -> list[dict]:
+    valid = [
+        row
+        for row in rows
+        if row.get("experiment_status") == "VALID"
+        and row.get("validation_summary", {}).get("auc_mean") is not None
+        and float(row["validation_summary"]["auc_mean"]) > float(champion_auc)
+        and row["validation_summary"].get("lift_over_baseline_mean", 0.0) >= float(champion_lift) * 0.95
+    ]
+    return sorted(valid, key=lambda row: row["validation_summary"].get("auc_mean", float("-inf")), reverse=True)[:limit]
+
+
 def _promotion_decision(candidate: dict, baseline: dict, dataset_failures: list[str]) -> tuple[str, list[str]]:
     reasons = []
     candidate_summary = candidate.get("validation_summary") or {}
@@ -2035,11 +2275,11 @@ def _run10_promotion_decision(candidate: dict, champion: dict, dataset_failures:
     candidate_summary = candidate.get("validation_summary") or {}
     champion_summary = champion.get("validation_summary") or {}
     auc = candidate_summary.get("auc_mean")
-    champion_auc = champion_summary.get("auc_mean") or RUN9_CHAMPION_AUC
+    champion_auc = champion_summary.get("auc_mean") or RUN11_CHAMPION_AUC
     candidate_min = candidate_summary.get("min_fold_auc")
     champion_min = champion_summary.get("min_fold_auc")
     candidate_top_lift = candidate_summary.get("lift_over_baseline_mean")
-    champion_top_lift = champion_summary.get("lift_over_baseline_mean") or RUN9_CHAMPION_TOP10_LIFT
+    champion_top_lift = champion_summary.get("lift_over_baseline_mean") or RUN11_CHAMPION_TOP10_LIFT
     if dataset_failures:
         reasons.extend(dataset_failures)
     if candidate.get("experiment_status") != "VALID":
@@ -2112,6 +2352,17 @@ def confidence_bucket_diagnostics(y_true, y_proba, bucket_size: float = 0.1) -> 
             }
         )
     return rows
+
+
+def calibration_error_from_buckets(buckets: list[dict]) -> float | None:
+    total = sum(int(bucket.get("n", 0)) for bucket in buckets)
+    if total <= 0:
+        return None
+    weighted_error = 0.0
+    for bucket in buckets:
+        n = int(bucket.get("n", 0))
+        weighted_error += n * abs(float(bucket.get("mean_confidence", 0.0)) - float(bucket.get("hit_rate", 0.0)))
+    return float(weighted_error / total)
 
 
 # Process-level model cache: every scan was re-downloading the model BYTEA from
@@ -2226,18 +2477,18 @@ def train_prebreakout_model(
         return {}
 
     run6_reproduction = build_run6_reproduction(df_labeled, total_rows_before_eligibility=len(df))
-    print("[ml_prebreakout] === RUN #11 DATASET AUDIT ===")
+    print("[ml_prebreakout] === RUN #12 DATASET AUDIT ===")
     print_target_and_fold_audit("RUN #6 REPRODUCTION", run6_reproduction["audit"])
     if run6_reproduction["failures"]:
-        print("[ml_prebreakout] Run #6 reproduction failed; refusing Run #11 evaluation.")
+        print("[ml_prebreakout] Run #6 reproduction failed; refusing Run #12 evaluation.")
         for failure in run6_reproduction["failures"]:
             print(f"[ml_prebreakout] RUN #6 REPRODUCTION FAILURE: {failure}")
         return {}
     run11_dataset_failures = validate_run11_dataset_audit(run6_reproduction["audit"])
     if run11_dataset_failures:
-        print("[ml_prebreakout] Run #11 material dataset audit failed; refusing ablation.")
+        print("[ml_prebreakout] Run #12 material dataset audit failed; refusing ablation.")
         for failure in run11_dataset_failures:
-            print(f"[ml_prebreakout] RUN #11 DATASET AUDIT FAILURE: {failure}")
+            print(f"[ml_prebreakout] RUN #12 DATASET AUDIT FAILURE: {failure}")
         return {}
 
     X_run6 = run6_reproduction["X"]
@@ -2261,7 +2512,7 @@ def train_prebreakout_model(
     df_feature_source = add_historical_ohlcv_context(df_labeled, days_back=days_back)
     ohlcv_source_columns = [col for col in ["Open", "High", "Low", "Close", "Volume"] if col in df_feature_source.columns]
     print(
-        "[ml_prebreakout] Run #11 OHLCV enrichment columns available: "
+        "[ml_prebreakout] Run #12 OHLCV enrichment columns available: "
         f"{ohlcv_source_columns if ohlcv_source_columns else 'none'}"
     )
     df_featured = add_prebreakout_features(
@@ -2278,12 +2529,15 @@ def train_prebreakout_model(
     all_market_features = list(X_market.columns)
     feature_quality_rows = _print_feature_quality_audit(
         df_featured,
-        _available_features(all_market_features, RUN9_CHAMPION_FEATURE_COLS + RUN10_EXPERIMENTAL_FEATURE_COLS),
+        _available_features(
+            all_market_features,
+            RUN11_CHAMPION_FEATURE_COLS + BOLLINGER_COMPRESSION_FEATURE_COLS + RUN12_EXPERIMENTAL_FEATURE_COLS,
+        ),
     )
 
     ablation_results = []
-    baseline_evaluation = _run10_eval(
-        "A0 Current rigorous control",
+    run6_control_evaluation = _run10_eval(
+        "Run #6 rigorous feature control",
         X_run6,
         y,
         df_labeled,
@@ -2292,74 +2546,86 @@ def train_prebreakout_model(
         [],
         "control",
     )
-    ablation_results.append(baseline_evaluation)
-    print("[ml_prebreakout] === RUN #11 CONTROL ===")
-    _print_run9_experiment("CONTROL", baseline_evaluation)
-    if not baseline_evaluation["validation_summary"].get("auc_mean"):
+    ablation_results.append(run6_control_evaluation)
+    print("[ml_prebreakout] === RUN #12 CONTROL ===")
+    _print_run9_experiment("RUN #6 FEATURE CONTROL", run6_control_evaluation)
+    if not run6_control_evaluation["validation_summary"].get("auc_mean"):
         print("[ml_prebreakout] Control experiment could not compute AUC.")
         return {}
 
-    print("[ml_prebreakout] === RUN #11 CURRENT CHAMPION ===")
-    champion_requested = RELATIVE_STRENGTH_FEATURE_COLS + VOLUME_VOLATILITY_EVOLUTION_FEATURE_COLS
+    print("[ml_prebreakout] === RUN #12 RUN #11 CHAMPION CONTROL ===")
+    base_feature_columns = _available_features(list(X_run6.columns), RUN6_FEATURE_COLS)
+    champion_requested = list(RUN11_CHAMPION_FEATURE_COLS)
     champion_evaluation = _run10_eval(
-        "A1 Current Run #9 champion",
+        "A0 Run #11 production champion",
         X_market,
         y,
         df_labeled,
         folds,
-        list(X_run6.columns),
+        base_feature_columns,
         champion_requested,
-        "current_champion",
+        "run11_champion",
     )
     ablation_results.append(champion_evaluation)
-    _print_run9_experiment("CURRENT CHAMPION", champion_evaluation)
+    _print_run9_experiment("RUN #11 CHAMPION", champion_evaluation)
     if champion_evaluation.get("experiment_status") != "VALID":
-        print("[ml_prebreakout] Current champion feature set is unavailable; refusing Run #11 ablation.")
+        print("[ml_prebreakout] Run #11 champion feature set is unavailable; refusing Run #12 ablation.")
         return {}
 
-    print("[ml_prebreakout] === RUN #11 COMPRESSION & STRUCTURE ABLATION ===")
+    print("[ml_prebreakout] === RUN #12 COMPRESSION QUALITY & READINESS ABLATION ===")
     champion_features = champion_evaluation["features"]
-    run11_experiments = [
-        ("A Champion + Bollinger compression", BOLLINGER_COMPRESSION_FEATURE_COLS, "bollinger_compression", []),
+    run12_experiments = [
         (
-            "B Champion + ATR compression",
+            "B Range contraction quality",
+            RANGE_CONTRACTION_QUALITY_FEATURE_COLS,
+            "range_contraction_quality",
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+        ),
+        (
+            "C Inside/tight-day compression",
+            INSIDE_TIGHT_DAY_FEATURE_COLS,
+            "inside_tight_day",
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+        ),
+        (
+            "D Higher-low quality",
+            HIGHER_LOW_QUALITY_FEATURE_COLS,
+            "higher_low_quality",
+            _missing_source_columns(df_feature_source, [["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+        ),
+        (
+            "E Price structure tightness",
+            PRICE_STRUCTURE_TIGHTNESS_FEATURE_COLS,
+            "price_structure_tightness",
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+        ),
+        (
+            "F Volume compression interaction",
+            VOLUME_COMPRESSION_INTERACTION_FEATURE_COLS,
+            "volume_compression_interaction",
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"], ["Volume"]]),
+        ),
+        (
+            "G RS/compression interaction",
+            RS_COMPRESSION_INTERACTION_FEATURE_COLS,
+            "rs_compression_interaction",
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+        ),
+        (
+            "H Bollinger confirmation",
+            BOLLINGER_COMPRESSION_FEATURE_COLS,
+            "bollinger_confirmation",
+            _missing_source_columns(df_feature_source, [["Close", "Last"]]),
+        ),
+        (
+            "I ATR confirmation",
             ATR_COMPRESSION_FEATURE_COLS,
-            "atr_compression",
+            "atr_confirmation",
             _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
-        ),
-        (
-            "C Champion + resistance proximity",
-            ["High20D", "High50D", "DistanceTo20DHighPct", "DistanceTo50DHighPct"],
-            "resistance_proximity",
-            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Close", "Last"]]),
-        ),
-        (
-            "D Champion + resistance touches",
-            ["ResistanceTouches20D", "ResistanceTouches50D"],
-            "resistance_touch",
-            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"]]),
-        ),
-        (
-            "E Champion + higher-low structure",
-            HIGHER_LOW_FEATURE_COLS,
-            "higher_low_structure",
-            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
-        ),
-        (
-            "F Champion + range compression",
-            RANGE_COMPRESSION_FEATURE_COLS,
-            "range_compression",
-            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
-        ),
-        (
-            "G Champion + volume dry-up",
-            VOLUME_DRY_UP_FEATURE_COLS,
-            "volume_dry_up",
-            _missing_source_columns(df_feature_source, [["Volume"]]),
         ),
     ]
     new_family_results = []
-    for name, requested, family, missing_cols in run11_experiments:
+    for name, requested, family, missing_cols in run12_experiments:
         if missing_cols:
             reason = f"required source columns missing: {', '.join(missing_cols)}"
             print(f"[ml_prebreakout] {name} skipped: {reason}; features_added=[]")
@@ -2368,94 +2634,66 @@ def train_prebreakout_model(
             evaluation = _run10_eval(name, X_market, y, df_labeled, folds, champion_features, requested, family, missing_cols)
         new_family_results.append(evaluation)
         ablation_results.append(evaluation)
-        _print_run9_experiment("COMPRESSION/STRUCTURE", evaluation)
+        _print_run9_experiment("RUN #12 ABLATION", evaluation)
 
-    champion_auc = champion_evaluation["validation_summary"].get("auc_mean", RUN9_CHAMPION_AUC)
-    champion_lift = champion_evaluation["validation_summary"].get("lift_over_baseline_mean", RUN9_CHAMPION_TOP10_LIFT)
-    bollinger_eval = next((row for row in new_family_results if row["family"] == "bollinger_compression"), None)
-    atr_eval = next((row for row in new_family_results if row["family"] == "atr_compression"), None)
-    compression_combo = _unique_feature_list(
-        (bollinger_eval or {}).get("features_added", []) + (atr_eval or {}).get("features_added", [])
-    )
-    if compression_combo and bollinger_eval and atr_eval and atr_eval.get("experiment_status") == "VALID":
-        compression_eval = _run10_eval(
-            "H Champion + Bollinger + ATR compression",
+    champion_auc = champion_evaluation["validation_summary"].get("auc_mean", RUN11_CHAMPION_AUC)
+    champion_lift = champion_evaluation["validation_summary"].get("lift_over_baseline_mean", RUN11_CHAMPION_TOP10_LIFT)
+    best_two = _best_valid_experiments(new_family_results, float(champion_auc), float(champion_lift), limit=2)
+    if len(best_two) >= 2:
+        best_two_features = _unique_feature_list(best_two[0].get("features_added", []) + best_two[1].get("features_added", []))
+        best_two_eval = _run10_eval(
+            "J Best two individually useful families",
             X_market,
             y,
             df_labeled,
             folds,
             champion_features,
-            compression_combo,
-            "bollinger_atr_compression",
+            best_two_features,
+            "best_two_families",
         )
     else:
-        compression_eval = _skipped_experiment(
-            "H Champion + Bollinger + ATR compression",
-            BOLLINGER_COMPRESSION_FEATURE_COLS + ATR_COMPRESSION_FEATURE_COLS,
-            "ATR compression or Bollinger compression was unavailable",
-            "bollinger_atr_compression",
-        )
-    ablation_results.append(compression_eval)
-    _print_run9_experiment("COMPRESSION COMBO", compression_eval)
-
-    structure_results = [row for row in new_family_results if row["family"] in {"resistance_proximity", "resistance_touch", "higher_low_structure"}]
-    compression_results = [row for row in new_family_results if row["family"] in {"bollinger_compression", "atr_compression", "range_compression"}]
-    best_structure = _best_valid_experiment(structure_results, float(champion_auc), float(champion_lift))
-    best_compression = _best_valid_experiment(compression_results, float(champion_auc), float(champion_lift))
-
-    if best_structure and best_structure.get("features_added"):
-        best_structure_eval = _run10_eval(
-            "I Champion + best price-structure family",
-            X_market,
-            y,
-            df_labeled,
-            folds,
-            champion_features,
-            best_structure["features_added"],
-            "best_price_structure_family",
-        )
-    else:
-        best_structure_eval = _skipped_experiment(
-            "I Champion + best price-structure family",
+        best_two_eval = _skipped_experiment(
+            "J Best two individually useful families",
             [],
-            "no individually useful price-structure family",
-            "best_price_structure_family",
+            "fewer than two individually useful Run #12 families",
+            "best_two_families",
         )
-    ablation_results.append(best_structure_eval)
-    _print_run9_experiment("BEST STRUCTURE", best_structure_eval)
+    ablation_results.append(best_two_eval)
+    _print_run9_experiment("BEST TWO FAMILIES", best_two_eval)
 
-    compression_structure_features = _unique_feature_list(
-        (best_compression or {}).get("features_added", []) + (best_structure or {}).get("features_added", [])
+    useful_rows = _best_valid_experiments(new_family_results, float(champion_auc), float(champion_lift), limit=3)
+    carefully_selected_features = _unique_feature_list(
+        [feature for row in useful_rows for feature in row.get("features_added", [])]
     )
-    if best_compression and best_structure and compression_structure_features:
-        best_combo_eval = _run10_eval(
-            "J Champion + best compression + best structure",
+    if carefully_selected_features:
+        careful_eval = _run10_eval(
+            "K Carefully selected combined model",
             X_market,
             y,
             df_labeled,
             folds,
             champion_features,
-            compression_structure_features,
-            "best_compression_plus_structure",
+            carefully_selected_features,
+            "carefully_selected_combination",
         )
     else:
-        best_combo_eval = _skipped_experiment(
-            "J Champion + best compression + best structure",
+        careful_eval = _skipped_experiment(
+            "K Carefully selected combined model",
             [],
-            "best compression and best structure families were not both individually useful",
-            "best_compression_plus_structure",
+            "no individually useful Run #12 family met the combination criteria",
+            "carefully_selected_combination",
         )
-    ablation_results.append(best_combo_eval)
-    _print_run9_experiment("BEST COMPRESSION + STRUCTURE", best_combo_eval)
+    ablation_results.append(careful_eval)
+    _print_run9_experiment("CAREFULLY SELECTED", careful_eval)
 
-    baseline_auc = baseline_evaluation["validation_summary"].get("auc_mean")
+    baseline_auc = run6_control_evaluation["validation_summary"].get("auc_mean")
     _print_run9_summary(ablation_results, baseline_auc)
 
     valid_challengers = [
         row
         for row in ablation_results
         if row.get("experiment_status") == "VALID"
-        and row is not baseline_evaluation
+        and row.get("family") not in {"control", "run11_champion"}
         and row["validation_summary"].get("auc_mean") is not None
     ]
     selected_eval = max(
@@ -2478,18 +2716,19 @@ def train_prebreakout_model(
     clf = _new_prebreakout_classifier()
     clf.fit(X_market[selected_features], y)
     calibration = confidence_bucket_diagnostics(selected_eval["validation_actual"], selected_eval["validation_proba"])
+    calibration_error = calibration_error_from_buckets(calibration)
     validation_rows = _valid_validation_rows(fold_metrics)
     feature_importances = _feature_importance_rows(clf, selected_features)
 
-    print("[ml_prebreakout] === RUN #11 PROMOTION DECISION ===")
-    print("[ml_prebreakout] RUN #11 - PRICE STRUCTURE & COMPRESSION")
+    print("[ml_prebreakout] === RUN #12 PROMOTION DECISION ===")
+    print("[ml_prebreakout] PREBREAKOUT RUN #12 - COMPRESSION QUALITY & BREAKOUT READINESS")
     print(f"[ml_prebreakout] Dataset Eligible: {len(X_run6)}")
     print(f"[ml_prebreakout] Dataset Positive: {int(y.sum())}")
     print(f"[ml_prebreakout] Dataset Positive rate: {_fmt_metric(float(y.mean()), 6)}")
     print(f"[ml_prebreakout] Dataset Validation rows: {_valid_validation_rows(champion_evaluation['fold_metrics'])}")
     print(f"[ml_prebreakout] Baseline Control AUC: {_fmt_metric(baseline_auc, 6)}")
-    print(f"[ml_prebreakout] Run #9 champion AUC: {_fmt_metric(champion_auc, 6)}")
-    print(f"[ml_prebreakout] Run #9 champion Top10 Lift: {_fmt_metric(champion_lift, 6)}")
+    print(f"[ml_prebreakout] Run #11 champion AUC: {_fmt_metric(champion_auc, 6)}")
+    print(f"[ml_prebreakout] Run #11 champion Top10 Lift: {_fmt_metric(champion_lift, 6)}")
     print(f"[ml_prebreakout] BEST CHALLENGER: {selected_eval['name']}")
     print(f"[ml_prebreakout] Mean AUC: {_fmt_metric(auc, 6)}")
     print(f"[ml_prebreakout] Delta vs champion: {_fmt_metric(float(auc) - float(champion_auc), 6)}")
@@ -2497,9 +2736,10 @@ def train_prebreakout_model(
     print(f"[ml_prebreakout] Fold 4: {_fmt_metric(validation_summary.get('fold4_auc'), 6)}")
     print(f"[ml_prebreakout] Fold 5: {_fmt_metric(validation_summary.get('fold5_auc'), 6)}")
     print(f"[ml_prebreakout] Top10 lift: {_fmt_metric(validation_summary.get('lift_over_baseline_mean'), 6)}")
+    print(f"[ml_prebreakout] Top20 lift: {_fmt_metric(validation_summary.get('top_20pct_lift_over_baseline_mean'), 6)}")
     print(f"[ml_prebreakout] Features added: {selected_eval.get('features_added')}")
     print(f"[ml_prebreakout] DECISION: {promotion_result}")
-    print(f"[ml_prebreakout] RUN #11 RESULT: {'PROMOTED' if promotion_result in {'PROMOTE', 'STRONG_PROMOTION'} else 'NO PROMOTION'}")
+    print(f"[ml_prebreakout] RUN #12 RESULT: {'PROMOTED' if promotion_result in {'PROMOTE', 'STRONG_PROMOTION'} else 'NO PROMOTION'}")
     for reason in promotion_reasons:
         print(f"[ml_prebreakout] REASON: {reason}")
     print("[ml_prebreakout] CALIBRATION BUCKETS")
@@ -2510,6 +2750,7 @@ def train_prebreakout_model(
             f"mean_predicted={_fmt_metric(bucket['mean_confidence'], 6)}, "
             f"actual_positive_rate={_fmt_metric(bucket['hit_rate'], 6)}"
         )
+    print(f"[ml_prebreakout] Calibration error: {_fmt_metric(calibration_error, 6)}")
     if feature_importances:
         print("[ml_prebreakout] TOP 20 FEATURE IMPORTANCES")
         for row in feature_importances:
@@ -2558,7 +2799,8 @@ def train_prebreakout_model(
         "feature_quality_audit": feature_quality_rows,
         "selected_feature_set": selected_eval["name"],
         "best_market_feature_set": selected_eval["name"],
-        "run11_result": "PROMOTED" if promotion_result in {"PROMOTE", "STRONG_PROMOTION"} else "NO_PROMOTION",
+        "run12_result": "PROMOTED" if promotion_result in {"PROMOTE", "STRONG_PROMOTION"} else "NO_PROMOTION",
+        "run11_result": "UNCHANGED",
         "market_regime_result": promotion_result,
         "promotion_result": promotion_result,
         "promotion_reasons": promotion_reasons,
@@ -2566,11 +2808,12 @@ def train_prebreakout_model(
             "run6_mean_auc": RUN6_BASELINE_MEAN_AUC,
             "run6_std_auc": RUN6_BASELINE_STD_AUC,
             "control_mean_auc": baseline_auc,
-            "run9_champion_auc": champion_auc,
-            "run9_champion_top10_lift": champion_lift,
+            "run11_champion_auc": champion_auc,
+            "run11_champion_std_auc": RUN11_CHAMPION_STD_AUC,
+            "run11_champion_top10_lift": champion_lift,
             "challenger_mean_auc": validation_summary.get("auc_mean"),
             "challenger_std_auc": validation_summary.get("auc_std"),
-            "delta_vs_champion": float(auc) - float(champion_auc),
+            "delta_vs_run11_champion": float(auc) - float(champion_auc),
         },
         "eligible_rows": int(len(X_run6)),
         "feature_list": list(selected_features),
@@ -2581,10 +2824,12 @@ def train_prebreakout_model(
         "mean_logloss": validation_summary.get("log_loss_mean"),
         "mean_top10_hit": validation_summary.get("top_10pct_hit_rate_mean"),
         "mean_top10_lift": validation_summary.get("lift_over_baseline_mean"),
+        "mean_top20_hit": validation_summary.get("top_20pct_hit_rate_mean"),
+        "mean_top20_lift": validation_summary.get("top_20pct_lift_over_baseline_mean"),
         "baseline_auc": baseline_auc,
         "delta_vs_baseline": float(auc) - float(baseline_auc) if baseline_auc is not None else None,
-        "run9_champion_auc": champion_auc,
-        "delta_vs_run9": float(auc) - float(champion_auc),
+        "run11_champion_auc": champion_auc,
+        "delta_vs_run11": float(auc) - float(champion_auc),
         "feature_importances": feature_importances,
         "target": PREBREAKOUT_TARGET_COLUMN,
         "target_rule": (
@@ -2605,6 +2850,7 @@ def train_prebreakout_model(
         "setup_score_threshold": PREBREAKOUT_SETUP_SCORE_THRESHOLD,
         "return_column": RETURN_COLUMN,
         "calibration": calibration,
+        "calibration_error": calibration_error,
         "rows": int(len(X_run6)),
         "training_rows": int(len(X_run6)),
         "positive_rows": int(y.sum()),
@@ -2613,6 +2859,7 @@ def train_prebreakout_model(
         "run9_dataset_audit": run6_reproduction["audit"],
         "run10_dataset_audit": run6_reproduction["audit"],
         "run11_dataset_audit": run6_reproduction["audit"],
+        "run12_dataset_audit": run6_reproduction["audit"],
         "benchmark_context_source": benchmark_context_source,
         "ohlcv_enrichment_columns": ohlcv_source_columns,
         "model_version": MODEL_VERSION,
@@ -2639,12 +2886,12 @@ def train_prebreakout_model(
             bundle["db_save_error"] = str(e)
             print(f"[ml_prebreakout] DB model save failed: {e}")
     else:
-        print("[ml_prebreakout] Run #11 did not promote; not saving challenger to Neon.")
+        print("[ml_prebreakout] Run #12 did not promote; leaving Run #11 champion untouched in Neon.")
 
-    results_path = Path(model_path).with_name("prebreakout_run11_results.json")
+    results_path = Path(model_path).with_name("prebreakout_run12_results.json")
     results_payload = {key: value for key, value in bundle.items() if key != "model"}
     results_path.write_text(json.dumps(results_payload, indent=2, sort_keys=True, default=str))
-    print(f"[ml_prebreakout] Saved Run #11 JSON report to {results_path}")
+    print(f"[ml_prebreakout] Saved Run #12 JSON report to {results_path}")
 
     joblib.dump(bundle, model_path)
     print(f"[ml_prebreakout] Saved XGBoost model/report bundle to {model_path}")

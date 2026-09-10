@@ -1,4 +1,4 @@
-name: Train PreBreakout Model
+name: Train PreBreakout Model - Run #12
 
 on:
   workflow_dispatch:
@@ -77,7 +77,7 @@ jobs:
           bundle = train_prebreakout_model(days_back=days_back, model_path=str(model_path))
           if not bundle:
               print(json.dumps({"trained": False, "days_back": days_back}, indent=2, sort_keys=True))
-              raise SystemExit("PreBreakout Run #11 training returned no report.")
+              raise SystemExit("PreBreakout Run #12 training returned no report.")
 
           summary = {
               "auc": bundle.get("auc"),
@@ -102,10 +102,12 @@ jobs:
               "run6_reproduction_audit": bundle.get("run6_reproduction_audit") or {},
               "run8_champion_auc": bundle.get("run8_champion_auc"),
               "run9_dataset_audit": bundle.get("run9_dataset_audit") or {},
-              "run9_champion_auc": bundle.get("run9_champion_auc"),
+              "run11_champion_auc": bundle.get("run11_champion_auc"),
               "run10_dataset_audit": bundle.get("run10_dataset_audit") or {},
               "run11_dataset_audit": bundle.get("run11_dataset_audit") or {},
+              "run12_dataset_audit": bundle.get("run12_dataset_audit") or {},
               "run11_result": bundle.get("run11_result"),
+              "run12_result": bundle.get("run12_result"),
               "selected_feature_set": bundle.get("selected_feature_set"),
               "source": bundle.get("source"),
               "std_auc": bundle.get("std_auc"),
@@ -122,7 +124,7 @@ jobs:
           if promoted and bundle.get("source") != "database":
               raise SystemExit("PreBreakout model trained locally but was not saved to Neon.")
           if not promoted:
-              print("PreBreakout Run #11 did not promote a new champion; no Neon save required.")
+              print("PreBreakout Run #12 did not promote a new champion; Run #11 remains in Neon.")
           PY
 
       - name: Upload debug model artifact
@@ -132,5 +134,5 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: |
             prebreakout_model.pkl
-            prebreakout_run11_results.json
+            prebreakout_run12_results.json
           if-no-files-found: warn

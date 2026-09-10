@@ -86,12 +86,9 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
             }
         )
         y = pd.Series([0, 1, 0, 1])
-        labeled = pd.DataFrame(
-            {
-                "Timestamp": pd.date_range("2026-01-01", periods=4, freq="D", tz="UTC"),
-                "FutureQualitySetupHit": y,
-            }
-        )
+        labeled = x.copy()
+        labeled["Timestamp"] = pd.date_range("2026-01-01", periods=4, freq="D", tz="UTC")
+        labeled["FutureQualitySetupHit"] = y
         fake_joblib = types.SimpleNamespace(dump=MagicMock())
         fake_classifier = FakePrebreakoutClassifier()
         save_mock = MagicMock(return_value=True)
@@ -135,8 +132,19 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                 bundle = ml_prebreakout.train_prebreakout_model(model_path=str(Path(tmp) / "model.pkl"))
 
         self.assertEqual(bundle["source"], "database")
-        expected_features = ["SPYTrend10D", "RSvsSPY10D", "RSvsSPY20D", "RSvsQQQ10D", "RSvsQQQ20D"]
-        expected_market_features = ["SPYTrend10D", "RSvsSPY10D", "RSvsSPY20D", "RSvsQQQ10D", "RSvsQQQ20D"]
+        expected_features = [
+            "Trend10D%",
+            "VolRel20",
+            "RSvsSPY10D",
+            "RSvsSPY20D",
+            "RSvsQQQ10D",
+            "RSvsQQQ20D",
+            "RVOLChange1D",
+            "RVOLChange3D",
+            "RVOLSlope3D",
+            "RVOLSlope5D",
+        ]
+        expected_market_features = ["RSvsSPY10D", "RSvsSPY20D", "RSvsQQQ10D", "RSvsQQQ20D"]
         self.assertEqual(bundle["features"], expected_features)
         self.assertEqual(bundle["market_feature_names"], expected_market_features)
         self.assertEqual(bundle["model_version"], ml_prebreakout.MODEL_VERSION)
@@ -423,6 +431,70 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertIn("ResistanceTouches20D", featured.columns)
         self.assertIn("VolumeDryUp20D", featured.columns)
 
+    def test_run12_compression_quality_features_are_chronological_and_aligned(self):
+        rows = []
+        for day in range(30):
+            width = 12.0 - day * 0.25
+            rows.append(
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-04-01T15:00:00Z") + pd.Timedelta(day, unit="D"),
+                    "Close": 100.0 + day * 0.05,
+                    "High": 100.0 + width / 2.0,
+                    "Low": 100.0 - width / 2.0 + day * 0.08,
+                    "Volume": 5000.0 - day * 70.0,
+                    "Trend10D%": 4.0,
+                    "Trend20D%": 7.0,
+                    "RSvsSPY10D": 1.5,
+                    "RSvsSPY20D": 2.0,
+                }
+            )
+        df = pd.DataFrame(rows).sample(frac=1.0, random_state=7)
+
+        featured = ml_prebreakout.add_prebreakout_features(df, include_market_features=False)
+        ordered = df.sort_values(["Symbol", "Timestamp"], kind="mergesort")
+        last_original_index = ordered.index[-1]
+
+        self.assertEqual(list(featured.index), list(df.index))
+        for col in [
+            "RangeContractionRatio3v10",
+            "ConsecutiveContractingRangeDays",
+            "RangePctStd10D",
+            "HighLowChannelWidth20D",
+            "ChannelCompression5v20",
+            "VolumeDryUp10D",
+            "CompressionWithVolumeDryUp",
+            "Compression_x_RS10",
+        ]:
+            self.assertIn(col, featured.columns)
+            self.assertFalse(pd.isna(featured.loc[last_original_index, col]))
+        self.assertGreater(float(featured.loc[last_original_index, "ConsecutiveContractingRangeDays"]), 1.0)
+        self.assertLess(float(featured.loc[last_original_index, "RangeContractionRatio3v10"]), 1.0)
+        self.assertLess(float(featured.loc[last_original_index, "VolumeDryUp10D"]), 1.0)
+
+    def test_run12_inside_day_and_higher_low_quality_features(self):
+        rows = []
+        for day in range(12):
+            rows.append(
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-05-01T15:00:00Z") + pd.Timedelta(day, unit="D"),
+                    "Close": 100.0,
+                    "High": 110.0 - day * 0.4,
+                    "Low": 90.0 + day * 0.3,
+                    "Volume": 1000.0,
+                }
+            )
+        df = pd.DataFrame(rows)
+
+        featured = ml_prebreakout.add_prebreakout_features(df, include_market_features=False)
+
+        self.assertEqual(float(featured.loc[11, "InsideDay"]), 1.0)
+        self.assertEqual(float(featured.loc[11, "InsideDayCount5D"]), 5.0)
+        self.assertAlmostEqual(float(featured.loc[11, "HigherLowRatio10D"]), 1.0)
+        self.assertGreater(float(featured.loc[11, "LowSlopeAcceleration"]), -1.0)
+        self.assertAlmostEqual(float(featured.loc[11, "LowConsistency10D"]), 1.0)
+
     def test_run10_rejects_empty_feature_experiment(self):
         x = pd.DataFrame({"Trend10D%": [1.0, 2.0]})
         y = pd.Series([0, 1])
@@ -442,12 +514,32 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(evaluation["experiment_status"], "INVALID_EMPTY_FEATURES")
         self.assertEqual(evaluation["features_added"], [])
 
+    def test_run12_rejects_features_already_in_control(self):
+        x = pd.DataFrame({"Trend10D%": [1.0, 2.0], "RangePct": [0.1, 0.2]})
+        y = pd.Series([0, 1])
+        labeled = pd.DataFrame({"Timestamp": pd.date_range("2026-01-01", periods=2, tz="UTC")})
+
+        evaluation = ml_prebreakout._run10_eval(
+            "Already controlled",
+            x,
+            y,
+            labeled,
+            [],
+            ["Trend10D%", "RangePct"],
+            ["RangePct"],
+            "duplicate_family",
+        )
+
+        self.assertEqual(evaluation["experiment_status"], "INVALID_EMPTY_FEATURES")
+        self.assertEqual(evaluation["features_added"], [])
+        self.assertIn("already present", evaluation["skip_reason"])
+
     def test_run10_promotion_requires_meaningful_auc_delta(self):
         champion = {
             "validation_summary": {
-                "auc_mean": 0.591993,
-                "min_fold_auc": 0.562,
-                "lift_over_baseline_mean": 1.608,
+                "auc_mean": 0.6602646969335696,
+                "min_fold_auc": 0.61,
+                "lift_over_baseline_mean": 1.6489,
             }
         }
         candidate = {
@@ -455,9 +547,9 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
             "requested_features": ["BBWidth20Pct"],
             "features_added": ["BBWidth20Pct"],
             "validation_summary": {
-                "auc_mean": 0.5924,
-                "min_fold_auc": 0.562,
-                "lift_over_baseline_mean": 1.61,
+                "auc_mean": 0.6610,
+                "min_fold_auc": 0.61,
+                "lift_over_baseline_mean": 1.65,
             },
         }
 
