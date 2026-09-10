@@ -77,7 +77,7 @@ def _load_ml_libs() -> None:
 
 
 MODEL_PATH = "prebreakout_model.pkl"
-MODEL_VERSION = "prebreakout-xgb-v7"
+MODEL_VERSION = "prebreakout-xgb-v8"
 TARGET_COLUMN = "ForwardReturnHit"
 RETURN_COLUMN = "Return_5D"
 RETURN_HORIZON_DAYS = 5
@@ -181,12 +181,22 @@ ATR_COMPRESSION_FEATURE_COLS = [
     "TrueRange",
     "ATR14",
     "ATR14Pct",
+    "ATRChange3D",
+    "ATRChange5D",
+    "ATRRatio5D",
+    "ATRRatio20D",
+]
+RUN10_ATR_COMPRESSION_FEATURE_COLS = [
     "ATR14PctChange3D",
     "ATR14PctChange5D",
     "ATRCompression5D",
     "ATRCompression20D",
 ]
 PREBREAKOUT_STRUCTURE_FEATURE_COLS = [
+    "High20D",
+    "High50D",
+    "DistanceTo20DHighPct",
+    "DistanceTo50DHighPct",
     "DistanceToHigh20Pct",
     "DistanceToHighChange1D",
     "DistanceToHighChange3D",
@@ -198,22 +208,39 @@ PREBREAKOUT_STRUCTURE_FEATURE_COLS = [
     "BreakoutPosSlope5D",
 ]
 HIGHER_LOW_FEATURE_COLS = [
-    "LowSlope3D",
-    "LowSlope5D",
-    "HigherLowCount5D",
-    "HigherLowRatio5D",
-    "LowSlope5DPct",
+    "HigherLowCount10D",
+    "HigherLowCount20D",
+    "LowSlope10D",
+    "LowSlope20D",
+    "HigherHighCount10D",
+    "HigherHighCount20D",
 ]
 RESISTANCE_TOUCH_FEATURE_COLS = [
+    "ResistanceTouches20D",
+    "ResistanceTouches50D",
     "ResistanceTouchCount10D",
     "ResistanceTouchCount20D",
+]
+RANGE_COMPRESSION_FEATURE_COLS = [
+    "RangePct",
+    "RangeCompression5D",
+    "RangeCompression10D",
+    "RangeCompression20D",
+]
+VOLUME_DRY_UP_FEATURE_COLS = [
+    "VolumeRatio5D20D",
+    "VolumeChange5D",
+    "VolumeDryUp20D",
 ]
 RUN10_EXPERIMENTAL_FEATURE_COLS = (
     BOLLINGER_COMPRESSION_FEATURE_COLS
     + ATR_COMPRESSION_FEATURE_COLS
+    + RUN10_ATR_COMPRESSION_FEATURE_COLS
     + PREBREAKOUT_STRUCTURE_FEATURE_COLS
     + HIGHER_LOW_FEATURE_COLS
     + RESISTANCE_TOUCH_FEATURE_COLS
+    + RANGE_COMPRESSION_FEATURE_COLS
+    + VOLUME_DRY_UP_FEATURE_COLS
 )
 RUN9_EXPERIMENTAL_FEATURE_COLS = (
     EMA_SETUP_EVOLUTION_FEATURE_COLS
@@ -722,6 +749,17 @@ def _rolling_sum_by_symbol(values: pd.Series, symbols: pd.Series, window: int, m
     )
 
 
+def _rolling_max_by_symbol(values: pd.Series, symbols: pd.Series, window: int, min_periods: int | None = None) -> pd.Series:
+    min_periods = window if min_periods is None else int(min_periods)
+    return (
+        values.groupby(symbols, sort=False)
+        .rolling(window, min_periods=min_periods)
+        .max()
+        .reset_index(level=0, drop=True)
+        .reindex(values.index)
+    )
+
+
 def _unique_feature_list(features: list[str]) -> list[str]:
     return list(dict.fromkeys(str(feature) for feature in features))
 
@@ -793,6 +831,89 @@ def load_benchmark_regime_context(days_back: int) -> dict[str, pd.DataFrame]:
         "SPY": _benchmark_context_from_bars(bars.get("SPY"), "SPY") if bars.get("SPY") is not None else pd.DataFrame(),
         "QQQ": _benchmark_context_from_bars(bars.get("QQQ"), "QQQ") if bars.get("QQQ") is not None else pd.DataFrame(),
     }
+
+
+def _ohlcv_context_from_bars(bars: pd.DataFrame) -> pd.DataFrame:
+    if bars is None or bars.empty:
+        return pd.DataFrame()
+    frame = bars.copy()
+    frame.index = pd.to_datetime(frame.index, errors="coerce", utc=True)
+    frame = frame.loc[frame.index.notna()].sort_index()
+    required = [col for col in ["Open", "High", "Low", "Close", "Volume"] if col in frame.columns]
+    if not required:
+        return pd.DataFrame()
+    context = pd.DataFrame({"Timestamp": (frame.index.normalize() + pd.Timedelta(1, unit="D")).to_numpy()})
+    for col in required:
+        context[f"OHLC_{col}"] = pd.to_numeric(frame[col], errors="coerce").to_numpy()
+    return context.dropna(subset=["Timestamp"]).drop_duplicates(subset=["Timestamp"], keep="last")
+
+
+def _merge_symbol_ohlcv_asof(group: pd.DataFrame, context: pd.DataFrame) -> pd.DataFrame:
+    if context.empty or group.empty:
+        return group
+    order_col = "__ohlcv_original_order"
+    index_col = "__ohlcv_original_index"
+    left = group.copy()
+    left[order_col] = np.arange(len(left))
+    left[index_col] = left.index
+    left["Timestamp"] = pd.to_datetime(left["Timestamp"], errors="coerce", utc=True)
+    left_sorted = left.sort_values("Timestamp", kind="mergesort")
+    right_sorted = context.copy()
+    right_sorted["Timestamp"] = pd.to_datetime(right_sorted["Timestamp"], errors="coerce", utc=True)
+    right_sorted = right_sorted.dropna(subset=["Timestamp"]).sort_values("Timestamp", kind="mergesort")
+    merged = pd.merge_asof(left_sorted, right_sorted, on="Timestamp", direction="backward")
+    restored = merged.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
+    restored.index = pd.Index(restored.pop(index_col))
+    return restored
+
+
+def add_historical_ohlcv_context(df: pd.DataFrame, days_back: int) -> pd.DataFrame:
+    """Enrich frozen training rows with prior-completed daily OHLCV bars when available."""
+    if df is None or df.empty or "Symbol" not in df.columns or "Timestamp" not in df.columns:
+        return df
+    try:
+        from data.price_alpaca import download_multi_alpaca
+
+        symbols = sorted(set(df["Symbol"].astype(str).str.upper()))
+        bars_by_symbol = download_multi_alpaca(
+            symbols,
+            period=f"{int(days_back) + 90}d",
+            interval="1d",
+            prepost=False,
+            timeout_s=30,
+        )
+    except Exception as e:
+        print(f"[ml_prebreakout] Historical OHLCV enrichment unavailable: {e}")
+        return df
+
+    if not bars_by_symbol:
+        print("[ml_prebreakout] Historical OHLCV enrichment returned no bars.")
+        return df
+
+    enriched_groups = []
+    symbols = df["Symbol"].astype(str).str.upper()
+    for symbol, group in df.groupby(symbols, sort=False):
+        context = _ohlcv_context_from_bars(bars_by_symbol.get(symbol))
+        enriched_groups.append(_merge_symbol_ohlcv_asof(group, context))
+    if not enriched_groups:
+        return df
+    enriched = pd.concat(enriched_groups).sort_index(kind="mergesort")
+    filled_cols = []
+    for col in ["Open", "High", "Low", "Close", "Volume"]:
+        ohlc_col = f"OHLC_{col}"
+        if ohlc_col not in enriched.columns:
+            continue
+        if col not in enriched.columns:
+            enriched[col] = enriched[ohlc_col]
+        else:
+            enriched[col] = enriched[col].where(pd.to_numeric(enriched[col], errors="coerce").notna(), enriched[ohlc_col])
+        if enriched[ohlc_col].notna().any():
+            filled_cols.append(col)
+    if filled_cols:
+        print(f"[ml_prebreakout] Historical OHLCV enrichment available for: {filled_cols}")
+    else:
+        print("[ml_prebreakout] Historical OHLCV enrichment found no usable OHLCV columns.")
+    return enriched.drop(columns=[col for col in enriched.columns if col.startswith("OHLC_")])
 
 
 def _merge_benchmark_asof(out: pd.DataFrame, benchmark: pd.DataFrame) -> pd.DataFrame:
@@ -1006,18 +1127,48 @@ def add_prebreakout_features(
         out["ATR14"] = _rolling_mean_by_symbol(out["TrueRange"], symbols, 14, min_periods=14)
         out["ATR14Pct"] = np.where(close > 0, out["ATR14"] / close * 100.0, np.nan)
         for window in (3, 5):
+            out[f"ATRChange{window}D"] = _change_from_prior(out["ATR14"], symbols, window)
+        for window in (3, 5):
             out[f"ATR14PctChange{window}D"] = _change_from_prior(out["ATR14Pct"], symbols, window)
         prior_atr_pct = out["ATR14Pct"].groupby(symbols, sort=False).shift(1)
         atr_mean5 = _rolling_mean_by_symbol(prior_atr_pct, symbols, 5, min_periods=3)
         atr_mean20 = _rolling_mean_by_symbol(prior_atr_pct, symbols, 20, min_periods=10)
         out["ATRCompression5D"] = np.where(atr_mean5 > 0, out["ATR14Pct"] / atr_mean5, np.nan)
         out["ATRCompression20D"] = np.where(atr_mean20 > 0, out["ATR14Pct"] / atr_mean20, np.nan)
+        prior_atr = out["ATR14"].groupby(symbols, sort=False).shift(1)
+        atr14_mean5 = _rolling_mean_by_symbol(prior_atr, symbols, 5, min_periods=3)
+        atr14_mean20 = _rolling_mean_by_symbol(prior_atr, symbols, 20, min_periods=10)
+        out["ATRRatio5D"] = np.where(atr14_mean5 > 0, out["ATR14"] / atr14_mean5, np.nan)
+        out["ATRRatio20D"] = np.where(atr14_mean20 > 0, out["ATR14"] / atr14_mean20, np.nan)
+
+        out["RangePct"] = np.where(close > 0, (high - low) / close, np.nan)
+        prior_range = out["RangePct"].groupby(symbols, sort=False).shift(1)
+        for window in (5, 10, 20):
+            range_mean = _rolling_mean_by_symbol(prior_range, symbols, window, min_periods=max(3, window // 2))
+            out[f"RangeCompression{window}D"] = np.where(range_mean > 0, out["RangePct"] / range_mean, np.nan)
 
     if close_col and high20_col:
         high20 = pd.to_numeric(out[high20_col], errors="coerce")
         out["DistanceToHigh20Pct"] = np.where(high20 > 0, (high20 - close) / high20 * 100.0, np.nan)
         for window in (1, 3, 5):
             out[f"DistanceToHighChange{window}D"] = _change_from_prior(out["DistanceToHigh20Pct"], symbols, window)
+
+    if high_col and close_col:
+        high = pd.to_numeric(out[high_col], errors="coerce")
+        out["High20D"] = _rolling_max_by_symbol(high, symbols, 20, min_periods=3)
+        out["High50D"] = _rolling_max_by_symbol(high, symbols, 50, min_periods=10)
+        out["DistanceTo20DHighPct"] = np.where(out["High20D"] > 0, close / out["High20D"] - 1.0, np.nan)
+        out["DistanceTo50DHighPct"] = np.where(out["High50D"] > 0, close / out["High50D"] - 1.0, np.nan)
+
+        prior_high = high.groupby(symbols, sort=False).shift(1)
+        prior_resistance20 = _rolling_max_by_symbol(prior_high, symbols, 20, min_periods=3)
+        prior_resistance50 = _rolling_max_by_symbol(prior_high, symbols, 50, min_periods=10)
+        touch20 = ((prior_resistance20 > 0) & (high >= prior_resistance20 * 0.98) & (high <= prior_resistance20 * 1.02)).astype(float)
+        touch20 = touch20.where(high.notna() & prior_resistance20.notna())
+        touch50 = ((prior_resistance50 > 0) & (high >= prior_resistance50 * 0.98) & (high <= prior_resistance50 * 1.02)).astype(float)
+        touch50 = touch50.where(high.notna() & prior_resistance50.notna())
+        out["ResistanceTouches20D"] = _rolling_sum_by_symbol(touch20, symbols, 20, min_periods=1)
+        out["ResistanceTouches50D"] = _rolling_sum_by_symbol(touch50, symbols, 50, min_periods=1)
 
     if "BreakoutPos20D" in out.columns:
         breakout_pos = pd.to_numeric(out["BreakoutPos20D"], errors="coerce")
@@ -1028,7 +1179,7 @@ def add_prebreakout_features(
 
     if low_col:
         low = pd.to_numeric(out[low_col], errors="coerce")
-        for window in (3, 5):
+        for window in (3, 5, 10, 20):
             out[f"LowSlope{window}D"] = _change_from_prior(low, symbols, window) / float(window)
         out["LowSlope5DPct"] = np.where(close > 0, out["LowSlope5D"] / close * 100.0, np.nan)
         higher_low = (low > low.groupby(symbols, sort=False).shift(1)).astype(float)
@@ -1036,6 +1187,15 @@ def add_prebreakout_features(
         out["HigherLowCount5D"] = _rolling_sum_by_symbol(higher_low, symbols, 5, min_periods=1)
         valid_low_comparisons = _rolling_sum_by_symbol(higher_low.notna().astype(float), symbols, 5, min_periods=1)
         out["HigherLowRatio5D"] = np.where(valid_low_comparisons > 0, out["HigherLowCount5D"] / valid_low_comparisons, np.nan)
+        out["HigherLowCount10D"] = _rolling_sum_by_symbol(higher_low, symbols, 10, min_periods=1)
+        out["HigherLowCount20D"] = _rolling_sum_by_symbol(higher_low, symbols, 20, min_periods=1)
+
+    if high_col:
+        high = pd.to_numeric(out[high_col], errors="coerce")
+        higher_high = (high > high.groupby(symbols, sort=False).shift(1)).astype(float)
+        higher_high = higher_high.where(high.notna() & high.groupby(symbols, sort=False).shift(1).notna())
+        out["HigherHighCount10D"] = _rolling_sum_by_symbol(higher_high, symbols, 10, min_periods=1)
+        out["HigherHighCount20D"] = _rolling_sum_by_symbol(higher_high, symbols, 20, min_periods=1)
 
     if high_col and high20_col:
         high = pd.to_numeric(out[high_col], errors="coerce")
@@ -1044,6 +1204,14 @@ def add_prebreakout_features(
         touches_resistance = touches_resistance.where(high.notna() & high20.notna())
         out["ResistanceTouchCount10D"] = _rolling_sum_by_symbol(touches_resistance, symbols, 10, min_periods=1)
         out["ResistanceTouchCount20D"] = _rolling_sum_by_symbol(touches_resistance, symbols, 20, min_periods=1)
+
+    if "Volume" in out.columns:
+        volume = pd.to_numeric(out["Volume"], errors="coerce")
+        vol_mean5 = _rolling_mean_by_symbol(volume, symbols, 5, min_periods=3)
+        vol_mean20 = _rolling_mean_by_symbol(volume, symbols, 20, min_periods=10)
+        out["VolumeRatio5D20D"] = np.where(vol_mean20 > 0, vol_mean5 / vol_mean20, np.nan)
+        out["VolumeChange5D"] = _change_from_prior(volume, symbols, 5)
+        out["VolumeDryUp20D"] = np.where(vol_mean20 > 0, volume / vol_mean20, np.nan)
 
     for col in ENGINEERED_HISTORY_COLS:
         if col not in out.columns:
@@ -1783,7 +1951,7 @@ def _print_run9_experiment(name: str, evaluation: dict) -> None:
 
 
 def _print_run9_summary(ablation: list[dict], baseline_auc: float | None) -> None:
-    print("[ml_prebreakout] === RUN #10 FINAL COMPARISON ===")
+    print("[ml_prebreakout] === RUN #11 FINAL COMPARISON ===")
     print(
         "[ml_prebreakout] "
         "Experiment | Features Added | Mean AUC | Std | Min Fold | PR-AUC | Brier | Top10Lift | Delta vs Baseline | Status"
@@ -1804,6 +1972,20 @@ def _print_run9_summary(ablation: list[dict], baseline_auc: float | None) -> Non
             f"{_fmt_metric(delta, 6)} | "
             f"{row.get('experiment_status', 'VALID')}"
         )
+
+
+def _best_valid_experiment(rows: list[dict], champion_auc: float, champion_lift: float) -> dict | None:
+    valid = [
+        row
+        for row in rows
+        if row.get("experiment_status") == "VALID"
+        and row.get("validation_summary", {}).get("auc_mean") is not None
+        and float(row["validation_summary"]["auc_mean"]) > float(champion_auc)
+        and row["validation_summary"].get("lift_over_baseline_mean", 0.0) >= float(champion_lift) * 0.95
+    ]
+    if not valid:
+        return None
+    return max(valid, key=lambda row: row["validation_summary"].get("auc_mean", float("-inf")))
 
 
 def _promotion_decision(candidate: dict, baseline: dict, dataset_failures: list[str]) -> tuple[str, list[str]]:
@@ -2029,18 +2211,18 @@ def train_prebreakout_model(
         return {}
 
     run6_reproduction = build_run6_reproduction(df_labeled, total_rows_before_eligibility=len(df))
-    print("[ml_prebreakout] === RUN #10 DATASET AUDIT ===")
+    print("[ml_prebreakout] === RUN #11 DATASET AUDIT ===")
     print_target_and_fold_audit("RUN #6 REPRODUCTION", run6_reproduction["audit"])
     if run6_reproduction["failures"]:
-        print("[ml_prebreakout] Run #6 reproduction failed; refusing Run #10 evaluation.")
+        print("[ml_prebreakout] Run #6 reproduction failed; refusing Run #11 evaluation.")
         for failure in run6_reproduction["failures"]:
             print(f"[ml_prebreakout] RUN #6 REPRODUCTION FAILURE: {failure}")
         return {}
-    run10_dataset_failures = validate_run9_dataset_audit(run6_reproduction["audit"])
-    if run10_dataset_failures:
-        print("[ml_prebreakout] Run #10 exact dataset audit failed; refusing ablation.")
-        for failure in run10_dataset_failures:
-            print(f"[ml_prebreakout] RUN #10 DATASET AUDIT FAILURE: {failure}")
+    run11_dataset_failures = validate_run9_dataset_audit(run6_reproduction["audit"])
+    if run11_dataset_failures:
+        print("[ml_prebreakout] Run #11 exact dataset audit failed; refusing ablation.")
+        for failure in run11_dataset_failures:
+            print(f"[ml_prebreakout] RUN #11 DATASET AUDIT FAILURE: {failure}")
         return {}
 
     X_run6 = run6_reproduction["X"]
@@ -2061,14 +2243,26 @@ def train_prebreakout_model(
         symbol: "alpaca_daily_prior_completed_bar" if not context.empty else "missing"
         for symbol, context in benchmark_context.items()
     }
-    X_market, _ = build_ml_dataset(df_labeled, benchmark_context=benchmark_context, include_market_features=True)
+    df_feature_source = add_historical_ohlcv_context(df_labeled, days_back=days_back)
+    ohlcv_source_columns = [col for col in ["Open", "High", "Low", "Close", "Volume"] if col in df_feature_source.columns]
+    print(
+        "[ml_prebreakout] Run #11 OHLCV enrichment columns available: "
+        f"{ohlcv_source_columns if ohlcv_source_columns else 'none'}"
+    )
+    df_featured = add_prebreakout_features(
+        df_feature_source,
+        benchmark_context=benchmark_context,
+        include_market_features=True,
+    )
+    selected_market_cols = [col for col in FEATURE_COLS if col in df_featured.columns]
+    X_market = df_featured[selected_market_cols].copy().fillna(0.0)
     if X_market.empty:
         print("[ml_prebreakout] No challenger features available.")
         return {}
 
     all_market_features = list(X_market.columns)
     feature_quality_rows = _print_feature_quality_audit(
-        X_market,
+        df_featured,
         _available_features(all_market_features, RUN9_CHAMPION_FEATURE_COLS + RUN10_EXPERIMENTAL_FEATURE_COLS),
     )
 
@@ -2084,13 +2278,13 @@ def train_prebreakout_model(
         "control",
     )
     ablation_results.append(baseline_evaluation)
-    print("[ml_prebreakout] === RUN #10 CONTROL ===")
+    print("[ml_prebreakout] === RUN #11 CONTROL ===")
     _print_run9_experiment("CONTROL", baseline_evaluation)
     if not baseline_evaluation["validation_summary"].get("auc_mean"):
         print("[ml_prebreakout] Control experiment could not compute AUC.")
         return {}
 
-    print("[ml_prebreakout] === RUN #10 CURRENT CHAMPION ===")
+    print("[ml_prebreakout] === RUN #11 CURRENT CHAMPION ===")
     champion_requested = RELATIVE_STRENGTH_FEATURE_COLS + VOLUME_VOLATILITY_EVOLUTION_FEATURE_COLS
     champion_evaluation = _run10_eval(
         "A1 Current Run #9 champion",
@@ -2105,41 +2299,53 @@ def train_prebreakout_model(
     ablation_results.append(champion_evaluation)
     _print_run9_experiment("CURRENT CHAMPION", champion_evaluation)
     if champion_evaluation.get("experiment_status") != "VALID":
-        print("[ml_prebreakout] Current champion feature set is unavailable; refusing Run #10 ablation.")
+        print("[ml_prebreakout] Current champion feature set is unavailable; refusing Run #11 ablation.")
         return {}
 
-    print("[ml_prebreakout] === RUN #10 COMPRESSION & STRUCTURE ABLATION ===")
+    print("[ml_prebreakout] === RUN #11 COMPRESSION & STRUCTURE ABLATION ===")
     champion_features = champion_evaluation["features"]
-    experiments = [
-        ("B1 Champion + Bollinger compression", BOLLINGER_COMPRESSION_FEATURE_COLS, "bollinger_compression", []),
+    run11_experiments = [
+        ("A Champion + Bollinger compression", BOLLINGER_COMPRESSION_FEATURE_COLS, "bollinger_compression", []),
         (
-            "B2 Champion + ATR compression",
+            "B Champion + ATR compression",
             ATR_COMPRESSION_FEATURE_COLS,
             "atr_compression",
-            _missing_source_columns(df_labeled, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
         ),
         (
-            "B3 Champion + distance/high-position evolution",
-            PREBREAKOUT_STRUCTURE_FEATURE_COLS,
-            "breakout_structure",
-            _missing_source_columns(df_labeled, [["High20", "High_20D", "High20D"], ["Close", "Last"]]),
+            "C Champion + resistance proximity",
+            ["High20D", "High50D", "DistanceTo20DHighPct", "DistanceTo50DHighPct"],
+            "resistance_proximity",
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Close", "Last"]]),
         ),
         (
-            "B4 Champion + higher-low structure",
+            "D Champion + resistance touches",
+            ["ResistanceTouches20D", "ResistanceTouches50D"],
+            "resistance_touch",
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"]]),
+        ),
+        (
+            "E Champion + higher-low structure",
             HIGHER_LOW_FEATURE_COLS,
             "higher_low_structure",
-            _missing_source_columns(df_labeled, [["Low", "DayLow", "LowPrice"]]),
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
         ),
         (
-            "B5 Champion + resistance touches",
-            RESISTANCE_TOUCH_FEATURE_COLS,
-            "resistance_touch",
-            _missing_source_columns(df_labeled, [["High", "DayHigh", "HighPrice"], ["High20", "High_20D", "High20D"]]),
+            "F Champion + range compression",
+            RANGE_COMPRESSION_FEATURE_COLS,
+            "range_compression",
+            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+        ),
+        (
+            "G Champion + volume dry-up",
+            VOLUME_DRY_UP_FEATURE_COLS,
+            "volume_dry_up",
+            _missing_source_columns(df_feature_source, [["Volume"]]),
         ),
     ]
     new_family_results = []
-    for name, requested, family, missing_cols in experiments:
-        if family == "atr_compression" and missing_cols:
+    for name, requested, family, missing_cols in run11_experiments:
+        if missing_cols:
             reason = f"required source columns missing: {', '.join(missing_cols)}"
             print(f"[ml_prebreakout] {name} skipped: {reason}; features_added=[]")
             evaluation = _skipped_experiment(name, requested, reason, family, missing_cols)
@@ -2151,62 +2357,81 @@ def train_prebreakout_model(
 
     champion_auc = champion_evaluation["validation_summary"].get("auc_mean", RUN9_CHAMPION_AUC)
     champion_lift = champion_evaluation["validation_summary"].get("lift_over_baseline_mean", RUN9_CHAMPION_TOP10_LIFT)
-    useful_family_results = [
-        row
-        for row in new_family_results
-        if row.get("experiment_status") == "VALID"
-        and row["validation_summary"].get("auc_mean") is not None
-        and float(row["validation_summary"]["auc_mean"]) > float(champion_auc)
-        and row["validation_summary"].get("lift_over_baseline_mean", 0.0) >= float(champion_lift) * 0.95
-    ]
-    useful_family_results = sorted(
-        useful_family_results,
-        key=lambda row: row["validation_summary"].get("auc_mean", float("-inf")),
-        reverse=True,
+    bollinger_eval = next((row for row in new_family_results if row["family"] == "bollinger_compression"), None)
+    atr_eval = next((row for row in new_family_results if row["family"] == "atr_compression"), None)
+    compression_combo = _unique_feature_list(
+        (bollinger_eval or {}).get("features_added", []) + (atr_eval or {}).get("features_added", [])
     )
-    best_two_features = _unique_feature_list([feature for row in useful_family_results[:2] for feature in row.get("features_added", [])])
-    if len(useful_family_results) >= 2 and best_two_features:
-        best_two_eval = _run10_eval(
-            "B6 Champion + best two new families",
+    if compression_combo and bollinger_eval and atr_eval and atr_eval.get("experiment_status") == "VALID":
+        compression_eval = _run10_eval(
+            "H Champion + Bollinger + ATR compression",
             X_market,
             y,
             df_labeled,
             folds,
             champion_features,
-            best_two_features,
-            "best_two_new_families",
+            compression_combo,
+            "bollinger_atr_compression",
         )
     else:
-        best_two_eval = _skipped_experiment(
-            "B6 Champion + best two new families",
-            [],
-            "fewer than two individually useful new families",
-            "best_two_new_families",
+        compression_eval = _skipped_experiment(
+            "H Champion + Bollinger + ATR compression",
+            BOLLINGER_COMPRESSION_FEATURE_COLS + ATR_COMPRESSION_FEATURE_COLS,
+            "ATR compression or Bollinger compression was unavailable",
+            "bollinger_atr_compression",
         )
-    ablation_results.append(best_two_eval)
-    _print_run9_experiment("BEST TWO", best_two_eval)
+    ablation_results.append(compression_eval)
+    _print_run9_experiment("COMPRESSION COMBO", compression_eval)
 
-    all_useful_features = _unique_feature_list([feature for row in useful_family_results for feature in row.get("features_added", [])])
-    if all_useful_features:
-        all_useful_eval = _run10_eval(
-            "B7 Champion + all individually useful new families",
+    structure_results = [row for row in new_family_results if row["family"] in {"resistance_proximity", "resistance_touch", "higher_low_structure"}]
+    compression_results = [row for row in new_family_results if row["family"] in {"bollinger_compression", "atr_compression", "range_compression"}]
+    best_structure = _best_valid_experiment(structure_results, float(champion_auc), float(champion_lift))
+    best_compression = _best_valid_experiment(compression_results, float(champion_auc), float(champion_lift))
+
+    if best_structure and best_structure.get("features_added"):
+        best_structure_eval = _run10_eval(
+            "I Champion + best price-structure family",
             X_market,
             y,
             df_labeled,
             folds,
             champion_features,
-            all_useful_features,
-            "all_useful_new_families",
+            best_structure["features_added"],
+            "best_price_structure_family",
         )
     else:
-        all_useful_eval = _skipped_experiment(
-            "B7 Champion + all individually useful new families",
+        best_structure_eval = _skipped_experiment(
+            "I Champion + best price-structure family",
             [],
-            "no individually useful new families",
-            "all_useful_new_families",
+            "no individually useful price-structure family",
+            "best_price_structure_family",
         )
-    ablation_results.append(all_useful_eval)
-    _print_run9_experiment("ALL USEFUL", all_useful_eval)
+    ablation_results.append(best_structure_eval)
+    _print_run9_experiment("BEST STRUCTURE", best_structure_eval)
+
+    compression_structure_features = _unique_feature_list(
+        (best_compression or {}).get("features_added", []) + (best_structure or {}).get("features_added", [])
+    )
+    if best_compression and best_structure and compression_structure_features:
+        best_combo_eval = _run10_eval(
+            "J Champion + best compression + best structure",
+            X_market,
+            y,
+            df_labeled,
+            folds,
+            champion_features,
+            compression_structure_features,
+            "best_compression_plus_structure",
+        )
+    else:
+        best_combo_eval = _skipped_experiment(
+            "J Champion + best compression + best structure",
+            [],
+            "best compression and best structure families were not both individually useful",
+            "best_compression_plus_structure",
+        )
+    ablation_results.append(best_combo_eval)
+    _print_run9_experiment("BEST COMPRESSION + STRUCTURE", best_combo_eval)
 
     baseline_auc = baseline_evaluation["validation_summary"].get("auc_mean")
     _print_run9_summary(ablation_results, baseline_auc)
@@ -2232,7 +2457,7 @@ def train_prebreakout_model(
     promotion_result, promotion_reasons = _run10_promotion_decision(
         selected_eval,
         champion_evaluation,
-        run10_dataset_failures,
+        run11_dataset_failures,
     )
     selected_features = selected_eval["features"]
     clf = _new_prebreakout_classifier()
@@ -2241,8 +2466,8 @@ def train_prebreakout_model(
     validation_rows = _valid_validation_rows(fold_metrics)
     feature_importances = _feature_importance_rows(clf, selected_features)
 
-    print("[ml_prebreakout] === RUN #10 PROMOTION DECISION ===")
-    print("[ml_prebreakout] PREBREAKOUT RUN #10 - COMPRESSION & STRUCTURE ABLATION")
+    print("[ml_prebreakout] === RUN #11 PROMOTION DECISION ===")
+    print("[ml_prebreakout] RUN #11 - PRICE STRUCTURE & COMPRESSION")
     print(f"[ml_prebreakout] Dataset Eligible: {len(X_run6)}")
     print(f"[ml_prebreakout] Dataset Positive: {int(y.sum())}")
     print(f"[ml_prebreakout] Dataset Positive rate: {_fmt_metric(float(y.mean()), 6)}")
@@ -2259,8 +2484,17 @@ def train_prebreakout_model(
     print(f"[ml_prebreakout] Top10 lift: {_fmt_metric(validation_summary.get('lift_over_baseline_mean'), 6)}")
     print(f"[ml_prebreakout] Features added: {selected_eval.get('features_added')}")
     print(f"[ml_prebreakout] DECISION: {promotion_result}")
+    print(f"[ml_prebreakout] RUN #11 RESULT: {'PROMOTED' if promotion_result in {'PROMOTE', 'STRONG_PROMOTION'} else 'NO PROMOTION'}")
     for reason in promotion_reasons:
         print(f"[ml_prebreakout] REASON: {reason}")
+    print("[ml_prebreakout] CALIBRATION BUCKETS")
+    for bucket in calibration:
+        print(
+            "[ml_prebreakout] "
+            f"{bucket['bucket']}: count={bucket['n']}, "
+            f"mean_predicted={_fmt_metric(bucket['mean_confidence'], 6)}, "
+            f"actual_positive_rate={_fmt_metric(bucket['hit_rate'], 6)}"
+        )
     if feature_importances:
         print("[ml_prebreakout] TOP 20 FEATURE IMPORTANCES")
         for row in feature_importances:
@@ -2309,6 +2543,7 @@ def train_prebreakout_model(
         "feature_quality_audit": feature_quality_rows,
         "selected_feature_set": selected_eval["name"],
         "best_market_feature_set": selected_eval["name"],
+        "run11_result": "PROMOTED" if promotion_result in {"PROMOTE", "STRONG_PROMOTION"} else "NO_PROMOTION",
         "market_regime_result": promotion_result,
         "promotion_result": promotion_result,
         "promotion_reasons": promotion_reasons,
@@ -2344,8 +2579,12 @@ def train_prebreakout_model(
         ),
         "candidate_rule": "IsBreakout is false, BreakoutScore < 8, price below 20-day high",
         "feature_notes": {
-            "DistanceToHigh20Pct": "(High20 - Close) / High20 * 100; falling values mean price is moving closer to resistance.",
-            "ResistanceTouchCount": "Counts current/past observations whose High is within 1% of that row's available High20.",
+            "DistanceTo20DHighPct": "Close / trailing High20D - 1; values near zero from below mean price is sitting just under resistance.",
+            "DistanceTo50DHighPct": "Close / trailing High50D - 1; values near zero from below mean price is sitting just under longer resistance.",
+            "ResistanceTouches20D": "Counts current/past observations whose High came within 2% of the prior trailing 20-day high known before that row.",
+            "ResistanceTouches50D": "Counts current/past observations whose High came within 2% of the prior trailing 50-day high known before that row.",
+            "ATRRatio": "Current ATR14 divided by the prior rolling ATR14 mean; values below 1 indicate volatility contraction.",
+            "RangeCompression": "Current daily range percentage divided by the prior rolling mean range percentage.",
         },
         "lead_days": PREBREAKOUT_LEAD_DAYS,
         "setup_score_threshold": PREBREAKOUT_SETUP_SCORE_THRESHOLD,
@@ -2358,15 +2597,17 @@ def train_prebreakout_model(
         "run6_reproduction_audit": run6_reproduction["audit"],
         "run9_dataset_audit": run6_reproduction["audit"],
         "run10_dataset_audit": run6_reproduction["audit"],
+        "run11_dataset_audit": run6_reproduction["audit"],
         "benchmark_context_source": benchmark_context_source,
+        "ohlcv_enrichment_columns": ohlcv_source_columns,
         "model_version": MODEL_VERSION,
         "source": "local",
     }
 
-    results_path = Path(model_path).with_name("prebreakout_run10_results.json")
+    results_path = Path(model_path).with_name("prebreakout_run11_results.json")
     results_payload = {key: value for key, value in bundle.items() if key != "model"}
     results_path.write_text(json.dumps(results_payload, indent=2, sort_keys=True, default=str))
-    print(f"[ml_prebreakout] Saved Run #10 JSON report to {results_path}")
+    print(f"[ml_prebreakout] Saved Run #11 JSON report to {results_path}")
 
     if promotion_result in {"PROMOTE", "STRONG_PROMOTION"} and save_prebreakout_model is not None and serialize_model_to_bytes is not None:
         try:
@@ -2388,7 +2629,7 @@ def train_prebreakout_model(
             bundle["db_save_error"] = str(e)
             print(f"[ml_prebreakout] DB model save failed: {e}")
     else:
-        print("[ml_prebreakout] Run #10 did not promote; not saving challenger to Neon.")
+        print("[ml_prebreakout] Run #11 did not promote; not saving challenger to Neon.")
 
     joblib.dump(bundle, model_path)
     print(f"[ml_prebreakout] Saved XGBoost model/report bundle to {model_path}")

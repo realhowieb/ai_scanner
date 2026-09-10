@@ -135,7 +135,7 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                 bundle = ml_prebreakout.train_prebreakout_model(model_path=str(Path(tmp) / "model.pkl"))
 
         self.assertEqual(bundle["source"], "database")
-        expected_features = list(x.columns)
+        expected_features = ["SPYTrend10D", "RSvsSPY10D", "RSvsSPY20D", "RSvsQQQ10D", "RSvsQQQ20D"]
         expected_market_features = ["SPYTrend10D", "RSvsSPY10D", "RSvsSPY20D", "RSvsQQQ10D", "RSvsQQQ20D"]
         self.assertEqual(bundle["features"], expected_features)
         self.assertEqual(bundle["market_feature_names"], expected_market_features)
@@ -312,7 +312,40 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
 
         self.assertAlmostEqual(featured.loc[last_idx, "BBWidth20Pct"], expected_bb_width)
         self.assertGreater(float(featured.loc[last_idx, "ATR14Pct"]), 0.0)
+        self.assertGreater(float(featured.loc[last_idx, "ATRRatio5D"]), 0.0)
+        self.assertGreater(float(featured.loc[last_idx, "RangeCompression5D"]), 0.0)
         self.assertIn("ATRCompression5D", featured.columns)
+
+    def test_historical_ohlcv_context_uses_prior_completed_bar(self):
+        scans = pd.DataFrame(
+            {
+                "Symbol": ["AAA", "AAA"],
+                "Timestamp": [
+                    pd.Timestamp("2026-01-02T15:00:00Z"),
+                    pd.Timestamp("2026-01-03T15:00:00Z"),
+                ],
+                "Last": [100.0, 101.0],
+            }
+        )
+        bars = pd.DataFrame(
+            {
+                "Open": [90.0, 100.0, 200.0],
+                "High": [91.0, 101.0, 201.0],
+                "Low": [89.0, 99.0, 199.0],
+                "Close": [90.5, 100.5, 200.5],
+                "Volume": [1000, 1100, 9999],
+            },
+            index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-04"], utc=True),
+        )
+
+        with patch("data.price_alpaca.download_multi_alpaca", return_value={"AAA": bars}) as download_mock:
+            enriched = ml_prebreakout.add_historical_ohlcv_context(scans, days_back=90)
+
+        download_mock.assert_called_once()
+        self.assertEqual(float(enriched.loc[0, "High"]), 91.0)
+        self.assertEqual(float(enriched.loc[1, "High"]), 101.0)
+        self.assertNotEqual(float(enriched.loc[1, "High"]), 201.0)
+        self.assertEqual(list(enriched.index), [0, 1])
 
     def test_structure_features_higher_lows_and_resistance_touches(self):
         rows = []
@@ -337,6 +370,36 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(float(featured.loc[9, "HigherLowCount5D"]), 5.0)
         self.assertAlmostEqual(featured.loc[9, "HigherLowRatio5D"], 1.0)
         self.assertEqual(float(featured.loc[9, "ResistanceTouchCount10D"]), 7.0)
+
+    def test_run11_price_structure_features_are_chronological_and_aligned(self):
+        rows = []
+        for day in range(55):
+            close = 100.0 + day * 0.2
+            rows.append(
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-03-01T15:00:00Z") + pd.Timedelta(day, unit="D"),
+                    "Close": close,
+                    "High": close + 1.0,
+                    "Low": 90.0 + day * 0.15,
+                    "Volume": 2000.0 - day * 5.0,
+                }
+            )
+        df = pd.DataFrame(rows).sample(frac=1.0, random_state=42)
+
+        featured = ml_prebreakout.add_prebreakout_features(df, include_market_features=False)
+        ordered = df.sort_values(["Symbol", "Timestamp"], kind="mergesort")
+        last_original_index = ordered.index[-1]
+        high20 = ordered["High"].rolling(20, min_periods=3).max().iloc[-1]
+        high50 = ordered["High"].rolling(50, min_periods=10).max().iloc[-1]
+
+        self.assertEqual(list(featured.index), list(df.index))
+        self.assertAlmostEqual(featured.loc[last_original_index, "High20D"], high20)
+        self.assertAlmostEqual(featured.loc[last_original_index, "High50D"], high50)
+        self.assertAlmostEqual(featured.loc[last_original_index, "DistanceTo20DHighPct"], ordered["Close"].iloc[-1] / high20 - 1.0)
+        self.assertGreaterEqual(float(featured.loc[last_original_index, "HigherLowCount20D"]), 19.0)
+        self.assertIn("ResistanceTouches20D", featured.columns)
+        self.assertIn("VolumeDryUp20D", featured.columns)
 
     def test_run10_rejects_empty_feature_experiment(self):
         x = pd.DataFrame({"Trend10D%": [1.0, 2.0]})

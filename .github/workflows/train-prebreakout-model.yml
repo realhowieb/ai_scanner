@@ -77,7 +77,7 @@ jobs:
           bundle = train_prebreakout_model(days_back=days_back, model_path=str(model_path))
           if not bundle:
               print(json.dumps({"trained": False, "days_back": days_back}, indent=2, sort_keys=True))
-              raise SystemExit("PreBreakout Run #9 training returned no report.")
+              raise SystemExit("PreBreakout Run #11 training returned no report.")
 
           summary = {
               "auc": bundle.get("auc"),
@@ -104,6 +104,8 @@ jobs:
               "run9_dataset_audit": bundle.get("run9_dataset_audit") or {},
               "run9_champion_auc": bundle.get("run9_champion_auc"),
               "run10_dataset_audit": bundle.get("run10_dataset_audit") or {},
+              "run11_dataset_audit": bundle.get("run11_dataset_audit") or {},
+              "run11_result": bundle.get("run11_result"),
               "selected_feature_set": bundle.get("selected_feature_set"),
               "source": bundle.get("source"),
               "std_auc": bundle.get("std_auc"),
@@ -120,7 +122,7 @@ jobs:
           if promoted and bundle.get("source") != "database":
               raise SystemExit("PreBreakout model trained locally but was not saved to Neon.")
           if not promoted:
-              print("PreBreakout Run #10 did not promote a new champion; no Neon save required.")
+              print("PreBreakout Run #11 did not promote a new champion; no Neon save required.")
           PY
 
       - name: Upload debug model artifact
@@ -130,5 +132,5 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: |
             prebreakout_model.pkl
-            prebreakout_run10_results.json
+            prebreakout_run11_results.json
           if-no-files-found: warn
