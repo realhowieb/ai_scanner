@@ -666,6 +666,29 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(report[0]["feature"], "f3")
         self.assertEqual(report[0]["fold_presence"], 2)
 
+    def test_run16_promotion_requires_all_five_valid_folds(self):
+        champion = {
+            "validation_summary": {
+                "auc_mean": 0.65,
+                "min_fold_auc": 0.63,
+                "lift_over_baseline_mean": 1.7,
+            }
+        }
+        candidate = {
+            "experiment_status": "VALID",
+            "validation_summary": {
+                "auc_mean": 0.66,
+                "min_fold_auc": 0.64,
+                "lift_over_baseline_mean": 1.7,
+            },
+            "fold_metrics": [{"fold": 4, "auc": 0.64}, {"fold": 5, "auc": 0.68}],
+        }
+
+        result, reasons = ml_prebreakout._run10_promotion_decision(candidate, champion, [])
+
+        self.assertEqual(result, "NO_PROMOTION")
+        self.assertTrue(any("valid fold count 2 != expected 5" in reason for reason in reasons))
+
     def test_run14_insufficient_qualifiers_status(self):
         evaluation = ml_prebreakout._insufficient_qualifiers_experiment(
             "J - Best overall combination",

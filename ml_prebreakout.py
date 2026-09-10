@@ -1688,6 +1688,7 @@ RUN6_EXPECTED_VALID_FOLDS = 2
 RUN6_ROW_TOLERANCE = 0.02
 RUN6_POSITIVE_TOLERANCE = 0.10
 RUN6_VALIDATION_ROW_TOLERANCE = 0.05
+RUN16_EXPECTED_VALID_FOLDS = 5
 RUN8_CONTROL_AUC = 0.581982
 RUN8_CHAMPION_AUC = 0.591574
 RUN9_CHAMPION_AUC = 0.591993
@@ -2233,6 +2234,10 @@ def _valid_validation_rows(fold_metrics: list[dict]) -> int:
     return int(sum(row.get("validation_rows", 0) for row in fold_metrics if row.get("auc") is not None))
 
 
+def _valid_auc_fold_count(fold_metrics: list[dict]) -> int:
+    return int(sum(1 for row in fold_metrics if row.get("auc") is not None))
+
+
 def _available_features(all_features: list[str], requested: list[str]) -> list[str]:
     available = set(all_features)
     return [feature for feature in requested if feature in available]
@@ -2680,6 +2685,11 @@ def _run10_promotion_decision(candidate: dict, champion: dict, dataset_failures:
     champion_min = champion_summary.get("min_fold_auc")
     candidate_top_lift = candidate_summary.get("lift_over_baseline_mean")
     champion_top_lift = champion_summary.get("lift_over_baseline_mean") or RUN11_CHAMPION_TOP10_LIFT
+    candidate_valid_folds = _valid_auc_fold_count(candidate.get("fold_metrics") or [])
+    if candidate_valid_folds and candidate_valid_folds != RUN16_EXPECTED_VALID_FOLDS:
+        reasons.append(
+            f"candidate valid fold count {candidate_valid_folds} != expected {RUN16_EXPECTED_VALID_FOLDS}; block promotion"
+        )
     if dataset_failures:
         reasons.extend(dataset_failures)
     if candidate.get("experiment_status") != "VALID":
