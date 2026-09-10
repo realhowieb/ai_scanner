@@ -105,6 +105,82 @@ def save_prebreakout_model(
     return True
 
 
+def restore_previous_model_if_active_run16_incomplete(*, min_valid_folds: int = 5) -> dict[str, Any]:
+    """Reactivate the prior model if an incomplete-fold Run #16 model is active."""
+    conn = get_neon_conn()
+    if conn is None:
+        return {"restored": False, "reason": "database unavailable"}
+    ensure_prebreakout_models_schema(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, model_version, metadata, auc, trained_at
+        FROM prebreakout_models
+        WHERE is_active = TRUE
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """
+    )
+    active = cur.fetchone()
+    if not active:
+        cur.close()
+        conn.close()
+        return {"restored": False, "reason": "no active prebreakout model"}
+    active_id = _row_get(active, "id", 0)
+    metadata = _row_get(active, "metadata", 2) or {}
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            metadata = {}
+    audit = metadata.get("run16_dataset_audit") or metadata.get("run6_reproduction_audit") or {}
+    valid_fold_count = int(audit.get("valid_fold_count") or 0)
+    is_incomplete_run16 = (
+        metadata.get("run_number") == 16
+        and metadata.get("run16_result") == "PROMOTED"
+        and valid_fold_count < int(min_valid_folds)
+    )
+    if not is_incomplete_run16:
+        cur.close()
+        conn.close()
+        return {
+            "restored": False,
+            "reason": "active model does not match incomplete Run #16 rollback criteria",
+            "active_id": active_id,
+            "valid_fold_count": valid_fold_count,
+        }
+    cur.execute(
+        """
+        SELECT id, model_version, auc, trained_at
+        FROM prebreakout_models
+        WHERE id <> %s
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (active_id,),
+    )
+    previous = cur.fetchone()
+    if not previous:
+        cur.close()
+        conn.close()
+        return {"restored": False, "reason": "no previous model row available", "active_id": active_id}
+    previous_id = _row_get(previous, "id", 0)
+    cur.execute("UPDATE prebreakout_models SET is_active = FALSE WHERE is_active = TRUE")
+    cur.execute("UPDATE prebreakout_models SET is_active = TRUE WHERE id = %s", (previous_id,))
+    conn.commit()
+    restored = {
+        "restored": True,
+        "deactivated_id": active_id,
+        "restored_id": previous_id,
+        "restored_model_version": _row_get(previous, "model_version", 1),
+        "restored_auc": _row_get(previous, "auc", 2),
+        "restored_trained_at": str(_row_get(previous, "trained_at", 3)),
+    }
+    cur.close()
+    conn.close()
+    return restored
+
+
 def load_latest_prebreakout_model_bundle(joblib_module: Any) -> dict[str, Any] | None:
     """Load the latest active model bundle from Neon/Postgres."""
     conn = get_neon_conn()

@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 import ml_prebreakout
+from db import prebreakout_models
 
 
 class FakePrebreakoutClassifier:
@@ -688,6 +689,28 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
 
         self.assertEqual(result, "NO_PROMOTION")
         self.assertTrue(any("valid fold count 2 != expected 5" in reason for reason in reasons))
+
+    def test_run16_restore_previous_model_if_active_run16_incomplete(self):
+        active = (
+            10,
+            "prebreakout-xgb-v16",
+            {"run_number": 16, "run16_result": "PROMOTED", "run16_dataset_audit": {"valid_fold_count": 2}},
+            0.657,
+            "2026-09-10T17:59:29Z",
+        )
+        previous = (9, "prebreakout-xgb-v14", 0.652, "2026-09-10T16:00:00Z")
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [active, previous]
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+
+        with patch.object(prebreakout_models, "get_neon_conn", return_value=conn):
+            result = prebreakout_models.restore_previous_model_if_active_run16_incomplete(min_valid_folds=5)
+
+        self.assertTrue(result["restored"])
+        self.assertEqual(result["deactivated_id"], 10)
+        self.assertEqual(result["restored_id"], 9)
+        cursor.execute.assert_any_call("UPDATE prebreakout_models SET is_active = TRUE WHERE id = %s", (9,))
 
     def test_run14_insufficient_qualifiers_status(self):
         evaluation = ml_prebreakout._insufficient_qualifiers_experiment(

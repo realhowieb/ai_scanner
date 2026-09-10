@@ -11,11 +11,13 @@ from db.runs import list_runs, load_run_results
 try:
     from db.prebreakout_models import (
         load_latest_prebreakout_model_bundle,
+        restore_previous_model_if_active_run16_incomplete,
         save_prebreakout_model,
         serialize_model_to_bytes,
     )
 except Exception:  # pragma: no cover - keeps ML imports resilient in partial deploys
     load_latest_prebreakout_model_bundle = None  # type: ignore[assignment]
+    restore_previous_model_if_active_run16_incomplete = None  # type: ignore[assignment]
     save_prebreakout_model = None  # type: ignore[assignment]
     serialize_model_to_bytes = None  # type: ignore[assignment]
 
@@ -2892,6 +2894,21 @@ def train_prebreakout_model(
         )
         return {}
 
+    rollback_result = None
+    if restore_previous_model_if_active_run16_incomplete is not None:
+        try:
+            rollback_result = restore_previous_model_if_active_run16_incomplete(
+                min_valid_folds=RUN16_EXPECTED_VALID_FOLDS
+            )
+            if rollback_result.get("restored"):
+                print(
+                    "[ml_prebreakout] Restored previous PreBreakout champion before Run #16: "
+                    f"{rollback_result}"
+                )
+        except Exception as e:
+            rollback_result = {"restored": False, "reason": str(e)}
+            print(f"[ml_prebreakout] Run #16 rollback check failed: {e}")
+
     df = load_run_history(days_back=days_back)
     if df.empty:
         print("[ml_prebreakout] No history data found.")
@@ -3385,6 +3402,7 @@ def train_prebreakout_model(
         "feature_stability_report": stability_report,
         "distillation_recommendation": distillation_recommendation,
         "leakage_audit": leakage_audit,
+        "run16_rollback_check": rollback_result,
         "run_number": 16,
         "selected_feature_set": selected_eval["name"],
         "best_market_feature_set": selected_eval["name"],

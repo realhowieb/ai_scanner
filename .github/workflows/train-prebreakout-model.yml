@@ -119,6 +119,7 @@ jobs:
               "run12_result": bundle.get("run12_result"),
               "run14_result": bundle.get("run14_result"),
               "run16_result": bundle.get("run16_result"),
+              "run16_rollback_check": bundle.get("run16_rollback_check") or {},
               "selected_feature_set": bundle.get("selected_feature_set"),
               "source": bundle.get("source"),
               "std_auc": bundle.get("std_auc"),
