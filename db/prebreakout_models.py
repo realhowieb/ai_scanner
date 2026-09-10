@@ -17,6 +17,7 @@ def ensure_prebreakout_models_schema(conn) -> None:
             model_version TEXT NOT NULL,
             model_bytes BYTEA NOT NULL,
             feature_names JSONB NOT NULL,
+            metadata JSONB,
             auc DOUBLE PRECISION,
             trained_at TIMESTAMPTZ,
             is_active BOOLEAN DEFAULT TRUE,
@@ -28,6 +29,7 @@ def ensure_prebreakout_models_schema(conn) -> None:
         "CREATE INDEX IF NOT EXISTS idx_prebreakout_models_active_created "
         "ON prebreakout_models (is_active, created_at DESC)"
     )
+    cur.execute("ALTER TABLE prebreakout_models ADD COLUMN IF NOT EXISTS metadata JSONB")
     conn.commit()
     cur.close()
 
@@ -72,6 +74,7 @@ def save_prebreakout_model(
     auc: float,
     trained_at: str,
     model_version: str,
+    metadata: dict[str, Any] | None = None,
 ) -> bool:
     """Save a new active model version to Neon/Postgres."""
     conn = get_neon_conn()
@@ -83,14 +86,15 @@ def save_prebreakout_model(
     cur.execute(
         """
         INSERT INTO prebreakout_models (
-            model_version, model_bytes, feature_names, auc, trained_at, is_active
+            model_version, model_bytes, feature_names, metadata, auc, trained_at, is_active
         )
-        VALUES (%s, %s, %s::jsonb, %s, %s, TRUE)
+        VALUES (%s, %s, %s::jsonb, %s::jsonb, %s, %s, TRUE)
         """,
         (
             model_version,
             model_bytes,
             json.dumps(feature_names),
+            json.dumps(metadata or {}),
             float(auc),
             trained_at,
         ),
@@ -110,7 +114,7 @@ def load_latest_prebreakout_model_bundle(joblib_module: Any) -> dict[str, Any] |
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT id, model_version, model_bytes, feature_names, auc, trained_at
+        SELECT id, model_version, model_bytes, feature_names, metadata, auc, trained_at
         FROM prebreakout_models
         WHERE is_active = TRUE
         ORDER BY created_at DESC, id DESC
@@ -125,15 +129,28 @@ def load_latest_prebreakout_model_bundle(joblib_module: Any) -> dict[str, Any] |
 
     feature_names = _coerce_feature_names(_row_get(row, "feature_names", 3))
     model = deserialize_model_from_bytes(_coerce_model_bytes(_row_get(row, "model_bytes", 2)), joblib_module)
-    trained_at = _row_get(row, "trained_at", 5)
+    metadata = _row_get(row, "metadata", 4) or {}
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            metadata = {}
+    trained_at = _row_get(row, "trained_at", 6)
     if trained_at is not None:
         trained_at = str(trained_at)
-    return {
+    bundle = {
         "model": model,
         "features": feature_names,
         "feature_names": feature_names,
-        "auc": _row_get(row, "auc", 4),
+        "auc": _row_get(row, "auc", 5),
         "trained_at": trained_at,
         "model_version": _row_get(row, "model_version", 1),
         "source": "database",
     }
+    if isinstance(metadata, dict):
+        bundle.update(metadata)
+        bundle["model"] = model
+        bundle["features"] = feature_names
+        bundle["feature_names"] = feature_names
+        bundle["source"] = "database"
+    return bundle

@@ -76,7 +76,7 @@ def _load_ml_libs() -> None:
 
 
 MODEL_PATH = "prebreakout_model.pkl"
-MODEL_VERSION = "prebreakout-xgb-v4"
+MODEL_VERSION = "prebreakout-xgb-v5"
 TARGET_COLUMN = "ForwardReturnHit"
 RETURN_COLUMN = "Return_5D"
 RETURN_HORIZON_DAYS = 5
@@ -102,6 +102,44 @@ ENGINEERED_HISTORY_COLS = [
     "BreakoutPos20D",
 ]
 ENGINEERED_WINDOWS = (1, 3, 5)
+REGIME_FEATURE_COLS = [
+    "SPYTrend10D",
+    "SPYTrend20D",
+    "SPYEMA9EMA21Spread",
+    "QQQTrend10D",
+    "QQQTrend20D",
+    "QQQEMA9EMA21Spread",
+    "SPYAboveEMA21",
+    "QQQAboveEMA21",
+    "SPYVolatility20D",
+    "QQQVolatility20D",
+    "RSvsSPY10D",
+    "RSvsSPY20D",
+    "RSvsQQQ10D",
+    "RSvsQQQ20D",
+    "MarketBreadthAboveEMA21",
+]
+SPY_REGIME_FEATURE_COLS = [
+    "SPYTrend10D",
+    "SPYTrend20D",
+    "SPYEMA9EMA21Spread",
+    "SPYAboveEMA21",
+    "SPYVolatility20D",
+]
+QQQ_REGIME_FEATURE_COLS = [
+    "QQQTrend10D",
+    "QQQTrend20D",
+    "QQQEMA9EMA21Spread",
+    "QQQAboveEMA21",
+    "QQQVolatility20D",
+]
+RELATIVE_STRENGTH_FEATURE_COLS = [
+    "RSvsSPY10D",
+    "RSvsSPY20D",
+    "RSvsQQQ10D",
+    "RSvsQQQ20D",
+]
+OPTIONAL_MARKET_CONTEXT_COLS = ["MarketBreadthAboveEMA21"]
 
 
 def _feature_safe_name(name: str) -> str:
@@ -120,7 +158,7 @@ def _engineered_feature_names() -> list[str]:
 
 
 ENGINEERED_FEATURE_COLS = _engineered_feature_names()
-FEATURE_COLS = BASE_FEATURE_COLS + ENGINEERED_FEATURE_COLS
+FEATURE_COLS = BASE_FEATURE_COLS + ENGINEERED_FEATURE_COLS + REGIME_FEATURE_COLS
 
 
 def _utc_now() -> datetime:
@@ -439,6 +477,7 @@ def add_prebreakout_target_label(
     df: pd.DataFrame,
     *,
     lookback_days: int = 90,
+    benchmark_context: dict[str, pd.DataFrame] | None = None,
 ) -> pd.DataFrame:
     """
     Build the PreBreakout objective:
@@ -490,6 +529,7 @@ def add_prebreakout_target_label(
                     break
                 probe += 1
 
+    labeled = add_market_regime_features(labeled, benchmark_context=benchmark_context)
     return labeled.loc[candidate_mask].reset_index(drop=True)
 
 
@@ -506,6 +546,200 @@ def sort_symbol_history(df: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values(sort_cols, kind="mergesort")
 
 
+def _above_ema21(row: pd.Series) -> float:
+    if row is None:
+        return np.nan
+    for col in ("AboveEMA21", "AboveEma21", "PriceAboveEMA21", "CloseAboveEMA21"):
+        if col in row.index and pd.notna(row.get(col)):
+            return 1.0 if bool(row.get(col)) else 0.0
+    for col in ("EMA21", "Ema21", "ema21"):
+        if col in row.index and pd.notna(row.get(col)):
+            price = row.get("Last", row.get("Close"))
+            try:
+                return 1.0 if float(price) > float(row.get(col)) else 0.0
+            except (TypeError, ValueError):
+                return np.nan
+    return np.nan
+
+
+def _ema9_ema21_spread(row: pd.Series | None) -> float:
+    if row is None:
+        return np.nan
+    ema9 = None
+    ema21 = None
+    for col in ("EMA9", "Ema9", "ema9"):
+        if col in row.index and pd.notna(row.get(col)):
+            ema9 = row.get(col)
+            break
+    for col in ("EMA21", "Ema21", "ema21"):
+        if col in row.index and pd.notna(row.get(col)):
+            ema21 = row.get(col)
+            break
+    if ema9 is None or ema21 is None:
+        return np.nan
+    price = row.get("Last", row.get("Close", np.nan))
+    try:
+        price = float(price)
+        if price <= 0:
+            return np.nan
+        return (float(ema9) - float(ema21)) / price * 100.0
+    except (TypeError, ValueError):
+        return np.nan
+
+
+def _numeric_group_column(group: pd.DataFrame, name: str) -> pd.Series:
+    if name not in group.columns:
+        return pd.Series(np.nan, index=group.index, dtype=float)
+    return pd.to_numeric(group[name], errors="coerce")
+
+
+def _all_benchmark_context(df: pd.DataFrame, symbol: str, prefix: str) -> pd.DataFrame:
+    if "Symbol" not in df.columns or "Timestamp" not in df.columns:
+        return pd.DataFrame()
+    symbols = df["Symbol"].astype(str).str.upper()
+    rows = df.loc[symbols == symbol].copy()
+    if rows.empty:
+        return pd.DataFrame()
+    rows["Timestamp"] = pd.to_datetime(rows["Timestamp"], errors="coerce", utc=True)
+    rows = rows.dropna(subset=["Timestamp"]).sort_values("Timestamp", kind="mergesort")
+    if rows.empty:
+        return pd.DataFrame()
+    return pd.DataFrame(
+        {
+            "Timestamp": rows["Timestamp"],
+            f"{prefix}Trend10D": _numeric_group_column(rows, "Trend10D%"),
+            f"{prefix}Trend20D": _numeric_group_column(rows, "Trend20D%"),
+            f"{prefix}EMA9EMA21Spread": rows.apply(_ema9_ema21_spread, axis=1),
+            f"{prefix}AboveEMA21": rows.apply(_above_ema21, axis=1),
+            f"{prefix}Volatility20D": _numeric_group_column(rows, "Volatility20D%"),
+        }
+    ).drop_duplicates(subset=["Timestamp"], keep="last")
+
+
+def _benchmark_context_from_bars(bars: pd.DataFrame, prefix: str) -> pd.DataFrame:
+    if bars is None or bars.empty or "Close" not in bars.columns:
+        return pd.DataFrame()
+    frame = bars.copy()
+    frame.index = pd.to_datetime(frame.index, errors="coerce", utc=True)
+    frame = frame.loc[frame.index.notna()].sort_index()
+    closes = pd.to_numeric(frame["Close"], errors="coerce")
+    if closes.dropna().empty:
+        return pd.DataFrame()
+    ema9 = closes.ewm(span=9, adjust=False).mean()
+    ema21 = closes.ewm(span=21, adjust=False).mean()
+    returns = closes.pct_change()
+    context = pd.DataFrame(
+        {
+            "Timestamp": frame.index.normalize() + pd.Timedelta(1, unit="D"),
+            f"{prefix}Trend10D": (closes / closes.shift(10) - 1.0) * 100.0,
+            f"{prefix}Trend20D": (closes / closes.shift(20) - 1.0) * 100.0,
+            f"{prefix}EMA9EMA21Spread": (ema9 - ema21) / closes * 100.0,
+            f"{prefix}AboveEMA21": (closes > ema21).astype(float),
+            f"{prefix}Volatility20D": returns.rolling(20).std() * 100.0,
+        }
+    )
+    return context.dropna(subset=["Timestamp"]).drop_duplicates(subset=["Timestamp"], keep="last")
+
+
+def load_benchmark_regime_context(days_back: int) -> dict[str, pd.DataFrame]:
+    """Fetch SPY/QQQ daily bars through the existing provider for training-time context."""
+    try:
+        from data.price_alpaca import download_multi_alpaca
+
+        bars = download_multi_alpaca(
+            ["SPY", "QQQ"],
+            period=f"{int(days_back) + 70}d",
+            interval="1d",
+            prepost=False,
+            timeout_s=20,
+        )
+    except Exception as e:
+        print(f"[ml_prebreakout] Benchmark regime fallback unavailable: {e}")
+        return {}
+    return {
+        "SPY": _benchmark_context_from_bars(bars.get("SPY"), "SPY") if bars.get("SPY") is not None else pd.DataFrame(),
+        "QQQ": _benchmark_context_from_bars(bars.get("QQQ"), "QQQ") if bars.get("QQQ") is not None else pd.DataFrame(),
+    }
+
+
+def _merge_benchmark_asof(out: pd.DataFrame, benchmark: pd.DataFrame) -> pd.DataFrame:
+    if benchmark.empty or "Timestamp" not in out.columns:
+        return out
+    order_col = "__regime_original_order"
+    left = out.copy()
+    left[order_col] = np.arange(len(left))
+    left["Timestamp"] = pd.to_datetime(left["Timestamp"], errors="coerce", utc=True)
+    left_sorted = left.sort_values("Timestamp", kind="mergesort")
+    right_sorted = benchmark.copy()
+    right_sorted["Timestamp"] = pd.to_datetime(right_sorted["Timestamp"], errors="coerce", utc=True)
+    right_sorted = right_sorted.dropna(subset=["Timestamp"]).sort_values("Timestamp", kind="mergesort")
+    merged = pd.merge_asof(left_sorted, right_sorted, on="Timestamp", direction="backward")
+    return merged.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
+
+
+def _market_breadth_above_ema21(group: pd.DataFrame) -> float:
+    if "Symbol" not in group.columns:
+        return np.nan
+    symbols = group["Symbol"].astype(str).str.upper()
+    stock_group = group.loc[~symbols.isin(["SPY", "QQQ"])]
+    if stock_group.empty:
+        return np.nan
+    values = stock_group.apply(_above_ema21, axis=1).dropna()
+    if values.empty:
+        return np.nan
+    return float(values.mean())
+
+
+def add_market_regime_features(
+    df: pd.DataFrame,
+    benchmark_context: dict[str, pd.DataFrame] | None = None,
+) -> pd.DataFrame:
+    """Stamp each row with benchmark context available at or before its timestamp."""
+    if df is None or df.empty:
+        return df
+
+    out = df.copy()
+    if "Timestamp" not in out.columns:
+        for col in REGIME_FEATURE_COLS:
+            if col not in out.columns:
+                out[col] = 0.0
+        return out
+
+    out = out.drop(columns=[col for col in REGIME_FEATURE_COLS if col in out.columns])
+    timestamps = pd.to_datetime(out["Timestamp"], errors="coerce", utc=True)
+    out["Timestamp"] = timestamps
+    for benchmark, prefix in (("SPY", "SPY"), ("QQQ", "QQQ")):
+        context = _all_benchmark_context(out, benchmark, prefix)
+        if context.empty and benchmark_context:
+            context = benchmark_context.get(benchmark, pd.DataFrame())
+        out = _merge_benchmark_asof(out, context)
+
+    for benchmark, prefix in (("SPY", "SPY"), ("QQQ", "QQQ")):
+        trend10 = f"{prefix}Trend10D"
+        trend20 = f"{prefix}Trend20D"
+        if trend10 in out.columns and "Trend10D%" in out.columns:
+            out[f"RSvs{benchmark}10D"] = pd.to_numeric(out["Trend10D%"], errors="coerce") - pd.to_numeric(
+                out[trend10], errors="coerce"
+            )
+        if trend20 in out.columns and "Trend20D%" in out.columns:
+            out[f"RSvs{benchmark}20D"] = pd.to_numeric(out["Trend20D%"], errors="coerce") - pd.to_numeric(
+                out[trend20], errors="coerce"
+            )
+
+    out["__regime_ts"] = timestamps
+    for _, group in out.groupby(out["__regime_ts"], sort=False, dropna=False):
+        breadth = _market_breadth_above_ema21(group)
+        if pd.notna(breadth):
+            out.loc[group.index, "MarketBreadthAboveEMA21"] = breadth
+
+    for col in REGIME_FEATURE_COLS:
+        if col not in out.columns:
+            out[col] = 0.0
+        out[col] = pd.to_numeric(out[col], errors="coerce").fillna(0.0)
+
+    return out.drop(columns=["__regime_ts"])
+
+
 def _spark_price_return(value, window: int):
     if not isinstance(value, (list, tuple)) or len(value) <= window:
         return np.nan
@@ -519,7 +753,10 @@ def _spark_price_return(value, window: int):
         return np.nan
 
 
-def add_prebreakout_features(df: pd.DataFrame) -> pd.DataFrame:
+def add_prebreakout_features(
+    df: pd.DataFrame,
+    benchmark_context: dict[str, pd.DataFrame] | None = None,
+) -> pd.DataFrame:
     """Add 1/3/5-day slopes and deltas without changing the target."""
     if df is None or df.empty:
         return df
@@ -528,6 +765,8 @@ def add_prebreakout_features(df: pd.DataFrame) -> pd.DataFrame:
     order_col = "__prebreakout_original_order"
     out[order_col] = np.arange(len(out))
     out = sort_symbol_history(out)
+    if any(col not in out.columns for col in REGIME_FEATURE_COLS):
+        out = add_market_regime_features(out, benchmark_context=benchmark_context)
     if "Spark10D" in out.columns:
         for window in ENGINEERED_WINDOWS:
             ret_col = f"PriceReturn{window}D"
@@ -571,14 +810,14 @@ def add_prebreakout_features(df: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
 
 
-def build_ml_dataset(df: pd.DataFrame):
+def build_ml_dataset(df: pd.DataFrame, benchmark_context: dict[str, pd.DataFrame] | None = None):
     """
     Select feature columns and target column.
     """
     if df.empty:
         return pd.DataFrame(), pd.Series(dtype=int)
 
-    df = add_prebreakout_features(df)
+    df = add_prebreakout_features(df, benchmark_context=benchmark_context)
     feature_cols = FEATURE_COLS
     feature_cols = [c for c in feature_cols if c in df.columns]
 
@@ -749,6 +988,184 @@ def _new_prebreakout_classifier():
     )
 
 
+RUN6_BASELINE_MEAN_AUC = 0.5819816609896494
+RUN6_BASELINE_STD_AUC = 0.043
+
+
+def prebreakout_feature_sets(all_features: list[str]) -> list[dict]:
+    base = [col for col in all_features if col not in REGIME_FEATURE_COLS]
+    spy = base + [col for col in SPY_REGIME_FEATURE_COLS if col in all_features]
+    spy_qqq = spy + [col for col in QQQ_REGIME_FEATURE_COLS if col in all_features]
+    spy_qqq_rs = spy_qqq + [col for col in RELATIVE_STRENGTH_FEATURE_COLS if col in all_features]
+    return [
+        {"name": "Baseline", "features": base, "market_features": []},
+        {"name": "+SPY", "features": spy, "market_features": [col for col in SPY_REGIME_FEATURE_COLS if col in spy]},
+        {
+            "name": "+SPY+QQQ",
+            "features": spy_qqq,
+            "market_features": [col for col in SPY_REGIME_FEATURE_COLS + QQQ_REGIME_FEATURE_COLS if col in spy_qqq],
+        },
+        {
+            "name": "+SPY+QQQ+RelativeStr",
+            "features": spy_qqq_rs,
+            "market_features": [
+                col
+                for col in SPY_REGIME_FEATURE_COLS + QQQ_REGIME_FEATURE_COLS + RELATIVE_STRENGTH_FEATURE_COLS
+                if col in spy_qqq_rs
+            ],
+        },
+    ]
+
+
+def _date_range_for_indices(df_labeled: pd.DataFrame, indices: list) -> tuple[str | None, str | None]:
+    if "Timestamp" not in df_labeled.columns or not indices:
+        return None, None
+    timestamps = pd.to_datetime(df_labeled.loc[indices, "Timestamp"], errors="coerce", utc=True).dropna()
+    if timestamps.empty:
+        return None, None
+    return (
+        timestamps.min().isoformat().replace("+00:00", "Z"),
+        timestamps.max().isoformat().replace("+00:00", "Z"),
+    )
+
+
+def evaluate_prebreakout_feature_set(
+    X: pd.DataFrame,
+    y: pd.Series,
+    df_labeled: pd.DataFrame,
+    folds: list[dict],
+    feature_cols: list[str],
+) -> dict:
+    fold_metrics = []
+    validation_proba = []
+    validation_actual = []
+    for fold in folds:
+        X_train = X.loc[fold["train_idx"], feature_cols]
+        X_val = X.loc[fold["val_idx"], feature_cols]
+        y_train = y.loc[fold["train_idx"]]
+        y_val = y.loc[fold["val_idx"]]
+        if y_train.nunique(dropna=True) < 2 or y_val.nunique(dropna=True) < 2:
+            continue
+
+        fold_clf = _new_prebreakout_classifier()
+        fold_clf.fit(X_train, y_train)
+        y_proba = fold_clf.predict_proba(X_val)[:, 1]
+        metrics = classification_diagnostics(y_val, y_proba)
+        train_start, train_end = _date_range_for_indices(df_labeled, fold["train_idx"])
+        val_start, val_end = _date_range_for_indices(df_labeled, fold["val_idx"])
+        metrics.update(
+            {
+                "fold": int(fold["fold"]),
+                "train_rows": int(len(X_train)),
+                "validation_rows": int(len(X_val)),
+                "train_start": train_start,
+                "train_end": train_end,
+                "validation_start": val_start or fold["validation_start"],
+                "validation_end": val_end or fold["validation_end"],
+                "purge_days": int(fold["purge_days"]),
+                "positive_validation_rows": int(y_val.sum()),
+                "positive_rate": float(y_val.mean()),
+            }
+        )
+        fold_metrics.append(metrics)
+        validation_proba.extend([float(value) for value in y_proba])
+        validation_actual.extend([int(value) for value in y_val])
+
+    return {
+        "fold_metrics": fold_metrics,
+        "validation_summary": summarize_fold_metrics(fold_metrics),
+        "validation_proba": validation_proba,
+        "validation_actual": validation_actual,
+    }
+
+
+def _fmt_metric(value, digits: int = 3) -> str:
+    if value is None:
+        return "n/a"
+    return f"{float(value):.{digits}f}"
+
+
+def _print_validation_report(name: str, fold_metrics: list[dict], summary: dict, validation_rows: int) -> None:
+    print(f"[ml_prebreakout] {name}")
+    for metrics in fold_metrics:
+        print(
+            "[ml_prebreakout] Fold "
+            f"{metrics['fold']}: train_rows={metrics['train_rows']}, "
+            f"validation_rows={metrics['validation_rows']}, "
+            f"train_range={metrics.get('train_start')}..{metrics.get('train_end')}, "
+            f"validation_range={metrics.get('validation_start')}..{metrics.get('validation_end')}, "
+            f"positive_rate={_fmt_metric(metrics.get('positive_rate'))}, "
+            f"ROC-AUC={_fmt_metric(metrics.get('auc'))}, "
+            f"PR-AUC={_fmt_metric(metrics.get('pr_auc'))}, "
+            f"Brier={_fmt_metric(metrics.get('brier_score'))}, "
+            f"LogLoss={_fmt_metric(metrics.get('log_loss'))}, "
+            f"Top10Hit={_fmt_metric(metrics.get('top_10pct_hit_rate'))}, "
+            f"Top10Lift={_fmt_metric(metrics.get('lift_over_baseline'), 2)}x"
+        )
+    print("[ml_prebreakout] PREBREAKOUT MARKET-REGIME CHALLENGER")
+    print(f"[ml_prebreakout] Mean ROC-AUC: {_fmt_metric(summary.get('auc_mean'), 6)}")
+    print(f"[ml_prebreakout] Std ROC-AUC: {_fmt_metric(summary.get('auc_std'), 6)}")
+    print(f"[ml_prebreakout] Mean PR-AUC: {_fmt_metric(summary.get('pr_auc_mean'), 6)}")
+    print(f"[ml_prebreakout] Mean Brier: {_fmt_metric(summary.get('brier_score_mean'), 6)}")
+    print(f"[ml_prebreakout] Mean LogLoss: {_fmt_metric(summary.get('log_loss_mean'), 6)}")
+    print(f"[ml_prebreakout] Mean Top10Hit: {_fmt_metric(summary.get('top_10pct_hit_rate_mean'), 6)}")
+    print(f"[ml_prebreakout] Mean Top10Lift: {_fmt_metric(summary.get('lift_over_baseline_mean'), 6)}")
+    print(f"[ml_prebreakout] OOF rows: {validation_rows}")
+
+
+def _print_baseline_comparison(summary: dict, fold_metrics: list[dict], same_run_baseline_auc: float | None = None) -> str:
+    challenger_auc = summary.get("auc_mean")
+    challenger_std = summary.get("auc_std")
+    weakest = min(fold_metrics, key=lambda row: row.get("auc") if row.get("auc") is not None else float("inf"))
+    best = max(fold_metrics, key=lambda row: row.get("auc") if row.get("auc") is not None else float("-inf"))
+    promote = bool(
+        challenger_auc is not None
+        and float(challenger_auc) > RUN6_BASELINE_MEAN_AUC
+        and (same_run_baseline_auc is None or float(challenger_auc) >= float(same_run_baseline_auc))
+    )
+    result = "PROMOTE" if promote else "REJECT"
+    print("[ml_prebreakout] BASELINE COMPARISON")
+    print(f"[ml_prebreakout] Run #6 Mean AUC: {RUN6_BASELINE_MEAN_AUC}")
+    print(f"[ml_prebreakout] Challenger Mean AUC: {_fmt_metric(challenger_auc, 6)}")
+    delta_auc = float(challenger_auc) - RUN6_BASELINE_MEAN_AUC if challenger_auc is not None else None
+    print(f"[ml_prebreakout] Delta AUC: {_fmt_metric(delta_auc, 6)}")
+    print(f"[ml_prebreakout] Run #6 Std AUC: ~{RUN6_BASELINE_STD_AUC}")
+    print(f"[ml_prebreakout] Challenger Std AUC: {_fmt_metric(challenger_std, 6)}")
+    delta_std = float(challenger_std) - RUN6_BASELINE_STD_AUC if challenger_std is not None else None
+    print(f"[ml_prebreakout] Delta Std: {_fmt_metric(delta_std, 6)}")
+    print(f"[ml_prebreakout] Weakest challenger fold: Fold {weakest['fold']} AUC={_fmt_metric(weakest.get('auc'))}")
+    print(f"[ml_prebreakout] Best challenger fold: Fold {best['fold']} AUC={_fmt_metric(best.get('auc'))}")
+    print(f"[ml_prebreakout] MARKET REGIME RESULT: {result}")
+    return result
+
+
+def _print_feature_ablation(ablation: list[dict]) -> None:
+    print("[ml_prebreakout] FEATURE ABLATION")
+    for row in ablation:
+        summary = row.get("validation_summary") or {}
+        print(
+            f"[ml_prebreakout] {row['name']:<24} "
+            f"AUC={_fmt_metric(summary.get('auc_mean'), 6)} "
+            f"Top10Lift={_fmt_metric(summary.get('lift_over_baseline_mean'), 6)}"
+        )
+
+
+def _feature_importance_rows(model, feature_cols: list[str], top_n: int = 20) -> list[dict]:
+    importances = getattr(model, "feature_importances_", None)
+    if importances is None:
+        return []
+    rows = []
+    for name, importance in zip(feature_cols, list(importances)):
+        rows.append(
+            {
+                "feature": str(name),
+                "importance": float(importance),
+                "is_market_regime_feature": str(name) in REGIME_FEATURE_COLS,
+            }
+        )
+    return sorted(rows, key=lambda row: row["importance"], reverse=True)[:top_n]
+
+
 def confidence_bucket_diagnostics(y_true, y_proba, bucket_size: float = 0.1) -> list[dict]:
     """Calibration-style hit rate by confidence bucket."""
     rows = []
@@ -883,15 +1300,21 @@ def train_prebreakout_model(
         print("[ml_prebreakout] No history data found.")
         return {}
 
+    benchmark_context = load_benchmark_regime_context(days_back)
+    benchmark_context_source = {
+        symbol: "alpaca_daily_prior_completed_bar" if not context.empty else "missing"
+        for symbol, context in benchmark_context.items()
+    }
     df_labeled = add_prebreakout_target_label(
         df,
         lookback_days=days_back,
+        benchmark_context=benchmark_context,
     )
     if df_labeled.empty:
         print("[ml_prebreakout] No eligible prebreakout rows with complete labels available.")
         return {}
 
-    X, y = build_ml_dataset(df_labeled)
+    X, y = build_ml_dataset(df_labeled, benchmark_context=benchmark_context)
     if X.empty:
         print("[ml_prebreakout] No features available.")
         return {}
@@ -904,75 +1327,101 @@ def train_prebreakout_model(
         print("[ml_prebreakout] No valid expanding-window validation folds available.")
         return {}
 
-    fold_metrics = []
-    validation_proba = []
-    validation_actual = []
-    for fold in folds:
-        X_train = X.loc[fold["train_idx"]]
-        X_val = X.loc[fold["val_idx"]]
-        y_train = y.loc[fold["train_idx"]]
-        y_val = y.loc[fold["val_idx"]]
-        if y_train.nunique(dropna=True) < 2 or y_val.nunique(dropna=True) < 2:
+    ablation_results = []
+    for feature_set in prebreakout_feature_sets(list(X.columns)):
+        features = [col for col in feature_set["features"] if col in X.columns]
+        if not features:
             continue
-
-        fold_clf = _new_prebreakout_classifier()
-        fold_clf.fit(X_train, y_train)
-        y_proba = fold_clf.predict_proba(X_val)[:, 1]
-        metrics = classification_diagnostics(y_val, y_proba)
-        metrics.update(
+        evaluation = evaluate_prebreakout_feature_set(X, y, df_labeled, folds, features)
+        if not evaluation["fold_metrics"]:
+            continue
+        evaluation.update(
             {
-                "fold": int(fold["fold"]),
-                "train_rows": int(len(X_train)),
-                "validation_rows": int(len(X_val)),
-                "validation_start": fold["validation_start"],
-                "validation_end": fold["validation_end"],
-                "purge_days": int(fold["purge_days"]),
-                "positive_validation_rows": int(y_val.sum()),
+                "name": feature_set["name"],
+                "features": features,
+                "market_features": feature_set["market_features"],
             }
         )
-        fold_metrics.append(metrics)
-        validation_proba.extend([float(value) for value in y_proba])
-        validation_actual.extend([int(value) for value in y_val])
+        ablation_results.append(evaluation)
 
-    if not fold_metrics:
+    if not ablation_results:
         print("[ml_prebreakout] Expanding-window folds have only one class in train or validation.")
         return {}
 
-    validation_summary = summarize_fold_metrics(fold_metrics)
+    _print_feature_ablation(ablation_results)
+    baseline_eval = next((row for row in ablation_results if row["name"] == "Baseline"), None)
+    market_candidates = [row for row in ablation_results if row["name"] != "Baseline"]
+    if not baseline_eval or not market_candidates:
+        print("[ml_prebreakout] Missing baseline or market ablation results.")
+        return {}
+
+    best_market_eval = max(
+        market_candidates,
+        key=lambda row: row["validation_summary"].get("auc_mean", float("-inf")),
+    )
+    baseline_auc = baseline_eval["validation_summary"].get("auc_mean")
+    best_market_auc = best_market_eval["validation_summary"].get("auc_mean")
+    selected_eval = (
+        best_market_eval
+        if best_market_auc is not None and baseline_auc is not None and float(best_market_auc) >= float(baseline_auc)
+        else baseline_eval
+    )
+
+    fold_metrics = best_market_eval["fold_metrics"]
+    validation_summary = best_market_eval["validation_summary"]
     auc = validation_summary.get("auc_mean")
     if auc is None:
         print("[ml_prebreakout] Expanding-window validation could not compute AUC.")
         return {}
 
+    selected_features = selected_eval["features"]
     clf = _new_prebreakout_classifier()
-    clf.fit(X, y)
+    clf.fit(X[selected_features], y)
 
-    calibration = confidence_bucket_diagnostics(validation_actual, validation_proba)
-    print(
-        "[ml_prebreakout] XGBoost expanding-window AUC: "
-        f"{auc:.3f} +/- {validation_summary.get('auc_std', 0.0):.3f}"
-    )
-    for metrics in fold_metrics:
-        print(
-            "[ml_prebreakout] Fold "
-            f"{metrics['fold']}: AUC={metrics['auc']:.3f}, "
-            f"PR-AUC={metrics['pr_auc']:.3f}, "
-            f"Brier={metrics['brier_score']:.3f}, "
-            f"LogLoss={metrics['log_loss']:.3f}, "
-            f"Top10Hit={metrics['top_10pct_hit_rate']:.3f}, "
-            f"Lift={metrics['lift_over_baseline']:.2f}x"
-        )
-
+    calibration = confidence_bucket_diagnostics(best_market_eval["validation_actual"], best_market_eval["validation_proba"])
     validation_rows = int(sum(row["validation_rows"] for row in fold_metrics))
+    _print_validation_report("Best market-regime feature set: " + best_market_eval["name"], fold_metrics, validation_summary, validation_rows)
+    market_regime_result = _print_baseline_comparison(validation_summary, fold_metrics, baseline_auc)
+
+    feature_importances = _feature_importance_rows(clf, selected_features)
+    if feature_importances:
+        print("[ml_prebreakout] TOP 20 FEATURE IMPORTANCES")
+        for row in feature_importances:
+            tag = " market-regime" if row["is_market_regime_feature"] else ""
+            print(f"[ml_prebreakout] {row['feature']}: {row['importance']:.6f}{tag}")
 
     bundle = {
         "model": clf,
-        "features": list(X.columns),
+        "features": list(selected_features),
+        "feature_names": list(selected_features),
+        "market_feature_names": list(selected_eval["market_features"]),
         "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
         "auc": float(auc),
         "validation_method": "expanding_window_5fold_purged",
+        "validation_metrics": validation_summary,
         "validation_folds": fold_metrics,
+        "fold_metrics": fold_metrics,
         "validation_summary": validation_summary,
+        "feature_ablation": [
+            {
+                "name": row["name"],
+                "features": row["features"],
+                "market_features": row["market_features"],
+                "validation_summary": row["validation_summary"],
+            }
+            for row in ablation_results
+        ],
+        "selected_feature_set": selected_eval["name"],
+        "best_market_feature_set": best_market_eval["name"],
+        "market_regime_result": market_regime_result,
+        "baseline_comparison": {
+            "run6_mean_auc": RUN6_BASELINE_MEAN_AUC,
+            "run6_std_auc": RUN6_BASELINE_STD_AUC,
+            "challenger_mean_auc": validation_summary.get("auc_mean"),
+            "challenger_std_auc": validation_summary.get("auc_std"),
+            "same_run_baseline_mean_auc": baseline_auc,
+        },
+        "feature_importances": feature_importances,
         "target": PREBREAKOUT_TARGET_COLUMN,
         "target_rule": (
             "Eligible rows are not broken out, BreakoutScore < 8, and below the 20-day high; "
@@ -985,8 +1434,10 @@ def train_prebreakout_model(
         "return_column": RETURN_COLUMN,
         "calibration": calibration,
         "rows": int(len(X)),
+        "training_rows": int(len(X)),
         "positive_rows": int(y.sum()),
         "validation_rows": validation_rows,
+        "benchmark_context_source": benchmark_context_source,
         "model_version": MODEL_VERSION,
         "source": "local",
     }
@@ -995,10 +1446,15 @@ def train_prebreakout_model(
         try:
             saved = save_prebreakout_model(
                 model_bytes=serialize_model_to_bytes(clf, joblib),
-                feature_names=list(X.columns),
+                feature_names=list(selected_features),
                 auc=float(auc),
                 trained_at=str(bundle["trained_at"]),
                 model_version=MODEL_VERSION,
+                metadata={
+                    key: value
+                    for key, value in bundle.items()
+                    if key not in {"model"}
+                },
             )
             if saved:
                 bundle["source"] = "database"

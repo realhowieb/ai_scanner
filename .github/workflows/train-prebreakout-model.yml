@@ -81,15 +81,26 @@ jobs:
 
           summary = {
               "auc": bundle.get("auc"),
+              "baseline_comparison": bundle.get("baseline_comparison") or {},
+              "benchmark_context_source": bundle.get("benchmark_context_source") or {},
               "calibration": bundle.get("calibration") or [],
+              "feature_ablation": bundle.get("feature_ablation") or [],
+              "feature_names": bundle.get("feature_names") or bundle.get("features") or [],
+              "fold_metrics": bundle.get("fold_metrics") or bundle.get("validation_folds") or [],
+              "market_feature_names": bundle.get("market_feature_names") or [],
+              "market_regime_result": bundle.get("market_regime_result"),
               "model_path": str(model_path),
+              "model_version": bundle.get("model_version"),
               "positive_rows": bundle.get("positive_rows"),
               "rows": bundle.get("rows"),
+              "selected_feature_set": bundle.get("selected_feature_set"),
               "source": bundle.get("source"),
               "target": bundle.get("target"),
               "target_rule": bundle.get("target_rule"),
               "trained_at": bundle.get("trained_at"),
+              "training_rows": bundle.get("training_rows") or bundle.get("rows"),
               "validation_method": bundle.get("validation_method"),
+              "validation_metrics": bundle.get("validation_metrics") or bundle.get("validation_summary") or {},
               "validation_rows": bundle.get("validation_rows"),
           }
           print(json.dumps(summary, indent=2, sort_keys=True, default=str))

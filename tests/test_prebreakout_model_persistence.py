@@ -70,7 +70,13 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         fake_joblib.load.assert_not_called()
 
     def test_train_prebreakout_model_saves_active_database_model(self):
-        x = pd.DataFrame({"Trend10D%": [1.0, 2.0, 3.0, 4.0], "VolRel20": [1.5, 3.0, 2.0, 4.0]})
+        x = pd.DataFrame(
+            {
+                "Trend10D%": [1.0, 2.0, 3.0, 4.0],
+                "VolRel20": [1.5, 3.0, 2.0, 4.0],
+                "SPYTrend10D": [0.5, 0.6, 0.7, 0.8],
+            }
+        )
         y = pd.Series([0, 1, 0, 1])
         labeled = pd.DataFrame(
             {
@@ -118,9 +124,11 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
                 bundle = ml_prebreakout.train_prebreakout_model(model_path=str(Path(tmp) / "model.pkl"))
 
         self.assertEqual(bundle["source"], "database")
-        self.assertEqual(bundle["features"], ["Trend10D%", "VolRel20"])
+        self.assertEqual(bundle["features"], ["Trend10D%", "VolRel20", "SPYTrend10D"])
+        self.assertEqual(bundle["market_feature_names"], ["SPYTrend10D"])
         self.assertEqual(bundle["model_version"], ml_prebreakout.MODEL_VERSION)
         self.assertEqual(bundle["validation_method"], "expanding_window_5fold_purged")
+        self.assertEqual(bundle["market_regime_result"], "PROMOTE")
         self.assertEqual(bundle["target"], "FutureQualitySetupHit")
         self.assertEqual(bundle["lead_days"], 3)
         self.assertEqual(bundle["setup_score_threshold"], 8.0)
@@ -135,8 +143,10 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         serialize_mock.assert_called_once_with(fake_classifier, fake_joblib)
         save_mock.assert_called_once()
         self.assertEqual(save_mock.call_args.kwargs["model_bytes"], b"model-bytes")
-        self.assertEqual(save_mock.call_args.kwargs["feature_names"], ["Trend10D%", "VolRel20"])
+        self.assertEqual(save_mock.call_args.kwargs["feature_names"], ["Trend10D%", "VolRel20", "SPYTrend10D"])
         self.assertEqual(save_mock.call_args.kwargs["auc"], 0.77)
+        self.assertEqual(save_mock.call_args.kwargs["metadata"]["target"], "FutureQualitySetupHit")
+        self.assertEqual(save_mock.call_args.kwargs["metadata"]["market_feature_names"], ["SPYTrend10D"])
 
     def test_add_forward_return_labels_uses_existing_return_column(self):
         df = pd.DataFrame(
@@ -259,6 +269,194 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(float(featured.loc[3, "BreakoutScoreDelta3D"]), 6.0)
         self.assertEqual(float(featured.loc[3, "BreakoutScoreSlope3D"]), 2.0)
         self.assertEqual(float(featured.loc[3, "Trend10DDelta1D"]), 3.0)
+
+    def test_add_market_regime_features_from_snapshot_context(self):
+        ts = pd.Timestamp("2026-01-08T15:00:00Z")
+        df = pd.DataFrame(
+            [
+                {
+                    "Symbol": "SPY",
+                    "Timestamp": ts,
+                    "Trend10D%": 2.0,
+                    "Trend20D%": 4.0,
+                    "Volatility20D%": 1.1,
+                    "PctChange": 0.5,
+                    "Last": 100.0,
+                    "EMA9": 101.0,
+                    "EMA21": 99.0,
+                },
+                {
+                    "Symbol": "QQQ",
+                    "Timestamp": ts,
+                    "Trend10D%": 3.0,
+                    "Trend20D%": 6.0,
+                    "Volatility20D%": 1.4,
+                    "PctChange": 0.8,
+                    "Last": 200.0,
+                    "EMA9": 198.0,
+                    "EMA21": 202.0,
+                },
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": ts,
+                    "PctChange": 2.0,
+                    "Volatility20D%": 8.0,
+                    "Trend10D%": 5.0,
+                    "Trend20D%": 9.0,
+                    "Last": 50.0,
+                    "EMA21": 45.0,
+                },
+                {
+                    "Symbol": "BBB",
+                    "Timestamp": ts,
+                    "PctChange": -1.0,
+                    "Volatility20D%": 4.0,
+                    "Trend10D%": -1.0,
+                    "Trend20D%": 1.0,
+                    "Last": 40.0,
+                    "EMA21": 44.0,
+                },
+                {
+                    "Symbol": "CCC",
+                    "Timestamp": ts,
+                    "PctChange": 1.0,
+                    "Volatility20D%": 6.0,
+                    "Trend10D%": 3.0,
+                    "Trend20D%": 5.0,
+                    "Last": 30.0,
+                    "EMA21": 25.0,
+                },
+            ]
+        )
+
+        featured = ml_prebreakout.add_market_regime_features(df)
+        aaa = featured.loc[featured["Symbol"] == "AAA"].iloc[0]
+
+        self.assertEqual(float(aaa["SPYTrend10D"]), 2.0)
+        self.assertEqual(float(aaa["QQQTrend20D"]), 6.0)
+        self.assertEqual(float(aaa["SPYAboveEMA21"]), 1.0)
+        self.assertEqual(float(aaa["QQQAboveEMA21"]), 0.0)
+        self.assertAlmostEqual(float(aaa["SPYEMA9EMA21Spread"]), 2.0)
+        self.assertAlmostEqual(float(aaa["QQQEMA9EMA21Spread"]), -2.0)
+        self.assertEqual(float(aaa["SPYVolatility20D"]), 1.1)
+        self.assertEqual(float(aaa["QQQVolatility20D"]), 1.4)
+        self.assertEqual(float(aaa["RSvsSPY10D"]), 3.0)
+        self.assertEqual(float(aaa["RSvsSPY20D"]), 5.0)
+        self.assertEqual(float(aaa["RSvsQQQ10D"]), 2.0)
+        self.assertEqual(float(aaa["RSvsQQQ20D"]), 3.0)
+        self.assertAlmostEqual(float(aaa["MarketBreadthAboveEMA21"]), 2 / 3)
+
+    def test_market_regime_features_never_use_future_benchmark_rows(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Symbol": "SPY",
+                    "Timestamp": pd.Timestamp("2026-01-01T15:00:00Z"),
+                    "Trend10D%": 1.0,
+                    "Trend20D%": 2.0,
+                },
+                {
+                    "Symbol": "AAA",
+                    "Timestamp": pd.Timestamp("2026-01-02T15:00:00Z"),
+                    "Trend10D%": 5.0,
+                    "Trend20D%": 7.0,
+                },
+                {
+                    "Symbol": "SPY",
+                    "Timestamp": pd.Timestamp("2026-01-05T15:00:00Z"),
+                    "Trend10D%": 9.0,
+                    "Trend20D%": 12.0,
+                },
+            ]
+        )
+
+        featured = ml_prebreakout.add_market_regime_features(df)
+        aaa = featured.loc[featured["Symbol"] == "AAA"].iloc[0]
+
+        self.assertEqual(float(aaa["SPYTrend10D"]), 1.0)
+        self.assertEqual(float(aaa["SPYTrend20D"]), 2.0)
+        self.assertEqual(float(aaa["RSvsSPY10D"]), 4.0)
+
+    def test_benchmark_context_from_bars_is_available_next_day(self):
+        dates = pd.date_range("2026-01-01", periods=25, freq="B", tz="UTC")
+        closes = [100.0] * (len(dates) - 1) + [125.0]
+        bars = pd.DataFrame({"Close": closes}, index=dates)
+        context = ml_prebreakout._benchmark_context_from_bars(bars, "SPY")
+        df = pd.DataFrame(
+            {
+                "Symbol": ["AAA"],
+                "Timestamp": [dates[-1]],
+                "Trend10D%": [5.0],
+                "Trend20D%": [8.0],
+            }
+        )
+
+        featured = ml_prebreakout.add_market_regime_features(df, benchmark_context={"SPY": context})
+
+        self.assertEqual(float(featured.loc[0, "SPYTrend10D"]), 0.0)
+        next_day_df = df.copy()
+        next_day_df["Timestamp"] = [dates[-1] + pd.Timedelta(1, unit="D")]
+        next_day_featured = ml_prebreakout.add_market_regime_features(next_day_df, benchmark_context={"SPY": context})
+        self.assertGreater(float(next_day_featured.loc[0, "SPYTrend10D"]), 0.0)
+
+    def test_prebreakout_features_restore_original_index_after_sorting(self):
+        df = pd.DataFrame(
+            {
+                "Symbol": ["BBB", "AAA", "AAA"],
+                "Timestamp": [
+                    pd.Timestamp("2026-01-03T15:00:00Z"),
+                    pd.Timestamp("2026-01-02T15:00:00Z"),
+                    pd.Timestamp("2026-01-01T15:00:00Z"),
+                ],
+                "BreakoutScore": [9.0, 5.0, 2.0],
+                "Trend10D%": [1.0, 4.0, 1.0],
+            },
+            index=[20, 10, 5],
+        )
+
+        featured = ml_prebreakout.add_prebreakout_features(df)
+
+        self.assertEqual(list(featured.index), [20, 10, 5])
+        self.assertEqual(float(featured.loc[10, "BreakoutScoreDelta1D"]), 3.0)
+
+    def test_build_dataset_and_scoring_share_market_feature_columns(self):
+        df = pd.DataFrame(
+            {
+                "Symbol": ["SPY", "AAA"],
+                "Timestamp": [pd.Timestamp("2026-01-08T15:00:00Z")] * 2,
+                "Trend10D%": [1.0, 4.0],
+                "Trend20D%": [2.0, 6.0],
+                "VolRel20": [1.0, 2.0],
+                "DollarVol20": [1_000_000.0, 2_000_000.0],
+                "BreakoutScore": [1.0, 5.0],
+                "GapPct": [0.1, 0.2],
+                "FutureQualitySetupHit": [0, 1],
+            }
+        )
+
+        x, _ = ml_prebreakout.build_ml_dataset(df)
+        fake_model = FakePrebreakoutClassifier()
+        bundle = {"model": fake_model, "features": list(x.columns)}
+
+        with patch.object(ml_prebreakout, "load_prebreakout_model", return_value=bundle):
+            scored = ml_prebreakout.score_prebreakout(df.copy())
+
+        self.assertIn("SPYTrend10D", x.columns)
+        self.assertIn("RSvsSPY10D", x.columns)
+        self.assertEqual(float(scored.loc[0, "PreBreakoutProb"]), 0.6)
+
+    def test_score_prebreakout_neutral_fills_missing_market_data(self):
+        fake_model = FakePrebreakoutClassifier()
+        bundle = {
+            "model": fake_model,
+            "features": ["Trend10D%", "SPYTrend10D", "RSvsSPY10D"],
+        }
+        df = pd.DataFrame({"Symbol": ["AAA"], "Timestamp": [pd.Timestamp("2026-01-08T15:00:00Z")], "Trend10D%": [3.0]})
+
+        with patch.object(ml_prebreakout, "load_prebreakout_model", return_value=bundle):
+            scored = ml_prebreakout.score_prebreakout(df)
+
+        self.assertEqual(float(scored.loc[0, "PreBreakoutProb"]), 0.6)
 
     def test_walk_forward_split_validates_on_later_rows(self):
         x = pd.DataFrame({"feature": [10, 20, 30, 40, 50]})
