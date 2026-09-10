@@ -1249,7 +1249,7 @@ def build_ml_dataset(
         include_market_features=include_market_features,
     )
     selected_cols = feature_cols or (FEATURE_COLS if include_market_features else RUN6_FEATURE_COLS)
-    selected_cols = [c for c in selected_cols if c in df.columns]
+    selected_cols = _unique_feature_list([c for c in selected_cols if c in df.columns])
 
     X = df[selected_cols].copy()
     X = X.fillna(0.0)
@@ -2269,7 +2269,7 @@ def train_prebreakout_model(
         benchmark_context=benchmark_context,
         include_market_features=True,
     )
-    selected_market_cols = [col for col in FEATURE_COLS if col in df_featured.columns]
+    selected_market_cols = _unique_feature_list([col for col in FEATURE_COLS if col in df_featured.columns])
     X_market = df_featured[selected_market_cols].copy().fillna(0.0)
     if X_market.empty:
         print("[ml_prebreakout] No challenger features available.")

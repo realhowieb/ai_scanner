@@ -763,6 +763,25 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertIn("RSvsSPY10D", x.columns)
         self.assertEqual(float(scored.loc[0, "PreBreakoutProb"]), 0.6)
 
+    def test_build_ml_dataset_deduplicates_feature_columns(self):
+        df = pd.DataFrame(
+            {
+                "Symbol": ["AAA", "AAA"],
+                "Timestamp": pd.date_range("2026-01-01", periods=2, freq="D", tz="UTC"),
+                "Trend10D%": [1.0, 2.0],
+                "DistanceTo20DHighPct": [-0.02, -0.01],
+                "FutureQualitySetupHit": [0, 1],
+            }
+        )
+
+        x, _ = ml_prebreakout.build_ml_dataset(
+            df,
+            include_market_features=False,
+            feature_cols=["Trend10D%", "DistanceTo20DHighPct", "DistanceTo20DHighPct"],
+        )
+
+        self.assertEqual(list(x.columns), ["Trend10D%", "DistanceTo20DHighPct"])
+
     def test_score_prebreakout_neutral_fills_missing_market_data(self):
         fake_model = FakePrebreakoutClassifier()
         bundle = {
