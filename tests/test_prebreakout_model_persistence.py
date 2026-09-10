@@ -534,6 +534,64 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(evaluation["features_added"], [])
         self.assertIn("already present", evaluation["skip_reason"])
 
+    def test_run14_train_fold_clipping_thresholds_do_not_use_validation_outlier(self):
+        x = pd.DataFrame({"feature": [1.0, 2.0, 3.0, 1000.0]})
+        y = pd.Series([0, 1, 0, 1])
+        labeled = pd.DataFrame({"Timestamp": pd.date_range("2026-01-01", periods=4, tz="UTC")})
+        folds = [
+            {
+                "fold": 1,
+                "train_idx": [0, 1, 2],
+                "val_idx": [3],
+                "validation_start": "2026-01-04T00:00:00Z",
+                "validation_end": "2026-01-04T00:00:00Z",
+                "purge_days": 5,
+            }
+        ]
+
+        with (
+            patch.object(ml_prebreakout, "roc_auc_score", return_value=0.7),
+            patch.object(ml_prebreakout, "average_precision_score", return_value=0.4),
+            patch.object(ml_prebreakout, "brier_score_loss", return_value=0.2),
+            patch.object(ml_prebreakout, "log_loss", return_value=0.5),
+            patch.object(ml_prebreakout, "XGBClassifier", return_value=FakePrebreakoutClassifier()),
+        ):
+            result = ml_prebreakout.evaluate_prebreakout_feature_set(
+                x,
+                y,
+                labeled,
+                folds,
+                ["feature"],
+                transform={"clip": True, "lower_q": 0.01, "upper_q": 0.99},
+            )
+
+        threshold = result["fold_metrics"][0]["transform_notes"]["clip_thresholds"]["feature"]["upper"]
+        self.assertLess(threshold, 1000.0)
+
+    def test_run14_preprocessing_plan_adds_missing_flags_and_removes_features(self):
+        x = pd.DataFrame({"keep": [1.0, np.nan, 3.0], "drop": [0.0, 0.0, 0.0]})
+        plan = {
+            "clip_thresholds": {"keep": {"lower": 1.0, "upper": 2.0}},
+            "missing_indicators": ["keep"],
+            "features_removed": ["drop"],
+        }
+
+        transformed, features = ml_prebreakout._apply_preprocessing_plan(x, ["keep", "drop"], plan)
+
+        self.assertEqual(features, ["keep", "keepMissing"])
+        self.assertEqual(float(transformed.loc[2, "keep"]), 2.0)
+        self.assertEqual(float(transformed.loc[1, "keepMissing"]), 1.0)
+
+    def test_run14_insufficient_qualifiers_status(self):
+        evaluation = ml_prebreakout._insufficient_qualifiers_experiment(
+            "J - Best overall combination",
+            "requires two independently useful families",
+            "best_overall_combination",
+        )
+
+        self.assertEqual(evaluation["experiment_status"], "SKIPPED_INSUFFICIENT_QUALIFIERS")
+        self.assertEqual(evaluation["features_added"], [])
+
     def test_run10_promotion_requires_meaningful_auc_delta(self):
         champion = {
             "validation_summary": {

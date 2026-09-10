@@ -77,7 +77,7 @@ def _load_ml_libs() -> None:
 
 
 MODEL_PATH = "prebreakout_model.pkl"
-MODEL_VERSION = "prebreakout-xgb-v9"
+MODEL_VERSION = "prebreakout-xgb-v10"
 TARGET_COLUMN = "ForwardReturnHit"
 RETURN_COLUMN = "Return_5D"
 RETURN_HORIZON_DAYS = 5
@@ -294,6 +294,20 @@ RS_COMPRESSION_INTERACTION_FEATURE_COLS = [
     "HigherLow_x_RS10",
     "StructureCompressionRS",
 ]
+RUN14_HIGHER_LOW_REFINEMENT_FEATURE_COLS = [
+    "HigherLowRatio3D",
+    "LowConsistency5D",
+]
+RUN14_HIGHER_LOW_RS_INTERACTION_FEATURE_COLS = [
+    "HigherLowRatio10D_x_RSvsSPY10D",
+    "HigherLowRatio10D_x_RSvsQQQ10D",
+    "LowSlope10DPct_x_RSvsSPY10D",
+]
+RUN14_HIGHER_LOW_COMPRESSION_FEATURE_COLS = [
+    "HigherLowRatio10D_x_RangeCompression10D",
+    "LowConsistency10D_x_RangeCompression10D",
+    "LowSlope10DPct_x_RangeCompression20D",
+]
 RUN12_EXPERIMENTAL_FEATURE_COLS = (
     RANGE_CONTRACTION_QUALITY_FEATURE_COLS
     + INSIDE_TIGHT_DAY_FEATURE_COLS
@@ -301,6 +315,9 @@ RUN12_EXPERIMENTAL_FEATURE_COLS = (
     + PRICE_STRUCTURE_TIGHTNESS_FEATURE_COLS
     + VOLUME_COMPRESSION_INTERACTION_FEATURE_COLS
     + RS_COMPRESSION_INTERACTION_FEATURE_COLS
+    + RUN14_HIGHER_LOW_REFINEMENT_FEATURE_COLS
+    + RUN14_HIGHER_LOW_RS_INTERACTION_FEATURE_COLS
+    + RUN14_HIGHER_LOW_COMPRESSION_FEATURE_COLS
 )
 RUN10_EXPERIMENTAL_FEATURE_COLS = (
     BOLLINGER_COMPRESSION_FEATURE_COLS
@@ -1334,10 +1351,14 @@ def add_prebreakout_features(
         add_feature("HigherLowCount5D", _rolling_sum_by_symbol(higher_low, symbols, 5, min_periods=1))
         add_feature("HigherLowCount10D", _rolling_sum_by_symbol(higher_low, symbols, 10, min_periods=1))
         add_feature("HigherLowCount20D", _rolling_sum_by_symbol(higher_low, symbols, 20, min_periods=1))
+        add_feature("HigherLowCount3D", _rolling_sum_by_symbol(higher_low, symbols, 3, min_periods=1))
+        valid_low_3 = _rolling_sum_by_symbol(higher_low.notna().astype(float), symbols, 3, min_periods=1)
         valid_low_5 = _rolling_sum_by_symbol(higher_low.notna().astype(float), symbols, 5, min_periods=1)
         valid_low_10 = _rolling_sum_by_symbol(higher_low.notna().astype(float), symbols, 10, min_periods=1)
+        add_feature("HigherLowRatio3D", np.where(valid_low_3 > 0, get_feature("HigherLowCount3D") / valid_low_3, np.nan))
         add_feature("HigherLowRatio5D", np.where(valid_low_5 > 0, get_feature("HigherLowCount5D") / valid_low_5, np.nan))
         add_feature("HigherLowRatio10D", np.where(valid_low_10 > 0, get_feature("HigherLowCount10D") / valid_low_10, np.nan))
+        add_feature("LowConsistency5D", get_feature("HigherLowRatio5D"))
         add_feature("LowConsistency10D", get_feature("HigherLowRatio10D"))
 
     if high_col:
@@ -1388,6 +1409,12 @@ def add_prebreakout_features(
         add_feature("RangePct_x_RS10", range_pct * rs10)
         add_feature("HigherLow_x_RS10", get_feature("HigherLowRatio10D") * rs10)
         add_feature("StructureCompressionRS", get_feature("ChannelCompression10v20") * get_feature("HigherLowRatio10D") * rs10)
+        add_feature("HigherLowRatio10D_x_RSvsSPY10D", get_feature("HigherLowRatio10D") * rs10)
+        add_feature("HigherLowRatio10D_x_RSvsQQQ10D", get_feature("HigherLowRatio10D") * get_feature("RSvsQQQ10D"))
+        add_feature("LowSlope10DPct_x_RSvsSPY10D", get_feature("LowSlope10DPct") * rs10)
+        add_feature("HigherLowRatio10D_x_RangeCompression10D", get_feature("HigherLowRatio10D") * get_feature("RangeCompression10D"))
+        add_feature("LowConsistency10D_x_RangeCompression10D", get_feature("LowConsistency10D") * get_feature("RangeCompression10D"))
+        add_feature("LowSlope10DPct_x_RangeCompression20D", get_feature("LowSlope10DPct") * get_feature("RangeCompression20D"))
 
     if "Volume" in out.columns:
         volume = pd.to_numeric(out["Volume"], errors="coerce")
@@ -1579,10 +1606,14 @@ def classification_diagnostics(y_true, y_proba) -> dict:
     actual = pd.Series(y_true).reset_index(drop=True).astype(int)
     predicted = pd.Series(y_proba).reset_index(drop=True).astype(float).clip(1e-9, 1.0 - 1e-9)
     baseline = float(actual.mean()) if len(actual) else 0.0
+    top5_hit_rate, top5_n = _top_fraction_hit_rate(actual, predicted, 0.05)
     top_hit_rate, top_n = _top_decile_hit_rate(actual, predicted)
     top20_hit_rate, top20_n = _top_fraction_hit_rate(actual, predicted, 0.20)
     metrics = {
         "baseline_hit_rate": baseline,
+        "top_5pct_hit_rate": top5_hit_rate,
+        "top_5pct_n": top5_n,
+        "top_5pct_lift_over_baseline": float(top5_hit_rate / baseline) if baseline > 0 else 0.0,
         "top_10pct_hit_rate": top_hit_rate,
         "top_10pct_n": top_n,
         "lift_over_baseline": float(top_hit_rate / baseline) if baseline > 0 else 0.0,
@@ -1609,6 +1640,8 @@ def summarize_fold_metrics(fold_metrics: list[dict]) -> dict:
         "pr_auc",
         "brier_score",
         "log_loss",
+        "top_5pct_hit_rate",
+        "top_5pct_lift_over_baseline",
         "top_10pct_hit_rate",
         "lift_over_baseline",
         "top_20pct_hit_rate",
@@ -1841,17 +1874,83 @@ def evaluate_prebreakout_feature_set(
     df_labeled: pd.DataFrame,
     folds: list[dict],
     feature_cols: list[str],
+    transform: dict | None = None,
 ) -> dict:
     fold_metrics = []
     validation_proba = []
     validation_actual = []
+    fold_feature_sets = []
+    transform = transform or {}
     for fold in folds:
-        X_train = X.loc[fold["train_idx"], feature_cols]
-        X_val = X.loc[fold["val_idx"], feature_cols]
+        fold_feature_cols = list(feature_cols)
+        X_train = X.loc[fold["train_idx"], fold_feature_cols].copy()
+        X_val = X.loc[fold["val_idx"], fold_feature_cols].copy()
         y_train = y.loc[fold["train_idx"]]
         y_val = y.loc[fold["val_idx"]]
         train_start, train_end = _date_range_for_indices(df_labeled, fold["train_idx"])
         val_start, val_end = _date_range_for_indices(df_labeled, fold["val_idx"])
+        transform_notes = {}
+        if transform.get("clip"):
+            lower_q = float(transform.get("lower_q", 0.01))
+            upper_q = float(transform.get("upper_q", 0.99))
+            thresholds = {}
+            for col in fold_feature_cols:
+                train_values = pd.to_numeric(X_train[col], errors="coerce")
+                finite = train_values[np.isfinite(train_values)]
+                if finite.empty:
+                    continue
+                lower = float(finite.quantile(lower_q))
+                upper = float(finite.quantile(upper_q))
+                if lower > upper:
+                    continue
+                thresholds[col] = {"lower": lower, "upper": upper}
+                X_train[col] = train_values.clip(lower, upper)
+                X_val[col] = pd.to_numeric(X_val[col], errors="coerce").clip(lower, upper)
+            transform_notes["clip_thresholds"] = thresholds
+        if transform.get("missing_indicators"):
+            requested_missing = transform.get("missing_features") or []
+            if not requested_missing:
+                train_missing = X_train.isna().mean().sort_values(ascending=False)
+                requested_missing = [col for col, rate in train_missing.items() if rate > 0.02][: int(transform.get("max_missing_features", 8))]
+            added_missing = []
+            for col in requested_missing:
+                if col not in X_train.columns:
+                    continue
+                flag = f"{col}Missing"
+                X_train[flag] = X_train[col].isna().astype(float)
+                X_val[flag] = X_val[col].isna().astype(float)
+                fold_feature_cols.append(flag)
+                added_missing.append(flag)
+            transform_notes["missing_indicators"] = added_missing
+        if transform.get("importance_prune_fraction") and y_train.nunique(dropna=True) >= 2:
+            fraction = float(transform["importance_prune_fraction"])
+            pre_model = _new_prebreakout_classifier()
+            pre_model.fit(X_train[fold_feature_cols], y_train)
+            importances = pd.Series(getattr(pre_model, "feature_importances_", np.zeros(len(fold_feature_cols))), index=fold_feature_cols)
+            remove_n = max(1, int(np.floor(len(fold_feature_cols) * fraction)))
+            removed = list(importances.sort_values(ascending=True).head(remove_n).index)
+            fold_feature_cols = [col for col in fold_feature_cols if col not in set(removed)]
+            X_train = X_train[fold_feature_cols]
+            X_val = X_val[fold_feature_cols]
+            transform_notes["features_removed"] = removed
+        if transform.get("correlation_prune_threshold"):
+            threshold = float(transform["correlation_prune_threshold"])
+            missing_rates = X_train[fold_feature_cols].isna().mean()
+            corr = X_train[fold_feature_cols].corr(numeric_only=True).abs()
+            removed = set()
+            for i, left in enumerate(fold_feature_cols):
+                if left in removed:
+                    continue
+                for right in fold_feature_cols[i + 1 :]:
+                    if right in removed:
+                        continue
+                    if pd.notna(corr.loc[left, right]) and float(corr.loc[left, right]) >= threshold:
+                        drop = right if missing_rates.get(left, 0.0) <= missing_rates.get(right, 0.0) else left
+                        removed.add(drop)
+            fold_feature_cols = [col for col in fold_feature_cols if col not in removed]
+            X_train = X_train[fold_feature_cols]
+            X_val = X_val[fold_feature_cols]
+            transform_notes["features_removed"] = sorted(removed)
         if y_train.nunique(dropna=True) < 2 or y_val.nunique(dropna=True) < 2:
             fold_metrics.append(
                 {
@@ -1871,14 +1970,15 @@ def evaluate_prebreakout_feature_set(
                     "log_loss": None,
                     "top_10pct_hit_rate": None,
                     "lift_over_baseline": None,
+                    "transform_notes": transform_notes,
                     "skipped": "one_class_train_or_validation",
                 }
             )
             continue
 
         fold_clf = _new_prebreakout_classifier()
-        fold_clf.fit(X_train, y_train)
-        y_proba = fold_clf.predict_proba(X_val)[:, 1]
+        fold_clf.fit(X_train[fold_feature_cols], y_train)
+        y_proba = fold_clf.predict_proba(X_val[fold_feature_cols])[:, 1]
         metrics = classification_diagnostics(y_val, y_proba)
         metrics.update(
             {
@@ -1892,9 +1992,12 @@ def evaluate_prebreakout_feature_set(
                 "purge_days": int(fold["purge_days"]),
                 "positive_validation_rows": int(y_val.sum()),
                 "positive_rate": float(y_val.mean()),
+                "feature_count": int(len(fold_feature_cols)),
+                "transform_notes": transform_notes,
             }
         )
         fold_metrics.append(metrics)
+        fold_feature_sets.append(list(fold_feature_cols))
         validation_proba.extend([float(value) for value in y_proba])
         validation_actual.extend([int(value) for value in y_val])
 
@@ -1903,7 +2006,73 @@ def evaluate_prebreakout_feature_set(
         "validation_summary": summarize_fold_metrics(fold_metrics),
         "validation_proba": validation_proba,
         "validation_actual": validation_actual,
+        "fold_feature_sets": fold_feature_sets,
     }
+
+
+def _fit_preprocessing_plan(X: pd.DataFrame, y: pd.Series, feature_cols: list[str], transform: dict | None = None) -> dict:
+    transform = transform or {}
+    plan = {"transform": dict(transform), "clip_thresholds": {}, "missing_indicators": [], "features_removed": []}
+    if transform.get("clip"):
+        lower_q = float(transform.get("lower_q", 0.01))
+        upper_q = float(transform.get("upper_q", 0.99))
+        for col in feature_cols:
+            values = pd.to_numeric(X[col], errors="coerce")
+            finite = values[np.isfinite(values)]
+            if finite.empty:
+                continue
+            plan["clip_thresholds"][col] = {
+                "lower": float(finite.quantile(lower_q)),
+                "upper": float(finite.quantile(upper_q)),
+            }
+    if transform.get("missing_indicators"):
+        requested = transform.get("missing_features") or []
+        if not requested:
+            missing = X[feature_cols].isna().mean().sort_values(ascending=False)
+            requested = [col for col, rate in missing.items() if rate > 0.02][: int(transform.get("max_missing_features", 8))]
+        plan["missing_indicators"] = [col for col in requested if col in feature_cols]
+    if transform.get("importance_prune_fraction") and y.nunique(dropna=True) >= 2:
+        fraction = float(transform["importance_prune_fraction"])
+        model = _new_prebreakout_classifier()
+        model.fit(X[feature_cols], y)
+        importances = pd.Series(getattr(model, "feature_importances_", np.zeros(len(feature_cols))), index=feature_cols)
+        remove_n = max(1, int(np.floor(len(feature_cols) * fraction)))
+        plan["features_removed"] = list(importances.sort_values(ascending=True).head(remove_n).index)
+    if transform.get("correlation_prune_threshold"):
+        threshold = float(transform["correlation_prune_threshold"])
+        missing_rates = X[feature_cols].isna().mean()
+        corr = X[feature_cols].corr(numeric_only=True).abs()
+        removed = set()
+        for i, left in enumerate(feature_cols):
+            if left in removed:
+                continue
+            for right in feature_cols[i + 1 :]:
+                if right in removed:
+                    continue
+                if pd.notna(corr.loc[left, right]) and float(corr.loc[left, right]) >= threshold:
+                    drop = right if missing_rates.get(left, 0.0) <= missing_rates.get(right, 0.0) else left
+                    removed.add(drop)
+        plan["features_removed"] = sorted(set(plan["features_removed"]) | removed)
+    return plan
+
+
+def _apply_preprocessing_plan(X: pd.DataFrame, feature_cols: list[str], plan: dict | None = None) -> tuple[pd.DataFrame, list[str]]:
+    plan = plan or {}
+    out = X.copy()
+    cols = list(feature_cols)
+    for col, bounds in (plan.get("clip_thresholds") or {}).items():
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce").clip(float(bounds["lower"]), float(bounds["upper"]))
+    for col in plan.get("missing_indicators") or []:
+        if col not in out.columns:
+            continue
+        flag = f"{col}Missing"
+        out[flag] = out[col].isna().astype(float)
+        if flag not in cols:
+            cols.append(flag)
+    removed = set(plan.get("features_removed") or [])
+    cols = [col for col in cols if col in out.columns and col not in removed]
+    return out[cols], cols
 
 
 def _fmt_metric(value, digits: int = 3) -> str:
@@ -2040,6 +2209,68 @@ def feature_quality_audit(X: pd.DataFrame, features: list[str]) -> list[dict]:
     return rows
 
 
+def feature_distribution_audit(X: pd.DataFrame, features: list[str]) -> list[dict]:
+    rows = []
+    total = len(X)
+    for feature in features:
+        values = pd.to_numeric(X[feature], errors="coerce") if feature in X.columns else pd.Series(dtype=float)
+        finite = values[np.isfinite(values)]
+        missing_count = int(values.isna().sum()) if feature in X.columns else total
+        non_finite_count = int((values.notna() & ~np.isfinite(values)).sum()) if feature in X.columns else total
+        zero_count = int((finite == 0.0).sum())
+        flags = []
+        if total and missing_count / total > 0.25:
+            flags.append("meaningful_missingness")
+        if len(finite) and zero_count / len(finite) > 0.95:
+            flags.append("mostly_zero")
+        if feature.startswith(("RSvsSPY", "RSvsQQQ")) and len(finite) and float(finite.abs().max()) > 500.0:
+            flags.append("extreme_relative_strength")
+        rows.append(
+            {
+                "feature": feature,
+                "missing_pct": float(missing_count / total * 100.0) if total else 100.0,
+                "zero_pct": float(zero_count / len(finite) * 100.0) if len(finite) else 0.0,
+                "finite_count": int(len(finite)),
+                "non_finite_count": non_finite_count,
+                "min": float(finite.min()) if len(finite) else None,
+                "p01": float(finite.quantile(0.01)) if len(finite) else None,
+                "p05": float(finite.quantile(0.05)) if len(finite) else None,
+                "median": float(finite.median()) if len(finite) else None,
+                "p95": float(finite.quantile(0.95)) if len(finite) else None,
+                "p99": float(finite.quantile(0.99)) if len(finite) else None,
+                "max": float(finite.max()) if len(finite) else None,
+                "unique_count": int(finite.nunique(dropna=True)),
+                "flags": flags,
+            }
+        )
+    return rows
+
+
+def _print_feature_distribution_audit(X: pd.DataFrame, features: list[str]) -> list[dict]:
+    rows = feature_distribution_audit(X, features)
+    print("[ml_prebreakout] RUN #14 DATA QUALITY AUDIT")
+    for row in rows:
+        print(
+            "[ml_prebreakout] "
+            f"{row['feature']}: missing={_fmt_metric(row['missing_pct'], 2)}%, "
+            f"zero={_fmt_metric(row['zero_pct'], 2)}%, "
+            f"finite={row['finite_count']}, non_finite={row['non_finite_count']}, "
+            f"min={_fmt_metric(row['min'], 6)}, p01={_fmt_metric(row['p01'], 6)}, "
+            f"p05={_fmt_metric(row['p05'], 6)}, median={_fmt_metric(row['median'], 6)}, "
+            f"p95={_fmt_metric(row['p95'], 6)}, p99={_fmt_metric(row['p99'], 6)}, "
+            f"max={_fmt_metric(row['max'], 6)}, unique={row['unique_count']}, flags={row['flags']}"
+        )
+    rs_extremes = [row for row in rows if "extreme_relative_strength" in row["flags"]]
+    if rs_extremes:
+        print(
+            "[ml_prebreakout] Relative-strength audit: extreme RS values detected. "
+            "Run #14 treats these as candidate statistical outliers and tests train-fold-only winsorization."
+        )
+    else:
+        print("[ml_prebreakout] Relative-strength audit: no RS values above the extreme-value threshold were detected.")
+    return rows
+
+
 def _print_feature_quality_audit(X: pd.DataFrame, features: list[str]) -> list[dict]:
     rows = feature_quality_audit(X, features)
     print("[ml_prebreakout] FEATURE QUALITY AUDIT")
@@ -2067,9 +2298,10 @@ def _run9_eval(
     features: list[str],
     added_features: list[str],
     family: str,
+    transform: dict | None = None,
 ) -> dict:
     feature_cols = _unique_feature_list([feature for feature in features if feature in X.columns])
-    evaluation = evaluate_prebreakout_feature_set(X, y, df_labeled, folds, feature_cols)
+    evaluation = evaluate_prebreakout_feature_set(X, y, df_labeled, folds, feature_cols, transform=transform)
     valid_auc_rows = [row for row in evaluation["fold_metrics"] if row.get("auc") is not None]
     if valid_auc_rows:
         weakest = min(valid_auc_rows, key=lambda row: float(row["auc"]))
@@ -2090,9 +2322,17 @@ def _run9_eval(
             "features": feature_cols,
             "feature_list": feature_cols,
             "features_added": [feature for feature in added_features if feature in feature_cols],
+            "features_removed": sorted(
+                {
+                    feature
+                    for row in evaluation["fold_metrics"]
+                    for feature in (row.get("transform_notes") or {}).get("features_removed", [])
+                }
+            ),
             "market_features": [feature for feature in feature_cols if feature in REGIME_FEATURE_COLS],
             "family": family,
             "validation_rows": _valid_validation_rows(evaluation["fold_metrics"]),
+            "transform": transform or {},
         }
     )
     return evaluation
@@ -2104,6 +2344,7 @@ def _skipped_experiment(name: str, requested: list[str], reason: str, family: st
         "features": [],
         "feature_list": [],
         "features_added": [],
+        "features_removed": [],
         "requested_features": list(requested),
         "market_features": [],
         "family": family,
@@ -2118,6 +2359,12 @@ def _skipped_experiment(name: str, requested: list[str], reason: str, family: st
     }
 
 
+def _insufficient_qualifiers_experiment(name: str, reason: str, family: str) -> dict:
+    row = _skipped_experiment(name, [], reason, family)
+    row["experiment_status"] = "SKIPPED_INSUFFICIENT_QUALIFIERS"
+    return row
+
+
 def _run10_eval(
     name: str,
     X: pd.DataFrame,
@@ -2128,6 +2375,7 @@ def _run10_eval(
     requested_features: list[str],
     family: str,
     missing_columns: list[str] | None = None,
+    transform: dict | None = None,
 ) -> dict:
     available_added = _available_features(list(X.columns), requested_features)
     base_set = set(base_features)
@@ -2140,7 +2388,7 @@ def _run10_eval(
             reason = "requested features are already present in the control feature set"
         print(f"[ml_prebreakout] {name} skipped: {reason}; features_added=[]")
         return _skipped_experiment(name, requested_features, reason, family, missing_columns)
-    evaluation = _run9_eval(name, X, y, df_labeled, folds, list(base_features) + new_added, new_added, family)
+    evaluation = _run9_eval(name, X, y, df_labeled, folds, list(base_features) + new_added, new_added, family, transform=transform)
     evaluation["requested_features"] = list(requested_features)
     evaluation["experiment_status"] = "VALID"
     evaluation["skip_reason"] = None
@@ -2167,6 +2415,8 @@ def _print_run9_experiment(name: str, evaluation: dict) -> None:
     summary = evaluation.get("validation_summary") or {}
     print(f"[ml_prebreakout] {name}: {evaluation['name']}")
     print(f"[ml_prebreakout] Feature list: {json.dumps(evaluation.get('features') or [])}")
+    if evaluation.get("features_removed"):
+        print(f"[ml_prebreakout] Features removed: {json.dumps(evaluation.get('features_removed') or [])}")
     for metrics in evaluation.get("fold_metrics", []):
         skipped = f", skipped={metrics['skipped']}" if metrics.get("skipped") else ""
         print(
@@ -2175,18 +2425,23 @@ def _print_run9_experiment(name: str, evaluation: dict) -> None:
             f"PR-AUC={_fmt_metric(metrics.get('pr_auc'), 6)}, "
             f"Brier={_fmt_metric(metrics.get('brier_score'), 6)}, "
             f"LogLoss={_fmt_metric(metrics.get('log_loss'), 6)}, "
+            f"Top5Lift={_fmt_metric(metrics.get('top_5pct_lift_over_baseline'), 6)}, "
             f"Top10Hit={_fmt_metric(metrics.get('top_10pct_hit_rate'), 6)}, "
-            f"Top10Lift={_fmt_metric(metrics.get('lift_over_baseline'), 6)}{skipped}"
+            f"Top10Lift={_fmt_metric(metrics.get('lift_over_baseline'), 6)}, "
+            f"Top20Lift={_fmt_metric(metrics.get('top_20pct_lift_over_baseline'), 6)}{skipped}"
         )
     print(
         "[ml_prebreakout] "
         f"Mean AUC={_fmt_metric(summary.get('auc_mean'), 6)}, "
+        f"Median AUC={_fmt_metric(summary.get('auc_median'), 6)}, "
         f"Std={_fmt_metric(summary.get('auc_std'), 6)}, "
         f"PR-AUC={_fmt_metric(summary.get('pr_auc_mean'), 6)}, "
         f"Brier={_fmt_metric(summary.get('brier_score_mean'), 6)}, "
         f"LogLoss={_fmt_metric(summary.get('log_loss_mean'), 6)}, "
+        f"Top5Lift={_fmt_metric(summary.get('top_5pct_lift_over_baseline_mean'), 6)}, "
         f"Top10Hit={_fmt_metric(summary.get('top_10pct_hit_rate_mean'), 6)}, "
         f"Top10Lift={_fmt_metric(summary.get('lift_over_baseline_mean'), 6)}, "
+        f"Top20Lift={_fmt_metric(summary.get('top_20pct_lift_over_baseline_mean'), 6)}, "
         f"MinFold={_fmt_metric(summary.get('min_fold_auc'), 6)}, "
         f"WeakestFold={summary.get('weakest_fold')}, "
         f"StrongestFold={summary.get('strongest_fold')}"
@@ -2194,10 +2449,10 @@ def _print_run9_experiment(name: str, evaluation: dict) -> None:
 
 
 def _print_run9_summary(ablation: list[dict], baseline_auc: float | None) -> None:
-    print("[ml_prebreakout] === RUN #12 FINAL COMPARISON ===")
+    print("[ml_prebreakout] === RUN #14 FINAL COMPARISON ===")
     print(
         "[ml_prebreakout] "
-        "Experiment | Features Added | Mean AUC | Std | Min Fold | PR-AUC | Brier | Top10Lift | Delta vs Baseline | Status"
+        "Experiment | Features Added | Features Removed | Mean AUC | Std | Worst Fold | PR-AUC | Top5Lift | Top10Lift | Top20Lift | Delta vs Control | Status"
     )
     for row in ablation:
         summary = row.get("validation_summary") or {}
@@ -2206,12 +2461,14 @@ def _print_run9_summary(ablation: list[dict], baseline_auc: float | None) -> Non
         print(
             "[ml_prebreakout] "
             f"{row['name']} | {', '.join(row.get('features_added') or []) or 'none'} | "
+            f"{', '.join(row.get('features_removed') or []) or 'none'} | "
             f"{_fmt_metric(auc, 6)} | "
             f"{_fmt_metric(summary.get('auc_std'), 6)} | "
             f"{_fmt_metric(summary.get('min_fold_auc'), 6)} | "
             f"{_fmt_metric(summary.get('pr_auc_mean'), 6)} | "
-            f"{_fmt_metric(summary.get('brier_score_mean'), 6)} | "
+            f"{_fmt_metric(summary.get('top_5pct_lift_over_baseline_mean'), 6)} | "
             f"{_fmt_metric(summary.get('lift_over_baseline_mean'), 6)} | "
+            f"{_fmt_metric(summary.get('top_20pct_lift_over_baseline_mean'), 6)} | "
             f"{_fmt_metric(delta, 6)} | "
             f"{row.get('experiment_status', 'VALID')}"
         )
@@ -2241,6 +2498,21 @@ def _best_valid_experiments(rows: list[dict], champion_auc: float, champion_lift
         and row["validation_summary"].get("lift_over_baseline_mean", 0.0) >= float(champion_lift) * 0.95
     ]
     return sorted(valid, key=lambda row: row["validation_summary"].get("auc_mean", float("-inf")), reverse=True)[:limit]
+
+
+def _champion_feature_names_from_bundle(bundle: dict | None, fallback: list[str]) -> list[str]:
+    if isinstance(bundle, dict):
+        for key in ("feature_names", "features", "feature_list"):
+            values = bundle.get(key)
+            if values:
+                return _unique_feature_list([str(value) for value in values])
+    return _unique_feature_list(list(fallback))
+
+
+def _champion_source_from_bundle(bundle: dict | None) -> str:
+    if not isinstance(bundle, dict):
+        return "fallback_repository_defaults"
+    return str(bundle.get("source") or "unknown")
 
 
 def _promotion_decision(candidate: dict, baseline: dict, dataset_failures: list[str]) -> tuple[str, list[str]]:
@@ -2318,9 +2590,27 @@ def _feature_importance_rows(model, feature_cols: list[str], top_n: int = 20) ->
                 "feature": str(name),
                 "importance": float(importance),
                 "is_market_regime_feature": str(name) in REGIME_FEATURE_COLS,
+                "category": _feature_category(str(name)),
             }
         )
     return sorted(rows, key=lambda row: row["importance"], reverse=True)[:top_n]
+
+
+def _feature_category(name: str) -> str:
+    lower = name.lower()
+    if any(token in lower for token in ["higherlow", "lowslope", "highlowchannel", "distanceto", "resistance", "breakoutpos"]):
+        return "price structure"
+    if any(token in lower for token in ["compression", "bbwidth", "range", "atr", "tight", "inside", "nr4", "nr7"]):
+        return "compression"
+    if lower.startswith("rsvs") or "_rs" in lower or "rs10" in lower or "rs20" in lower:
+        return "relative strength"
+    if any(token in lower for token in ["trend", "return", "slope"]):
+        return "momentum"
+    if any(token in lower for token in ["volume", "volrel", "rvol", "dollarvol", "dryup"]):
+        return "liquidity/volume"
+    if any(token in lower for token in ["breakoutscore", "gap"]):
+        return "breakout context"
+    return "other"
 
 
 def confidence_bucket_diagnostics(y_true, y_proba, bucket_size: float = 0.1) -> list[dict]:
@@ -2431,6 +2721,7 @@ def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.Data
     for col in feature_cols:
         if col not in X.columns:
             X[col] = 0.0
+    X, feature_cols = _apply_preprocessing_plan(X, feature_cols, bundle.get("preprocessing"))
     X = X[feature_cols].fillna(0.0)
 
     proba = model.predict_proba(X)[:, 1]
@@ -2477,18 +2768,18 @@ def train_prebreakout_model(
         return {}
 
     run6_reproduction = build_run6_reproduction(df_labeled, total_rows_before_eligibility=len(df))
-    print("[ml_prebreakout] === RUN #12 DATASET AUDIT ===")
+    print("[ml_prebreakout] === RUN #14 DATASET AUDIT ===")
     print_target_and_fold_audit("RUN #6 REPRODUCTION", run6_reproduction["audit"])
     if run6_reproduction["failures"]:
-        print("[ml_prebreakout] Run #6 reproduction failed; refusing Run #12 evaluation.")
+        print("[ml_prebreakout] Run #6 reproduction failed; refusing Run #14 evaluation.")
         for failure in run6_reproduction["failures"]:
             print(f"[ml_prebreakout] RUN #6 REPRODUCTION FAILURE: {failure}")
         return {}
     run11_dataset_failures = validate_run11_dataset_audit(run6_reproduction["audit"])
     if run11_dataset_failures:
-        print("[ml_prebreakout] Run #12 material dataset audit failed; refusing ablation.")
+        print("[ml_prebreakout] Run #14 material dataset audit failed; refusing ablation.")
         for failure in run11_dataset_failures:
-            print(f"[ml_prebreakout] RUN #12 DATASET AUDIT FAILURE: {failure}")
+            print(f"[ml_prebreakout] RUN #14 DATASET AUDIT FAILURE: {failure}")
         return {}
 
     X_run6 = run6_reproduction["X"]
@@ -2512,7 +2803,7 @@ def train_prebreakout_model(
     df_feature_source = add_historical_ohlcv_context(df_labeled, days_back=days_back)
     ohlcv_source_columns = [col for col in ["Open", "High", "Low", "Close", "Volume"] if col in df_feature_source.columns]
     print(
-        "[ml_prebreakout] Run #12 OHLCV enrichment columns available: "
+        "[ml_prebreakout] Run #14 OHLCV enrichment columns available: "
         f"{ohlcv_source_columns if ohlcv_source_columns else 'none'}"
     )
     df_featured = add_prebreakout_features(
@@ -2521,18 +2812,26 @@ def train_prebreakout_model(
         include_market_features=True,
     )
     selected_market_cols = _unique_feature_list([col for col in FEATURE_COLS if col in df_featured.columns])
-    X_market = df_featured[selected_market_cols].copy().fillna(0.0)
+    X_market = df_featured[selected_market_cols].copy()
     if X_market.empty:
         print("[ml_prebreakout] No challenger features available.")
         return {}
 
     all_market_features = list(X_market.columns)
+    champion_bundle = load_prebreakout_model() if load_latest_prebreakout_model_bundle is not None else None
+    fallback_champion_features = list(RUN11_CHAMPION_FEATURE_COLS) + list(HIGHER_LOW_QUALITY_FEATURE_COLS)
+    persisted_champion_features = _champion_feature_names_from_bundle(champion_bundle, fallback_champion_features)
+    champion_source = _champion_source_from_bundle(champion_bundle)
     feature_quality_rows = _print_feature_quality_audit(
         df_featured,
         _available_features(
             all_market_features,
-            RUN11_CHAMPION_FEATURE_COLS + BOLLINGER_COMPRESSION_FEATURE_COLS + RUN12_EXPERIMENTAL_FEATURE_COLS,
+            persisted_champion_features + BOLLINGER_COMPRESSION_FEATURE_COLS + RUN12_EXPERIMENTAL_FEATURE_COLS,
         ),
+    )
+    distribution_audit_rows = _print_feature_distribution_audit(
+        X_market,
+        _available_features(all_market_features, persisted_champion_features),
     )
 
     ablation_results = []
@@ -2547,144 +2846,195 @@ def train_prebreakout_model(
         "control",
     )
     ablation_results.append(run6_control_evaluation)
-    print("[ml_prebreakout] === RUN #12 CONTROL ===")
+    print("[ml_prebreakout] === RUN #14 CONTROL ===")
     _print_run9_experiment("RUN #6 FEATURE CONTROL", run6_control_evaluation)
     if not run6_control_evaluation["validation_summary"].get("auc_mean"):
         print("[ml_prebreakout] Control experiment could not compute AUC.")
         return {}
 
-    print("[ml_prebreakout] === RUN #12 RUN #11 CHAMPION CONTROL ===")
+    print("[ml_prebreakout] === RUN #14 CURRENT PRODUCTION CHAMPION ===")
     base_feature_columns = _available_features(list(X_run6.columns), RUN6_FEATURE_COLS)
-    champion_requested = list(RUN11_CHAMPION_FEATURE_COLS)
+    champion_requested = _available_features(all_market_features, persisted_champion_features)
     champion_evaluation = _run10_eval(
-        "A0 Run #11 production champion",
+        "A - Current production champion",
         X_market,
         y,
         df_labeled,
         folds,
         base_feature_columns,
         champion_requested,
-        "run11_champion",
+        "current_champion",
     )
     ablation_results.append(champion_evaluation)
-    _print_run9_experiment("RUN #11 CHAMPION", champion_evaluation)
+    _print_run9_experiment("CURRENT CHAMPION", champion_evaluation)
     if champion_evaluation.get("experiment_status") != "VALID":
-        print("[ml_prebreakout] Run #11 champion feature set is unavailable; refusing Run #12 ablation.")
+        print("[ml_prebreakout] Current champion feature set is unavailable; refusing Run #14 ablation.")
         return {}
 
-    print("[ml_prebreakout] === RUN #12 COMPRESSION QUALITY & READINESS ABLATION ===")
+    print("[ml_prebreakout] === RUN #14 ROBUSTNESS, PRUNING & RANKING QUALITY ===")
     champion_features = champion_evaluation["features"]
-    run12_experiments = [
+    missing_candidates = [
+        row["feature"]
+        for row in distribution_audit_rows
+        if row.get("missing_pct") is not None and float(row["missing_pct"]) > 2.0
+    ][:8]
+    run14_experiments = [
         (
-            "B Range contraction quality",
-            RANGE_CONTRACTION_QUALITY_FEATURE_COLS,
-            "range_contraction_quality",
-            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+            "B1 - Outlier robustness 0.5/99.5 clipping",
+            [],
+            "outlier_robustness_005_995",
+            [],
+            {"clip": True, "lower_q": 0.005, "upper_q": 0.995},
         ),
         (
-            "C Inside/tight-day compression",
-            INSIDE_TIGHT_DAY_FEATURE_COLS,
-            "inside_tight_day",
-            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+            "B2 - Outlier robustness 1/99 clipping",
+            [],
+            "outlier_robustness_01_99",
+            [],
+            {"clip": True, "lower_q": 0.01, "upper_q": 0.99},
         ),
         (
-            "D Higher-low quality",
-            HIGHER_LOW_QUALITY_FEATURE_COLS,
-            "higher_low_quality",
+            "C - Missingness robustness",
+            [],
+            "missingness_robustness",
+            [],
+            {"missing_indicators": True, "missing_features": missing_candidates, "max_missing_features": 8},
+        ),
+        (
+            "D1 - Low-importance pruning bottom 10%",
+            [],
+            "importance_prune_10",
+            [],
+            {"importance_prune_fraction": 0.10},
+        ),
+        (
+            "D2 - Low-importance pruning bottom 20%",
+            [],
+            "importance_prune_20",
+            [],
+            {"importance_prune_fraction": 0.20},
+        ),
+        (
+            "D3 - Low-importance pruning bottom 30%",
+            [],
+            "importance_prune_30",
+            [],
+            {"importance_prune_fraction": 0.30},
+        ),
+        (
+            "E - Correlation pruning >= 0.95",
+            [],
+            "correlation_prune_095",
+            [],
+            {"correlation_prune_threshold": 0.95},
+        ),
+        (
+            "F - Higher-low quality refinement",
+            RUN14_HIGHER_LOW_REFINEMENT_FEATURE_COLS,
+            "higher_low_refinement",
             _missing_source_columns(df_feature_source, [["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+            {},
         ),
         (
-            "E Price structure tightness",
-            PRICE_STRUCTURE_TIGHTNESS_FEATURE_COLS,
-            "price_structure_tightness",
+            "G - Higher-low x relative strength",
+            RUN14_HIGHER_LOW_RS_INTERACTION_FEATURE_COLS,
+            "higher_low_relative_strength",
+            _missing_source_columns(df_feature_source, [["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+            {"clip": True, "lower_q": 0.01, "upper_q": 0.99},
+        ),
+        (
+            "H - Higher-low x compression",
+            RUN14_HIGHER_LOW_COMPRESSION_FEATURE_COLS,
+            "higher_low_compression",
             _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
-        ),
-        (
-            "F Volume compression interaction",
-            VOLUME_COMPRESSION_INTERACTION_FEATURE_COLS,
-            "volume_compression_interaction",
-            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"], ["Volume"]]),
-        ),
-        (
-            "G RS/compression interaction",
-            RS_COMPRESSION_INTERACTION_FEATURE_COLS,
-            "rs_compression_interaction",
-            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
-        ),
-        (
-            "H Bollinger confirmation",
-            BOLLINGER_COMPRESSION_FEATURE_COLS,
-            "bollinger_confirmation",
-            _missing_source_columns(df_feature_source, [["Close", "Last"]]),
-        ),
-        (
-            "I ATR confirmation",
-            ATR_COMPRESSION_FEATURE_COLS,
-            "atr_confirmation",
-            _missing_source_columns(df_feature_source, [["High", "DayHigh", "HighPrice"], ["Low", "DayLow", "LowPrice"], ["Close", "Last"]]),
+            {"clip": True, "lower_q": 0.01, "upper_q": 0.99},
         ),
     ]
     new_family_results = []
-    for name, requested, family, missing_cols in run12_experiments:
+    for name, requested, family, missing_cols, transform in run14_experiments:
         if missing_cols:
             reason = f"required source columns missing: {', '.join(missing_cols)}"
             print(f"[ml_prebreakout] {name} skipped: {reason}; features_added=[]")
             evaluation = _skipped_experiment(name, requested, reason, family, missing_cols)
         else:
-            evaluation = _run10_eval(name, X_market, y, df_labeled, folds, champion_features, requested, family, missing_cols)
+            evaluation = _run10_eval(
+                name,
+                X_market,
+                y,
+                df_labeled,
+                folds,
+                champion_features,
+                requested,
+                family,
+                missing_cols,
+                transform=transform,
+            )
         new_family_results.append(evaluation)
         ablation_results.append(evaluation)
-        _print_run9_experiment("RUN #12 ABLATION", evaluation)
+        _print_run9_experiment("RUN #14 EXPERIMENT", evaluation)
 
     champion_auc = champion_evaluation["validation_summary"].get("auc_mean", RUN11_CHAMPION_AUC)
     champion_lift = champion_evaluation["validation_summary"].get("lift_over_baseline_mean", RUN11_CHAMPION_TOP10_LIFT)
-    best_two = _best_valid_experiments(new_family_results, float(champion_auc), float(champion_lift), limit=2)
-    if len(best_two) >= 2:
-        best_two_features = _unique_feature_list(best_two[0].get("features_added", []) + best_two[1].get("features_added", []))
-        best_two_eval = _run10_eval(
-            "J Best two individually useful families",
-            X_market,
-            y,
-            df_labeled,
-            folds,
-            champion_features,
-            best_two_features,
-            "best_two_families",
-        )
-    else:
-        best_two_eval = _skipped_experiment(
-            "J Best two individually useful families",
-            [],
-            "fewer than two individually useful Run #12 families",
-            "best_two_families",
-        )
-    ablation_results.append(best_two_eval)
-    _print_run9_experiment("BEST TWO FAMILIES", best_two_eval)
+    robustness_families = {
+        "outlier_robustness_005_995",
+        "outlier_robustness_01_99",
+        "missingness_robustness",
+        "importance_prune_10",
+        "importance_prune_20",
+        "importance_prune_30",
+        "correlation_prune_095",
+    }
+    structural_families = {
+        "higher_low_refinement",
+        "higher_low_relative_strength",
+        "higher_low_compression",
+    }
+    robustness_results = [row for row in new_family_results if row.get("family") in robustness_families]
+    structural_results = [row for row in new_family_results if row.get("family") in structural_families]
+    best_robustness = _best_valid_experiment(robustness_results, float(champion_auc), float(champion_lift))
+    best_structural = _best_valid_experiment(structural_results, float(champion_auc), float(champion_lift))
 
-    useful_rows = _best_valid_experiments(new_family_results, float(champion_auc), float(champion_lift), limit=3)
-    carefully_selected_features = _unique_feature_list(
-        [feature for row in useful_rows for feature in row.get("features_added", [])]
-    )
-    if carefully_selected_features:
-        careful_eval = _run10_eval(
-            "K Carefully selected combined model",
+    if best_robustness:
+        simplified_eval = _run10_eval(
+            "I - Best simplified/robust model",
             X_market,
             y,
             df_labeled,
             folds,
             champion_features,
-            carefully_selected_features,
-            "carefully_selected_combination",
+            [],
+            "best_simplified_model",
+            transform=best_robustness.get("transform") or {},
         )
     else:
-        careful_eval = _skipped_experiment(
-            "K Carefully selected combined model",
-            [],
-            "no individually useful Run #12 family met the combination criteria",
-            "carefully_selected_combination",
+        simplified_eval = _insufficient_qualifiers_experiment(
+            "I - Best simplified/robust model",
+            "no individually useful robustness or pruning experiment qualified",
+            "best_simplified_model",
         )
-    ablation_results.append(careful_eval)
-    _print_run9_experiment("CAREFULLY SELECTED", careful_eval)
+    ablation_results.append(simplified_eval)
+    _print_run9_experiment("BEST SIMPLIFIED", simplified_eval)
+
+    if best_robustness and best_structural:
+        overall_eval = _run10_eval(
+            "J - Best overall combination",
+            X_market,
+            y,
+            df_labeled,
+            folds,
+            champion_features,
+            best_structural.get("features_added") or [],
+            "best_overall_combination",
+            transform=best_robustness.get("transform") or {},
+        )
+    else:
+        overall_eval = _insufficient_qualifiers_experiment(
+            "J - Best overall combination",
+            "requires one independently useful robustness/pruning family and one independently useful structural family",
+            "best_overall_combination",
+        )
+    ablation_results.append(overall_eval)
+    _print_run9_experiment("BEST OVERALL", overall_eval)
 
     baseline_auc = run6_control_evaluation["validation_summary"].get("auc_mean")
     _print_run9_summary(ablation_results, baseline_auc)
@@ -2693,7 +3043,7 @@ def train_prebreakout_model(
         row
         for row in ablation_results
         if row.get("experiment_status") == "VALID"
-        and row.get("family") not in {"control", "run11_champion"}
+        and row.get("family") not in {"control", "current_champion"}
         and row["validation_summary"].get("auc_mean") is not None
     ]
     selected_eval = max(
@@ -2713,33 +3063,43 @@ def train_prebreakout_model(
         run11_dataset_failures,
     )
     selected_features = selected_eval["features"]
+    preprocessing = _fit_preprocessing_plan(X_market, y, selected_features, selected_eval.get("transform") or {})
+    X_final, selected_features = _apply_preprocessing_plan(X_market, selected_features, preprocessing)
     clf = _new_prebreakout_classifier()
-    clf.fit(X_market[selected_features], y)
+    clf.fit(X_final, y)
     calibration = confidence_bucket_diagnostics(selected_eval["validation_actual"], selected_eval["validation_proba"])
     calibration_error = calibration_error_from_buckets(calibration)
     validation_rows = _valid_validation_rows(fold_metrics)
-    feature_importances = _feature_importance_rows(clf, selected_features)
+    feature_importances = _feature_importance_rows(clf, selected_features, top_n=25)
 
-    print("[ml_prebreakout] === RUN #12 PROMOTION DECISION ===")
-    print("[ml_prebreakout] PREBREAKOUT RUN #12 - COMPRESSION QUALITY & BREAKOUT READINESS")
-    print(f"[ml_prebreakout] Dataset Eligible: {len(X_run6)}")
-    print(f"[ml_prebreakout] Dataset Positive: {int(y.sum())}")
-    print(f"[ml_prebreakout] Dataset Positive rate: {_fmt_metric(float(y.mean()), 6)}")
-    print(f"[ml_prebreakout] Dataset Validation rows: {_valid_validation_rows(champion_evaluation['fold_metrics'])}")
-    print(f"[ml_prebreakout] Baseline Control AUC: {_fmt_metric(baseline_auc, 6)}")
-    print(f"[ml_prebreakout] Run #11 champion AUC: {_fmt_metric(champion_auc, 6)}")
-    print(f"[ml_prebreakout] Run #11 champion Top10 Lift: {_fmt_metric(champion_lift, 6)}")
-    print(f"[ml_prebreakout] BEST CHALLENGER: {selected_eval['name']}")
-    print(f"[ml_prebreakout] Mean AUC: {_fmt_metric(auc, 6)}")
-    print(f"[ml_prebreakout] Delta vs champion: {_fmt_metric(float(auc) - float(champion_auc), 6)}")
-    print(f"[ml_prebreakout] Min fold: {_fmt_metric(validation_summary.get('min_fold_auc'), 6)}")
-    print(f"[ml_prebreakout] Fold 4: {_fmt_metric(validation_summary.get('fold4_auc'), 6)}")
-    print(f"[ml_prebreakout] Fold 5: {_fmt_metric(validation_summary.get('fold5_auc'), 6)}")
-    print(f"[ml_prebreakout] Top10 lift: {_fmt_metric(validation_summary.get('lift_over_baseline_mean'), 6)}")
-    print(f"[ml_prebreakout] Top20 lift: {_fmt_metric(validation_summary.get('top_20pct_lift_over_baseline_mean'), 6)}")
+    print("[ml_prebreakout] === RUN #14 PROMOTION DECISION ===")
+    print("[ml_prebreakout] RUN #14 - ROBUSTNESS, FEATURE PRUNING & RANKING QUALITY")
+    print(f"[ml_prebreakout] Historical rows: {len(df)}")
+    print(f"[ml_prebreakout] Eligible rows: {len(X_run6)}")
+    print(f"[ml_prebreakout] Positive labels: {int(y.sum())}")
+    print(f"[ml_prebreakout] Positive rate: {_fmt_metric(float(y.mean()), 6)}")
+    print(f"[ml_prebreakout] Validation rows: {_valid_validation_rows(champion_evaluation['fold_metrics'])}")
+    print(f"[ml_prebreakout] Champion source: {champion_source}")
+    print(f"[ml_prebreakout] Champion feature count: {len(champion_features)}")
+    print(f"[ml_prebreakout] Champion mean AUC: {_fmt_metric(champion_auc, 6)}")
+    print(f"[ml_prebreakout] Champion AUC std: {_fmt_metric(champion_evaluation['validation_summary'].get('auc_std'), 6)}")
+    print(f"[ml_prebreakout] Champion worst fold: {_fmt_metric(champion_evaluation['validation_summary'].get('min_fold_auc'), 6)}")
+    print(f"[ml_prebreakout] Champion PR-AUC: {_fmt_metric(champion_evaluation['validation_summary'].get('pr_auc_mean'), 6)}")
+    print(f"[ml_prebreakout] Champion Top10 Lift: {_fmt_metric(champion_lift, 6)}")
+    print(f"[ml_prebreakout] WINNER: {selected_eval['name']}")
+    print(f"[ml_prebreakout] Winner mean AUC: {_fmt_metric(auc, 6)}")
+    print(f"[ml_prebreakout] Winner AUC delta: {_fmt_metric(float(auc) - float(champion_auc), 6)}")
+    print(f"[ml_prebreakout] Winner AUC std: {_fmt_metric(validation_summary.get('auc_std'), 6)}")
+    print(f"[ml_prebreakout] Winner worst fold: {_fmt_metric(validation_summary.get('min_fold_auc'), 6)}")
+    print(f"[ml_prebreakout] Winner PR-AUC: {_fmt_metric(validation_summary.get('pr_auc_mean'), 6)}")
+    print(f"[ml_prebreakout] Winner Top5 lift: {_fmt_metric(validation_summary.get('top_5pct_lift_over_baseline_mean'), 6)}")
+    print(f"[ml_prebreakout] Winner Top10 lift: {_fmt_metric(validation_summary.get('lift_over_baseline_mean'), 6)}")
+    print(f"[ml_prebreakout] Winner Top20 lift: {_fmt_metric(validation_summary.get('top_20pct_lift_over_baseline_mean'), 6)}")
     print(f"[ml_prebreakout] Features added: {selected_eval.get('features_added')}")
-    print(f"[ml_prebreakout] DECISION: {promotion_result}")
-    print(f"[ml_prebreakout] RUN #12 RESULT: {'PROMOTED' if promotion_result in {'PROMOTE', 'STRONG_PROMOTION'} else 'NO PROMOTION'}")
+    print(f"[ml_prebreakout] Features removed: {preprocessing.get('features_removed')}")
+    print(f"[ml_prebreakout] Final feature count: {len(selected_features)}")
+    print(f"[ml_prebreakout] PROMOTION DECISION: {promotion_result}")
+    print(f"[ml_prebreakout] RUN #14 RESULT: {'PROMOTED' if promotion_result in {'PROMOTE', 'STRONG_PROMOTION'} else 'NO PROMOTION'}")
     for reason in promotion_reasons:
         print(f"[ml_prebreakout] REASON: {reason}")
     print("[ml_prebreakout] CALIBRATION BUCKETS")
@@ -2752,10 +3112,10 @@ def train_prebreakout_model(
         )
     print(f"[ml_prebreakout] Calibration error: {_fmt_metric(calibration_error, 6)}")
     if feature_importances:
-        print("[ml_prebreakout] TOP 20 FEATURE IMPORTANCES")
-        for row in feature_importances:
+        print("[ml_prebreakout] TOP 25 FEATURE IMPORTANCES")
+        for rank, row in enumerate(feature_importances, start=1):
             tag = " market-regime" if row["is_market_regime_feature"] else ""
-            print(f"[ml_prebreakout] {row['feature']}: {row['importance']:.6f}{tag}")
+            print(f"[ml_prebreakout] {rank}. {row['feature']} | {row['importance']:.6f} | {row['category']}{tag}")
 
     bundle = {
         "model": clf,
@@ -2776,9 +3136,11 @@ def train_prebreakout_model(
                 "features": row["features"],
                 "feature_list": row["feature_list"],
                 "features_added": row["features_added"],
+                "features_removed": row.get("features_removed", []),
                 "requested_features": row.get("requested_features", []),
                 "market_features": row["market_features"],
                 "family": row["family"],
+                "transform": row.get("transform", {}),
                 "experiment_status": row.get("experiment_status", "VALID"),
                 "skip_reason": row.get("skip_reason"),
                 "missing_columns": row.get("missing_columns", []),
@@ -2791,16 +3153,21 @@ def train_prebreakout_model(
             {
                 "name": row["name"],
                 "features_added": row["features_added"],
+                "features_removed": row.get("features_removed", []),
+                "final_feature_count": len(row.get("features") or []),
+                "transform": row.get("transform", {}),
                 "experiment_status": row.get("experiment_status", "VALID"),
                 "validation_summary": row["validation_summary"],
             }
             for row in ablation_results
         ],
         "feature_quality_audit": feature_quality_rows,
+        "data_quality_audit": distribution_audit_rows,
         "selected_feature_set": selected_eval["name"],
         "best_market_feature_set": selected_eval["name"],
-        "run12_result": "PROMOTED" if promotion_result in {"PROMOTE", "STRONG_PROMOTION"} else "NO_PROMOTION",
-        "run11_result": "UNCHANGED",
+        "run14_result": "PROMOTED" if promotion_result in {"PROMOTE", "STRONG_PROMOTION"} else "NO_PROMOTION",
+        "run12_result": "SUPERSEDED_BY_RUN14_EXPERIMENT",
+        "run11_result": "UNCHANGED_UNLESS_CURRENT_CHAMPION_METADATA_SAYS_OTHERWISE",
         "market_regime_result": promotion_result,
         "promotion_result": promotion_result,
         "promotion_reasons": promotion_reasons,
@@ -2808,12 +3175,12 @@ def train_prebreakout_model(
             "run6_mean_auc": RUN6_BASELINE_MEAN_AUC,
             "run6_std_auc": RUN6_BASELINE_STD_AUC,
             "control_mean_auc": baseline_auc,
-            "run11_champion_auc": champion_auc,
-            "run11_champion_std_auc": RUN11_CHAMPION_STD_AUC,
-            "run11_champion_top10_lift": champion_lift,
+            "current_champion_source": champion_source,
+            "current_champion_auc": champion_auc,
+            "current_champion_top10_lift": champion_lift,
             "challenger_mean_auc": validation_summary.get("auc_mean"),
             "challenger_std_auc": validation_summary.get("auc_std"),
-            "delta_vs_run11_champion": float(auc) - float(champion_auc),
+            "delta_vs_current_champion": float(auc) - float(champion_auc),
         },
         "eligible_rows": int(len(X_run6)),
         "feature_list": list(selected_features),
@@ -2822,14 +3189,21 @@ def train_prebreakout_model(
         "mean_pr_auc": validation_summary.get("pr_auc_mean"),
         "mean_brier": validation_summary.get("brier_score_mean"),
         "mean_logloss": validation_summary.get("log_loss_mean"),
+        "mean_top5_hit": validation_summary.get("top_5pct_hit_rate_mean"),
+        "mean_top5_lift": validation_summary.get("top_5pct_lift_over_baseline_mean"),
         "mean_top10_hit": validation_summary.get("top_10pct_hit_rate_mean"),
         "mean_top10_lift": validation_summary.get("lift_over_baseline_mean"),
         "mean_top20_hit": validation_summary.get("top_20pct_hit_rate_mean"),
         "mean_top20_lift": validation_summary.get("top_20pct_lift_over_baseline_mean"),
         "baseline_auc": baseline_auc,
         "delta_vs_baseline": float(auc) - float(baseline_auc) if baseline_auc is not None else None,
-        "run11_champion_auc": champion_auc,
-        "delta_vs_run11": float(auc) - float(champion_auc),
+        "current_champion_source": champion_source,
+        "current_champion_auc": champion_auc,
+        "delta_vs_current_champion": float(auc) - float(champion_auc),
+        "features_added": selected_eval.get("features_added", []),
+        "features_removed": preprocessing.get("features_removed", []),
+        "final_feature_count": len(selected_features),
+        "preprocessing": preprocessing,
         "feature_importances": feature_importances,
         "target": PREBREAKOUT_TARGET_COLUMN,
         "target_rule": (
@@ -2860,6 +3234,7 @@ def train_prebreakout_model(
         "run10_dataset_audit": run6_reproduction["audit"],
         "run11_dataset_audit": run6_reproduction["audit"],
         "run12_dataset_audit": run6_reproduction["audit"],
+        "run14_dataset_audit": run6_reproduction["audit"],
         "benchmark_context_source": benchmark_context_source,
         "ohlcv_enrichment_columns": ohlcv_source_columns,
         "model_version": MODEL_VERSION,
@@ -2886,12 +3261,12 @@ def train_prebreakout_model(
             bundle["db_save_error"] = str(e)
             print(f"[ml_prebreakout] DB model save failed: {e}")
     else:
-        print("[ml_prebreakout] Run #12 did not promote; leaving Run #11 champion untouched in Neon.")
+        print("[ml_prebreakout] Run #14 did not promote; leaving the current production champion untouched in Neon.")
 
-    results_path = Path(model_path).with_name("prebreakout_run12_results.json")
+    results_path = Path(model_path).with_name("prebreakout_run14_results.json")
     results_payload = {key: value for key, value in bundle.items() if key != "model"}
     results_path.write_text(json.dumps(results_payload, indent=2, sort_keys=True, default=str))
-    print(f"[ml_prebreakout] Saved Run #12 JSON report to {results_path}")
+    print(f"[ml_prebreakout] Saved Run #14 JSON report to {results_path}")
 
     joblib.dump(bundle, model_path)
     print(f"[ml_prebreakout] Saved XGBoost model/report bundle to {model_path}")
