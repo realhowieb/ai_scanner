@@ -2619,11 +2619,6 @@ def train_prebreakout_model(
         "source": "local",
     }
 
-    results_path = Path(model_path).with_name("prebreakout_run11_results.json")
-    results_payload = {key: value for key, value in bundle.items() if key != "model"}
-    results_path.write_text(json.dumps(results_payload, indent=2, sort_keys=True, default=str))
-    print(f"[ml_prebreakout] Saved Run #11 JSON report to {results_path}")
-
     if promotion_result in {"PROMOTE", "STRONG_PROMOTION"} and save_prebreakout_model is not None and serialize_model_to_bytes is not None:
         try:
             saved = save_prebreakout_model(
@@ -2645,6 +2640,11 @@ def train_prebreakout_model(
             print(f"[ml_prebreakout] DB model save failed: {e}")
     else:
         print("[ml_prebreakout] Run #11 did not promote; not saving challenger to Neon.")
+
+    results_path = Path(model_path).with_name("prebreakout_run11_results.json")
+    results_payload = {key: value for key, value in bundle.items() if key != "model"}
+    results_path.write_text(json.dumps(results_payload, indent=2, sort_keys=True, default=str))
+    print(f"[ml_prebreakout] Saved Run #11 JSON report to {results_path}")
 
     joblib.dump(bundle, model_path)
     print(f"[ml_prebreakout] Saved XGBoost model/report bundle to {model_path}")
