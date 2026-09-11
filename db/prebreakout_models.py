@@ -181,6 +181,53 @@ def restore_previous_model_if_active_run16_incomplete(*, min_valid_folds: int = 
     return restored
 
 
+def update_active_prebreakout_model_metadata(patch: dict[str, Any]) -> bool:
+    """Merge ``patch`` into the active model's metadata JSONB, in place.
+
+    Used to attach a calibration map to the live champion without retraining or
+    swapping the model row (no change to model_bytes or which row is_active).
+    Returns False when there is no active row or the database is unavailable.
+    """
+    if not isinstance(patch, dict) or not patch:
+        return False
+    conn = get_neon_conn()
+    if conn is None:
+        return False
+    ensure_prebreakout_models_schema(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, metadata FROM prebreakout_models
+        WHERE is_active = TRUE
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return False
+    active_id = _row_get(row, "id", 0)
+    metadata = _row_get(row, "metadata", 1) or {}
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            metadata = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata.update(patch)
+    cur.execute(
+        "UPDATE prebreakout_models SET metadata = %s::jsonb WHERE id = %s",
+        (json.dumps(metadata), active_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return True
+
+
 def load_latest_prebreakout_model_bundle(joblib_module: Any) -> dict[str, Any] | None:
     """Load the latest active model bundle from Neon/Postgres."""
     conn = get_neon_conn()

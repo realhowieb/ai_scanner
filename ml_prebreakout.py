@@ -14,12 +14,14 @@ try:
         restore_previous_model_if_active_run16_incomplete,
         save_prebreakout_model,
         serialize_model_to_bytes,
+        update_active_prebreakout_model_metadata,
     )
 except Exception:  # pragma: no cover - keeps ML imports resilient in partial deploys
     load_latest_prebreakout_model_bundle = None  # type: ignore[assignment]
     restore_previous_model_if_active_run16_incomplete = None  # type: ignore[assignment]
     save_prebreakout_model = None  # type: ignore[assignment]
     serialize_model_to_bytes = None  # type: ignore[assignment]
+    update_active_prebreakout_model_metadata = None  # type: ignore[assignment]
 
 # ML libraries are loaded LAZILY: this module sits on app.py's boot import
 # chain (via prebreakout_tab / three_step_scanner), and importing xgboost +
@@ -3299,6 +3301,84 @@ def apply_calibration_map(proba, calibration_map: dict | None):
     xp = np.asarray(xs, dtype=float)
     fp = np.asarray(ys, dtype=float)
     return np.clip(np.interp(values, xp, fp), 0.0, 1.0)
+
+
+def fit_isotonic_calibration_map_from_buckets(buckets: list[dict], *, min_total: int = 50) -> dict | None:
+    """Build an isotonic calibration map from stored confidence buckets.
+
+    Recalibrating the live champion in place: its OOF classifier probabilities
+    are not persisted, but the per-decile ``calibration`` buckets
+    (mean_confidence -> hit_rate, weighted by n) are — and those *are* the
+    classifier's calibration curve. Fitting isotonic on the bucket points
+    (weighted by n) reconstructs the map without a retrain or any data pull.
+    Returns None when the buckets are too sparse to fit.
+    """
+    if not isinstance(buckets, list) or len(buckets) < 2:
+        return None
+    xs, ys, ws = [], [], []
+    for bucket in buckets:
+        n = int(bucket.get("n", 0) or 0)
+        if n <= 0:
+            continue
+        xs.append(float(bucket.get("mean_confidence", 0.0)))
+        ys.append(float(bucket.get("hit_rate", 0.0)))
+        ws.append(n)
+    if len(xs) < 2 or sum(ws) < int(min_total):
+        return None
+    try:
+        from sklearn.isotonic import IsotonicRegression
+
+        iso = IsotonicRegression(out_of_bounds="clip")
+        iso.fit(np.asarray(xs, dtype=float), np.asarray(ys, dtype=float), sample_weight=np.asarray(ws, dtype=float))
+        tx = np.asarray(iso.X_thresholds_, dtype=float)
+        ty = np.asarray(iso.y_thresholds_, dtype=float)
+        if tx.size < 2:
+            return None
+        return {
+            "method": "isotonic_from_buckets",
+            "x": [float(v) for v in tx],
+            "y": [float(v) for v in ty],
+            "n": int(sum(ws)),
+        }
+    except Exception as e:
+        print(f"[ml_prebreakout] isotonic-from-buckets fit failed: {e}")
+        return None
+
+
+def recalibrate_active_champion() -> dict:
+    """Attach an isotonic calibration map to the live champion, in place.
+
+    Promotions carry a calibration map automatically, but when no challenger
+    beats the champion the live model never gains one — so its displayed
+    probability stays raw. This fits the map from the champion's own stored
+    ``calibration`` buckets and patches the active Neon row's metadata WITHOUT
+    swapping the model or changing which row is active. Idempotent-safe: pass
+    force to overwrite an existing map. Returns a small status dict.
+    """
+    if update_active_prebreakout_model_metadata is None:
+        return {"ok": False, "reason": "db metadata update helper unavailable"}
+    bundle = load_prebreakout_model()
+    if not bundle:
+        return {"ok": False, "reason": "no active champion in Neon"}
+    if bundle.get("source") != "database":
+        return {"ok": False, "reason": f"active model source is {bundle.get('source')!r}, not database"}
+    existing = bundle.get("calibration_map")
+    if isinstance(existing, dict) and existing.get("x"):
+        return {"ok": True, "skipped": "champion already has a calibration_map", "method": existing.get("method")}
+    calibration_map = fit_isotonic_calibration_map_from_buckets(bundle.get("calibration") or [])
+    if not calibration_map:
+        return {"ok": False, "reason": "champion calibration buckets too sparse to fit a map"}
+    patched = update_active_prebreakout_model_metadata({"calibration_map": calibration_map})
+    if not patched:
+        return {"ok": False, "reason": "metadata update failed (database unavailable?)"}
+    clear_model_cache()
+    return {
+        "ok": True,
+        "model_version": bundle.get("model_version"),
+        "auc": bundle.get("auc"),
+        "calibration_points": len(calibration_map["x"]),
+        "n": calibration_map["n"],
+    }
 
 
 # Process-level model cache: every scan was re-downloading the model BYTEA from

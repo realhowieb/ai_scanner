@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import tempfile
 import types
 import unittest
@@ -952,6 +953,82 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         # ...and monotonic, so ranking is never reordered.
         order_raw = np.argsort(raw, kind="stable")
         self.assertTrue(np.all(np.diff(calibrated[order_raw]) >= -1e-9))
+
+    @unittest.skipUnless(_SKLEARN, "scikit-learn not installed")
+    def test_fit_calibration_map_from_buckets_corrects_overconfidence(self):
+        buckets = [
+            {"bucket": f"{i}", "n": 100, "mean_confidence": (i + 0.5) / 10, "hit_rate": (i + 0.5) / 10 * 0.5}
+            for i in range(10)
+        ]
+        cmap = ml_prebreakout.fit_isotonic_calibration_map_from_buckets(buckets)
+        self.assertEqual(cmap["method"], "isotonic_from_buckets")
+        self.assertEqual(cmap["n"], 1000)
+        calibrated = ml_prebreakout.apply_calibration_map(np.array([0.9]), cmap)
+        self.assertLess(float(calibrated[0]), 0.9)
+
+    def test_fit_calibration_map_from_buckets_none_when_sparse(self):
+        self.assertIsNone(ml_prebreakout.fit_isotonic_calibration_map_from_buckets([]))
+        self.assertIsNone(
+            ml_prebreakout.fit_isotonic_calibration_map_from_buckets(
+                [{"n": 1, "mean_confidence": 0.5, "hit_rate": 0.3}]
+            )
+        )
+
+    @unittest.skipUnless(_SKLEARN, "scikit-learn not installed")
+    def test_recalibrate_active_champion_patches_metadata(self):
+        buckets = [
+            {"bucket": f"{i}", "n": 100, "mean_confidence": (i + 0.5) / 10, "hit_rate": (i + 0.5) / 10 * 0.5}
+            for i in range(10)
+        ]
+        bundle = {"source": "database", "model_version": "v9", "auc": 0.668, "calibration": buckets}
+        with (
+            patch.object(ml_prebreakout, "load_prebreakout_model", return_value=bundle),
+            patch.object(ml_prebreakout, "update_active_prebreakout_model_metadata", return_value=True) as up,
+            patch.object(ml_prebreakout, "clear_model_cache"),
+        ):
+            result = ml_prebreakout.recalibrate_active_champion()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["model_version"], "v9")
+        self.assertIn("calibration_map", up.call_args[0][0])
+
+    def test_recalibrate_active_champion_skips_when_already_calibrated(self):
+        bundle = {"source": "database", "calibration_map": {"x": [0.0, 1.0], "y": [0.0, 1.0]}}
+        with patch.object(ml_prebreakout, "load_prebreakout_model", return_value=bundle):
+            result = ml_prebreakout.recalibrate_active_champion()
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["skipped"])
+
+    def test_recalibrate_active_champion_requires_active_db_model(self):
+        with patch.object(ml_prebreakout, "load_prebreakout_model", return_value=None):
+            self.assertFalse(ml_prebreakout.recalibrate_active_champion()["ok"])
+        with patch.object(ml_prebreakout, "load_prebreakout_model", return_value={"source": "local"}):
+            self.assertFalse(ml_prebreakout.recalibrate_active_champion()["ok"])
+
+    def test_update_active_model_metadata_merges_patch(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = (7, {"auc": 0.668, "calibration": []})
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+        with patch.object(prebreakout_models, "get_neon_conn", return_value=conn):
+            ok = prebreakout_models.update_active_prebreakout_model_metadata(
+                {"calibration_map": {"x": [0.0, 1.0], "y": [0.0, 0.5]}}
+            )
+        self.assertTrue(ok)
+        update_call = [c for c in cursor.execute.call_args_list if "UPDATE prebreakout_models SET metadata" in c[0][0]][0]
+        written = json.loads(update_call[0][1][0])
+        self.assertIn("calibration_map", written)
+        self.assertEqual(written["auc"], 0.668)  # existing keys preserved
+        self.assertEqual(update_call[0][1][1], 7)  # active id
+
+    def test_update_active_model_metadata_false_without_active_row(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = None
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+        with patch.object(prebreakout_models, "get_neon_conn", return_value=conn):
+            self.assertFalse(
+                prebreakout_models.update_active_prebreakout_model_metadata({"calibration_map": {"x": [0], "y": [0]}})
+            )
 
     def test_apply_calibration_map_is_safe_noop_without_map(self):
         raw = np.array([0.1, 0.5, 0.9])
