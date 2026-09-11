@@ -106,6 +106,48 @@ def save_ai_confidence_model(
     return True
 
 
+def update_active_ai_confidence_model_metadata(patch: dict[str, Any]) -> bool:
+    """Merge ``patch`` into the active AI Confidence model's metadata, in place.
+
+    Used to attach a calibration map to the live model without retraining or
+    swapping the row (no change to model_bytes or which row is_active). Returns
+    False when there is no active row or the database is unavailable.
+    """
+    if not isinstance(patch, dict) or not patch:
+        return False
+    conn = get_neon_conn()
+    if conn is None:
+        return False
+    ensure_ai_confidence_models_schema(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, metadata FROM ai_confidence_models
+        WHERE is_active = TRUE
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return False
+    active_id = _row_get(row, "id", 0)
+    metadata = _coerce_json(_row_get(row, "metadata", 1)) or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata.update(patch)
+    cur.execute(
+        "UPDATE ai_confidence_models SET metadata = %s::jsonb WHERE id = %s",
+        (json.dumps(metadata), active_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return True
+
+
 def load_latest_ai_confidence_model_bundle(joblib_module: Any) -> dict[str, Any] | None:
     """Load the latest active AI Confidence model from Neon/Postgres."""
     conn = get_neon_conn()

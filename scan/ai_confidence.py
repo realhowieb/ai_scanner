@@ -5,16 +5,19 @@ import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 try:
     from db.ai_confidence_models import (
         load_latest_ai_confidence_model_bundle,
         save_ai_confidence_model,
+        update_active_ai_confidence_model_metadata,
     )
 except Exception:  # pragma: no cover - keep scanner import resilient
     load_latest_ai_confidence_model_bundle = None  # type: ignore[assignment]
     save_ai_confidence_model = None  # type: ignore[assignment]
+    update_active_ai_confidence_model_metadata = None  # type: ignore[assignment]
 
 try:
     import joblib
@@ -159,6 +162,60 @@ def save_ai_confidence_model_from_files(
     )
 
 
+def _apply_calibration_map(proba: Any, calibration_map: Any) -> Any:
+    """Map raw probabilities through a stored isotonic step-map via np.interp.
+
+    Kept local (pure numpy) so the hot scoring path doesn't import the heavy
+    ml_prebreakout module. Returns the input unchanged when no usable map is
+    present, so scoring is safe on models trained before calibration existed.
+    """
+    values = np.asarray(proba, dtype=float)
+    if not isinstance(calibration_map, dict):
+        return values
+    xs = calibration_map.get("x")
+    ys = calibration_map.get("y")
+    if not xs or not ys or len(xs) != len(ys) or len(xs) < 2:
+        return values
+    return np.clip(np.interp(values, np.asarray(xs, dtype=float), np.asarray(ys, dtype=float)), 0.0, 1.0)
+
+
+def recalibrate_active_ai_confidence() -> dict:
+    """Attach an isotonic calibration map to the live AI Confidence model.
+
+    The live model may carry no calibration map (e.g. trained before calibration
+    existed), so its displayed confidence is the raw, over-confident score. This
+    fits a map from the model's own stored ``calibration`` buckets and patches
+    the active row's metadata in place — no retrain, no model swap. Idempotent:
+    skips when a map is already present. Returns a small status dict.
+    """
+    if update_active_ai_confidence_model_metadata is None:
+        return {"ok": False, "reason": "db metadata update helper unavailable"}
+    model, metadata, warning = load_ai_confidence_bundle()
+    if model is None:
+        return {"ok": False, "reason": warning or "no AI Confidence model available"}
+    if metadata.get("source") != "database":
+        return {"ok": False, "reason": f"active model source is {metadata.get('source')!r}, not database"}
+    existing = metadata.get("calibration_map")
+    if isinstance(existing, dict) and existing.get("x"):
+        return {"ok": True, "skipped": "model already has a calibration_map", "method": existing.get("method")}
+    try:
+        from ml_prebreakout import fit_isotonic_calibration_map_from_buckets
+    except Exception as exc:  # pragma: no cover - defensive
+        return {"ok": False, "reason": f"calibration fitter unavailable: {type(exc).__name__}"}
+    calibration_map = fit_isotonic_calibration_map_from_buckets(metadata.get("calibration") or [])
+    if not calibration_map:
+        return {"ok": False, "reason": "model calibration buckets too sparse to fit a map"}
+    if not update_active_ai_confidence_model_metadata({"calibration_map": calibration_map}):
+        return {"ok": False, "reason": "metadata update failed (database unavailable?)"}
+    _BUNDLE_CACHE.clear()
+    return {
+        "ok": True,
+        "model_version": metadata.get("model_version"),
+        "calibration_points": len(calibration_map["x"]),
+        "n": calibration_map["n"],
+    }
+
+
 def score_ai_confidence(
     df: pd.DataFrame,
     *,
@@ -197,7 +254,12 @@ def score_ai_confidence(
     try:
         features_df = frame.loc[:, features].apply(pd.to_numeric, errors="coerce").fillna(0.0)
         proba = model.predict_proba(features_df)
-        frame[CONFIDENCE_COL] = (proba[:, 1] * 100.0).round(1)
+        # Isotonic calibration (fit on OOF validation) makes the displayed
+        # confidence honest — a shown 45% actually hits ~45% — instead of the
+        # raw, over-confident score. Monotonic, so it never changes ranking.
+        # No-ops on models trained before calibration was attached.
+        calibrated = _apply_calibration_map(proba[:, 1], metadata.get("calibration_map"))
+        frame[CONFIDENCE_COL] = (calibrated * 100.0).round(1)
         if trained_at:
             frame.attrs[TRAINED_AT_ATTR] = trained_at
         if metadata.get("source"):

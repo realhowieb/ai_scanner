@@ -15,6 +15,7 @@ from ml_prebreakout import (  # noqa: E402
     TARGET_COLUMN,
     add_forward_return_labels,
     confidence_bucket_diagnostics,
+    fit_isotonic_calibration_map,
     load_run_history,
     walk_forward_split,
 )
@@ -120,10 +121,14 @@ def train_ai_confidence_model(
 
     auc = None
     calibration = []
+    calibration_map = None
     y_val_proba = model.predict_proba(x_val)[:, 1]
     if y_val.nunique() >= 2:
         auc = float(roc_auc_score(y_val, y_val_proba))
         calibration = confidence_bucket_diagnostics(y_val, y_val_proba)
+        # Fit isotonic calibration on the OOF validation preds so the displayed
+        # confidence is honest; monotonic, so it never changes ranking.
+        calibration_map = fit_isotonic_calibration_map(y_val, y_val_proba)
 
     metadata = {
         "feature_names": FEATURE_NAMES,
@@ -133,6 +138,7 @@ def train_ai_confidence_model(
         "target": TARGET_COLUMN,
         "target_rule": "+4% before -2% in 5 trading days; fallback Return_5D >= +4%",
         "calibration": calibration,
+        "calibration_map": calibration_map,
         "rows": int(len(x)),
         "positive_rows": int(y.sum()),
         "model_version": MODEL_VERSION,

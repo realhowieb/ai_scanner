@@ -1,0 +1,52 @@
+name: Recalibrate AI Confidence Model
+
+# Attach an isotonic calibration map to the live AI Confidence model in place, so
+# its displayed confidence is honest instead of the raw, over-confident score.
+# Reads the model's own stored calibration buckets and patches the active Neon
+# row's metadata — no retrain, no model swap.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recalibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+      AI_SCANNER_SQLITE_FALLBACK: "false"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements-core.txt
+            requirements-ml.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -r requirements-ml.txt -c requirements.lock
+
+      - name: Check Neon connection secret
+        run: |
+          if [ -z "$NEON_DATABASE_URL" ]; then
+            echo "NEON_DATABASE_URL or DATABASE_URL GitHub Actions secret is required."
+            exit 1
+          fi
+
+      - name: Recalibrate active AI Confidence model in place
+        run: python scripts/recalibrate_ai_confidence_model.py
+
+      - name: Verify calibration map is live
+        run: |
+          python -c "from scan.ai_confidence import load_ai_confidence_bundle; m, md, w = load_ai_confidence_bundle(); cm = md.get('calibration_map') or {}; print({'source': md.get('source'), 'has_map': bool(cm.get('x')), 'method': cm.get('method'), 'points': len(cm.get('x') or [])}); raise SystemExit(0 if cm.get('x') else 1)"
