@@ -25,6 +25,18 @@ class ImportancePrebreakoutClassifier(FakePrebreakoutClassifier):
         return self
 
 
+class FakePrebreakoutRanker:
+    def __init__(self, *args, **kwargs):
+        self.params = dict(kwargs)
+
+    def fit(self, _x, _y, group=None):
+        self.group = list(group or [])
+        return self
+
+    def predict(self, frame):
+        return np.arange(len(frame), dtype=float)
+
+
 class PrebreakoutModelPersistenceTests(unittest.TestCase):
     def setUp(self):
         # The loader caches bundles module-wide; clear so per-test mocks apply.
@@ -711,6 +723,175 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertEqual(result["deactivated_id"], 10)
         self.assertEqual(result["restored_id"], 9)
         cursor.execute.assert_any_call("UPDATE prebreakout_models SET is_active = TRUE WHERE id = %s", (9,))
+
+    def test_run17_forward_path_stop_wins_same_bar(self):
+        bars = pd.DataFrame(
+            {
+                "Close": [100.0, 100.0],
+                "High": [100.0, 106.0],
+                "Low": [100.0, 97.0],
+            },
+            index=pd.to_datetime(["2026-01-02", "2026-01-05"], utc=True),
+        )
+
+        stats = ml_prebreakout._forward_path_stats(bars, pd.Timestamp("2026-01-02").date(), 1, 0.04, -0.02)
+
+        self.assertFalse(stats["hit"])
+        self.assertTrue(stats["stopped"])
+        self.assertEqual(stats["stopped_day"], 1)
+
+    def test_run17_forward_label_variant_respects_trading_horizon(self):
+        df = pd.DataFrame(
+            {
+                "Symbol": ["AAA"],
+                "Timestamp": [pd.Timestamp("2026-01-02T15:00:00Z")],
+                "Last": [100.0],
+                "High20": [110.0],
+                "BreakoutScore": [5.0],
+                "IsBreakout": [False],
+            }
+        )
+        bars = pd.DataFrame(
+            {
+                "Close": [100.0, 101.0, 104.5],
+                "High": [100.0, 101.0, 104.5],
+                "Low": [100.0, 99.0, 101.0],
+            },
+            index=pd.to_datetime(["2026-01-02", "2026-01-05", "2026-01-06"], utc=True),
+        )
+
+        one_day = ml_prebreakout.add_forward_return_labels_variant(
+            df,
+            horizon_days=1,
+            hit_threshold=0.04,
+            stop_threshold=-0.02,
+            bars_by_symbol={"AAA": bars},
+            force_path=True,
+        )
+        two_day = ml_prebreakout.add_forward_return_labels_variant(
+            df,
+            horizon_days=2,
+            hit_threshold=0.04,
+            stop_threshold=-0.02,
+            bars_by_symbol={"AAA": bars},
+            force_path=True,
+        )
+
+        self.assertEqual(int(one_day.loc[0, "ForwardReturnHit"]), 0)
+        self.assertEqual(int(two_day.loc[0, "ForwardReturnHit"]), 1)
+
+    def test_run17_prebreakout_target_variant_preserves_candidate_rule(self):
+        df = pd.DataFrame(
+            {
+                "Symbol": ["AAA", "AAA"],
+                "Timestamp": pd.to_datetime(["2026-01-02T15:00:00Z", "2026-01-05T15:00:00Z"], utc=True),
+                "Last": [100.0, 105.0],
+                "High20": [110.0, 106.0],
+                "BreakoutScore": [5.0, 8.0],
+                "IsBreakout": [False, False],
+            }
+        )
+        bars = pd.DataFrame(
+            {
+                "Close": [100.0, 105.0, 110.0],
+                "High": [100.0, 105.0, 110.0],
+                "Low": [100.0, 104.0, 108.0],
+            },
+            index=pd.to_datetime(["2026-01-02", "2026-01-05", "2026-01-06"], utc=True),
+        )
+
+        labeled = ml_prebreakout.add_prebreakout_target_label_variant(
+            df,
+            lead_days=1,
+            horizon_days=1,
+            hit_threshold=0.04,
+            stop_threshold=-0.02,
+            bars_by_symbol={"AAA": bars},
+            force_path=True,
+        )
+
+        self.assertEqual(len(labeled), 1)
+        self.assertEqual(int(labeled.loc[0, "FutureQualitySetupHit"]), 1)
+        self.assertLess(float(labeled.loc[0, "BreakoutScore"]), ml_prebreakout.PREBREAKOUT_SETUP_SCORE_THRESHOLD)
+
+    def test_run17_session_groups_are_timestamp_local(self):
+        df = pd.DataFrame(
+            {
+                "Symbol": ["B", "A", "C"],
+                "Timestamp": pd.to_datetime(
+                    ["2026-01-03T15:00:00Z", "2026-01-02T15:00:00Z", "2026-01-03T14:00:00Z"],
+                    utc=True,
+                ),
+            },
+            index=[20, 10, 30],
+        )
+
+        ordered, groups = ml_prebreakout._session_order_and_groups(df, [20, 10, 30])
+
+        self.assertEqual(ordered, [10, 30, 20])
+        self.assertEqual(groups, [1, 2])
+
+    def test_run17_ranking_objective_uses_session_groups(self):
+        x = pd.DataFrame({"f": [1.0, 2.0, 3.0, 4.0]}, index=[0, 1, 2, 3])
+        y = pd.Series([0, 1, 0, 1], index=[0, 1, 2, 3])
+        labeled = pd.DataFrame(
+            {
+                "Timestamp": pd.to_datetime(
+                    ["2026-01-01T15:00:00Z", "2026-01-01T15:01:00Z", "2026-01-02T15:00:00Z", "2026-01-02T15:01:00Z"],
+                    utc=True,
+                )
+            },
+            index=[0, 1, 2, 3],
+        )
+        folds = [{"fold": 1, "train_idx": [0, 1], "val_idx": [2, 3], "validation_start": "", "validation_end": "", "purge_days": 5}]
+
+        with (
+            patch.object(ml_prebreakout, "XGBRanker", FakePrebreakoutRanker),
+            patch.object(ml_prebreakout, "roc_auc_score", return_value=0.7),
+            patch.object(ml_prebreakout, "average_precision_score", return_value=0.4),
+            patch.object(ml_prebreakout, "brier_score_loss", return_value=0.2),
+            patch.object(ml_prebreakout, "log_loss", return_value=0.5),
+        ):
+            result = ml_prebreakout.evaluate_prebreakout_ranking_feature_set(x, y, labeled, folds, ["f"])
+
+        self.assertEqual(result["fold_metrics"][0]["ranking_group_count"], 1)
+        self.assertEqual(result["validation_index"], [2, 3])
+
+    def test_run17_topk_economic_diagnostics_reports_forward_returns(self):
+        frame = pd.DataFrame({"Return_5D": [0.01, 0.08, -0.02, 0.03], "MFE_5D": [0.02, 0.1, 0.01, 0.04], "MAE_5D": [-0.01, -0.02, -0.04, -0.01]})
+
+        result = ml_prebreakout.topk_economic_diagnostics(
+            frame,
+            [0, 1, 0, 1],
+            [0.1, 0.9, 0.2, 0.8],
+            return_column="Return_5D",
+            mfe_column="MFE_5D",
+            mae_column="MAE_5D",
+        )
+
+        self.assertEqual(result["top_10pct"]["n"], 1)
+        self.assertEqual(result["top_10pct"]["hit_rate"], 1.0)
+        self.assertAlmostEqual(result["top_10pct"]["avg_return"], 0.08)
+
+    def test_run17_calibration_comparison_keeps_ranking_separate(self):
+        with (
+            patch.object(ml_prebreakout, "brier_score_loss", return_value=0.12),
+        ):
+            result = ml_prebreakout.calibration_comparison([0, 1, 0, 1], [0.1, 0.8, 0.2, 0.9])
+
+        self.assertIn("raw", result)
+        self.assertIn("buckets", result["raw"])
+        self.assertIn("platt", result)
+
+    def test_run17_target_change_candidate_decision_is_separate(self):
+        baseline = {"name": "A", "validation_summary": {"auc_mean": 0.66, "lift_over_baseline_mean": 1.7}}
+        challenger = {"name": "B", "validation_summary": {"auc_mean": 0.675, "lift_over_baseline_mean": 1.72}}
+
+        result, best, reasons = ml_prebreakout._run17_target_change_decision([baseline, challenger], baseline)
+
+        self.assertEqual(result, "TARGET_CHANGE_CANDIDATE")
+        self.assertEqual(best, challenger)
+        self.assertTrue(reasons)
 
     def test_run14_insufficient_qualifiers_status(self):
         evaluation = ml_prebreakout._insufficient_qualifiers_experiment(

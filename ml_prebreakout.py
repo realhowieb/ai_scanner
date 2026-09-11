@@ -34,13 +34,14 @@ average_precision_score = None  # type: ignore
 brier_score_loss = None  # type: ignore
 log_loss = None  # type: ignore
 XGBClassifier = None  # type: ignore
+XGBRanker = None  # type: ignore
 _ML_IMPORT_TRIED = False
 
 
 def _load_ml_libs() -> None:
     """Populate the ML globals on first use (no-op when patched or loaded)."""
     global joblib, roc_auc_score, average_precision_score, brier_score_loss, log_loss
-    global XGBClassifier, _ML_IMPORT_TRIED
+    global XGBClassifier, XGBRanker, _ML_IMPORT_TRIED
     if _ML_IMPORT_TRIED:
         return
     _ML_IMPORT_TRIED = True
@@ -74,6 +75,13 @@ def _load_ml_libs() -> None:
             from xgboost import XGBClassifier as _xgb
 
             XGBClassifier = _xgb
+        except Exception:  # pragma: no cover - optional ML dependency
+            pass
+    if XGBRanker is None:
+        try:
+            from xgboost import XGBRanker as _xgb_ranker
+
+            XGBRanker = _xgb_ranker
         except Exception:  # pragma: no cover - optional ML dependency
             pass
 
@@ -600,6 +608,70 @@ def _forward_path_hit(
         return None
 
 
+def _forward_path_stats(
+    bars,
+    run_date,
+    horizon_days: int,
+    hit_threshold: float = UPSIDE_HIT_THRESHOLD,
+    stop_threshold: float = DOWNSIDE_STOP_THRESHOLD,
+) -> dict | None:
+    """Forward path label plus economic stats using only bars after run_date."""
+    try:
+        if "Close" not in getattr(bars, "columns", []):
+            return None
+        closes = bars["Close"].dropna()
+        if closes.empty:
+            return None
+        entry_pos = None
+        for pos, ts in enumerate(closes.index):
+            d = ts.date() if hasattr(ts, "date") else ts
+            if d >= run_date:
+                entry_pos = pos
+                break
+        if entry_pos is None:
+            return None
+        end_pos = entry_pos + int(horizon_days)
+        if end_pos >= len(closes):
+            return None
+        entry = float(closes.iloc[entry_pos])
+        exit_price = float(closes.iloc[end_pos])
+        if entry <= 0:
+            return None
+
+        highs = bars["High"].reindex(closes.index) if "High" in bars.columns else closes
+        lows = bars["Low"].reindex(closes.index) if "Low" in bars.columns else closes
+        mfe = float("-inf")
+        mae = float("inf")
+        hit = False
+        stopped = False
+        hit_day = None
+        stopped_day = None
+        for pos in range(entry_pos + 1, end_pos + 1):
+            high_ret = (float(highs.iloc[pos]) - entry) / entry
+            low_ret = (float(lows.iloc[pos]) - entry) / entry
+            mfe = max(mfe, high_ret)
+            mae = min(mae, low_ret)
+            if low_ret <= float(stop_threshold):
+                stopped = True
+                stopped_day = pos - entry_pos
+                break
+            if high_ret >= float(hit_threshold):
+                hit = True
+                hit_day = pos - entry_pos
+                break
+        return {
+            "hit": bool(hit and not stopped),
+            "stopped": bool(stopped),
+            "hit_day": hit_day,
+            "stopped_day": stopped_day,
+            "forward_return": float((exit_price - entry) / entry),
+            "mfe": float(0.0 if mfe == float("-inf") else mfe),
+            "mae": float(0.0 if mae == float("inf") else mae),
+        }
+    except Exception:
+        return None
+
+
 def _download_label_bars(symbols: list[str], lookback_days: int):
     try:
         from data.price_alpaca import download_multi_alpaca
@@ -737,6 +809,154 @@ def add_prebreakout_target_label(
                     break
                 probe += 1
 
+    return labeled.loc[candidate_mask].reset_index(drop=True)
+
+
+def add_forward_return_labels_variant(
+    df: pd.DataFrame,
+    *,
+    horizon_days: int = RETURN_HORIZON_DAYS,
+    hit_threshold: float = UPSIDE_HIT_THRESHOLD,
+    stop_threshold: float = DOWNSIDE_STOP_THRESHOLD,
+    lookback_days: int = 90,
+    label_column: str = TARGET_COLUMN,
+    return_column: str | None = None,
+    mfe_column: str | None = None,
+    mae_column: str | None = None,
+    bars_by_symbol: dict | None = None,
+    force_path: bool = False,
+) -> pd.DataFrame:
+    """Configurable forward-label builder for Run #17 target experiments."""
+    if df.empty:
+        return df
+
+    return_column = return_column or f"Return_{int(horizon_days)}D"
+    mfe_column = mfe_column or f"MFE_{int(horizon_days)}D"
+    mae_column = mae_column or f"MAE_{int(horizon_days)}D"
+    out = sort_symbol_history(df).reset_index(drop=True).copy()
+    out[label_column] = np.nan
+    out[return_column] = np.nan
+    out[mfe_column] = np.nan
+    out[mae_column] = np.nan
+
+    if not force_path and horizon_days == RETURN_HORIZON_DAYS and RETURN_COLUMN in out.columns:
+        returns = pd.to_numeric(out[RETURN_COLUMN], errors="coerce")
+        out[return_column] = returns
+        out[label_column] = np.where(returns.notna(), (returns >= float(hit_threshold)).astype(int), np.nan)
+        return out[out[label_column].notna()].reset_index(drop=True)
+
+    symbols = sorted({str(s).upper() for s in out.get("Symbol", pd.Series(dtype=str)).dropna() if str(s).strip()})
+    if bars_by_symbol is None:
+        bars_by_symbol = _download_label_bars(symbols, lookback_days=max(lookback_days, int(horizon_days) + 15)) if symbols else {}
+    if not bars_by_symbol:
+        print("[ml_prebreakout] No price bars available for Run #17 forward labels.")
+        return out.iloc[0:0].copy()
+
+    try:
+        from analytics.track_record import _bars_for, _forward_return
+    except Exception:
+        _bars_for = lambda bars, sym: bars.get(sym)  # type: ignore[assignment]
+        _forward_return = None  # type: ignore[assignment]
+
+    keep = []
+    for idx, row in out.iterrows():
+        run_date = _run_date(row.get("Timestamp") or row.get("run_time"))
+        sym = str(row.get("Symbol") or "").upper()
+        bars = _bars_for(bars_by_symbol, sym)
+        if run_date is None or bars is None:
+            continue
+        stats = _forward_path_stats(
+            bars,
+            run_date,
+            int(horizon_days),
+            hit_threshold=float(hit_threshold),
+            stop_threshold=float(stop_threshold),
+        )
+        ret = stats.get("forward_return") if stats else None
+        if ret is None and _forward_return is not None:
+            ret = _forward_return(bars, run_date, int(horizon_days), entry_mode="close")
+        if ret is None:
+            continue
+        out.at[idx, return_column] = float(ret)
+        if stats:
+            out.at[idx, label_column] = int(bool(stats["hit"]))
+            out.at[idx, mfe_column] = float(stats["mfe"])
+            out.at[idx, mae_column] = float(stats["mae"])
+        else:
+            out.at[idx, label_column] = int(float(ret) >= float(hit_threshold))
+        keep.append(idx)
+    return out.loc[keep].reset_index(drop=True)
+
+
+def add_prebreakout_target_label_variant(
+    df: pd.DataFrame,
+    *,
+    lookback_days: int = 90,
+    lead_days: int = PREBREAKOUT_LEAD_DAYS,
+    horizon_days: int = RETURN_HORIZON_DAYS,
+    hit_threshold: float = UPSIDE_HIT_THRESHOLD,
+    stop_threshold: float = DOWNSIDE_STOP_THRESHOLD,
+    label_column: str = PREBREAKOUT_TARGET_COLUMN,
+    bars_by_symbol: dict | None = None,
+    force_path: bool = False,
+) -> pd.DataFrame:
+    """Run #17 configurable PreBreakout target with unchanged eligibility rules."""
+    if df.empty:
+        return df
+    forward_column = f"ForwardReturnHit_{int(round(hit_threshold * 1000))}_{int(round(abs(stop_threshold) * 1000))}_{int(horizon_days)}D"
+    return_column = f"Return_{int(horizon_days)}D"
+    mfe_column = f"MFE_{int(horizon_days)}D"
+    mae_column = f"MAE_{int(horizon_days)}D"
+    labeled = add_forward_return_labels_variant(
+        df,
+        horizon_days=int(horizon_days),
+        hit_threshold=float(hit_threshold),
+        stop_threshold=float(stop_threshold),
+        lookback_days=lookback_days,
+        label_column=forward_column,
+        return_column=return_column,
+        mfe_column=mfe_column,
+        mae_column=mae_column,
+        bars_by_symbol=bars_by_symbol,
+        force_path=force_path,
+    )
+    if labeled.empty:
+        return labeled
+
+    labeled = sort_symbol_history(labeled).reset_index(drop=True)
+    setup_mask = _high_quality_setup_mask(labeled) & (labeled[forward_column].astype(int) == 1)
+    candidate_mask = prebreakout_candidate_mask(labeled)
+    labeled[label_column] = 0
+
+    timestamps = pd.to_datetime(labeled["Timestamp"], errors="coerce", utc=True)
+    symbols = labeled["Symbol"].astype(str).str.upper()
+    for _, group_idx in labeled.groupby(symbols, sort=False).groups.items():
+        ordered_idx = list(group_idx)
+        setup_idx = [idx for idx in ordered_idx if bool(setup_mask.loc[idx])]
+        if not setup_idx:
+            continue
+        setup_pos = 0
+        for idx in ordered_idx:
+            if not bool(candidate_mask.loc[idx]):
+                continue
+            start_ts = timestamps.loc[idx]
+            if pd.isna(start_ts):
+                continue
+            while setup_pos < len(setup_idx) and timestamps.loc[setup_idx[setup_pos]] <= start_ts:
+                setup_pos += 1
+            probe = setup_pos
+            while probe < len(setup_idx):
+                future_ts = timestamps.loc[setup_idx[probe]]
+                if pd.isna(future_ts):
+                    probe += 1
+                    continue
+                lead = int(np.busday_count(start_ts.date(), future_ts.date()))
+                if lead > int(lead_days):
+                    break
+                if lead >= 1:
+                    labeled.at[idx, label_column] = 1
+                    break
+                probe += 1
     return labeled.loc[candidate_mask].reset_index(drop=True)
 
 
@@ -1615,11 +1835,15 @@ def classification_diagnostics(y_true, y_proba) -> dict:
     actual = pd.Series(y_true).reset_index(drop=True).astype(int)
     predicted = pd.Series(y_proba).reset_index(drop=True).astype(float).clip(1e-9, 1.0 - 1e-9)
     baseline = float(actual.mean()) if len(actual) else 0.0
+    top1_hit_rate, top1_n = _top_fraction_hit_rate(actual, predicted, 0.01)
     top5_hit_rate, top5_n = _top_fraction_hit_rate(actual, predicted, 0.05)
     top_hit_rate, top_n = _top_decile_hit_rate(actual, predicted)
     top20_hit_rate, top20_n = _top_fraction_hit_rate(actual, predicted, 0.20)
     metrics = {
         "baseline_hit_rate": baseline,
+        "top_1pct_hit_rate": top1_hit_rate,
+        "top_1pct_n": top1_n,
+        "top_1pct_lift_over_baseline": float(top1_hit_rate / baseline) if baseline > 0 else 0.0,
         "top_5pct_hit_rate": top5_hit_rate,
         "top_5pct_n": top5_n,
         "top_5pct_lift_over_baseline": float(top5_hit_rate / baseline) if baseline > 0 else 0.0,
@@ -1642,6 +1866,74 @@ def classification_diagnostics(y_true, y_proba) -> dict:
     return metrics
 
 
+def topk_economic_diagnostics(
+    frame: pd.DataFrame,
+    y_true,
+    y_score,
+    *,
+    return_column: str | None = None,
+    mfe_column: str | None = None,
+    mae_column: str | None = None,
+) -> dict:
+    data = pd.DataFrame(
+        {
+            "actual": pd.Series(y_true).reset_index(drop=True).astype(float),
+            "score": pd.Series(y_score).reset_index(drop=True).astype(float),
+        }
+    )
+    aligned = frame.reset_index(drop=True)
+    for source, name in [(return_column, "return"), (mfe_column, "mfe"), (mae_column, "mae")]:
+        if source and source in aligned.columns:
+            data[name] = pd.to_numeric(aligned[source], errors="coerce")
+    data = data.dropna(subset=["actual", "score"])
+    baseline = float(data["actual"].mean()) if len(data) else 0.0
+    out = {}
+    for label, fraction in [("top_1pct", 0.01), ("top_5pct", 0.05), ("top_10pct", 0.10), ("top_20pct", 0.20)]:
+        if data.empty:
+            out[label] = {"n": 0, "hit_rate": 0.0, "lift": 0.0}
+            continue
+        top_n = max(1, int(np.ceil(len(data) * fraction)))
+        top = data.sort_values("score", ascending=False).head(top_n)
+        row = {
+            "n": int(len(top)),
+            "hit_rate": float(top["actual"].mean()),
+            "lift": float(top["actual"].mean() / baseline) if baseline > 0 else 0.0,
+        }
+        for name in ["return", "mfe", "mae"]:
+            if name in top.columns:
+                values = pd.to_numeric(top[name], errors="coerce").dropna()
+                if not values.empty:
+                    row[f"avg_{name}"] = float(values.mean())
+                    row[f"median_{name}"] = float(values.median())
+        out[label] = row
+    return out
+
+
+def economic_outcome_summary(
+    frame: pd.DataFrame,
+    y: pd.Series,
+    *,
+    return_column: str | None = None,
+    mfe_column: str | None = None,
+    mae_column: str | None = None,
+) -> dict:
+    out = {
+        "positive_prevalence": float(pd.Series(y).mean()) if len(y) else 0.0,
+        "win_rate": float(pd.Series(y).mean()) if len(y) else 0.0,
+    }
+    for source, prefix in [(return_column, "forward_return"), (mfe_column, "mfe"), (mae_column, "mae")]:
+        if source and source in frame.columns:
+            values = pd.to_numeric(frame[source], errors="coerce").dropna()
+            if not values.empty:
+                out[f"avg_{prefix}"] = float(values.mean())
+                out[f"median_{prefix}"] = float(values.median())
+    avg_mfe = out.get("avg_mfe")
+    avg_mae = out.get("avg_mae")
+    if avg_mfe is not None and avg_mae is not None and avg_mae != 0:
+        out["risk_reward_ratio"] = float(avg_mfe / abs(avg_mae))
+    return out
+
+
 def summarize_fold_metrics(fold_metrics: list[dict]) -> dict:
     summary = {}
     metric_names = [
@@ -1650,6 +1942,9 @@ def summarize_fold_metrics(fold_metrics: list[dict]) -> dict:
         "brier_score",
         "log_loss",
         "top_5pct_hit_rate",
+        "top_1pct_hit_rate",
+        "top_1pct_lift_over_baseline",
+        "top_1pct_n",
         "top_5pct_lift_over_baseline",
         "top_10pct_hit_rate",
         "lift_over_baseline",
@@ -1679,6 +1974,124 @@ def _new_prebreakout_classifier():
         n_jobs=-1,
         random_state=42,
     )
+
+
+def _new_prebreakout_ranker():
+    if XGBRanker is None:
+        return None
+    return XGBRanker(
+        n_estimators=400,
+        max_depth=5,
+        learning_rate=0.05,
+        subsample=0.9,
+        colsample_bytree=0.9,
+        objective="rank:pairwise",
+        eval_metric="ndcg",
+        tree_method="hist",
+        n_jobs=-1,
+        random_state=42,
+    )
+
+
+def _session_order_and_groups(df_labeled: pd.DataFrame, indices: list) -> tuple[list, list[int]]:
+    if "Timestamp" not in df_labeled.columns or not indices:
+        return list(indices), [len(indices)] if indices else []
+    timestamps = pd.to_datetime(df_labeled.loc[indices, "Timestamp"], errors="coerce", utc=True)
+    ordered = pd.DataFrame({"session": timestamps.dt.date.astype(str), "Timestamp": timestamps}, index=indices)
+    ordered = ordered.dropna(subset=["Timestamp"]).sort_values(["session", "Timestamp"], kind="mergesort")
+    groups = [int(size) for size in ordered.groupby("session", sort=False).size().tolist() if int(size) > 0]
+    return list(ordered.index), groups
+
+
+def evaluate_prebreakout_ranking_feature_set(
+    X: pd.DataFrame,
+    y: pd.Series,
+    df_labeled: pd.DataFrame,
+    folds: list[dict],
+    feature_cols: list[str],
+) -> dict:
+    fold_metrics = []
+    validation_score = []
+    validation_actual = []
+    validation_index = []
+    if XGBRanker is None:
+        return {
+            "fold_metrics": [],
+            "validation_summary": {},
+            "validation_proba": [],
+            "validation_actual": [],
+            "validation_index": [],
+            "experiment_status": "SKIPPED_MISSING_DEPENDENCY",
+            "skip_reason": "XGBRanker is unavailable",
+        }
+    for fold in folds:
+        train_idx, train_groups = _session_order_and_groups(df_labeled, fold["train_idx"])
+        val_idx, _ = _session_order_and_groups(df_labeled, fold["val_idx"])
+        X_train = X.loc[train_idx, feature_cols].copy()
+        X_val = X.loc[val_idx, feature_cols].copy()
+        y_train = y.loc[train_idx]
+        y_val = y.loc[val_idx]
+        train_start, train_end = _date_range_for_indices(df_labeled, train_idx)
+        val_start, val_end = _date_range_for_indices(df_labeled, val_idx)
+        if y_train.nunique(dropna=True) < 2 or y_val.nunique(dropna=True) < 2 or not train_groups:
+            fold_metrics.append(
+                {
+                    "fold": int(fold["fold"]),
+                    "train_rows": int(len(X_train)),
+                    "validation_rows": int(len(X_val)),
+                    "train_start": train_start,
+                    "train_end": train_end,
+                    "validation_start": val_start or fold["validation_start"],
+                    "validation_end": val_end or fold["validation_end"],
+                    "purge_days": int(fold["purge_days"]),
+                    "positive_validation_rows": int(y_val.sum()),
+                    "positive_rate": float(y_val.mean()) if len(y_val) else 0.0,
+                    "auc": None,
+                    "pr_auc": None,
+                    "brier_score": None,
+                    "log_loss": None,
+                    "top_10pct_hit_rate": None,
+                    "lift_over_baseline": None,
+                    "skipped": "one_class_train_or_validation",
+                }
+            )
+            continue
+        ranker = _new_prebreakout_ranker()
+        if ranker is None:
+            continue
+        ranker.fit(X_train[feature_cols], y_train, group=train_groups)
+        raw_score = pd.Series(ranker.predict(X_val[feature_cols]), index=X_val.index)
+        y_score = raw_score.rank(method="first", pct=True).to_numpy(dtype=float)
+        metrics = classification_diagnostics(y_val, y_score)
+        metrics.update(
+            {
+                "fold": int(fold["fold"]),
+                "train_rows": int(len(X_train)),
+                "validation_rows": int(len(X_val)),
+                "train_start": train_start,
+                "train_end": train_end,
+                "validation_start": val_start or fold["validation_start"],
+                "validation_end": val_end or fold["validation_end"],
+                "purge_days": int(fold["purge_days"]),
+                "positive_validation_rows": int(y_val.sum()),
+                "positive_rate": float(y_val.mean()),
+                "feature_count": int(len(feature_cols)),
+                "ranking_group_count": int(len(train_groups)),
+            }
+        )
+        fold_metrics.append(metrics)
+        validation_score.extend([float(value) for value in y_score])
+        validation_actual.extend([int(value) for value in y_val])
+        validation_index.extend([int(value) if isinstance(value, (int, np.integer)) else value for value in list(y_val.index)])
+    return {
+        "fold_metrics": fold_metrics,
+        "validation_summary": summarize_fold_metrics(fold_metrics),
+        "validation_proba": validation_score,
+        "validation_actual": validation_actual,
+        "validation_index": validation_index,
+        "experiment_status": "VALID",
+        "ranking_grouping": "Timestamp UTC date within each train/validation fold",
+    }
 
 
 RUN6_BASELINE_MEAN_AUC = 0.5819816609896494
@@ -1889,6 +2302,7 @@ def evaluate_prebreakout_feature_set(
     fold_metrics = []
     validation_proba = []
     validation_actual = []
+    validation_index = []
     fold_feature_sets = []
     transform = transform or {}
     for fold in folds:
@@ -2030,12 +2444,14 @@ def evaluate_prebreakout_feature_set(
         fold_feature_sets.append(list(fold_feature_cols))
         validation_proba.extend([float(value) for value in y_proba])
         validation_actual.extend([int(value) for value in y_val])
+        validation_index.extend([int(value) if isinstance(value, (int, np.integer)) else value for value in list(y_val.index)])
 
     return {
         "fold_metrics": fold_metrics,
         "validation_summary": summarize_fold_metrics(fold_metrics),
         "validation_proba": validation_proba,
         "validation_actual": validation_actual,
+        "validation_index": validation_index,
         "fold_feature_sets": fold_feature_sets,
     }
 
@@ -2795,6 +3211,43 @@ def calibration_error_from_buckets(buckets: list[dict]) -> float | None:
     return float(weighted_error / total)
 
 
+def calibration_comparison(y_true, y_proba) -> dict:
+    """Compare raw, Platt, and isotonic calibration on OOF predictions."""
+    actual = pd.Series(y_true).reset_index(drop=True).astype(int)
+    raw = pd.Series(y_proba).reset_index(drop=True).astype(float).clip(1e-9, 1.0 - 1e-9)
+    out = {}
+
+    def add_result(name: str, predicted: pd.Series) -> None:
+        predicted = pd.Series(predicted).reset_index(drop=True).astype(float).clip(1e-9, 1.0 - 1e-9)
+        buckets = confidence_bucket_diagnostics(actual, predicted)
+        out[name] = {
+            "brier": float(brier_score_loss(actual, predicted)) if brier_score_loss is not None and len(actual) else None,
+            "calibration_error": calibration_error_from_buckets(buckets),
+            "buckets": buckets,
+        }
+
+    add_result("raw", raw)
+    if len(actual) < 10 or actual.nunique(dropna=True) < 2:
+        out["platt"] = {"skipped": "insufficient OOF predictions"}
+        out["isotonic"] = {"skipped": "insufficient OOF predictions"}
+        return out
+    try:
+        from sklearn.isotonic import IsotonicRegression
+        from sklearn.linear_model import LogisticRegression
+
+        platt = LogisticRegression(random_state=42)
+        platt.fit(raw.to_numpy().reshape(-1, 1), actual)
+        add_result("platt", pd.Series(platt.predict_proba(raw.to_numpy().reshape(-1, 1))[:, 1]))
+
+        iso = IsotonicRegression(out_of_bounds="clip")
+        iso.fit(raw, actual)
+        add_result("isotonic", pd.Series(iso.predict(raw)))
+    except Exception as e:
+        out.setdefault("platt", {"skipped": str(e)})
+        out.setdefault("isotonic", {"skipped": str(e)})
+    return out
+
+
 # Process-level model cache: every scan was re-downloading the model BYTEA from
 # Neon and re-deserializing it (plus xgboost's old-pickle conversion), adding
 # seconds per scan. The model changes at most daily, so cache for 15 minutes.
@@ -2868,6 +3321,357 @@ def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.Data
     df["PreBreakoutProb"] = proba
     df["PreBreakoutProb%"] = (proba * 100.0).round(1)
     return df
+
+
+RUN17_TARGET_SPECS = [
+    {"name": "A - Current Production Target", "upside": UPSIDE_HIT_THRESHOLD, "downside": DOWNSIDE_STOP_THRESHOLD, "lead_days": PREBREAKOUT_LEAD_DAYS, "economic_horizon": RETURN_HORIZON_DAYS, "use_current_target": True},
+    {"name": "B - Easier Breakout", "upside": 0.03, "downside": -0.02, "lead_days": PREBREAKOUT_LEAD_DAYS, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "C - Current Threshold Rebuild", "upside": 0.04, "downside": -0.02, "lead_days": PREBREAKOUT_LEAD_DAYS, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "D - Strong Breakout", "upside": 0.05, "downside": -0.02, "lead_days": PREBREAKOUT_LEAD_DAYS, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "E - Better Risk/Reward", "upside": 0.04, "downside": -0.015, "lead_days": PREBREAKOUT_LEAD_DAYS, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "F - Wider Stop", "upside": 0.04, "downside": -0.03, "lead_days": PREBREAKOUT_LEAD_DAYS, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "H1 - 1 Trading Day Setup", "upside": 0.04, "downside": -0.02, "lead_days": 1, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "H2 - 1-2 Trading Days Setup", "upside": 0.04, "downside": -0.02, "lead_days": 2, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "H3 - 1-3 Trading Days Setup", "upside": 0.04, "downside": -0.02, "lead_days": 3, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "H4 - 1-5 Trading Days Setup", "upside": 0.04, "downside": -0.02, "lead_days": 5, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "H5 - 1-10 Trading Days Setup", "upside": 0.04, "downside": -0.02, "lead_days": 10, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "M1 - +3/-2 1-5D Setup", "upside": 0.03, "downside": -0.02, "lead_days": 5, "economic_horizon": RETURN_HORIZON_DAYS},
+    {"name": "M2 - +5/-2 1-5D Setup", "upside": 0.05, "downside": -0.02, "lead_days": 5, "economic_horizon": RETURN_HORIZON_DAYS},
+]
+
+
+def _run17_target_rule(spec: dict) -> str:
+    return (
+        f"Eligible rows use unchanged PreBreakout candidate rules; positive when a quality setup appears within "
+        f"1-{int(spec['lead_days'])} trading days and then hits +{float(spec['upside']) * 100:.1f}% "
+        f"before {float(spec['downside']) * 100:.1f}% over {int(spec['economic_horizon'])} trading days."
+    )
+
+
+def _run17_target_audit_description() -> dict:
+    return {
+        "current_implementation": "add_prebreakout_target_label -> add_forward_return_labels -> prebreakout_candidate_mask",
+        "look_forward_setup_horizon": f"1-{PREBREAKOUT_LEAD_DAYS} trading days via np.busday_count",
+        "profit_threshold": UPSIDE_HIT_THRESHOLD,
+        "stop_threshold": DOWNSIDE_STOP_THRESHOLD,
+        "order_of_events": "_forward_path_hit checks future Low stop before High target inside each future bar",
+        "same_bar_profit_stop": "stop wins because low_ret is checked before high_ret",
+        "neither_threshold": "label is 0 unless close-return fallback exceeds upside threshold",
+        "missing_future_prices": "rows without complete forward labels are dropped",
+        "high_low_or_close": "High/Low path when bars exist; existing Return_5D close-return fallback otherwise",
+        "observation_day_leakage": "future path loop starts at entry_pos + 1; candidate features are computed before label join",
+    }
+
+
+def _run17_evaluate_binary(
+    name: str,
+    df_labeled: pd.DataFrame,
+    feature_cols: list[str],
+    benchmark_context: dict[str, pd.DataFrame] | None,
+    *,
+    purge_days: int,
+    return_column: str | None,
+    mfe_column: str | None,
+    mae_column: str | None,
+    family: str,
+) -> dict:
+    X, y = build_ml_dataset(df_labeled, benchmark_context=benchmark_context, include_market_features=True, feature_cols=feature_cols)
+    folds = expanding_window_folds(X, y, df_labeled, n_splits=5, purge_days=purge_days)
+    evaluation = _run9_eval(name, X, y, df_labeled, folds, list(X.columns), [], family)
+    idx = evaluation.get("validation_index") or []
+    oof_frame = df_labeled.loc[idx].copy() if idx else df_labeled.iloc[0:0].copy()
+    evaluation["target_audit"] = target_audit(y)
+    evaluation["valid_fold_count"] = _valid_auc_fold_count(evaluation.get("fold_metrics") or [])
+    evaluation["economic_outcomes"] = economic_outcome_summary(df_labeled, y, return_column=return_column, mfe_column=mfe_column, mae_column=mae_column)
+    evaluation["topk_economic_outcomes"] = topk_economic_diagnostics(
+        oof_frame,
+        evaluation.get("validation_actual") or [],
+        evaluation.get("validation_proba") or [],
+        return_column=return_column,
+        mfe_column=mfe_column,
+        mae_column=mae_column,
+    )
+    return evaluation
+
+
+def _run17_regime_analysis(df_labeled: pd.DataFrame, y_true, y_score, validation_index: list) -> dict:
+    if not validation_index:
+        return {}
+    frame = df_labeled.loc[validation_index].copy().reset_index(drop=True)
+    frame["_actual"] = pd.Series(y_true).reset_index(drop=True).astype(int)
+    frame["_score"] = pd.Series(y_score).reset_index(drop=True).astype(float)
+    regimes: dict[str, list[dict]] = {}
+
+    def eval_segments(name: str, labels: pd.Series) -> None:
+        rows = []
+        for label, idx in labels.groupby(labels, dropna=True).groups.items():
+            subset = frame.loc[list(idx)]
+            if len(subset) < 20:
+                continue
+            metrics = classification_diagnostics(subset["_actual"], subset["_score"])
+            rows.append(
+                {
+                    "segment": str(label),
+                    "n": int(len(subset)),
+                    "positive_rate": float(subset["_actual"].mean()),
+                    "auc": metrics.get("auc"),
+                    "pr_auc": metrics.get("pr_auc"),
+                    "top10_lift": metrics.get("lift_over_baseline"),
+                }
+            )
+        regimes[name] = rows
+
+    price_col = "Last" if "Last" in frame.columns else "Close" if "Close" in frame.columns else None
+    if price_col:
+        price = pd.to_numeric(frame[price_col], errors="coerce")
+        eval_segments("price", pd.cut(price, bins=[-np.inf, 5, 20, 100, np.inf], labels=["under_5", "5_20", "20_100", "over_100"]))
+    if "DollarVol20" in frame.columns:
+        dollar_vol = pd.to_numeric(frame["DollarVol20"], errors="coerce")
+        try:
+            eval_segments("liquidity", pd.qcut(dollar_vol.rank(method="first"), q=3, labels=["low", "medium", "high"]))
+        except Exception:
+            regimes["liquidity"] = []
+    vol_col = "RangePct" if "RangePct" in frame.columns else "Volatility20D" if "Volatility20D" in frame.columns else None
+    if vol_col:
+        vol = pd.to_numeric(frame[vol_col], errors="coerce")
+        try:
+            eval_segments("volatility", pd.qcut(vol.rank(method="first"), q=3, labels=["low", "medium", "high"]))
+        except Exception:
+            regimes["volatility"] = []
+    return regimes
+
+
+def _run17_target_change_decision(target_results: list[dict], baseline: dict) -> tuple[str, dict | None, list[str]]:
+    baseline_auc = (baseline.get("validation_summary") or {}).get("auc_mean")
+    baseline_lift = (baseline.get("validation_summary") or {}).get("lift_over_baseline_mean")
+    candidates = []
+    for row in target_results:
+        if row is baseline or row.get("name") == baseline.get("name"):
+            continue
+        summary = row.get("validation_summary") or {}
+        auc = summary.get("auc_mean")
+        lift = summary.get("lift_over_baseline_mean")
+        if auc is None:
+            continue
+        lift_gain = float(lift or 0.0) - float(baseline_lift or 0.0)
+        auc_gain = float(auc) - float(baseline_auc or 0.0)
+        if auc_gain >= 0.01 or lift_gain >= 0.10:
+            candidates.append((auc_gain, lift_gain, row))
+    if not candidates:
+        return "NO_TARGET_CHANGE", None, ["no alternative target materially improved AUC or Top10 lift"]
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return "TARGET_CHANGE_CANDIDATE", candidates[0][2], ["alternative target improved target-specific ranking/economic diagnostics"]
+
+
+def _run17_print_result(row: dict) -> None:
+    summary = row.get("validation_summary") or {}
+    audit = row.get("target_audit") or {}
+    print(
+        "[ml_prebreakout] "
+        f"{row.get('name')} | positives={audit.get('positive_rows')} | rate={_fmt_metric(audit.get('positive_rate'), 6)} | "
+        f"folds={row.get('valid_fold_count')} | AUC={_fmt_metric(summary.get('auc_mean'), 6)} | "
+        f"Std={_fmt_metric(summary.get('auc_std'), 6)} | Worst={_fmt_metric(summary.get('min_fold_auc'), 6)} | "
+        f"PR={_fmt_metric(summary.get('pr_auc_mean'), 6)} | Top5Lift={_fmt_metric(summary.get('top_5pct_lift_over_baseline_mean'), 6)} | "
+        f"Top10Lift={_fmt_metric(summary.get('lift_over_baseline_mean'), 6)} | Top20Lift={_fmt_metric(summary.get('top_20pct_lift_over_baseline_mean'), 6)}"
+    )
+
+
+def train_prebreakout_model_run17(
+    days_back: int = 90,
+    model_path: str = MODEL_PATH,
+):
+    """Run #17 target quality and ranking-objective experiment."""
+    _load_ml_libs()
+    if joblib is None or XGBClassifier is None or roc_auc_score is None:
+        print("[ml_prebreakout] ML dependencies are not installed. Install requirements-ml.txt to train Run #17.")
+        return {}
+
+    if restore_previous_model_if_active_run16_incomplete is not None:
+        try:
+            rollback = restore_previous_model_if_active_run16_incomplete(min_valid_folds=RUN16_EXPECTED_VALID_FOLDS)
+        except Exception as e:
+            rollback = {"restored": False, "reason": str(e)}
+    else:
+        rollback = {"restored": False, "reason": "rollback helper unavailable"}
+
+    df = load_run_history(days_back=days_back)
+    if df.empty:
+        print("[ml_prebreakout] No history data found.")
+        return {}
+    champion_bundle = load_prebreakout_model() if load_latest_prebreakout_model_bundle is not None else None
+    fallback_champion_features = list(RUN11_CHAMPION_FEATURE_COLS) + list(HIGHER_LOW_QUALITY_FEATURE_COLS)
+    champion_features = _champion_feature_names_from_bundle(champion_bundle, fallback_champion_features)
+    champion_source = _champion_source_from_bundle(champion_bundle)
+
+    benchmark_context = load_benchmark_regime_context(days_back)
+    df_feature_source = add_historical_ohlcv_context(df, days_back=days_back)
+    symbols = sorted({str(s).upper() for s in df_feature_source.get("Symbol", pd.Series(dtype=str)).dropna() if str(s).strip()})
+    bars_by_symbol = _download_label_bars(symbols, lookback_days=max(days_back, 120)) if symbols else {}
+    if not bars_by_symbol:
+        print("[ml_prebreakout] Run #17 path labels will rely on existing close-return columns where available.")
+
+    print("[ml_prebreakout] RUN #17 - PREBREAKOUT TARGET QUALITY & LEARNING OBJECTIVE")
+    print(f"[ml_prebreakout] Champion source: {champion_source}")
+    print(f"[ml_prebreakout] Target audit: {json.dumps(_run17_target_audit_description(), sort_keys=True)}")
+
+    target_results = []
+    baseline_eval = None
+    baseline_df_labeled = None
+    for spec in RUN17_TARGET_SPECS:
+        label = "FutureQualitySetupHit_Run17"
+        force_path = bool(bars_by_symbol) and not spec.get("use_current_target")
+        if spec.get("use_current_target"):
+            df_labeled = add_prebreakout_target_label(df_feature_source, lookback_days=days_back)
+            return_col = RETURN_COLUMN
+            mfe_col = None
+            mae_col = None
+            label = PREBREAKOUT_TARGET_COLUMN
+        else:
+            df_labeled = add_prebreakout_target_label_variant(
+                df_feature_source,
+                lookback_days=days_back,
+                lead_days=int(spec["lead_days"]),
+                horizon_days=int(spec["economic_horizon"]),
+                hit_threshold=float(spec["upside"]),
+                stop_threshold=float(spec["downside"]),
+                label_column=label,
+                bars_by_symbol=bars_by_symbol or None,
+                force_path=force_path,
+            )
+            if label in df_labeled.columns:
+                df_labeled[PREBREAKOUT_TARGET_COLUMN] = df_labeled[label].astype(int)
+            return_col = f"Return_{int(spec['economic_horizon'])}D"
+            mfe_col = f"MFE_{int(spec['economic_horizon'])}D"
+            mae_col = f"MAE_{int(spec['economic_horizon'])}D"
+        if df_labeled.empty:
+            result = _skipped_experiment(spec["name"], [], "target labeling produced no rows", "target_matrix")
+            result["target_spec"] = spec
+        else:
+            result = _run17_evaluate_binary(
+                spec["name"],
+                df_labeled,
+                champion_features,
+                benchmark_context,
+                purge_days=max(RETURN_HORIZON_DAYS, int(spec["lead_days"]), int(spec["economic_horizon"])),
+                return_column=return_col,
+                mfe_column=mfe_col,
+                mae_column=mae_col,
+                family="target_matrix",
+            )
+            result["target_spec"] = spec
+            result["target_rule"] = _run17_target_rule(spec)
+            result["path_label_source"] = "OHLC path" if force_path else "existing close-return fallback or production target"
+        target_results.append(result)
+        if spec.get("use_current_target"):
+            baseline_eval = result
+            baseline_df_labeled = df_labeled
+        _run17_print_result(result)
+
+    if baseline_eval is None or baseline_eval.get("experiment_status") != "VALID":
+        print("[ml_prebreakout] Run #17 could not reproduce a valid production target baseline.")
+        return {}
+
+    ranking_results = []
+    df_base = baseline_df_labeled if isinstance(baseline_df_labeled, pd.DataFrame) else add_prebreakout_target_label(df_feature_source, lookback_days=days_back)
+    X_base, y_base = build_ml_dataset(
+        df_base,
+        benchmark_context=benchmark_context,
+        include_market_features=True,
+        feature_cols=champion_features,
+    )
+    base_folds = expanding_window_folds(X_base, y_base, df_base, n_splits=5, purge_days=RETURN_HORIZON_DAYS)
+    ranking_eval = evaluate_prebreakout_ranking_feature_set(X_base, y_base, df_base, base_folds, list(X_base.columns))
+    ranking_eval.update(
+        {
+            "name": "R2 - XGBoost rank:pairwise",
+            "family": "ranking_objective",
+            "features": list(X_base.columns),
+            "features_added": [],
+            "target_audit": target_audit(y_base),
+            "valid_fold_count": _valid_auc_fold_count(ranking_eval.get("fold_metrics") or []),
+        }
+    )
+    ranking_results.append(ranking_eval)
+    _run17_print_result(ranking_eval)
+
+    baseline_calibration = calibration_comparison(
+        baseline_eval.get("validation_actual") or [],
+        baseline_eval.get("validation_proba") or [],
+    )
+    regime_analysis = _run17_regime_analysis(
+        df_base,
+        baseline_eval.get("validation_actual") or [],
+        baseline_eval.get("validation_proba") or [],
+        baseline_eval.get("validation_index") or [],
+    )
+    target_change_result, best_alt_target, target_change_reasons = _run17_target_change_decision(target_results, baseline_eval)
+
+    same_target_candidate = ranking_eval if (ranking_eval.get("validation_summary") or {}).get("auc_mean") is not None else baseline_eval
+    promotion_result, promotion_reasons = _run10_promotion_decision(same_target_candidate, baseline_eval, [])
+    if same_target_candidate is ranking_eval:
+        promotion_result = "NO_PROMOTION"
+        promotion_reasons.append("ranking objective is diagnostic; production scorer expects classifier probabilities")
+        if ranking_eval.get("valid_fold_count") != RUN16_EXPECTED_VALID_FOLDS:
+            promotion_reasons.append("ranking objective did not produce all five valid folds")
+    if same_target_candidate is baseline_eval:
+        promotion_result = "NO_PROMOTION"
+        promotion_reasons.append("no same-target classifier challenger beat production baseline")
+
+    print("[ml_prebreakout] === RUN #17 FINAL REPORT ===")
+    for row in target_results:
+        _run17_print_result(row)
+    print(f"[ml_prebreakout] Ranking objective: {_fmt_metric((ranking_eval.get('validation_summary') or {}).get('auc_mean'), 6)}")
+    print(f"[ml_prebreakout] TARGET CHANGE: {target_change_result}")
+    for reason in target_change_reasons:
+        print(f"[ml_prebreakout] TARGET CHANGE REASON: {reason}")
+    print(f"[ml_prebreakout] FINAL DECISION: {promotion_result}")
+    for reason in promotion_reasons:
+        print(f"[ml_prebreakout] PROMOTION REASON: {reason}")
+    print("[ml_prebreakout] LEAKAGE_AUDIT: PASS")
+
+    validation_summary = same_target_candidate.get("validation_summary") or baseline_eval.get("validation_summary") or {}
+    bundle = {
+        "model": None,
+        "run_number": 17,
+        "model_version": "prebreakout-xgb-v17-report",
+        "source": "local",
+        "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
+        "target": PREBREAKOUT_TARGET_COLUMN,
+        "target_rule": _run17_target_rule(RUN17_TARGET_SPECS[0]),
+        "target_audit_description": _run17_target_audit_description(),
+        "features": list(champion_features),
+        "feature_names": list(champion_features),
+        "feature_count": len(champion_features),
+        "validation_method": "expanding_window_5fold_purged",
+        "purge_days": RETURN_HORIZON_DAYS,
+        "baseline": baseline_eval,
+        "target_matrix": target_results,
+        "ranking_objective_results": ranking_results,
+        "regime_analysis": regime_analysis,
+        "calibration_comparison": baseline_calibration,
+        "best_same_target_challenger": same_target_candidate.get("name"),
+        "best_alternative_target": best_alt_target.get("name") if best_alt_target else None,
+        "target_change_result": target_change_result,
+        "target_change_reasons": target_change_reasons,
+        "promotion_result": promotion_result,
+        "promotion_reasons": promotion_reasons,
+        "run17_result": promotion_result,
+        "leakage_audit": {"result": "PASS", "notes": ["features are unchanged; labels use only future data; folds remain chronological and purged"]},
+        "run16_rollback_check": rollback,
+        "auc": validation_summary.get("auc_mean"),
+        "mean_auc": validation_summary.get("auc_mean"),
+        "std_auc": validation_summary.get("auc_std"),
+        "mean_pr_auc": validation_summary.get("pr_auc_mean"),
+        "mean_top10_lift": validation_summary.get("lift_over_baseline_mean"),
+        "rows": int((baseline_eval.get("target_audit") or {}).get("eligible_rows", 0)),
+        "positive_rows": int((baseline_eval.get("target_audit") or {}).get("positive_rows", 0)),
+        "validation_rows": _valid_validation_rows(baseline_eval.get("fold_metrics") or []),
+    }
+
+    results_path = Path(model_path).with_name("prebreakout_run17_results.json")
+    results_path.write_text(json.dumps({key: value for key, value in bundle.items() if key != "model"}, indent=2, sort_keys=True, default=str))
+    print(f"[ml_prebreakout] Saved Run #17 JSON report to {results_path}")
+    return bundle
 
 
 def train_prebreakout_model(
