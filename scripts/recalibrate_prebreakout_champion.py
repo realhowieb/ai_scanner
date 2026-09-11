@@ -12,6 +12,14 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
+
+# Running `python scripts/foo.py` puts scripts/ on sys.path, not the repo root
+# where ml_prebreakout.py lives; add it so the import resolves (matches
+# scripts/train_ai_confidence_model.py).
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def main() -> int:
