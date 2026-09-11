@@ -3596,6 +3596,27 @@ def train_prebreakout_model_run17(
     print(f"[ml_prebreakout] Champion source: {champion_source}")
     print(f"[ml_prebreakout] Target audit: {json.dumps(_run17_target_audit_description(), sort_keys=True)}")
 
+    results_path = Path(model_path).with_name("prebreakout_run17_results.json")
+
+    def write_run17_checkpoint(extra: dict | None = None) -> None:
+        payload = {
+            "run_number": 17,
+            "model_version": "prebreakout-xgb-v17-report",
+            "source": "local",
+            "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
+            "days_back": int(days_back),
+            "target": PREBREAKOUT_TARGET_COLUMN,
+            "target_audit_description": _run17_target_audit_description(),
+            "feature_names": list(champion_features),
+            "feature_count": len(champion_features),
+            "validation_method": "expanding_window_5fold_purged",
+            "target_matrix": target_results,
+            "checkpoint": True,
+        }
+        if extra:
+            payload.update(extra)
+        results_path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str))
+
     target_results = []
     baseline_eval = None
     baseline_df_labeled = None
@@ -3648,9 +3669,11 @@ def train_prebreakout_model_run17(
             baseline_eval = result
             baseline_df_labeled = df_labeled
         _run17_print_result(result)
+        write_run17_checkpoint({"last_completed_target": spec["name"]})
 
     if baseline_eval is None or baseline_eval.get("experiment_status") != "VALID":
         print("[ml_prebreakout] Run #17 could not reproduce a valid production target baseline.")
+        write_run17_checkpoint({"run17_result": "BASELINE_REPRODUCTION_FAILED"})
         return {}
 
     ranking_results = []
@@ -3750,7 +3773,6 @@ def train_prebreakout_model_run17(
         "validation_rows": _valid_validation_rows(baseline_eval.get("fold_metrics") or []),
     }
 
-    results_path = Path(model_path).with_name("prebreakout_run17_results.json")
     results_path.write_text(json.dumps({key: value for key, value in bundle.items() if key != "model"}, indent=2, sort_keys=True, default=str))
     print(f"[ml_prebreakout] Saved Run #17 JSON report to {results_path}")
     return bundle

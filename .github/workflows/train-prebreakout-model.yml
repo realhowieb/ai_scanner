@@ -18,10 +18,11 @@ permissions:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     env:
       NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - name: Checkout repo
@@ -66,7 +67,7 @@ jobs:
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
         run: |
-          python - <<'PY'
+          python -u - <<'PY'
           import json
           from pathlib import Path
 
