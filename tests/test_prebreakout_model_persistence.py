@@ -887,6 +887,52 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertIn("buckets", result["raw"])
         self.assertIn("platt", result)
 
+    def test_run17_binary_eval_sets_explicit_status(self):
+        df_labeled = pd.DataFrame(
+            {
+                "Symbol": ["AAA", "BBB", "CCC", "DDD"],
+                "Timestamp": pd.to_datetime(
+                    ["2026-01-01", "2026-01-02", "2026-01-05", "2026-01-06"],
+                    utc=True,
+                ),
+                "Return_5D": [0.01, 0.05, -0.02, 0.04],
+            },
+            index=[10, 11, 12, 13],
+        )
+        x = pd.DataFrame({"f": [1.0, 2.0, 3.0, 4.0]}, index=df_labeled.index)
+        y = pd.Series([0, 1, 0, 1], index=df_labeled.index)
+        fake_eval = {
+            "fold_metrics": [
+                {"fold": 1, "validation_rows": 2, "auc": 0.7},
+                {"fold": 2, "validation_rows": 2, "auc": None},
+            ],
+            "validation_summary": {"auc_mean": 0.7},
+            "validation_actual": [0, 1],
+            "validation_proba": [0.2, 0.8],
+            "validation_index": [12, 13],
+        }
+
+        with (
+            patch.object(ml_prebreakout, "build_ml_dataset", return_value=(x, y)),
+            patch.object(ml_prebreakout, "expanding_window_folds", return_value=[{"fold": 1}]),
+            patch.object(ml_prebreakout, "_run9_eval", return_value=fake_eval),
+        ):
+            result = ml_prebreakout._run17_evaluate_binary(
+                "A - Current Production Target",
+                df_labeled,
+                ["f"],
+                None,
+                purge_days=5,
+                return_column="Return_5D",
+                mfe_column=None,
+                mae_column=None,
+                family="target_matrix",
+            )
+
+        self.assertEqual(result["experiment_status"], "VALID")
+        self.assertEqual(result["valid_fold_count"], 1)
+        self.assertIn("validation_warning", result)
+
     @unittest.skipUnless(_SKLEARN, "scikit-learn not installed")
     def test_isotonic_calibration_map_corrects_and_preserves_ranking(self):
         rng = np.random.default_rng(0)
@@ -919,13 +965,57 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         )
 
     def test_run17_target_change_candidate_decision_is_separate(self):
-        baseline = {"name": "A", "validation_summary": {"auc_mean": 0.66, "lift_over_baseline_mean": 1.7}}
-        challenger = {"name": "B", "validation_summary": {"auc_mean": 0.675, "lift_over_baseline_mean": 1.72}}
+        baseline = {
+            "name": "A",
+            "valid_fold_count": 5,
+            "validation_summary": {"auc_mean": 0.66, "lift_over_baseline_mean": 1.7},
+        }
+        challenger = {
+            "name": "B",
+            "valid_fold_count": 5,
+            "validation_summary": {"auc_mean": 0.675, "lift_over_baseline_mean": 1.72},
+        }
 
         result, best, reasons = ml_prebreakout._run17_target_change_decision([baseline, challenger], baseline)
 
         self.assertEqual(result, "TARGET_CHANGE_CANDIDATE")
         self.assertEqual(best, challenger)
+        self.assertTrue(reasons)
+
+    def test_run17_target_change_requires_full_baseline_folds(self):
+        baseline = {
+            "name": "A",
+            "valid_fold_count": 3,
+            "validation_summary": {"auc_mean": 0.66, "lift_over_baseline_mean": 1.7},
+        }
+        challenger = {
+            "name": "B",
+            "valid_fold_count": 5,
+            "validation_summary": {"auc_mean": 0.675, "lift_over_baseline_mean": 1.9},
+        }
+
+        result, best, reasons = ml_prebreakout._run17_target_change_decision([baseline, challenger], baseline)
+
+        self.assertEqual(result, "NO_TARGET_CHANGE")
+        self.assertIsNone(best)
+        self.assertTrue(any("requires 5" in reason for reason in reasons))
+
+    def test_run17_target_change_ignores_incomplete_challenger_folds(self):
+        baseline = {
+            "name": "A",
+            "valid_fold_count": 5,
+            "validation_summary": {"auc_mean": 0.66, "lift_over_baseline_mean": 1.7},
+        }
+        challenger = {
+            "name": "B",
+            "valid_fold_count": 3,
+            "validation_summary": {"auc_mean": 0.72, "lift_over_baseline_mean": 2.1},
+        }
+
+        result, best, reasons = ml_prebreakout._run17_target_change_decision([baseline, challenger], baseline)
+
+        self.assertEqual(result, "NO_TARGET_CHANGE")
+        self.assertIsNone(best)
         self.assertTrue(reasons)
 
     def test_run14_insufficient_qualifiers_status(self):

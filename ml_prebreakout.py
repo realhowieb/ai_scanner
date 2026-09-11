@@ -3438,8 +3438,16 @@ def _run17_evaluate_binary(
     evaluation = _run9_eval(name, X, y, df_labeled, folds, list(X.columns), [], family)
     idx = evaluation.get("validation_index") or []
     oof_frame = df_labeled.loc[idx].copy() if idx else df_labeled.iloc[0:0].copy()
+    valid_fold_count = _valid_auc_fold_count(evaluation.get("fold_metrics") or [])
     evaluation["target_audit"] = target_audit(y)
-    evaluation["valid_fold_count"] = _valid_auc_fold_count(evaluation.get("fold_metrics") or [])
+    evaluation["valid_fold_count"] = valid_fold_count
+    evaluation["requested_fold_count"] = 5
+    evaluation["experiment_status"] = "VALID" if valid_fold_count > 0 else "SKIPPED_INSUFFICIENT_VALID_FOLDS"
+    evaluation["validation_warning"] = (
+        None
+        if valid_fold_count == RUN16_EXPECTED_VALID_FOLDS
+        else f"{valid_fold_count} of {RUN16_EXPECTED_VALID_FOLDS} folds had both classes"
+    )
     evaluation["economic_outcomes"] = economic_outcome_summary(df_labeled, y, return_column=return_column, mfe_column=mfe_column, mae_column=mae_column)
     evaluation["topk_economic_outcomes"] = topk_economic_diagnostics(
         oof_frame,
@@ -3502,9 +3510,22 @@ def _run17_regime_analysis(df_labeled: pd.DataFrame, y_true, y_score, validation
 def _run17_target_change_decision(target_results: list[dict], baseline: dict) -> tuple[str, dict | None, list[str]]:
     baseline_auc = (baseline.get("validation_summary") or {}).get("auc_mean")
     baseline_lift = (baseline.get("validation_summary") or {}).get("lift_over_baseline_mean")
+    baseline_valid_folds = int(baseline.get("valid_fold_count") or 0)
+    if baseline_valid_folds != RUN16_EXPECTED_VALID_FOLDS:
+        return (
+            "NO_TARGET_CHANGE",
+            None,
+            [
+                f"production baseline produced {baseline_valid_folds} valid folds; "
+                f"requires {RUN16_EXPECTED_VALID_FOLDS} for target-change recommendation"
+            ],
+        )
     candidates = []
     for row in target_results:
         if row is baseline or row.get("name") == baseline.get("name"):
+            continue
+        valid_folds = int(row.get("valid_fold_count") or 0)
+        if valid_folds != RUN16_EXPECTED_VALID_FOLDS:
             continue
         summary = row.get("validation_summary") or {}
         auc = summary.get("auc_mean")
@@ -3524,6 +3545,7 @@ def _run17_target_change_decision(target_results: list[dict], baseline: dict) ->
 def _run17_print_result(row: dict) -> None:
     summary = row.get("validation_summary") or {}
     audit = row.get("target_audit") or {}
+    warning = row.get("validation_warning")
     print(
         "[ml_prebreakout] "
         f"{row.get('name')} | positives={audit.get('positive_rows')} | rate={_fmt_metric(audit.get('positive_rate'), 6)} | "
@@ -3532,6 +3554,8 @@ def _run17_print_result(row: dict) -> None:
         f"PR={_fmt_metric(summary.get('pr_auc_mean'), 6)} | Top5Lift={_fmt_metric(summary.get('top_5pct_lift_over_baseline_mean'), 6)} | "
         f"Top10Lift={_fmt_metric(summary.get('lift_over_baseline_mean'), 6)} | Top20Lift={_fmt_metric(summary.get('top_20pct_lift_over_baseline_mean'), 6)}"
     )
+    if warning:
+        print(f"[ml_prebreakout] {row.get('name')} validation warning: {warning}")
 
 
 def train_prebreakout_model_run17(
