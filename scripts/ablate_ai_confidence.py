@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import ml_prebreakout  # noqa: E402
 from ml_prebreakout import (  # noqa: E402
     ATR_COMPRESSION_FEATURE_COLS,
     BASE_FEATURE_COLS,
@@ -113,6 +114,10 @@ def main() -> int:
     parser.add_argument("--days-back", type=int, default=90)
     parser.add_argument("--max-runs", type=int, default=1500)
     args = parser.parse_args()
+
+    # ml_prebreakout lazy-loads xgboost/sklearn; the classifier factory assumes
+    # they're already loaded (the training entrypoints call this first).
+    ml_prebreakout._load_ml_libs()
 
     history = load_run_history(days_back=args.days_back, max_runs=args.max_runs)
     if history is None or history.empty:
