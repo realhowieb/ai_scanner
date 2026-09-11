@@ -883,6 +883,36 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertIn("buckets", result["raw"])
         self.assertIn("platt", result)
 
+    def test_isotonic_calibration_map_corrects_and_preserves_ranking(self):
+        rng = np.random.default_rng(0)
+        raw = rng.uniform(0.0, 1.0, 2000)
+        # Over-confident model: true hit prob is half the raw score.
+        y = (rng.uniform(0.0, 1.0, 2000) < raw * 0.5).astype(int)
+
+        cmap = ml_prebreakout.fit_isotonic_calibration_map(y, raw)
+        self.assertIsInstance(cmap, dict)
+        self.assertEqual(cmap["method"], "isotonic")
+        self.assertEqual(len(cmap["x"]), len(cmap["y"]))
+
+        calibrated = ml_prebreakout.apply_calibration_map(raw, cmap)
+        # Magnitude corrected toward the true base rate...
+        self.assertAlmostEqual(float(calibrated.mean()), float(y.mean()), places=2)
+        self.assertGreater(raw.mean(), calibrated.mean())
+        # ...and monotonic, so ranking is never reordered.
+        order_raw = np.argsort(raw, kind="stable")
+        self.assertTrue(np.all(np.diff(calibrated[order_raw]) >= -1e-9))
+
+    def test_apply_calibration_map_is_safe_noop_without_map(self):
+        raw = np.array([0.1, 0.5, 0.9])
+        for bad in (None, {}, {"x": [0.1], "y": [0.2]}, {"x": [], "y": []}):
+            np.testing.assert_allclose(ml_prebreakout.apply_calibration_map(raw, bad), raw)
+
+    def test_fit_isotonic_calibration_map_returns_none_when_insufficient(self):
+        self.assertIsNone(ml_prebreakout.fit_isotonic_calibration_map([0, 1], [0.2, 0.8]))
+        self.assertIsNone(
+            ml_prebreakout.fit_isotonic_calibration_map([0] * 100, [0.3] * 100)
+        )
+
     def test_run17_target_change_candidate_decision_is_separate(self):
         baseline = {"name": "A", "validation_summary": {"auc_mean": 0.66, "lift_over_baseline_mean": 1.7}}
         challenger = {"name": "B", "validation_summary": {"auc_mean": 0.675, "lift_over_baseline_mean": 1.72}}

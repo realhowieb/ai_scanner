@@ -3248,6 +3248,59 @@ def calibration_comparison(y_true, y_proba) -> dict:
     return out
 
 
+def fit_isotonic_calibration_map(y_true, y_proba, *, min_samples: int = 50) -> dict | None:
+    """Fit isotonic calibration on out-of-fold predictions and export it as a
+    lightweight step-map (``{x, y}``) that ``score_prebreakout`` applies via
+    ``np.interp``.
+
+    Isotonic regression is a monotonic step function, so the whole calibrator is
+    captured by its breakpoint thresholds and values — JSON-serializable, so it
+    rides along in the model metadata with no extra model-bytes plumbing, and
+    (being monotonic) it corrects probability magnitudes without ever reordering
+    signals. Returns None when there are too few OOF rows or only one class.
+    """
+    actual = pd.Series(y_true).reset_index(drop=True).astype(int)
+    raw = pd.Series(y_proba).reset_index(drop=True).astype(float).clip(1e-9, 1.0 - 1e-9)
+    if len(actual) < int(min_samples) or actual.nunique(dropna=True) < 2:
+        return None
+    try:
+        from sklearn.isotonic import IsotonicRegression
+
+        iso = IsotonicRegression(out_of_bounds="clip")
+        iso.fit(raw.to_numpy(), actual.to_numpy())
+        xs = np.asarray(iso.X_thresholds_, dtype=float)
+        ys = np.asarray(iso.y_thresholds_, dtype=float)
+        if xs.size < 2:
+            return None
+        return {
+            "method": "isotonic",
+            "x": [float(v) for v in xs],
+            "y": [float(v) for v in ys],
+            "n": int(len(actual)),
+        }
+    except Exception as e:
+        print(f"[ml_prebreakout] isotonic calibration fit failed: {e}")
+        return None
+
+
+def apply_calibration_map(proba, calibration_map: dict | None):
+    """Map raw model probabilities through a stored isotonic step-map.
+
+    Returns the input unchanged when no usable map is present, so scoring stays
+    safe on older bundles trained before calibration was added.
+    """
+    values = np.asarray(proba, dtype=float)
+    if not isinstance(calibration_map, dict):
+        return values
+    xs = calibration_map.get("x")
+    ys = calibration_map.get("y")
+    if not xs or not ys or len(xs) != len(ys) or len(xs) < 2:
+        return values
+    xp = np.asarray(xs, dtype=float)
+    fp = np.asarray(ys, dtype=float)
+    return np.clip(np.interp(values, xp, fp), 0.0, 1.0)
+
+
 # Process-level model cache: every scan was re-downloading the model BYTEA from
 # Neon and re-deserializing it (plus xgboost's old-pickle conversion), adding
 # seconds per scan. The model changes at most daily, so cache for 15 minutes.
@@ -3318,8 +3371,13 @@ def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.Data
     X = X[feature_cols].fillna(0.0)
 
     proba = model.predict_proba(X)[:, 1]
-    df["PreBreakoutProb"] = proba
-    df["PreBreakoutProb%"] = (proba * 100.0).round(1)
+    # Isotonic calibration (fit on OOF validation) makes the displayed % mean
+    # what it says; monotonic, so it never changes signal ranking. No-ops on
+    # older bundles that predate calibration.
+    calibrated = apply_calibration_map(proba, bundle.get("calibration_map"))
+    df["PreBreakoutProbRaw"] = proba
+    df["PreBreakoutProb"] = calibrated
+    df["PreBreakoutProb%"] = (calibrated * 100.0).round(1)
     return df
 
 
@@ -4103,6 +4161,9 @@ def train_prebreakout_model(
     clf.fit(X_final, y)
     calibration = confidence_bucket_diagnostics(selected_eval["validation_actual"], selected_eval["validation_proba"])
     calibration_error = calibration_error_from_buckets(calibration)
+    calibration_map = fit_isotonic_calibration_map(
+        selected_eval["validation_actual"], selected_eval["validation_proba"]
+    )
     validation_rows = _valid_validation_rows(fold_metrics)
     feature_importances = _feature_importance_rows(clf, selected_features, top_n=20)
 
@@ -4271,6 +4332,7 @@ def train_prebreakout_model(
         "return_column": RETURN_COLUMN,
         "calibration": calibration,
         "calibration_error": calibration_error,
+        "calibration_map": calibration_map,
         "rows": int(len(X_run6)),
         "training_rows": int(len(X_run6)),
         "positive_rows": int(y.sum()),
