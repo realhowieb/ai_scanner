@@ -154,6 +154,12 @@ def render_results(
         st.caption(f"AI Confidence target: {ai_target_rule}")
     if is_admin_view:
         render_calibration_table(ai_calibration, title="AI Confidence calibration")
+        try:
+            from ui.ai_confidence_explain import render_confidence_explainer
+
+            render_confidence_explainer(df)
+        except Exception:
+            pass
     render_track_record_badge()
     try:
         from ui.score_map import render_score_map
