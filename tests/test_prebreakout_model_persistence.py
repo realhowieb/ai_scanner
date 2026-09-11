@@ -1,3 +1,4 @@
+import importlib.util
 import tempfile
 import types
 import unittest
@@ -9,6 +10,9 @@ import pandas as pd
 
 import ml_prebreakout
 from db import prebreakout_models
+
+# Isotonic calibration needs scikit-learn; the lean CI env may not have it.
+_SKLEARN = importlib.util.find_spec("sklearn") is not None
 
 
 class FakePrebreakoutClassifier:
@@ -883,6 +887,7 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
         self.assertIn("buckets", result["raw"])
         self.assertIn("platt", result)
 
+    @unittest.skipUnless(_SKLEARN, "scikit-learn not installed")
     def test_isotonic_calibration_map_corrects_and_preserves_ranking(self):
         rng = np.random.default_rng(0)
         raw = rng.uniform(0.0, 1.0, 2000)
