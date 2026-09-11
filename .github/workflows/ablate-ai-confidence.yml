@@ -1,0 +1,61 @@
+name: Ablate AI Confidence
+
+# Read-only experiment: does enriching features and/or sweeping the target raise
+# AI Confidence's walk-forward AUC? Prints a ranked table; ships nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: "Training lookback days"
+        required: true
+        default: "90"
+      max_runs:
+        description: "Max scan-history runs"
+        required: true
+        default: "1500"
+
+permissions:
+  contents: read
+
+jobs:
+  ablate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+      AI_SCANNER_SQLITE_FALLBACK: "false"
+      ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+      ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+      ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements-core.txt
+            requirements-ml.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -r requirements-ml.txt -c requirements.lock
+
+      - name: Check Neon connection secret
+        run: |
+          if [ -z "$NEON_DATABASE_URL" ]; then
+            echo "NEON_DATABASE_URL or DATABASE_URL GitHub Actions secret is required."
+            exit 1
+          fi
+
+      - name: Run AI Confidence ablation
+        run: |
+          python scripts/ablate_ai_confidence.py \
+            --days-back "${{ inputs.days_back }}" \
+            --max-runs "${{ inputs.max_runs }}"
