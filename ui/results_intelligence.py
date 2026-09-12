@@ -462,6 +462,7 @@ def _render_result_detail(
     a0, a1, a2, a3 = st.columns(4)
     if a0.button("🔬 Full intel", key=f"{key_prefix}_intel_open_{c['ticker']}"):
         st.session_state["hsf_stock_ticker"] = c["ticker"]
+        st.session_state["hsf_stock_opp"] = c
         try:
             st.switch_page("pages/stock.py")
         except Exception:

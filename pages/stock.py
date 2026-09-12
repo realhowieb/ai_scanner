@@ -34,12 +34,17 @@ if _ticker:
 if not _ticker:
     st.caption("Enter a ticker, or open one from Market Brief, Scanner, or your Watchlist.")
 else:
+    # Use the live opportunity carried from Scanner/Brief ONLY when it matches
+    # the selected ticker — hard guard against a stale row from another ticker.
+    _opp = st.session_state.get("hsf_stock_opp")
+    if not (_opp and str(_opp.get("ticker") or "").strip().upper() == _ticker):
+        _opp = None
     try:
         from ui.charts import render_chart_for_ticker
         from ui.stock_intelligence import render_stock_intelligence
 
         render_stock_intelligence(
-            _ticker, source="page",
+            _ticker, current_opp=_opp, source="page",
             render_chart_for_ticker=lambda t: render_chart_for_ticker(t, key=f"si_page_chart_{t}"),
         )
     except Exception as e:

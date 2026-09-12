@@ -199,5 +199,117 @@ class ReadOnlyAndNoRebuildTests(unittest.TestCase):
             si.render_stock_intelligence("NVDA", current_row=_row())  # DB down -> still renders
 
 
+class StateIsolationTests(unittest.TestCase):
+    """Section 43 — mandatory: A -> B -> A must not leak B into A."""
+
+    _A = {"ticker": "AMD", "score": 60, "score_version": "1.0", "status": "WATCH",
+          "primary_setup": "PreBreakout", "signals": ["prebreakout"], "n_signals": 1,
+          "fading": False, "breakout_score": None, "prob": 70, "chg_pct": 1.0, "last": 100.0,
+          "score_components": {"signals_component": 12, "model_component": 26,
+                               "momentum_component": 0, "fading_penalty": 0}}
+    _B = {"ticker": "NVDA", "score": 85, "score_version": "1.0", "status": "STRONG",
+          "primary_setup": "Breakout", "signals": ["breakout", "golden_cross"], "n_signals": 2,
+          "fading": False, "breakout_score": 80, "prob": None, "chg_pct": 3.0, "last": 120.0,
+          "score_components": {"signals_component": 24, "model_component": 30,
+                               "momentum_component": 6, "fading_penalty": 0}}
+
+    def test_a_b_a_no_leak(self):
+        a1 = si.build_stock_intelligence("AMD", current_opp=self._A)
+        b = si.build_stock_intelligence("NVDA", current_opp=self._B)
+        a2 = si.build_stock_intelligence("AMD", current_opp=self._A)
+        self.assertEqual((a1["hsf_score"], a2["hsf_score"], b["hsf_score"]), (60, 60, 85))
+        self.assertEqual(a2["signals"], ["prebreakout"])
+        self.assertNotIn("breakout", a2["signals"])
+        self.assertNotIn("golden_cross", a2["signals"])
+        self.assertIsNone(a2["model"]["breakout_score"])
+        self.assertEqual(a2["model"]["prebreakout_prob"], 70)
+
+    def test_mismatched_opp_is_rejected(self):
+        # B's opp handed to AMD must be ignored (no leak) -> falls back to none.
+        intel = si.build_stock_intelligence("AMD", current_opp=self._B)
+        self.assertFalse(intel["has_opportunity"])
+
+    def test_build_does_not_mutate_caller_opp(self):
+        snap = dict(self._A)
+        si.build_stock_intelligence("AMD", current_opp=self._A, history=_hist_amd())
+        self.assertEqual(self._A, snap)  # movement/annotations don't mutate input
+
+
+def _hist_amd():
+    import datetime as _dt
+    t0 = _dt.datetime(2026, 9, 12, 9, 30, tzinfo=_dt.timezone.utc)
+    return [{"time": t0, "score": 55, "status": "WATCH", "score_version": "1.0", "signals": ["prebreakout"]}]
+
+
+class RequiredLifecycleTest(unittest.TestCase):
+    """Section 44 — the exact required history."""
+
+    def _h(self):
+        import datetime as _dt
+        base = _dt.datetime(2026, 9, 12, 9, 30, tzinfo=_dt.timezone.utc)
+
+        def step(m, s, st_, sig):
+            return {"time": base + dt.timedelta(minutes=m), "score": s,
+                    "status": st_, "score_version": "1.0", "signals": sig}
+        return [
+            step(0, 58, "WATCH", ["prebreakout"]),
+            step(30, 62, "WATCH", ["prebreakout"]),
+            step(60, 70, "WATCH", ["prebreakout", "golden_cross"]),
+            step(90, 78, "STRONG", ["prebreakout", "golden_cross", "breakout"]),
+            step(120, 74, "WATCH", ["golden_cross", "breakout"]),
+        ]
+
+    def test_full_lifecycle(self):
+        life = si.reconstruct_lifecycle(self._h())
+        self.assertEqual(life[0]["label"], "HSF history begins")
+        self.assertEqual(life[1]["movement"], "RISING")            # +4
+        self.assertEqual(life[2]["signals_added"], ["golden_cross"])
+        self.assertEqual(life[3]["transition"], ("WATCH", "STRONG"))
+        self.assertIn("breakout", life[3]["signals_added"])
+        self.assertEqual(life[4]["transition"], ("STRONG", "WATCH"))
+        self.assertEqual(life[4]["movement"], "FALLING")           # -4
+        self.assertEqual(life[4]["signals_removed"], ["prebreakout"])
+
+    def test_movement_threshold_boundaries(self):
+        import datetime as _dt
+        t0 = _dt.datetime(2026, 9, 12, tzinfo=_dt.timezone.utc)
+
+        def two(delta):
+            return si.reconstruct_lifecycle([
+                {"time": t0, "score": 70, "status": "WATCH", "score_version": "1.0", "signals": []},
+                {"time": t0 + dt.timedelta(hours=1), "score": 70 + delta, "status": "WATCH",
+                 "score_version": "1.0", "signals": []}])[1]["movement"]
+        self.assertEqual(two(2), "UNCHANGED")
+        self.assertEqual(two(3), "RISING")
+        self.assertEqual(two(4), "RISING")
+        self.assertEqual(two(0), "UNCHANGED")
+        self.assertEqual(two(-2), "UNCHANGED")
+        self.assertEqual(two(-3), "FALLING")
+
+
+class HSFConsistencyTests(unittest.TestCase):
+    """Section 4/5 — Stock Intel reuses the CANONICAL score, not a copy."""
+
+    def test_score_equals_canonical(self):
+        from ui import opportunities as op
+        row = _row()
+        intel = si.build_stock_intelligence("NVDA", current_row=row)
+        # Same inputs through the canonical scorer -> same score.
+        from ui.results_intelligence import _row_to_signal_fields
+        f = _row_to_signal_fields(row)
+        pos = [s for s in op._POSITIVE_SIGNALS if s in f["signals"]]
+        canonical = op.build_opportunity_score(
+            n_signals=len(pos), breakout_score=f["breakout_score"], prob=f["prob"],
+            chg_pct=f["chg_pct"], fading=f["fading"])
+        self.assertEqual(intel["hsf_score"], canonical)
+
+    def test_components_sum_to_score(self):
+        intel = si.build_stock_intelligence("NVDA", current_row=_row())
+        c = intel["score_components"]
+        raw = (c["signals_component"] + c["model_component"]
+               + c["momentum_component"] - c["fading_penalty"])
+        self.assertEqual(intel["hsf_score"], int(round(max(0, min(100, raw)))))
+
+
 if __name__ == "__main__":
     unittest.main()

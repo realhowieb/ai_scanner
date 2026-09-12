@@ -135,6 +135,7 @@ def _watch_next(status: Optional[str], signals: List[str], movement: Optional[st
 def build_stock_intelligence(
     ticker: str,
     *,
+    current_opp: Optional[Dict[str, Any]] = None,
     current_row: Optional[Dict[str, Any]] = None,
     history: Optional[List[Dict[str, Any]]] = None,
     regime: Optional[str] = None,
@@ -143,10 +144,21 @@ def build_stock_intelligence(
 ) -> Dict[str, Any]:
     """Pure normalized Stock Intelligence object. All inputs injected (the
     renderer fetches them). Safe on missing/partial data — fields are None when
-    unavailable, never fabricated."""
+    unavailable, never fabricated.
+
+    Current-state precedence: a pre-built `current_opp` (already canonically
+    scored by Scanner/Brief) is used ONLY when its ticker matches this one — a
+    hard state-isolation guard so a stale row from another ticker can never leak
+    in. Otherwise a `current_row` is scored canonically; otherwise the latest
+    frozen observation is used as a from_history fallback.
+    """
     ticker = str(ticker or "").strip().upper()
     hist = list(history or [])
-    current = build_current_opportunity(ticker, current_row)
+    current = None
+    if current_opp and str(current_opp.get("ticker") or "").strip().upper() == ticker:
+        current = dict(current_opp)  # copy so we never mutate the caller's object
+    if current is None:
+        current = build_current_opportunity(ticker, current_row)
 
     # If there's no live scanner row, fall back to the latest frozen observation
     # for the current HSF state (no live price, but real score/status/signals).
@@ -254,6 +266,7 @@ def _regime_from_session() -> Optional[str]:
 def render_stock_intelligence(
     ticker: str,
     *,
+    current_opp: Optional[Dict[str, Any]] = None,
     current_row: Optional[Dict[str, Any]] = None,
     source: Optional[str] = None,
     render_chart_for_ticker: Optional[Callable[[str], None]] = None,
@@ -287,8 +300,9 @@ def render_stock_intelligence(
         earnings_days = None
 
     intel = build_stock_intelligence(
-        ticker, current_row=current_row, history=history, regime=_regime_from_session(),
-        calibration_records=calibration_records, earnings_days=earnings_days)
+        ticker, current_opp=current_opp, current_row=current_row, history=history,
+        regime=_regime_from_session(), calibration_records=calibration_records,
+        earnings_days=earnings_days)
 
     _render_header(intel)
     _render_why_and_risks(intel)

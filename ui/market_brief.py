@@ -919,6 +919,7 @@ def _render_opportunity_detail(o: Dict[str, Any], data: Dict[str, Any]) -> None:
     a0, a1, a2, a3 = st.columns(4)
     if a0.button("🔬 Full intel", key=f"opp_intel_{o['ticker']}"):
         st.session_state["hsf_stock_ticker"] = o["ticker"]
+        st.session_state["hsf_stock_opp"] = o
         try:
             st.switch_page("pages/stock.py")
         except Exception:
