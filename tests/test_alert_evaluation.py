@@ -103,5 +103,108 @@ class BackgroundEvaluationTests(unittest.TestCase):
         self.assertGreaterEqual(m["delivered"], 1)  # valid NVDA still processed
 
 
+class StatusSemanticsTests(unittest.TestCase):
+    def _run(self, *, watchers, prefs, snaps=None, deliver=None, detect_raises=False, recent=None):
+        from contextlib import ExitStack
+        recent = recent or {}
+        recmock = mock.MagicMock(return_value=1)
+        with ExitStack() as es:
+            es.enter_context(mock.patch("db.opportunity_snapshots.load_recent_snapshots",
+                                        return_value=snaps if snaps is not None else _snaps()))
+            es.enter_context(mock.patch.object(ae, "_watchers", return_value=watchers))
+            es.enter_context(mock.patch("db.intelligence_alerts.get_hsf_alert_prefs",
+                                        side_effect=lambda u: prefs.get(u)))
+            es.enter_context(mock.patch("db.intelligence_alerts.recent_fingerprints",
+                                        side_effect=lambda u, **k: set(recent.get(u, set()))))
+            es.enter_context(mock.patch("db.intelligence_alerts.record_intelligence_alert",
+                                        mock.MagicMock(return_value=1)))
+            es.enter_context(mock.patch("db.intelligence_alerts.update_delivery_status",
+                                        mock.MagicMock(return_value=True)))
+            es.enter_context(mock.patch("db.intelligence_alerts.record_evaluation_run", recmock))
+            if detect_raises:
+                es.enter_context(mock.patch("analytics.opportunity_events.derive_opportunity_events",
+                                            side_effect=RuntimeError("boom")))
+            r = ae.run_intelligence_alert_evaluation(deliver=deliver)
+        return r, recmock
+
+    def test_healthy_success_and_run_persisted(self):
+        r, rec = self._run(watchers={"A": {"NVDA"}}, prefs={"A": {"upgrade": True}},
+                           deliver=lambda u, c, n: True)
+        self.assertEqual(r["status"], "SUCCESS")
+        self.assertEqual(r["delivered"], 1)
+        self.assertTrue(rec.called)  # evaluation-run record persisted
+
+    def test_zero_events_is_success_not_failed(self):
+        same = [{"snapshot_time": "t2", "opportunities": [opp("NVDA", 71, "WATCH")]},
+                {"snapshot_time": "t1", "opportunities": [opp("NVDA", 71, "WATCH")]}]
+        r, _ = self._run(watchers={"A": {"NVDA"}}, prefs={"A": {}}, snaps=same)
+        self.assertEqual(r["status"], "SUCCESS")
+        self.assertEqual(r["events_detected"], 0)
+
+    def test_missing_baseline_is_skipped(self):
+        r, _ = self._run(watchers={"A": {"NVDA"}}, prefs={"A": {}}, snaps=[_snaps()[0]])
+        self.assertEqual(r["status"], "SKIPPED")
+        self.assertIn("two", r["reason"])
+
+    def test_detection_failure_is_failed_with_stage(self):
+        r, _ = self._run(watchers={"A": {"NVDA"}}, prefs={"A": {}}, detect_raises=True)
+        self.assertEqual(r["status"], "FAILED")
+        self.assertEqual(r["error_stage"], "DETECT_EVENTS")
+
+    def test_delivery_failure_is_partial(self):
+        r, _ = self._run(watchers={"A": {"NVDA"}}, prefs={"A": {"upgrade": True}},
+                         deliver=lambda u, c, n: False)
+        self.assertEqual(r["status"], "PARTIAL")
+        self.assertEqual(r["failed"], 1)
+        self.assertEqual(r["delivered"], 0)
+
+    def test_filtered_by_preferences_distinct_from_deduped(self):
+        r, _ = self._run(watchers={"A": {"NVDA"}}, prefs={"A": {"upgrade": False}},
+                         deliver=lambda u, c, n: True)
+        self.assertEqual(r["filtered_by_preferences"], 1)
+        self.assertEqual(r["deduped"], 0)
+
+
+class HealthReaderTests(unittest.TestCase):
+    def _health(self, latest, last_success, recent_fail, since, since_success):
+        cur = mock.MagicMock()
+        cur.fetchone.side_effect = [latest, last_success, recent_fail, since, since_success]
+        conn = mock.MagicMock()
+        conn.cursor.return_value = cur
+        from db import intelligence_alerts as ia
+        with mock.patch.object(ia, "get_neon_conn", return_value=conn):
+            return ia.get_intelligence_health(), cur
+
+    # latest row layout: (started, status, events, matched, delivered, failed, deduped, filtered, users, error_stage, reason, dur)
+    def test_health_read_only_no_writes(self):
+        latest = ("t", "SUCCESS", 6, 3, 2, 0, 1, 0, 4, None, None, 12)
+        h, cur = self._health(latest, ("t",), (0,), (5.0,), (5.0,))
+        self.assertEqual(h["status"], "HEALTHY")
+        # only SELECTs — never an INSERT/UPDATE/DELETE from health.
+        for c in cur.execute.call_args_list:
+            self.assertNotRegex(c[0][0].upper(), r"\b(INSERT|UPDATE|DELETE)\b")
+
+    def test_unknown_when_no_runs(self):
+        h, _ = self._health(None, (None,), (0,), (None,), (None,))
+        self.assertEqual(h["status"], "UNKNOWN")
+
+    def test_stale_when_no_recent_success(self):
+        latest = ("t", "SUCCESS", 0, 0, 0, 0, 0, 0, 0, None, None, 5)
+        h, _ = self._health(latest, ("old",), (0,), (10.0,), (2000.0,))  # 2000 min > 24h
+        self.assertEqual(h["status"], "STALE")
+
+    def test_degraded_when_latest_failed(self):
+        latest = ("t", "FAILED", 0, 0, 0, 0, 0, 0, 0, "DETECT_EVENTS", "boom", 3)
+        h, _ = self._health(latest, ("t2",), (1,), (2.0,), (30.0,))
+        self.assertEqual(h["status"], "DEGRADED")
+        self.assertEqual(h["error_stage"], "DETECT_EVENTS")
+
+    def test_degraded_when_partial(self):
+        latest = ("t", "PARTIAL", 5, 3, 1, 2, 0, 0, 2, None, "delivery failures", 8)
+        h, _ = self._health(latest, ("t",), (0,), (2.0,), (2.0,))
+        self.assertEqual(h["status"], "DEGRADED")
+        self.assertEqual(h["delivery_failure_count"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()

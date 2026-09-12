@@ -97,3 +97,47 @@ def render_intelligence_alerts(username: str) -> None:
                 st.caption("Open 'Stock Intel' from the sidebar.")
     if keep and shown == 0:
         st.caption(f"No {_feed_filter.lower()} alerts in the recent feed.")
+
+    # Admin-only operational health (read-only; no evaluation/writes/delivery).
+    try:
+        if (st.session_state.get("entitlements") or {}).get("can_diagnostics"):
+            _render_health()
+    except Exception:
+        pass
+
+
+_HEALTH_ICON = {"HEALTHY": "🟢", "DEGRADED": "🟠", "STALE": "🟠", "UNKNOWN": "⚪"}
+
+
+def _render_health() -> None:
+    try:
+        from db.intelligence_alerts import get_intelligence_health, list_recent_evaluation_runs
+
+        h = get_intelligence_health()
+        runs = list_recent_evaluation_runs(limit=15)
+    except Exception:
+        return
+    with st.expander("🩺 HSF Intelligence health (admin)", expanded=False):
+        icon = _HEALTH_ICON.get(str(h.get("status")), "")
+        st.markdown(f"**Status: {icon} {h.get('status')}**"
+                    + (f" — {h['reason']}" if h.get("reason") else ""))
+        c1, c2, c3 = st.columns(3)
+        c1.caption(f"Last run: {h.get('last_run_at')}")
+        c2.caption(f"Last success: {h.get('last_success_at')}")
+        c3.caption(f"Since success: {h.get('minutes_since_last_success')} min"
+                   if h.get("minutes_since_last_success") is not None else "Since success: —")
+        lm = h.get("latest_metrics") or {}
+        if lm:
+            st.caption(
+                f"Latest — events {lm.get('events_detected')} · users {lm.get('users_evaluated')} · "
+                f"matched {lm.get('notifications_matched')} · delivered {lm.get('delivered')} · "
+                f"deduped {lm.get('deduped')} · filtered {lm.get('filtered_by_preferences')} · "
+                f"failed {lm.get('failed')}")
+        if runs:
+            st.markdown("**Recent evaluations**")
+            st.dataframe(
+                [{"Time": r.get("started_at"), "Status": r.get("status"),
+                  "Events": r.get("events_detected"), "Matched": r.get("notifications_matched"),
+                  "Delivered": r.get("delivered"), "Failed": r.get("failed"),
+                  "Dur ms": r.get("duration_ms"), "Stage": r.get("error_stage")} for r in runs],
+                hide_index=True, width="stretch")

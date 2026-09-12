@@ -48,8 +48,200 @@ def _ensure_schema(conn) -> None:
         )
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS intelligence_evaluation_runs (
+            id BIGSERIAL PRIMARY KEY,
+            started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            status TEXT NOT NULL,
+            duration_ms INTEGER,
+            previous_snapshot_time TIMESTAMPTZ,
+            current_snapshot_time TIMESTAMPTZ,
+            snapshots_loaded INTEGER DEFAULT 0,
+            events_detected INTEGER DEFAULT 0,
+            users_evaluated INTEGER DEFAULT 0,
+            watchlist_tickers_evaluated INTEGER DEFAULT 0,
+            notifications_matched INTEGER DEFAULT 0,
+            filtered_by_preferences INTEGER DEFAULT 0,
+            deduped INTEGER DEFAULT 0,
+            persisted INTEGER DEFAULT 0,
+            delivered INTEGER DEFAULT 0,
+            failed INTEGER DEFAULT 0,
+            reason TEXT,
+            error_stage TEXT,
+            error_type TEXT
+        )
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_hsf_eval_runs_time "
+                "ON intelligence_evaluation_runs (started_at DESC)")
     conn.commit()
     cur.close()
+
+
+_RUN_COUNT_FIELDS = (
+    "snapshots_loaded", "events_detected", "users_evaluated", "watchlist_tickers_evaluated",
+    "notifications_matched", "filtered_by_preferences", "deduped", "persisted", "delivered", "failed",
+)
+
+
+def _parse_ts(v):
+    """Accept a datetime or a str timestamp; None/'None' -> NULL."""
+    if v is None or v == "None" or v == "":
+        return None
+    return v
+
+
+def record_evaluation_run(result: Dict[str, Any]) -> Optional[int]:
+    """Persist one operational evaluation-run record. Returns id or None."""
+    conn = get_neon_conn()
+    if conn is None:
+        return None
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO intelligence_evaluation_runs
+              (status, duration_ms, previous_snapshot_time, current_snapshot_time,
+               snapshots_loaded, events_detected, users_evaluated, watchlist_tickers_evaluated,
+               notifications_matched, filtered_by_preferences, deduped, persisted, delivered, failed,
+               reason, error_stage, error_type)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
+            """,
+            (
+                result.get("status"), result.get("duration_ms"),
+                _parse_ts(result.get("previous_snapshot_time")),
+                _parse_ts(result.get("current_snapshot_time")),
+                *[int(result.get(f) or 0) for f in _RUN_COUNT_FIELDS],
+                result.get("reason"), result.get("error_stage"), result.get("error_type"),
+            ),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        return int(row[0] if not isinstance(row, dict) else row["id"]) if row else None
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return None
+
+
+def list_recent_evaluation_runs(limit: int = 15) -> List[Dict[str, Any]]:
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT started_at, status, events_detected, notifications_matched, "
+            "delivered, failed, deduped, filtered_by_preferences, duration_ms, "
+            "error_stage, reason FROM intelligence_evaluation_runs "
+            "ORDER BY started_at DESC LIMIT %s",
+            (int(limit),),
+        )
+        rows = cur.fetchall() or []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return []
+    return [dict(r) if isinstance(r, dict) else dict(zip(cols, r)) for r in rows]
+
+
+# A full weekday without a successful evaluation is genuinely stale given the
+# ~4 scheduled cron runs/weekday (overnight/weekend gaps are expected, so the
+# threshold is generous to avoid false staleness).
+INTELLIGENCE_STALE_AFTER_MINUTES = 24 * 60
+
+
+def get_intelligence_health(stale_after_minutes: int = INTELLIGENCE_STALE_AFTER_MINUTES) -> Dict[str, Any]:
+    """Read-only operational health — NO evaluation, NO writes, NO delivery, NO
+    market rebuild, NO Claude. Derived from persisted run records only."""
+    conn = get_neon_conn()
+    if conn is None:
+        return {"status": "UNKNOWN", "reason": "database unavailable"}
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT started_at, status, events_detected, notifications_matched, delivered, "
+            "failed, deduped, filtered_by_preferences, users_evaluated, error_stage, reason, duration_ms "
+            "FROM intelligence_evaluation_runs ORDER BY started_at DESC LIMIT 1")
+        latest = cur.fetchone()
+        cur.execute("SELECT MAX(started_at) FROM intelligence_evaluation_runs WHERE status IN ('SUCCESS','PARTIAL')")
+        last_success_row = cur.fetchone()
+        cur.execute("SELECT COUNT(*) FROM intelligence_evaluation_runs "
+                    "WHERE status = 'FAILED' AND started_at >= NOW() - make_interval(hours => 24)")
+        recent_fail_row = cur.fetchone()
+        cur.execute("SELECT EXTRACT(EPOCH FROM (NOW() - MAX(started_at)))/60 FROM intelligence_evaluation_runs")
+        since_row = cur.fetchone()
+        cur.execute("SELECT EXTRACT(EPOCH FROM (NOW() - MAX(started_at)))/60 "
+                    "FROM intelligence_evaluation_runs WHERE status IN ('SUCCESS','PARTIAL')")
+        since_success_row = cur.fetchone()
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return {"status": "UNKNOWN", "reason": "health query failed"}
+
+    def g(row, i):
+        if not row:
+            return None
+        return row[i] if not isinstance(row, dict) else list(row.values())[i]
+
+    if not latest:
+        return {"status": "UNKNOWN", "reason": "no evaluation has run yet",
+                "last_run_at": None, "last_success_at": None}
+
+    latest_status = g(latest, 1)
+    last_success_at = g(last_success_row, 0)
+    recent_failures = int(g(recent_fail_row, 0) or 0)
+    mins_since_run = g(since_row, 0)
+    mins_since_success = g(since_success_row, 0)
+    latest_metrics = {
+        "events_detected": g(latest, 2), "notifications_matched": g(latest, 3),
+        "delivered": g(latest, 4), "failed": g(latest, 5), "deduped": g(latest, 6),
+        "filtered_by_preferences": g(latest, 7), "users_evaluated": g(latest, 8),
+    }
+
+    # Deterministic status precedence.
+    if last_success_at is None:
+        status = "DEGRADED"
+        reason = "runs recorded but none succeeded"
+    elif mins_since_success is not None and float(mins_since_success) > float(stale_after_minutes):
+        status = "STALE"
+        reason = f"no successful evaluation in over {int(stale_after_minutes/60)}h"
+    elif latest_status in ("FAILED", "PARTIAL") or recent_failures > 0:
+        status = "DEGRADED"
+        reason = g(latest, 10) or f"latest run {latest_status}"
+    else:
+        status = "HEALTHY"
+        reason = None
+
+    return {
+        "status": status, "reason": reason,
+        "last_run_at": g(latest, 0), "last_success_at": last_success_at,
+        "minutes_since_last_run": round(float(mins_since_run), 1) if mins_since_run is not None else None,
+        "minutes_since_last_success": round(float(mins_since_success), 1) if mins_since_success is not None else None,
+        "latest_status": latest_status, "error_stage": g(latest, 9),
+        "recent_failure_count": recent_failures,
+        "delivery_failure_count": int(latest_metrics["failed"] or 0),
+        "latest_metrics": latest_metrics,
+    }
 
 
 def recent_fingerprints(user_id: str, *, hours: int = _DEFAULT_COOLDOWN_HOURS) -> Set[str]:
