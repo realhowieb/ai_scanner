@@ -272,10 +272,12 @@ def render_market_brief() -> None:
     summary = _market_summary(data)
     if summary:
         st.markdown(f"**🧭 {summary}.**")
+    _render_claude_narrative(data)
     _render_phase_banner(phase)
     _render_market_pulse(data.get("market_close") or [])
     _render_breadth_sectors(data)
     _render_standouts(data)
+    _render_brief_scorecard()
 
     # ---- detail sections: user-toggleable, time-aware order ----
     keys = [k for k, _ in _TOGGLEABLE]
@@ -458,6 +460,120 @@ def _render_standouts(data: Dict[str, Any]) -> None:
         st.markdown(f"- **{t}** — {' + '.join(tg)}")
     st.caption("Names showing up across more than one list — where the day's "
                "action clusters. Not a prediction; just where to look first.")
+
+
+def _render_brief_scorecard() -> None:
+    """Accountability: how the signals we flagged recently actually did.
+
+    Uses the immutable signal_outcomes table (real forward returns). Shows a
+    'collecting' note while windows are still maturing; silent if unavailable.
+    """
+    if st is None:
+        return
+    try:
+        from db.signal_outcomes import summarize_recent_outcomes
+
+        s = summarize_recent_outcomes(days_back=7)
+    except Exception:
+        return
+    completed = int(s.get("completed") or 0)
+    pending = int(s.get("pending") or 0)
+    if completed == 0 and pending == 0:
+        return
+    st.markdown("#### 🧾 How our recent signals did (7d)")
+    if completed == 0:
+        st.caption(
+            f"{pending} signal(s) flagged — outcomes still maturing "
+            "(5-day window). Scorecard fills in as they complete."
+        )
+        return
+    hit_rate = s.get("hit_rate")
+    aw = s.get("avg_winner")
+    al = s.get("avg_loser")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Signals scored", completed)
+    c2.metric("Reached +4%", f"{hit_rate*100:.0f}%" if hit_rate is not None else "—",
+              help="Share that hit +4% within 5 trading days (the model's target).")
+    c3.metric("Avg winner", f"{aw*100:+.1f}%" if aw is not None else "—")
+    c4.metric("Avg loser", f"{al*100:+.1f}%" if al is not None else "—")
+    best_t, best_r = s.get("best_ticker"), s.get("best_return")
+    line = []
+    if best_t and best_r is not None:
+        line.append(f"Best: **{best_t}** {best_r*100:+.1f}%")
+    if pending:
+        line.append(f"{pending} still maturing")
+    if line:
+        st.caption(" · ".join(line))
+
+
+def _brief_narrative_facts(data: Dict[str, Any]) -> str:
+    """Compact, real facts block for Claude to narrate (never invents)."""
+    lines: List[str] = []
+    for lbl, _last, chg in (data.get("market_close") or []):
+        if chg is not None and ("SPY" in str(lbl) or "QQQ" in str(lbl)):
+            lines.append(f"- {lbl}: {chg:+.2f}%")
+    b = data.get("breadth")
+    if b:
+        lines.append(f"- Breadth (advancers/decliners): {b[0]}/{b[1]}")
+    sec = data.get("sectors") or []
+    if sec:
+        top = ", ".join(f"{n} {c:+.1f}%" for n, c in sec[:3] if c is not None)
+        if top:
+            lines.append(f"- Leading sectors: {top}")
+    st_names = [str(x) for x in _standouts(data)][:5]
+    if st_names:
+        lines.append(f"- Confluence standouts: {', '.join(st_names)}")
+    counts = []
+    for key, label in (("gappers", "gappers"), ("picks", "PreBreakout picks"),
+                       ("top_setups", "setups"), ("earnings_today", "earnings today")):
+        n = len(data.get(key) or [])
+        if n:
+            counts.append(f"{n} {label}")
+    if counts:
+        lines.append(f"- Counts: {', '.join(counts)}")
+    return "\n".join(lines)
+
+
+def _render_claude_narrative(data: Dict[str, Any]) -> None:
+    """A 2-3 sentence plain-English brief written by Claude from real data.
+
+    Grounded strictly on the facts block; cached per snapshot so it costs one
+    call per scan, not per rerun. Silent when AI is off or facts are thin.
+    """
+    if st is None:
+        return
+    try:
+        from ui.ai import ask_claude, is_configured
+
+        if not is_configured():
+            return
+    except Exception:
+        return
+    facts = _brief_narrative_facts(data)
+    if not facts.strip():
+        return
+    ts = data.get("snapshot_time")
+    cache_key = f"brief_narrative_{ts}"
+    cached = st.session_state.get(cache_key)
+    if cached is None:
+        system = (
+            "You write a 2-3 sentence morning market brief for an experienced "
+            "trader. Use ONLY the facts provided — do NOT invent prices, news, "
+            "levels, forecasts, or tickers not listed. Be plain, concise, and "
+            "non-promissory (describe conditions and what to watch, don't predict). "
+            "No emojis, no bullet points, no preamble."
+        )
+        text, err = ask_claude(
+            system=system,
+            user=f"Today's scan facts:\n{facts}",
+            max_tokens=200,
+            username=(st.session_state.get("username") or "").strip().lower() or None,
+            feature="market_brief_narrative",
+        )
+        cached = text or ""  # cache empty on error so we don't retry every rerun
+        st.session_state[cache_key] = cached
+    if cached:
+        st.markdown(f"> {cached}")
 
 
 def _render_catalysts(data: Dict[str, Any]) -> None:

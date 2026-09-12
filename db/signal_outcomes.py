@@ -138,6 +138,81 @@ def list_pending_outcomes(min_age_days: int = 8, limit: int = 1000) -> List[Dict
     return out
 
 
+def summarize_recent_outcomes(days_back: int = 7) -> Dict[str, Any]:
+    """Scorecard over signals fired in the last `days_back` days.
+
+    A "hit" is reaching +4% within the 5-day window (mfe_5d >= 0.04), matching
+    the models' economic target. Winners/losers split on close-to-close 5D
+    return. Returns zeroed fields (never raises) when the DB or data is absent.
+    """
+    empty = {
+        "days_back": int(days_back), "completed": 0, "pending": 0, "hits": 0,
+        "hit_rate": None, "winners": 0, "losers": 0, "avg_winner": None,
+        "avg_loser": None, "best_ticker": None, "best_return": None,
+    }
+    conn = get_neon_conn()
+    if conn is None:
+        return empty
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+              COUNT(*) FILTER (WHERE outcome_computed_at IS NOT NULL) AS completed,
+              COUNT(*) FILTER (WHERE outcome_computed_at IS NULL) AS pending,
+              COUNT(*) FILTER (WHERE mfe_5d >= 0.04) AS hits,
+              COUNT(*) FILTER (WHERE outcome_computed_at IS NOT NULL AND return_5d > 0) AS winners,
+              COUNT(*) FILTER (WHERE outcome_computed_at IS NOT NULL AND return_5d <= 0) AS losers,
+              AVG(return_5d) FILTER (WHERE outcome_computed_at IS NOT NULL AND return_5d > 0) AS avg_winner,
+              AVG(return_5d) FILTER (WHERE outcome_computed_at IS NOT NULL AND return_5d <= 0) AS avg_loser
+            FROM signal_outcomes
+            WHERE fired_at >= NOW() - make_interval(days => %s)
+            """,
+            (int(days_back),),
+        )
+        row = cur.fetchone()
+        cur.execute(
+            """
+            SELECT ticker, return_5d FROM signal_outcomes
+            WHERE fired_at >= NOW() - make_interval(days => %s)
+              AND outcome_computed_at IS NOT NULL AND return_5d IS NOT NULL
+            ORDER BY return_5d DESC
+            LIMIT 1
+            """,
+            (int(days_back),),
+        )
+        best = cur.fetchone()
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return empty
+
+    def _g(r, key, idx):
+        return r.get(key) if isinstance(r, dict) else r[idx]
+
+    completed = int(_g(row, "completed", 0) or 0) if row else 0
+    hits = int(_g(row, "hits", 2) or 0) if row else 0
+    out = dict(empty)
+    out.update({
+        "completed": completed,
+        "pending": int(_g(row, "pending", 1) or 0) if row else 0,
+        "hits": hits,
+        "hit_rate": (hits / completed) if completed else None,
+        "winners": int(_g(row, "winners", 3) or 0) if row else 0,
+        "losers": int(_g(row, "losers", 4) or 0) if row else 0,
+        "avg_winner": float(_g(row, "avg_winner", 5)) if row and _g(row, "avg_winner", 5) is not None else None,
+        "avg_loser": float(_g(row, "avg_loser", 6)) if row and _g(row, "avg_loser", 6) is not None else None,
+        "best_ticker": (_g(best, "ticker", 0) if best else None),
+        "best_return": (float(_g(best, "return_5d", 1)) if best and _g(best, "return_5d", 1) is not None else None),
+    })
+    return out
+
+
 def save_outcome(
     *,
     signal_id: int,

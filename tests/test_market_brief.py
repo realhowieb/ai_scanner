@@ -183,6 +183,25 @@ class SummaryAndPositionsTests(unittest.TestCase):
         self.assertEqual(pos[0][0], "AAPL")
         self.assertAlmostEqual(pos[0][1], 2.0)        # 100 → 102 = +2%
 
+    def test_narrative_facts_use_only_real_values(self):
+        from ui import market_brief as mb
+
+        data = {
+            "market_close": [("SPY", 450, -0.4), ("QQQ", 380, -0.3)],
+            "breadth": (180, 320),
+            "sectors": [("XLK", 0.8), ("XLF", -0.3)],
+            "picks": [{"ticker": "NVDA"}],
+            "earnings_today": ["CRM"],
+            "snapshot_time": "T1",
+        }
+        facts = mb._brief_narrative_facts(data)
+        self.assertIn("SPY: -0.40%", facts)
+        self.assertIn("Breadth (advancers/decliners): 180/320", facts)
+        self.assertIn("XLK +0.8%", facts)
+        self.assertIn("1 PreBreakout picks", facts)
+        # No data -> empty (so we never ask Claude to narrate nothing).
+        self.assertEqual(mb._brief_narrative_facts({"snapshot_time": "x"}), "")
+
 
 if __name__ == "__main__":
     unittest.main()
