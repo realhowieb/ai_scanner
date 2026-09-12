@@ -617,6 +617,19 @@ def main():
         print(f"[cron] alert outcome scoring failed: {e}")
         _capture(e)
 
+    # Freeze the latest snapshot's HSF opportunities for calibration, so
+    # signal-time records are collected by the deliberate cron pipeline rather
+    # than only when a user opens the Market Brief. Idempotent per snapshot.
+    try:
+        from analytics.opportunity_freeze import freeze_latest_opportunities
+
+        frozen = freeze_latest_opportunities()
+        if frozen:
+            print(f"[opportunity_freeze] froze {frozen} HSF opportunity(ies)")
+    except Exception as e:
+        print(f"[cron] opportunity freeze failed: {e}")
+        _capture(e)
+
     # Settle immutable fired-signal rows with 1/3/5D return plus MFE/MAE.
     try:
         from analytics.signal_outcomes import score_pending_signal_outcomes

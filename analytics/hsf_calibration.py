@@ -333,29 +333,40 @@ def data_quality_checks(records: List[Dict[str, Any]]) -> List[str]:
     invalid = 0
     missing_ticker = 0
     missing_version = 0
+    missing_score = 0
+    missing_components = 0
     early_outcome = 0
+    comp_keys = ("signals_component", "model_component", "momentum_component", "fading_penalty")
     for r in records:
         key = (str(r.get("ticker") or "").upper(), r.get("fired_at"))
         if key in seen:
             dups += 1
         seen.add(key)
         s = r.get("hsf_score")
-        if s is not None and (s < 0 or s > 100):
+        if s is None:
+            missing_score += 1
+        elif s < 0 or s > 100:
             invalid += 1
         if not r.get("ticker"):
             missing_ticker += 1
         if not r.get("score_version"):
             missing_version += 1
+        if all(r.get(k) is None for k in comp_keys):
+            missing_components += 1
         if r.get("matured") and r.get("mfe_5d") is None and r.get("return_5d") is None:
             early_outcome += 1
     if dups:
         warnings.append(f"{dups} duplicate (ticker, fired_at) record(s)")
     if invalid:
         warnings.append(f"{invalid} score(s) outside 0-100")
+    if missing_score:
+        warnings.append(f"{missing_score} record(s) missing hsf_score")
     if missing_ticker:
         warnings.append(f"{missing_ticker} record(s) missing ticker")
     if missing_version:
-        warnings.append(f"{missing_version} record(s) missing score_version")
+        warnings.append(f"{missing_version} record(s) missing score_version (legacy/unknown)")
+    if missing_components:
+        warnings.append(f"{missing_components} record(s) missing score components")
     if early_outcome:
         warnings.append(f"{early_outcome} matured record(s) with no MFE/return (outcome may be incomplete)")
     return warnings
