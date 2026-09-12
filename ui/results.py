@@ -140,6 +140,17 @@ def render_results(
             st.session_state.pop(k, None)
 
     st.subheader("Results")
+    # Intelligence-first layer (ranked HSF opportunities, views, movement). Never
+    # breaks the raw ALL RESULTS table below if anything here fails.
+    try:
+        from ui.results_intelligence import render_scanner_intelligence
+
+        render_scanner_intelligence(df, key_prefix=key_prefix,
+                                    render_chart_for_ticker=render_chart_for_ticker)
+        st.markdown("---")
+        st.caption("Full scanner output (all columns) below.")
+    except Exception:
+        pass
     ai_warning = df.attrs.get(aic.WARNING_ATTR)
     ai_trained_at = df.attrs.get(aic.TRAINED_AT_ATTR)
     ai_source = df.attrs.get(aic.SOURCE_ATTR)

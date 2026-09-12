@@ -519,6 +519,7 @@ def select_watch_next(compared: List[Dict[str, Any]], *, limit: int = 3) -> List
 
 
 def to_snapshot_rows(opps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Minimal persisted shape for movement comparison (ticker/score/status)."""
-    return [{"ticker": o["ticker"], "score": o["score"], "status": o["status"]}
+    """Minimal persisted shape for movement comparison (ticker/score/status/version)."""
+    return [{"ticker": o["ticker"], "score": o["score"], "status": o["status"],
+             "score_version": o.get("score_version", HSF_SCORE_VERSION)}
             for o in (opps or []) if o.get("ticker")]
