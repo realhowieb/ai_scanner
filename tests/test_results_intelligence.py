@@ -124,5 +124,58 @@ class ExplanationGroundingTests(unittest.TestCase):
         self.assertNotIn("$", " ".join(ex["reasons"]))
 
 
+class FingerprintTests(unittest.TestCase):
+    def setUp(self):
+        import pandas as pd
+        self.pd = pd
+        self.base = [
+            {"Ticker": "NVDA", "IsBreakout": True, "EMACross": "Golden",
+             "PreBreakoutProb%": 78, "BreakoutScore": 74, "PctChange": 2.4, "GapPct": 1.0, "Last": 120.0},
+            {"Ticker": "AMD", "IsBreakout": True, "EMACross": None,
+             "PreBreakoutProb%": 55, "BreakoutScore": 60, "PctChange": 1.0, "GapPct": 0.2, "Last": 95.0},
+        ]
+
+    def _sig(self, rows):
+        return ri._df_signature(self.pd.DataFrame(rows))
+
+    def _mut(self, fn):
+        b = [dict(r) for r in self.base]
+        fn(b)
+        return b
+
+    def test_identical_same_signature(self):
+        self.assertEqual(self._sig(self.base), self._sig([dict(r) for r in self.base]))
+
+    def test_row_reorder_same_signature(self):
+        self.assertEqual(self._sig(self.base), self._sig(list(reversed(self.base))))
+
+    def test_presentation_only_price_change_does_not_invalidate(self):
+        self.assertEqual(self._sig(self.base), self._sig(self._mut(lambda b: b[0].__setitem__("Last", 999.0))))
+
+    def test_intelligence_field_changes_invalidate(self):
+        s0 = self._sig(self.base)
+        for label, fn in [
+            ("PctChange", lambda b: b[0].__setitem__("PctChange", 9.9)),
+            ("BreakoutScore", lambda b: b[0].__setitem__("BreakoutScore", 10)),
+            ("PreBreakoutProb", lambda b: b[0].__setitem__("PreBreakoutProb%", 10)),
+            ("IsBreakout", lambda b: b[0].__setitem__("IsBreakout", False)),
+            ("EMACross", lambda b: b[0].__setitem__("EMACross", None)),
+            ("GapPct", lambda b: b[0].__setitem__("GapPct", 9.0)),
+            ("ticker_replaced", lambda b: b[0].__setitem__("Ticker", "ZZZ")),
+            ("ticker_added", lambda b: b.append({"Ticker": "HPE", "IsBreakout": True, "BreakoutScore": 48})),
+            ("ticker_removed", lambda b: b.pop()),
+        ]:
+            self.assertNotEqual(s0, self._sig(self._mut(fn)), f"{label} should invalidate")
+
+    def test_nan_none_missing_empty_safe(self):
+        import numpy as np
+        nan_rows = [{"Ticker": "X", "IsBreakout": np.nan, "EMACross": None,
+                     "PreBreakoutProb%": np.nan, "BreakoutScore": np.nan, "PctChange": np.nan, "GapPct": np.nan}]
+        self.assertIsInstance(self._sig(nan_rows), str)
+        self.assertIsInstance(ri._df_signature(self.pd.DataFrame([{"Ticker": "A", "Foo": 1}])), str)
+        self.assertEqual(ri._df_signature(self.pd.DataFrame()), "empty")
+        self.assertEqual(ri._df_signature(None), "empty")
+
+
 if __name__ == "__main__":
     unittest.main()

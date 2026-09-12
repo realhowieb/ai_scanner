@@ -255,16 +255,41 @@ def _movement_cell(c: Dict[str, Any]) -> str:
     return movement_badge(c)
 
 
+# Columns that materially change scanner intelligence (HSF score, status,
+# primary setup, signal count, movement, view classification). Presentation-only
+# fields (e.g. price/Last, Volume, Spark) are deliberately excluded so the cache
+# isn't invalidated by changes that can't alter the intelligence.
+_FINGERPRINT_COLS = (
+    "Ticker", "Symbol", "IsBreakout", "EMACross",
+    "PreBreakoutProb%", "PreBreakoutProb", "BreakoutScore", "PctChange", "GapPct",
+)
+
+
 def _df_signature(df: Any) -> str:
-    """Cheap fingerprint of a result set so we recompute only when it changes."""
+    """Content fingerprint over the intelligence-relevant columns only.
+
+    Order-independent (consolidation/ranking are order-independent), NaN/None/
+    missing-column/empty safe, and cheap (vectorized hash over a small subset —
+    never re-scores or touches the DB/network). Changes iff a field that can
+    alter the intelligence changes; row reordering does not.
+    """
     try:
-        n = len(df)
-        tcol = "Ticker" if "Ticker" in df.columns else ("Symbol" if "Symbol" in df.columns else None)
-        head = tail = ""
-        if tcol and n:
-            head = str(df[tcol].iloc[0])
-            tail = str(df[tcol].iloc[-1])
-        return f"{n}:{head}:{tail}:{len(df.columns)}"
+        if df is None or getattr(df, "empty", True):
+            return "empty"
+        cols = [c for c in _FINGERPRINT_COLS if c in getattr(df, "columns", [])]
+        if not cols:
+            return f"na:{len(df)}:{len(getattr(df, 'columns', []))}"
+        import hashlib
+
+        from pandas.util import hash_pandas_object
+
+        # Per-row uint64 hashes (NaN-safe), then combine order-independently by
+        # sorting the row hashes before digesting — so the same set of rows in
+        # any order yields the same fingerprint.
+        row_hashes = hash_pandas_object(df[cols], index=False)
+        ordered = sorted(int(x) for x in row_hashes.to_numpy())
+        digest = hashlib.sha1(repr(ordered).encode()).hexdigest()[:16]
+        return f"{len(df)}:{len(cols)}:{digest}"
     except Exception:
         return "na"
 
