@@ -213,6 +213,56 @@ def summarize_recent_outcomes(days_back: int = 7) -> Dict[str, Any]:
     return out
 
 
+def summarize_outcomes_by_type(days_back: int = 7, min_completed: int = 5) -> List[Dict[str, Any]]:
+    """Positive-outcome rate per signal_type over the window.
+
+    Only returns types with at least `min_completed` scored signals so the
+    dashboard never shows a rate off 1-2 samples. Never raises.
+    """
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT COALESCE(signal_type, 'other') AS stype,
+                   COUNT(*) FILTER (WHERE outcome_computed_at IS NOT NULL) AS completed,
+                   COUNT(*) FILTER (WHERE outcome_computed_at IS NOT NULL AND mfe_5d >= 0.04) AS hits
+            FROM signal_outcomes
+            WHERE fired_at >= NOW() - make_interval(days => %s)
+            GROUP BY COALESCE(signal_type, 'other')
+            HAVING COUNT(*) FILTER (WHERE outcome_computed_at IS NOT NULL) >= %s
+            ORDER BY hits::float / NULLIF(COUNT(*) FILTER (WHERE outcome_computed_at IS NOT NULL), 0) DESC
+            """,
+            (int(days_back), int(min_completed)),
+        )
+        rows = cur.fetchall() or []
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return []
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        if isinstance(r, dict):
+            stype, completed, hits = r.get("stype"), r.get("completed"), r.get("hits")
+        else:
+            stype, completed, hits = r[0], r[1], r[2]
+        completed = int(completed or 0)
+        hits = int(hits or 0)
+        out.append({
+            "signal_type": stype or "other",
+            "completed": completed,
+            "positive_rate": (hits / completed) if completed else None,
+        })
+    return out
+
+
 def save_outcome(
     *,
     signal_id: int,

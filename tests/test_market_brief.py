@@ -202,6 +202,32 @@ class SummaryAndPositionsTests(unittest.TestCase):
         # No data -> empty (so we never ask Claude to narrate nothing).
         self.assertEqual(mb._brief_narrative_facts({"snapshot_time": "x"}), "")
 
+    def test_freshness_never_fakes_live_and_uses_et(self):
+        import datetime as dt
+
+        from ui import market_brief as mb
+
+        closed = mb._freshness_label(
+            dt.datetime(2026, 9, 11, 20, 5, tzinfo=dt.timezone.utc), "closed"
+        )
+        self.assertIn("Last session", closed)
+        self.assertIn("ET", closed)
+        self.assertNotIn("Live", closed)  # never fake live when closed
+        live = mb._freshness_label(
+            dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=12), "open"
+        )
+        self.assertIn("Live", live)
+        self.assertIn("ago", live)
+        self.assertIsNone(mb._freshness_label(None, "closed"))
+
+    def test_breadth_interpretation(self):
+        from ui import market_brief as mb
+
+        self.assertEqual(mb._breadth_word(142, 27), "Bullish")
+        self.assertEqual(mb._breadth_word(27, 142), "Bearish")
+        self.assertEqual(mb._breadth_word(100, 100), "Neutral")
+        self.assertEqual(mb._breadth_word(0, 0), "—")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -269,15 +269,18 @@ def render_market_brief() -> None:
     phase = _market_phase()
 
     # ---- glance layer (always on) ----
-    summary = _market_summary(data)
-    if summary:
-        st.markdown(f"**🧭 {summary}.**")
+    # A. Market state — compact header (replaces the tall summary + pulse block).
+    render_market_header(data, phase)
     _render_claude_narrative(data)
-    _render_phase_banner(phase)
-    _render_market_pulse(data.get("market_close") or [])
-    _render_breadth_sectors(data)
+    # B / C. Top Opportunities + why-it-ranked / ticker detail.
+    render_top_opportunities(data)
+    # D. Signal performance (promoted above the fold).
+    render_signal_scorecard()
+    st.markdown("---")
+    # E. Secondary market detail (existing sections, demoted below the fold).
     _render_standouts(data)
-    _render_brief_scorecard()
+    _render_breadth_sectors(data)
+    _render_market_pulse(data.get("market_close") or [])
 
     # ---- detail sections: user-toggleable, time-aware order ----
     keys = [k for k, _ in _TOGGLEABLE]
@@ -462,48 +465,61 @@ def _render_standouts(data: Dict[str, Any]) -> None:
                "action clusters. Not a prediction; just where to look first.")
 
 
-def _render_brief_scorecard() -> None:
-    """Accountability: how the signals we flagged recently actually did.
+def render_signal_scorecard() -> None:
+    """D. HSF signal performance — how flagged signals actually resolved.
 
-    Uses the immutable signal_outcomes table (real forward returns). Shows a
-    'collecting' note while windows are still maturing; silent if unavailable.
+    Uses the immutable signal_outcomes table (real forward returns) only. Uses
+    'positive-outcome' language, not 'win rate' — these are 5-day positive-move
+    outcomes, not entries/exits of a trading strategy. Shows a 'maturing' note
+    while windows complete; silent if the table is empty/unavailable.
     """
     if st is None:
         return
     try:
-        from db.signal_outcomes import summarize_recent_outcomes
+        from db.signal_outcomes import summarize_outcomes_by_type, summarize_recent_outcomes
 
         s = summarize_recent_outcomes(days_back=7)
     except Exception:
         return
     completed = int(s.get("completed") or 0)
     pending = int(s.get("pending") or 0)
-    if completed == 0 and pending == 0:
+    flagged = completed + pending
+    if flagged == 0:
         return
-    st.markdown("#### 🧾 How our recent signals did (7d)")
+    st.markdown("### 📈 HSF Signal Performance — 7d")
     if completed == 0:
         st.caption(
-            f"{pending} signal(s) flagged — outcomes still maturing "
-            "(5-day window). Scorecard fills in as they complete."
+            f"{flagged} signal(s) flagged — outcomes still maturing (5-day "
+            "window). Positive-outcome rates fill in as signals complete."
         )
         return
-    hit_rate = s.get("hit_rate")
+    rate = s.get("hit_rate")
     aw = s.get("avg_winner")
     al = s.get("avg_loser")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Signals scored", completed)
-    c2.metric("Reached +4%", f"{hit_rate*100:.0f}%" if hit_rate is not None else "—",
-              help="Share that hit +4% within 5 trading days (the model's target).")
-    c3.metric("Avg winner", f"{aw*100:+.1f}%" if aw is not None else "—")
-    c4.metric("Avg loser", f"{al*100:+.1f}%" if al is not None else "—")
+    c1.metric("Flagged", flagged, help=f"{completed} matured · {pending} maturing")
+    c2.metric("Positive outcomes", f"{rate*100:.0f}%" if rate is not None else "—",
+              help="Share that made a +4% move within 5 trading days. Not a "
+                   "trading win rate — no defined entries/exits.")
+    c3.metric("Avg positive move", f"{aw*100:+.1f}%" if aw is not None else "—")
+    c4.metric("Avg negative move", f"{al*100:+.1f}%" if al is not None else "—")
+
+    try:
+        by_type = summarize_outcomes_by_type(days_back=7)
+    except Exception:
+        by_type = []
+    if by_type:
+        st.caption("By signal type (positive-outcome rate):")
+        st.markdown("\n".join(
+            f"- **{r['signal_type']}** — {r['positive_rate']*100:.0f}%"
+            f" ({r['completed']} matured)"
+            for r in by_type if r.get("positive_rate") is not None
+        ))
     best_t, best_r = s.get("best_ticker"), s.get("best_return")
-    line = []
     if best_t and best_r is not None:
-        line.append(f"Best: **{best_t}** {best_r*100:+.1f}%")
-    if pending:
-        line.append(f"{pending} still maturing")
-    if line:
-        st.caption(" · ".join(line))
+        st.caption(f"Best 5-day move: **{best_t}** {best_r*100:+.1f}%")
+    st.caption("Outcome = 5-day positive move (reached +4% before −2%), the "
+               "models' target — educational, not a trading result.")
 
 
 def _brief_narrative_facts(data: Dict[str, Any]) -> str:
@@ -574,6 +590,223 @@ def _render_claude_narrative(data: Dict[str, Any]) -> None:
         st.session_state[cache_key] = cached
     if cached:
         st.markdown(f"> {cached}")
+
+
+def _breadth_word(adv: Any, dec: Any) -> str:
+    total = (adv or 0) + (dec or 0)
+    if not total:
+        return "—"
+    ratio = (adv or 0) / total
+    if ratio >= 0.60:
+        return "Bullish"
+    if ratio <= 0.40:
+        return "Bearish"
+    return "Neutral"
+
+
+def _ago(secs: int) -> str:
+    secs = max(int(secs), 0)
+    if secs < 90:
+        return f"{secs} sec ago"
+    mins = secs // 60
+    if mins < 90:
+        return f"{mins} min ago"
+    return f"{mins // 60} hr ago"
+
+
+def _freshness_label(ts: Any, phase: Optional[str]) -> Optional[str]:
+    """User-friendly freshness derived from real snapshot time + market phase.
+
+    Never fakes live status: 'Live' only when the market is actually open/
+    premarket; otherwise 'Last session'. Shows ET, not raw UTC.
+    """
+    if ts is None:
+        return None
+    import datetime as _dt
+
+    ts_utc = ts if getattr(ts, "tzinfo", None) else (ts.replace(tzinfo=_dt.timezone.utc) if hasattr(ts, "replace") else None)
+    if ts_utc is None:
+        return None
+    stamp = None
+    try:
+        from zoneinfo import ZoneInfo
+
+        et = ts_utc.astimezone(ZoneInfo("America/New_York"))
+        stamp = et.strftime("%-I:%M %p ET")
+    except Exception:
+        stamp = None
+    if phase in ("open", "premarket"):
+        try:
+            secs = int((_dt.datetime.now(_dt.timezone.utc) - ts_utc).total_seconds())
+            return f"🟢 Live · updated {_ago(secs)}"
+        except Exception:
+            return "🟢 Live" + (f" · {stamp}" if stamp else "")
+    return "⚪ Last session" + (f" · updated {stamp}" if stamp else "")
+
+
+def render_market_header(data: Dict[str, Any], phase: Optional[str]) -> None:
+    """A. Market state — compact risk headline + 4-metric row + freshness."""
+    if st is None:
+        return
+    mc = data.get("market_close") or []
+
+    def find(sym: str):
+        return next(((last, c) for (lbl, last, c) in mc if sym in str(lbl)), (None, None))
+
+    spy_last, spy_chg = find("SPY")
+    qqq_last, qqq_chg = find("QQQ")
+    b = data.get("breadth")
+    sec = data.get("sectors") or []
+
+    tone = "MIXED"
+    if spy_chg is not None:
+        tone = "RISK-ON" if spy_chg >= 0.15 else "RISK-OFF" if spy_chg <= -0.15 else "MIXED"
+    bits = [f"**{tone}**"]
+    if spy_chg is not None:
+        bits.append(f"SPY {spy_chg:+.2f}%")
+    if qqq_chg is not None:
+        bits.append(f"QQQ {qqq_chg:+.2f}%")
+    if b:
+        bits.append(f"Breadth {b[0]}/{b[1]}")
+    if sec and sec[0][1] is not None:
+        bits.append(f"{sec[0][0]} leading")
+    st.markdown(" &nbsp;•&nbsp; ".join(bits))
+    fresh = _freshness_label(data.get("snapshot_time"), phase)
+    if fresh:
+        st.caption(fresh)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("SPY", f"{spy_last:,.2f}" if spy_last is not None else "—",
+              f"{spy_chg:+.2f}%" if spy_chg is not None else None)
+    c2.metric("QQQ", f"{qqq_last:,.2f}" if qqq_last is not None else "—",
+              f"{qqq_chg:+.2f}%" if qqq_chg is not None else None)
+    if b:
+        c3.metric("Breadth", f"{b[0]}/{b[1]}", _breadth_word(b[0], b[1]), delta_color="off")
+    else:
+        c3.metric("Breadth", "—")
+    if sec:
+        name, chg = sec[0]
+        c4.metric("Leading sector", str(name), f"{chg:+.1f}%" if chg is not None else None)
+    else:
+        c4.metric("Leading sector", "—")
+
+
+_STATUS_ICON = {"STRONG": "🟢", "WATCH": "🟡", "CAUTION": "🟠"}
+
+
+def render_top_opportunities(data: Dict[str, Any]) -> None:
+    """B/C. Ranked Top Opportunities + a 'why it ranked' / chart detail."""
+    if st is None:
+        return
+    try:
+        from ui.opportunities import build_opportunities
+    except Exception:
+        return
+    opps = build_opportunities(data, base_ticker=_base_ticker, top_n=5)
+    st.markdown("### 🎯 Top Opportunities")
+    if not opps:
+        st.caption("No multi-signal opportunities in the latest snapshot — "
+                   "see the full scanner for individual signals.")
+        return
+    st.caption("Ranked by HSF Opportunity Score (0-100) — confluence of existing "
+               "signals; not a price target.")
+    rows = [{
+        "#": i,
+        "Ticker": o["ticker"],
+        "HSF": o["score"],
+        "Primary setup": o["primary_setup"],
+        "Signals": o["n_signals"],
+        "Status": f"{_STATUS_ICON.get(o['status'], '')} {o['status']}",
+    } for i, o in enumerate(opps, 1)]
+    try:
+        cc = st.column_config
+        st.dataframe(
+            rows, hide_index=True, width="stretch",
+            column_config={
+                "#": cc.NumberColumn(width="small"),
+                "HSF": cc.ProgressColumn(min_value=0, max_value=100, format="%d"),
+                "Signals": cc.NumberColumn(width="small"),
+            },
+        )
+    except Exception:
+        st.dataframe(rows, hide_index=True, width="stretch")
+
+    tickers = [o["ticker"] for o in opps]
+    pick = st.selectbox("Explain / chart", tickers, key="opp_pick", label_visibility="collapsed")
+    o = next((x for x in opps if x["ticker"] == pick), None)
+    if o:
+        _render_opportunity_detail(o, data)
+
+
+def _render_opportunity_detail(o: Dict[str, Any], data: Dict[str, Any]) -> None:
+    from ui.opportunities import build_opportunity_explanation
+
+    ex = build_opportunity_explanation(o, earnings_today=data.get("earnings_today") or [])
+    st.markdown(f"**{o['ticker']} — HSF {o['score']}/100 · {o['status']}**")
+    if ex["reasons"]:
+        st.markdown("**Why it ranked**")
+        st.markdown("\n".join(f"- ✓ {r}" for r in ex["reasons"]))
+    if ex["risks"]:
+        st.markdown("**Risk flags**")
+        st.markdown("\n".join(f"- ⚠ {r}" for r in ex["risks"]))
+    _render_opp_ai_take(o, ex, data)
+
+    a1, a2, a3 = st.columns(3)
+    if a1.button("📈 Chart", key=f"opp_chart_{o['ticker']}"):
+        st.session_state["brief_show_chart"] = o["ticker"]
+    if a2.button("👁 Watch", key=f"opp_watch_{o['ticker']}"):
+        _add_to_watchlist(o["ticker"])
+    if a3.button("🔔 Alert", key=f"opp_alert_{o['ticker']}"):
+        st.session_state["alert_price_tk"] = o["ticker"]
+        try:
+            st.switch_page("pages/alerts.py")
+        except Exception:
+            st.caption("Open Alerts from the sidebar — it's pre-filled.")
+    if st.session_state.get("brief_show_chart") == o["ticker"]:
+        try:
+            from ui.charts import render_chart_for_ticker
+
+            render_chart_for_ticker(o["ticker"], key=f"opp_chartimg_{o['ticker']}")
+        except Exception:
+            st.caption("Chart unavailable.")
+
+
+def _render_opp_ai_take(o: Dict[str, Any], ex: Dict[str, List[str]], data: Dict[str, Any]) -> None:
+    """Optional Claude one-liner, grounded ONLY on the deterministic reasons.
+
+    Secondary to the deterministic explanation above; the section works fine if
+    AI is off or the call fails.
+    """
+    if st is None or not ex.get("reasons"):
+        return
+    try:
+        from ui.ai import ask_claude, is_configured
+
+        if not is_configured():
+            return
+    except Exception:
+        return
+    cache_key = f"opp_ai_{o['ticker']}_{data.get('snapshot_time')}"
+    cached = st.session_state.get(cache_key)
+    if cached is None:
+        facts = "; ".join(ex["reasons"])
+        risks = "; ".join(ex["risks"]) if ex["risks"] else "none noted"
+        system = (
+            "You summarize a stock setup for a trader in ONE sentence. Use ONLY "
+            "the confirming signals and risks provided — do NOT invent prices, "
+            "levels, news, or numbers. Be plain and non-promissory. No emojis."
+        )
+        text, _err = ask_claude(
+            system=system,
+            user=f"Ticker {o['ticker']} (HSF {o['score']}/100). Confirming: {facts}. Risks: {risks}.",
+            max_tokens=90,
+            username=(st.session_state.get("username") or "").strip().lower() or None,
+            feature="opportunity_ai_take",
+        )
+        cached = text or ""
+        st.session_state[cache_key] = cached
+    if cached:
+        st.markdown(f"**AI take:** {cached}")
 
 
 def _render_catalysts(data: Dict[str, Any]) -> None:
