@@ -235,6 +235,62 @@ def fetch_opportunity_outcomes(days_back: int = 180, limit: int = 20000) -> List
     return out
 
 
+def fetch_ticker_opportunity_history(
+    ticker: str, days_back: int = 45, limit: int = 300
+) -> List[Dict[str, Any]]:
+    """Frozen HSF opportunity observations for one ticker, oldest-first — the
+    lifecycle source. Reads signal-time fields only (score/version/status/
+    signals) from the frozen payload. Also reports matured/positive counts for
+    the ticker-specific history summary. Never raises; [] when DB unavailable.
+    """
+    t = str(ticker or "").strip().upper()
+    if not t:
+        return []
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT fired_at, raw_signal, indicators, setup_score, prebreakout_prob,
+                   mfe_5d, outcome_computed_at
+            FROM signal_outcomes
+            WHERE source = 'opportunity' AND UPPER(ticker) = %s
+              AND fired_at >= NOW() - make_interval(days => %s)
+            ORDER BY fired_at ASC
+            LIMIT %s
+            """,
+            (t, int(days_back), int(limit)),
+        )
+        rows = cur.fetchall() or []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return []
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        d = dict(r) if isinstance(r, dict) else dict(zip(cols, r))
+        raw = d.get("raw_signal") or {}
+        ind = d.get("indicators") or {}
+        out.append({
+            "time": d.get("fired_at"),
+            "score": raw.get("hsf_score"),
+            "status": raw.get("status") or ind.get("status"),
+            "score_version": raw.get("score_version"),
+            "signals": list(ind.get("signals") or []),
+            "matured": d.get("outcome_computed_at") is not None,
+            "mfe_5d": d.get("mfe_5d"),
+        })
+    return out
+
+
 def summarize_recent_outcomes(days_back: int = 7) -> Dict[str, Any]:
     """Scorecard over signals fired in the last `days_back` days.
 

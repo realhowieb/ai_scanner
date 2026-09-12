@@ -16,6 +16,7 @@ except Exception:  # pragma: no cover
 _NAV = [
     ("app.py", "Scanner", "🔎"),
     ("pages/brief.py", "Market Brief", "📬"),
+    ("pages/stock.py", "Stock Intel", "🔬"),
     ("pages/day_trader.py", "Day Trader", "⚡"),
     ("pages/watchlists.py", "Watchlists", "📋"),
     ("pages/alerts.py", "Alerts", "🔔"),

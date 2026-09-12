@@ -459,7 +459,13 @@ def _render_result_detail(
         pass
 
     # Actions — reuse existing chart / watchlist / alert (no duplicate systems).
-    a1, a2, a3 = st.columns(3)
+    a0, a1, a2, a3 = st.columns(4)
+    if a0.button("🔬 Full intel", key=f"{key_prefix}_intel_open_{c['ticker']}"):
+        st.session_state["hsf_stock_ticker"] = c["ticker"]
+        try:
+            st.switch_page("pages/stock.py")
+        except Exception:
+            st.caption("Open 'Stock Intel' from the sidebar.")
     if a1.button("📈 Chart", key=f"{key_prefix}_intel_chart_{c['ticker']}"):
         st.session_state[f"{key_prefix}_intel_show_chart"] = c["ticker"]
     if a2.button("👁 Watch", key=f"{key_prefix}_intel_watch_{c['ticker']}"):

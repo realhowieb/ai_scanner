@@ -1,0 +1,49 @@
+"""🔬 HSF Stock Intelligence — canonical single-ticker deep dive.
+
+Reads the selected ticker from session state (set when a user opens a name from
+Market Brief / Scanner / Watchlist) or a manual ticker box, then renders the
+read-only canonical intelligence view. No scan, no brief rebuild, no writes.
+"""
+from __future__ import annotations
+
+import streamlit as st
+
+st.set_page_config(page_title="Stock Intelligence", page_icon="🔬", layout="wide")
+
+_username = (st.session_state.get("username") or "").strip().lower()
+if not _username:
+    st.info("Please log in on the main page to view HSF Stock Intelligence.")
+    st.page_link("app.py", label="Go to login", icon="🔐")
+    st.stop()
+
+try:
+    from ui.nav import render_sidebar_nav
+
+    render_sidebar_nav()
+except Exception:
+    pass
+
+st.markdown("## 🔬 HSF Stock Intelligence")
+
+_default = (st.session_state.get("hsf_stock_ticker") or "").strip().upper()
+_ticker = st.text_input("Ticker", value=_default, placeholder="e.g. NVDA",
+                        key="hsf_stock_ticker_input").strip().upper()
+if _ticker:
+    st.session_state["hsf_stock_ticker"] = _ticker
+
+if not _ticker:
+    st.caption("Enter a ticker, or open one from Market Brief, Scanner, or your Watchlist.")
+else:
+    try:
+        from ui.charts import render_chart_for_ticker
+        from ui.stock_intelligence import render_stock_intelligence
+
+        render_stock_intelligence(
+            _ticker, source="page",
+            render_chart_for_ticker=lambda t: render_chart_for_ticker(t, key=f"si_page_chart_{t}"),
+        )
+    except Exception as e:
+        st.error("Stock Intelligence failed to load.")
+        st.caption(f"{type(e).__name__}: {e}")
+
+st.page_link("app.py", label="← Back to scanner", icon="🏠")
