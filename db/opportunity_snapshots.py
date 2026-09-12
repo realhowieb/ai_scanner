@@ -81,6 +81,41 @@ def save_opportunity_snapshot(
         return False
 
 
+def load_recent_snapshots(context: str = "market_brief", limit: int = 2) -> List[Dict[str, Any]]:
+    """The most recent snapshots for a context, newest first — for computing the
+    latest state transition (current vs previous). Never raises; [] if DB down."""
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT snapshot_time, opportunities, context FROM opportunity_snapshots "
+            "WHERE context = %s ORDER BY snapshot_time DESC LIMIT %s",
+            (str(context), int(limit)),
+        )
+        rows = cur.fetchall() or []
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return []
+    out = []
+    for r in rows:
+        ts, payload = (r.get("snapshot_time"), r.get("opportunities")) if isinstance(r, dict) else (r[0], r[1])
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                payload = []
+        out.append({"snapshot_time": ts, "opportunities": payload if isinstance(payload, list) else []})
+    return out
+
+
 def load_previous_opportunity_snapshot(
     before_time: Any, *, context: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:

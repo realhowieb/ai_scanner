@@ -630,6 +630,20 @@ def main():
         print(f"[cron] opportunity freeze failed: {e}")
         _capture(e)
 
+    # HSF intelligence alerts: detect opportunity state-changes between the two
+    # latest snapshots and notify subscribed users. Owned by the background
+    # pipeline (never a page render); fails independently.
+    try:
+        from analytics.alert_evaluation import run_intelligence_alert_evaluation
+
+        m = run_intelligence_alert_evaluation()
+        if m.get("events_detected"):
+            print(f"[intelligence_alerts] events={m['events_detected']} "
+                  f"delivered={m['delivered']} deduped={m['deduped']} failed={m['failed']}")
+    except Exception as e:
+        print(f"[cron] intelligence alert evaluation failed: {e}")
+        _capture(e)
+
     # Settle immutable fired-signal rows with 1/3/5D return plus MFE/MAE.
     try:
         from analytics.signal_outcomes import score_pending_signal_outcomes

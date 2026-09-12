@@ -51,6 +51,14 @@ try:
     from ui.header import render_page_logo
 
     render_page_logo()
+    # HSF Intelligence Alerts (state-change) sit above the existing static alerts.
+    try:
+        from ui.intelligence_alerts_ui import render_intelligence_alerts
+
+        render_intelligence_alerts(_username)
+        st.markdown("---")
+    except Exception:
+        pass
     _max_alerts, _email_ok = _tier_limits()
     render_alerts_panel(
         _username,
