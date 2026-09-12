@@ -255,30 +255,18 @@ def _movement_cell(c: Dict[str, Any]) -> str:
     return movement_badge(c)
 
 
-def _regime_for_scanner() -> Optional[str]:
-    """Reuse the SAME deterministic regime as Market Brief (cached brief data)."""
+def _df_signature(df: Any) -> str:
+    """Cheap fingerprint of a result set so we recompute only when it changes."""
     try:
-        from ui.market_brief import _brief_cached
-        from ui.opportunities import classify_market_regime
-        data = _brief_cached() or {}
-        mc = data.get("market_close") or []
-
-        def find(sym):
-            return next((c for (lbl, _l, c) in mc if sym in str(lbl)), None)
-        return classify_market_regime(
-            spy_chg=find("SPY"), qqq_chg=find("QQQ"),
-            breadth=data.get("breadth"), sectors=data.get("sectors"),
-        ).get("regime")
+        n = len(df)
+        tcol = "Ticker" if "Ticker" in df.columns else ("Symbol" if "Symbol" in df.columns else None)
+        head = tail = ""
+        if tcol and n:
+            head = str(df[tcol].iloc[0])
+            tail = str(df[tcol].iloc[-1])
+        return f"{n}:{head}:{tail}:{len(df.columns)}"
     except Exception:
-        return None
-
-
-def _snapshot_ts() -> Any:
-    try:
-        import datetime as dt
-        return dt.datetime.now(dt.timezone.utc)
-    except Exception:
-        return None
+        return "na"
 
 
 def render_scanner_intelligence(
@@ -295,34 +283,37 @@ def render_scanner_intelligence(
         rows = df.to_dict("records")
     except Exception:
         return
-    opps = consolidate_scanner_results(rows)
     total = len(rows)
 
-    # Movement vs the previous scan snapshot (version-safe); persist current.
-    previous_rows = None
-    ts = _snapshot_ts()
-    try:
-        from db.opportunity_snapshots import (
-            load_previous_opportunity_snapshot,
-            save_opportunity_snapshot,
-        )
-        from ui.opportunities import to_snapshot_rows
-        prev = load_previous_opportunity_snapshot(ts)
-        previous_rows = prev.get("opportunities") if prev else None
-        if opps:
-            save_opportunity_snapshot(ts, to_snapshot_rows(opps))
-    except Exception:
+    # Consolidation + movement are cached per result-set so switching views or
+    # any rerun does NOT recompute or re-hit the DB. READ-ONLY: the scanner
+    # never writes snapshots or freezes opportunities — Market Brief owns that,
+    # so opening Results adds no DB writes and no brief rebuild.
+    sig = _df_signature(df)
+    cache = st.session_state.get(f"{key_prefix}_intel_cache")
+    if cache and cache.get("sig") == sig:
+        compared, has_prev = cache["compared"], cache["has_prev"]
+    else:
+        opps = consolidate_scanner_results(rows)
         previous_rows = None
-    try:
-        from db.signal_outcomes import freeze_opportunities
-        freeze_opportunities(ts, opps)
-    except Exception:
-        pass
+        try:
+            import datetime as dt
 
-    compared = enrich_movement(opps, previous_rows)
-    has_prev = bool(previous_rows)
+            from db.opportunity_snapshots import load_previous_opportunity_snapshot
+            prev = load_previous_opportunity_snapshot(dt.datetime.now(dt.timezone.utc))
+            previous_rows = prev.get("opportunities") if prev else None
+        except Exception:
+            previous_rows = None
+        compared = enrich_movement(opps, previous_rows)
+        has_prev = bool(previous_rows)
+        st.session_state[f"{key_prefix}_intel_cache"] = {
+            "sig": sig, "compared": compared, "has_prev": has_prev}
+
+    # Regime is read from whatever Market Brief last computed (cheap, cached in
+    # session); we never trigger a brief rebuild just to label the scanner.
+    regime = st.session_state.get("_last_market_regime")
     summary = summarize_results(compared, total_matches=total,
-                                has_previous=has_prev, regime=_regime_for_scanner())
+                                has_previous=has_prev, regime=regime)
     views = classify_views(compared)
 
     # --- Summary header (compact) ---

@@ -699,6 +699,8 @@ def render_market_header(data: Dict[str, Any], phase: Optional[str]) -> None:
 
         r = classify_market_regime(spy_chg=spy_chg, qqq_chg=qqq_chg, breadth=b, sectors=sec)
         regime, interp = r.get("regime"), r.get("interpretation")
+        if regime:
+            st.session_state["_last_market_regime"] = regime
     except Exception:
         pass
     bits = [f"**{regime or tone}**"]
