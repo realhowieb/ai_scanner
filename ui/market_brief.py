@@ -269,17 +269,24 @@ def render_market_brief() -> None:
     phase = _market_phase()
 
     # ---- glance layer (always on) ----
-    # A. Market state — compact header (replaces the tall summary + pulse block).
+    # Compute opportunities + movement once (cached per snapshot).
+    compared, previous = compute_compared_opportunities(data)
+    # A. Market state — regime + compact metrics + freshness.
     render_market_header(data, phase)
     _render_claude_narrative(data)
-    # B / C. Top Opportunities + why-it-ranked / ticker detail.
-    render_top_opportunities(data)
-    # D. Signal performance (promoted above the fold).
+    # B. Since last scan — only meaningful changes, only when history exists.
+    render_since_last_scan(compared, previous)
+    # C / D. Top Opportunities (score movement + status transitions) + detail.
+    render_top_opportunities(compared, data)
+    # E. What to watch next (~3 deterministic items).
+    render_watch_next(compared)
+    # F. HSF signal performance (outcome scorecard).
     render_signal_scorecard()
+    # G. Sector leadership (compact leaders / laggards).
+    render_sector_leadership(data)
     st.markdown("---")
-    # E. Secondary market detail (existing sections, demoted below the fold).
+    # H. Secondary market detail (existing sections, demoted below the fold).
     _render_standouts(data)
-    _render_breadth_sectors(data)
     _render_market_pulse(data.get("market_close") or [])
 
     # ---- detail sections: user-toggleable, time-aware order ----
@@ -661,7 +668,17 @@ def render_market_header(data: Dict[str, Any], phase: Optional[str]) -> None:
     tone = "MIXED"
     if spy_chg is not None:
         tone = "RISK-ON" if spy_chg >= 0.15 else "RISK-OFF" if spy_chg <= -0.15 else "MIXED"
-    bits = [f"**{tone}**"]
+    # Deterministic regime (richer than tone); leads the headline when available.
+    regime = None
+    interp = None
+    try:
+        from ui.opportunities import classify_market_regime
+
+        r = classify_market_regime(spy_chg=spy_chg, qqq_chg=qqq_chg, breadth=b, sectors=sec)
+        regime, interp = r.get("regime"), r.get("interpretation")
+    except Exception:
+        pass
+    bits = [f"**{regime or tone}**"]
     if spy_chg is not None:
         bits.append(f"SPY {spy_chg:+.2f}%")
     if qqq_chg is not None:
@@ -671,6 +688,8 @@ def render_market_header(data: Dict[str, Any], phase: Optional[str]) -> None:
     if sec and sec[0][1] is not None:
         bits.append(f"{sec[0][0]} leading")
     st.markdown(" &nbsp;•&nbsp; ".join(bits))
+    if interp:
+        st.caption(interp)
     fresh = _freshness_label(data.get("snapshot_time"), phase)
     if fresh:
         st.caption(fresh)
@@ -694,30 +713,76 @@ def render_market_header(data: Dict[str, Any], phase: Optional[str]) -> None:
 _STATUS_ICON = {"STRONG": "🟢", "WATCH": "🟡", "CAUTION": "🟠"}
 
 
-def render_top_opportunities(data: Dict[str, Any]) -> None:
-    """B/C. Ranked Top Opportunities + a 'why it ranked' / chart detail."""
+def compute_compared_opportunities(data: Dict[str, Any]) -> tuple:
+    """Build current opportunities, compare to the previous scan snapshot, and
+    persist the current set for next time. Cached per snapshot in session_state
+    so DB reads/writes happen once per scan, not once per rerun.
+
+    Returns (compared_opportunities, previous_rows). Degrades to (current, None)
+    when history/DB is unavailable — never fakes previous scores.
+    """
+    try:
+        from ui.opportunities import build_opportunities, compare_opportunities
+    except Exception:
+        return [], None
+    opps = build_opportunities(data, base_ticker=_base_ticker, top_n=5)
+    ts = data.get("snapshot_time")
+
+    if st is not None:
+        cache = st.session_state.get("_opp_compare_cache")
+        if cache and cache.get("ts") == ts:
+            return cache["compared"], cache["previous"]
+
+    previous_rows = None
+    try:
+        from db.opportunity_snapshots import (
+            load_previous_opportunity_snapshot,
+            save_opportunity_snapshot,
+        )
+        from ui.opportunities import to_snapshot_rows
+
+        prev = load_previous_opportunity_snapshot(ts)
+        previous_rows = prev.get("opportunities") if prev else None
+        save_opportunity_snapshot(ts, to_snapshot_rows(opps))
+    except Exception:
+        previous_rows = None
+
+    compared = compare_opportunities(opps, previous_rows)
+    if st is not None:
+        st.session_state["_opp_compare_cache"] = {
+            "ts": ts, "compared": compared, "previous": previous_rows}
+    return compared, previous_rows
+
+
+def render_top_opportunities(compared: List[Dict[str, Any]], data: Dict[str, Any]) -> None:
+    """C/D. Ranked Top Opportunities with score movement + status transitions,
+    plus a 'why it ranked' / chart detail."""
     if st is None:
         return
-    try:
-        from ui.opportunities import build_opportunities
-    except Exception:
-        return
-    opps = build_opportunities(data, base_ticker=_base_ticker, top_n=5)
+    from ui.opportunities import movement_badge
+
     st.markdown("### 🎯 Top Opportunities")
-    if not opps:
+    if not compared:
         st.caption("No multi-signal opportunities in the latest snapshot — "
                    "see the full scanner for individual signals.")
         return
     st.caption("Ranked by HSF Opportunity Score (0-100) — confluence of existing "
-               "signals; not a price target.")
-    rows = [{
-        "#": i,
-        "Ticker": o["ticker"],
-        "HSF": o["score"],
-        "Primary setup": o["primary_setup"],
-        "Signals": o["n_signals"],
-        "Status": f"{_STATUS_ICON.get(o['status'], '')} {o['status']}",
-    } for i, o in enumerate(opps, 1)]
+               "signals; not a price target. Movement vs the previous scan.")
+    rows = []
+    for i, o in enumerate(compared, 1):
+        tr = o.get("status_transition")
+        status = f"{_STATUS_ICON.get(o['status'], '')} {o['status']}"
+        if tr:
+            status = f"{tr[0]} → {tr[1]}"
+        rows.append({
+            "#": i,
+            "Ticker": o["ticker"],
+            "HSF": o["score"],
+            "Δ": movement_badge(o),
+            "Primary setup": o["primary_setup"],
+            "Signals": o["n_signals"],
+            "Status": status,
+        })
     try:
         cc = st.column_config
         st.dataframe(
@@ -725,24 +790,108 @@ def render_top_opportunities(data: Dict[str, Any]) -> None:
             column_config={
                 "#": cc.NumberColumn(width="small"),
                 "HSF": cc.ProgressColumn(min_value=0, max_value=100, format="%d"),
+                "Δ": cc.TextColumn(width="small"),
                 "Signals": cc.NumberColumn(width="small"),
             },
         )
     except Exception:
         st.dataframe(rows, hide_index=True, width="stretch")
 
-    tickers = [o["ticker"] for o in opps]
+    tickers = [o["ticker"] for o in compared]
     pick = st.selectbox("Explain / chart", tickers, key="opp_pick", label_visibility="collapsed")
-    o = next((x for x in opps if x["ticker"] == pick), None)
+    o = next((x for x in compared if x["ticker"] == pick), None)
     if o:
         _render_opportunity_detail(o, data)
 
 
+def render_since_last_scan(compared: List[Dict[str, Any]], previous: Optional[List[Dict[str, Any]]]) -> None:
+    """B. Compact 'since last scan' — only meaningful changes, only when a
+    previous snapshot exists."""
+    if st is None:
+        return
+    from ui.opportunities import summarize_changes
+
+    s = summarize_changes(compared, previous)
+    if not s or not s.get("any"):
+        return
+    st.markdown("#### 🔄 Since last scan")
+    bits = []
+    if s["new"]:
+        bits.append(f"{len(s['new'])} new")
+    if s["strengthened"]:
+        bits.append(f"{len(s['strengthened'])} strengthened")
+    if s["weakened"]:
+        bits.append(f"{len(s['weakened'])} weakened")
+    if s["upgrades"]:
+        bits.append(f"{len(s['upgrades'])} status upgrade{'s' if len(s['upgrades']) != 1 else ''}")
+    if s["downgrades"]:
+        bits.append(f"{len(s['downgrades'])} status downgrade{'s' if len(s['downgrades']) != 1 else ''}")
+    if s["dropped"]:
+        bits.append(f"{len(s['dropped'])} dropped")
+    if bits:
+        st.markdown(" · ".join(bits))
+    line = []
+    for u in s["upgrades"][:2]:
+        tr = u["status_transition"]
+        line.append(f"**{u['ticker']}** {tr[0]} → {tr[1]}")
+    big = s.get("biggest_mover")
+    if big and big.get("score_delta"):
+        from ui.opportunities import movement_badge
+        line.append(f"Biggest mover: **{big['ticker']}** {movement_badge(big)}")
+    if s["dropped"]:
+        line.append(f"Dropped from ranking: {', '.join(s['dropped'][:3])}")
+    if line:
+        st.caption(" · ".join(line))
+
+
+def render_watch_next(compared: List[Dict[str, Any]]) -> None:
+    """E. 'What to watch next' — up to ~3 deterministic developing situations."""
+    if st is None or not compared:
+        return
+    from ui.opportunities import select_watch_next
+
+    items = select_watch_next(compared, limit=3)
+    if not items:
+        return
+    st.markdown("### 👀 What to watch next")
+    for it in items:
+        st.markdown(f"**{it['ticker']}** — {it['headline']}  \n{it['detail']}")
+
+
+def render_sector_leadership(data: Dict[str, Any]) -> None:
+    """G. Compact sector leaders / laggards from existing ETF sector data."""
+    if st is None:
+        return
+    sec = data.get("sectors") or []
+    rated = [(n, c) for (n, c) in sec if c is not None]
+    if len(rated) < 3:
+        return
+    st.markdown("### 🧭 Sector leadership")
+    leaders = rated[:3]
+    laggards = rated[-2:] if len(rated) >= 5 else []
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Leaders**")
+        st.markdown("\n".join(f"- {n} &nbsp; {c:+.1f}%" for n, c in leaders))
+    if laggards:
+        with c2:
+            st.markdown("**Laggards**")
+            st.markdown("\n".join(f"- {n} &nbsp; {c:+.1f}%" for n, c in laggards))
+
+
 def _render_opportunity_detail(o: Dict[str, Any], data: Dict[str, Any]) -> None:
-    from ui.opportunities import build_opportunity_explanation
+    from ui.opportunities import build_opportunity_explanation, movement_badge
 
     ex = build_opportunity_explanation(o, earnings_today=data.get("earnings_today") or [])
-    st.markdown(f"**{o['ticker']} — HSF {o['score']}/100 · {o['status']}**")
+    sub = []
+    badge = movement_badge(o)
+    if badge and badge != "—":
+        sub.append(badge)
+    tr = o.get("status_transition")
+    if tr:
+        sub.append(f"{tr[0]} → {tr[1]}")
+    head = f"**{o['ticker']} — HSF {o['score']}/100 · {o['status']}**"
+    st.markdown(head + ("  ·  " + "  ·  ".join(sub) if sub else ""))
     if ex["reasons"]:
         st.markdown("**Why it ranked**")
         st.markdown("\n".join(f"- ✓ {r}" for r in ex["reasons"]))

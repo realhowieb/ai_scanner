@@ -75,5 +75,117 @@ class OpportunityScoreTests(unittest.TestCase):
         self.assertEqual([o["ticker"] for o in opps], ["XYZ"])
 
 
+class MarketRegimeTests(unittest.TestCase):
+    def test_strong_bullish(self):
+        r = op.classify_market_regime(spy_chg=0.84, qqq_chg=0.88, breadth=(142, 27),
+                                      sectors=[("Tech", 1.8), ("Semis", 1.5)])
+        self.assertEqual(r["regime"], "TRENDING BULLISH")
+        self.assertTrue(r["interpretation"])
+
+    def test_strong_bearish(self):
+        r = op.classify_market_regime(spy_chg=-0.7, qqq_chg=-0.8, breadth=(27, 142),
+                                      sectors=[("Utils", -0.7)])
+        self.assertEqual(r["regime"], "TRENDING BEARISH")
+
+    def test_mixed(self):
+        r = op.classify_market_regime(spy_chg=0.05, qqq_chg=-0.05, breadth=(100, 100), sectors=[])
+        self.assertEqual(r["regime"], "MIXED / CHOPPY")
+
+    def test_missing_and_zero_breadth_and_partial_sectors(self):
+        self.assertIsNone(op.classify_market_regime(spy_chg=None, qqq_chg=None, breadth=None)["regime"])
+        # Zero breadth doesn't divide-by-zero; index-only -> RISK-ON.
+        self.assertEqual(op.classify_market_regime(spy_chg=0.3, qqq_chg=0.3, breadth=(0, 0))["regime"], "RISK-ON")
+        # Sectors present but no percentages -> ignored, still classifies.
+        r = op.classify_market_regime(spy_chg=0.3, qqq_chg=0.3, breadth=None,
+                                      sectors=[("Tech", None)])
+        self.assertEqual(r["regime"], "RISK-ON")
+
+    def test_high_volatility_divergence(self):
+        r = op.classify_market_regime(spy_chg=1.4, qqq_chg=1.3, breadth=(30, 170), sectors=None)
+        self.assertEqual(r["regime"], "HIGH VOLATILITY")
+
+
+class SnapshotComparisonTests(unittest.TestCase):
+    def _cur(self):
+        return [
+            {"ticker": "NTAP", "score": 92, "status": "STRONG", "fading": False, "n_signals": 4},
+            {"ticker": "HPE", "score": 81, "status": "WATCH", "fading": False, "n_signals": 2},
+            {"ticker": "CDW", "score": 76, "status": "WATCH", "fading": False, "n_signals": 2},
+        ]
+
+    def _prev(self):
+        return [
+            {"ticker": "NTAP", "score": 81, "status": "WATCH"},
+            {"ticker": "CDW", "score": 83, "status": "WATCH"},
+            {"ticker": "CPRT", "score": 60, "status": "WATCH"},
+        ]
+
+    def test_movement_states_and_badges(self):
+        comp = op.compare_opportunities(self._cur(), self._prev())
+        by = {c["ticker"]: c for c in comp}
+        self.assertEqual(by["NTAP"]["movement_state"], "RISING")
+        self.assertEqual(op.movement_badge(by["NTAP"]), "▲ +11")
+        self.assertEqual(by["HPE"]["movement_state"], "NEW")
+        self.assertEqual(op.movement_badge(by["HPE"]), "NEW")
+        self.assertEqual(by["CDW"]["movement_state"], "FALLING")
+        self.assertEqual(op.movement_badge(by["CDW"]), "▼ -7")
+
+    def test_status_transition_detected(self):
+        comp = op.compare_opportunities(self._cur(), self._prev())
+        ntap = next(c for c in comp if c["ticker"] == "NTAP")
+        self.assertEqual(ntap["status_transition"], ("WATCH", "STRONG"))
+
+    def test_no_previous_snapshot_is_all_new_no_summary(self):
+        comp = op.compare_opportunities(self._cur(), None)
+        self.assertTrue(all(c["movement_state"] == "NEW" for c in comp))
+        self.assertIsNone(op.summarize_changes(comp, None))
+
+    def test_malformed_previous_records_are_safe(self):
+        comp = op.compare_opportunities(self._cur(), [{"score": 50}, {}, {"ticker": None, "score": 9}])
+        # No ticker match -> all NEW, no crash.
+        self.assertTrue(all(c["movement_state"] == "NEW" for c in comp))
+
+    def test_duplicate_previous_ticker_first_wins(self):
+        prev = [{"ticker": "NTAP", "score": 81, "status": "WATCH"},
+                {"ticker": "NTAP", "score": 10, "status": "CAUTION"}]
+        comp = op.compare_opportunities(self._cur(), prev)
+        ntap = next(c for c in comp if c["ticker"] == "NTAP")
+        self.assertEqual(ntap["previous_score"], 81)
+
+    def test_summary_and_dropped(self):
+        comp = op.compare_opportunities(self._cur(), self._prev())
+        s = op.summarize_changes(comp, self._prev())
+        self.assertEqual(len(s["new"]), 1)
+        self.assertEqual(len(s["strengthened"]), 1)
+        self.assertEqual(len(s["weakened"]), 1)
+        self.assertEqual(len(s["upgrades"]), 1)
+        self.assertIn("CPRT", s["dropped"])
+        self.assertEqual(s["biggest_mover"]["ticker"], "NTAP")
+
+    def test_status_transitions_both_directions(self):
+        cur = [{"ticker": "A", "score": 60, "status": "WATCH", "fading": False, "n_signals": 2},
+               {"ticker": "B", "score": 45, "status": "CAUTION", "fading": True, "n_signals": 2}]
+        prev = [{"ticker": "A", "score": 50, "status": "CAUTION"},
+                {"ticker": "B", "score": 80, "status": "STRONG"}]
+        comp = op.compare_opportunities(cur, prev)
+        s = op.summarize_changes(comp, prev)
+        self.assertEqual(len(s["upgrades"]), 1)    # A: CAUTION -> WATCH
+        self.assertEqual(len(s["downgrades"]), 1)  # B: STRONG -> CAUTION
+
+    def test_watch_next_prioritizes_upgrades_then_fading(self):
+        comp = op.compare_opportunities(self._cur(), self._prev())
+        wn = op.select_watch_next(comp, limit=3)
+        self.assertEqual(wn[0]["ticker"], "NTAP")
+        self.assertIn("STRONG", wn[0]["headline"])
+        # Deterministic conditions, no invented price/level.
+        for it in wn:
+            self.assertNotIn("$", it["detail"])
+
+    def test_watch_next_empty_when_nothing_notable(self):
+        cur = [{"ticker": "Z", "score": 55, "status": "WATCH", "fading": False, "n_signals": 2}]
+        comp = op.compare_opportunities(cur, [{"ticker": "Z", "score": 55, "status": "WATCH"}])
+        self.assertEqual(op.select_watch_next(comp), [])
+
+
 if __name__ == "__main__":
     unittest.main()

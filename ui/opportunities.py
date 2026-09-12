@@ -276,3 +276,210 @@ def _to_float(value: Any) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# Run 18A — market regime, snapshot comparison, change summary, watch-next.
+# All deterministic and real-data-only (Claude may *explain* a regime later, but
+# never determines it). Every function is safe on missing/partial inputs.
+# ---------------------------------------------------------------------------
+
+_STATUS_RANK = {"CAUTION": 1, "WATCH": 2, "STRONG": 3}
+
+
+def classify_market_regime(
+    *,
+    spy_chg: Optional[float],
+    qqq_chg: Optional[float],
+    breadth: Optional[tuple],
+    sectors: Optional[List[tuple]] = None,
+) -> Dict[str, Any]:
+    """Deterministic market regime from data the app already has.
+
+    Regimes: TRENDING BULLISH · RISK-ON · MIXED / CHOPPY · RISK-OFF ·
+    TRENDING BEARISH · HIGH VOLATILITY. Never invents VIX/volatility — the
+    'HIGH VOLATILITY' label is only used for a *real* index/breadth divergence
+    (a large index move contradicted by breadth). Returns {regime, interpretation};
+    regime is None when there is no index data to classify from.
+
+    Method (transparent):
+      idx        = mean of available SPY/QQQ % changes.
+      breadth_r  = advancers / (advancers+decliners), when breadth exists.
+      sec_pos    = fraction of sectors positive, when sectors exist.
+      broad_up   = breadth_r >= 0.60 OR sec_pos >= 0.66
+      broad_dn   = breadth_r <= 0.40 OR sec_pos <= 0.34
+      TRENDING BULLISH : idx >= 0.5 and broad_up
+      TRENDING BEARISH : idx <= -0.5 and broad_dn
+      HIGH VOLATILITY  : |idx| >= 1.0 and breadth clearly disagrees with idx sign
+      RISK-ON          : idx >= 0.15 and not broad_dn
+      RISK-OFF         : idx <= -0.15 and not broad_up
+      else             : MIXED / CHOPPY
+    """
+    idx_vals = [v for v in (spy_chg, qqq_chg) if v is not None]
+    if not idx_vals:
+        return {"regime": None, "interpretation": None}
+    idx = sum(idx_vals) / len(idx_vals)
+
+    breadth_r = None
+    if breadth:
+        adv, dec = (breadth[0] or 0), (breadth[1] or 0)
+        total = adv + dec
+        if total > 0:
+            breadth_r = adv / total
+
+    sec_pos = None
+    sec_list = [c for (_n, c) in (sectors or []) if c is not None]
+    if sec_list:
+        sec_pos = sum(1 for c in sec_list if c > 0) / len(sec_list)
+
+    broad_up = (breadth_r is not None and breadth_r >= 0.60) or (sec_pos is not None and sec_pos >= 0.66)
+    broad_dn = (breadth_r is not None and breadth_r <= 0.40) or (sec_pos is not None and sec_pos <= 0.34)
+    divergence = breadth_r is not None and (
+        (idx >= 0.15 and breadth_r <= 0.40) or (idx <= -0.15 and breadth_r >= 0.60)
+    )
+
+    if idx >= 0.5 and broad_up:
+        regime = "TRENDING BULLISH"
+        interp = "Broad participation and positive index momentum favor bullish setups."
+    elif idx <= -0.5 and broad_dn:
+        regime = "TRENDING BEARISH"
+        interp = "Weak breadth and negative index momentum favor caution and defense."
+    elif abs(idx) >= 1.0 and divergence:
+        regime = "HIGH VOLATILITY"
+        interp = "Large index move at odds with breadth — expect choppy, headline-driven trade."
+    elif idx >= 0.15 and not broad_dn:
+        regime = "RISK-ON"
+        interp = "Positive index momentum; confirmation from breadth or sectors would strengthen trend."
+    elif idx <= -0.15 and not broad_up:
+        regime = "RISK-OFF"
+        interp = "Negative index momentum; favor selectivity and tighter risk."
+    else:
+        regime = "MIXED / CHOPPY"
+        interp = "Indexes and breadth are not aligned — setups are lower-conviction."
+    return {"regime": regime, "interpretation": interp}
+
+
+def compare_opportunities(
+    current: List[Dict[str, Any]],
+    previous: Optional[List[Dict[str, Any]]],
+    *,
+    min_delta: int = 3,
+) -> List[Dict[str, Any]]:
+    """Annotate current opportunities with movement vs the previous snapshot.
+
+    Adds previous_score, score_delta, movement_state (NEW/RISING/FALLING/
+    UNCHANGED) and status_transition (prev_status, new_status) — the latter only
+    when the tier actually changed. Tiny deltas (< min_delta) count as UNCHANGED
+    so noise isn't reported as movement. Safe when previous is None/empty.
+    """
+    prev_by: Dict[str, Dict[str, Any]] = {}
+    for p in (previous or []):
+        t = str(p.get("ticker") or "").upper()
+        if t and t not in prev_by:  # first wins — dedupe duplicate ticker rows
+            prev_by[t] = p
+
+    out = []
+    for o in (current or []):
+        p = prev_by.get(str(o.get("ticker") or "").upper())
+        prev_score = _to_float(p.get("score")) if p else None
+        if prev_score is None:
+            movement, delta = "NEW", None
+        else:
+            delta = int(round(o["score"] - prev_score))
+            if delta >= min_delta:
+                movement = "RISING"
+            elif delta <= -min_delta:
+                movement = "FALLING"
+            else:
+                movement = "UNCHANGED"
+        prev_status = p.get("status") if p else None
+        transition = (prev_status, o["status"]) if (prev_status and prev_status != o["status"]) else None
+        out.append({
+            **o,
+            "previous_score": int(prev_score) if prev_score is not None else None,
+            "score_delta": delta,
+            "movement_state": movement,
+            "previous_status": prev_status,
+            "status_transition": transition,
+        })
+    return out
+
+
+def movement_badge(opp: Dict[str, Any]) -> str:
+    """Compact movement label: 'NEW' · '▲ +11' · '▼ -7' · '—'."""
+    state = opp.get("movement_state")
+    if state == "NEW":
+        return "NEW"
+    d = opp.get("score_delta")
+    if state == "RISING" and d is not None:
+        return f"▲ +{d}"
+    if state == "FALLING" and d is not None:
+        return f"▼ {d}"
+    return "—"
+
+
+def _rank(status: Optional[str]) -> int:
+    return _STATUS_RANK.get(str(status or "").upper(), 0)
+
+
+def summarize_changes(
+    compared: List[Dict[str, Any]],
+    previous: Optional[List[Dict[str, Any]]],
+) -> Optional[Dict[str, Any]]:
+    """'Since last scan' rollup. Returns None when there is no previous snapshot
+    to compare against (so the section is simply omitted)."""
+    if not previous:
+        return None
+    new = [c for c in compared if c["movement_state"] == "NEW"]
+    strengthened = [c for c in compared if c["movement_state"] == "RISING"]
+    weakened = [c for c in compared if c["movement_state"] == "FALLING"]
+    upgrades = [c for c in compared if c["status_transition"] and _rank(c["status_transition"][1]) > _rank(c["status_transition"][0])]
+    downgrades = [c for c in compared if c["status_transition"] and _rank(c["status_transition"][1]) < _rank(c["status_transition"][0])]
+    cur = {str(c["ticker"]).upper() for c in compared}
+    dropped = [str(p.get("ticker")).upper() for p in previous
+               if str(p.get("ticker") or "").upper() and str(p.get("ticker")).upper() not in cur]
+    movers = [c for c in compared if c.get("score_delta") is not None]
+    biggest = max(movers, key=lambda c: abs(c["score_delta"]), default=None)
+    return {
+        "new": new, "strengthened": strengthened, "weakened": weakened,
+        "upgrades": upgrades, "downgrades": downgrades, "dropped": dropped,
+        "biggest_mover": biggest,
+        "any": bool(new or strengthened or weakened or upgrades or downgrades or dropped),
+    }
+
+
+def select_watch_next(compared: List[Dict[str, Any]], *, limit: int = 3) -> List[Dict[str, Any]]:
+    """Deterministic 'what to watch next' — condition descriptions only, never
+    invented price/level/catalyst values. Priority: status upgrades, then
+    fading conflicts, then near-threshold WATCH names."""
+    items: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    def add(o, headline, detail):
+        t = o["ticker"]
+        if t in seen:
+            return
+        seen.add(t)
+        items.append({"ticker": t, "headline": headline, "detail": detail,
+                      "score": o.get("score"), "status": o.get("status")})
+
+    # 1) Status upgrades — most important developing situations.
+    for o in compared:
+        tr = o.get("status_transition")
+        if tr and _rank(tr[1]) > _rank(tr[0]):
+            add(o, f"{tr[0]} → {tr[1]}", "Recently upgraded — momentum and signal confluence strengthening.")
+    # 2) Fading conflicts — a fading signal against otherwise-positive confluence.
+    for o in compared:
+        if o.get("fading") and int(o.get("n_signals") or 0) >= 2:
+            add(o, "CAUTION", "Fading signal conflicts with bullish confirmation.")
+    # 3) Near-threshold WATCH names — one confirmation from STRONG.
+    for o in sorted(compared, key=lambda x: x.get("score") or 0, reverse=True):
+        if o.get("status") == "WATCH" and int(o.get("score") or 0) >= 65:
+            add(o, f"HSF {o.get('score')}", "Would strengthen with one more confirming signal.")
+    return items[: max(0, int(limit))]
+
+
+def to_snapshot_rows(opps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Minimal persisted shape for movement comparison (ticker/score/status)."""
+    return [{"ticker": o["ticker"], "score": o["score"], "status": o["status"]}
+            for o in (opps or []) if o.get("ticker")]
