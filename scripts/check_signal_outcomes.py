@@ -54,13 +54,16 @@ def main() -> int:
     print(f"last backfill run:  {last_backfill}")
 
     cur.execute(
-        "SELECT source, COUNT(*), "
-        "COUNT(*) FILTER (WHERE outcome_computed_at IS NOT NULL) "
-        "FROM signal_outcomes GROUP BY source ORDER BY 2 DESC"
+        "SELECT source AS src, COUNT(*) AS n, "
+        "COUNT(*) FILTER (WHERE outcome_computed_at IS NOT NULL) AS scored "
+        "FROM signal_outcomes GROUP BY source ORDER BY n DESC"
     )
     print("\nby source (source | rows | scored):")
     for r in cur.fetchall() or []:
-        src, n, done = (r if not isinstance(r, dict) else (r.get("source"), *list(r.values())[1:]))
+        if isinstance(r, dict):
+            src, n, done = r.get("src"), r.get("n"), r.get("scored")
+        else:
+            src, n, done = r[0], r[1], r[2]
         print(f"  {src or '(none)'}: {n} | {done}")
     cur.close()
     conn.close()
