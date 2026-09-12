@@ -325,6 +325,23 @@ def _to_float(value: Any) -> Optional[float]:
 
 _STATUS_RANK = {"CAUTION": 1, "WATCH": 2, "STRONG": 3}
 
+# Canonical meaningful score-change threshold. ONE definition — consumed by
+# compare_opportunities here and by every downstream consumer (stock-intelligence
+# lifecycle, alert-quality classification). Never fork this.
+MIN_SCORE_DELTA = 3
+
+
+def versions_incompatible(prev_version: Any, cur_version: Any) -> bool:
+    """Canonical score-version comparison (ONE definition, reused everywhere).
+
+    A missing version is treated as COMPATIBLE: the only HSF score version to
+    have existed is the current one, so pre-versioning rows are v1.0 by
+    definition. Two present-and-different versions block a numeric comparison.
+    """
+    if prev_version is None or cur_version is None:
+        return False
+    return str(prev_version) != str(cur_version)
+
 
 def classify_market_regime(
     *,
@@ -402,7 +419,7 @@ def compare_opportunities(
     current: List[Dict[str, Any]],
     previous: Optional[List[Dict[str, Any]]],
     *,
-    min_delta: int = 3,
+    min_delta: int = MIN_SCORE_DELTA,
 ) -> List[Dict[str, Any]]:
     """Annotate current opportunities with movement vs the previous snapshot.
 
@@ -441,11 +458,7 @@ def compare_opportunities(
                 movement = "NEW"
             else:
                 prev_ver = p.get("score_version")
-                # A missing previous version is treated as compatible: the only
-                # score version to have existed is the current one, so old
-                # (pre-versioning) snapshots are v1.0 by definition. A *present*
-                # and different version blocks the numeric comparison.
-                if prev_ver is not None and str(prev_ver) != cur_ver:
+                if versions_incompatible(prev_ver, cur_ver):
                     movement = "VERSION_CHANGED"
                 else:
                     prev_score = _to_float(p.get("score"))

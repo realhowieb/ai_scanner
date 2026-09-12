@@ -377,19 +377,33 @@ def persist_alert_outcome(res: Dict[str, Any]) -> bool:
 
 # Quality-rate numerator sets (deterministic). RECOVERED/DETERIORATED/NEUTRAL are
 # reported on their own — they are neither a confirmation nor a clean reversal.
+# CONFIRMED = directional thesis held; PERSISTED = non-directional existence held
+# (NEW_OPPORTUNITY). Both count toward "confirmed"; they stay distinct in detail.
 _CONFIRM_SET = ("CONFIRMED", "PERSISTED")
 _REVERSE_SET = ("REVERSED",)
-# Horizon offsets must mirror analytics.alert_quality.HORIZONS (hours).
-_QUALITY_HORIZON_HOURS = (("NEXT", 0), ("D1", 24), ("D3", 72), ("D5", 120))
+# VERSION_CHANGED is NOT quality-evaluable — excluded from every rate denominator
+# (24A Step 13/14). PENDING/UNAVAILABLE are never persisted so never appear here.
+_NON_EVALUABLE = ("VERSION_CHANGED",)
+
+
+def _quality_horizon_hours():
+    """Canonical horizon (key, offset_hours), sourced from the ONE definition in
+    analytics.alert_quality (lazy import avoids any import cycle)."""
+    try:
+        from analytics.alert_quality import get_quality_horizons
+
+        return tuple((h["key"], h["offset_hours"]) for h in get_quality_horizons())
+    except Exception:
+        return (("NEXT", 0), ("H24", 24), ("H72", 72), ("H120", 120))
 
 
 def get_alert_quality_summary(*, days_back: int = 60, min_sample: int = 10) -> Dict[str, Any]:
     """Read-only quality aggregation — NO scanning, NO freezing, NO evaluation,
     NO delivery, NO writes, NO Claude. Derived from persisted outcomes + frozen
     alerts only. Deterministic. Separate from operational health (Run 23)."""
-    empty = {"available": False, "alerts_total": 0, "matured": 0, "pending": 0,
-             "unavailable": 0, "confirmed": 0, "reversed": 0,
-             "confirmation_rate": None, "reversal_rate": None,
+    empty = {"available": False, "alerts_total": 0, "matured": 0, "evaluable": 0,
+             "version_changed": 0, "pending": 0, "unavailable": 0, "confirmed": 0,
+             "reversed": 0, "confirmation_rate": None, "reversal_rate": None,
              "by_event_type": [], "by_horizon": [], "frequency": {},
              "min_sample": int(min_sample)}
     conn = get_neon_conn()
@@ -401,7 +415,8 @@ def get_alert_quality_summary(*, days_back: int = 60, min_sample: int = 10) -> D
         cur = conn.cursor()
 
         # Expected vs matured pairs -> pending / unavailable (per-horizon offsets).
-        hz_values = ",".join(f"({h})" for _, h in _QUALITY_HORIZON_HOURS)
+        horizon_hours = _quality_horizon_hours()
+        hz_values = ",".join(f"({h})" for _, h in horizon_hours)
         cur.execute(
             f"""
             SELECT
@@ -485,26 +500,39 @@ def get_alert_quality_summary(*, days_back: int = 60, min_sample: int = 10) -> D
     def _pair(r):
         return (r[0], r[1], int(r[2] or 0)) if not isinstance(r, dict) else tuple(r.values())
 
-    overall: Dict[str, int] = {}
-    for r in overall_rows:
-        k, n = (r[0], int(r[1] or 0)) if not isinstance(r, dict) else tuple(r.values())
-        overall[k] = n
-    matured = sum(overall.values())
-    confirmed = sum(overall.get(k, 0) for k in _CONFIRM_SET)
-    reversed_ = sum(overall.get(k, 0) for k in _REVERSE_SET)
-    pending = max(total_pairs - elapsed_pairs, 0)
-    unavailable = max(elapsed_pairs - matured, 0)
+    # ONE denominator rule (24A Step 14): evaluable = matured observations minus
+    # the non-evaluable (VERSION_CHANGED). NEUTRAL is intentionally KEPT in the
+    # denominator — it was evaluable, it just neither confirmed nor reversed.
+    # Rates are shown only at evaluable >= min_sample. Computed here once; every
+    # UI section consumes these numbers (never recomputes its own percentage).
+    def _evaluable(d: Dict[str, int]) -> int:
+        return sum(n for k, n in d.items() if k not in _NON_EVALUABLE)
 
-    def _assess(m: int, conf: int, rev: int) -> str:
-        if m < int(min_sample):
+    def _rate(num: int, evaluable: int):
+        return (num / evaluable) if evaluable >= int(min_sample) and evaluable else None
+
+    def _assess(evaluable: int, conf: int, rev: int) -> str:
+        if evaluable < int(min_sample):
             return "INSUFFICIENT_SAMPLE"
-        cr = conf / m if m else 0
-        rr = rev / m if m else 0
+        cr = conf / evaluable
+        rr = rev / evaluable
         if cr >= 0.6 and rr <= 0.25:
             return "Promising"
         if rr >= 0.5:
             return "High reversal"
         return "Mixed"
+
+    overall: Dict[str, int] = {}
+    for r in overall_rows:
+        k, n = (r[0], int(r[1] or 0)) if not isinstance(r, dict) else tuple(r.values())
+        overall[k] = n
+    matured = sum(overall.values())
+    evaluable = _evaluable(overall)
+    version_changed = overall.get("VERSION_CHANGED", 0)
+    confirmed = sum(overall.get(k, 0) for k in _CONFIRM_SET)
+    reversed_ = sum(overall.get(k, 0) for k in _REVERSE_SET)
+    pending = max(total_pairs - elapsed_pairs, 0)
+    unavailable = max(elapsed_pairs - matured, 0)
 
     by_event: Dict[str, Dict[str, int]] = {}
     for r in event_rows:
@@ -513,30 +541,32 @@ def get_alert_quality_summary(*, days_back: int = 60, min_sample: int = 10) -> D
     by_event_type = []
     for et, d in sorted(by_event.items()):
         m = sum(d.values())
+        ev = _evaluable(d)
         conf = sum(d.get(k, 0) for k in _CONFIRM_SET)
         rev = sum(d.get(k, 0) for k in _REVERSE_SET)
         by_event_type.append({
-            "event_type": et, "matured": m, "confirmed": conf, "reversed": rev,
+            "event_type": et, "matured": m, "evaluable": ev, "confirmed": conf,
+            "persisted": d.get("PERSISTED", 0), "reversed": rev,
             "recovered": d.get("RECOVERED", 0), "deteriorated": d.get("DETERIORATED", 0),
-            "neutral": d.get("NEUTRAL", 0),
-            "confirmation_rate": (conf / m) if m >= int(min_sample) else None,
-            "assessment": _assess(m, conf, rev),
+            "neutral": d.get("NEUTRAL", 0), "version_changed": d.get("VERSION_CHANGED", 0),
+            "confirmation_rate": _rate(conf, ev), "assessment": _assess(ev, conf, rev),
         })
 
     by_h: Dict[str, Dict[str, int]] = {}
     for r in horizon_rows:
         hz, cls, n = _pair(r)
         by_h.setdefault(hz, {})[cls] = n
-    order = {name: i for i, (name, _) in enumerate(_QUALITY_HORIZON_HOURS)}
+    order = {name: i for i, (name, _) in enumerate(horizon_hours)}
     by_horizon = []
     for hz, d in sorted(by_h.items(), key=lambda kv: order.get(kv[0], 99)):
         m = sum(d.values())
+        ev = _evaluable(d)
         conf = sum(d.get(k, 0) for k in _CONFIRM_SET)
         rev = sum(d.get(k, 0) for k in _REVERSE_SET)
         by_horizon.append({
-            "horizon": hz, "matured": m, "confirmed": conf, "reversed": rev,
-            "confirmation_rate": (conf / m) if m >= int(min_sample) else None,
-            "assessment": _assess(m, conf, rev),
+            "horizon": hz, "matured": m, "evaluable": ev, "confirmed": conf,
+            "reversed": rev, "confirmation_rate": _rate(conf, ev),
+            "assessment": _assess(ev, conf, rev),
         })
 
     dist = {}
@@ -563,10 +593,11 @@ def get_alert_quality_summary(*, days_back: int = 60, min_sample: int = 10) -> D
 
     return {
         "available": True, "alerts_total": alerts_total, "matured": matured,
+        "evaluable": evaluable, "version_changed": version_changed,
         "pending": pending, "unavailable": unavailable,
         "confirmed": confirmed, "reversed": reversed_,
-        "confirmation_rate": (confirmed / matured) if matured >= int(min_sample) else None,
-        "reversal_rate": (reversed_ / matured) if matured >= int(min_sample) else None,
+        "confirmation_rate": _rate(confirmed, evaluable),
+        "reversal_rate": _rate(reversed_, evaluable),
         "by_event_type": by_event_type, "by_horizon": by_horizon,
         "frequency": frequency, "min_sample": int(min_sample),
         "overall_classifications": overall,

@@ -145,7 +145,14 @@ def _render_health() -> None:
                 hide_index=True, width="stretch")
 
 
-_HORIZON_LABEL = {"NEXT": "Next obs", "D1": "~1 day", "D3": "~3 days", "D5": "~5 days"}
+def _horizon_labels() -> dict:
+    """Honest elapsed-time labels from the ONE canonical horizon definition."""
+    try:
+        from analytics.alert_quality import get_quality_horizons
+
+        return {h["key"]: h["label"] for h in get_quality_horizons()}
+    except Exception:
+        return {}
 
 
 def _pct(x) -> str:
@@ -193,9 +200,10 @@ def _render_quality() -> None:
                 hide_index=True, width="stretch")
         by_h = q.get("by_horizon") or []
         if by_h:
-            st.markdown("**By horizon**")
+            labels = _horizon_labels()
+            st.markdown("**By horizon** (elapsed wall-clock, not trading days)")
             st.dataframe(
-                [{"Horizon": _HORIZON_LABEL.get(h["horizon"], h["horizon"]),
+                [{"Horizon": labels.get(h["horizon"], h["horizon"]),
                   "Matured": h["matured"], "Confirmed": h["confirmed"],
                   "Reversed": h["reversed"], "Confirmation": _pct(h.get("confirmation_rate")),
                   "Assessment": h["assessment"]} for h in by_h],
