@@ -244,6 +244,335 @@ def get_intelligence_health(stale_after_minutes: int = INTELLIGENCE_STALE_AFTER_
     }
 
 
+# ---------------------------------------------------------------------------
+# Run 24 — alert QUALITY measurement persistence (separate from health).
+# Stores subsequent-HSF-state outcomes for each alert/horizon. Idempotent per
+# (alert_id, evaluation_horizon). Never price, never Claude. Read side is pure.
+# ---------------------------------------------------------------------------
+
+
+def _ensure_quality_schema(conn) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS intelligence_alert_outcomes (
+            id BIGSERIAL PRIMARY KEY,
+            alert_id BIGINT NOT NULL,
+            ticker TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            alert_time TIMESTAMPTZ,
+            evaluation_horizon TEXT NOT NULL,
+            evaluation_time TIMESTAMPTZ,
+            data_status TEXT NOT NULL,
+            quality_classification TEXT NOT NULL,
+            alert_score DOUBLE PRECISION,
+            subsequent_score DOUBLE PRECISION,
+            score_delta INTEGER,
+            alert_status TEXT,
+            subsequent_status TEXT,
+            still_present BOOLEAN,
+            fading BOOLEAN,
+            score_version TEXT,
+            evaluated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (alert_id, evaluation_horizon)
+        )
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_iao_event_horizon "
+                "ON intelligence_alert_outcomes (event_type, evaluation_horizon)")
+    conn.commit()
+    cur.close()
+
+
+def fetch_alerts_for_maturation(days_back: int = 30, limit: int = 2000) -> List[Dict[str, Any]]:
+    """Frozen intelligence alerts (all users) for background quality maturation.
+
+    Returns {id, ticker, event_type, alert_time, payload(note)} oldest-first.
+    The payload already holds the signal-time HSF state (no reconstruction from
+    current market data — leakage-safe). Never raises; [] if DB unavailable.
+    """
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, ticker, event_type, detected_at, payload "
+            "FROM hsf_intelligence_alerts "
+            "WHERE detected_at >= NOW() - make_interval(days => %s) "
+            "ORDER BY detected_at ASC LIMIT %s",
+            (int(days_back), int(limit)),
+        )
+        rows = cur.fetchall() or []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return []
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        d = dict(r) if isinstance(r, dict) else dict(zip(cols, r))
+        payload = d.get("payload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                payload = {}
+        out.append({
+            "id": d.get("id"), "ticker": d.get("ticker"),
+            "event_type": d.get("event_type"), "alert_time": d.get("detected_at"),
+            "payload": payload if isinstance(payload, dict) else {},
+        })
+    return out
+
+
+def persist_alert_outcome(res: Dict[str, Any]) -> bool:
+    """Idempotently persist one matured alert/horizon outcome. Returns True only
+    when a new row was written (ON CONFLICT DO NOTHING)."""
+    if not res.get("alert_id") or not res.get("evaluation_horizon"):
+        return False
+    conn = get_neon_conn()
+    if conn is None:
+        return False
+    try:
+        _ensure_quality_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO intelligence_alert_outcomes
+              (alert_id, ticker, event_type, alert_time, evaluation_horizon,
+               evaluation_time, data_status, quality_classification, alert_score,
+               subsequent_score, score_delta, alert_status, subsequent_status,
+               still_present, fading, score_version)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (alert_id, evaluation_horizon) DO NOTHING
+            """,
+            (
+                int(res["alert_id"]), str(res.get("ticker") or "").upper(),
+                res.get("event_type"), _parse_ts(res.get("alert_time")),
+                res.get("evaluation_horizon"), _parse_ts(res.get("evaluation_time")),
+                res.get("data_status"), res.get("quality_classification"),
+                res.get("alert_score"), res.get("subsequent_score"), res.get("score_delta"),
+                res.get("alert_status"), res.get("subsequent_status"),
+                res.get("still_present"), res.get("fading"), res.get("score_version"),
+            ),
+        )
+        wrote = cur.rowcount == 1
+        conn.commit()
+        cur.close()
+        conn.close()
+        return wrote
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return False
+
+
+# Quality-rate numerator sets (deterministic). RECOVERED/DETERIORATED/NEUTRAL are
+# reported on their own — they are neither a confirmation nor a clean reversal.
+_CONFIRM_SET = ("CONFIRMED", "PERSISTED")
+_REVERSE_SET = ("REVERSED",)
+# Horizon offsets must mirror analytics.alert_quality.HORIZONS (hours).
+_QUALITY_HORIZON_HOURS = (("NEXT", 0), ("D1", 24), ("D3", 72), ("D5", 120))
+
+
+def get_alert_quality_summary(*, days_back: int = 60, min_sample: int = 10) -> Dict[str, Any]:
+    """Read-only quality aggregation — NO scanning, NO freezing, NO evaluation,
+    NO delivery, NO writes, NO Claude. Derived from persisted outcomes + frozen
+    alerts only. Deterministic. Separate from operational health (Run 23)."""
+    empty = {"available": False, "alerts_total": 0, "matured": 0, "pending": 0,
+             "unavailable": 0, "confirmed": 0, "reversed": 0,
+             "confirmation_rate": None, "reversal_rate": None,
+             "by_event_type": [], "by_horizon": [], "frequency": {},
+             "min_sample": int(min_sample)}
+    conn = get_neon_conn()
+    if conn is None:
+        return empty
+    try:
+        _ensure_schema(conn)
+        _ensure_quality_schema(conn)
+        cur = conn.cursor()
+
+        # Expected vs matured pairs -> pending / unavailable (per-horizon offsets).
+        hz_values = ",".join(f"({h})" for _, h in _QUALITY_HORIZON_HOURS)
+        cur.execute(
+            f"""
+            SELECT
+              COUNT(*) AS total_pairs,
+              SUM(CASE WHEN NOW() >= a.detected_at + make_interval(hours => hz.h)
+                       THEN 1 ELSE 0 END) AS elapsed_pairs,
+              COUNT(DISTINCT a.id) AS alerts_total
+            FROM hsf_intelligence_alerts a
+            CROSS JOIN (VALUES {hz_values}) AS hz(h)
+            WHERE a.event_type <> 'VERSION_CHANGED'
+              AND a.detected_at >= NOW() - make_interval(days => %s)
+            """,
+            (int(days_back),),
+        )
+        pair_row = cur.fetchone() or (0, 0, 0)
+
+        # Overall matured outcomes by classification.
+        cur.execute(
+            "SELECT quality_classification, COUNT(*) FROM intelligence_alert_outcomes "
+            "WHERE data_status = 'MATURED' AND alert_time >= NOW() - make_interval(days => %s) "
+            "GROUP BY quality_classification",
+            (int(days_back),),
+        )
+        overall_rows = cur.fetchall() or []
+
+        # By event type (matured only).
+        cur.execute(
+            "SELECT event_type, quality_classification, COUNT(*) FROM intelligence_alert_outcomes "
+            "WHERE data_status = 'MATURED' AND alert_time >= NOW() - make_interval(days => %s) "
+            "GROUP BY event_type, quality_classification",
+            (int(days_back),),
+        )
+        event_rows = cur.fetchall() or []
+
+        # By horizon (matured only).
+        cur.execute(
+            "SELECT evaluation_horizon, quality_classification, COUNT(*) FROM intelligence_alert_outcomes "
+            "WHERE data_status = 'MATURED' AND alert_time >= NOW() - make_interval(days => %s) "
+            "GROUP BY evaluation_horizon, quality_classification",
+            (int(days_back),),
+        )
+        horizon_rows = cur.fetchall() or []
+
+        # Frequency / noise metrics.
+        cur.execute(
+            "SELECT event_type, COUNT(*) FROM hsf_intelligence_alerts "
+            "WHERE detected_at >= NOW() - make_interval(days => %s) GROUP BY event_type",
+            (int(days_back),),
+        )
+        dist_rows = cur.fetchall() or []
+        cur.execute(
+            "SELECT COUNT(DISTINCT ticker), "
+            "COUNT(*) FILTER (WHERE delivery_status='DELIVERED') "
+            "FROM hsf_intelligence_alerts WHERE detected_at >= NOW() - make_interval(days => %s)",
+            (int(days_back),),
+        )
+        tick_row = cur.fetchone() or (0, 0)
+        cur.execute(
+            "SELECT COALESCE(SUM(notifications_matched),0), COALESCE(SUM(deduped),0), "
+            "COALESCE(SUM(filtered_by_preferences),0), COUNT(*) "
+            "FROM intelligence_evaluation_runs WHERE started_at >= NOW() - make_interval(days => %s)",
+            (int(days_back),),
+        )
+        run_row = cur.fetchone() or (0, 0, 0, 0)
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return empty
+
+    def _v(row, i):
+        return (row[i] if not isinstance(row, dict) else list(row.values())[i]) if row else None
+
+    total_pairs = int(_v(pair_row, 0) or 0)
+    elapsed_pairs = int(_v(pair_row, 1) or 0)
+    alerts_total = int(_v(pair_row, 2) or 0)
+
+    def _pair(r):
+        return (r[0], r[1], int(r[2] or 0)) if not isinstance(r, dict) else tuple(r.values())
+
+    overall: Dict[str, int] = {}
+    for r in overall_rows:
+        k, n = (r[0], int(r[1] or 0)) if not isinstance(r, dict) else tuple(r.values())
+        overall[k] = n
+    matured = sum(overall.values())
+    confirmed = sum(overall.get(k, 0) for k in _CONFIRM_SET)
+    reversed_ = sum(overall.get(k, 0) for k in _REVERSE_SET)
+    pending = max(total_pairs - elapsed_pairs, 0)
+    unavailable = max(elapsed_pairs - matured, 0)
+
+    def _assess(m: int, conf: int, rev: int) -> str:
+        if m < int(min_sample):
+            return "INSUFFICIENT_SAMPLE"
+        cr = conf / m if m else 0
+        rr = rev / m if m else 0
+        if cr >= 0.6 and rr <= 0.25:
+            return "Promising"
+        if rr >= 0.5:
+            return "High reversal"
+        return "Mixed"
+
+    by_event: Dict[str, Dict[str, int]] = {}
+    for r in event_rows:
+        et, cls, n = _pair(r)
+        by_event.setdefault(et, {})[cls] = n
+    by_event_type = []
+    for et, d in sorted(by_event.items()):
+        m = sum(d.values())
+        conf = sum(d.get(k, 0) for k in _CONFIRM_SET)
+        rev = sum(d.get(k, 0) for k in _REVERSE_SET)
+        by_event_type.append({
+            "event_type": et, "matured": m, "confirmed": conf, "reversed": rev,
+            "recovered": d.get("RECOVERED", 0), "deteriorated": d.get("DETERIORATED", 0),
+            "neutral": d.get("NEUTRAL", 0),
+            "confirmation_rate": (conf / m) if m >= int(min_sample) else None,
+            "assessment": _assess(m, conf, rev),
+        })
+
+    by_h: Dict[str, Dict[str, int]] = {}
+    for r in horizon_rows:
+        hz, cls, n = _pair(r)
+        by_h.setdefault(hz, {})[cls] = n
+    order = {name: i for i, (name, _) in enumerate(_QUALITY_HORIZON_HOURS)}
+    by_horizon = []
+    for hz, d in sorted(by_h.items(), key=lambda kv: order.get(kv[0], 99)):
+        m = sum(d.values())
+        conf = sum(d.get(k, 0) for k in _CONFIRM_SET)
+        rev = sum(d.get(k, 0) for k in _REVERSE_SET)
+        by_horizon.append({
+            "horizon": hz, "matured": m, "confirmed": conf, "reversed": rev,
+            "confirmation_rate": (conf / m) if m >= int(min_sample) else None,
+            "assessment": _assess(m, conf, rev),
+        })
+
+    dist = {}
+    for r in dist_rows:
+        k, n = (r[0], int(r[1] or 0)) if not isinstance(r, dict) else tuple(r.values())
+        dist[k] = n
+    distinct_tickers = int(_v(tick_row, 0) or 0)
+    delivered_total = int(_v(tick_row, 1) or 0)
+    matched_sum = int(_v(run_row, 0) or 0)
+    deduped_sum = int(_v(run_row, 1) or 0)
+    filtered_sum = int(_v(run_row, 2) or 0)
+    run_count = int(_v(run_row, 3) or 0)
+    denom = matched_sum + deduped_sum
+    frequency = {
+        "alerts_total": alerts_total,
+        "distinct_tickers": distinct_tickers,
+        "alerts_per_ticker": (alerts_total / distinct_tickers) if distinct_tickers else None,
+        "delivered_total": delivered_total,
+        "event_type_distribution": dist,
+        "dedupe_rate": (deduped_sum / denom) if denom else None,
+        "filter_rate": (filtered_sum / matched_sum) if matched_sum else None,
+        "runs_considered": run_count,
+    }
+
+    return {
+        "available": True, "alerts_total": alerts_total, "matured": matured,
+        "pending": pending, "unavailable": unavailable,
+        "confirmed": confirmed, "reversed": reversed_,
+        "confirmation_rate": (confirmed / matured) if matured >= int(min_sample) else None,
+        "reversal_rate": (reversed_ / matured) if matured >= int(min_sample) else None,
+        "by_event_type": by_event_type, "by_horizon": by_horizon,
+        "frequency": frequency, "min_sample": int(min_sample),
+        "overall_classifications": overall,
+    }
+
+
 def recent_fingerprints(user_id: str, *, hours: int = _DEFAULT_COOLDOWN_HOURS) -> Set[str]:
     """Fingerprints already recorded for this user within the cooldown window."""
     if not user_id:

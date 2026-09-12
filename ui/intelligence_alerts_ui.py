@@ -98,10 +98,12 @@ def render_intelligence_alerts(username: str) -> None:
     if keep and shown == 0:
         st.caption(f"No {_feed_filter.lower()} alerts in the recent feed.")
 
-    # Admin-only operational health (read-only; no evaluation/writes/delivery).
+    # Admin-only operational health + alert quality (read-only; no evaluation,
+    # no writes, no delivery, no Claude). Health and quality stay separate.
     try:
         if (st.session_state.get("entitlements") or {}).get("can_diagnostics"):
             _render_health()
+            _render_quality()
     except Exception:
         pass
 
@@ -141,3 +143,63 @@ def _render_health() -> None:
                   "Delivered": r.get("delivered"), "Failed": r.get("failed"),
                   "Dur ms": r.get("duration_ms"), "Stage": r.get("error_stage")} for r in runs],
                 hide_index=True, width="stretch")
+
+
+_HORIZON_LABEL = {"NEXT": "Next obs", "D1": "~1 day", "D3": "~3 days", "D5": "~5 days"}
+
+
+def _pct(x) -> str:
+    return f"{x*100:.0f}%" if isinstance(x, (int, float)) else "—"
+
+
+def _render_quality() -> None:
+    """Compact alert-quality panel. Measures HSF state follow-through, never
+    price, never 'win rate'. Read-only. Separate from operational health."""
+    try:
+        from db.intelligence_alerts import get_alert_quality_summary
+
+        q = get_alert_quality_summary()
+    except Exception:
+        return
+    with st.expander("📐 HSF Intelligence alert quality (admin)", expanded=False):
+        if not q.get("available"):
+            st.caption("Alert quality data is unavailable right now.")
+            return
+        st.caption("Did alerts identify meaningful subsequent HSF state changes? "
+                   "Measured from frozen alert-time state vs later canonical HSF "
+                   "observations — not price, not investment performance.")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Alerts", q.get("alerts_total"))
+        c2.metric("Matured", q.get("matured"))
+        c3.metric("Pending", q.get("pending"))
+        c4.metric("Confirmed", _pct(q.get("confirmation_rate")))
+        c5.metric("Reversed", _pct(q.get("reversal_rate")))
+        freq = q.get("frequency") or {}
+        st.caption(
+            f"No follow-up data: {q.get('unavailable')} · "
+            f"dedupe rate {_pct(freq.get('dedupe_rate'))} · "
+            f"filtered {_pct(freq.get('filter_rate'))} · "
+            f"alerts/ticker {freq.get('alerts_per_ticker'):.1f}"
+            if isinstance(freq.get("alerts_per_ticker"), (int, float))
+            else f"No follow-up data: {q.get('unavailable')} · dedupe rate {_pct(freq.get('dedupe_rate'))}")
+        by_event = q.get("by_event_type") or []
+        if by_event:
+            st.markdown("**Quality by event type**")
+            st.dataframe(
+                [{"Event": e["event_type"], "Matured": e["matured"],
+                  "Confirmed": e["confirmed"], "Reversed": e["reversed"],
+                  "Confirmation": _pct(e.get("confirmation_rate")),
+                  "Assessment": e["assessment"]} for e in by_event],
+                hide_index=True, width="stretch")
+        by_h = q.get("by_horizon") or []
+        if by_h:
+            st.markdown("**By horizon**")
+            st.dataframe(
+                [{"Horizon": _HORIZON_LABEL.get(h["horizon"], h["horizon"]),
+                  "Matured": h["matured"], "Confirmed": h["confirmed"],
+                  "Reversed": h["reversed"], "Confirmation": _pct(h.get("confirmation_rate")),
+                  "Assessment": h["assessment"]} for h in by_h],
+                hide_index=True, width="stretch")
+        st.caption(f"Rates shown only at ≥ {q.get('min_sample')} matured observations; "
+                   "smaller samples read INSUFFICIENT_SAMPLE. Measurement only — "
+                   "alert behavior is unchanged.")

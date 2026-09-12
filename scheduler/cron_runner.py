@@ -644,6 +644,20 @@ def main():
         print(f"[cron] intelligence alert evaluation failed: {e}")
         _capture(e)
 
+    # HSF intelligence alert QUALITY maturation: for each past alert, find the
+    # first comparable subsequent HSF snapshot at/after each horizon and classify
+    # follow-through (measurement only — never price, never tunes alert behavior).
+    # Idempotent; owned by the background pipeline (never a page render).
+    try:
+        from analytics.alert_quality import mature_alert_outcomes
+
+        matured = mature_alert_outcomes()
+        if matured:
+            print(f"[alert_quality] matured {matured} alert outcome(s)")
+    except Exception as e:
+        print(f"[cron] alert quality maturation failed: {e}")
+        _capture(e)
+
     # Settle immutable fired-signal rows with 1/3/5D return plus MFE/MAE.
     try:
         from analytics.signal_outcomes import score_pending_signal_outcomes
