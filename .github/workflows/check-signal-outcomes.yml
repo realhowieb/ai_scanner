@@ -1,0 +1,44 @@
+name: Check Signal Outcomes
+
+# Read-only health check: is the signal_outcomes pipeline freezing signals and
+# backfilling their forward outcomes? Prints counts + the scorecard. No writes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+      AI_SCANNER_SQLITE_FALLBACK: "false"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: requirements-core.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+
+      - name: Check Neon connection secret
+        run: |
+          if [ -z "$NEON_DATABASE_URL" ]; then
+            echo "NEON_DATABASE_URL or DATABASE_URL GitHub Actions secret is required."
+            exit 1
+          fi
+
+      - name: Report signal_outcomes health
+        run: python scripts/check_signal_outcomes.py
