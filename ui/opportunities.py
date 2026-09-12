@@ -157,16 +157,24 @@ def build_opportunities(
         # "opportunity" — require either confluence (2+) or a model score.
         if len(pos) < 2 and s["breakout_score"] is None and s["prob"] is None:
             continue
-        score = build_opportunity_score(
+        bd = score_breakdown(
             n_signals=len(pos),
             breakout_score=s["breakout_score"],
             prob=s["prob"],
             chg_pct=s["chg_pct"],
             fading=fading,
         )
+        score = bd["score"]
         opportunities.append({
             "ticker": s["ticker"],
             "score": score,
+            "score_version": HSF_SCORE_VERSION,
+            "score_components": {
+                "signals_component": bd["signals_component"],
+                "model_component": bd["model_component"],
+                "momentum_component": bd["momentum_component"],
+                "fading_penalty": bd["fading_penalty"],
+            },
             "primary_setup": _primary_setup(pos, fading),
             "n_signals": len(pos),
             "signals": pos,
@@ -182,17 +190,26 @@ def build_opportunities(
     return opportunities[: max(0, int(top_n))]
 
 
-def build_opportunity_score(
+# HSF score version — bump when the formula/weights change. Historical frozen
+# opportunities keep the version they were scored under, so calibration can
+# compare v1.0 vs a future v1.1 without overwriting history.
+HSF_SCORE_VERSION = "1.0"
+
+
+def score_breakdown(
     *,
     n_signals: int,
     breakout_score: Optional[float],
     prob: Optional[float],
     chg_pct: Optional[float],
     fading: bool,
-) -> int:
-    """Compute the 0-100 HSF Opportunity Score. See module docstring for the
-    formula. Missing inputs contribute 0 (never a fabricated value)."""
-    signals_component = min(int(n_signals) * _SIGNAL_POINTS, _SIGNAL_CAP)
+) -> Dict[str, Any]:
+    """The 0-100 HSF score AND its components (for freezing/calibration).
+
+    Missing inputs contribute 0 (never a fabricated value). Returns the four
+    documented components plus the final clamped score.
+    """
+    signals_component = float(min(int(n_signals) * _SIGNAL_POINTS, _SIGNAL_CAP))
 
     model_candidates = [0.0]
     if breakout_score is not None:
@@ -205,10 +222,32 @@ def build_opportunity_score(
     if chg_pct is not None and chg_pct > 0:
         momentum_component = min(float(chg_pct), _MOMENTUM_FULL_PCT) / _MOMENTUM_FULL_PCT * _MOMENTUM_CAP
 
-    raw = signals_component + model_component + momentum_component
-    if fading:
-        raw -= _FADING_PENALTY
-    return int(round(max(0.0, min(100.0, raw))))
+    fading_penalty = float(_FADING_PENALTY) if fading else 0.0
+    raw = signals_component + model_component + momentum_component - fading_penalty
+    score = int(round(max(0.0, min(100.0, raw))))
+    return {
+        "signals_component": round(signals_component, 2),
+        "model_component": round(model_component, 2),
+        "momentum_component": round(momentum_component, 2),
+        "fading_penalty": round(fading_penalty, 2),
+        "score": score,
+    }
+
+
+def build_opportunity_score(
+    *,
+    n_signals: int,
+    breakout_score: Optional[float],
+    prob: Optional[float],
+    chg_pct: Optional[float],
+    fading: bool,
+) -> int:
+    """Compute the 0-100 HSF Opportunity Score. See module docstring for the
+    formula. Missing inputs contribute 0 (never a fabricated value)."""
+    return score_breakdown(
+        n_signals=n_signals, breakout_score=breakout_score, prob=prob,
+        chg_pct=chg_pct, fading=fading,
+    )["score"]
 
 
 def _primary_setup(pos_signals: List[str], fading: bool) -> str:

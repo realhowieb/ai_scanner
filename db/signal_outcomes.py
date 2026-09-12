@@ -138,6 +138,103 @@ def list_pending_outcomes(min_age_days: int = 8, limit: int = 1000) -> List[Dict
     return out
 
 
+def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any]) -> bool:
+    """Freeze one HSF Top-Opportunity into signal_outcomes for calibration.
+
+    Reuses the existing freeze + forward-outcome backfill pipeline (source=
+    'opportunity'), so no duplicate outcome system. The frozen payload holds
+    ONLY signal-time features (score, version, components, signal flags) — never
+    any forward/outcome field; those land later in the return_/mfe_/mae_ columns
+    via the same cron backfill. Idempotent per (snapshot, ticker).
+    """
+    if snapshot_time is None or not opp.get("ticker"):
+        return False
+    try:
+        event_id = int(snapshot_time.timestamp()) if hasattr(snapshot_time, "timestamp") else None
+    except Exception:
+        event_id = None
+    comps = opp.get("score_components") or {}
+    # Frozen features (signal-time only — leakage-safe by construction).
+    indicators = {
+        "n_signals": opp.get("n_signals"),
+        "signals": list(opp.get("signals") or []),
+        "chg_pct": opp.get("chg_pct"),
+        "gap_pct": opp.get("gap_pct"),
+        "fading": bool(opp.get("fading")),
+        "primary_setup": opp.get("primary_setup"),
+        "status": opp.get("status"),
+    }
+    raw_signal = {
+        "hsf_score": opp.get("score"),
+        "score_version": opp.get("score_version"),
+        "score_components": comps,
+        "primary_setup": opp.get("primary_setup"),
+        "status": opp.get("status"),
+    }
+    return freeze_signal(
+        source="opportunity",
+        source_event_id=event_id,
+        signal_type="hsf_opportunity",
+        user_id=None,
+        alert_id=None,
+        ticker=opp.get("ticker"),
+        fired_at=snapshot_time,
+        entry_price=None,
+        setup_score=opp.get("breakout_score"),
+        ai_confidence=None,
+        prebreakout_prob=opp.get("prob"),
+        indicators=indicators,
+        raw_signal=raw_signal,
+    )
+
+
+def freeze_opportunities(snapshot_time: Any, opps: List[Dict[str, Any]]) -> int:
+    """Freeze a snapshot's opportunities; returns how many rows were written."""
+    return sum(1 for o in (opps or []) if freeze_opportunity(snapshot_time, o))
+
+
+def fetch_opportunity_outcomes(days_back: int = 180, limit: int = 20000) -> List[Dict[str, Any]]:
+    """Frozen HSF opportunities joined to their (maybe pending) forward outcomes.
+
+    Returns raw rows for the calibration analytics; the analytics layer decides
+    matured vs pending. Never raises — returns [] when the DB is unavailable.
+    """
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT ticker, fired_at, setup_score, prebreakout_prob,
+                   indicators, raw_signal,
+                   return_1d, return_3d, return_5d, mfe_5d, mae_5d,
+                   outcome_computed_at
+            FROM signal_outcomes
+            WHERE source = 'opportunity'
+              AND fired_at >= NOW() - make_interval(days => %s)
+            ORDER BY fired_at ASC
+            LIMIT %s
+            """,
+            (int(days_back), int(limit)),
+        )
+        rows = cur.fetchall() or []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return []
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        out.append(dict(r) if isinstance(r, dict) else dict(zip(cols, r)))
+    return out
+
+
 def summarize_recent_outcomes(days_back: int = 7) -> Dict[str, Any]:
     """Scorecard over signals fired in the last `days_back` days.
 

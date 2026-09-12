@@ -187,8 +187,22 @@ if st is not None:
     def _brief_cached() -> Optional[Dict[str, Any]]:
         return _compute_brief()
 
+    @st.cache_data(ttl=1800, show_spinner=False)
+    def _calibration_records_cached() -> List[Dict[str, Any]]:
+        """Matured HSF calibration records for the brief's historical-context
+        line. Cached 30 min so it's read once, not per rerun."""
+        try:
+            from analytics.hsf_calibration import build_calibration_dataset
+
+            return build_calibration_dataset(days_back=180).get("records") or []
+        except Exception:
+            return []
+
 else:  # pragma: no cover
     _brief_cached = _compute_brief
+
+    def _calibration_records_cached() -> List[Dict[str, Any]]:
+        return []
 
 
 # --------------------------------- helpers -----------------------------------
@@ -288,6 +302,15 @@ def render_market_brief() -> None:
     # H. Secondary market detail (existing sections, demoted below the fold).
     _render_standouts(data)
     _render_market_pulse(data.get("market_close") or [])
+    # Admin-only: HSF score calibration evidence (read-only; changes nothing).
+    try:
+        if (st.session_state.get("entitlements") or {}).get("can_diagnostics"):
+            from ui.hsf_calibration_report import render_hsf_calibration_report
+
+            with st.expander("🔬 HSF score calibration (admin)", expanded=False):
+                render_hsf_calibration_report()
+    except Exception:
+        pass
 
     # ---- detail sections: user-toggleable, time-aware order ----
     keys = [k for k, _ in _TOGGLEABLE]
@@ -746,6 +769,15 @@ def compute_compared_opportunities(data: Dict[str, Any]) -> tuple:
         save_opportunity_snapshot(ts, to_snapshot_rows(opps))
     except Exception:
         previous_rows = None
+    # Freeze full opportunities (score + components + signal-time features) into
+    # signal_outcomes for leakage-safe calibration; the existing cron backfill
+    # fills their forward outcomes. Idempotent per (snapshot, ticker).
+    try:
+        from db.signal_outcomes import freeze_opportunities
+
+        freeze_opportunities(ts, opps)
+    except Exception:
+        pass
 
     compared = compare_opportunities(opps, previous_rows)
     if st is not None:
@@ -898,6 +930,22 @@ def _render_opportunity_detail(o: Dict[str, Any], data: Dict[str, Any]) -> None:
     if ex["risks"]:
         st.markdown("**Risk flags**")
         st.markdown("\n".join(f"- ⚠ {r}" for r in ex["risks"]))
+    # Historical context (real forward outcomes only; shows 'still building'
+    # until a bucket has enough matured samples). Never fabricated.
+    try:
+        from analytics.hsf_calibration import historical_context
+
+        ctx = historical_context(_calibration_records_cached(), o.get("score"))
+        if ctx and ctx.get("sufficient"):
+            st.caption(
+                f"📊 Historical context · {ctx['bucket']} range: "
+                f"{ctx['positive_rate']*100:.0f}% positive outcome (reached +4% in 5D) · "
+                f"n={ctx['n']} · {ctx['confidence'].title()}"
+            )
+        elif ctx and ctx.get("n"):
+            st.caption(f"📊 Historical context · Still building history · n={ctx['n']}")
+    except Exception:
+        pass
     _render_opp_ai_take(o, ex, data)
 
     a1, a2, a3 = st.columns(3)
