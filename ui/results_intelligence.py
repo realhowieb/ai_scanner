@@ -166,27 +166,14 @@ def enrich_movement(
 ) -> List[Dict[str, Any]]:
     """Version-safe movement enrichment vs the previous opportunity snapshot.
 
-    Reuses compare_opportunities, then blanks the delta/movement for any ticker
-    whose previous score used a DIFFERENT HSF score version (formula may have
-    changed) — movement_state becomes 'VERSION_CHANGED' and score_delta None,
-    so we never present an incomparable ▲/▼.
+    Thin wrapper over the CANONICAL compare_opportunities, which already returns
+    NO_BASELINE (no previous snapshot), NEW, VERSION_CHANGED (incompatible score
+    version — no ▲/▼), and RISING/FALLING/UNCHANGED. Kept as a named entry point
+    for the scanner; the movement definition lives in one place.
     """
-    from ui.opportunities import HSF_SCORE_VERSION, compare_opportunities
+    from ui.opportunities import compare_opportunities
 
-    compared = compare_opportunities(opps, previous_rows)
-    prev_ver = {}
-    for p in (previous_rows or []):
-        t = str(p.get("ticker") or "").upper()
-        if t and t not in prev_ver:
-            prev_ver[t] = p.get("score_version")
-    for c in compared:
-        pv = prev_ver.get(str(c["ticker"]).upper())
-        if c["movement_state"] not in ("NEW",) and pv is not None and pv != HSF_SCORE_VERSION:
-            c["movement_state"] = "VERSION_CHANGED"
-            c["score_delta"] = None
-            c["status_transition"] = None
-            c["previous_score"] = None
-    return compared
+    return compare_opportunities(opps, previous_rows)
 
 
 def classify_views(compared: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -325,7 +312,13 @@ def render_scanner_intelligence(
             import datetime as dt
 
             from db.opportunity_snapshots import load_previous_opportunity_snapshot
-            prev = load_previous_opportunity_snapshot(dt.datetime.now(dt.timezone.utc))
+            # Same-context only: the scanner never writes snapshots (read-only,
+            # Run 20B), so it has no 'scanner' baseline and correctly reports
+            # NO_BASELINE instead of misleading movement against Market Brief
+            # opportunities (a different universe). Movement lights up here only
+            # if/when the scanner persists its own comparable history.
+            prev = load_previous_opportunity_snapshot(
+                dt.datetime.now(dt.timezone.utc), context="scanner")
             previous_rows = prev.get("opportunities") if prev else None
         except Exception:
             previous_rows = None

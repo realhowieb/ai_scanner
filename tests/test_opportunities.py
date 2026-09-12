@@ -135,9 +135,11 @@ class SnapshotComparisonTests(unittest.TestCase):
         ntap = next(c for c in comp if c["ticker"] == "NTAP")
         self.assertEqual(ntap["status_transition"], ("WATCH", "STRONG"))
 
-    def test_no_previous_snapshot_is_all_new_no_summary(self):
+    def test_no_previous_snapshot_is_no_baseline_not_new(self):
+        # With no baseline, nothing is genuinely NEW — it's NO_BASELINE.
         comp = op.compare_opportunities(self._cur(), None)
-        self.assertTrue(all(c["movement_state"] == "NEW" for c in comp))
+        self.assertTrue(all(c["movement_state"] == "NO_BASELINE" for c in comp))
+        self.assertTrue(all(c["score_delta"] is None for c in comp))
         self.assertIsNone(op.summarize_changes(comp, None))
 
     def test_malformed_previous_records_are_safe(self):
@@ -185,6 +187,75 @@ class SnapshotComparisonTests(unittest.TestCase):
         cur = [{"ticker": "Z", "score": 55, "status": "WATCH", "fading": False, "n_signals": 2}]
         comp = op.compare_opportunities(cur, [{"ticker": "Z", "score": 55, "status": "WATCH"}])
         self.assertEqual(op.select_watch_next(comp), [])
+
+
+class MovementSemanticsTests(unittest.TestCase):
+    """Run 20C — trustworthy movement semantics."""
+
+    def _cur(self, score=80, status="STRONG", ver="1.0"):
+        return [{"ticker": "NVDA", "score": score, "status": status, "score_version": ver,
+                 "fading": False, "n_signals": 3}]
+
+    def _prev(self, score=77, status="WATCH", ver="1.0"):
+        return [{"ticker": "NVDA", "score": score, "status": status, "score_version": ver}]
+
+    def test_no_baseline_distinct_from_new(self):
+        self.assertEqual(op.compare_opportunities(self._cur(), None)[0]["movement_state"], "NO_BASELINE")
+        self.assertEqual(op.compare_opportunities(self._cur(), [])[0]["movement_state"], "NO_BASELINE")
+
+    def test_genuinely_new_when_absent_from_baseline(self):
+        prev = [{"ticker": "AMD", "score": 60, "status": "WATCH", "score_version": "1.0"}]
+        self.assertEqual(op.compare_opportunities(self._cur(), prev)[0]["movement_state"], "NEW")
+
+    def test_same_version_allows_delta(self):
+        c = op.compare_opportunities(self._cur(80), self._prev(77))[0]
+        self.assertEqual(c["score_delta"], 3)
+        self.assertEqual(c["movement_state"], "RISING")
+
+    def test_version_mismatch_blocks_delta(self):
+        c = op.compare_opportunities(self._cur(86, ver="1.1"), self._prev(72, ver="1.0"))[0]
+        self.assertEqual(c["movement_state"], "VERSION_CHANGED")
+        self.assertIsNone(c["score_delta"])
+        self.assertIsNone(c["status_transition"])
+        self.assertIsNone(c["previous_score"])
+
+    def test_missing_previous_version_treated_compatible(self):
+        prev = [{"ticker": "NVDA", "score": 77, "status": "WATCH"}]  # no score_version
+        c = op.compare_opportunities(self._cur(80), prev)[0]
+        self.assertEqual(c["movement_state"], "RISING")  # compatible -> delta computed
+
+    def test_threshold_two_unchanged_three_rising_minus_three_falling(self):
+        self.assertEqual(op.compare_opportunities(self._cur(79), self._prev(77))[0]["movement_state"], "UNCHANGED")
+        self.assertEqual(op.compare_opportunities(self._cur(80), self._prev(77))[0]["movement_state"], "RISING")
+        self.assertEqual(op.compare_opportunities(self._cur(74), self._prev(77))[0]["movement_state"], "FALLING")
+
+    def test_status_transitions_both_directions(self):
+        up = op.compare_opportunities(self._cur(85, "STRONG"), self._prev(78, "WATCH"))[0]
+        self.assertEqual(up["status_transition"], ("WATCH", "STRONG"))
+        down = op.compare_opportunities(self._cur(70, "WATCH"), self._prev(80, "STRONG"))[0]
+        self.assertEqual(down["status_transition"], ("STRONG", "WATCH"))
+
+    def test_duplicate_previous_ticker_first_wins(self):
+        prev = [{"ticker": "NVDA", "score": 77, "status": "WATCH", "score_version": "1.0"},
+                {"ticker": "NVDA", "score": 10, "status": "CAUTION", "score_version": "1.0"}]
+        self.assertEqual(op.compare_opportunities(self._cur(80), prev)[0]["previous_score"], 77)
+
+    def test_malformed_previous_payload_is_safe(self):
+        comp = op.compare_opportunities(self._cur(80), [{"score": 5}, {}, {"ticker": None}])
+        self.assertEqual(comp[0]["movement_state"], "NEW")  # baseline exists, no match
+
+    def test_dropped_means_gone_from_ranking(self):
+        cur = [{"ticker": "NVDA", "score": 80, "status": "STRONG", "fading": False, "n_signals": 3}]
+        prev = [{"ticker": "NVDA", "score": 77, "status": "WATCH", "score_version": "1.0"},
+                {"ticker": "CPRT", "score": 60, "status": "WATCH", "score_version": "1.0"}]
+        s = op.summarize_changes(op.compare_opportunities(cur, prev), prev)
+        self.assertIn("CPRT", s["dropped"])  # dropped from ranking, NOT a price claim
+
+    def test_movement_badge_states(self):
+        self.assertEqual(op.movement_badge({"movement_state": "NO_BASELINE"}), "—")
+        self.assertEqual(op.movement_badge({"movement_state": "VERSION_CHANGED"}), "—")
+        self.assertEqual(op.movement_badge({"movement_state": "NEW"}), "NEW")
+        self.assertEqual(op.movement_badge({"movement_state": "RISING", "score_delta": 11}), "▲ +11")
 
 
 if __name__ == "__main__":

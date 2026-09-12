@@ -406,11 +406,19 @@ def compare_opportunities(
 ) -> List[Dict[str, Any]]:
     """Annotate current opportunities with movement vs the previous snapshot.
 
-    Adds previous_score, score_delta, movement_state (NEW/RISING/FALLING/
-    UNCHANGED) and status_transition (prev_status, new_status) — the latter only
-    when the tier actually changed. Tiny deltas (< min_delta) count as UNCHANGED
-    so noise isn't reported as movement. Safe when previous is None/empty.
+    movement_state is one of:
+      NO_BASELINE   — there is no previous snapshot to compare against at all
+                      (so we must NOT imply every ticker is genuinely NEW);
+      NEW           — ticker absent from a *valid* previous snapshot;
+      VERSION_CHANGED — previous score used a different HSF score version, so a
+                      numeric delta would be misleading (no ▲/▼);
+      RISING/FALLING — |delta| >= min_delta (canonical threshold, default 3);
+      UNCHANGED     — tiny delta (< min_delta), i.e. noise.
+
+    status_transition is set only for a real tier change on a comparable prior.
+    Deterministic on duplicate previous rows (first wins). Safe on None/empty.
     """
+    has_baseline = bool(previous)
     prev_by: Dict[str, Dict[str, Any]] = {}
     for p in (previous or []):
         t = str(p.get("ticker") or "").upper()
@@ -419,20 +427,37 @@ def compare_opportunities(
 
     out = []
     for o in (current or []):
-        p = prev_by.get(str(o.get("ticker") or "").upper())
-        prev_score = _to_float(p.get("score")) if p else None
-        if prev_score is None:
-            movement, delta = "NEW", None
+        cur_ver = str(o.get("score_version") or HSF_SCORE_VERSION)
+        prev_score = None
+        prev_status = None
+        transition = None
+        delta = None
+
+        if not has_baseline:
+            movement = "NO_BASELINE"
         else:
-            delta = int(round(o["score"] - prev_score))
-            if delta >= min_delta:
-                movement = "RISING"
-            elif delta <= -min_delta:
-                movement = "FALLING"
+            p = prev_by.get(str(o.get("ticker") or "").upper())
+            if p is None:
+                movement = "NEW"
             else:
-                movement = "UNCHANGED"
-        prev_status = p.get("status") if p else None
-        transition = (prev_status, o["status"]) if (prev_status and prev_status != o["status"]) else None
+                prev_ver = p.get("score_version")
+                # A missing previous version is treated as compatible: the only
+                # score version to have existed is the current one, so old
+                # (pre-versioning) snapshots are v1.0 by definition. A *present*
+                # and different version blocks the numeric comparison.
+                if prev_ver is not None and str(prev_ver) != cur_ver:
+                    movement = "VERSION_CHANGED"
+                else:
+                    prev_score = _to_float(p.get("score"))
+                    prev_status = p.get("status")
+                    if prev_score is None:
+                        movement = "NEW"
+                        prev_status = None
+                    else:
+                        delta = int(round(o["score"] - prev_score))
+                        movement = ("RISING" if delta >= min_delta
+                                    else "FALLING" if delta <= -min_delta else "UNCHANGED")
+                        transition = (prev_status, o["status"]) if (prev_status and prev_status != o["status"]) else None
         out.append({
             **o,
             "previous_score": int(prev_score) if prev_score is not None else None,
@@ -445,7 +470,11 @@ def compare_opportunities(
 
 
 def movement_badge(opp: Dict[str, Any]) -> str:
-    """Compact movement label: 'NEW' · '▲ +11' · '▼ -7' · '—'."""
+    """Compact movement label: 'NEW' · '▲ +11' · '▼ -7' · '—'.
+
+    NO_BASELINE and VERSION_CHANGED render as '—' (no movement claim) — callers
+    that want to surface those states do so explicitly, never as a fake delta.
+    """
     state = opp.get("movement_state")
     if state == "NEW":
         return "NEW"

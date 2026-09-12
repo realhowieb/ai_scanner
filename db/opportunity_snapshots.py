@@ -25,13 +25,33 @@ def _ensure_schema(conn) -> None:
         )
         """
     )
+    # Backward-compatible: `context` tags which surface produced the snapshot so
+    # movement only ever compares like-for-like (never Market Brief opps vs
+    # Scanner opps). Old rows default to 'market_brief' — the only writer before
+    # this column existed — so their history stays comparable, not orphaned.
+    cur.execute("ALTER TABLE opportunity_snapshots ADD COLUMN IF NOT EXISTS "
+                "context TEXT NOT NULL DEFAULT 'market_brief'")
     conn.commit()
     cur.close()
 
 
-def save_opportunity_snapshot(snapshot_time: Any, opportunities: List[Dict[str, Any]]) -> bool:
-    """Upsert the computed opportunities for one scan snapshot. Idempotent —
-    re-rendering the same snapshot overwrites the same row, not a new one."""
+def _dedupe_by_ticker(opps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One canonical record per ticker (first wins), so a snapshot never carries
+    duplicate ticker rows that would double-count movement."""
+    seen, out = set(), []
+    for o in (opps or []):
+        t = str(o.get("ticker") or "").upper()
+        if t and t not in seen:
+            seen.add(t)
+            out.append(o)
+    return out
+
+
+def save_opportunity_snapshot(
+    snapshot_time: Any, opportunities: List[Dict[str, Any]], *, context: str = "market_brief"
+) -> bool:
+    """Upsert the computed opportunities for one snapshot. Idempotent per
+    snapshot_time; dedupes tickers before storing."""
     if snapshot_time is None:
         return False
     conn = get_neon_conn()
@@ -42,12 +62,12 @@ def save_opportunity_snapshot(snapshot_time: Any, opportunities: List[Dict[str, 
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO opportunity_snapshots (snapshot_time, opportunities)
-            VALUES (%s, %s::jsonb)
+            INSERT INTO opportunity_snapshots (snapshot_time, opportunities, context)
+            VALUES (%s, %s::jsonb, %s)
             ON CONFLICT (snapshot_time)
-            DO UPDATE SET opportunities = EXCLUDED.opportunities
+            DO UPDATE SET opportunities = EXCLUDED.opportunities, context = EXCLUDED.context
             """,
-            (snapshot_time, json.dumps(opportunities or [])),
+            (snapshot_time, json.dumps(_dedupe_by_ticker(opportunities)), str(context)),
         )
         conn.commit()
         cur.close()
@@ -61,11 +81,13 @@ def save_opportunity_snapshot(snapshot_time: Any, opportunities: List[Dict[str, 
         return False
 
 
-def load_previous_opportunity_snapshot(before_time: Any) -> Optional[Dict[str, Any]]:
-    """Most recent snapshot strictly before `before_time` (the prior scan).
-
-    Returns {"snapshot_time", "opportunities": [...]} or None (no prior snapshot,
-    malformed payload, or DB down). Never raises.
+def load_previous_opportunity_snapshot(
+    before_time: Any, *, context: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Most recent snapshot STRICTLY before `before_time` — the prior comparable
+    snapshot. When `context` is given, only same-context snapshots are returned
+    (so movement never crosses surfaces). Returns {"snapshot_time",
+    "opportunities", "context"} or None. Never raises.
     """
     if before_time is None:
         return None
@@ -75,16 +97,18 @@ def load_previous_opportunity_snapshot(before_time: Any) -> Optional[Dict[str, A
     try:
         _ensure_schema(conn)
         cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT snapshot_time, opportunities
-            FROM opportunity_snapshots
-            WHERE snapshot_time < %s
-            ORDER BY snapshot_time DESC
-            LIMIT 1
-            """,
-            (before_time,),
-        )
+        if context is None:
+            cur.execute(
+                "SELECT snapshot_time, opportunities, context FROM opportunity_snapshots "
+                "WHERE snapshot_time < %s ORDER BY snapshot_time DESC LIMIT 1",
+                (before_time,),
+            )
+        else:
+            cur.execute(
+                "SELECT snapshot_time, opportunities, context FROM opportunity_snapshots "
+                "WHERE snapshot_time < %s AND context = %s ORDER BY snapshot_time DESC LIMIT 1",
+                (before_time, str(context)),
+            )
         row = cur.fetchone()
         cur.close()
         conn.close()
@@ -107,4 +131,5 @@ def load_previous_opportunity_snapshot(before_time: Any) -> Optional[Dict[str, A
             payload = []
     if not isinstance(payload, list):
         payload = []
-    return {"snapshot_time": ts, "opportunities": payload}
+    ctx = (row.get("context") if isinstance(row, dict) else (row[2] if len(row) > 2 else None))
+    return {"snapshot_time": ts, "opportunities": payload, "context": ctx}

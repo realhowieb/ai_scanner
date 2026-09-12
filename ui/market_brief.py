@@ -766,9 +766,9 @@ def compute_compared_opportunities(data: Dict[str, Any]) -> tuple:
         )
         from ui.opportunities import to_snapshot_rows
 
-        prev = load_previous_opportunity_snapshot(ts)
+        prev = load_previous_opportunity_snapshot(ts, context="market_brief")
         previous_rows = prev.get("opportunities") if prev else None
-        save_opportunity_snapshot(ts, to_snapshot_rows(opps))
+        save_opportunity_snapshot(ts, to_snapshot_rows(opps), context="market_brief")
     except Exception:
         previous_rows = None
     # Freeze full opportunities (score + components + signal-time features) into

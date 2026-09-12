@@ -81,9 +81,10 @@ class MovementViewTests(unittest.TestCase):
         self.assertIsNone(amd["score_delta"])
         self.assertIsNone(amd["status_transition"])
 
-    def test_no_previous_all_new_but_summary_hides_counts(self):
+    def test_no_previous_is_no_baseline_and_summary_hides_counts(self):
         comp = ri.enrich_movement(self._opps(), None)
-        self.assertTrue(all(c["movement_state"] == "NEW" for c in comp))
+        # Never present the whole set as NEW when there is no baseline.
+        self.assertTrue(all(c["movement_state"] == "NO_BASELINE" for c in comp))
         s = ri.summarize_results(comp, total_matches=10, has_previous=False)
         self.assertNotIn("new", s)   # no valid previous -> don't surface NEW counts
         self.assertNotIn("rising", s)
