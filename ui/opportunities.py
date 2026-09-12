@@ -298,7 +298,7 @@ def build_opportunity_explanation(
 
     n = int(opp.get("n_signals") or 0)
     if n >= 2:
-        reasons.append(f"Confluence — appears across {n} independent signals")
+        reasons.append(f"Confluence — appears across {n} confirming signals")
 
     if opp.get("fading"):
         chg = opp.get("chg_pct")

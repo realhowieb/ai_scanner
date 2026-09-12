@@ -151,22 +151,6 @@ class StandoutsTests(unittest.TestCase):
 
 
 class SummaryAndPositionsTests(unittest.TestCase):
-    def test_market_summary_synthesizes(self):
-        import ui.market_brief as mb
-
-        data = {
-            "market_close": [("S&P 500 (SPY)", 660.0, 0.6)],
-            "breadth": (312, 188), "sectors": [("Tech", 1.2), ("Energy", -0.8)],
-            "gappers": [{"ticker": "CRWV"}], "golden": ["CRWV"],
-            "top_setups": [("CRWV", 39)], "picks": [], "gainers": [], "losers": [],
-            "earnings_today": ["EA", "QCOM"],
-        }
-        s = mb._market_summary(data)
-        self.assertIn("Risk-on", s)
-        self.assertIn("breadth 312/188", s)
-        self.assertIn("Tech leading", s)
-        self.assertIn("1 standout", s)
-
     def test_open_positions_marks_to_now(self):
         from unittest import mock
 

@@ -356,29 +356,6 @@ _TOGGLEABLE = [
 ]
 
 
-def _market_summary(data: Dict[str, Any]) -> Optional[str]:
-    """A one-line, deterministic synthesis of the brief for the top of the page."""
-    bits: List[str] = []
-    spy = next((c for (lbl, _last, c) in (data.get("market_close") or [])
-                if "SPY" in str(lbl) and c is not None), None)
-    if spy is not None:
-        tone = "Risk-on" if spy >= 0.15 else "Risk-off" if spy <= -0.15 else "Mixed"
-        bits.append(f"{tone} — SPY {spy:+.1f}%")
-    b = data.get("breadth")
-    if b:
-        bits.append(f"breadth {b[0]}/{b[1]}")
-    sec = data.get("sectors") or []
-    if sec:
-        bits.append(f"{sec[0][0]} leading")
-    n = len(_standouts(data))
-    if n:
-        bits.append(f"{n} standout{'s' if n != 1 else ''}")
-    et = len(data.get("earnings_today") or [])
-    if et:
-        bits.append(f"{et} earnings today")
-    return " · ".join(bits) if bits else None
-
-
 def _render_breadth_sectors(data: Dict[str, Any]) -> None:
     b = data.get("breadth")
     sec = data.get("sectors") or []
@@ -441,17 +418,6 @@ def _market_phase() -> Optional[str]:
         return market_state(_dt.datetime.now(_dt.timezone.utc))
     except Exception:
         return None
-
-
-def _render_phase_banner(phase: Optional[str]) -> None:
-    banner = {
-        "premarket": "🌅 **Premarket** — focus on today's setups & gappers.",
-        "open": "🔔 **Market open** — live gainers/losers below.",
-        "afterhours": "🌙 **After the close** — here's how the day went.",
-        "closed": "🌙 **Market closed** — recap of the last session.",
-    }.get(phase or "", "")
-    if banner:
-        st.caption(banner)
 
 
 def _standouts(data: Dict[str, Any]) -> List[tuple]:

@@ -60,6 +60,9 @@ class OpportunityScoreTests(unittest.TestCase):
         # No fabricated metrics we didn't pass.
         self.assertNotIn("RVOL", joined)
         self.assertNotIn("resistance", joined.lower())
+        # Product language: 'confirming', never 'independent' (not established).
+        self.assertIn("confirming signals", joined)
+        self.assertNotIn("independent", joined)
 
     def test_empty_and_malformed_inputs_are_safe(self):
         self.assertEqual(op.build_opportunities({}), [])
