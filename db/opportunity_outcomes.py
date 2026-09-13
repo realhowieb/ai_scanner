@@ -247,6 +247,88 @@ def get_opportunity_outcome_summary(*, days_back: int = 90, min_sample: int = MI
     }
 
 
+def get_degraded_cohort_outcomes(*, days_back: int = 90, min_sample: int = MIN_OUTCOME_SAMPLE) -> Dict[str, Any]:
+    """Read-only outcomes for the RECOVERY-ELIGIBLE degraded cohort only (Step 15):
+    observations whose SIGNAL-TIME state was degraded — canonical fading flag OR
+    status CAUTION. The denominator is this cohort, never all opportunities.
+    Returns overall + per-horizon classification counts + recovery rate."""
+    empty = {"available": False, "matured": 0, "comparable": 0, "recovered": 0,
+             "recovered_rate": None, "by_horizon": [], "min_sample": int(min_sample)}
+    conn = get_neon_conn()
+    if conn is None:
+        return empty
+    cohort = "(initial_fading = TRUE OR initial_status = 'CAUTION')"
+    where = (f"WHERE data_status = 'MATURED' AND {cohort} "
+             "AND source_snapshot_time >= NOW() - make_interval(days => %s)")
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(f"SELECT outcome_classification, COUNT(*) FROM hsf_opportunity_outcomes {where} "
+                    "GROUP BY outcome_classification", (int(days_back),))
+        overall_rows = cur.fetchall() or []
+        cur.execute(f"SELECT evaluation_horizon, outcome_classification, COUNT(*) "
+                    f"FROM hsf_opportunity_outcomes {where} GROUP BY evaluation_horizon, outcome_classification",
+                    (int(days_back),))
+        horizon_rows = cur.fetchall() or []
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return empty
+    d: Dict[str, int] = {}
+    for r in overall_rows:
+        k, n = (r[0], int(r[1] or 0)) if not isinstance(r, dict) else tuple(r.values())
+        d[k] = n
+    matured = sum(d.values())
+    comparable = sum(n for k, n in d.items() if k not in _NON_COMPARABLE)
+    recovered = d.get("RECOVERED", 0)
+    return {
+        "available": comparable >= int(min_sample), "matured": matured, "comparable": comparable,
+        "recovered": recovered, "recovered_rate": _rate(recovered, comparable, min_sample),
+        "faded": d.get("FADED", 0), "weakened": d.get("WEAKENED", 0), "dropped": d.get("DROPPED", 0),
+        "by_horizon": _roll(horizon_rows, 0, min_sample), "min_sample": int(min_sample),
+    }
+
+
+def get_intelligence_evidence_freshness() -> Dict[str, Any]:
+    """Read-only freshness of the HISTORICAL EVIDENCE Run 26 analyzes (distinct
+    from Run 23 operational health). Latest: frozen opportunity observation,
+    matured opportunity outcome, intelligence alert, matured alert outcome.
+    Each query is independently guarded so a missing table never breaks it."""
+    out = {"latest_frozen_observation": None, "latest_opportunity_outcome": None,
+           "latest_intelligence_alert": None, "latest_alert_outcome": None}
+    conn = get_neon_conn()
+    if conn is None:
+        return out
+    queries = {
+        "latest_frozen_observation": "SELECT MAX(fired_at) FROM signal_outcomes WHERE source = 'opportunity'",
+        "latest_opportunity_outcome": "SELECT MAX(evaluated_at) FROM hsf_opportunity_outcomes",
+        "latest_intelligence_alert": "SELECT MAX(detected_at) FROM hsf_intelligence_alerts",
+        "latest_alert_outcome": "SELECT MAX(evaluated_at) FROM intelligence_alert_outcomes",
+    }
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        for key, sql in queries.items():
+            try:
+                cur.execute(sql)
+                row = cur.fetchone()
+                out[key] = (row[0] if not isinstance(row, dict) else list(row.values())[0]) if row else None
+            except Exception:
+                conn.rollback()
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return out
+
+
 def get_similar_state_outcomes(
     *, status: Optional[str], score: Optional[float], horizon: str = "H24",
     days_back: int = 180, min_sample: int = MIN_OUTCOME_SAMPLE,
@@ -291,9 +373,13 @@ def get_similar_state_outcomes(
     matured = sum(d.values())
     comparable = sum(n for k, n in d.items() if k not in _NON_COMPARABLE)
     follow = sum(d.get(k, 0) for k in _FOLLOW_THROUGH)
+    strength = ("STRONG" if comparable >= 5 * int(min_sample)
+                else "MODERATE" if comparable >= 2 * int(min_sample)
+                else "EARLY")
     result.update({
         "available": comparable >= int(min_sample), "matured": matured, "comparable": comparable,
         "follow_through_rate": _rate(follow, comparable, min_sample),
+        "evidence_strength": strength,
         "assessment": "OK" if comparable >= int(min_sample) else "INSUFFICIENT_SAMPLE",
     })
     return result

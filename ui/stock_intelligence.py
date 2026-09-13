@@ -450,6 +450,7 @@ def _render_historical(intel: Dict[str, Any]) -> None:
             f"Similar HSF states (status {coh['status']} · HSF score {coh['score_band']}, "
             f"{coh['horizon']}): {coh['comparable']} observations, "
             f"{coh['follow_through_rate']*100:.0f}% persisted or strengthened "
+            f"· evidence strength: {str(coh.get('evidence_strength', 'EARLY')).title()} "
             "(historical HSF-state persistence, not a price probability).")
 
 

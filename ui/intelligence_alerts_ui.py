@@ -105,6 +105,7 @@ def render_intelligence_alerts(username: str) -> None:
             _render_health()
             _render_quality()
             _render_opportunity_outcomes()
+            _render_performance()
     except Exception:
         pass
 
@@ -270,3 +271,72 @@ def _render_opportunity_outcomes() -> None:
                    f"reported separately (it starts from a degraded state). Rates only "
                    f"at ≥ {s.get('min_sample')} comparable (excl. VERSION_CHANGED). "
                    "Observation only — HSF Score and alerts are unchanged.")
+
+
+_READINESS_ICON = {"EARLY": "🌱", "DEVELOPING": "🌿", "SUFFICIENT": "🌳", "ROBUST": "🏛️"}
+
+
+def _render_performance() -> None:
+    """Run 26 — read-only HSF Intelligence Performance: composes persisted Run
+    24A alert-quality + Run 25A opportunity-outcome evidence into deterministic
+    descriptive findings. No scans/writes/Claude. Historical HSF-state behavior,
+    never price or investment return."""
+    try:
+        from analytics.intelligence_performance import get_intelligence_performance_summary
+
+        s = get_intelligence_performance_summary()
+    except Exception:
+        return
+    if not s.get("available"):
+        return
+    with st.expander("📊 HSF Intelligence performance (admin)", expanded=False):
+        st.caption("What HSF has learned about the historical behavior of its own "
+                   "intelligence — HSF-state persistence and alert follow-through. "
+                   "Descriptive evidence, not a price forecast or win rate.")
+        rd = s.get("readiness") or {}
+        tier = rd.get("tier", "EARLY")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Evidence readiness", f"{_READINESS_ICON.get(tier, '')} {tier}")
+        c2.metric("Opportunity comparable", rd.get("opportunity_comparable"))
+        c3.metric("Alert comparable", rd.get("alert_comparable"))
+
+        findings = s.get("findings") or []
+        st.markdown("**What HSF has learned**")
+        if findings:
+            for f in findings:
+                st.markdown(f"- {f['statement']}  \n"
+                            f"  <small>{f.get('detail','')} · evidence strength: "
+                            f"{str(f.get('evidence_strength','EARLY')).title()}</small>",
+                            unsafe_allow_html=True)
+        else:
+            st.caption("No reliable pattern yet — major cohorts have not reached the "
+                       f"minimum sample ({s.get('min_sample')}) for a supported finding.")
+
+        # Opportunity intelligence — by horizon.
+        oh = (s.get("opportunity") or {}).get("by_horizon") or []
+        if oh:
+            labels = _horizon_labels()
+            st.markdown(f"**Opportunity persistence by horizon** (decay: {(s.get('horizon_decay') or {}).get('state','—')})")
+            st.dataframe(
+                [{"Horizon": labels.get(r["key"], r["key"]), "N": r["comparable"],
+                  "Persist/Strengthen": (_pct(r.get("follow_through_rate")) if r.get("assessment") == "OK" else "insuf."),
+                  "Weakened": r.get("weakened"), "Faded": r.get("faded"),
+                  "Dropped": r.get("dropped"), "Recovered": r.get("recovered")} for r in oh],
+                hide_index=True, width="stretch")
+        st.caption(f"Score-band order: {(s.get('score_monotonicity') or {}).get('state','—')} · "
+                   f"confirming-signal order: {(s.get('signal_monotonicity') or {}).get('state','—')} · "
+                   f"regime: {(s.get('regime') or {}).get('state','—')}")
+
+        # Alert intelligence — noise/value by event.
+        noise = s.get("alert_noise") or []
+        if noise:
+            st.markdown("**Alert follow-through by event type**")
+            st.dataframe(
+                [{"Event": n["event_type"], "N": n.get("evaluable"),
+                  "Confirmation": _pct(n.get("confirmation_rate")),
+                  "Volume": n.get("detected_volume"), "Assessment": n.get("assessment")}
+                 for n in noise],
+                hide_index=True, width="stretch")
+        dp = s.get("default_preferences") or {}
+        st.caption(f"Default alert choices vs evidence: {dp.get('assessment','INSUFFICIENT_SAMPLE')}. "
+                   "Findings are descriptive — HSF Score, ranking, and alert behavior are unchanged.")
