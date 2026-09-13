@@ -149,7 +149,12 @@ def results_column_config() -> dict:
         "VolRel20": cc.NumberColumn("RVOL", format="%.2fx"),
         "DollarVol20": cc.NumberColumn("$Vol 20d", format="compact"),
         "RSvsSPY": cc.NumberColumn("RS vs SPY", format="%.2f"),
-        "PreBreakoutProb%": cc.NumberColumn("PreBreakout", format="%.1f%%"),
+        "PreBreakoutProb%": cc.NumberColumn(
+            "PreBreakout", format="%.1f%%",
+            help="Calibrated PreBreakout likelihood (isotonic, out-of-sample). "
+                 "Low-signal setups share a calibrated floor, so many rows show "
+                 "the same % — that is the estimated likelihood, not a per-ticker "
+                 "precision value. Ties break by the underlying model score."),
         "AI Confidence": cc.NumberColumn(format="%.1f%%"),
         "PctChange": cc.NumberColumn("Day %", format="%.2f%%"),
         "Spark10D": cc.LineChartColumn("10-day", width="small"),

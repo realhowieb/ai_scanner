@@ -9,6 +9,13 @@ BreakoutScore rather than presenting stored order as a model opinion.
 from __future__ import annotations
 
 PREBREAKOUT_COL = "PreBreakoutProb%"
+# Isotonic calibration is monotonic and has a flat left tail, so many low-signal
+# rows share one calibrated % (e.g. the ~13.1% plateau). The calibrated value is
+# the PRIMARY ranking key (semantics unchanged); the raw model probability is a
+# deterministic SECONDARY key that breaks plateau ties by the discriminative
+# model score instead of arbitrary row order. Macro-ordering is identical —
+# raw is monotonic in calibrated — so this only makes tied rows deterministic.
+PREBREAKOUT_RAW_COL = "PreBreakoutProbRaw"
 FALLBACK_COL = "BreakoutScore"
 
 
@@ -18,7 +25,10 @@ def apply_default_ranking(df):
         if df is None or getattr(df, "empty", True):
             return df
         if PREBREAKOUT_COL in df.columns and float(df[PREBREAKOUT_COL].max() or 0.0) > 0.0:
-            return df.sort_values(PREBREAKOUT_COL, ascending=False).reset_index(drop=True)
+            sort_cols = [PREBREAKOUT_COL]
+            if PREBREAKOUT_RAW_COL in df.columns:
+                sort_cols.append(PREBREAKOUT_RAW_COL)  # deterministic tie-break
+            return df.sort_values(sort_cols, ascending=False).reset_index(drop=True)
         if FALLBACK_COL in df.columns:
             return df.sort_values(FALLBACK_COL, ascending=False).reset_index(drop=True)
         return df
