@@ -1,13 +1,13 @@
-"""📋 Watchlists — create, organize, and quote your watchlists.
+"""📋 My Watchlist — personalized HSF intelligence and watchlist management.
 
-Promotes watchlist management to its own page. Reuses
-ui.watchlists.render_watchlists_panel.
+Run 27 promotes the persisted watchlist into a read-only intelligence surface
+while preserving the existing watchlist management panel and scan handoff.
 """
 from __future__ import annotations
 
 import streamlit as st
 
-st.set_page_config(page_title="Watchlists", page_icon="📋", layout="wide")
+st.set_page_config(page_title="My Watchlist", page_icon="📋", layout="wide")
 
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:
@@ -15,15 +15,16 @@ if not _username:
     st.page_link("app.py", label="Go to login", icon="🔐")
     st.stop()
 
-st.markdown("## 📋 Watchlists")
-st.caption("Create and organize watchlists; your active list feeds the scanner, "
-           "the Day Trader monitor, and the Market Brief.")
-
 try:
     from ui.header import render_page_logo
+    from ui.personal_watchlist import render_personal_watchlist
     from ui.watchlists import render_watchlists_panel
 
     render_page_logo()
+    render_personal_watchlist(_username)
+    st.markdown("---")
+    st.markdown("### Manage Watchlists")
+    st.caption("Your active list feeds the scanner, Day Trader monitor, Market Brief, and alerts.")
     render_watchlists_panel(_username)
 
     from ui.watchlists import handle_active_watchlist_actions

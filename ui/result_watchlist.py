@@ -55,13 +55,13 @@ def render_watchlist_action(ticker: str, *, key_prefix: str = "results") -> None
     action_col, caption_col = st.columns([1, 2])
     with action_col:
         clicked = st.button(
-            "⭐ Add to Watchlist" if not already else "✅ In Watchlist",
+            "☆ Watch" if not already else "★ Watching",
             key=f"{key_prefix}_btn_details_add_watchlist_{normalized_ticker}",
             disabled=already,
             width="stretch",
         )
     with caption_col:
-        st.caption("Adds this ticker to your active watchlist.")
+        st.caption("Uses your active watchlist.")
 
     if not clicked:
         return

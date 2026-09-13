@@ -235,6 +235,15 @@ _STATUS_ICON = {"STRONG": "🟢", "WATCH": "🟡", "CAUTION": "🟠"}
 _VIEWS = ["Top ranked", "Developing", "New", "Fading", "All results"]
 
 
+def _watch_label(ticker: str) -> str:
+    active = {
+        str(t).strip().upper()
+        for t in ((st.session_state.get("active_watchlist_tickers") if st is not None else []) or [])
+        if str(t).strip()
+    }
+    return "★ Watching" if str(ticker or "").strip().upper() in active else "☆ Watch"
+
+
 def _movement_cell(c: Dict[str, Any]) -> str:
     from ui.opportunities import movement_badge
     if c.get("movement_state") == "VERSION_CHANGED":
@@ -469,7 +478,7 @@ def _render_result_detail(
             st.caption("Open 'Stock Intel' from the sidebar.")
     if a1.button("📈 Chart", key=f"{key_prefix}_intel_chart_{c['ticker']}"):
         st.session_state[f"{key_prefix}_intel_show_chart"] = c["ticker"]
-    if a2.button("👁 Watch", key=f"{key_prefix}_intel_watch_{c['ticker']}"):
+    if a2.button(_watch_label(c["ticker"]), key=f"{key_prefix}_intel_watch_{c['ticker']}"):
         try:
             from ui.market_brief import _add_to_watchlist
             _add_to_watchlist(c["ticker"])

@@ -55,6 +55,10 @@ try:
     try:
         from ui.intelligence_alerts_ui import render_intelligence_alerts
 
+        st.caption(
+            "HSF Intelligence alerts are generated for watched opportunities by background detection; "
+            "opening this page only reads saved alert state."
+        )
         render_intelligence_alerts(_username)
         st.markdown("---")
     except Exception:

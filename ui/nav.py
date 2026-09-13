@@ -18,7 +18,7 @@ _NAV = [
     ("pages/brief.py", "Market Brief", "📬"),
     ("pages/stock.py", "Stock Intel", "🔬"),
     ("pages/day_trader.py", "Day Trader", "⚡"),
-    ("pages/watchlists.py", "Watchlists", "📋"),
+    ("pages/watchlists.py", "My Watchlist", "📋"),
     ("pages/alerts.py", "Alerts", "🔔"),
     ("pages/journal.py", "Journal", "📓"),
     ("pages/kalshi.py", "Kalshi BTC", "🪙"),

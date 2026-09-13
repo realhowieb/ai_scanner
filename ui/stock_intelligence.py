@@ -26,6 +26,21 @@ _SETUP_LABELS = {
 }
 
 
+def _is_watched(ticker: str) -> bool:
+    if st is None:
+        return False
+    active = {
+        str(t).strip().upper()
+        for t in (st.session_state.get("active_watchlist_tickers") or [])
+        if str(t).strip()
+    }
+    return str(ticker or "").strip().upper() in active
+
+
+def _watch_label(ticker: str) -> str:
+    return "★ Watching" if _is_watched(ticker) else "☆ Watch"
+
+
 def _rank(s: Optional[str]) -> int:
     return _STATUS_RANK.get(str(s or "").upper(), 0)
 
@@ -331,6 +346,7 @@ def render_stock_intelligence(
 
 def _render_header(intel: Dict[str, Any]) -> None:
     st.markdown(f"## {intel['ticker']}")
+    st.caption(_watch_label(intel["ticker"]))
     price = intel.get("price")
     chg = intel.get("change_pct")
     if price is not None or chg is not None:
@@ -460,7 +476,7 @@ def _render_actions(intel: Dict[str, Any], render_chart_for_ticker) -> None:
     a1, a2, a3 = st.columns(3)
     if a1.button("📈 Chart", key=f"si_chart_{t}"):
         st.session_state[f"si_show_chart_{t}"] = True
-    if a2.button("👁 Watchlist", key=f"si_watch_{t}"):
+    if a2.button(_watch_label(t), key=f"si_watch_{t}"):
         try:
             from ui.market_brief import _add_to_watchlist
             _add_to_watchlist(t)

@@ -251,6 +251,54 @@ def _add_to_watchlist(ticker: str) -> None:
         st.warning("Could not add to watchlist.")
 
 
+def _is_watched(ticker: str) -> bool:
+    symbol = _base_ticker(ticker)
+    active = {
+        str(t).strip().upper()
+        for t in (st.session_state.get("active_watchlist_tickers") or [])
+        if str(t).strip()
+    }
+    return bool(symbol and symbol in active)
+
+
+def _watch_button_label(ticker: str) -> str:
+    return "★ Watching" if _is_watched(ticker) else "☆ Watch"
+
+
+def _render_watchlist_opportunity_matches(compared: List[Dict[str, Any]], user: str) -> None:
+    """Personalized read-only watchlist match against already-built opportunities."""
+    if not user or not compared:
+        return
+    try:
+        from analytics.watchlist_intelligence import match_watchlist_opportunities
+        from db.watchlists import get_user_watchlist
+
+        watched = get_user_watchlist(user)
+        matches = match_watchlist_opportunities(watched, compared)
+    except Exception:
+        return
+    if not watched:
+        return
+
+    st.markdown("### From Your Watchlist")
+    if not matches:
+        st.caption("None of your watched stocks are currently in the HSF opportunity ranking.")
+        return
+    st.caption(f"{len(matches)} watched stock(s) are active HSF opportunities in this brief.")
+    for row in matches[:5]:
+        c1, c2, c3, c4 = st.columns([1.0, 1.5, 2.0, 1.2])
+        c1.markdown(f"**{row.get('ticker')}**")
+        c2.caption(f"HSF {int(row.get('score') or 0)}/100 · {row.get('status') or '—'}")
+        c3.caption(row.get("primary_setup") or f"{row.get('n_signals') or 0} confirming signals")
+        if c4.button("Full intel", key=f"brief_watch_match_intel_{row.get('ticker')}", width="stretch"):
+            st.session_state["hsf_stock_ticker"] = row.get("ticker")
+            st.session_state["hsf_stock_opp"] = row
+            try:
+                st.switch_page("pages/stock.py")
+            except Exception:
+                st.caption("Open Stock Intel from the sidebar.")
+
+
 # --------------------------------- render ------------------------------------
 
 def render_market_brief() -> None:
@@ -292,6 +340,7 @@ def render_market_brief() -> None:
     render_since_last_scan(compared, previous)
     # C / D. Top Opportunities (score movement + status transitions) + detail.
     render_top_opportunities(compared, data)
+    _render_watchlist_opportunity_matches(compared, user)
     # E. What to watch next (~3 deterministic items).
     render_watch_next(compared)
     # F. HSF signal performance (outcome scorecard).
@@ -926,7 +975,7 @@ def _render_opportunity_detail(o: Dict[str, Any], data: Dict[str, Any]) -> None:
             st.caption("Open 'Stock Intel' from the sidebar.")
     if a1.button("📈 Chart", key=f"opp_chart_{o['ticker']}"):
         st.session_state["brief_show_chart"] = o["ticker"]
-    if a2.button("👁 Watch", key=f"opp_watch_{o['ticker']}"):
+    if a2.button(_watch_button_label(o["ticker"]), key=f"opp_watch_{o['ticker']}"):
         _add_to_watchlist(o["ticker"])
     if a3.button("🔔 Alert", key=f"opp_alert_{o['ticker']}"):
         st.session_state["alert_price_tk"] = o["ticker"]
@@ -1210,7 +1259,7 @@ def _render_actions(data: Dict[str, Any]) -> None:
     a1, a2, a3 = st.columns(3)
     if a1.button("📈 Chart", key="brief_act_chart"):
         st.session_state["brief_show_chart"] = pick
-    if a2.button("👁 Watch", key="brief_act_watch"):
+    if a2.button(_watch_button_label(pick), key="brief_act_watch"):
         _add_to_watchlist(pick)
     if a3.button(f"🔔 Alert on {pick}", key="brief_act_alert"):
         st.session_state["alert_price_tk"] = pick

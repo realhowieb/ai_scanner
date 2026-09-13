@@ -1,9 +1,24 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import re
+from typing import Any, Dict, List, Optional
 
 from db.engine import get_neon_conn
 from db.schema import ensure_neon_watchlists_schema
+
+_TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,7}$")
+
+
+def normalize_watchlist_ticker(value: object) -> str:
+    """Canonical persisted ticker shape: trimmed, upper-case, and valid-ish."""
+    ticker = str(value or "").strip().upper()
+    return ticker if _TICKER_RE.match(ticker) else ""
+
+
+def normalize_watchlist_tickers(tickers: List[object]) -> List[str]:
+    """De-dupe watchlist tickers deterministically after normalization."""
+    cleaned = sorted({t for t in (normalize_watchlist_ticker(v) for v in (tickers or [])) if t})
+    return cleaned
 
 
 def _get_conn():
@@ -79,6 +94,7 @@ def create_watchlist(user_id: str, name: str) -> int:
     # We don't use this return value in the UI, so a dummy value is fine.
     return -1
 
+
 def delete_watchlist(watchlist_id: int, user_id: str) -> None:
     conn = _get_conn()
     cur = conn.cursor()
@@ -119,9 +135,97 @@ def get_watchlist_tickers(watchlist_id: int, user_id: str) -> List[str]:
             # tuple-style row (e.g. sqlite or default cursor)
             val = r[0] if len(r) > 0 else None
         if val:
-            tickers.append(str(val).upper())
+            ticker = normalize_watchlist_ticker(val)
+            if ticker:
+                tickers.append(ticker)
 
-    return tickers
+    return normalize_watchlist_tickers(tickers)
+
+
+def get_user_watchlist(user_id: str) -> List[str]:
+    """All persisted watchlist tickers for a user, loaded with one batch query."""
+    if not user_id:
+        return []
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT wi.ticker
+        FROM watchlist_items wi
+        JOIN watchlists wl ON wl.id = wi.watchlist_id
+        WHERE wl.user_id = %s
+        ORDER BY wi.ticker ASC
+        """,
+        (user_id,),
+    )
+    rows = cur.fetchall() or []
+    cur.close()
+    tickers: List[object] = []
+    for r in rows:
+        tickers.append(r.get("ticker") if isinstance(r, dict) else (r[0] if len(r) else None))
+    return normalize_watchlist_tickers(tickers)
+
+
+def _default_watchlist_id(user_id: str) -> Optional[int]:
+    watchlists = list_watchlists(user_id)
+    if not watchlists:
+        create_watchlist(user_id, "My Watchlist")
+        watchlists = list_watchlists(user_id)
+    if not watchlists:
+        return None
+    return int(watchlists[0]["id"])
+
+
+def add_to_watchlist(user_id: str, ticker: object, watchlist_id: Optional[int] = None) -> bool:
+    """Add one ticker to the user's active/default watchlist without duplicates."""
+    symbol = normalize_watchlist_ticker(ticker)
+    if not user_id or not symbol:
+        return False
+    wid = int(watchlist_id) if watchlist_id is not None else _default_watchlist_id(user_id)
+    if wid is None:
+        return False
+    current = get_watchlist_tickers(wid, user_id)
+    updated = normalize_watchlist_tickers([*current, symbol])
+    if updated == current:
+        return True
+    set_watchlist_tickers(wid, user_id, updated)
+    return True
+
+
+def remove_from_watchlist(user_id: str, ticker: object, watchlist_id: Optional[int] = None) -> bool:
+    """Remove one ticker from the active watchlist, or every user watchlist."""
+    symbol = normalize_watchlist_ticker(ticker)
+    if not user_id or not symbol:
+        return False
+    conn = _get_conn()
+    cur = conn.cursor()
+    if watchlist_id is None:
+        cur.execute(
+            """
+            DELETE FROM watchlist_items wi
+            USING watchlists wl
+            WHERE wi.watchlist_id = wl.id
+              AND wl.user_id = %s
+              AND UPPER(TRIM(wi.ticker)) = %s
+            """,
+            (user_id, symbol),
+        )
+    else:
+        cur.execute(
+            """
+            DELETE FROM watchlist_items wi
+            USING watchlists wl
+            WHERE wi.watchlist_id = wl.id
+              AND wl.id = %s
+              AND wl.user_id = %s
+              AND UPPER(TRIM(wi.ticker)) = %s
+            """,
+            (int(watchlist_id), user_id, symbol),
+        )
+    changed = cur.rowcount > 0
+    conn.commit()
+    cur.close()
+    return bool(changed)
 
 
 def set_watchlist_tickers(watchlist_id: int, user_id: str, tickers: List[str]) -> None:
@@ -142,7 +246,7 @@ def set_watchlist_tickers(watchlist_id: int, user_id: str, tickers: List[str]) -
     if tickers:
         cur.executemany(
             "INSERT INTO watchlist_items (watchlist_id, ticker) VALUES (%s, %s)",
-            [(watchlist_id, t.upper()) for t in tickers],
+            [(watchlist_id, t) for t in normalize_watchlist_tickers(tickers)],
         )
     conn.commit()
     cur.close()
