@@ -120,6 +120,20 @@ def _render_health() -> None:
     except Exception:
         return
     with st.expander("🩺 HSF Intelligence health (admin)", expanded=False):
+        # Run 30: build identification + configuration health (no secret values).
+        try:
+            from config_validation import config_health_summary
+
+            ch = config_health_summary()
+            b = ch.get("build") or {}
+            st.caption(f"Build `{b.get('commit_sha')}` · env {b.get('environment')} · "
+                       f"{b.get('version')}")
+            if ch.get("missing_required"):
+                st.warning(f"Missing required config: {', '.join(ch['missing_required'])}")
+            if ch.get("degraded"):
+                st.caption(f"Optional/degraded: {', '.join(ch['degraded'])}")
+        except Exception:
+            pass
         icon = _HEALTH_ICON.get(str(h.get("status")), "")
         st.markdown(f"**Status: {icon} {h.get('status')}**"
                     + (f" — {h['reason']}" if h.get("reason") else ""))

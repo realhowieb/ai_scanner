@@ -147,20 +147,27 @@ def get_neon_conn():
             return _checkout_warm(url)
         import psycopg
 
-        conn = psycopg.connect(url, row_factory=psycopg.rows.dict_row)
-        return conn
-    except ImportError as e:
+        # Bounded connect timeout so a network stall never hangs a page render
+        # indefinitely (libpq connect_timeout, overridable via env). Run 30 P1.
         try:
-            st.caption(f"⚠️ Neon driver unavailable (psycopg): {e}")
+            _ct = max(1, int(os.environ.get("DB_CONNECT_TIMEOUT", "10")))
+        except (TypeError, ValueError):
+            _ct = 10
+        conn = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_ct)
+        return conn
+    except ImportError:
+        # Never echo the exception (could include the DSN / connection string).
+        try:
+            st.caption("⚠️ Database driver unavailable.")
         except Exception:
             pass
         return None
-    except Exception as e:
-        # Surface a gentle hint in the UI, but don't crash callers.
+    except Exception:
+        # Surface a gentle, SANITIZED hint — never the raw error (Run 30: the DSN
+        # can appear in psycopg error text). Callers handle None.
         try:
-            st.caption(f"⚠️ Neon connection failed (engine): {e}")
+            st.caption("⚠️ Database temporarily unavailable.")
         except Exception:
-            # In non-Streamlit contexts, st.caption may not be available.
             pass
         return None
 

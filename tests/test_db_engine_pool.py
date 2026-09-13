@@ -25,7 +25,7 @@ def _fake_psycopg(conns):
     mod = types.ModuleType("psycopg")
     mod.rows = types.SimpleNamespace(dict_row=object())
 
-    def connect(url, row_factory=None):
+    def connect(url, row_factory=None, **kwargs):  # accepts connect_timeout (Run 30)
         return conns.pop(0)
 
     mod.connect = connect
