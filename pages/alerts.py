@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.design_system import render_page_header
+
 st.set_page_config(page_title="Alerts", page_icon="🔔", layout="wide")
 
 _username = (st.session_state.get("username") or "").strip().lower()
@@ -52,6 +54,7 @@ try:
     from ui.onboarding import render_alerts_orientation
 
     render_page_logo()
+    render_page_header("Alerts", "Meaningful intelligence changes for watched stocks.")
     render_alerts_orientation(_username)
     # HSF Intelligence Alerts (state-change) sit above the existing static alerts.
     try:

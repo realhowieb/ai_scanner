@@ -344,7 +344,7 @@ def render_scanner_intelligence(
     views = classify_views(compared)
 
     # --- Summary header (compact) ---
-    st.markdown("### 🎯 HSF Opportunities")
+    st.markdown("### HSF Opportunities")
     bits = [f"**{summary['opportunities']}** opportunities of {total} matches"]
     if summary["strong"]:
         bits.append(f"🟢 {summary['strong']} STRONG")
@@ -394,15 +394,15 @@ def render_scanner_intelligence(
         tr = c.get("status_transition")
         status = f"{tr[0]} → {tr[1]}" if tr else f"{_STATUS_ICON.get(c['status'], '')} {c['status']}"
         rows_out.append({
-            "#": i, "Ticker": c["ticker"], "HSF": c["score"], "Δ": _movement_cell(c),
+            "#": i, "Ticker": c["ticker"], "HSF Score": c["score"], "Change": _movement_cell(c),
             "Setup": c["primary_setup"], "Signals": c["n_signals"], "Status": status,
         })
     try:
         cc = st.column_config
         st.dataframe(rows_out, hide_index=True, width="stretch", column_config={
             "#": cc.NumberColumn(width="small"),
-            "HSF": cc.ProgressColumn(min_value=0, max_value=100, format="%d"),
-            "Δ": cc.TextColumn(width="small"), "Signals": cc.NumberColumn(width="small"),
+            "HSF Score": cc.ProgressColumn(min_value=0, max_value=100, format="%d"),
+            "Change": cc.TextColumn(width="small"), "Signals": cc.NumberColumn(width="small"),
         })
     except Exception:
         st.dataframe(rows_out, hide_index=True, width="stretch")
@@ -419,6 +419,7 @@ def _render_result_detail(
     c: Dict[str, Any], *, key_prefix: str,
     render_chart_for_ticker: Optional[Callable[[str], None]],
 ) -> None:
+    from ui.design_system import hsf_score_line
     from ui.opportunities import build_opportunity_explanation, movement_badge
 
     sub = []
@@ -433,7 +434,7 @@ def _render_result_detail(
         sub.append(f"{tr[0]} → {tr[1]}")
     price = f" · ${c['last']:,.2f}" if c.get("last") is not None else ""
     chg = f" ({c['chg_pct']:+.1f}%)" if c.get("chg_pct") is not None else ""
-    st.markdown(f"**{c['ticker']} — HSF {c['score']}/100 · {c['status']}**{price}{chg}"
+    st.markdown(f"**{c['ticker']} — {hsf_score_line(c['score'], c['status'])}**{price}{chg}"
                 + ("  ·  " + "  ·  ".join(sub) if sub else ""))
 
     ex = build_opportunity_explanation(c, earnings_today=[])
@@ -469,13 +470,13 @@ def _render_result_detail(
 
     # Actions — reuse existing chart / watchlist / alert (no duplicate systems).
     a0, a1, a2, a3 = st.columns(4)
-    if a0.button("🔬 Full intel", key=f"{key_prefix}_intel_open_{c['ticker']}"):
+    if a0.button("View Intelligence", key=f"{key_prefix}_intel_open_{c['ticker']}"):
         st.session_state["hsf_stock_ticker"] = c["ticker"]
         st.session_state["hsf_stock_opp"] = c
         try:
             st.switch_page("pages/stock.py")
         except Exception:
-            st.caption("Open 'Stock Intel' from the sidebar.")
+            st.caption("Open Stock Intelligence from the sidebar.")
     if a1.button("📈 Chart", key=f"{key_prefix}_intel_chart_{c['ticker']}"):
         st.session_state[f"{key_prefix}_intel_show_chart"] = c["ticker"]
     if a2.button(_watch_label(c["ticker"]), key=f"{key_prefix}_intel_watch_{c['ticker']}"):

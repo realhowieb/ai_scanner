@@ -24,9 +24,6 @@ _PREF_ROWS = [
     ("signal_added", "Confirming signal added"),
     ("signal_removed", "Confirming signal removed"),
 ]
-_SEV_ICON = {"HIGH": "🔴", "MEDIUM": "🟠", "LOW": "⚪"}
-
-
 def render_intelligence_alerts(username: str) -> None:
     """Render preferences + recent feed for one user. Never raises."""
     if st is None or not username:
@@ -41,13 +38,15 @@ def render_intelligence_alerts(username: str) -> None:
     except Exception:
         return
 
-    st.markdown("### 🔔 HSF Intelligence Alerts")
+    from ui.design_system import event_label, freshness_label
+
+    st.markdown("### Intelligence Alerts")
     st.caption("Get notified when something meaningful changes about the HSF "
                "opportunities on your watchlist — not on every scan. Detection "
                "runs in the background.")
 
     prefs = {**DEFAULT_PREFERENCES, **(get_hsf_alert_prefs(username) or {})}
-    with st.expander("⚙️ Alert preferences", expanded=False):
+    with st.expander("Notification Preferences", expanded=False):
         st.caption("Notify me when a watched ticker:")
         new_prefs: Dict[str, Any] = {}
         cols = st.columns(2)
@@ -60,14 +59,14 @@ def render_intelligence_alerts(username: str) -> None:
             else:
                 st.caption("Couldn't save preferences right now.")
 
-    st.markdown("#### Recent HSF intelligence alerts")
+    st.markdown("#### Recent Intelligence")
     try:
         recent = list_recent_intelligence_alerts(username, limit=30)
     except Exception:
         recent = []
     if not recent:
-        st.caption("No HSF intelligence alerts yet. HSF will record meaningful "
-                   "state changes for the opportunities you follow.")
+        st.info("No watched stocks have meaningful HSF changes yet.")
+        st.caption("This is normal. HSF records changes for watched opportunities as background detection runs.")
         return
     _feed_filter = st.radio("Filter", ["All", "Upgrades", "Downgrades", "New", "Fading", "Dropped"],
                             horizontal=True, key="hsf_feed_filter", label_visibility="collapsed")
@@ -80,21 +79,20 @@ def render_intelligence_alerts(username: str) -> None:
         if keep and r.get("event_type") not in keep:
             continue
         shown += 1
-        icon = _SEV_ICON.get(str(r.get("severity") or "").upper(), "")
-        try:
-            ts = r["detected_at"].strftime("%b %d %I:%M %p") if hasattr(r.get("detected_at"), "strftime") else str(r.get("detected_at"))
-        except Exception:
-            ts = str(r.get("detected_at"))
         copy = (r.get("copy") or f"{r.get('ticker')} · {r.get('event_type')}").replace("\n", " · ")
         status = r.get("delivery_status")
-        tail = f"  ·  _{status.lower()}_" if status and status != "DELIVERED" else ""
-        st.markdown(f"{icon} **{ts}** — {copy}{tail}")
-        if r.get("ticker") and st.button(f"🔬 {r['ticker']} intel", key=f"hsf_feed_intel_{shown}_{r['ticker']}"):
-            st.session_state["hsf_stock_ticker"] = str(r["ticker"]).upper()
-            try:
-                st.switch_page("pages/stock.py")
-            except Exception:
-                st.caption("Open 'Stock Intel' from the sidebar.")
+        tail = f" · {status.lower()}" if status and status != "DELIVERED" else ""
+        with st.container(border=True):
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"**{str(r.get('ticker') or '').upper()} · {event_label(r.get('event_type'))}**")
+            c1.caption(f"{copy}{tail}")
+            c1.caption(freshness_label(r.get("detected_at")))
+            if r.get("ticker") and c2.button("View Intelligence", key=f"hsf_feed_intel_{shown}_{r['ticker']}"):
+                st.session_state["hsf_stock_ticker"] = str(r["ticker"]).upper()
+                try:
+                    st.switch_page("pages/stock.py")
+                except Exception:
+                    st.caption("Open Stock Intelligence from the sidebar.")
     if keep and shown == 0:
         st.caption(f"No {_feed_filter.lower()} alerts in the recent feed.")
 

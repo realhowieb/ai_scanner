@@ -14,12 +14,12 @@ except Exception:  # pragma: no cover
 
 # Feature pages only — reset_password / verify_email are intentionally omitted.
 _NAV = [
-    ("app.py", "Scanner", "🔎"),
     ("pages/brief.py", "Market Brief", "📬"),
-    ("pages/stock.py", "Stock Intel", "🔬"),
-    ("pages/day_trader.py", "Day Trader", "⚡"),
+    ("app.py", "Scanner", "🔎"),
     ("pages/watchlists.py", "My Watchlist", "📋"),
+    ("pages/stock.py", "Stock Intelligence", "🔬"),
     ("pages/alerts.py", "Alerts", "🔔"),
+    ("pages/day_trader.py", "Day Trader", "⚡"),
     ("pages/journal.py", "Journal", "📓"),
     ("pages/kalshi.py", "Kalshi BTC", "🪙"),
     ("pages/settings.py", "Settings", "⚙️"),

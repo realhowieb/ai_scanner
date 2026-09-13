@@ -305,17 +305,19 @@ def _render_watchlist_opportunity_matches(compared: List[Dict[str, Any]], user: 
         return
     st.caption(f"{len(matches)} watched stock(s) are active HSF opportunities in this brief.")
     for row in matches[:5]:
+        from ui.design_system import hsf_score_line
+
         c1, c2, c3, c4 = st.columns([1.0, 1.5, 2.0, 1.2])
         c1.markdown(f"**{row.get('ticker')}**")
-        c2.caption(f"HSF {int(row.get('score') or 0)}/100 · {row.get('status') or '—'}")
+        c2.caption(hsf_score_line(row.get("score"), row.get("status")))
         c3.caption(row.get("primary_setup") or f"{row.get('n_signals') or 0} confirming signals")
-        if c4.button("Full intel", key=f"brief_watch_match_intel_{row.get('ticker')}", width="stretch"):
+        if c4.button("View Intelligence", key=f"brief_watch_match_intel_{row.get('ticker')}", width="stretch"):
             st.session_state["hsf_stock_ticker"] = row.get("ticker")
             st.session_state["hsf_stock_opp"] = row
             try:
                 st.switch_page("pages/stock.py")
             except Exception:
-                st.caption("Open Stock Intel from the sidebar.")
+                st.caption("Open Stock Intelligence from the sidebar.")
 
 
 # --------------------------------- render ------------------------------------
@@ -948,6 +950,7 @@ def render_sector_leadership(data: Dict[str, Any]) -> None:
 
 
 def _render_opportunity_detail(o: Dict[str, Any], data: Dict[str, Any]) -> None:
+    from ui.design_system import hsf_score_line
     from ui.opportunities import build_opportunity_explanation, movement_badge
 
     ex = build_opportunity_explanation(o, earnings_today=data.get("earnings_today") or [])
@@ -958,7 +961,7 @@ def _render_opportunity_detail(o: Dict[str, Any], data: Dict[str, Any]) -> None:
     tr = o.get("status_transition")
     if tr:
         sub.append(f"{tr[0]} → {tr[1]}")
-    head = f"**{o['ticker']} — HSF {o['score']}/100 · {o['status']}**"
+    head = f"**{o['ticker']} — {hsf_score_line(o['score'], o['status'])}**"
     st.markdown(head + ("  ·  " + "  ·  ".join(sub) if sub else ""))
     if ex["reasons"]:
         st.markdown("**Why it ranked**")
@@ -985,13 +988,13 @@ def _render_opportunity_detail(o: Dict[str, Any], data: Dict[str, Any]) -> None:
     _render_opp_ai_take(o, ex, data)
 
     a0, a1, a2, a3 = st.columns(4)
-    if a0.button("🔬 Full intel", key=f"opp_intel_{o['ticker']}"):
+    if a0.button("View Intelligence", key=f"opp_intel_{o['ticker']}"):
         st.session_state["hsf_stock_ticker"] = o["ticker"]
         st.session_state["hsf_stock_opp"] = o
         try:
             st.switch_page("pages/stock.py")
         except Exception:
-            st.caption("Open 'Stock Intel' from the sidebar.")
+            st.caption("Open Stock Intelligence from the sidebar.")
     if a1.button("📈 Chart", key=f"opp_chart_{o['ticker']}"):
         st.session_state["brief_show_chart"] = o["ticker"]
     if a2.button(_watch_button_label(o["ticker"]), key=f"opp_watch_{o['ticker']}"):

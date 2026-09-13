@@ -15,16 +15,14 @@ if not _username:
     st.page_link("app.py", label="Go to login", icon="🔐")
     st.stop()
 
-st.markdown("## 📬 Market Brief")
-st.caption("The same brief we email you each morning — top gappers, fresh setups, "
-           "and PreBreakout picks from the latest scan.")
-
 try:
+    from ui.design_system import render_page_header
     from ui.header import render_page_logo
     from ui.market_brief import render_market_brief
     from ui.onboarding import render_market_brief_orientation
 
     render_page_logo()
+    render_page_header("Market Brief", "What matters in the market right now.")
     render_market_brief_orientation(_username)
     render_market_brief()
 except Exception as e:

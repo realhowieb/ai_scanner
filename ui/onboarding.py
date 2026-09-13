@@ -163,8 +163,9 @@ def render_intelligence_performance_orientation(username: str) -> None:
 
 
 def _render_first_run(user: str) -> None:
-    st.markdown("## HSF Market Intelligence")
-    st.markdown("Know what changed. Understand why it matters. Track the stocks you care about.")
+    from ui.design_system import render_page_header
+
+    render_page_header("HSF Market Intelligence", "Know what changed. Understand why it matters. Track the stocks you care about.")
     st.caption(
         "HSF organizes market signals into one workflow: what deserves attention, "
         "what is strengthening, what is fading, and what changed in your watchlist."
@@ -189,7 +190,7 @@ def _render_first_run(user: str) -> None:
         st.markdown("2. **Watch** stocks you care about.")
         st.markdown("3. **Understand** HSF status, changes, and context.")
         st.caption("HSF can notify you when watched intelligence changes.")
-        st.page_link("pages/brief.py", label="Explore Today's Market", icon="📬")
+        st.page_link("pages/brief.py", label="Explore Market", icon="📬")
 
     with st.expander("HSF Score and status", expanded=False):
         st.markdown(

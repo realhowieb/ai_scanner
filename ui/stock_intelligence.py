@@ -345,6 +345,8 @@ def render_stock_intelligence(
 
 
 def _render_header(intel: Dict[str, Any]) -> None:
+    from ui.design_system import hsf_score_line, render_empty_state
+
     st.markdown(f"## {intel['ticker']}")
     st.caption(_watch_label(intel["ticker"]))
     price = intel.get("price")
@@ -354,12 +356,13 @@ def _render_header(intel: Dict[str, Any]) -> None:
         cline = f"  ·  {chg:+.2f}%" if chg is not None else ""
         st.markdown(f"**{pline}{cline}**")
     if not intel["has_opportunity"]:
-        st.info("No active HSF opportunity for this ticker right now "
-                "(fewer than 2 confirming signals and no model score). "
-                "Its HSF history, if any, is shown below.")
+        render_empty_state(
+            "Not currently ranked as an HSF opportunity.",
+            "HSF history, if available, appears below. This is a normal state for watched stocks.",
+        )
     else:
         score, status = intel["hsf_score"], intel["status"]
-        line = f"**HSF {score} · {status}**  ·  v{intel.get('score_version')}"
+        line = f"**{hsf_score_line(score, status)}**  ·  v{intel.get('score_version')}"
         mv = intel.get("movement") or {}
         state = mv.get("movement_state")
         from ui.opportunities import movement_badge
@@ -424,7 +427,7 @@ def _render_signals_and_model(intel: Dict[str, Any]) -> None:
                 f"Signals {comps.get('signals_component')}/48 · "
                 f"Model {comps.get('model_component')}/38 · "
                 f"Momentum {comps.get('momentum_component')}/14 · "
-                f"Risk penalty −{comps.get('fading_penalty')}  →  **HSF {intel['hsf_score']}**")
+                f"Risk penalty -{comps.get('fading_penalty')}  ->  **HSF Score {intel['hsf_score']}**")
         st.caption("HSF Score is an opportunity ranking (0–100), NOT a probability.")
         bits = []
         if model.get("breakout_score") is not None:
@@ -472,7 +475,6 @@ def _render_historical(intel: Dict[str, Any]) -> None:
 
 def _render_actions(intel: Dict[str, Any], render_chart_for_ticker) -> None:
     t = intel["ticker"]
-    st.markdown("---")
     a1, a2, a3 = st.columns(3)
     if a1.button("📈 Chart", key=f"si_chart_{t}"):
         st.session_state[f"si_show_chart_{t}"] = True

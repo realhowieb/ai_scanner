@@ -738,7 +738,7 @@ def main():
         st.rerun()
 
     if st.session_state.get("hsf_first_run"): render_scanner_orientation(username)
-    st.markdown("## 🚀 AI Scanner")
+    st.markdown("## Scanner")
     render_three_step_scanner()
     st.markdown("---")
 

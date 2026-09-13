@@ -40,6 +40,15 @@ class NewPagesTests(unittest.TestCase):
         self.assertNotIn("pages/reset_password.py", paths)  # reachable via URL, not nav
         self.assertNotIn("pages/verify_email.py", paths)
 
+    def test_custom_nav_follows_hsf_product_flow(self):
+        from ui.nav import _NAV
+
+        labels = [label for _p, label, _i in _NAV[:5]]
+        self.assertEqual(
+            labels,
+            ["Market Brief", "Scanner", "My Watchlist", "Stock Intelligence", "Alerts"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

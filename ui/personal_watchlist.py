@@ -16,13 +16,6 @@ except Exception:  # pragma: no cover
 _STATUS_ICON = {"STRONG": "🟢", "WATCH": "🟡", "CAUTION": "🟠"}
 
 
-def _fmt_score(value: Any) -> str:
-    try:
-        return f"{float(value):.0f}"
-    except (TypeError, ValueError):
-        return "—"
-
-
 def _freshness(row: Dict[str, Any]) -> str:
     minutes = row.get("last_updated_minutes")
     if minutes is None:
@@ -41,14 +34,17 @@ def _set_stock(ticker: str) -> None:
 
 
 def _watchlist_badge(row: Dict[str, Any]) -> str:
+    from ui.design_system import hsf_score_line
+
     status = row.get("hsf_status")
-    score = _fmt_score(row.get("hsf_score"))
     if status:
-        return f"HSF Score {score} · {status}"
+        return hsf_score_line(row.get("hsf_score"), status)
     return "Not currently ranked"
 
 
 def _render_row(row: Dict[str, Any], *, key_prefix: str) -> None:
+    from ui.design_system import event_label
+
     ticker = row["ticker"]
     status = row.get("hsf_status")
     icon = _STATUS_ICON.get(str(status or "").upper(), "•")
@@ -57,7 +53,7 @@ def _render_row(row: Dict[str, Any], *, key_prefix: str) -> None:
         top[0].markdown(f"### {ticker}")
         top[1].markdown(f"{icon} **{_watchlist_badge(row)}**")
         top[2].caption(row.get("attention_reason") or "No recent HSF change detected.")
-        if top[3].button("Full Intelligence", key=f"{key_prefix}_intel_{ticker}", width="stretch"):
+        if top[3].button("View Intelligence", key=f"{key_prefix}_intel_{ticker}", width="stretch"):
             _set_stock(ticker)
 
         bits: List[str] = []
@@ -72,7 +68,7 @@ def _render_row(row: Dict[str, Any], *, key_prefix: str) -> None:
         if row.get("fading"):
             bits.append("FADING")
         if row.get("recent_alert"):
-            bits.append(f"Recent intelligence alert: {row['recent_alert'].get('event_type')}")
+            bits.append(f"Recent alert: {event_label(row['recent_alert'].get('event_type'))}")
         bits.append(_freshness(row))
         st.caption(" · ".join(bits))
 
@@ -138,7 +134,9 @@ def render_personal_watchlist(user_id: str) -> None:
 
     summary = intel.get("summary") or {}
     rows = intel.get("rows") or []
-    st.markdown("## My Watchlist")
+    from ui.design_system import render_page_header
+
+    render_page_header("My Watchlist", "Personalized intelligence for the stocks you track.")
     if not rows:
         _render_empty_watchlist(user)
         return
@@ -196,8 +194,10 @@ def render_personal_watchlist(user_id: str) -> None:
 
     if intel.get("recent_alerts"):
         with st.expander("Recent HSF Intelligence Alerts", expanded=False):
+            from ui.design_system import event_label
+
             for alert in intel["recent_alerts"][:10]:
                 st.caption(
                     f"{str(alert.get('ticker') or '').upper()} · "
-                    f"{alert.get('event_type')} · {alert.get('copy') or alert.get('severity') or ''}"
+                    f"{event_label(alert.get('event_type'))} · {alert.get('copy') or alert.get('severity') or ''}"
                 )
