@@ -324,6 +324,15 @@ def _to_float(value: Any) -> Optional[float]:
 # ---------------------------------------------------------------------------
 
 _STATUS_RANK = {"CAUTION": 1, "WATCH": 2, "STRONG": 3}
+# Canonical status ordering — ONE definition, exported for every consumer
+# (movement, alert quality, opportunity outcomes). Never fork this mapping.
+HSF_STATUS_RANK = _STATUS_RANK
+
+
+def status_rank(status: Any) -> int:
+    """Canonical HSF status rank (CAUTION=1 < WATCH=2 < STRONG=3; unknown/None=0)."""
+    return _STATUS_RANK.get(str(status or "").upper(), 0)
+
 
 # Canonical meaningful score-change threshold. ONE definition — consumed by
 # compare_opportunities here and by every downstream consumer (stock-intelligence

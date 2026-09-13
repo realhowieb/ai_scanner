@@ -445,12 +445,12 @@ def _render_historical(intel: Dict[str, Any]) -> None:
                    f"{summ['matured']} matured, {summ['positive']} positive "
                    "(observations, not trades).")
     coh = intel.get("outcome_cohort")
-    if coh and coh.get("available") and coh.get("favorable_rate") is not None:
+    if coh and coh.get("available") and coh.get("follow_through_rate") is not None:
         st.caption(
-            f"Similar HSF states ({coh['status']} · score {coh['score_band']}): "
-            f"{coh['comparable']} H24 observations, "
-            f"{coh['favorable_rate']*100:.0f}% persisted or strengthened "
-            "(HSF-state persistence, not a price forecast).")
+            f"Similar HSF states (status {coh['status']} · HSF score {coh['score_band']}, "
+            f"{coh['horizon']}): {coh['comparable']} observations, "
+            f"{coh['follow_through_rate']*100:.0f}% persisted or strengthened "
+            "(historical HSF-state persistence, not a price probability).")
 
 
 def _render_actions(intel: Dict[str, Any], render_chart_for_ticker) -> None:

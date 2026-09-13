@@ -8,22 +8,29 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from db.engine import get_neon_conn
 
-# Comparable outcome-rate denominators exclude these (Step 20). PENDING/
-# UNAVAILABLE are never persisted, so only VERSION_CHANGED must be excluded.
+# Comparable outcome-rate denominators exclude these (Step 20/24). PENDING/
+# UNAVAILABLE are never persisted; only VERSION_CHANGED must be excluded. NEUTRAL
+# is a defensive fallback not produced by the current deterministic mapping, so it
+# stays in the comparable denominator (counts as 0 in practice).
 _NON_COMPARABLE = ("VERSION_CHANGED",)
-# Favorable = initial state held or improved; unfavorable = deteriorated/left.
-_FAVORABLE = ("STRENGTHENED", "PERSISTED", "RECOVERED")
-_UNFAVORABLE = ("WEAKENED", "FADED", "DROPPED")
+# Persistence follow-through (Step 25) = held OR improved from a healthy state.
+# RECOVERED starts from a degraded state, so it is reported SEPARATELY, never
+# folded into a universal "success" rate.
+_FOLLOW_THROUGH = ("STRENGTHENED", "PERSISTED")
+_DETERIORATED = ("WEAKENED", "FADED", "DROPPED")
 MIN_OUTCOME_SAMPLE = 10  # mirrors analytics.alert_quality.MIN_QUALITY_SAMPLE
 
-# SQL band expression mirrors analytics.opportunity_outcomes.SCORE_BANDS.
+# SQL band/bucket expressions mirror analytics.opportunity_outcomes exactly
+# (bands aligned to canonical status thresholds; zero signals kept distinct).
 _BAND_CASE = (
-    "CASE WHEN initial_score >= 80 THEN '80+' "
-    "WHEN initial_score >= 70 THEN '70-79' "
-    "WHEN initial_score >= 60 THEN '60-69' ELSE '<60' END")
+    "CASE WHEN initial_score < 0 OR initial_score > 100 THEN 'INVALID' "
+    "WHEN initial_score >= 75 THEN '75+' "
+    "WHEN initial_score >= 60 THEN '60-74' "
+    "WHEN initial_score >= 50 THEN '50-59' ELSE '<50' END")
 _SIGNAL_CASE = (
     "CASE WHEN initial_signal_count >= 3 THEN '3+' "
-    "WHEN initial_signal_count = 2 THEN '2' ELSE '1' END")
+    "WHEN initial_signal_count = 2 THEN '2' "
+    "WHEN initial_signal_count = 1 THEN '1' ELSE '0' END")
 
 
 def _ensure_schema(conn) -> None:
@@ -161,8 +168,8 @@ def _roll(rows, key_idx: int, min_sample: int) -> List[Dict[str, Any]]:
     for key, d in grouped.items():
         matured = sum(d.values())
         comparable = sum(n for k, n in d.items() if k not in _NON_COMPARABLE)
-        fav = sum(d.get(k, 0) for k in _FAVORABLE)
-        unfav = sum(d.get(k, 0) for k in _UNFAVORABLE)
+        follow = sum(d.get(k, 0) for k in _FOLLOW_THROUGH)
+        deteriorated = sum(d.get(k, 0) for k in _DETERIORATED)
         assessment = "INSUFFICIENT_SAMPLE" if comparable < int(min_sample) else "OK"
         out.append({
             "key": key, "matured": matured, "comparable": comparable,
@@ -170,8 +177,11 @@ def _roll(rows, key_idx: int, min_sample: int) -> List[Dict[str, Any]]:
             "weakened": d.get("WEAKENED", 0), "faded": d.get("FADED", 0),
             "dropped": d.get("DROPPED", 0), "recovered": d.get("RECOVERED", 0),
             "neutral": d.get("NEUTRAL", 0), "version_changed": d.get("VERSION_CHANGED", 0),
-            "favorable_rate": _rate(fav, comparable, min_sample),
-            "unfavorable_rate": _rate(unfav, comparable, min_sample),
+            # Persistence follow-through (held/strengthened). RECOVERED reported
+            # separately as its own rate — it starts from a degraded state.
+            "follow_through_rate": _rate(follow, comparable, min_sample),
+            "deteriorated_rate": _rate(deteriorated, comparable, min_sample),
+            "recovered_rate": _rate(d.get("RECOVERED", 0), comparable, min_sample),
             "assessment": assessment,
         })
     return out
@@ -248,7 +258,8 @@ def get_similar_state_outcomes(
 
     band = score_band(score)
     result = {"available": False, "status": status, "score_band": band, "horizon": horizon,
-              "matured": 0, "comparable": 0, "favorable_rate": None, "assessment": "INSUFFICIENT_SAMPLE"}
+              "matured": 0, "comparable": 0, "follow_through_rate": None,
+              "assessment": "INSUFFICIENT_SAMPLE"}
     if not status or band is None:
         return result
     conn = get_neon_conn()
@@ -279,10 +290,10 @@ def get_similar_state_outcomes(
         d[k] = n
     matured = sum(d.values())
     comparable = sum(n for k, n in d.items() if k not in _NON_COMPARABLE)
-    fav = sum(d.get(k, 0) for k in _FAVORABLE)
+    follow = sum(d.get(k, 0) for k in _FOLLOW_THROUGH)
     result.update({
         "available": comparable >= int(min_sample), "matured": matured, "comparable": comparable,
-        "favorable_rate": _rate(fav, comparable, min_sample),
+        "follow_through_rate": _rate(follow, comparable, min_sample),
         "assessment": "OK" if comparable >= int(min_sample) else "INSUFFICIENT_SAMPLE",
     })
     return result

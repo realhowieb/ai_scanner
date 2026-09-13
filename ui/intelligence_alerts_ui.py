@@ -225,8 +225,8 @@ def _outcome_rows(rows, key_label="Group") -> list:
             "Strengthened": r.get("strengthened"), "Persisted": r.get("persisted"),
             "Weakened": r.get("weakened"), "Faded": r.get("faded"),
             "Dropped": r.get("dropped"), "Recovered": r.get("recovered"),
-            "Favorable": (_pct(r.get("favorable_rate")) if r.get("assessment") == "OK"
-                          else "insufficient"),
+            "Follow-through": (_pct(r.get("follow_through_rate")) if r.get("assessment") == "OK"
+                               else "insufficient"),
         })
     return out
 
@@ -266,6 +266,7 @@ def _render_opportunity_outcomes() -> None:
                     r["key"] = _HLBL.get(r.get("key"), r.get("key"))
             st.markdown(f"**{title}**")
             st.dataframe(_outcome_rows(rows, lbl), hide_index=True, width="stretch")
-        st.caption(f"Favorable = strengthened/persisted/recovered. Rates only at "
-                   f"≥ {s.get('min_sample')} comparable (excl. VERSION_CHANGED). "
+        st.caption(f"Follow-through = strengthened or persisted (held). Recovered is "
+                   f"reported separately (it starts from a degraded state). Rates only "
+                   f"at ≥ {s.get('min_sample')} comparable (excl. VERSION_CHANGED). "
                    "Observation only — HSF Score and alerts are unchanged.")

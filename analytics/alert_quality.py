@@ -28,9 +28,9 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Any, Dict, List, Optional
 
+from ui.opportunities import HSF_STATUS_RANK as _STATUS_RANK
 from ui.opportunities import MIN_SCORE_DELTA, versions_incompatible
-
-_STATUS_RANK = {"CAUTION": 1, "WATCH": 2, "STRONG": 3}
+from ui.opportunities import status_rank as _rank
 
 # Centralized minimum sample before a quality rate is presented as meaningful.
 MIN_QUALITY_SAMPLE = 10
@@ -65,10 +65,6 @@ VERSION_CHANGED = "VERSION_CHANGED"
 MATURED = "MATURED"
 PENDING = "PENDING"
 UNAVAILABLE = "UNAVAILABLE"
-
-
-def _rank(status: Optional[str]) -> int:
-    return _STATUS_RANK.get(str(status or "").upper(), 0)
 
 
 def _num(v: Any) -> Optional[float]:

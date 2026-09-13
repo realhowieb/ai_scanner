@@ -94,6 +94,31 @@ class ClassifyTests(unittest.TestCase):
                                                          _sub("STRONG", 90, version="2.0")),
                          oo.VERSION_CHANGED)
 
+    def test_degraded_tickup_still_degraded_is_strengthened_not_recovered(self):
+        # CAUTION 44 -> CAUTION 48: improves but stays in a degraded tier => not RECOVERED
+        self.assertEqual(oo.classify_opportunity_outcome(_init("CAUTION", 44, fading=True),
+                                                         _sub("CAUTION", 48)), oo.STRENGTHENED)
+
+    def test_recovered_requires_healthy_tier(self):
+        # CAUTION+fading -> WATCH not fading with real improvement => RECOVERED
+        self.assertEqual(oo.classify_opportunity_outcome(_init("CAUTION", 48, fading=True),
+                                                         _sub("WATCH", 62)), oo.RECOVERED)
+
+    def test_score_increase_exactly_threshold_strengthened(self):
+        self.assertEqual(oo.classify_opportunity_outcome(_init("WATCH", 70), _sub("WATCH", 73)),
+                         oo.STRENGTHENED)
+
+    def test_score_decrease_exactly_threshold_weakened(self):
+        self.assertEqual(oo.classify_opportunity_outcome(_init("STRONG", 80), _sub("STRONG", 77)),
+                         oo.WEAKENED)
+
+    def test_version_change_with_absence_is_version_changed(self):
+        # absent ticker but incompatible universe version -> VERSION_CHANGED, not DROPPED
+        self.assertEqual(
+            oo.classify_opportunity_outcome(_init("WATCH", 70, version="1.0"),
+                                            _sub(None, None, present=False, version="2.0")),
+            oo.VERSION_CHANGED)
+
 
 class HorizonTests(unittest.TestCase):
     def test_pending(self):
@@ -152,20 +177,70 @@ class HorizonTests(unittest.TestCase):
         self.assertEqual(r1["evaluation_time"], SRC + dt.timedelta(hours=2))
 
 
+class ReconstructionTests(unittest.TestCase):
+    def test_reversed_db_order_identical(self):
+        rows = [
+            {"observation_id": 2, "ticker": "NVDA", "snapshot_time": SRC, "score": 60,
+             "status": "WATCH", "score_version": "1.0", "signals": ["gainer"], "fading": False},
+            {"observation_id": 1, "ticker": "NVDA", "snapshot_time": SRC, "score": 80,
+             "status": "STRONG", "score_version": "1.0", "signals": ["breakout"], "fading": False},
+        ]
+        a = oo._reconstruct_snapshots(rows)
+        b = oo._reconstruct_snapshots(list(reversed(rows)))
+        # deterministic: lowest observation_id (1 -> STRONG 80) wins regardless of order
+        self.assertEqual(a, b)
+        self.assertEqual(a[0]["opportunities"][0]["score"], 80)
+
+    def test_source_dedupe_one_logical_observation(self):
+        rows = [
+            _obs(oid=5, score=70), _obs(oid=3, score=70),  # same ticker/time/version
+        ]
+        deduped = oo._dedupe_source_observations(rows)
+        self.assertEqual(len(deduped), 1)
+        self.assertEqual(deduped[0]["observation_id"], 3)  # lowest id wins
+
+    def test_absent_from_incompatible_version_universe(self):
+        obs = _obs(version="1.0")  # NVDA
+        snaps = [_snap(SRC + dt.timedelta(hours=2),
+                       [_opp("AMD", "STRONG", 80, version="2.0")])]  # NVDA absent; universe v2.0
+        r = oo.evaluate_observation_at_horizon(obs, "NEXT", snaps, now=NOW)
+        self.assertEqual(r["outcome_classification"], oo.VERSION_CHANGED)
+        self.assertIsNone(r["score_delta"])
+
+
 class BandBucketTests(unittest.TestCase):
     def test_score_bands_boundaries(self):
-        self.assertEqual(oo.score_band(80), "80+")
-        self.assertEqual(oo.score_band(79.9), "70-79")
-        self.assertEqual(oo.score_band(70), "70-79")
-        self.assertEqual(oo.score_band(69), "60-69")
-        self.assertEqual(oo.score_band(59), "<60")
+        # bands aligned to canonical thresholds: STRONG>=75, CAUTION<50
+        self.assertEqual(oo.score_band(75), "75+")
+        self.assertEqual(oo.score_band(74.99), "60-74")
+        self.assertEqual(oo.score_band(60), "60-74")
+        self.assertEqual(oo.score_band(59.99), "50-59")
+        self.assertEqual(oo.score_band(50), "50-59")
+        self.assertEqual(oo.score_band(49.99), "<50")
+        self.assertEqual(oo.score_band(100), "75+")
+
+    def test_score_bands_malformed(self):
         self.assertIsNone(oo.score_band(None))
+        self.assertIsNone(oo.score_band("abc"))
+        self.assertIsNone(oo.score_band(-5))
+        self.assertIsNone(oo.score_band(101))
 
     def test_signal_buckets(self):
         self.assertEqual(oo.signal_count_bucket(1), "1")
         self.assertEqual(oo.signal_count_bucket(2), "2")
         self.assertEqual(oo.signal_count_bucket(5), "3+")
-        self.assertEqual(oo.signal_count_bucket(None), "1")
+        self.assertEqual(oo.signal_count_bucket(0), "0")       # zero kept distinct
+        self.assertEqual(oo.signal_count_bucket(None), "0")
+
+    def test_signal_normalization_dedupes(self):
+        self.assertEqual(oo.normalized_signals(["breakout", "Breakout", "volume ", "volume"]),
+                         ["breakout", "volume"])
+        # frozen signal count uses the de-duplicated set, never the raw length
+        o = _obs()
+        o["signals"] = ["breakout", "breakout", "gainer"]
+        r = oo.evaluate_observation_at_horizon(
+            o, "NEXT", [_snap(SRC + dt.timedelta(hours=2), [_opp("NVDA", "STRONG", 81)])], now=NOW)
+        self.assertEqual(r["initial_signal_count"], 2)
 
 
 class MaturationTests(unittest.TestCase):
@@ -234,7 +309,8 @@ class AggregationTests(unittest.TestCase):
             horizon=[("NEXT", "PERSISTED", 50)])
         self.assertEqual(q["matured"], 85)
         self.assertEqual(q["comparable"], 80)  # excludes 5 VERSION_CHANGED
-        self.assertEqual(q["by_status"][0]["favorable_rate"], 50 / 60)
+        # follow-through = strengthened+persisted (RECOVERED is separate)
+        self.assertEqual(q["by_status"][0]["follow_through_rate"], 50 / 60)
         for c in cur.execute.call_args_list:
             self.assertNotRegex(c[0][0].upper(), r"\b(INSERT|UPDATE|DELETE)\b")
 
@@ -244,7 +320,7 @@ class AggregationTests(unittest.TestCase):
             band=[("80+", "PERSISTED", 6)], signal=[("2", "PERSISTED", 6)],
             regime=[("UNKNOWN", "PERSISTED", 6)], horizon=[("NEXT", "PERSISTED", 6)])
         self.assertEqual(q["by_status"][0]["assessment"], "INSUFFICIENT_SAMPLE")
-        self.assertIsNone(q["by_status"][0]["favorable_rate"])
+        self.assertIsNone(q["by_status"][0]["follow_through_rate"])
 
 
 if __name__ == "__main__":

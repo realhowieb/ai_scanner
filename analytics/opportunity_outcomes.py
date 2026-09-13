@@ -34,13 +34,9 @@ from analytics.alert_quality import (  # canonical reuse
     is_valid_quality_snapshot,
     select_first_valid_observation,
 )
-from ui.opportunities import (  # canonical reuse
-    HSF_SCORE_VERSION,
-    MIN_SCORE_DELTA,
-    versions_incompatible,
-)
-
-_STATUS_RANK = {"CAUTION": 1, "WATCH": 2, "STRONG": 3}
+from ui.opportunities import HSF_SCORE_VERSION, MIN_SCORE_DELTA, versions_incompatible  # canonical reuse
+from ui.opportunities import HSF_STATUS_RANK as _STATUS_RANK
+from ui.opportunities import status_rank as _rank
 
 # Canonical opportunity-evolution vocabulary (Step 7).
 STRENGTHENED = "STRENGTHENED"
@@ -57,15 +53,35 @@ NEUTRAL = "NEUTRAL"
 # WEAKENED > PERSISTED > NEUTRAL.
 
 
-def _rank(status: Optional[str]) -> int:
-    return _STATUS_RANK.get(str(status or "").upper(), 0)
-
-
 def _num(v: Any) -> Optional[float]:
     try:
         return None if v is None else float(v)
     except (TypeError, ValueError):
         return None
+
+
+def normalized_signals(signals: Any) -> List[str]:
+    """Confirming signals as a deterministic set (Step 14): lower-cased, trimmed,
+    de-duplicated, sorted. Reuses no external definition — only normalizes form,
+    never the signal meanings. Duplicates never inflate the count."""
+    out = set()
+    for s in (signals or []):
+        t = str(s or "").strip().lower()
+        if t:
+            out.add(t)
+    return sorted(out)
+
+
+def _is_degraded(status: Any, fading: Any) -> bool:
+    """Canonical degraded/weak HSF condition (recovery-eligible): explicit canonical
+    fading, or status CAUTION (which canonically means fading OR score < 50 — a
+    genuinely degraded tier, not merely lower-ranked)."""
+    return bool(fading) or _rank(status) <= _STATUS_RANK["CAUTION"]
+
+
+def _is_healthy(status: Any, fading: Any) -> bool:
+    """Meaningfully healthy HSF state: WATCH or STRONG and not fading."""
+    return (not bool(fading)) and _rank(status) >= _STATUS_RANK["WATCH"]
 
 
 def is_eligible_opportunity_observation(obs: Dict[str, Any]) -> bool:
@@ -109,10 +125,13 @@ def classify_opportunity_outcome(
     up = (s_rank > i_rank) or (delta is not None and delta >= MIN_SCORE_DELTA)
     down = (s_rank < i_rank) or (delta is not None and delta <= -MIN_SCORE_DELTA)
 
-    initial_weak = bool(initial.get("fading")) or i_rank <= _STATUS_RANK["CAUTION"]
-    # RECOVERED only from a weak/fading source that meaningfully improves and is
-    # no longer fading (a healthy source that improves is STRENGTHENED instead).
-    if initial_weak and up and not bool(subsequent.get("fading")):
+    # RECOVERED only when the SOURCE was in a genuinely degraded/fading canonical
+    # state AND the later state returns to a meaningfully HEALTHIER tier (>= WATCH,
+    # not fading) with real improvement. A healthy source that improves is
+    # STRENGTHENED instead; a degraded source that merely ticks up but stays
+    # degraded is STRENGTHENED, not RECOVERED.
+    if _is_degraded(initial.get("status"), initial.get("fading")) and up \
+            and _is_healthy(subsequent.get("status"), subsequent.get("fading")):
         return RECOVERED
     if bool(subsequent.get("fading")):
         return FADED  # canonical fading explicitly true takes precedence
@@ -125,21 +144,47 @@ def classify_opportunity_outcome(
 
 def _reconstruct_snapshots(observations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Group frozen signal-time observations by snapshot_time into snapshot-shaped
-    sets {snapshot_time, opportunities:[...]}. This is what the Run 24A validity +
-    selection helpers consume. Deterministic; malformed rows are dropped."""
-    by_time: Dict[Any, Dict[str, Any]] = {}
+    sets {snapshot_time, opportunities:[...]}. Consumed by the Run 24A validity +
+    selection helpers.
+
+    All source rows come from ONE canonical context (signal_outcomes
+    source='opportunity', i.e. market_brief), so timestamp grouping never merges
+    different scans/contexts. A ticker is de-duplicated WITHIN a snapshot by the
+    lowest observation_id (deterministic — never "first DB row returned"), so
+    reversed input order yields an identical reconstruction."""
+    by_time: Dict[Any, Dict[str, Dict[str, Any]]] = {}
     for o in (observations or []):
         st = _to_dt(o.get("snapshot_time"))
-        if st is None or not str(o.get("ticker") or "").strip():
+        t = str(o.get("ticker") or "").strip().upper()
+        if st is None or not t:
             continue
-        bucket = by_time.setdefault(st, {"snapshot_time": st, "opportunities": []})
-        bucket["opportunities"].append({
-            "ticker": str(o.get("ticker")).upper(),
-            "score": o.get("score"), "status": o.get("status"),
+        row = {
+            "ticker": t, "score": o.get("score"), "status": o.get("status"),
             "score_version": o.get("score_version"),
             "signals": list(o.get("signals") or []), "fading": bool(o.get("fading")),
-        })
-    return list(by_time.values())
+            "_oid": o.get("observation_id"),
+        }
+        bucket = by_time.setdefault(st, {})
+        prev = bucket.get(t)
+        if prev is None or _oid_key(row) < _oid_key(prev):
+            bucket[t] = row  # deterministic: lowest observation_id wins
+    return [{"snapshot_time": st, "opportunities": sorted(rows.values(), key=lambda r: r["ticker"])}
+            for st, rows in by_time.items()]
+
+
+def _oid_key(row: Dict[str, Any]):
+    oid = row.get("_oid")
+    return (0, int(oid)) if isinstance(oid, int) else (1, str(oid))
+
+
+def _snapshot_version(snapshot: Dict[str, Any]) -> Any:
+    """Canonical score version of a reconstructed snapshot = the version shared by
+    its present opportunities (the comparison universe). Used to decide, for an
+    ABSENT ticker, whether the ranking universe itself changed incompatibly —
+    never fabricated from current data. None when unknown/mixed."""
+    vers = {str(o.get("score_version")) for o in (snapshot.get("opportunities") or [])
+            if o.get("score_version") is not None}
+    return next(iter(vers)) if len(vers) == 1 else None
 
 
 def _find(opps: List[Dict[str, Any]], ticker: str) -> Dict[str, Any]:
@@ -160,7 +205,11 @@ def _base(obs: Dict[str, Any], horizon: str) -> Dict[str, Any]:
         "initial_score": obs.get("score"), "initial_status": obs.get("status"),
         "initial_score_version": obs.get("score_version"),
         "initial_fading": bool(obs.get("fading")),
-        "initial_signal_count": int(obs.get("n_signals") or len(obs.get("signals") or []) or 0),
+        # Count from the FROZEN signal-time signals, de-duplicated (never from
+        # current/future state). Falls back to frozen n_signals only if no list.
+        "initial_signal_count": (len(normalized_signals(obs.get("signals")))
+                                 if obs.get("signals") is not None
+                                 else int(obs.get("n_signals") or 0)),
         "initial_regime": obs.get("regime"),  # None unless frozen with the obs
     }
 
@@ -194,6 +243,11 @@ def evaluate_observation_at_horizon(
         return _empty(base, UNAVAILABLE)  # transient; not persisted
 
     subseq = _find(chosen.get("opportunities") or [], base["ticker"])
+    if not subseq.get("present"):
+        # For an absent ticker there is no per-ticker version; infer the ranking
+        # universe's version so an incompatible-version universe classifies as
+        # VERSION_CHANGED (precedence) rather than a misleading DROPPED (Step 7).
+        subseq["score_version"] = _snapshot_version(chosen)
     initial = {"status": obs.get("status"), "score": obs.get("score"),
                "score_version": obs.get("score_version"), "fading": bool(obs.get("fading"))}
     classification = classify_opportunity_outcome(initial, subseq)
@@ -215,6 +269,25 @@ def evaluate_observation_at_horizon(
         "subsequent_fading": subseq.get("fading"), "still_present": subseq.get("present"),
         "score_delta": score_delta, "status_transition": transition,
     }
+
+
+def _dedupe_source_observations(observations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Collapse to ONE logical observation per (ticker, snapshot_time,
+    score_version), keeping the lowest observation_id deterministically. The
+    frozen store already enforces uniqueness per (snapshot, ticker); this is a
+    defensive guard so duplicate rows can never inflate opportunity counts or
+    depend on DB row ordering. Historical rows are never deleted."""
+    best: Dict[tuple, Dict[str, Any]] = {}
+    for o in (observations or []):
+        st = _to_dt(o.get("snapshot_time"))
+        t = str(o.get("ticker") or "").strip().upper()
+        if st is None or not t:
+            continue
+        key = (t, st, str(o.get("score_version")))
+        prev = best.get(key)
+        if prev is None or _oid_key({"_oid": o.get("observation_id")}) < _oid_key({"_oid": prev.get("observation_id")}):
+            best[key] = o
+    return list(best.values())
 
 
 def mature_opportunity_outcomes(
@@ -241,6 +314,7 @@ def mature_opportunity_outcomes(
         return metrics
     if not observations:
         return metrics
+    observations = _dedupe_source_observations(observations)
     snapshots = _reconstruct_snapshots(observations)
     try:
         existing = persisted_outcome_keys(days_back=lookback_days)
@@ -278,15 +352,17 @@ def mature_opportunity_outcomes(
     return metrics
 
 
-# Centralized score bands (Step 22). Aligned with the canonical status tiers
-# (STRONG >= 75). Kept deliberately few; never tuned to flatter results.
-SCORE_BANDS = [(80, 101, "80+"), (70, 80, "70-79"), (60, 70, "60-69"), (0, 60, "<60")]
+# Centralized score bands (Step 11). Chosen BEFORE looking at any results and
+# aligned to the CANONICAL status thresholds so no band straddles a tier edge:
+# STRONG >= 75, CAUTION < 50 (WATCH in between). Deliberately few; never tuned to
+# flatter results. A malformed/out-of-range score returns None (never a band).
+SCORE_BANDS = [(75, 101, "75+"), (60, 75, "60-74"), (50, 60, "50-59"), (0, 50, "<50")]
 
 
 def score_band(score: Any) -> Optional[str]:
     s = _num(score)
-    if s is None:
-        return None
+    if s is None or s < 0 or s > 100:
+        return None  # malformed scores never enter a misleading band
     for lo, hi, label in SCORE_BANDS:
         if lo <= s < hi:
             return label
@@ -294,12 +370,15 @@ def score_band(score: Any) -> Optional[str]:
 
 
 def signal_count_bucket(n: Any) -> str:
+    """Confirming-signal bucket. Zero is kept DISTINCT (a ranked opportunity
+    normally carries >= 1 confirming signal; zero signals a malformed/incomplete
+    observation and must not hide inside '1')."""
     try:
         c = int(n or 0)
     except (TypeError, ValueError):
         c = 0
+    if c <= 0:
+        return "0"
     if c >= 3:
         return "3+"
-    if c == 2:
-        return "2"
-    return "1"
+    return str(c)
