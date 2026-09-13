@@ -24,12 +24,19 @@ except Exception:
     pass
 
 st.markdown("## 🔬 HSF Stock Intelligence")
+try:
+    from ui.onboarding import render_stock_intelligence_orientation
+
+    render_stock_intelligence_orientation(_username)
+except Exception:
+    pass
 
 _default = (st.session_state.get("hsf_stock_ticker") or "").strip().upper()
 _ticker = st.text_input("Ticker", value=_default, placeholder="e.g. NVDA",
                         key="hsf_stock_ticker_input").strip().upper()
 if _ticker:
     st.session_state["hsf_stock_ticker"] = _ticker
+    st.session_state["hsf_stock_intelligence_viewed"] = True
 
 if not _ticker:
     st.caption("Enter a ticker, or open one from Market Brief, Scanner, or your Watchlist.")

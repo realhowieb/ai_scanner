@@ -56,7 +56,6 @@ try:
     from ui.app_runtime import (
         get_market_session,
         render_active_filters_summary,
-        render_onboarding_hint,
         render_sidebar_upgrade_card,
     )
     from ui.app_runtime import (
@@ -209,6 +208,7 @@ try:
     from ui.header import render_header, render_market_snapshot, render_price_ticker
     from ui.history import render_history_expander
     from ui.journal import render_journal_panel
+    from ui.onboarding import render_hsf_onboarding_entry, render_scanner_orientation
     from ui.prebreakout_tab import render_prebreakout_tab
     from ui.result_explain import add_why_column
     from ui.results import get_results_df, render_results
@@ -259,6 +259,8 @@ except Exception as _e:
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
     render_journal_panel = lambda *a, **k: None  # type: ignore
+    render_hsf_onboarding_entry = lambda *a, **k: None  # type: ignore
+    render_scanner_orientation = lambda *a, **k: None  # type: ignore
     add_why_column = lambda df: df  # type: ignore
     render_user_settings_footer = _missing  # type: ignore
 
@@ -449,7 +451,6 @@ def main():
     # Also check the raw authenticator state
     _ = st.session_state.get("authentication_status") is True
 
-
     # -------- ONLY NOW RENDER HEADER + TICKER --------
     # Show ticker above the header (layout option B)
     render_price_ticker()
@@ -518,8 +519,6 @@ def main():
         ):
             st.session_state.pop(k, None)
 
-    render_onboarding_hint(username, tier_name=tier_name)
-
     render_admin_build_stamp(app_file=__file__, username=username, tier_key=tier_key)
 
     # -------- Load Saved User Settings (if available) --------
@@ -542,7 +541,6 @@ def main():
         has_min_tier=has_min_tier,
         logout_and_reset_session=logout_and_reset_session,
     )
-    #st.markdown("---")
 
     # -------- DB Status (admin-only badge; status still computed for all) --------
     db_status = render_db_status_badge(show_badge=bool(st.session_state.get("is_admin")))
@@ -560,6 +558,9 @@ def main():
         render_data_health_banner(is_admin=bool(st.session_state.get("is_admin")))
     except Exception:
         pass
+
+    render_hsf_onboarding_entry(username, tier_name=tier_name)
+    st.markdown("---")
 
     # -------- Provider Health (admin diagnostics) --------
     if flags.get("can_diagnostics"):
@@ -736,6 +737,7 @@ def main():
                 pass
         st.rerun()
 
+    if st.session_state.get("hsf_first_run"): render_scanner_orientation(username)
     st.markdown("## 🚀 AI Scanner")
     render_three_step_scanner()
     st.markdown("---")

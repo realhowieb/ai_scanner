@@ -77,8 +77,43 @@ def _render_row(row: Dict[str, Any], *, key_prefix: str) -> None:
         st.caption(" · ".join(bits))
 
 
-def _render_empty_watchlist() -> None:
-    st.info("Build your watchlist to see the HSF intelligence that matters to you.")
+def _render_empty_watchlist(user_id: str) -> None:
+    st.info("Build your personalized market view.")
+    st.caption(
+        "Track stocks you care about and HSF will organize current status, meaningful changes, "
+        "strengthening, fading, and intelligence alerts."
+    )
+    with st.form("my_watchlist_first_ticker_form", clear_on_submit=False):
+        ticker = st.text_input("Add a ticker", placeholder="NVDA")
+        submitted = st.form_submit_button("Add to Watchlist")
+    if submitted:
+        try:
+            from ui.onboarding import add_first_watch_ticker
+
+            result = add_first_watch_ticker(user_id, ticker)
+            if result.status == "invalid":
+                st.warning(result.message)
+            elif result.status == "save_failed":
+                st.error(result.message)
+            else:
+                st.success(result.message)
+                if result.opportunity:
+                    st.caption(
+                        f"HSF currently classifies {result.ticker} as "
+                        f"{result.opportunity.get('status')}. "
+                        f"HSF Score {result.opportunity.get('score')}."
+                    )
+                    st.session_state["hsf_stock_ticker"] = result.ticker
+                    st.session_state["hsf_stock_opp"] = result.opportunity
+                    st.page_link("pages/stock.py", label="View Full Intelligence", icon="🔬")
+                else:
+                    st.caption(
+                        f"{result.ticker} is not currently ranked as an HSF opportunity. "
+                        "HSF will continue organizing meaningful changes for watched stocks."
+                    )
+                    st.page_link("pages/watchlists.py", label="Refresh My Watchlist", icon="📋")
+        except Exception:
+            st.warning("Ticker saved state is temporarily unavailable. Please try again.")
     c1, c2, c3 = st.columns(3)
     c1.page_link("pages/brief.py", label="Browse Market Brief", icon="📬")
     c2.page_link("app.py", label="Open Scanner", icon="🔎")
@@ -105,7 +140,7 @@ def render_personal_watchlist(user_id: str) -> None:
     rows = intel.get("rows") or []
     st.markdown("## My Watchlist")
     if not rows:
-        _render_empty_watchlist()
+        _render_empty_watchlist(user)
         return
 
     st.caption(

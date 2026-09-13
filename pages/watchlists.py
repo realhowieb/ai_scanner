@@ -20,6 +20,7 @@ try:
     from ui.personal_watchlist import render_personal_watchlist
     from ui.watchlists import render_watchlists_panel
 
+    st.session_state["hsf_my_watchlist_viewed"] = True
     render_page_logo()
     render_personal_watchlist(_username)
     st.markdown("---")

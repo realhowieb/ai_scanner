@@ -233,19 +233,38 @@ def _watchlist_rows(user: str) -> List[Dict[str, Any]]:
 def _add_to_watchlist(ticker: str) -> None:
     user = (st.session_state.get("username") or "").strip().lower()
     aid = st.session_state.get("active_watchlist_id")
-    if not user or not aid:
-        st.warning("Open the Watchlists page once to set an active watchlist first.")
+    if not user:
+        st.warning("Log in to save watchlist tickers.")
         return
     try:
-        from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
+        from db.watchlists import (
+            add_to_watchlist,
+            get_user_watchlist,
+            get_watchlist_tickers,
+            set_watchlist_tickers,
+        )
 
-        cur = get_watchlist_tickers(aid, user) or []
         up = _base_ticker(ticker)
+        if not up:
+            st.warning("We couldn't recognize that ticker.")
+            return
+        cur = get_watchlist_tickers(aid, user) if aid else get_user_watchlist(user)
         if up in [str(t).upper() for t in cur]:
             st.toast(f"{up} is already in your watchlist")
             return
-        set_watchlist_tickers(aid, user, list(cur) + [up])
-        st.session_state["active_watchlist_tickers"] = list(cur) + [up]
+        if aid:
+            set_watchlist_tickers(aid, user, list(cur) + [up])
+            updated = list(cur) + [up]
+        else:
+            if not add_to_watchlist(user, up):
+                st.warning("Could not add to watchlist.")
+                return
+            updated = sorted({
+                str(t).strip().upper()
+                for t in [*st.session_state.get("active_watchlist_tickers", []), up]
+                if str(t).strip()
+            })
+        st.session_state["active_watchlist_tickers"] = updated
         st.toast(f"Added {up} to your watchlist")
     except Exception:
         st.warning("Could not add to watchlist.")

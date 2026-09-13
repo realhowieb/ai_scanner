@@ -22,8 +22,10 @@ st.caption("The same brief we email you each morning — top gappers, fresh setu
 try:
     from ui.header import render_page_logo
     from ui.market_brief import render_market_brief
+    from ui.onboarding import render_market_brief_orientation
 
     render_page_logo()
+    render_market_brief_orientation(_username)
     render_market_brief()
 except Exception as e:
     st.error("Market brief failed to load.")

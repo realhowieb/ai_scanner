@@ -49,8 +49,10 @@ def _tier_limits() -> tuple[int, bool]:
 try:
     from ui.alerts import render_alerts_panel
     from ui.header import render_page_logo
+    from ui.onboarding import render_alerts_orientation
 
     render_page_logo()
+    render_alerts_orientation(_username)
     # HSF Intelligence Alerts (state-change) sit above the existing static alerts.
     try:
         from ui.intelligence_alerts_ui import render_intelligence_alerts
