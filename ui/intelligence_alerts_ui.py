@@ -104,6 +104,7 @@ def render_intelligence_alerts(username: str) -> None:
         if (st.session_state.get("entitlements") or {}).get("can_diagnostics"):
             _render_health()
             _render_quality()
+            _render_opportunity_outcomes()
     except Exception:
         pass
 
@@ -211,3 +212,60 @@ def _render_quality() -> None:
         st.caption(f"Rates shown only at ≥ {q.get('min_sample')} matured observations; "
                    "smaller samples read INSUFFICIENT_SAMPLE. Measurement only — "
                    "alert behavior is unchanged.")
+
+
+_HLBL = {"NEXT": "Next obs", "H24": "24h+", "H72": "72h+", "H120": "120h+"}
+
+
+def _outcome_rows(rows, key_label="Group") -> list:
+    out = []
+    for r in rows:
+        out.append({
+            key_label: r.get("key"), "N": r.get("matured"),
+            "Strengthened": r.get("strengthened"), "Persisted": r.get("persisted"),
+            "Weakened": r.get("weakened"), "Faded": r.get("faded"),
+            "Dropped": r.get("dropped"), "Recovered": r.get("recovered"),
+            "Favorable": (_pct(r.get("favorable_rate")) if r.get("assessment") == "OK"
+                          else "insufficient"),
+        })
+    return out
+
+
+def _render_opportunity_outcomes() -> None:
+    """Run 25 — what happened to ALL frozen HSF opportunities (not just alerted
+    ones). HSF-state persistence only, never price. Read-only. Separate from
+    alert quality."""
+    try:
+        from db.opportunity_outcomes import get_opportunity_outcome_summary
+
+        s = get_opportunity_outcome_summary()
+    except Exception:
+        return
+    with st.expander("🧭 HSF Opportunity outcome intelligence (admin)", expanded=False):
+        if not s.get("available") or not s.get("matured"):
+            st.caption("No matured opportunity outcomes yet. HSF records the "
+                       "subsequent state of every frozen opportunity over time.")
+            return
+        st.caption("What happened to frozen HSF opportunities after identification "
+                   "— subsequent canonical HSF state, not price or returns.")
+        c1, c2 = st.columns(2)
+        c1.metric("Matured outcomes", s.get("matured"))
+        c2.metric("Comparable", s.get("comparable"))
+        for title, dim, lbl in [
+            ("By initial status", "by_status", "Status"),
+            ("By HSF score band", "by_score_band", "Band"),
+            ("By confirming-signal count", "by_signal_count", "Signals"),
+            ("By horizon (elapsed)", "by_horizon", "Horizon"),
+            ("By market regime", "by_regime", "Regime"),
+        ]:
+            rows = s.get(dim) or []
+            if not rows:
+                continue
+            if dim == "by_horizon":
+                for r in rows:
+                    r["key"] = _HLBL.get(r.get("key"), r.get("key"))
+            st.markdown(f"**{title}**")
+            st.dataframe(_outcome_rows(rows, lbl), hide_index=True, width="stretch")
+        st.caption(f"Favorable = strengthened/persisted/recovered. Rates only at "
+                   f"≥ {s.get('min_sample')} comparable (excl. VERSION_CHANGED). "
+                   "Observation only — HSF Score and alerts are unchanged.")

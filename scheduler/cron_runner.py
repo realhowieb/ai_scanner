@@ -658,6 +658,21 @@ def main():
         print(f"[cron] alert quality maturation failed: {e}")
         _capture(e)
 
+    # HSF opportunity OUTCOME intelligence maturation: for every eligible frozen
+    # opportunity (not only alerted ones), classify subsequent HSF state at each
+    # horizon (HSF-state persistence only — never price, never tunes anything).
+    # Idempotent, first-observation immutable; background-only.
+    try:
+        from analytics.opportunity_outcomes import mature_opportunity_outcomes
+
+        om = mature_opportunity_outcomes()
+        if om.get("matured"):
+            print(f"[opportunity_outcomes] matured={om['matured']} "
+                  f"pending={om['pending']} unavailable={om['unavailable']}")
+    except Exception as e:
+        print(f"[cron] opportunity outcome maturation failed: {e}")
+        _capture(e)
+
     # Settle immutable fired-signal rows with 1/3/5D return plus MFE/MAE.
     try:
         from analytics.signal_outcomes import score_pending_signal_outcomes

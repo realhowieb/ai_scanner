@@ -291,6 +291,70 @@ def fetch_ticker_opportunity_history(
     return out
 
 
+def fetch_opportunity_observations(days_back: int = 30, limit: int = 20000) -> List[Dict[str, Any]]:
+    """Frozen HSF opportunity SIGNAL-TIME observations for Run 25 outcome
+    intelligence — id + ticker + snapshot_time + signal-time HSF state ONLY.
+
+    Deliberately returns NO forward/price columns (return_/mfe_/mae_): HSF-state
+    outcome intelligence stays separate from the price pipeline. The row id is the
+    canonical observation id; fired_at is the source snapshot time. Never raises.
+    """
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, ticker, fired_at, raw_signal, indicators
+            FROM signal_outcomes
+            WHERE source = 'opportunity'
+              AND fired_at >= NOW() - make_interval(days => %s)
+            ORDER BY fired_at ASC
+            LIMIT %s
+            """,
+            (int(days_back), int(limit)),
+        )
+        rows = cur.fetchall() or []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        cur.close()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return []
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        d = dict(r) if isinstance(r, dict) else dict(zip(cols, r))
+        raw = d.get("raw_signal") or {}
+        ind = d.get("indicators") or {}
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                raw = {}
+        if isinstance(ind, str):
+            try:
+                ind = json.loads(ind)
+            except json.JSONDecodeError:
+                ind = {}
+        out.append({
+            "observation_id": d.get("id"),
+            "ticker": d.get("ticker"),
+            "snapshot_time": d.get("fired_at"),
+            "score": raw.get("hsf_score"),
+            "status": raw.get("status") or ind.get("status"),
+            "score_version": raw.get("score_version"),
+            "signals": list(ind.get("signals") or []),
+            "n_signals": ind.get("n_signals"),
+            "fading": bool(ind.get("fading")),
+        })
+    return out
+
+
 def summarize_recent_outcomes(days_back: int = 7) -> Dict[str, Any]:
     """Scorecard over signals fired in the last `days_back` days.
 

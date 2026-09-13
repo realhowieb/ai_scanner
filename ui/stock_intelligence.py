@@ -245,11 +245,27 @@ def build_stock_intelligence(
         "market_regime": regime,
         "earnings_days": earnings_days,
         "historical_context": hist_ctx,
+        "outcome_cohort": _outcome_cohort(current),
         "history_summary": history_summary,
         "lifecycle": lifecycle,
         "watch_next": watch_next,
         "from_history": bool(current.get("from_history")) if current else False,
     }
+
+
+def _outcome_cohort(current: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Run 25 read-only HSF-state historical context for the current state's
+    cohort (same status + score band), at H24. Descriptive persistence only —
+    never a price probability. None when unavailable / insufficient history."""
+    if not current or current.get("status") is None or current.get("score") is None:
+        return None
+    try:
+        from db.opportunity_outcomes import get_similar_state_outcomes
+
+        c = get_similar_state_outcomes(status=current.get("status"), score=current.get("score"))
+    except Exception:
+        return None
+    return c if c.get("available") else None
 
 
 # ------------------------------- render --------------------------------------
@@ -414,7 +430,7 @@ def _render_watch_next(intel: Dict[str, Any]) -> None:
 def _render_historical(intel: Dict[str, Any]) -> None:
     ctx = intel.get("historical_context")
     summ = intel.get("history_summary")
-    if not ctx and not summ:
+    if not ctx and not summ and not intel.get("outcome_cohort"):
         return
     st.markdown("#### Historical context")
     if ctx and ctx.get("sufficient"):
@@ -428,6 +444,13 @@ def _render_historical(intel: Dict[str, Any]) -> None:
         st.caption(f"This ticker: {summ['observations']} prior HSF observation(s), "
                    f"{summ['matured']} matured, {summ['positive']} positive "
                    "(observations, not trades).")
+    coh = intel.get("outcome_cohort")
+    if coh and coh.get("available") and coh.get("favorable_rate") is not None:
+        st.caption(
+            f"Similar HSF states ({coh['status']} · score {coh['score_band']}): "
+            f"{coh['comparable']} H24 observations, "
+            f"{coh['favorable_rate']*100:.0f}% persisted or strengthened "
+            "(HSF-state persistence, not a price forecast).")
 
 
 def _render_actions(intel: Dict[str, Any], render_chart_for_ticker) -> None:
