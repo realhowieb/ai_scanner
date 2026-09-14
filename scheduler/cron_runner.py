@@ -30,6 +30,7 @@ class ScanRunSummary:
     row_count: int = 0
     duration_sec: float = 0.0
     error: str | None = None
+    automation_export: dict | None = None
 
 
 def _read_symbols(path: Path) -> list[str]:
@@ -221,6 +222,7 @@ def run_and_save(
         if not tickers:
             raise RuntimeError(f"No tickers loaded for {universe}")
 
+        scan_started_at = dt.datetime.now(dt.timezone.utc)
         started = time.perf_counter()
         results = run_breakout_scan(
             tickers,
@@ -239,6 +241,7 @@ def run_and_save(
             use_cache=True,
         )
         duration = time.perf_counter() - started
+        completed_at = dt.datetime.now(dt.timezone.utc)
         row_count = len(results)
 
         run_name = f"{universe} | {row_count} results | {duration:.1f}s"
@@ -275,6 +278,36 @@ def run_and_save(
         )
         print(f"Saved {row_count} rows for {universe}.")
 
+        automation_export = None
+        try:
+            from integrations.automation_export import publish_scan_results
+
+            automation_export = publish_scan_results(
+                results,
+                universe=universe,
+                scan_type="scheduled",
+                market_session=_resolve_session(),
+                started_at_utc=scan_started_at,
+                completed_at_utc=completed_at,
+                duration_seconds=duration,
+                symbols_requested=len(tickers),
+                symbols_processed=None,
+                symbols_skipped=None,
+                retention_days=int(os.getenv("AUTOMATION_HISTORY_DAYS", "30")),
+            )
+            print(
+                "[automation_export] latest_scan.json published: "
+                f"candidates={automation_export.get('candidate_count')} "
+                f"warnings={automation_export.get('warning_count')} "
+                f"path={automation_export.get('latest_path')}"
+            )
+        except Exception as e:
+            # Export is an integration layer; a failed export should be visible
+            # without turning a successful scan into a new outage mode.
+            automation_export = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+            print(f"[automation_export] publish failed for {universe}: {e}")
+            _capture(e)
+
         # Promote to the day's snapshot so the track record + digest have a
         # reliable daily is_snapshot row (idempotent per universe/day).
         if save_snapshot:
@@ -291,6 +324,7 @@ def run_and_save(
             ok=True,
             row_count=row_count,
             duration_sec=duration,
+            automation_export=automation_export,
         )
 
     except Exception as e:

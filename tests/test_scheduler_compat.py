@@ -61,6 +61,19 @@ class SchedulerCompatTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["runs"][0]["universe"], "SP500")
 
+    def test_scheduled_scans_publish_automation_snapshot(self) -> None:
+        cron_source = (ROOT / "scheduler" / "cron_runner.py").read_text(encoding="utf-8")
+        pre_post_source = (ROOT / "scan" / "pre_post.py").read_text(encoding="utf-8")
+        workflow_source = (ROOT / ".github" / "workflows" / "scheduled-scans.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("publish_scan_results", cron_source)
+        self.assertIn("publish_scan_results", pre_post_source)
+        self.assertIn("scanner-automation-snapshot", workflow_source)
+        self.assertIn("artifacts/automation/latest_scan.json", workflow_source)
+        self.assertIn("artifacts/automation/status.json", workflow_source)
+
     def test_market_time_gate_uses_new_york_dst(self) -> None:
         # June is EDT (UTC-4). A fixed UTC-5 conversion would incorrectly
         # treat this as 5 AM ET and skip.

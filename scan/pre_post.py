@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -80,6 +82,7 @@ def run_scan(
     if us_only:
         universe = filter_us_tickers(universe)
     universe = filter_problem_tickers(universe)
+    requested_count = len(universe)
     if not universe:
         return pd.DataFrame(), {"params": {}, "skipped_count": 0, "downloaded_count": 0, "elapsed_s": 0.0}
 
@@ -112,9 +115,11 @@ def run_scan(
         "apply_gap_filter": bool(apply_gap_filter),
         "session": session_label,
     }
+    meta["requested_count"] = requested_count
     return breakout_df, meta
 
 def run_and_save(run_type: str, universe: list[str] | None, **kwargs) -> int:
+    started_at = dt.datetime.now(dt.timezone.utc)
     df, meta = run_scan(run_type, universe, **kwargs)
     try:
         if not df.empty and "Breakout %" in df.columns:
@@ -132,6 +137,30 @@ def run_and_save(run_type: str, universe: list[str] | None, **kwargs) -> int:
             is_snapshot=False,
             allow_sqlite_fallback=False,
         )
+        try:
+            from integrations.automation_export import publish_scan_results
+
+            export = publish_scan_results(
+                to_save,
+                universe=str(run_type).upper(),
+                scan_type="scheduled",
+                market_session=kwargs.get("session_label") or run_type,
+                started_at_utc=started_at,
+                completed_at_utc=dt.datetime.now(dt.timezone.utc),
+                duration_seconds=float(meta.get("elapsed_s", 0.0)),
+                symbols_requested=int(meta.get("requested_count") or len(universe or [])),
+                symbols_processed=int(meta.get("downloaded_count") or 0),
+                symbols_skipped=int(meta.get("skipped_count") or 0),
+                retention_days=int(os.getenv("AUTOMATION_HISTORY_DAYS", "30")),
+            )
+            print(
+                "[automation_export] latest_scan.json published: "
+                f"candidates={export.get('candidate_count')} "
+                f"warnings={export.get('warning_count')} "
+                f"path={export.get('latest_path')}"
+            )
+        except HEADLESS_BOUNDARY_ERRORS as e:
+            print(f"[automation_export] publish failed for {run_type}: {e}")
         return 0
     except HEADLESS_BOUNDARY_ERRORS:
         return -1
