@@ -294,10 +294,14 @@ def _ai_confidence_model_provenance() -> dict[str, Any]:
 
 
 def github_run_metadata(env: dict[str, str] | None = None) -> dict[str, Any]:
-    env = env or os.environ
+    env = os.environ if env is None else env
     return {
         "github_run_id": env.get("GITHUB_RUN_ID"),
         "github_run_attempt": env.get("GITHUB_RUN_ATTEMPT"),
+        "github_workflow": env.get("GITHUB_WORKFLOW"),
+        "github_job": env.get("GITHUB_JOB"),
+        "github_ref": env.get("GITHUB_REF"),
+        "github_repository": env.get("GITHUB_REPOSITORY"),
         "git_sha": env.get("GITHUB_SHA") or env.get("RENDER_GIT_COMMIT") or env.get("COMMIT_SHA"),
     }
 
@@ -309,7 +313,7 @@ def build_run_id(
     started_at_utc: dt.datetime,
     env: dict[str, str] | None = None,
 ) -> str:
-    env = env or os.environ
+    env = os.environ if env is None else env
     run_id = env.get("GITHUB_RUN_ID")
     attempt = env.get("GITHUB_RUN_ATTEMPT")
     suffix = f"-{attempt}" if attempt else ""
@@ -369,6 +373,11 @@ def build_snapshot(
             "duration_seconds": round(float(duration_seconds or 0.0), 3),
             "status": "success",
             "github_run_id": env_meta.get("github_run_id"),
+            "github_run_attempt": env_meta.get("github_run_attempt"),
+            "github_workflow": env_meta.get("github_workflow"),
+            "github_job": env_meta.get("github_job"),
+            "github_ref": env_meta.get("github_ref"),
+            "github_repository": env_meta.get("github_repository"),
             "git_sha": git_sha,
             "symbols_requested": symbols_requested,
             "symbols_processed": symbols_processed,

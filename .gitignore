@@ -28,6 +28,7 @@ y.pub
 
 breakout_results*.csv
 breakout_momentum.csv
+artifacts/
 did.bin
 
 *.joblib

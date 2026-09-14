@@ -206,6 +206,22 @@ class AutomationExportTests(unittest.TestCase):
         self.assertTrue(snapshot["scan"]["run_id"].startswith("local-"))
         self.assertIsNone(snapshot["scan"]["github_run_id"])
 
+    def test_explicit_empty_environment_ignores_ambient_github_variables(self) -> None:
+        with patch.dict(os.environ, {"GITHUB_RUN_ID": "999", "GITHUB_SHA": "ambient-sha"}):
+            snapshot = ae.build_snapshot(
+                self._frame(),
+                universe="SP500",
+                scan_type="scheduled",
+                market_session="regular",
+                started_at_utc=self._started(),
+                model_metadata={},
+                env={},
+            )
+
+        self.assertTrue(snapshot["scan"]["run_id"].startswith("local-"))
+        self.assertIsNone(snapshot["scan"]["github_run_id"])
+        self.assertIsNone(snapshot["scan"]["git_sha"])
+
     def test_history_retention_removes_old_snapshot_dirs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -240,4 +256,3 @@ class AutomationExportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
