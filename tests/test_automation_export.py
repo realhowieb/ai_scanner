@@ -254,5 +254,91 @@ class AutomationExportTests(unittest.TestCase):
         self.assertIn("safe-sha", encoded)
 
 
+class ModelScoreEnrichmentTests(unittest.TestCase):
+    """The headless scheduled scan reaches the exporter WITHOUT model-probability
+    columns; the exporter must enrich them so the snapshot is not all-null."""
+
+    def _bare_frame(self) -> pd.DataFrame:
+        # Mirrors the headless df: core fields present, NO PreBreakout/AI columns.
+        return pd.DataFrame([
+            {"Ticker": "AAA", "Last": 12.5, "PctChange": 2.3, "VolRel20": 1.7,
+             "Volume": 1_200_000, "Breakout %": 51.0, "PatternTag": "Base/Neutral"},
+            {"Ticker": "BBB", "Last": 30.0, "PctChange": -1.1, "VolRel20": 0.9,
+             "Volume": 800_000, "Breakout %": 42.0, "PatternTag": "NearHigh"},
+        ])
+
+    def _fake_score_prebreakout(self, df):
+        out = df.copy()
+        out["PreBreakoutProbRaw"] = [0.1809, 0.0122]
+        out["PreBreakoutProb"] = [0.25, 0.131]
+        out["PreBreakoutProb%"] = [25.0, 13.1]
+        return out
+
+    def test_enrichment_populates_prebreakout_fields(self) -> None:
+        import sys
+        import types
+        fake = types.ModuleType("ml_prebreakout")
+        fake.score_prebreakout = self._fake_score_prebreakout
+        fake.load_prebreakout_model = lambda *_a, **_k: {"model": object()}
+        fake.MODEL_PATH = "x"
+        with patch.dict(sys.modules, {"ml_prebreakout": fake}):
+            enriched = ae.ensure_model_scores(self._bare_frame())
+            records = ae.dataframe_records(enriched)
+            candidates = [ae.candidate_from_row(r, rank=i + 1) for i, r in enumerate(records)]
+        probs = [c["prebreakout_ml_probability"] for c in candidates]
+        self.assertEqual(probs, [0.25, 0.131])  # populated, per-ticker (not null/broadcast)
+
+    def test_build_snapshot_uses_enrichment(self) -> None:
+        import sys
+        import types
+        fake = types.ModuleType("ml_prebreakout")
+        fake.score_prebreakout = self._fake_score_prebreakout
+        fake.load_prebreakout_model = lambda *_a, **_k: {"model": object()}
+        fake.MODEL_PATH = "x"
+        with patch.dict(sys.modules, {"ml_prebreakout": fake}):
+            snap = ae.build_snapshot(
+                self._bare_frame(), universe="COMBO", scan_type="scheduled",
+                market_session="regular",
+                started_at_utc=dt.datetime(2026, 9, 14, 14, 35, tzinfo=dt.timezone.utc),
+                model_metadata={}, env={})
+        vals = [c["prebreakout_ml_probability"] for c in snap["candidates"]]
+        self.assertEqual(vals, [0.25, 0.131])
+        # diagnostics now see real variation, not unique_scores=0
+        self.assertEqual(snap["diagnostics"]["prebreakout_ml_probability_distribution"]["unique_scores"], 2)
+
+    def test_enrichment_noop_when_already_scored(self) -> None:
+        df = self._bare_frame()
+        df["PreBreakoutProb%"] = [25.0, 13.1]
+        df["AI Confidence"] = [60.0, 40.0]
+        # already enriched -> returned unchanged, scorer never imported/called
+        out = ae.ensure_model_scores(df)
+        self.assertIs(out, df)
+
+    def test_enrichment_safe_without_model(self) -> None:
+        # scorer raising must not break export; fields simply stay null
+        import sys
+        import types
+        boom = types.ModuleType("ml_prebreakout")
+        boom.load_prebreakout_model = lambda *_a, **_k: {"model": object()}
+        boom.MODEL_PATH = "x"
+
+        def _raise(_df):
+            raise RuntimeError("no model")
+        boom.score_prebreakout = _raise
+        with patch.dict(sys.modules, {"ml_prebreakout": boom}):
+            snap = ae.build_snapshot(
+                self._bare_frame(), universe="COMBO", scan_type="scheduled",
+                market_session="regular",
+                started_at_utc=dt.datetime(2026, 9, 14, 14, 35, tzinfo=dt.timezone.utc),
+                model_metadata={}, env={})
+        self.assertEqual(len(snap["candidates"]), 2)  # export still succeeds
+        self.assertTrue(all(c["prebreakout_ml_probability"] is None for c in snap["candidates"]))
+
+    def test_dict_records_passthrough(self) -> None:
+        # non-DataFrame input (list of dicts) is returned unchanged
+        rows = [{"Ticker": "AAA"}]
+        self.assertEqual(ae.ensure_model_scores(rows), rows)
+
+
 if __name__ == "__main__":
     unittest.main()

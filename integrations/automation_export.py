@@ -124,6 +124,50 @@ def _probability(row: dict[str, Any], *names: str) -> float | None:
     return None
 
 
+def ensure_model_scores(results: Any) -> Any:
+    """Best-effort: make sure the results carry the model-probability columns the
+    snapshot maps (PreBreakout + AI Confidence).
+
+    The headless scheduled scan (scan.pre_post.run_scan → run_headless_pipeline,
+    include_ta=False) does NOT run model scoring, so its DataFrame reaches the
+    exporter without `PreBreakoutProb%` / `AI Confidence` — leaving those snapshot
+    fields null even though the model is loaded. The interactive/CSV path
+    (scan.execution) DOES enrich, which is why the CSV had them. This mirrors that
+    enrichment for the export only, reusing the SAME canonical scorers (no new
+    logic, no HSF-Score change). No-op when: not a DataFrame, empty, already
+    scored, or the scorers/model are unavailable — it never raises.
+    """
+    if pd is None or not isinstance(results, pd.DataFrame) or results.empty:
+        return results
+    frame = results
+    # Skip if ANY PreBreakout probability column is already present — never
+    # re-score / overwrite an already-enriched frame (interactive path or caller).
+    _pre_cols = ("PreBreakoutProb%", "PreBreakoutProb", "PreBreakoutProbRaw")
+    if not any(c in frame.columns for c in _pre_cols):
+        try:
+            from ml_prebreakout import (
+                MODEL_PATH,
+                load_prebreakout_model,
+                score_prebreakout,
+            )
+
+            # Only enrich when the model actually loads — otherwise score_prebreakout
+            # writes 0.0, which would misrepresent "unavailable" as a real 0% and
+            # differs from the honest null the exporter emits without a model.
+            if load_prebreakout_model(MODEL_PATH):
+                frame = score_prebreakout(frame.copy())
+        except Exception:
+            pass
+    if "AI Confidence" not in getattr(frame, "columns", []):
+        try:
+            from scan.ai_confidence import score_ai_confidence
+
+            frame = score_ai_confidence(frame)
+        except Exception:
+            pass
+    return frame
+
+
 def dataframe_records(results: Any) -> list[dict[str, Any]]:
     if results is None:
         return []
@@ -341,6 +385,7 @@ def build_snapshot(
     env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     completed_at_utc = completed_at_utc or utc_now()
+    results = ensure_model_scores(results)  # populate ML-probability columns if missing
     records = dataframe_records(results)
     candidates = [candidate_from_row(row, rank=i + 1) for i, row in enumerate(records)]
     diagnostics = build_diagnostics(candidates)
