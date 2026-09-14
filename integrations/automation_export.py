@@ -8,6 +8,7 @@ external AI services.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import math
 import os
@@ -165,6 +166,16 @@ def ensure_model_scores(results: Any) -> Any:
             frame = score_ai_confidence(frame)
         except Exception:
             pass
+    # Present the snapshot in the SAME canonical order the in-app Scanner uses
+    # (PreBreakout-first when scored, else BreakoutScore, with the raw-probability
+    # tie-break) so a consumer's `rank` matches what users see. Reuses the one
+    # canonical ranker; no-op / safe when columns are absent.
+    try:
+        from scan.ranking import apply_default_ranking
+
+        frame = apply_default_ranking(frame)
+    except Exception:
+        pass
     return frame
 
 
@@ -180,7 +191,15 @@ def dataframe_records(results: Any) -> list[dict[str, Any]]:
 
 def candidate_from_row(row: dict[str, Any], *, rank: int | None = None) -> dict[str, Any]:
     symbol = (_text(row, "Ticker", "Symbol", "symbol") or "").upper()
+    # Raw (uncalibrated) model probability — the DISCRIMINATIVE signal. The
+    # calibrated prob is isotonic and has a wide flat floor (~88% of rows share
+    # one value), so consumers need the raw score to rank within that plateau.
+    pre_prob_raw = _probability(row, "PreBreakoutProbRaw", "prebreakout_ml_probability_raw")
+    # `prebreakout_score` carries the raw model score when no explicit score
+    # column exists (previously always null in the headless snapshot).
     pre_score = _num(row, "PreBreakoutScore", "prebreakout_score")
+    if pre_score is None:
+        pre_score = pre_prob_raw
     pre_prob = _probability(row, "PreBreakoutProb", "PreBreakoutProb%", "prebreakout_ml_probability")
     breakout_prob = _probability(row, "BreakoutProb", "AI Confidence", "AIConfidence", "breakout_ml_probability")
     breakout_score = _num(row, "BreakoutScore", "Breakout %", "breakout_score")
@@ -200,6 +219,7 @@ def candidate_from_row(row: dict[str, Any], *, rank: int | None = None) -> dict[
         "prebreakout_score": pre_score,
         "breakout_score": breakout_score,
         "prebreakout_ml_probability": pre_prob,
+        "prebreakout_ml_probability_raw": pre_prob_raw,
         "breakout_ml_probability": breakout_prob,
         "scanner_signal": _text(row, "PatternTag", "ScannerSignal", "scanner_signal"),
         "rank": rank,
@@ -299,19 +319,35 @@ def collect_model_provenance() -> dict[str, dict[str, Any]]:
     }
 
 
+def _feature_schema_fingerprint(features: Any) -> str | None:
+    """Deterministic identifier of a model's ordered feature schema.
+
+    When a bundle has no explicit `feature_schema_version`, we derive one from the
+    real ordered feature list so consumers can still detect a feature-set change
+    (the whole point of a schema version). This is a content fingerprint of actual
+    data, never a fabricated version. None when the feature list is empty/unknown.
+    """
+    names = [str(f) for f in (features or []) if str(f).strip()]
+    if not names:
+        return None
+    digest = hashlib.sha1("\n".join(names).encode("utf-8")).hexdigest()[:12]
+    return f"fp:{len(names)}:{digest}"
+
+
 def _prebreakout_model_provenance() -> dict[str, Any]:
     try:
         import ml_prebreakout
 
         bundle = ml_prebreakout.load_prebreakout_model()
         metadata = dict(bundle.get("metadata") or {}) if isinstance(bundle, dict) else {}
+        features = (bundle or {}).get("features") or [] if isinstance(bundle, dict) else []
         return safe_json_value(
             {
                 "version": (bundle or {}).get("model_version") if isinstance(bundle, dict) else getattr(ml_prebreakout, "MODEL_VERSION", None),
                 "trained_at": (bundle or {}).get("trained_at") if isinstance(bundle, dict) else metadata.get("trained_at"),
                 "artifact": (bundle or {}).get("source") if isinstance(bundle, dict) else str(getattr(ml_prebreakout, "MODEL_PATH", "")),
-                "feature_schema_version": metadata.get("feature_schema_version"),
-                "feature_count": len((bundle or {}).get("features") or [] if isinstance(bundle, dict) else []),
+                "feature_schema_version": metadata.get("feature_schema_version") or _feature_schema_fingerprint(features),
+                "feature_count": len(features),
             }
         )
     except Exception as exc:
@@ -323,13 +359,14 @@ def _ai_confidence_model_provenance() -> dict[str, Any]:
         from scan.ai_confidence import MODEL_VERSION, load_ai_confidence_bundle
 
         _model, metadata, warning = load_ai_confidence_bundle()
+        feature_names = metadata.get("feature_names") or []
         return safe_json_value(
             {
                 "version": metadata.get("model_version") or MODEL_VERSION,
                 "trained_at": metadata.get("trained_at"),
                 "artifact": metadata.get("source") or "local",
-                "feature_schema_version": metadata.get("feature_schema_version"),
-                "feature_count": len(metadata.get("feature_names") or []),
+                "feature_schema_version": metadata.get("feature_schema_version") or _feature_schema_fingerprint(feature_names),
+                "feature_count": len(feature_names),
                 "warning": warning,
             }
         )

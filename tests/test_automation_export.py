@@ -310,9 +310,13 @@ class ModelScoreEnrichmentTests(unittest.TestCase):
         df = self._bare_frame()
         df["PreBreakoutProb%"] = [25.0, 13.1]
         df["AI Confidence"] = [60.0, 40.0]
-        # already enriched -> returned unchanged, scorer never imported/called
+        # Already scored -> values preserved (never re-scored/overwritten to 0).
+        # Rows may be reordered by canonical ranking, so compare per-ticker.
         out = ae.ensure_model_scores(df)
-        self.assertIs(out, df)
+        by = {r["Ticker"]: r for r in out.to_dict(orient="records")}
+        self.assertEqual(by["AAA"]["PreBreakoutProb%"], 25.0)
+        self.assertEqual(by["BBB"]["PreBreakoutProb%"], 13.1)
+        self.assertEqual(by["AAA"]["AI Confidence"], 60.0)
 
     def test_enrichment_safe_without_model(self) -> None:
         # scorer raising must not break export; fields simply stay null
@@ -338,6 +342,52 @@ class ModelScoreEnrichmentTests(unittest.TestCase):
         # non-DataFrame input (list of dicts) is returned unchanged
         rows = [{"Ticker": "AAA"}]
         self.assertEqual(ae.ensure_model_scores(rows), rows)
+
+
+class RawProbabilityAndRankingTests(unittest.TestCase):
+    """Snapshot improvements: export the raw (discriminative) PreBreakout prob,
+    populate prebreakout_score from it, and rank candidates canonically."""
+
+    def test_raw_probability_exported_and_backfills_score(self) -> None:
+        c = ae.candidate_from_row(
+            {"Ticker": "AAA", "PreBreakoutProbRaw": 0.0345, "PreBreakoutProb%": 13.1},
+            rank=1)
+        self.assertAlmostEqual(c["prebreakout_ml_probability_raw"], 0.0345)
+        self.assertAlmostEqual(c["prebreakout_ml_probability"], 0.131)   # calibrated
+        self.assertAlmostEqual(c["prebreakout_score"], 0.0345)           # backfilled from raw
+
+    def test_explicit_prebreakout_score_wins_over_raw(self) -> None:
+        c = ae.candidate_from_row(
+            {"Ticker": "AAA", "PreBreakoutScore": 7.5, "PreBreakoutProbRaw": 0.02}, rank=1)
+        self.assertEqual(c["prebreakout_score"], 7.5)  # explicit column preferred
+
+    def test_snapshot_ranks_plateau_by_raw(self) -> None:
+        # 3 rows share the calibrated floor (13.1%) but differ in raw -> canonical
+        # ranking must order them by raw desc; the 25% row ranks first overall.
+        df = pd.DataFrame([
+            {"Ticker": "AAA", "PreBreakoutProb%": 13.1, "PreBreakoutProbRaw": 0.0122, "BreakoutScore": 40},
+            {"Ticker": "BBB", "PreBreakoutProb%": 13.1, "PreBreakoutProbRaw": 0.0345, "BreakoutScore": 50},
+            {"Ticker": "CCC", "PreBreakoutProb%": 13.1, "PreBreakoutProbRaw": 0.0067, "BreakoutScore": 30},
+            {"Ticker": "DDD", "PreBreakoutProb%": 25.0, "PreBreakoutProbRaw": 0.1809, "BreakoutScore": 60},
+        ])
+        snap = ae.build_snapshot(
+            df, universe="COMBO", scan_type="scheduled", market_session="regular",
+            started_at_utc=dt.datetime(2026, 9, 14, 14, 35, tzinfo=dt.timezone.utc),
+            model_metadata={}, env={})
+        order = [c["symbol"] for c in snap["candidates"]]
+        self.assertEqual(order, ["DDD", "BBB", "AAA", "CCC"])
+        self.assertEqual([c["rank"] for c in snap["candidates"]], [1, 2, 3, 4])
+
+
+class FeatureSchemaFingerprintTests(unittest.TestCase):
+    def test_fingerprint_deterministic_and_sensitive(self) -> None:
+        a = ae._feature_schema_fingerprint(["f1", "f2", "f3"])
+        b = ae._feature_schema_fingerprint(["f1", "f2", "f3"])
+        c = ae._feature_schema_fingerprint(["f1", "f2", "f4"])  # changed feature
+        self.assertEqual(a, b)          # deterministic
+        self.assertNotEqual(a, c)       # detects a feature-set change
+        self.assertTrue(a.startswith("fp:3:"))  # encodes the count
+        self.assertIsNone(ae._feature_schema_fingerprint([]))   # empty -> None
 
 
 if __name__ == "__main__":

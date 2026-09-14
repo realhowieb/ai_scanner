@@ -52,9 +52,10 @@ Candidate fields use normalized names for external consumers:
 - `rvol`
 - `volume`
 - `avg_volume`
-- `prebreakout_score`
+- `prebreakout_score` (raw model score when no explicit score column exists)
 - `breakout_score`
-- `prebreakout_ml_probability`
+- `prebreakout_ml_probability` (calibrated; isotonic, has a wide low-range floor)
+- `prebreakout_ml_probability_raw` (uncalibrated model probability — the discriminative signal for ranking within the calibrated floor)
 - `breakout_ml_probability`
 - `scanner_signal`
 - `rank`
