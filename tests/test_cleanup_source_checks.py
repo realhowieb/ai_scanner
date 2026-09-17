@@ -23,7 +23,11 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertNotIn("def _normalize_df", source)
         self.assertNotIn("def _frame_fingerprint", source)
         self.assertNotIn("def _download_multi_alpaca", source)
-        self.assertIn("_YAHOO_HTTP_ERRORS = (requests.RequestException, ValueError, KeyError, TypeError)", fetch_source)
+        # requests import is optional (import-safety); the Yahoo HTTP error tuple
+        # still wires RequestException when available plus the JSON parse errors.
+        self.assertIn("_YAHOO_HTTP_ERRORS = (", fetch_source)
+        self.assertIn("requests.RequestException", fetch_source)
+        self.assertIn("(ValueError, KeyError, TypeError)", fetch_source)
         self.assertIn('"YFRateLimitError"', fetch_source)
         self.assertIn("def _build_yfinance_errors", fetch_source)
         self.assertIn("except _YAHOO_HTTP_ERRORS as e", fetch_source)

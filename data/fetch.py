@@ -37,7 +37,11 @@ from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence,
 
 import numpy as np
 import pandas as pd
-import requests
+
+try:
+    import requests
+except ImportError:  # pragma: no cover - allow the module to import without requests during linting/tests
+    requests = None  # type: ignore
 
 try:
     import yfinance as yf
@@ -48,7 +52,10 @@ except ImportError:  # pragma: no cover - allow the module to import without yfi
 
 
 _YFINANCE_BASE_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, ValueError)
-_YAHOO_HTTP_ERRORS = (requests.RequestException, ValueError, KeyError, TypeError)
+_YAHOO_HTTP_ERRORS = (
+    ((requests.RequestException,) if requests is not None else ())
+    + (ValueError, KeyError, TypeError)
+)
 
 
 def _build_yfinance_errors() -> tuple[type[Exception], ...]:
@@ -399,6 +406,9 @@ def fetch_hot_stocks(
     This is UI-agnostic and safe for headless use. Requires network access.
     """
     log = logger or _noop_log
+    if requests is None:  # requests optional at import; this path needs it
+        log("requests not installed; skipping hot-stocks fetch")
+        return {}
     # Map our friendly names to Yahoo's predefined screener IDs
     scr_ids = {
         "most_active": "most_actives",
