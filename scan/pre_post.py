@@ -170,6 +170,7 @@ def run_and_save(run_type: str, universe: list[str] | None, **kwargs) -> int:
                 symbols_requested=int(meta.get("requested_count") or len(universe or [])),
                 symbols_processed=int(meta.get("downloaded_count") or 0),
                 symbols_skipped=int(meta.get("skipped_count") or 0),
+                dropped_untradable=int(meta.get("dropped_untradable") or 0),
                 retention_days=int(os.getenv("AUTOMATION_HISTORY_DAYS", "30")),
             )
             print(

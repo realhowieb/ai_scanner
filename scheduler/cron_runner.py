@@ -222,6 +222,18 @@ def run_and_save(
         if not tickers:
             raise RuntimeError(f"No tickers loaded for {universe}")
 
+        # Drop delisted / non-tradable names (e.g. EA) from the regular scan too;
+        # the headless pre/post path filters inside run_headless_pipeline, but the
+        # engine path does not. Fails open (never empties the universe).
+        _pre_tradable = len(tickers)
+        try:
+            from data.tradability import filter_tradable_tickers
+
+            tickers = filter_tradable_tickers(tickers)
+        except Exception as _e:
+            _capture(_e)
+        dropped_untradable = _pre_tradable - len(tickers)
+
         scan_started_at = dt.datetime.now(dt.timezone.utc)
         started = time.perf_counter()
         results = run_breakout_scan(
@@ -293,6 +305,7 @@ def run_and_save(
                 symbols_requested=len(tickers),
                 symbols_processed=None,
                 symbols_skipped=None,
+                dropped_untradable=int(dropped_untradable),
                 retention_days=int(os.getenv("AUTOMATION_HISTORY_DAYS", "30")),
             )
             print(

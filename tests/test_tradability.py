@@ -132,3 +132,19 @@ class SessionUniverseTests(unittest.TestCase):
         ):
             uni = pre_post._load_session_universe()
         self.assertEqual(uni, ["SPY"])
+
+
+class SnapshotDroppedFieldTests(unittest.TestCase):
+    def test_summary_includes_dropped_untradable(self):
+        import datetime as _dt
+
+        import pandas as pd
+
+        from integrations import automation_export as ae
+        df = pd.DataFrame([{"Ticker": "NVDA", "BreakoutScore": 40, "Last": 100.0}])
+        snap = ae.build_snapshot(
+            df, universe="COMBO", scan_type="scheduled", market_session="regular",
+            started_at_utc=_dt.datetime(2026, 9, 16, tzinfo=_dt.timezone.utc),
+            symbols_requested=4771, symbols_processed=4232, symbols_skipped=16,
+            dropped_untradable=539, model_metadata={}, env={})
+        self.assertEqual(snap["summary"]["dropped_untradable"], 539)
