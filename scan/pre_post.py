@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from data.fetch import fetch_and_save_sp500, load_sp500_tickers, load_sp600_tickers
+from data.fetch import (
+    fetch_and_save_sp500,
+    load_nasdaq_tickers,
+    load_sp500_tickers,
+    load_sp600_tickers,
+)
 from data.filters import (
     filter_problem_tickers,
     filter_us_tickers,
@@ -44,6 +49,35 @@ def _load_sp600_or_sp500() -> list[str]:
     except HEADLESS_BOUNDARY_ERRORS:
         symbols = []
     return list(symbols or _load_sp500())
+
+
+def _load_session_universe() -> list[str]:
+    """Universe for premarket/postmarket scans: SP500 + the full Nasdaq list
+    (deduped), matching the regular-session COMBO coverage and honoring the same
+    CRON_NASDAQ_LIMIT. Falls back to SP500 if the Nasdaq list is unavailable, so a
+    loader failure never empties the session scan."""
+    try:
+        sp500 = list(load_sp500_tickers() or [])
+    except HEADLESS_BOUNDARY_ERRORS:
+        sp500 = list(_load_sp500())
+    try:
+        nasdaq = list(load_nasdaq_tickers() or [])
+    except HEADLESS_BOUNDARY_ERRORS:
+        nasdaq = []
+    if nasdaq:
+        try:
+            limit = int(os.getenv("CRON_NASDAQ_LIMIT", "2000"))
+        except (TypeError, ValueError):
+            limit = 2000
+        nasdaq = nasdaq[:limit]
+    seen: set[str] = set()
+    combined: list[str] = []
+    for sym in [*sp500, *nasdaq]:
+        s = str(sym).strip().upper()
+        if s and s not in seen:
+            seen.add(s)
+            combined.append(s)
+    return combined or _load_sp600_or_sp500()
 
 try:
     from scan.spy import get_spy_history  # type: ignore
@@ -166,10 +200,10 @@ def run_and_save(run_type: str, universe: list[str] | None, **kwargs) -> int:
         return -1
 
 def run_premarket_headless() -> int:
-    return run_and_save("premarket", None, session_label="premarket")
+    return run_and_save("premarket", _load_session_universe(), session_label="premarket")
 
 def run_postmarket_headless() -> int:
-    return run_and_save("postmarket", None, session_label="postmarket")
+    return run_and_save("postmarket", _load_session_universe(), session_label="postmarket")
 
 def run_sp500_headless(session_label: str = "regular") -> int:
     try:
