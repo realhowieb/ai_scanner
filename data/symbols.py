@@ -26,8 +26,9 @@ _YF_DOT_SUFFIXES: Tuple[str, ...] = (
     ".SA",                           # Brazil
 )
 
-# Class share punctuation that should become "-" for Yahoo (e.g., BRK.B -> BRK-B)
-_CLASS_SEP_PATTERN = re.compile(r"(?<=^[A-Z0-9]{1,10})[\._/ ](?=[A-Z]{1,2}$)")
+# Class share punctuation that should become "-" for Yahoo (e.g., BRK.B -> BRK-B).
+# Capture-group form (no variable-width lookbehind, which Python's re rejects).
+_CLASS_SEP_PATTERN = re.compile(r"^([A-Z0-9]{1,10})[\._/ ]([A-Z]{1,2})$")
 
 # Characters allowed in final Yahoo-normalized tickers (plus dot for suffixes)
 _ALLOWED_PATTERN = re.compile(r"^[A-Z0-9\-\.]+$")
@@ -64,7 +65,7 @@ def _split_base_and_suffix(t: str) -> Tuple[str, str]:
 
 def _replace_class_separator_to_dash(base: str) -> str:
     # Convert class/share separators to '-' (BRK.B -> BRK-B)
-    return _CLASS_SEP_PATTERN.sub("-", base)
+    return _CLASS_SEP_PATTERN.sub(r"\1-\2", base)
 
 
 def _collapse_dashes(s: str) -> str:
