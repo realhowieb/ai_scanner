@@ -60,7 +60,7 @@ def _load_session_universe() -> list[str]:
         combined = list(_load_universe("COMBO") or [])
         if combined:
             return combined
-    except Exception:
+    except HEADLESS_BOUNDARY_ERRORS:
         pass
     return _load_sp600_or_sp500()
 
