@@ -1,0 +1,57 @@
+name: Refresh Universe
+
+# Keep sp500.txt / nasdaq.txt current from authoritative sources (SPDR SPY
+# holdings + Nasdaq listed directory). Weekly is plenty — index membership and
+# new listings change slowly, and the live tradability filter already drops
+# delistings at scan time. Both scripts fail safe: if a fetch is bad, the file
+# is left unchanged.
+
+on:
+  schedule:
+    - cron: "30 10 * * 0"   # Sundays 10:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-universe
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install minimal deps
+        run: python -m pip install --upgrade pip requests
+
+      - name: Refresh S&P 500 (SPDR SPY holdings)
+        run: python -m scripts.refresh_sp500 || echo "sp500 refresh skipped (fail-safe)"
+
+      - name: Refresh Nasdaq (Nasdaq listed directory)
+        run: python -m scripts.refresh_nasdaq || echo "nasdaq refresh skipped (fail-safe)"
+
+      - name: Commit changes if any
+        run: |
+          if git diff --quiet -- sp500.txt nasdaq.txt; then
+            echo "No universe changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "### Universe changes" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git --no-pager diff --stat -- sp500.txt nasdaq.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git add sp500.txt nasdaq.txt
+          git commit -m "Auto-refresh universe files (sp500 / nasdaq)"
+          git push
