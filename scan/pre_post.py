@@ -9,12 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from data.fetch import (
-    fetch_and_save_sp500,
-    load_nasdaq_tickers,
-    load_sp500_tickers,
-    load_sp600_tickers,
-)
+from data.fetch import fetch_and_save_sp500, load_sp500_tickers, load_sp600_tickers
 from data.filters import (
     filter_problem_tickers,
     filter_us_tickers,
@@ -52,32 +47,22 @@ def _load_sp600_or_sp500() -> list[str]:
 
 
 def _load_session_universe() -> list[str]:
-    """Universe for premarket/postmarket scans: SP500 + the full Nasdaq list
-    (deduped), matching the regular-session COMBO coverage and honoring the same
-    CRON_NASDAQ_LIMIT. Falls back to SP500 if the Nasdaq list is unavailable, so a
-    loader failure never empties the session scan."""
+    """Universe for premarket/postmarket scans: the same SP500 + full Nasdaq
+    (deduped) COMBO the regular scheduled run uses, honoring CRON_NASDAQ_LIMIT.
+
+    Reuses the canonical `cron_runner._load_universe("COMBO")` (which reads the
+    static universe files) via a late import — the shim `load_nasdaq_tickers` is
+    not implemented, and this keeps one source of truth for coverage. Falls back
+    to SP500 if that is unavailable, so a failure never empties the scan."""
     try:
-        sp500 = list(load_sp500_tickers() or [])
-    except HEADLESS_BOUNDARY_ERRORS:
-        sp500 = list(_load_sp500())
-    try:
-        nasdaq = list(load_nasdaq_tickers() or [])
-    except HEADLESS_BOUNDARY_ERRORS:
-        nasdaq = []
-    if nasdaq:
-        try:
-            limit = int(os.getenv("CRON_NASDAQ_LIMIT", "2000"))
-        except (TypeError, ValueError):
-            limit = 2000
-        nasdaq = nasdaq[:limit]
-    seen: set[str] = set()
-    combined: list[str] = []
-    for sym in [*sp500, *nasdaq]:
-        s = str(sym).strip().upper()
-        if s and s not in seen:
-            seen.add(s)
-            combined.append(s)
-    return combined or _load_sp600_or_sp500()
+        from scheduler.cron_runner import _load_universe
+
+        combined = list(_load_universe("COMBO") or [])
+        if combined:
+            return combined
+    except Exception:
+        pass
+    return _load_sp600_or_sp500()
 
 try:
     from scan.spy import get_spy_history  # type: ignore

@@ -106,35 +106,29 @@ if __name__ == "__main__":
 
 
 class SessionUniverseTests(unittest.TestCase):
-    def test_session_universe_is_sp500_plus_full_nasdaq(self):
-        import os as _os
+    def test_session_universe_reuses_combo(self):
+        # pre/post sessions use the SAME COMBO universe as the regular run
+        from scan import pre_post
+        with mock.patch("scheduler.cron_runner._load_universe",
+                        return_value=["AAPL", "MSFT", "TSLA", "NVDA"]) as lu:
+            uni = pre_post._load_session_universe()
+        lu.assert_called_once_with("COMBO")
+        self.assertEqual(uni, ["AAPL", "MSFT", "TSLA", "NVDA"])
 
+    def test_session_universe_falls_back_when_combo_empty(self):
         from scan import pre_post
         with (
-            mock.patch("scan.pre_post.load_sp500_tickers", return_value=["AAPL", "MSFT"]),
-            mock.patch("scan.pre_post.load_nasdaq_tickers", return_value=["MSFT", "TSLA", "NVDA"]),
-            mock.patch.dict(_os.environ, {"CRON_NASDAQ_LIMIT": "10000"}, clear=False),
+            mock.patch("scheduler.cron_runner._load_universe", return_value=[]),
+            mock.patch("scan.pre_post._load_sp600_or_sp500", return_value=["AAPL", "MSFT"]),
         ):
             uni = pre_post._load_session_universe()
-        self.assertEqual(uni, ["AAPL", "MSFT", "TSLA", "NVDA"])  # deduped, order preserved
+        self.assertEqual(uni, ["AAPL", "MSFT"])  # never empty
 
-    def test_session_universe_honors_limit(self):
-        import os as _os
-
+    def test_session_universe_falls_back_on_error(self):
         from scan import pre_post
         with (
-            mock.patch("scan.pre_post.load_sp500_tickers", return_value=["AAPL"]),
-            mock.patch("scan.pre_post.load_nasdaq_tickers", return_value=["A", "B", "C", "D"]),
-            mock.patch.dict(_os.environ, {"CRON_NASDAQ_LIMIT": "2"}, clear=False),
+            mock.patch("scheduler.cron_runner._load_universe", side_effect=RuntimeError("boom")),
+            mock.patch("scan.pre_post._load_sp600_or_sp500", return_value=["SPY"]),
         ):
             uni = pre_post._load_session_universe()
-        self.assertEqual(uni, ["AAPL", "A", "B"])  # nasdaq truncated to 2
-
-    def test_session_universe_falls_back_without_nasdaq(self):
-        from scan import pre_post
-        with (
-            mock.patch("scan.pre_post.load_sp500_tickers", return_value=["AAPL", "MSFT"]),
-            mock.patch("scan.pre_post.load_nasdaq_tickers", return_value=[]),
-        ):
-            uni = pre_post._load_session_universe()
-        self.assertEqual(uni, ["AAPL", "MSFT"])  # SP500 only, never empty
+        self.assertEqual(uni, ["SPY"])
