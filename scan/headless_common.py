@@ -145,6 +145,18 @@ def run_headless_pipeline(
 ) -> tuple[pd.DataFrame, dict]:
     """Fetch, filter, scan, and return results plus run metadata."""
     symbols = list(universe)
+    # Drop symbols Alpaca no longer lists as active + tradable (delisted /
+    # acquired names left behind in the static universe files, e.g. EA). Single
+    # chokepoint for every scan path. Fails open — a provider issue never empties
+    # the scan — and is process-cached so a multi-universe run hits the API once.
+    _pre_tradable = len(symbols)
+    try:
+        from data.tradability import filter_tradable_tickers
+
+        symbols = filter_tradable_tickers(symbols)
+    except Exception:
+        pass
+    dropped_untradable = _pre_tradable - len(symbols)
     price_data, skipped, elapsed_fetch = fetch_headless_prices(
         symbols,
         period="60d",
@@ -171,6 +183,7 @@ def run_headless_pipeline(
     meta = {
         "downloaded_count": len({ticker for ticker in price_data if ticker in set(symbols)}),
         "skipped_count": len(skipped),
+        "dropped_untradable": int(dropped_untradable),
         "elapsed_s": float(elapsed_fetch),
     }
     return breakout_df, meta
