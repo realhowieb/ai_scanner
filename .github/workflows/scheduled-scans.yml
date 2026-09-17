@@ -95,6 +95,10 @@ jobs:
           # Session routing: 'auto' lets cron_runner infer premarket/regular/
           # postmarket from ET time, so one external cron job covers all slots.
           CRON_SESSION: ${{ inputs.session || 'auto' }}
+          # Scan the FULL Nasdaq list (nasdaq.txt has ~4,428 symbols) instead of
+          # the code default of 2,000. A value above the file length covers every
+          # symbol; the price cache above keeps the added COMBO overlap cheap.
+          CRON_NASDAQ_LIMIT: "10000"
           AUTOMATION_HISTORY_DAYS: "30"
           # Manual runs also bypass the per-alert cooldown so alerts can be
           # tested on demand; scheduled runs keep the normal 12h throttle.
