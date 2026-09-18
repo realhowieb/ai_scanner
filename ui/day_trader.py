@@ -961,8 +961,87 @@ def _styled(df, moved_now: set):
         return df
 
 
+def _watchlist_add_feedback(pick: str, wl_name: str, result: Dict[str, Any]) -> str:
+    """Deterministic feedback string for a watchlist add (no duplicates)."""
+    if result.get("added"):
+        return f"{pick} added to {wl_name}."
+    if result.get("already_present"):
+        return f"{pick} is already in {wl_name}."
+    return f"Couldn't add {pick} to {wl_name} right now."
+
+
+def _render_watchlist_action(pick: str) -> None:
+    """Add the picked Day Trader symbol to a persistent watchlist.
+
+    Reuses the canonical watchlist data layer (db.watchlists) — no second
+    watchlist implementation, no scan is triggered. Shows the default watchlist,
+    existing membership, a quick 'add to default', a destination picker, and
+    create-new. Adding here never removes the symbol from Day Trader."""
+    username = (st.session_state.get("username") or "").strip().lower()
+    if not username:
+        st.caption("Sign in to add symbols to a watchlist.")
+        return
+    try:
+        from db.watchlists import (
+            add_tickers_to_watchlist,
+            create_watchlist,
+            get_watchlist_tickers,
+            list_watchlists,
+        )
+    except Exception:
+        st.caption("Watchlists are unavailable right now.")
+        return
+
+    wls = list_watchlists(username) or []
+    # Membership (which watchlists already contain the symbol) — read once.
+    member_ids = set()
+    for wl in wls:
+        try:
+            if pick in set(get_watchlist_tickers(wl["id"], username) or []):
+                member_ids.add(wl["id"])
+        except Exception:
+            pass
+    default = next((w for w in wls if w.get("is_default")), (wls[0] if wls else None))
+
+    st.markdown(f"**Add {pick} to a watchlist**")
+    if member_ids:
+        st.caption("✓ Already in: " + ", ".join(w["name"] for w in wls if w["id"] in member_ids))
+
+    # Quick add to the default watchlist (fastest path).
+    if default:
+        in_default = default["id"] in member_ids
+        label = f"⭐ Add to {default['name']}" + (" ✓" if in_default else " (default)")
+        if st.button(label, key="dt_wl_quickadd", disabled=in_default):
+            res = add_tickers_to_watchlist(username, [pick], default["id"])
+            st.success(_watchlist_add_feedback(pick, default["name"], res))
+
+    # Choose another destination.
+    if wls:
+        labels = {f"{w['name']}" + (" (default)" if w.get("is_default") else ""): w["id"] for w in wls}
+        choice = st.selectbox("Or add to", list(labels.keys()), key="dt_wl_dest")
+        if st.button("Add", key="dt_wl_add"):
+            res = add_tickers_to_watchlist(username, [pick], labels[choice])
+            st.success(_watchlist_add_feedback(pick, choice, res))
+
+    # Create a new watchlist and add to it.
+    with st.expander("➕ Create new watchlist"):
+        new_name = st.text_input("Name", key="dt_wl_new_name", label_visibility="collapsed",
+                                 placeholder="e.g. Momentum")
+        if st.button("Create & add", key="dt_wl_create"):
+            name = (new_name or "").strip()
+            if not name:
+                st.caption("Enter a name first.")
+            else:
+                wid = create_watchlist(username, name)
+                if wid:
+                    res = add_tickers_to_watchlist(username, [pick], wid)
+                    st.success(_watchlist_add_feedback(pick, name, res))
+                else:
+                    st.caption("Couldn't create that watchlist right now.")
+
+
 def _render_row_actions() -> None:
-    """Chart / trade plan / alert-me for a picked ticker (outside the fragment)."""
+    """Chart / trade plan / watchlist / alert for a picked ticker (outside the fragment)."""
     rows = st.session_state.get("dt_rows") or []
     if not rows:
         return
@@ -970,16 +1049,23 @@ def _render_row_actions() -> None:
     if not tickers:
         return
     st.markdown("**Act on a symbol**")
+    # Keep the selection valid: if the previously picked symbol dropped out of the
+    # current Day Trader results, reset so the selectbox falls to the first valid
+    # ticker (never errors on a stale value). Symbols always come from dt_rows.
+    if st.session_state.get("dt_action_ticker") not in tickers:
+        st.session_state.pop("dt_action_ticker", None)
     pick = st.selectbox("Ticker", tickers, key="dt_action_ticker", label_visibility="collapsed")
     row = next((r for r in rows if r.get("ticker") == pick), None)
     if not row:
         return
-    a1, a2, a3 = st.columns(3)
+    a1, a2, a3, a4 = st.columns(4)
     if a1.button("📈 Chart", key="dt_act_chart"):
         st.session_state["dt_show_chart"] = pick
     if a2.button("🎯 Trade plan", key="dt_act_plan"):
         st.session_state["dt_show_plan"] = pick
-    if a3.button(f"🔔 Alert me on {pick}", key="dt_act_alert"):
+    if a3.button("⭐ Watchlist", key="dt_act_wl"):
+        st.session_state["dt_show_wl"] = pick
+    if a4.button("🔔 Alert", key="dt_act_alert"):
         st.session_state["alert_price_tk"] = pick
         if row.get("last"):
             st.session_state["alert_price_val"] = round(float(row["last"]), 2)
@@ -987,6 +1073,9 @@ def _render_row_actions() -> None:
             st.switch_page("pages/alerts.py")
         except Exception:
             st.caption("Open the Alerts page from the sidebar — the form is pre-filled.")
+
+    if st.session_state.get("dt_show_wl") == pick:
+        _render_watchlist_action(pick)
 
     if st.session_state.get("dt_show_chart") == pick:
         try:
