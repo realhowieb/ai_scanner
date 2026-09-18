@@ -28,6 +28,20 @@ MAX_SYMBOLS = 150
 MEGA_CAPS = "AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, AVGO, SPY, QQQ, IWM, DIA"
 HIGHLIGHT_CHG_PCT = 3.0
 HIGHLIGHT_RVOL = 2.0
+DAY_TRADER_TABLE_COLUMNS = [
+    "Ticker",
+    "Open",
+    "Last",
+    "Change $",
+    "Gap %",
+    "ADX",
+    "VWAP",
+    "vs VWAP",
+    "RVOL",
+    "Volume (M)",
+    "SuperTrend (13,2)",
+    "EWO",
+]
 
 
 # ------------------------------ pure helpers -------------------------------
@@ -136,6 +150,37 @@ def _ema_cross_display(value: object) -> str:
         return "Golden Cross"
     if text == "death":
         return "Death Cross"
+    return "—"
+
+
+def format_change_dollar(value: object) -> str:
+    """Format an intraday dollar move as +$0.00 / -$0.00."""
+    try:
+        v = float(value)
+        if v != v:
+            return "—"
+        return f"+${v:,.2f}" if v >= 0 else f"-${abs(v):,.2f}"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def format_volume_millions(value: object) -> str:
+    """Format raw share volume as millions for compact display."""
+    try:
+        v = float(value)
+        if v != v:
+            return "—"
+        return f"{v / 1_000_000.0:,.2f}M"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def format_supertrend_direction(value: object) -> str:
+    text = str(value or "").strip().lower()
+    if text in ("green", "bullish", "up", "true"):
+        return "🟢 Green"
+    if text in ("red", "bearish", "down", "false"):
+        return "🔴 Red"
     return "—"
 
 
@@ -633,10 +678,23 @@ def _render_table(
 
     df = pd.DataFrame(rows).rename(
         columns={
-            "ticker": "Ticker", "last": "Last", "chg_pct": "Chg %", "gap_pct": "Gap %",
-            "vwap": "VWAP", "vs_vwap_pct": "vs VWAP %", "volume": "Volume", "rvol": "RVOL",
-            "ema_cross": "EMA Cross", "atr_pct": "ATR %", "donchian_pos": "Range %",
+            "ticker": "Ticker",
+            "open": "Open",
+            "last": "Last",
+            "change_dollar": "Change $",
+            "chg_pct": "Chg %",
+            "gap_pct": "Gap %",
+            "adx": "ADX",
+            "vwap": "VWAP",
+            "vs_vwap_pct": "vs VWAP",
+            "volume": "Volume",
+            "rvol": "RVOL",
+            "ema_cross": "EMA Cross",
+            "atr_pct": "ATR %",
+            "donchian_pos": "Range %",
             "bb_pctb": "%B",
+            "supertrend_direction": "SuperTrend (13,2)",
+            "ewo": "EWO",
         }
     )
     # Donchian breakout + Bollinger squeeze as pre-formatted string columns
@@ -651,9 +709,10 @@ def _render_table(
     # see *why* each name ranked (computed from the same raw metric rows).
     if show_score:
         df["DT Score"] = [round(day_trade_score(r), 1) for r in rows]
-    df["vs VWAP"] = df["vs VWAP %"].apply(
-        lambda v: "▲ above" if (v is not None and v >= 0) else ("▼ below" if v is not None else "—")
-    )
+    if "Volume" in df.columns:
+        df["Volume (M)"] = pd.to_numeric(df["Volume"], errors="coerce") / 1_000_000.0
+    if "SuperTrend (13,2)" in df.columns:
+        df["SuperTrend (13,2)"] = df["SuperTrend (13,2)"].apply(format_supertrend_direction)
     if "EMA Cross" in df.columns:
         df["EMA Cross"] = df["EMA Cross"].apply(_ema_cross_display)
     # After-hours change: last trade vs today's official close. Rendered as a
@@ -668,22 +727,7 @@ def _render_table(
             for r in df.to_dict(orient="records")
         ]
 
-    # Compact defaults ON so the table fits a phone — the full 12-column grid
-    # overflows a mobile screen and shows only the Ticker column (the rest scroll
-    # off-screen). Desktop users can untick for every column.
-    compact = st.checkbox(
-        "📱 Compact view (fewer columns — best on mobile)", value=True, key="dt_compact"
-    )
-    if compact:
-        # A phone-fittable set: the momentum essentials + ATR% for volatility.
-        ordered = ["Ticker", "DT Score", "Chg %", "Last", "ATR %", "AH %", "RVOL"]
-    else:
-        ordered = [
-            "Ticker", "DT Score", "Last", "Chg %", "AH %", "Gap %", "ATR %",
-            "Range %", "20d B/O", "%B", "Squeeze", "VWAP", "vs VWAP", "vs VWAP %",
-            "RVOL", "EMA Cross", "Volume",
-        ]
-    df = df[[c for c in ordered if c in df.columns]]  # "DT Score" only when present
+    df = df[[c for c in DAY_TRADER_TABLE_COLUMNS if c in df.columns]]
 
     # Pin Ticker so it stays put while the rest scrolls; degrade gracefully on
     # older Streamlit that lacks column_config/pinned.
@@ -693,16 +737,16 @@ def _render_table(
                      column_config=col_cfg)
     except Exception:
         st.dataframe(_styled(df, moved_now), hide_index=True, width="stretch")
-    if not compact:
-        st.caption("↔ Swipe the table sideways to see all columns on mobile.")
+    st.caption("↔ Swipe the table sideways on mobile.")
 
     # Stash for the row-action picker rendered outside the fragment.
     st.session_state["dt_rows"] = rows
 
     now = pd.Timestamp.utcnow().strftime("%H:%M:%S UTC")
     st.caption(
-        f"As of {now} · Chg %/Gap % vs prior close · RVOL = today's volume ÷ 20-day avg · "
-        "Highlight = ±3% move or 2× RVOL · IEX feed — verify before trading."
+        f"As of {now} · Open = regular-session open · Gap % vs prior close · "
+        "RVOL = today's volume ÷ 20-day avg · Highlight = ±3% move or 2× RVOL · "
+        "IEX feed — verify before trading."
     )
 
 
@@ -726,13 +770,22 @@ def _styled(df, moved_now: set):
         return "—" if pd.isna(v) else f"{v:+.2f}%"
 
     def _price(v):
-        return "—" if pd.isna(v) else f"{v:,.2f}"
+        return "—" if pd.isna(v) else f"${v:,.2f}"
+
+    def _signed_dollar(v):
+        return format_change_dollar(v)
+
+    def _signed_number(v):
+        return "—" if pd.isna(v) else f"{v:+.2f}"
 
     def _rvol(v):
         return "—" if pd.isna(v) else f"{v:.2f}×"
 
-    def _vol(v):
-        return "—" if pd.isna(v) else f"{int(v):,}"
+    def _vol_m(v):
+        return "—" if pd.isna(v) else f"{v:,.2f}M"
+
+    def _one_decimal(v):
+        return "—" if pd.isna(v) else f"{v:.1f}"
 
     def vwap_heat(val):
         # Diverging heat: green above VWAP, red below, intensity by magnitude,
@@ -764,29 +817,35 @@ def _styled(df, moved_now: set):
         return "—" if pd.isna(v) else f"{v:.1f}%"
 
     fmt = {}
-    for col in ("Chg %", "Gap %", "vs VWAP %"):  # AH % is pre-formatted to strings
+    for col in ("Chg %", "Gap %", "vs VWAP"):  # AH % is pre-formatted to strings
         if col in df.columns:
             fmt[col] = _pct
     for col in ("ATR %", "Range %", "%B"):
         if col in df.columns:
             fmt[col] = _pct_pos
-    for col in ("Last", "VWAP"):
+    for col in ("Open", "Last", "VWAP"):
         if col in df.columns:
             fmt[col] = _price
+    if "Change $" in df.columns:
+        fmt["Change $"] = _signed_dollar
+    if "ADX" in df.columns:
+        fmt["ADX"] = _one_decimal
     if "RVOL" in df.columns:
         fmt["RVOL"] = _rvol
-    if "Volume" in df.columns:
-        fmt["Volume"] = _vol
+    if "Volume (M)" in df.columns:
+        fmt["Volume (M)"] = _vol_m
+    if "EWO" in df.columns:
+        fmt["EWO"] = _signed_number
 
     try:
         styler = df.style.format(fmt).apply(in_play, axis=1)
-        for col in ("Chg %", "Gap %", "vs VWAP %"):
+        for col in ("Change $", "Chg %", "Gap %", "vs VWAP", "EWO"):
             if col in df.columns:
                 styler = styler.map(color_pct, subset=[col])
         if "AH %" in df.columns:
             styler = styler.map(color_pct_str, subset=["AH %"])
-        if "vs VWAP %" in df.columns:
-            styler = styler.map(vwap_heat, subset=["vs VWAP %"])
+        if "vs VWAP" in df.columns:
+            styler = styler.map(vwap_heat, subset=["vs VWAP"])
         return styler
     except Exception:
         return df

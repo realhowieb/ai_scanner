@@ -130,6 +130,51 @@ class EmaCrossDisplayTests(unittest.TestCase):
         self.assertEqual(_ema_cross_display(None), "—")
 
 
+class DayTraderFormattingTests(unittest.TestCase):
+    def test_change_dollar_formatting(self):
+        from ui.day_trader import format_change_dollar
+
+        self.assertEqual(format_change_dollar(0.75), "+$0.75")
+        self.assertEqual(format_change_dollar(-0.4), "-$0.40")
+        self.assertEqual(format_change_dollar(float("nan")), "—")
+        self.assertEqual(format_change_dollar(None), "—")
+
+    def test_volume_millions_formatting(self):
+        from ui.day_trader import format_volume_millions
+
+        self.assertEqual(format_volume_millions(850_000), "0.85M")
+        self.assertEqual(format_volume_millions(12_400_000), "12.40M")
+        self.assertEqual(format_volume_millions(float("nan")), "—")
+
+    def test_supertrend_display(self):
+        from ui.day_trader import format_supertrend_direction
+
+        self.assertEqual(format_supertrend_direction("green"), "🟢 Green")
+        self.assertEqual(format_supertrend_direction("red"), "🔴 Red")
+        self.assertEqual(format_supertrend_direction(None), "—")
+
+    def test_primary_table_column_order(self):
+        from ui.day_trader import DAY_TRADER_TABLE_COLUMNS
+
+        self.assertEqual(
+            DAY_TRADER_TABLE_COLUMNS,
+            [
+                "Ticker",
+                "Open",
+                "Last",
+                "Change $",
+                "Gap %",
+                "ADX",
+                "VWAP",
+                "vs VWAP",
+                "RVOL",
+                "Volume (M)",
+                "SuperTrend (13,2)",
+                "EWO",
+            ],
+        )
+
+
 class ParseValidationTests(unittest.TestCase):
     def test_rejects_junk_and_caps_count(self):
         raw = "AAPL, not a ticker!!, BRK.B, BRK-B, x" + ", FAKE" * 300
@@ -357,3 +402,103 @@ class RangeMetricsTests(unittest.TestCase):
 
         self.assertIsNone(_range_metrics(self._df(range(100, 110))))
         self.assertIsNone(_range_metrics(None))
+
+    def test_range_metrics_includes_professional_indicators(self):
+        from market_data import _range_metrics
+
+        m = _range_metrics(self._df(range(100, 170)))
+        self.assertIsNotNone(m)
+        self.assertIn("adx", m)
+        self.assertIn("supertrend", m)
+        self.assertIn("supertrend_direction", m)
+        self.assertIn("ewo", m)
+        self.assertIsNotNone(m["adx"])
+        self.assertIn(m["supertrend_direction"], ("green", "red"))
+        self.assertIsNotNone(m["ewo"])
+
+    def test_build_day_trader_metrics_adds_open_and_change_dollar(self):
+        from unittest import mock
+
+        from market_data import build_day_trader_metrics
+
+        snapshots = {
+            "TEST": {
+                "latestTrade": {"p": 10.75, "t": "2026-09-17T14:30:00Z"},
+                "dailyBar": {"o": 10.0, "c": 10.5, "vw": 10.2, "v": 1_000_000},
+                "prevDailyBar": {"c": 9.5},
+            }
+        }
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snapshots), \
+             mock.patch("market_data.fetch_avg_daily_volume", return_value={"TEST": 500_000}), \
+             mock.patch("market_data.fetch_ema_crosses", return_value={}), \
+             mock.patch("market_data.fetch_daily_range_metrics", return_value={}):
+            rows = build_day_trader_metrics(["TEST"])
+
+        self.assertEqual(rows[0]["open"], 10.0)
+        self.assertEqual(rows[0]["last"], 10.75)
+        self.assertEqual(rows[0]["change_dollar"], 0.75)
+        self.assertEqual(rows[0]["volume"], 1_000_000)
+
+    def test_build_day_trader_metrics_missing_market_data_is_safe(self):
+        from unittest import mock
+
+        from market_data import build_day_trader_metrics
+
+        snapshots = {
+            "TEST": {
+                "latestTrade": {"p": 10.75},
+                "dailyBar": {"c": 10.5, "vw": 10.2, "v": 1_000_000},
+                "prevDailyBar": {"c": 9.5},
+            }
+        }
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snapshots), \
+             mock.patch("market_data.fetch_avg_daily_volume", return_value={}), \
+             mock.patch("market_data.fetch_ema_crosses", return_value={}), \
+             mock.patch("market_data.fetch_daily_range_metrics", return_value={}):
+            rows = build_day_trader_metrics(["TEST"])
+
+        self.assertIsNone(rows[0]["open"])
+        self.assertIsNone(rows[0]["change_dollar"])
+
+
+@unittest.skipUnless(_PANDAS, "professional indicators need pandas")
+class ProfessionalIndicatorTests(unittest.TestCase):
+    def _df(self, closes):
+        import pandas as pd
+
+        c = pd.Series([float(x) for x in closes])
+        return pd.DataFrame({"High": c * 1.02, "Low": c * 0.98, "Close": c})
+
+    def test_ewo_calculation(self):
+        from scan.indicators import ewo
+
+        osc = ewo(self._df(range(1, 41)))
+        self.assertAlmostEqual(float(osc.iloc[-1]), 15.0, places=4)
+
+    def test_adx_calculation(self):
+        from scan.indicators import adx
+
+        value = float(adx(self._df(range(100, 170))).iloc[-1])
+        self.assertGreater(value, 20.0)
+        self.assertLessEqual(value, 100.0)
+
+    def test_adx_insufficient_bars_yields_nan(self):
+        from scan.indicators import adx
+
+        value = adx(self._df(range(100, 110))).iloc[-1]
+        self.assertTrue(value != value)
+
+    def test_supertrend_bullish_and_bearish_state(self):
+        from scan.indicators import supertrend
+
+        bullish = supertrend(self._df(range(100, 170)), 13, 2)
+        bearish = supertrend(self._df(range(170, 100, -1)), 13, 2)
+        self.assertEqual(bullish["direction"].iloc[-1], "green")
+        self.assertEqual(bearish["direction"].iloc[-1], "red")
+
+    def test_supertrend_insufficient_bars_yields_missing_state(self):
+        from scan.indicators import supertrend
+
+        st = supertrend(self._df(range(100, 110)), 13, 2)
+        self.assertTrue(st["supertrend"].isna().all())
+        self.assertTrue(st["direction"].isna().all())

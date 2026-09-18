@@ -237,11 +237,11 @@ def fetch_ema_crosses(symbols: List[str]) -> Dict[str, str]:
 
 
 def _range_metrics(frame) -> Optional[Dict[str, Any]]:
-    """ATR% + Donchian position/breakout + Bollinger %B/squeeze from daily bars."""
+    """Daily technical enrichments for the display-sized Day Trader table."""
     try:
         import pandas as pd
 
-        from scan.indicators import atr, bollinger, donchian
+        from scan.indicators import adx, atr, bollinger, donchian, ewo, supertrend
 
         if frame is None or "Close" not in getattr(frame, "columns", []):
             return None
@@ -275,12 +275,44 @@ def _range_metrics(frame) -> Optional[Dict[str, Any]]:
         width = ((bu - bl) / mid * 100.0).dropna()
         squeeze = bool(len(width) >= 20 and float(width.iloc[-1]) <= float(width.tail(100).quantile(0.15)))
 
+        def _finite_latest(series) -> Optional[float]:
+            try:
+                val = float(series.iloc[-1])
+                return val if val == val else None
+            except Exception:
+                return None
+
+        try:
+            adx_val = _finite_latest(adx(frame, 14))
+        except Exception:
+            adx_val = None
+
+        try:
+            st_frame = supertrend(frame, 13, 2.0)
+            st_val = _finite_latest(st_frame["supertrend"])
+            st_dir = st_frame["direction"].iloc[-1]
+            st_dir = str(st_dir).lower() if pd.notna(st_dir) else None
+            if st_dir not in ("green", "red"):
+                st_dir = None
+        except Exception:
+            st_val = None
+            st_dir = None
+
+        try:
+            ewo_val = _finite_latest(ewo(frame, 5, 35))
+        except Exception:
+            ewo_val = None
+
         return {
             "atr_pct": round(atr_pct, 2) if atr_pct is not None else None,
             "donchian_pos": round(donch_pos) if donch_pos is not None else None,
             "donchian_breakout": breakout,
             "bb_pctb": round(pctb) if pctb is not None else None,
             "bb_squeeze": squeeze,
+            "adx": round(adx_val, 1) if adx_val is not None else None,
+            "supertrend": round(st_val, 2) if st_val is not None else None,
+            "supertrend_direction": st_dir,
+            "ewo": round(ewo_val, 2) if ewo_val is not None else None,
         }
     except Exception:
         return None
@@ -319,7 +351,8 @@ def build_day_trader_metrics(
     One cached snapshot call yields today's move, gap, VWAP, and volume — no
     heavy bar downloads. RVOL layers on a slowly-changing cached average-volume
     lookup. Each row:
-      { ticker, last, chg_pct, gap_pct, vwap, vs_vwap_pct, volume, rvol }
+      { ticker, open, last, change_dollar, chg_pct, gap_pct, adx, vwap,
+        vs_vwap_pct, rvol, volume, supertrend, supertrend_direction, ewo }
     Symbols with no usable price are dropped. Sorted by |chg_pct| descending.
     """
     if not symbols:
@@ -363,6 +396,7 @@ def build_day_trader_metrics(
             if (today_open and prev_close)
             else None
         )
+        change_dollar = (last - today_open) if today_open is not None else None
         vs_vwap_pct = ((last - vwap) / vwap * 100.0) if vwap else None
         avg = avg_vol.get(sym)
         rvol = (volume / avg) if (volume and avg) else None
@@ -370,7 +404,11 @@ def build_day_trader_metrics(
         rows.append(
             {
                 "ticker": sym,
+                "open": round(today_open, 2) if today_open is not None else None,
                 "last": round(last, 2),
+                "change_dollar": (
+                    round(change_dollar, 2) if change_dollar is not None else None
+                ),
                 "chg_pct": round(chg_pct, 2) if chg_pct is not None else None,
                 "gap_pct": round(gap_pct, 2) if gap_pct is not None else None,
                 "vwap": round(vwap, 2) if vwap is not None else None,

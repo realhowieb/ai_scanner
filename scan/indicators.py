@@ -164,6 +164,121 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return atr_wilder
 
 
+def adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """Average Directional Index.
+
+    Requires High, Low, and Close. ADX measures trend strength only; direction
+    lives in the +DI/-DI components and is intentionally not returned here.
+    """
+    for col in ("High", "Low", "Close"):
+        if col not in df.columns:
+            raise KeyError(f"ADX requires '{col}' column")
+
+    high = pd.to_numeric(df["High"], errors="coerce").astype(float)
+    low = pd.to_numeric(df["Low"], errors="coerce").astype(float)
+    close = pd.to_numeric(df["Close"], errors="coerce").astype(float)
+
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = pd.Series(
+        np.where((up_move > down_move) & (up_move > 0), up_move, 0.0),
+        index=df.index,
+    )
+    minus_dm = pd.Series(
+        np.where((down_move > up_move) & (down_move > 0), down_move, 0.0),
+        index=df.index,
+    )
+
+    prev_close = close.shift(1)
+    true_range = pd.concat(
+        [
+            (high - low).abs(),
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+
+    atr_wilder = true_range.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    plus_di = 100.0 * plus_dm.ewm(alpha=1 / period, adjust=False, min_periods=period).mean() / atr_wilder
+    minus_di = 100.0 * minus_dm.ewm(alpha=1 / period, adjust=False, min_periods=period).mean() / atr_wilder
+    dx = 100.0 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    return dx.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+
+
+def supertrend(df: pd.DataFrame, period: int = 13, multiplier: float = 2.0) -> pd.DataFrame:
+    """SuperTrend bands and bullish/bearish state.
+
+    Returns a DataFrame aligned to ``df`` with:
+      - supertrend: current active band value
+      - direction: "green" for bullish, "red" for bearish
+    """
+    for col in ("High", "Low", "Close"):
+        if col not in df.columns:
+            raise KeyError(f"SuperTrend requires '{col}' column")
+
+    high = pd.to_numeric(df["High"], errors="coerce").astype(float)
+    low = pd.to_numeric(df["Low"], errors="coerce").astype(float)
+    close = pd.to_numeric(df["Close"], errors="coerce").astype(float)
+    atr_s = atr(pd.DataFrame({"High": high, "Low": low, "Close": close}), period)
+    hl2 = (high + low) / 2.0
+    basic_upper = hl2 + multiplier * atr_s
+    basic_lower = hl2 - multiplier * atr_s
+
+    final_upper = basic_upper.copy()
+    final_lower = basic_lower.copy()
+    st = pd.Series(np.nan, index=df.index, dtype="float64")
+    direction = pd.Series(pd.NA, index=df.index, dtype="object")
+
+    for i in range(len(df)):
+        if i == 0 or pd.isna(basic_upper.iloc[i]) or pd.isna(basic_lower.iloc[i]):
+            continue
+
+        prev_i = i - 1
+        prev_final_upper = final_upper.iloc[prev_i]
+        prev_final_lower = final_lower.iloc[prev_i]
+        prev_close = close.iloc[prev_i]
+
+        if pd.notna(prev_final_upper):
+            final_upper.iloc[i] = (
+                basic_upper.iloc[i]
+                if basic_upper.iloc[i] < prev_final_upper or prev_close > prev_final_upper
+                else prev_final_upper
+            )
+        if pd.notna(prev_final_lower):
+            final_lower.iloc[i] = (
+                basic_lower.iloc[i]
+                if basic_lower.iloc[i] > prev_final_lower or prev_close < prev_final_lower
+                else prev_final_lower
+            )
+
+        prev_st = st.iloc[prev_i]
+        if pd.isna(prev_st):
+            if close.iloc[i] >= final_lower.iloc[i]:
+                st.iloc[i] = final_lower.iloc[i]
+                direction.iloc[i] = "green"
+            else:
+                st.iloc[i] = final_upper.iloc[i]
+                direction.iloc[i] = "red"
+        elif prev_st == prev_final_upper:
+            if close.iloc[i] <= final_upper.iloc[i]:
+                st.iloc[i] = final_upper.iloc[i]
+                direction.iloc[i] = "red"
+            else:
+                st.iloc[i] = final_lower.iloc[i]
+                direction.iloc[i] = "green"
+        elif close.iloc[i] >= final_lower.iloc[i]:
+            st.iloc[i] = final_lower.iloc[i]
+            direction.iloc[i] = "green"
+        else:
+            st.iloc[i] = final_upper.iloc[i]
+            direction.iloc[i] = "red"
+
+    st.iloc[:period] = np.nan
+    direction.iloc[:period] = pd.NA
+    return pd.DataFrame({"supertrend": st, "direction": direction}, index=df.index)
+
+
 def donchian(df: pd.DataFrame, period: int = 20):
     """Donchian channel: (upper, lower) = rolling max High / min Low.
 
