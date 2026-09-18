@@ -190,6 +190,21 @@ class DayTraderFormattingTests(unittest.TestCase):
         self.assertTrue(pd.isna(shaped.loc[0, "SuperTrend (13,2)"]))
         self.assertTrue(pd.isna(shaped.loc[0, "EWO"]))
 
+    @unittest.skipUnless(_PANDAS, "display table styling needs pandas")
+    def test_missing_indicator_cells_do_not_break_styling(self):
+        import pandas as pd
+
+        from ui.day_trader import _ensure_day_trader_table_columns, _styled
+
+        df = pd.DataFrame(
+            [{"Ticker": "CRWD", "Open": 236.38, "Last": 245.44, "Volume (M)": 0.33}]
+        )
+        shaped = _ensure_day_trader_table_columns(df)
+        styled = _styled(shaped, moved_now=set())
+
+        self.assertTrue(hasattr(styled, "to_html"))
+        self.assertIn("CRWD", styled.to_html())
+
 
 class ParseValidationTests(unittest.TestCase):
     def test_rejects_junk_and_caps_count(self):

@@ -762,10 +762,19 @@ def _render_table(
 
 
 def _styled(df, moved_now: set):
+    def _missing(val) -> bool:
+        try:
+            return val is None or bool(pd.isna(val))
+        except Exception:
+            return val is None
+
     def color_pct(val):
-        if val is None or (isinstance(val, float) and pd.isna(val)):
+        if _missing(val):
             return ""
-        return "color: #16a34a" if val >= 0 else "color: #dc2626"
+        try:
+            return "color: #16a34a" if float(val) >= 0 else "color: #dc2626"
+        except (TypeError, ValueError):
+            return ""
 
     def color_pct_str(val):
         # AH % is a pre-formatted string ("+1.2%" / "-0.5%" / "—"); color by sign.
@@ -778,35 +787,41 @@ def _styled(df, moved_now: set):
         return ""
 
     def _pct(v):
-        return "—" if pd.isna(v) else f"{v:+.2f}%"
+        return "—" if _missing(v) else f"{float(v):+.2f}%"
 
     def _price(v):
-        return "—" if pd.isna(v) else f"${v:,.2f}"
+        return "—" if _missing(v) else f"${float(v):,.2f}"
 
     def _signed_dollar(v):
         return format_change_dollar(v)
 
     def _signed_number(v):
-        return "—" if pd.isna(v) else f"{v:+.2f}"
+        return "—" if _missing(v) else f"{float(v):+.2f}"
 
     def _rvol(v):
-        return "—" if pd.isna(v) else f"{v:.2f}×"
+        return "—" if _missing(v) else f"{float(v):.2f}×"
 
     def _vol_m(v):
-        return "—" if pd.isna(v) else f"{v:,.2f}M"
+        return "—" if _missing(v) else f"{float(v):,.2f}M"
 
     def _one_decimal(v):
-        return "—" if pd.isna(v) else f"{v:.1f}"
+        return "—" if _missing(v) else f"{float(v):.1f}"
 
     def vwap_heat(val):
         # Diverging heat: green above VWAP, red below, intensity by magnitude,
         # neutral at 0 (midpoint stays uncolored per the diverging rule).
-        if val is None or (isinstance(val, float) and pd.isna(val)) or val == 0:
+        if _missing(val):
             return ""
-        alpha = min(abs(float(val)) / 3.0, 1.0) * 0.35
+        try:
+            value = float(val)
+        except (TypeError, ValueError):
+            return ""
+        if value == 0:
+            return ""
+        alpha = min(abs(value) / 3.0, 1.0) * 0.35
         return (
             f"background-color: rgba(22, 163, 74, {alpha:.2f})"
-            if val > 0
+            if value > 0
             else f"background-color: rgba(220, 38, 38, {alpha:.2f})"
         )
 
@@ -825,7 +840,7 @@ def _styled(df, moved_now: set):
         return [style] * len(row)
 
     def _pct_pos(v):  # ATR % / Range % / %B — plain single-sided percent
-        return "—" if pd.isna(v) else f"{v:.1f}%"
+        return "—" if _missing(v) else f"{float(v):.1f}%"
 
     fmt = {}
     for col in ("Chg %", "Gap %", "vs VWAP"):  # AH % is pre-formatted to strings
