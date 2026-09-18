@@ -153,9 +153,40 @@ def _load_intraday_observations() -> Optional[List[Dict[str, Any]]]:
             bars = fetch_minute_bars(sym, start, end)
         except Exception:
             bars = []
-        if bars:
-            out.extend(minute_bars_to_observations(sym, bars, sample_every=sample_every))
+        if not bars:
+            continue
+        # Prefer FULL-feature reconstruction (daily ADX/SuperTrend/EWO + gap +
+        # RVOL) when a daily frame is available; else the intraday-only subset.
+        daily_df = _fetch_daily_frame(sym)
+        if daily_df is not None:
+            try:
+                from analytics.day_trade_reconstruct import reconstruct_observations
+
+                out.extend(reconstruct_observations(sym, daily_df, bars, sample_every=sample_every))
+                continue
+            except Exception:
+                pass
+        out.extend(minute_bars_to_observations(sym, bars, sample_every=sample_every))
     return out or None
+
+
+def _fetch_daily_frame(symbol: str):
+    """Daily OHLCV frame (title-cased) for the daily-indicator reconstruction, or
+    None when unavailable. Reuses the existing daily Alpaca path (>= ~60 sessions
+    so ADX/EWO have enough history)."""
+    try:
+        from data.price_alpaca import download_multi_alpaca
+
+        frames = download_multi_alpaca([symbol], period="120d", interval="1d",
+                                       prepost=False, timeout_s=20.0)
+        df = frames.get(symbol.upper()) or frames.get(symbol)
+        if df is None or getattr(df, "empty", True):
+            return None
+        # Ensure title-cased OHLCV columns the indicators expect.
+        rename = {c: str(c).title() for c in df.columns}
+        return df.rename(columns=rename)
+    except Exception:
+        return None
 
 
 def main() -> int:
