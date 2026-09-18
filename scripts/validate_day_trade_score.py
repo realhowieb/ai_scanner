@@ -91,11 +91,71 @@ def build_report(observations: List[Dict[str, Any]], *, min_n: int = 10) -> Dict
     }
 
 
+def minute_bars_to_observations(symbol: str, bars: Sequence[Dict[str, Any]],
+                                *, sample_every: int = 15) -> List[Dict[str, Any]]:
+    """Build no-lookahead validation observations from ascending 1-minute bars.
+
+    At each sampled signal bar i, the Run 32 INTRADAY-derivable inputs are
+    computed from bars[0..i] ONLY (session VWAP, intraday change); outcomes come
+    from bars after i. Daily-derived indicators (ADX / SuperTrend / EWO / gap /
+    RVOL baseline) are NOT reconstructed from minute bars here and are passed as
+    None — the Run 32 engine renormalizes over available evidence. This is an
+    honest, partial validation of the intraday signal subset; full-fidelity
+    validation additionally needs the daily-indicator history.
+    """
+    obs: List[Dict[str, Any]] = []
+    if len(bars) < 2:
+        return obs
+    closes = [b.get("c") for b in bars]
+    day_open = bars[0].get("o")
+    cum_pv = cum_v = 0.0
+    for i, b in enumerate(bars):
+        typ = ((b.get("h") or 0) + (b.get("l") or 0) + (b.get("c") or 0)) / 3.0
+        vol = b.get("v") or 0
+        cum_pv += typ * vol
+        cum_v += vol
+        if i == 0 or i % sample_every != 0:
+            continue
+        price = b.get("c")
+        vwap = (cum_pv / cum_v) if cum_v else None
+        feat = {
+            "chg_pct": ((price - day_open) / day_open * 100) if (day_open and price is not None) else None,
+            "vs_vwap_pct": ((price - vwap) / vwap * 100) if (vwap and price is not None) else None,
+            "gap_pct": None, "adx": None, "rvol": None,
+            "supertrend_direction": None, "ewo": None,
+        }
+        obs.append(build_observation(timestamp=str(b.get("t")), ticker=symbol,
+                                     features=feat, prices_after=closes[i:]))
+    return obs
+
+
 def _load_intraday_observations() -> Optional[List[Dict[str, Any]]]:
-    """Return historical observations if an intraday bar source is available, else
-    None. The project ships only daily-bar Alpaca support, so this returns None
-    unless a real minute-bar loader is wired in (kept as the honest boundary)."""
-    return None
+    """Load historical observations from Alpaca 1-minute bars when configured.
+
+    Reads DTV_SYMBOLS (comma-separated), DTV_START, DTV_END (ISO). Returns None
+    when no symbols/creds are configured (the harness then reports NO_INTRADAY_DATA
+    honestly). Never raises."""
+    import os
+
+    symbols = [s.strip().upper() for s in (os.getenv("DTV_SYMBOLS") or "").split(",") if s.strip()]
+    start = os.getenv("DTV_START")
+    if not symbols or not start:
+        return None
+    try:
+        from data.price_alpaca import fetch_minute_bars
+    except Exception:
+        return None
+    end = os.getenv("DTV_END")
+    sample_every = int(os.getenv("DTV_SAMPLE_EVERY", "15"))
+    out: List[Dict[str, Any]] = []
+    for sym in symbols:
+        try:
+            bars = fetch_minute_bars(sym, start, end)
+        except Exception:
+            bars = []
+        if bars:
+            out.extend(minute_bars_to_observations(sym, bars, sample_every=sample_every))
+    return out or None
 
 
 def main() -> int:

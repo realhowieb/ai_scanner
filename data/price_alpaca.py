@@ -220,3 +220,63 @@ def download_multi_alpaca(
             out[out_sym] = normalized
 
     return out
+
+
+def fetch_minute_bars(
+    symbol: str,
+    start: str,
+    end: str | None = None,
+    *,
+    timeframe: str = "1Min",
+    feed: str | None = None,
+    timeout_s: float = 15.0,
+    max_pages: int = 50,
+) -> list[dict]:
+    """Fetch historical intraday bars for ONE symbol from Alpaca Market Data.
+
+    Returns ascending bars [{"t","o","h","l","c","v"}, ...] (RFC3339 `t`). Used by
+    the off-Streamlit DT Score validation harness — NOT the production Day Trader
+    path. `start`/`end` are RFC3339 / ISO date strings. Respects the existing
+    IEX/SIP feed selection. Fails safe: returns [] with no config / on any error
+    (never raises into a caller).
+    """
+    if requests is None:
+        return []
+    cfg = get_alpaca_config()
+    if cfg is None:
+        return []
+    sym = str(symbol or "").upper().replace("-", ".")
+    if not sym:
+        return []
+    url = f"{cfg['data_url']}/v2/stocks/{sym}/bars"
+    headers = {
+        "APCA-API-KEY-ID": cfg["api_key"],
+        "APCA-API-SECRET-KEY": cfg["api_secret"],
+        "Accept": "application/json",
+    }
+    data_feed = str(feed or get_alpaca_data_feed()).strip().lower()
+    out: list[dict] = []
+    page_token: str | None = None
+    for _ in range(max_pages):
+        params = {
+            "timeframe": timeframe, "start": start, "limit": 10000,
+            "adjustment": "raw", "feed": data_feed,
+        }
+        if end:
+            params["end"] = end
+        if page_token:
+            params["page_token"] = page_token
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=timeout_s)
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception as exc:  # network / parse — fail safe
+            logger.warning("Alpaca minute bars failed for %s: %s", sym, exc)
+            break
+        for b in (payload.get("bars") or []):
+            if isinstance(b, dict) and b.get("t") is not None:
+                out.append({k: b.get(k) for k in ("t", "o", "h", "l", "c", "v")})
+        page_token = payload.get("next_page_token")
+        if not page_token:
+            break
+    return out
