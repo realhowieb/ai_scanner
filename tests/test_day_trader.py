@@ -149,9 +149,9 @@ class DayTraderFormattingTests(unittest.TestCase):
     def test_vwap_distance_formatting_shows_above_below(self):
         from ui.day_trader import format_vwap_distance
 
-        self.assertEqual(format_vwap_distance(0.42), "+0.42% above")
-        self.assertEqual(format_vwap_distance(-1.15), "-1.15% below")
-        self.assertEqual(format_vwap_distance(0), "+0.00% at VWAP")
+        self.assertEqual(format_vwap_distance(0.42), "above")
+        self.assertEqual(format_vwap_distance(-1.15), "below")
+        self.assertEqual(format_vwap_distance(0), "at VWAP")
         self.assertEqual(format_vwap_distance(None), "—")
 
     def test_supertrend_display(self):

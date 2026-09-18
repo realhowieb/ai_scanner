@@ -182,10 +182,10 @@ def format_vwap_distance(value: object) -> str:
         if v != v:
             return "—"
         if v > 0:
-            return f"{v:+.2f}% above"
+            return "above"
         if v < 0:
-            return f"{v:+.2f}% below"
-        return "+0.00% at VWAP"
+            return "below"
+        return "at VWAP"
     except (TypeError, ValueError):
         return "—"
 
