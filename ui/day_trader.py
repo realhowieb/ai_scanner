@@ -992,12 +992,13 @@ def _render_watchlist_action(pick: str) -> None:
         st.caption("Watchlists are unavailable right now.")
         return
 
+    pick_u = str(pick).strip().upper()  # watchlist tickers are stored upper-cased
     wls = list_watchlists(username) or []
     # Membership (which watchlists already contain the symbol) — read once.
     member_ids = set()
     for wl in wls:
         try:
-            if pick in set(get_watchlist_tickers(wl["id"], username) or []):
+            if pick_u in set(get_watchlist_tickers(wl["id"], username) or []):
                 member_ids.add(wl["id"])
         except Exception:
             pass
@@ -1032,12 +1033,18 @@ def _render_watchlist_action(pick: str) -> None:
             if not name:
                 st.caption("Enter a name first.")
             else:
-                wid = create_watchlist(username, name)
+                # create_watchlist raises ValueError on a duplicate/invalid name.
+                try:
+                    wid = create_watchlist(username, name)
+                except ValueError as e:
+                    st.caption(str(e))
+                    wid = None
+                except Exception:
+                    st.caption("Couldn't create that watchlist right now.")
+                    wid = None
                 if wid:
                     res = add_tickers_to_watchlist(username, [pick], wid)
                     st.success(_watchlist_add_feedback(pick, name, res))
-                else:
-                    st.caption("Couldn't create that watchlist right now.")
 
 
 def _render_row_actions() -> None:

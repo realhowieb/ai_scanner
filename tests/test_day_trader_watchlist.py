@@ -163,3 +163,39 @@ class WatchlistAddTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WatchlistEdgeTests(unittest.TestCase):
+    def _fake(self, **kw):
+        return FakeSt(session={"username": "tester"}, **kw)
+
+    def test_duplicate_name_shows_message_no_crash(self):
+        fake = self._fake(buttons={"dt_wl_create": True}, text={"dt_wl_new_name": "Momentum"})
+        add = mock.MagicMock()
+        with (
+            mock.patch.object(dt, "st", fake),
+            mock.patch("db.watchlists.list_watchlists", return_value=WLS),
+            mock.patch("db.watchlists.get_watchlist_tickers", return_value=[]),
+            mock.patch("db.watchlists.add_tickers_to_watchlist", add),
+            mock.patch("db.watchlists.create_watchlist",
+                       side_effect=ValueError("A watchlist with that name already exists.")),
+        ):
+            dt._render_watchlist_action("NVDA")  # must not raise
+        add.assert_not_called()
+        self.assertTrue(any("already exists" in t for _, t in fake.messages))
+
+    def test_membership_matches_case_insensitively(self):
+        # lower-case pick still detected as already in a watchlist (upper-cased)
+        fake = self._fake(buttons={"dt_wl_quickadd": True})
+        add = mock.MagicMock()
+        with (
+            mock.patch.object(dt, "st", fake),
+            mock.patch("db.watchlists.list_watchlists", return_value=WLS),
+            mock.patch("db.watchlists.get_watchlist_tickers",
+                       side_effect=lambda wid, u: ["NVDA"] if wid == 1 else []),
+            mock.patch("db.watchlists.add_tickers_to_watchlist", add),
+            mock.patch("db.watchlists.create_watchlist", mock.MagicMock()),
+        ):
+            dt._render_watchlist_action("nvda")  # lower-case input
+        add.assert_not_called()  # already a member -> quick-add disabled
+        self.assertTrue(any("Already in" in t for _, t in fake.messages))
