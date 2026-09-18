@@ -19,9 +19,12 @@ from zoneinfo import ZoneInfo
 
 try:
     import pandas as pd
+except Exception:  # pragma: no cover - pandas may be absent in minimal envs
+    pd = None  # type: ignore[assignment]
+
+try:
     import streamlit as st
 except Exception:  # pragma: no cover - headless envs; pure helpers still work
-    pd = None  # type: ignore[assignment]
     st = None  # type: ignore[assignment]
 
 MAX_SYMBOLS = 150
