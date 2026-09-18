@@ -184,6 +184,17 @@ def format_supertrend_direction(value: object) -> str:
     return "—"
 
 
+def _ensure_day_trader_table_columns(df):
+    """Return the canonical Day Trader table shape, filling missing fields."""
+    if pd is None:
+        return df
+    out = df.copy()
+    for col in DAY_TRADER_TABLE_COLUMNS:
+        if col not in out.columns:
+            out[col] = pd.NA
+    return out[DAY_TRADER_TABLE_COLUMNS]
+
+
 def _parse_symbols(raw: str, max_symbols: int = 200) -> List[str]:
     """Parse, validate, and dedupe a comma-separated ticker list.
 
@@ -727,7 +738,7 @@ def _render_table(
             for r in df.to_dict(orient="records")
         ]
 
-    df = df[[c for c in DAY_TRADER_TABLE_COLUMNS if c in df.columns]]
+    df = _ensure_day_trader_table_columns(df)
 
     # Pin Ticker so it stays put while the rest scrolls; degrade gracefully on
     # older Streamlit that lacks column_config/pinned.

@@ -174,6 +174,22 @@ class DayTraderFormattingTests(unittest.TestCase):
             ],
         )
 
+    @unittest.skipUnless(_PANDAS, "display table shaping needs pandas")
+    def test_primary_table_keeps_indicator_columns_when_missing(self):
+        import pandas as pd
+
+        from ui.day_trader import DAY_TRADER_TABLE_COLUMNS, _ensure_day_trader_table_columns
+
+        df = pd.DataFrame(
+            [{"Ticker": "CRWD", "Open": 236.38, "Last": 245.44, "Volume (M)": 0.33}]
+        )
+        shaped = _ensure_day_trader_table_columns(df)
+
+        self.assertEqual(list(shaped.columns), DAY_TRADER_TABLE_COLUMNS)
+        self.assertTrue(pd.isna(shaped.loc[0, "ADX"]))
+        self.assertTrue(pd.isna(shaped.loc[0, "SuperTrend (13,2)"]))
+        self.assertTrue(pd.isna(shaped.loc[0, "EWO"]))
+
 
 class ParseValidationTests(unittest.TestCase):
     def test_rejects_junk_and_caps_count(self):
