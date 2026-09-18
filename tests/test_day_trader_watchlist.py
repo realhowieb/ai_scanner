@@ -199,3 +199,77 @@ class WatchlistEdgeTests(unittest.TestCase):
             dt._render_watchlist_action("nvda")  # lower-case input
         add.assert_not_called()  # already a member -> quick-add disabled
         self.assertTrue(any("Already in" in t for _, t in fake.messages))
+
+
+WLS_NO_DEFAULT = [
+    {"id": 1, "name": "Momentum", "is_default": False, "symbol_count": 2},
+    {"id": 2, "name": "Swing", "is_default": False, "symbol_count": 1},
+]
+
+
+class NoDefaultWatchlistTests(unittest.TestCase):
+    def _run(self, *, buttons, selectbox=None):
+        fake = FakeSt(buttons=buttons, selectbox=selectbox, session={"username": "tester"})
+        add = mock.MagicMock(return_value={"added": ["NVDA"]})
+        setdef = mock.MagicMock(return_value=True)
+        with (
+            mock.patch.object(dt, "st", fake),
+            mock.patch("db.watchlists.list_watchlists", return_value=WLS_NO_DEFAULT),
+            mock.patch("db.watchlists.get_watchlist_tickers", return_value=[]),
+            mock.patch("db.watchlists.add_tickers_to_watchlist", add),
+            mock.patch("db.watchlists.create_watchlist", mock.MagicMock()),
+            mock.patch("db.watchlists.set_default_watchlist", setdef),
+        ):
+            dt._render_watchlist_action("NVDA")
+        return fake, add, setdef
+
+    def test_no_default_prompts_and_does_not_autopick(self):
+        fake, add, _ = self._run(buttons={})
+        # never silently treats the first list as default
+        self.assertTrue(any("No default watchlist set" in t for _, t in fake.messages))
+        add.assert_not_called()
+
+    def test_set_default_available(self):
+        fake, _, setdef = self._run(buttons={"dt_wl_setdefault": True},
+                                    selectbox={"dt_wl_dest": "Swing"})
+        setdef.assert_called_once_with(2, "tester")
+
+
+class WatchlistSourceTests(unittest.TestCase):
+    def _pick(self, *, selectbox, membership):
+        fake = FakeSt(selectbox=selectbox, session={"username": "tester"})
+        with (
+            mock.patch.object(dt, "st", fake),
+            mock.patch("db.watchlists.list_watchlists", return_value=WLS),
+            mock.patch("db.watchlists.get_watchlist_tickers",
+                       side_effect=lambda wid, u: membership.get(wid, [])),
+        ):
+            return dt._watchlist_source_tickers(["FALLBACK"])
+
+    def test_default_watchlist_drives_symbols(self):
+        # no explicit pick -> default (id 1) list is used
+        out = self._pick(selectbox={}, membership={1: ["NVDA", "AMD"], 2: ["PLTR"]})
+        self.assertEqual(out, ["NVDA", "AMD"])
+
+    def test_switching_watchlist_updates_symbols(self):
+        out = self._pick(selectbox={"dt_wl_source": "Momentum"},
+                         membership={1: ["NVDA"], 2: ["PLTR", "SOFI"]})
+        self.assertEqual(out, ["PLTR", "SOFI"])
+
+    def test_all_watchlists_merges(self):
+        out = self._pick(selectbox={"dt_wl_source": "All watchlists"},
+                         membership={1: ["NVDA", "AMD"], 2: ["AMD", "PLTR"]})
+        self.assertEqual(out, ["NVDA", "AMD", "PLTR"])  # deduped, order preserved
+
+    def test_unauthenticated_falls_back(self):
+        fake = FakeSt(session={})
+        with mock.patch.object(dt, "st", fake):
+            self.assertEqual(dt._watchlist_source_tickers(["FALLBACK"]), ["FALLBACK"])
+
+    def test_no_watchlists_falls_back(self):
+        fake = FakeSt(session={"username": "tester"})
+        with (
+            mock.patch.object(dt, "st", fake),
+            mock.patch("db.watchlists.list_watchlists", return_value=[]),
+        ):
+            self.assertEqual(dt._watchlist_source_tickers(["FALLBACK"]), ["FALLBACK"])

@@ -545,8 +545,48 @@ def _resolve_symbols(source: str, watch_tickers: List[str] | None) -> List[str]:
             help="Comma-separated tickers.",
         )
         return _parse_symbols(raw)
-    # "My watchlist"
+    # "⭐ Watchlist" (and any fallback): use the resolved watchlist tickers.
     return _parse_symbols(_default_symbols(watch_tickers))
+
+
+def _watchlist_source_tickers(fallback: List[str] | None) -> List[str] | None:
+    """Render a watchlist picker and return the chosen list's tickers for the
+    Day Trader source. Default selection = the user's is_default watchlist. An
+    explicit 'All watchlists' merges them; otherwise a single list is used. Reads
+    only the watchlist data layer — never a scan. Falls back to `fallback` when
+    unauthenticated / no watchlists / unavailable."""
+    username = (st.session_state.get("username") or "").strip().lower()
+    if not username:
+        return fallback
+    try:
+        from db.watchlists import get_watchlist_tickers, list_watchlists
+    except Exception:
+        return fallback
+    wls = list_watchlists(username) or []
+    if not wls:
+        st.caption("No watchlists yet — create one on the My Watchlist page.")
+        return fallback
+    labels: List[str] = []
+    id_by_label: Dict[str, int] = {}
+    default_label = None
+    for w in wls:
+        lbl = w["name"] + (" (default)" if w.get("is_default") else "")
+        labels.append(lbl)
+        id_by_label[lbl] = w["id"]
+        if w.get("is_default"):
+            default_label = lbl
+    labels.append("All watchlists")
+    idx = labels.index(default_label) if default_label else 0
+    choice = st.selectbox("Watchlist", labels, index=idx, key="dt_wl_source")
+    if choice == "All watchlists":
+        seen, out = set(), []
+        for w in wls:
+            for t in (get_watchlist_tickers(w["id"], username) or []):
+                if t not in seen:
+                    seen.add(t)
+                    out.append(t)
+        return out
+    return get_watchlist_tickers(id_by_label[choice], username) or []
 
 
 # --------------------------------- panel -----------------------------------
@@ -592,7 +632,7 @@ def render_day_trader_panel(
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
         source_options = [
-            "My watchlist",
+            "⭐ Watchlist",
             "🔥 Top movers (S&P 500 + NASDAQ)",
             "🔥 Top movers (S&P 500)",
             "🔥 Top movers (NASDAQ)",
@@ -636,7 +676,13 @@ def render_day_trader_panel(
                 pass
             st.rerun()
 
-    symbols = _resolve_symbols(source, watch_tickers)
+    # ⭐ Watchlist source: let the user pick WHICH of their watchlists drives the
+    # symbols (default = their is_default list). Selecting a watchlist just feeds
+    # its tickers into the metrics pipeline — it never runs a market scan.
+    effective_watch = watch_tickers
+    if source == "⭐ Watchlist":
+        effective_watch = _watchlist_source_tickers(watch_tickers)
+    symbols = _resolve_symbols(source, effective_watch)
     if not symbols:
         st.info("No symbols to monitor for this source.")
         return
@@ -987,6 +1033,7 @@ def _render_watchlist_action(pick: str) -> None:
             create_watchlist,
             get_watchlist_tickers,
             list_watchlists,
+            set_default_watchlist,
         )
     except Exception:
         st.caption("Watchlists are unavailable right now.")
@@ -994,7 +1041,7 @@ def _render_watchlist_action(pick: str) -> None:
 
     pick_u = str(pick).strip().upper()  # watchlist tickers are stored upper-cased
     wls = list_watchlists(username) or []
-    # Membership (which watchlists already contain the symbol) — read once.
+    # Persisted membership (which watchlists already contain the symbol).
     member_ids = set()
     for wl in wls:
         try:
@@ -1002,27 +1049,41 @@ def _render_watchlist_action(pick: str) -> None:
                 member_ids.add(wl["id"])
         except Exception:
             pass
-    default = next((w for w in wls if w.get("is_default")), (wls[0] if wls else None))
+    # Reflect this session's just-added ids immediately (no full refresh needed).
+    just = st.session_state.setdefault("dt_wl_added", {})
+    member_ids |= set(just.get(pick_u, set()))
+    # Only a genuinely is_default watchlist is treated as the default — never an
+    # arbitrary first list.
+    default = next((w for w in wls if w.get("is_default")), None)
 
-    st.markdown(f"**Add {pick} to a watchlist**")
-    if member_ids:
-        st.caption("✓ Already in: " + ", ".join(w["name"] for w in wls if w["id"] in member_ids))
+    st.markdown(f"**Add {pick_u} to a watchlist**")
 
-    # Quick add to the default watchlist (fastest path).
+    def _do_add(wid: int, name: str) -> None:
+        res = add_tickers_to_watchlist(username, [pick_u], wid)
+        just.setdefault(pick_u, set()).add(wid)
+        member_ids.add(wid)
+        st.success(_watchlist_add_feedback(pick_u, name, res))
+
+    # Quick add to the default watchlist (fastest path) — only with a real default.
     if default:
         in_default = default["id"] in member_ids
         label = f"⭐ Add to {default['name']}" + (" ✓" if in_default else " (default)")
         if st.button(label, key="dt_wl_quickadd", disabled=in_default):
-            res = add_tickers_to_watchlist(username, [pick], default["id"])
-            st.success(_watchlist_add_feedback(pick, default["name"], res))
+            _do_add(default["id"], default["name"])
+    elif wls:
+        st.caption("No default watchlist set — pick a destination below.")
 
-    # Choose another destination.
+    # Choose a destination (and set a default when none exists).
     if wls:
         labels = {f"{w['name']}" + (" (default)" if w.get("is_default") else ""): w["id"] for w in wls}
-        choice = st.selectbox("Or add to", list(labels.keys()), key="dt_wl_dest")
-        if st.button("Add", key="dt_wl_add"):
-            res = add_tickers_to_watchlist(username, [pick], labels[choice])
-            st.success(_watchlist_add_feedback(pick, choice, res))
+        choice = st.selectbox("Add to" if default else "Watchlist", list(labels.keys()), key="dt_wl_dest")
+        wid = labels[choice]
+        if st.button("Add", key="dt_wl_add", disabled=wid in member_ids):
+            _do_add(wid, choice)
+        if not default:
+            if st.button(f"Set “{choice}” as default", key="dt_wl_setdefault"):
+                if set_default_watchlist(wid, username):
+                    st.success(f"{choice} is now your default watchlist.")
 
     # Create a new watchlist and add to it.
     with st.expander("➕ Create new watchlist"):
@@ -1043,8 +1104,11 @@ def _render_watchlist_action(pick: str) -> None:
                     st.caption("Couldn't create that watchlist right now.")
                     wid = None
                 if wid:
-                    res = add_tickers_to_watchlist(username, [pick], wid)
-                    st.success(_watchlist_add_feedback(pick, name, res))
+                    _do_add(wid, name)
+
+    # Membership summary rendered LAST so an add in this run is reflected now.
+    if member_ids:
+        st.caption("✓ Already in: " + ", ".join(w["name"] for w in wls if w["id"] in member_ids))
 
 
 def _render_row_actions() -> None:
