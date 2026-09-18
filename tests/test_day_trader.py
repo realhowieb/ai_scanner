@@ -187,7 +187,7 @@ class DayTraderFormattingTests(unittest.TestCase):
 
         self.assertEqual(list(shaped.columns), DAY_TRADER_TABLE_COLUMNS)
         self.assertTrue(pd.isna(shaped.loc[0, "ADX"]))
-        self.assertTrue(pd.isna(shaped.loc[0, "SuperTrend (13,2)"]))
+        self.assertEqual(shaped.loc[0, "SuperTrend (13,2)"], "—")
         self.assertTrue(pd.isna(shaped.loc[0, "EWO"]))
 
     @unittest.skipUnless(_PANDAS, "display table styling needs pandas")

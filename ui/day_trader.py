@@ -189,9 +189,14 @@ def _ensure_day_trader_table_columns(df):
     if pd is None:
         return df
     out = df.copy()
+    text_cols = {"Ticker", "SuperTrend (13,2)"}
     for col in DAY_TRADER_TABLE_COLUMNS:
         if col not in out.columns:
-            out[col] = pd.NA
+            out[col] = "—" if col in text_cols else float("nan")
+    if "SuperTrend (13,2)" in out.columns:
+        out["SuperTrend (13,2)"] = out["SuperTrend (13,2)"].apply(
+            lambda v: "—" if pd.isna(v) else v
+        )
     return out[DAY_TRADER_TABLE_COLUMNS]
 
 
@@ -560,7 +565,12 @@ def render_day_trader_panel(
             # Clear only this page's cached fetches — st.cache_data.clear()
             # would nuke every app cache (models, history, quotes) and recreate
             # the slowness the caching work eliminated.
-            for fn in ("fetch_alpaca_snapshots", "fetch_avg_daily_volume"):
+            for fn in (
+                "fetch_alpaca_snapshots",
+                "fetch_avg_daily_volume",
+                "fetch_ema_crosses",
+                "fetch_daily_range_metrics",
+            ):
                 try:
                     import market_data
 
@@ -749,6 +759,14 @@ def _render_table(
     except Exception:
         st.dataframe(_styled(df, moved_now), hide_index=True, width="stretch")
     st.caption("↔ Swipe the table sideways on mobile.")
+    if not any(
+        r.get("adx") is not None or r.get("supertrend_direction") is not None or r.get("ewo") is not None
+        for r in rows
+    ):
+        st.caption(
+            "ADX, SuperTrend and EWO require cached daily OHLC history. "
+            "They show — until historical bars are available; Refresh now retries the daily-bar fetch."
+        )
 
     # Stash for the row-action picker rendered outside the fragment.
     st.session_state["dt_rows"] = rows
