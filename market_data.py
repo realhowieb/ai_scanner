@@ -162,6 +162,111 @@ def _sf(value: object) -> Optional[float]:
         return None
 
 
+def calculate_day_trader_row_audit(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Recalculate Day Trader display math from row primitives.
+
+    This is a developer/debug helper. It does not change ranking or rendering;
+    it exists so tests and diagnostics can prove displayed values match their
+    claimed formulas.
+    """
+    ticker = str(row.get("ticker") or row.get("Ticker") or "").upper()
+    open_px = _sf(row.get("open") if "open" in row else row.get("Open"))
+    prev_close = _sf(
+        row.get("previous_close")
+        if "previous_close" in row
+        else row.get("Previous Close")
+    )
+    last = _sf(row.get("last") if "last" in row else row.get("Last"))
+    displayed_gap = _sf(row.get("gap_pct") if "gap_pct" in row else row.get("Gap %"))
+    displayed_change = _sf(
+        row.get("change_dollar")
+        if "change_dollar" in row
+        else row.get("Change $")
+    )
+    vwap = _sf(row.get("vwap") if "vwap" in row else row.get("VWAP"))
+
+    expected_gap = (
+        round((open_px - prev_close) / prev_close * 100.0, 2)
+        if open_px is not None and prev_close
+        else None
+    )
+    expected_change = (
+        round(last - open_px, 2)
+        if last is not None and open_px is not None
+        else None
+    )
+    expected_vs_vwap_pct = (
+        round((last - vwap) / vwap * 100.0, 2)
+        if last is not None and vwap
+        else None
+    )
+    if last is None or vwap is None:
+        expected_vwap_state = None
+    elif last > vwap:
+        expected_vwap_state = "above"
+    elif last < vwap:
+        expected_vwap_state = "below"
+    else:
+        expected_vwap_state = "at VWAP"
+
+    gap_difference = (
+        round(abs(float(displayed_gap) - float(expected_gap)), 4)
+        if displayed_gap is not None and expected_gap is not None
+        else None
+    )
+    change_difference = (
+        round(abs(float(displayed_change) - float(expected_change)), 4)
+        if displayed_change is not None and expected_change is not None
+        else None
+    )
+
+    return {
+        "ticker": ticker,
+        "open": open_px,
+        "previous_close": prev_close,
+        "last": last,
+        "displayed_gap_pct": displayed_gap,
+        "expected_gap_pct": expected_gap,
+        "gap_difference": gap_difference,
+        "gap_pass": bool(gap_difference is not None and gap_difference <= 0.02),
+        "displayed_change_dollar": displayed_change,
+        "expected_change_dollar": expected_change,
+        "change_difference": change_difference,
+        "change_pass": bool(change_difference is not None and change_difference <= 0.01),
+        "vwap": vwap,
+        "expected_vs_vwap_pct": expected_vs_vwap_pct,
+        "expected_vwap_state": expected_vwap_state,
+        "open_source": row.get("open_source"),
+        "previous_close_source": row.get("previous_close_source")
+        or row.get("prev_close_source"),
+        "vwap_source": row.get("vwap_source"),
+        "volume_source": row.get("volume_source"),
+        "rvol_source": row.get("rvol_source"),
+    }
+
+
+def build_day_trader_validation_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return formula-validation rows for developer diagnostics/tests."""
+    return [calculate_day_trader_row_audit(row) for row in rows or []]
+
+
+def day_trader_metric_timeframes() -> List[Dict[str, str]]:
+    """Document the current Day Trader metric timeframe/source semantics."""
+    return [
+        {"metric": "Open", "timeframe": "snapshot daily bar", "source": "Alpaca dailyBar.o"},
+        {"metric": "Last", "timeframe": "latest snapshot", "source": "Alpaca latestTrade/minuteBar/dailyBar"},
+        {"metric": "Change $", "timeframe": "session", "source": "Last - Open"},
+        {"metric": "Gap %", "timeframe": "daily/session", "source": "Open vs prevDailyBar.c"},
+        {"metric": "ADX", "timeframe": "1d", "source": "daily OHLC bars, ADX(14)"},
+        {"metric": "VWAP", "timeframe": "snapshot daily bar", "source": "Alpaca dailyBar.vw"},
+        {"metric": "vs VWAP", "timeframe": "latest vs daily VWAP", "source": "Last relative to VWAP"},
+        {"metric": "RVOL", "timeframe": "session vs 20 daily bars", "source": "current volume / 20d avg volume"},
+        {"metric": "Volume", "timeframe": "snapshot daily bar cumulative", "source": "Alpaca dailyBar.v"},
+        {"metric": "SuperTrend", "timeframe": "1d", "source": "daily OHLC bars, SuperTrend(13,2)"},
+        {"metric": "EWO", "timeframe": "1d", "source": "daily close bars, SMA(5)-SMA(35)"},
+    ]
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_avg_daily_volume(
     symbols: List[str],
@@ -260,7 +365,7 @@ def _range_metrics(frame) -> Optional[Dict[str, Any]]:
     try:
         import pandas as pd
 
-        from scan.indicators import adx, atr, bollinger, donchian, ewo, supertrend
+        from scan.indicators import adx, atr, bollinger, donchian, ewo, ewo_pct, supertrend
 
         if frame is None or "Close" not in getattr(frame, "columns", []):
             return None
@@ -270,6 +375,8 @@ def _range_metrics(frame) -> Optional[Dict[str, Any]]:
         last = float(close.iloc[-1])
         if last <= 0:
             return None
+        indicator_source = str(getattr(frame, "attrs", {}).get("source") or "daily_bars")
+        indicator_feed = getattr(frame, "attrs", {}).get("feed")
 
         try:
             atr_pct = float(atr(frame, 14).iloc[-1]) / last * 100.0
@@ -321,6 +428,10 @@ def _range_metrics(frame) -> Optional[Dict[str, Any]]:
             ewo_val = _finite_latest(ewo(frame, 5, 35))
         except Exception:
             ewo_val = None
+        try:
+            ewo_pct_val = _finite_latest(ewo_pct(frame, 5, 35))
+        except Exception:
+            ewo_pct_val = None
 
         return {
             "atr_pct": round(atr_pct, 2) if atr_pct is not None else None,
@@ -329,9 +440,24 @@ def _range_metrics(frame) -> Optional[Dict[str, Any]]:
             "bb_pctb": round(pctb) if pctb is not None else None,
             "bb_squeeze": squeeze,
             "adx": round(adx_val, 1) if adx_val is not None else None,
+            "adx_period": 14,
+            "adx_timeframe": "1d",
+            "adx_source": indicator_source,
+            "adx_feed": indicator_feed,
             "supertrend": round(st_val, 2) if st_val is not None else None,
             "supertrend_direction": st_dir,
+            "supertrend_period": 13,
+            "supertrend_multiplier": 2.0,
+            "supertrend_timeframe": "1d",
+            "supertrend_source": indicator_source,
+            "supertrend_feed": indicator_feed,
             "ewo": round(ewo_val, 2) if ewo_val is not None else None,
+            "ewo_pct": round(ewo_pct_val, 2) if ewo_pct_val is not None else None,
+            "ewo_fast": 5,
+            "ewo_slow": 35,
+            "ewo_timeframe": "1d",
+            "ewo_source": indicator_source,
+            "ewo_feed": indicator_feed,
         }
     except Exception:
         return None
@@ -422,11 +548,11 @@ def build_day_trader_metrics(
         avg = avg_vol.get(sym)
         rvol = (volume / avg) if (volume and avg) else None
 
-        rows.append(
-            {
+        row = {
                 "ticker": sym,
                 "open": round(today_open, 2) if today_open is not None else None,
                 "last": round(last, 2),
+                "previous_close": round(prev_close, 2) if prev_close is not None else None,
                 "change_dollar": (
                     round(change_dollar, 2) if change_dollar is not None else None
                 ),
@@ -443,9 +569,22 @@ def build_day_trader_metrics(
                 "close_today": round(close_today, 2) if close_today is not None else None,
                 "ema_cross": ema_crosses.get(sym),
                 "open_source": source if today_open is not None else None,
+                "open_feed": data_feed if today_open is not None else None,
+                "open_timeframe": "snapshot_daily_bar",
                 "last_source": source,
+                "last_feed": data_feed,
+                "last_timeframe": "latest_trade_or_minute_or_daily_snapshot",
                 "prev_close_source": source if prev_close is not None else None,
+                "previous_close_source": source if prev_close is not None else None,
+                "previous_close_feed": data_feed if prev_close is not None else None,
+                "previous_close_timeframe": "previous_completed_regular_session_daily_bar",
                 "vwap_source": source if vwap is not None else None,
+                "vwap_feed": data_feed if vwap is not None else None,
+                "vwap_timeframe": "snapshot_daily_bar",
+                "vwap_formula": "provider_supplied_daily_bar_vw",
+                "volume_timeframe": "snapshot_daily_bar_session_cumulative",
+                "rvol_period": 20,
+                "rvol_formula": "current_session_volume / average_daily_volume_20",
                 "market_data_feed": data_feed,
                 # Latest activity timestamp — lets callers drop stale/delisted
                 # names (a delisted ticker's last trade is days/weeks old).
@@ -453,7 +592,8 @@ def build_day_trader_metrics(
                 # ATR% / Donchian / Bollinger (daily). Empty dict when not fetched.
                 **(range_metrics.get(sym) or {}),
             }
-        )
+        row.update(calculate_day_trader_row_audit(row))
+        rows.append(row)
 
     rows.sort(key=lambda r: abs(r["chg_pct"]) if r.get("chg_pct") is not None else -1.0, reverse=True)
     return rows

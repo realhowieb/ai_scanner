@@ -225,6 +225,57 @@ class DayTraderFormattingTests(unittest.TestCase):
         self.assertTrue(hasattr(styled, "to_html"))
         self.assertIn("CRWD", styled.to_html())
 
+    def test_day_trader_formula_audit_helper(self):
+        from market_data import calculate_day_trader_row_audit
+
+        audit = calculate_day_trader_row_audit(
+            {
+                "ticker": "DELL",
+                "open": 572.0,
+                "previous_close": 563.32,
+                "last": 588.42,
+                "change_dollar": 16.42,
+                "gap_pct": 1.54,
+                "vwap": 584.04,
+                "open_source": "alpaca_iex",
+                "previous_close_source": "alpaca_iex",
+                "vwap_source": "alpaca_iex",
+            }
+        )
+
+        self.assertEqual(audit["expected_change_dollar"], 16.42)
+        self.assertEqual(audit["expected_gap_pct"], 1.54)
+        self.assertTrue(audit["gap_pass"])
+        self.assertTrue(audit["change_pass"])
+        self.assertEqual(audit["expected_vwap_state"], "above")
+
+    def test_day_trader_formula_audit_neutral_vwap_state(self):
+        from market_data import calculate_day_trader_row_audit
+
+        audit = calculate_day_trader_row_audit(
+            {
+                "ticker": "FLAT",
+                "open": 100.0,
+                "previous_close": 100.0,
+                "last": 101.0,
+                "change_dollar": 1.0,
+                "gap_pct": 0.0,
+                "vwap": 101.0,
+            }
+        )
+
+        self.assertEqual(audit["expected_vwap_state"], "at VWAP")
+
+    def test_metric_timeframe_matrix_documents_daily_indicators(self):
+        from market_data import day_trader_metric_timeframes
+
+        rows = {row["metric"]: row for row in day_trader_metric_timeframes()}
+
+        self.assertEqual(rows["ADX"]["timeframe"], "1d")
+        self.assertEqual(rows["SuperTrend"]["source"], "daily OHLC bars, SuperTrend(13,2)")
+        self.assertEqual(rows["EWO"]["source"], "daily close bars, SMA(5)-SMA(35)")
+        self.assertEqual(rows["VWAP"]["source"], "Alpaca dailyBar.vw")
+
 
 class ParseValidationTests(unittest.TestCase):
     def test_rejects_junk_and_caps_count(self):
@@ -457,7 +508,10 @@ class RangeMetricsTests(unittest.TestCase):
     def test_range_metrics_includes_professional_indicators(self):
         from market_data import _range_metrics
 
-        m = _range_metrics(self._df(range(100, 170)))
+        df = self._df(range(100, 170))
+        df.attrs["source"] = "alpaca_multi"
+        df.attrs["feed"] = "iex"
+        m = _range_metrics(df)
         self.assertIsNotNone(m)
         self.assertIn("adx", m)
         self.assertIn("supertrend", m)
@@ -466,6 +520,17 @@ class RangeMetricsTests(unittest.TestCase):
         self.assertIsNotNone(m["adx"])
         self.assertIn(m["supertrend_direction"], ("green", "red"))
         self.assertIsNotNone(m["ewo"])
+        self.assertIsNotNone(m["ewo_pct"])
+        self.assertEqual(m["adx_period"], 14)
+        self.assertEqual(m["adx_timeframe"], "1d")
+        self.assertEqual(m["supertrend_period"], 13)
+        self.assertEqual(m["supertrend_multiplier"], 2.0)
+        self.assertEqual(m["supertrend_timeframe"], "1d")
+        self.assertEqual(m["ewo_fast"], 5)
+        self.assertEqual(m["ewo_slow"], 35)
+        self.assertEqual(m["ewo_timeframe"], "1d")
+        self.assertEqual(m["ewo_source"], "alpaca_multi")
+        self.assertEqual(m["ewo_feed"], "iex")
 
     def test_build_day_trader_metrics_adds_open_and_change_dollar(self):
         from unittest import mock
@@ -488,12 +553,24 @@ class RangeMetricsTests(unittest.TestCase):
 
         self.assertEqual(rows[0]["open"], 10.0)
         self.assertEqual(rows[0]["last"], 10.75)
+        self.assertEqual(rows[0]["previous_close"], 9.5)
         self.assertEqual(rows[0]["change_dollar"], 0.75)
+        self.assertEqual(rows[0]["expected_change_dollar"], 0.75)
+        self.assertEqual(rows[0]["expected_gap_pct"], 5.26)
+        self.assertTrue(rows[0]["gap_pass"])
+        self.assertTrue(rows[0]["change_pass"])
         self.assertEqual(rows[0]["volume"], 1_000_000)
         self.assertEqual(rows[0]["volume_source"], "alpaca_iex")
         self.assertEqual(rows[0]["open_source"], "alpaca_iex")
+        self.assertEqual(rows[0]["open_timeframe"], "snapshot_daily_bar")
         self.assertEqual(rows[0]["prev_close_source"], "alpaca_iex")
+        self.assertEqual(rows[0]["previous_close_source"], "alpaca_iex")
+        self.assertEqual(
+            rows[0]["previous_close_timeframe"],
+            "previous_completed_regular_session_daily_bar",
+        )
         self.assertEqual(rows[0]["vwap_source"], "alpaca_iex")
+        self.assertEqual(rows[0]["vwap_formula"], "provider_supplied_daily_bar_vw")
         self.assertEqual(rows[0]["rvol_source"], "alpaca_iex_current_vs_20d_alpaca_iex_avg")
 
     def test_build_day_trader_metrics_missing_market_data_is_safe(self):
@@ -540,6 +617,8 @@ class RangeMetricsTests(unittest.TestCase):
         self.assertEqual(rows[0]["open"], 105.0)
         self.assertEqual(rows[0]["change_dollar"], 15.0)
         self.assertEqual(rows[0]["gap_pct"], 5.0)
+        self.assertEqual(rows[0]["expected_gap_pct"], 5.0)
+        self.assertEqual(rows[0]["expected_change_dollar"], 15.0)
 
 
 @unittest.skipUnless(_PANDAS, "professional indicators need pandas")
@@ -551,10 +630,12 @@ class ProfessionalIndicatorTests(unittest.TestCase):
         return pd.DataFrame({"High": c * 1.02, "Low": c * 0.98, "Close": c})
 
     def test_ewo_calculation(self):
-        from scan.indicators import ewo
+        from scan.indicators import ewo, ewo_pct
 
         osc = ewo(self._df(range(1, 41)))
         self.assertAlmostEqual(float(osc.iloc[-1]), 15.0, places=4)
+        norm = ewo_pct(self._df(range(1, 41)))
+        self.assertAlmostEqual(float(norm.iloc[-1]), (15.0 / 23.0) * 100.0, places=4)
 
     def test_adx_calculation(self):
         from scan.indicators import adx

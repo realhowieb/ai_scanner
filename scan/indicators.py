@@ -73,6 +73,14 @@ def ewo(data: pd.Series | pd.DataFrame, fast: int = 5, slow: int = 35) -> pd.Ser
     return s.rolling(fast).mean() - s.rolling(slow).mean()
 
 
+def ewo_pct(data: pd.Series | pd.DataFrame, fast: int = 5, slow: int = 35) -> pd.Series:
+    """Percent-normalized EWO = (SMA(fast) - SMA(slow)) / SMA(slow) * 100."""
+    s = _to_series_close(data)
+    slow_sma = s.rolling(slow).mean()
+    raw = s.rolling(fast).mean() - slow_sma
+    return raw / slow_sma.replace(0, np.nan) * 100.0
+
+
 def ewo_cross_detail(frame, fast: int = 5, slow: int = 35, min_bars: int = 37):
     """Fresh EWO zero-line cross on the latest daily bar (shared core).
 
