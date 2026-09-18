@@ -146,6 +146,14 @@ class DayTraderFormattingTests(unittest.TestCase):
         self.assertEqual(format_volume_millions(12_400_000), "12.40M")
         self.assertEqual(format_volume_millions(float("nan")), "—")
 
+    def test_vwap_distance_formatting_shows_above_below(self):
+        from ui.day_trader import format_vwap_distance
+
+        self.assertEqual(format_vwap_distance(0.42), "+0.42% above")
+        self.assertEqual(format_vwap_distance(-1.15), "-1.15% below")
+        self.assertEqual(format_vwap_distance(0), "+0.00% at VWAP")
+        self.assertEqual(format_vwap_distance(None), "—")
+
     def test_supertrend_display(self):
         from ui.day_trader import format_supertrend_direction
 

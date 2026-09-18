@@ -175,6 +175,21 @@ def format_volume_millions(value: object) -> str:
         return "—"
 
 
+def format_vwap_distance(value: object) -> str:
+    """Format VWAP distance with explicit above/below context."""
+    try:
+        v = float(value)
+        if v != v:
+            return "—"
+        if v > 0:
+            return f"{v:+.2f}% above"
+        if v < 0:
+            return f"{v:+.2f}% below"
+        return "+0.00% at VWAP"
+    except (TypeError, ValueError):
+        return "—"
+
+
 def format_supertrend_direction(value: object) -> str:
     text = str(value or "").strip().lower()
     if text in ("green", "bullish", "up", "true"):
@@ -807,6 +822,9 @@ def _styled(df, moved_now: set):
     def _pct(v):
         return "—" if _missing(v) else f"{float(v):+.2f}%"
 
+    def _vwap_distance(v):
+        return format_vwap_distance(v)
+
     def _price(v):
         return "—" if _missing(v) else f"${float(v):,.2f}"
 
@@ -864,6 +882,8 @@ def _styled(df, moved_now: set):
     for col in ("Chg %", "Gap %", "vs VWAP"):  # AH % is pre-formatted to strings
         if col in df.columns:
             fmt[col] = _pct
+    if "vs VWAP" in df.columns:
+        fmt["vs VWAP"] = _vwap_distance
     for col in ("ATR %", "Range %", "%B"):
         if col in df.columns:
             fmt[col] = _pct_pos
