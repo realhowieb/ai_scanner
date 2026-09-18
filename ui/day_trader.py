@@ -44,6 +44,9 @@ DAY_TRADER_TABLE_COLUMNS = [
     "Volume (M)",
     "SuperTrend (13,2)",
     "EWO",
+    "Direction",
+    "DT Score",
+    "Setup",
 ]
 
 
@@ -825,10 +828,24 @@ def _render_table(
         )
     if "bb_squeeze" in df.columns:
         df["Squeeze"] = df["bb_squeeze"].apply(lambda v: "🎯" if bool(v) else "—")
-    # Intraday day-trade momentum score — shown for the movers screen so you can
-    # see *why* each name ranked (computed from the same raw metric rows).
-    if show_score:
-        df["DT Score"] = [round(day_trade_score(r), 1) for r in rows]
+    # Run 32 — deterministic signal intelligence (Direction / DT Score / Setup),
+    # synthesized locally from the same raw metric rows (no scan, no network).
+    # Rows lacking ADX/SuperTrend/EWO show "—" honestly (insufficient evidence).
+    try:
+        from analytics.day_trade_intel import day_trade_intelligence, direction_icon
+
+        intel = [day_trade_intelligence(r) for r in rows]
+        df["Direction"] = [
+            f"{direction_icon(i['direction'])} {i['direction'].title()}"
+            if i["quality"] != "insufficient" else "—"
+            for i in intel
+        ]
+        df["DT Score"] = [i["score"] if i["score"] is not None else None for i in intel]
+        df["Setup"] = [
+            i["quality"].title() if i["quality"] != "insufficient" else "—" for i in intel
+        ]
+    except Exception:
+        pass
     volume_col = _volume_column_label(rows)
     if "Volume" in df.columns:
         df[volume_col] = pd.to_numeric(df["Volume"], errors="coerce") / 1_000_000.0
@@ -1111,6 +1128,29 @@ def _render_watchlist_action(pick: str) -> None:
         st.caption("✓ Already in: " + ", ".join(w["name"] for w in wls if w["id"] in member_ids))
 
 
+def _render_symbol_intel(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Compact deterministic intelligence summary for the selected symbol.
+    Returns the intel dict so callers (e.g. Trade plan) can reuse it."""
+    try:
+        from analytics.day_trade_intel import day_trade_intelligence, direction_icon
+    except Exception:
+        return {}
+    intel = day_trade_intelligence(row)
+    if intel.get("quality") == "insufficient":
+        st.caption("⚪ Neutral · insufficient data for a reliable read.")
+        return intel
+    icon = direction_icon(intel["direction"])
+    score = intel["score"]
+    score_txt = "—" if score is None else f"{score:.0f}"
+    st.markdown(f"{icon} **{intel['direction'].title()}** · DT Score {score_txt} "
+                f"· **{intel['quality'].title()}**")
+    if intel["reasons"]:
+        st.caption(" · ".join(intel["reasons"]))
+    for c in intel["conflicts"]:
+        st.caption(f"⚠ {c}")
+    return intel
+
+
 def _render_row_actions() -> None:
     """Chart / trade plan / watchlist / alert for a picked ticker (outside the fragment)."""
     rows = st.session_state.get("dt_rows") or []
@@ -1129,6 +1169,7 @@ def _render_row_actions() -> None:
     row = next((r for r in rows if r.get("ticker") == pick), None)
     if not row:
         return
+    intel = _render_symbol_intel(row)  # compact Direction / DT Score / Setup / why
     a1, a2, a3, a4 = st.columns(4)
     if a1.button("📈 Chart", key="dt_act_chart"):
         st.session_state["dt_show_chart"] = pick
@@ -1159,7 +1200,21 @@ def _render_row_actions() -> None:
         try:
             from ui.trade_plan import render_trade_plan
 
-            plan_row: Dict[str, Any] = {"Ticker": pick, "Last": row.get("last")}
+            # Pass the deterministic Day Trader intelligence as context so the
+            # trade plan can explain why the ticker surfaced (no engine rewrite).
+            plan_row: Dict[str, Any] = {
+                "Ticker": pick, "Last": row.get("last"),
+                "dt_direction": intel.get("direction"),
+                "dt_score": intel.get("score"),
+                "dt_setup": intel.get("quality"),
+                "dt_reasons": intel.get("reasons"),
+                "dt_conflicts": intel.get("conflicts"),
+            }
+            if intel.get("quality") and intel["quality"] != "insufficient":
+                st.caption(
+                    f"Context: {intel['direction'].title()} · DT "
+                    f"{'—' if intel.get('score') is None else round(intel['score'])} · "
+                    f"{intel['quality'].title()}. Verify before trading.")
             render_trade_plan(plan_row, locked=False)
         except Exception:
             st.caption("Trade plan unavailable.")

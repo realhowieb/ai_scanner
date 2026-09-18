@@ -191,6 +191,9 @@ class DayTraderFormattingTests(unittest.TestCase):
                 "Volume (M)",
                 "SuperTrend (13,2)",
                 "EWO",
+                "Direction",
+                "DT Score",
+                "Setup",
             ],
         )
 
