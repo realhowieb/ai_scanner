@@ -37,34 +37,76 @@ def _resolve_watchlist_fns() -> tuple[WatchlistGetter | None, WatchlistSetter | 
 
 
 def render_watchlist_action(ticker: str, *, key_prefix: str = "results") -> None:
-    """Render and handle adding a result ticker to the active watchlist."""
+    """Render and handle adding a result ticker to a persisted watchlist."""
     normalized_ticker = (ticker or "").strip().upper()
     if not normalized_ticker:
         return
 
-    active_id = st.session_state.get("active_watchlist_id")
     username = st.session_state.get("username") or st.session_state.get("user") or "anonymous"
-    current_norm = _normalize_symbols(st.session_state.get("active_watchlist_tickers", []))
+    active_id = st.session_state.get("active_watchlist_id")
+    watchlists = []
+    default_id = None
+    try:
+        from db.watchlists import get_default_watchlist_id, list_watchlists
 
-    if active_id is None:
-        st.caption("📋 Watchlist: select an active watchlist to add tickers.")
+        watchlists = list_watchlists(username)
+        default_id = get_default_watchlist_id(username)
+    except Exception:
+        watchlists = []
+
+    if not watchlists and active_id is None:
+        st.caption("Watchlist unavailable.")
         return
 
-    already = normalized_ticker in current_norm
+    id_to_label = {
+        int(wl["id"]): f"{'★ ' if wl.get('is_default') else ''}{wl['name']} ({wl.get('symbol_count', 0)})"
+        for wl in watchlists
+    }
+    ids = list(id_to_label.keys()) or [int(active_id)]
+    selected_id = int(default_id or active_id or ids[0])
+    if selected_id not in ids:
+        selected_id = ids[0]
+
+    current_norm = _normalize_symbols(st.session_state.get("active_watchlist_tickers", []))
+    already_active = active_id is not None and int(selected_id) == int(active_id) and normalized_ticker in current_norm
 
     action_col, caption_col = st.columns([1, 2])
     with action_col:
         clicked = st.button(
-            "☆ Watch" if not already else "★ Watching",
+            "Add to Watchlist" if not already_active else "★ Watching",
             key=f"{key_prefix}_btn_details_add_watchlist_{normalized_ticker}",
-            disabled=already,
+            disabled=already_active,
             width="stretch",
         )
     with caption_col:
-        st.caption("Uses your active watchlist.")
+        if len(ids) > 1:
+            selected_id = st.selectbox(
+                "Destination",
+                ids,
+                index=ids.index(selected_id),
+                format_func=lambda wid: id_to_label.get(int(wid), str(wid)),
+                key=f"{key_prefix}_watchlist_dest_{normalized_ticker}",
+                label_visibility="collapsed",
+            )
+        else:
+            st.caption(id_to_label.get(int(selected_id), "Default watchlist"))
 
     if not clicked:
         return
+
+    try:
+        from db.watchlists import add_tickers_to_watchlist
+
+        result = add_tickers_to_watchlist(username, [normalized_ticker], int(selected_id))
+        if result.get("added"):
+            if active_id is not None and int(active_id) == int(selected_id):
+                st.session_state["active_watchlist_tickers"] = sorted(current_norm | {normalized_ticker})
+            st.success(f"Added **{normalized_ticker}** to your watchlist.")
+        else:
+            st.info(f"**{normalized_ticker}** is already in that watchlist.")
+        return
+    except Exception:
+        pass
 
     get_fn, set_fn = _resolve_watchlist_fns()
     updated_norm = set(current_norm)
@@ -79,12 +121,13 @@ def render_watchlist_action(ticker: str, *, key_prefix: str = "results") -> None
         return
 
     try:
-        existing_db_norm = _normalize_symbols(get_fn(active_id, username) or [])
+        existing_db_norm = _normalize_symbols(get_fn(selected_id, username) or [])
         new_db = sorted(existing_db_norm | {normalized_ticker})
-        set_fn(active_id, username, list(new_db))
+        set_fn(selected_id, username, list(new_db))
 
-        verify_norm = _normalize_symbols(get_fn(active_id, username) or [])
-        st.session_state["active_watchlist_tickers"] = sorted(verify_norm)
+        verify_norm = _normalize_symbols(get_fn(selected_id, username) or [])
+        if active_id is not None and int(active_id) == int(selected_id):
+            st.session_state["active_watchlist_tickers"] = sorted(verify_norm)
     except (RuntimeError, TypeError, ValueError, OSError) as exc:
         st.warning(
             f"Added **{normalized_ticker}** locally, but DB save failed: {exc}. "

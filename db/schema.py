@@ -204,13 +204,47 @@ def ensure_neon_watchlists_schema(conn):
         )
         """
     )
+    cur.execute("ALTER TABLE watchlists ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT FALSE")
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS watchlist_items (
             id BIGSERIAL PRIMARY KEY,
             watchlist_id BIGINT NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
-            ticker TEXT NOT NULL
+            ticker TEXT NOT NULL,
+            date_added TIMESTAMPTZ DEFAULT NOW(),
+            price_when_added NUMERIC,
+            note TEXT
         )
+        """
+    )
+    cur.execute("ALTER TABLE watchlist_items ADD COLUMN IF NOT EXISTS date_added TIMESTAMPTZ DEFAULT NOW()")
+    cur.execute("ALTER TABLE watchlist_items ADD COLUMN IF NOT EXISTS price_when_added NUMERIC")
+    cur.execute("ALTER TABLE watchlist_items ADD COLUMN IF NOT EXISTS note TEXT")
+    cur.execute(
+        """
+        DELETE FROM watchlist_items wi
+        USING watchlist_items older
+        WHERE wi.watchlist_id = older.watchlist_id
+          AND UPPER(TRIM(wi.ticker)) = UPPER(TRIM(older.ticker))
+          AND wi.id > older.id
+        """
+    )
+    cur.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlist_items_unique_symbol
+        ON watchlist_items (watchlist_id, UPPER(TRIM(ticker)))
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_watchlists_user_default_created
+        ON watchlists (user_id, is_default DESC, created_at DESC, id DESC)
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_watchlist_items_watchlist_date
+        ON watchlist_items (watchlist_id, date_added DESC)
         """
     )
     conn.commit()
@@ -230,13 +264,50 @@ def ensure_sqlite_watchlists_schema(conn):
         )
         """
     )
+    cur.execute("PRAGMA table_info(watchlists)")
+    wl_cols = {row[1] for row in cur.fetchall()}
+    if "is_default" not in wl_cols:
+        cur.execute("ALTER TABLE watchlists ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0")
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS watchlist_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             watchlist_id INTEGER NOT NULL,
-            ticker TEXT NOT NULL
+            ticker TEXT NOT NULL,
+            date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            price_when_added REAL,
+            note TEXT
         )
+        """
+    )
+    cur.execute("PRAGMA table_info(watchlist_items)")
+    item_cols = {row[1] for row in cur.fetchall()}
+    if "date_added" not in item_cols:
+        cur.execute("ALTER TABLE watchlist_items ADD COLUMN date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    if "price_when_added" not in item_cols:
+        cur.execute("ALTER TABLE watchlist_items ADD COLUMN price_when_added REAL")
+    if "note" not in item_cols:
+        cur.execute("ALTER TABLE watchlist_items ADD COLUMN note TEXT")
+    cur.execute(
+        """
+        DELETE FROM watchlist_items
+        WHERE id NOT IN (
+            SELECT MIN(id)
+            FROM watchlist_items
+            GROUP BY watchlist_id, UPPER(TRIM(ticker))
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlist_items_unique_symbol
+        ON watchlist_items (watchlist_id, ticker)
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_watchlists_user_default_created
+        ON watchlists (user_id, is_default, created_at, id)
         """
     )
     conn.commit()

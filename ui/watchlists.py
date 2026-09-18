@@ -51,11 +51,20 @@ except Exception:  # pragma: no cover
     pd = None
 
 from db.watchlists import (
+    add_tickers_to_watchlist,
     create_watchlist,
     delete_watchlist,
+    duplicate_watchlist,
+    get_default_watchlist_id,
+    get_watchlist_items,
     get_watchlist_tickers,
     list_watchlists,
+    move_tickers_between_watchlists,
+    remove_tickers_from_watchlist,
+    rename_watchlist,
+    set_default_watchlist,
     set_watchlist_tickers,
+    update_watchlist_item_note,
 )
 from ui.watchlist_intelligence import render_watchlist_intelligence
 
@@ -80,18 +89,31 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
 
     # Header row: title · list selector · new-list popover
     h1, h2, h3 = st.columns([2, 2, 1])
-    h1.markdown("### 📋 My Watchlists")
+    h1.markdown("### My Watchlists")
     active_id: Optional[int] = None
     active_tickers: List[str] = []
     if watchlists:
-        options = {wl["name"]: wl for wl in watchlists}
+        default_id = next((int(wl["id"]) for wl in watchlists if wl.get("is_default")), None)
+        session_id = st.session_state.get("active_watchlist_id")
+        ids = [int(wl["id"]) for wl in watchlists]
+        id_to_wl = {int(wl["id"]): wl for wl in watchlists}
+        initial_id = session_id if session_id in ids else (default_id if default_id in ids else ids[0])
+        index = ids.index(int(initial_id)) if initial_id in ids else 0
+
+        def _label(wid: int) -> str:
+            wl = id_to_wl[int(wid)]
+            star = "★ " if wl.get("is_default") else ""
+            suffix = " — Default" if wl.get("is_default") else ""
+            return f"{star}{wl['name']} ({wl.get('symbol_count', 0)}){suffix}"
+
         with h2:
-            selected_label = st.selectbox(
-                "Active watchlist", list(options.keys()), index=0,
+            selected_id = st.selectbox(
+                "Active watchlist", ids, index=index, format_func=_label,
                 label_visibility="collapsed",
+                key="active_watchlist_selector",
             )
-        active = options[selected_label]
-        active_id = active["id"]
+        active = id_to_wl[int(selected_id)]
+        active_id = int(active["id"])
         active_tickers = _normalize_stored_tickers(
             get_watchlist_tickers(active_id, user_id), active_id, user_id
         )
@@ -102,14 +124,21 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
             pop = st.expander("＋ New", expanded=False)
         with pop:
             new_name = st.text_input("Watchlist name", key="wl_new_name")
+            make_default = st.checkbox("Make this my default watchlist", key="wl_new_default")
             if st.button("Create", key="wl_create_btn"):
                 if new_name.strip():
-                    create_watchlist(user_id, new_name.strip())
-                    st.rerun()
+                    try:
+                        new_id = create_watchlist(user_id, new_name.strip(), make_default=make_default)
+                        st.session_state["active_watchlist_id"] = new_id
+                        st.rerun()
+                    except ValueError as exc:
+                        st.warning(str(exc))
+                    except Exception:
+                        st.error("Could not create watchlist right now.")
                 else:
                     st.warning("Please enter a name.")
     if not watchlists:
-        st.caption("No watchlists yet — create one with ＋ New.")
+        st.info("Your watchlist is empty. Create a list, then add symbols from Scanner or Stock Intelligence.")
 
     # The watchlist IS the visualization: live stat tiles (price + day move).
     if active_tickers:
@@ -330,7 +359,21 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
             frame_mod = pd
             if frame_mod is None:
                 import pandas as frame_mod  # type: ignore
-            export_csv_data = frame_mod.DataFrame({"Symbol": watchlist_tickers}).to_csv(index=False)
+            try:
+                items = get_watchlist_items(active_id, st.session_state.get("username", ""))
+            except Exception:
+                items = [{"ticker": t, "date_added": None, "price_when_added": None, "note": None} for t in watchlist_tickers]
+            export_csv_data = frame_mod.DataFrame(
+                [
+                    {
+                        "ticker": item.get("ticker"),
+                        "date_added": item.get("date_added"),
+                        "price_when_added": item.get("price_when_added"),
+                        "note": item.get("note"),
+                    }
+                    for item in items
+                ]
+            ).to_csv(index=False)
         st.download_button(
             "CSV", data=export_csv_data,
             file_name=f"watchlist_{len(watchlist_tickers) or 0}.csv", mime="text/csv",
@@ -341,7 +384,64 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
     remove_watchlist_btn = False
     clear_watchlist_btn = False
     remove_pick = ""
-    with st.expander("⚙️ Manage", expanded=False):
+    with st.expander("Manage Watchlist", expanded=False):
+        username = st.session_state.get("username", "")
+        all_watchlists = []
+        try:
+            all_watchlists = list_watchlists(username)
+        except Exception:
+            all_watchlists = []
+        id_to_name = {int(wl["id"]): str(wl["name"]) for wl in all_watchlists}
+        active_name = id_to_name.get(int(active_id), "this watchlist") if active_id is not None else "this watchlist"
+        default_id = None
+        try:
+            default_id = get_default_watchlist_id(username)
+        except Exception:
+            default_id = None
+        if active_id is not None:
+            st.caption("★ Default" if int(active_id) == int(default_id or -1) else "Not default")
+            c_name, c_save = st.columns([3, 1])
+            with c_name:
+                renamed = st.text_input(
+                    "Watchlist name",
+                    value=active_name,
+                    key=f"wl_rename_{active_id}_{active_name}",
+                )
+            with c_save:
+                st.write("")
+                if st.button("Rename", key=f"wl_rename_btn_{active_id}", width="stretch"):
+                    try:
+                        rename_watchlist(int(active_id), username, renamed)
+                        st.success("Watchlist renamed.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.warning(str(exc))
+                    except Exception:
+                        st.error("Could not rename watchlist right now.")
+            m_default, m_duplicate = st.columns(2)
+            with m_default:
+                if st.button(
+                    "Set as Default",
+                    key=f"wl_set_default_{active_id}",
+                    disabled=int(active_id) == int(default_id or -1),
+                    width="stretch",
+                ):
+                    try:
+                        set_default_watchlist(int(active_id), username)
+                        st.success("Default watchlist updated.")
+                        st.rerun()
+                    except Exception:
+                        st.error("Could not update the default watchlist.")
+            with m_duplicate:
+                if st.button("Duplicate", key=f"wl_duplicate_{active_id}", width="stretch"):
+                    try:
+                        new_id = duplicate_watchlist(int(active_id), username)
+                        if new_id is not None:
+                            st.session_state["active_watchlist_id"] = new_id
+                        st.success("Watchlist duplicated.")
+                        st.rerun()
+                    except Exception:
+                        st.error("Could not duplicate watchlist right now.")
         if has_watchlist:
             m1, m2 = st.columns([3, 1])
             with m1:
@@ -373,12 +473,93 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
                 set_watchlist_tickers(active_id, st.session_state.get("username", ""), tickers)
                 st.success("Watchlist updated.")
                 st.rerun()
+            st.markdown("#### Move or copy tickers")
+            selected_bulk = st.multiselect(
+                "Selected tickers",
+                [str(t).upper() for t in watchlist_tickers],
+                key=f"wl_bulk_symbols_{active_id}",
+            )
+            dest_options = [
+                int(wl["id"])
+                for wl in all_watchlists
+                if active_id is not None and int(wl["id"]) != int(active_id)
+            ]
+            dest_id = st.selectbox(
+                "Destination watchlist",
+                dest_options,
+                format_func=lambda wid: id_to_name.get(int(wid), str(wid)),
+                key=f"wl_bulk_dest_{active_id}",
+                disabled=not dest_options,
+            ) if dest_options else None
+            b1, b2, b3 = st.columns(3)
+            if b1.button(
+                "Copy Selected",
+                key=f"wl_copy_selected_{active_id}",
+                disabled=not selected_bulk or dest_id is None,
+                width="stretch",
+            ):
+                try:
+                    result = add_tickers_to_watchlist(username, selected_bulk, int(dest_id))
+                    st.success(
+                        f"{len(result.get('added', []))} copied. "
+                        f"{len(result.get('already_present', []))} already present."
+                    )
+                except Exception:
+                    st.error("Could not copy selected symbols.")
+            if b2.button(
+                "Move Selected",
+                key=f"wl_move_selected_{active_id}",
+                disabled=not selected_bulk or dest_id is None,
+                width="stretch",
+            ):
+                try:
+                    result = move_tickers_between_watchlists(
+                        username, int(active_id), int(dest_id), selected_bulk
+                    )
+                    st.success(f"{len(result.get('moved', []))} moved.")
+                    st.rerun()
+                except Exception:
+                    st.error("Could not move selected symbols.")
+            if b3.button(
+                "Remove Selected",
+                key=f"wl_remove_selected_{active_id}",
+                disabled=not selected_bulk,
+                width="stretch",
+            ):
+                try:
+                    result = remove_tickers_from_watchlist(username, selected_bulk, int(active_id))
+                    st.success(f"{len(result.get('removed', []))} removed.")
+                    st.rerun()
+                except Exception:
+                    st.error("Could not remove selected symbols.")
+            with st.expander("Ticker notes", expanded=False):
+                try:
+                    items = get_watchlist_items(int(active_id), username)
+                except Exception:
+                    items = []
+                for item in items:
+                    ticker = item["ticker"]
+                    note_value = st.text_input(
+                        ticker,
+                        value=str(item.get("note") or ""),
+                        key=f"wl_note_{active_id}_{ticker}",
+                        placeholder="Optional note",
+                    )
+                    if note_value != str(item.get("note") or ""):
+                        update_watchlist_item_note(int(active_id), username, ticker, note_value)
             clear_watchlist_btn = st.button(
                 "Clear all tickers", key="btn_clear_watchlist", disabled=not has_watchlist
             )
         if active_id is not None:
-            if st.button("🗑️ Delete this watchlist", key="wl_delete_btn"):
-                delete_watchlist(active_id, st.session_state.get("username", ""))
+            confirm_key = f"wl_delete_confirm_{active_id}"
+            st.checkbox(f"Confirm delete {active_name}", key=confirm_key)
+            if st.button(
+                "Delete Watchlist",
+                key="wl_delete_btn",
+                disabled=not st.session_state.get(confirm_key),
+            ):
+                delete_watchlist(active_id, username)
+                st.session_state["active_watchlist_id"] = None
                 st.rerun()
         if not has_watchlist and active_id is None:
             st.caption("Create a watchlist to manage tickers.")
@@ -475,12 +656,10 @@ def handle_active_watchlist_actions(
                 banner("No active watchlist selected to add to.", "warning")
             else:
                 try:
-                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
-                    norm_existing = {str(t).strip().upper() for t in existing}
-                    added = [s for s in syms if s not in norm_existing]
+                    result = add_tickers_to_watchlist(username, syms, int(active_watchlist_id))
+                    added = result.get("added", [])
                     if added:
-                        updated = sorted(norm_existing | set(added))
-                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
+                        updated = get_watchlist_tickers(active_watchlist_id, username) or []
                         st.session_state["active_watchlist_tickers"] = list(updated)
                         if len(added) == 1:
                             banner(f"Added {added[0]} to the active watchlist.", "success")
@@ -500,11 +679,9 @@ def handle_active_watchlist_actions(
                 banner("No active watchlist selected to remove from.", "warning")
             else:
                 try:
-                    existing = get_watchlist_tickers(active_watchlist_id, username) or []
-                    norm_existing = {str(t).strip().upper() for t in existing}
-                    if sym in norm_existing:
-                        updated = sorted(norm_existing - {sym})
-                        set_watchlist_tickers(active_watchlist_id, username, list(updated))
+                    result = remove_tickers_from_watchlist(username, [sym], int(active_watchlist_id))
+                    if result.get("removed"):
+                        updated = get_watchlist_tickers(active_watchlist_id, username) or []
                         st.session_state["active_watchlist_tickers"] = list(updated)
                         banner(f"Removed {sym} from the active watchlist.", "success")
                     else:
