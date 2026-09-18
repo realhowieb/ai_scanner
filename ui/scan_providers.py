@@ -7,6 +7,8 @@ from typing import Any, List, Optional
 import pandas as pd
 import streamlit as st
 
+from data.alpaca_config import get_alpaca_data_feed
+
 try:
     import requests
     from requests import exceptions as requests_exc
@@ -115,7 +117,7 @@ def get_alpaca_extended_last_prices(symbols: List[str]) -> dict[str, float]:
         batch = normalized_symbols[index : index + ALPACA_MAX_SNAPSHOT_BATCH]
         params = {
             "symbols": ",".join(batch),
-            "feed": "iex",
+            "feed": get_alpaca_data_feed(),
         }
         try:
             resp = requests.get(ALPACA_SNAPSHOT_URL, headers=headers, params=params, timeout=5)
@@ -171,7 +173,7 @@ def fetch_alpaca_snapshot_debug(symbol: str) -> tuple[int, Any]:
 
     params = {
         "symbols": str(symbol).strip().upper(),
-        "feed": st.secrets.get("ALPACA_FEED", "iex"),
+        "feed": get_alpaca_data_feed(),
     }
     response = requests.get(ALPACA_SNAPSHOT_URL, headers=headers, params=params, timeout=5)
     response.raise_for_status()

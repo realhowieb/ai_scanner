@@ -35,6 +35,12 @@ def get_alpaca_config() -> Dict[str, str] | None:
     return cfg
 
 
+def get_alpaca_data_feed() -> str:
+    from data.alpaca_config import get_alpaca_data_feed as _shared_feed
+
+    return _shared_feed()
+
+
 def alpaca_timeframe_from_interval(interval: str) -> str | None:
     """Map yfinance-style intervals to Alpaca timeframes."""
     return {
@@ -87,6 +93,7 @@ def download_multi_alpaca(
     interval: str,
     prepost: bool,
     timeout_s: float,
+    feed: str | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Download bars for multiple symbols from Alpaca Market Data."""
     del prepost  # Daily Alpaca bars ignore extended-hours selection.
@@ -115,6 +122,7 @@ def download_multi_alpaca(
     symbols = alpaca_symbols
 
     url = f"{cfg['data_url']}/v2/stocks/bars"
+    data_feed = str(feed or get_alpaca_data_feed()).strip().lower()
     headers = {
         "APCA-API-KEY-ID": cfg["api_key"],
         "APCA-API-SECRET-KEY": cfg["api_secret"],
@@ -137,7 +145,7 @@ def download_multi_alpaca(
                 "start": start,
                 "limit": 10000,
                 "adjustment": "raw",
-                "feed": "iex",
+                "feed": data_feed,
             }
             if page_token:
                 params["page_token"] = page_token
@@ -205,6 +213,7 @@ def download_multi_alpaca(
             normalized = normalize_price_frame(df)
             try:
                 normalized.attrs["source"] = "alpaca_multi"
+                normalized.attrs["feed"] = data_feed
                 normalized.attrs["symbol"] = out_sym
             except (AttributeError, TypeError, ValueError):
                 pass

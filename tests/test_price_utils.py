@@ -106,6 +106,50 @@ class PriceUtilsTests(unittest.TestCase):
         )
         prices.clear_price_cache()
 
+    def test_alpaca_bars_request_uses_configured_feed(self):
+        import data.price_alpaca as price_alpaca
+
+        sent = {}
+
+        class Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "bars": {
+                        "AMD": [
+                            {
+                                "t": "2026-09-17T00:00:00Z",
+                                "o": 10.0,
+                                "h": 11.0,
+                                "l": 9.5,
+                                "c": 10.5,
+                                "v": 1234,
+                            }
+                        ]
+                    }
+                }
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            sent.update(params or {})
+            return Resp()
+
+        with patch.object(
+            price_alpaca,
+            "get_alpaca_config",
+            return_value={"api_key": "key", "api_secret": "secret", "data_url": "https://x"},
+        ), patch.object(price_alpaca, "requests", MagicMock(get=fake_get)):
+            out = price_alpaca.download_multi_alpaca(
+                ["AMD"], period="5d", interval="1d", prepost=False, timeout_s=5, feed="sip"
+            )
+
+        self.assertEqual(sent["feed"], "sip")
+        self.assertIn("AMD", out)
+        self.assertEqual(out["AMD"].attrs.get("feed"), "sip")
+
 
 if __name__ == "__main__":
     unittest.main()

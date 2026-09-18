@@ -146,6 +146,18 @@ class DayTraderFormattingTests(unittest.TestCase):
         self.assertEqual(format_volume_millions(12_400_000), "12.40M")
         self.assertEqual(format_volume_millions(float("nan")), "—")
 
+    def test_volume_column_label_discloses_iex_partial_feed(self):
+        from ui.day_trader import _volume_column_label
+
+        self.assertEqual(
+            _volume_column_label([{"volume_source": "alpaca_iex"}]),
+            "Volume (IEX M)",
+        )
+        self.assertEqual(
+            _volume_column_label([{"volume_source": "alpaca_sip"}]),
+            "Volume (M)",
+        )
+
     def test_vwap_distance_formatting_shows_above_below(self):
         from ui.day_trader import format_vwap_distance
 
@@ -468,6 +480,7 @@ class RangeMetricsTests(unittest.TestCase):
             }
         }
         with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snapshots), \
+             mock.patch("market_data._get_alpaca_data_feed", return_value="iex"), \
              mock.patch("market_data.fetch_avg_daily_volume", return_value={"TEST": 500_000}), \
              mock.patch("market_data.fetch_ema_crosses", return_value={}), \
              mock.patch("market_data.fetch_daily_range_metrics", return_value={}):
@@ -477,6 +490,11 @@ class RangeMetricsTests(unittest.TestCase):
         self.assertEqual(rows[0]["last"], 10.75)
         self.assertEqual(rows[0]["change_dollar"], 0.75)
         self.assertEqual(rows[0]["volume"], 1_000_000)
+        self.assertEqual(rows[0]["volume_source"], "alpaca_iex")
+        self.assertEqual(rows[0]["open_source"], "alpaca_iex")
+        self.assertEqual(rows[0]["prev_close_source"], "alpaca_iex")
+        self.assertEqual(rows[0]["vwap_source"], "alpaca_iex")
+        self.assertEqual(rows[0]["rvol_source"], "alpaca_iex_current_vs_20d_alpaca_iex_avg")
 
     def test_build_day_trader_metrics_missing_market_data_is_safe(self):
         from unittest import mock
@@ -491,6 +509,7 @@ class RangeMetricsTests(unittest.TestCase):
             }
         }
         with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snapshots), \
+             mock.patch("market_data._get_alpaca_data_feed", return_value="iex"), \
              mock.patch("market_data.fetch_avg_daily_volume", return_value={}), \
              mock.patch("market_data.fetch_ema_crosses", return_value={}), \
              mock.patch("market_data.fetch_daily_range_metrics", return_value={}):
@@ -498,6 +517,29 @@ class RangeMetricsTests(unittest.TestCase):
 
         self.assertIsNone(rows[0]["open"])
         self.assertIsNone(rows[0]["change_dollar"])
+
+    def test_gap_uses_daily_open_not_latest_trade(self):
+        from unittest import mock
+
+        from market_data import build_day_trader_metrics
+
+        snapshots = {
+            "TEST": {
+                "latestTrade": {"p": 120.0},
+                "dailyBar": {"o": 105.0, "c": 110.0, "vw": 112.0, "v": 1_000_000},
+                "prevDailyBar": {"c": 100.0},
+            }
+        }
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snapshots), \
+             mock.patch("market_data._get_alpaca_data_feed", return_value="iex"), \
+             mock.patch("market_data.fetch_avg_daily_volume", return_value={}), \
+             mock.patch("market_data.fetch_ema_crosses", return_value={}), \
+             mock.patch("market_data.fetch_daily_range_metrics", return_value={}):
+            rows = build_day_trader_metrics(["TEST"])
+
+        self.assertEqual(rows[0]["open"], 105.0)
+        self.assertEqual(rows[0]["change_dollar"], 15.0)
+        self.assertEqual(rows[0]["gap_pct"], 5.0)
 
 
 @unittest.skipUnless(_PANDAS, "professional indicators need pandas")

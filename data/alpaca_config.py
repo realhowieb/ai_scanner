@@ -10,7 +10,7 @@ cron has no Streamlit secrets file). Every reader now resolves identically:
   3. Default (URLs only — credentials have no default)
 
 Expected keys: ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY, and optionally
-ALPACA_DATA_URL / ALPACA_BASE_URL.
+ALPACA_DATA_URL / ALPACA_BASE_URL / ALPACA_FEED.
 """
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ from typing import Dict, Optional
 
 DEFAULT_DATA_URL = "https://data.alpaca.markets"
 DEFAULT_BASE_URL = "https://paper-api.alpaca.markets"
+DEFAULT_MARKET_DATA_FEED = "iex"
+SUPPORTED_MARKET_DATA_FEEDS = {"iex", "sip"}
 
 
 def alpaca_secret(key: str, default: Optional[str] = None) -> Optional[str]:
@@ -69,3 +71,14 @@ def get_alpaca_headers() -> Optional[Dict[str, str]]:
         "APCA-API-SECRET-KEY": cfg["api_secret"],
         "Accept": "application/json",
     }
+
+
+def get_alpaca_data_feed(default: str = DEFAULT_MARKET_DATA_FEED) -> str:
+    """Return the configured Alpaca stock market-data feed.
+
+    Alpaca's free/basic data commonly uses the IEX feed, which is partial
+    exchange data. SIP is consolidated when the account is entitled to it.
+    """
+    raw = alpaca_secret("ALPACA_DATA_FEED") or alpaca_secret("ALPACA_FEED") or default
+    feed = str(raw or default).strip().lower()
+    return feed if feed in SUPPORTED_MARKET_DATA_FEEDS else default

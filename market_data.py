@@ -66,11 +66,21 @@ def _get_alpaca_headers() -> Optional[Dict[str, str]]:
     return get_alpaca_headers()
 
 
+def _get_alpaca_data_feed() -> str:
+    from data.alpaca_config import get_alpaca_data_feed
+
+    return get_alpaca_data_feed()
+
+
+def _alpaca_source(feed: str) -> str:
+    return f"alpaca_{str(feed or '').strip().lower() or 'unknown'}"
+
+
 # ------------------------------- Snapshots ---------------------------------
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def fetch_alpaca_snapshots(symbols: List[str]) -> Dict[str, dict]:
+def fetch_alpaca_snapshots(symbols: List[str], feed: Optional[str] = None) -> Dict[str, dict]:
     """
     Fetch snapshot data for a list of symbols from Alpaca.
 
@@ -96,6 +106,7 @@ def fetch_alpaca_snapshots(symbols: List[str]) -> Dict[str, dict]:
 
     cfg = _get_alpaca_base_urls()
     url = f"{cfg['data_url']}/v2/stocks/snapshots"
+    feed = str(feed or _get_alpaca_data_feed()).strip().lower()
 
     # Alpaca uses a dot for class shares (BRK.B) while our universe uses Yahoo's
     # dash form (BRK-B). Send the dot form and map responses back — otherwise a
@@ -115,7 +126,10 @@ def fetch_alpaca_snapshots(symbols: List[str]) -> Dict[str, dict]:
         chunk = alpaca_syms[start : start + 100]
         try:
             resp = requests.get(
-                url, headers=headers, params={"symbols": ",".join(chunk)}, timeout=10
+                url,
+                headers=headers,
+                params={"symbols": ",".join(chunk), "feed": feed},
+                timeout=10,
             )
         except requests_exc.RequestException:  # type: ignore[union-attr]
             continue
@@ -149,7 +163,11 @@ def _sf(value: object) -> Optional[float]:
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def fetch_avg_daily_volume(symbols: List[str], lookback: int = 20) -> Dict[str, float]:
+def fetch_avg_daily_volume(
+    symbols: List[str],
+    lookback: int = 20,
+    feed: Optional[str] = None,
+) -> Dict[str, float]:
     """Average daily share volume over `lookback` sessions (for RVOL).
 
     Cached for 30 minutes because the denominator moves slowly. Returns an empty
@@ -169,6 +187,7 @@ def fetch_avg_daily_volume(symbols: List[str], lookback: int = 20) -> Dict[str, 
             interval="1d",
             prepost=False,
             timeout_s=15.0,
+            feed=feed or _get_alpaca_data_feed(),
         )
     except Exception:
         return {}
@@ -358,11 +377,12 @@ def build_day_trader_metrics(
     if not symbols:
         return []
     syms = [s.upper() for s in dict.fromkeys(symbols).keys() if str(s).strip()]
-    snapshots = fetch_alpaca_snapshots(syms)
+    data_feed = _get_alpaca_data_feed()
+    snapshots = fetch_alpaca_snapshots(syms, feed=data_feed)
     if not snapshots:
         return []
 
-    avg_vol = fetch_avg_daily_volume(syms) if with_rvol else {}
+    avg_vol = fetch_avg_daily_volume(syms, feed=data_feed) if with_rvol else {}
     # Daily-bar enrichments (EMA cross + ATR/Donchian/Bollinger) run on the
     # DISPLAY path only. The universe-wide movers *screening* pass (with_rvol=
     # False) scores from snapshots alone and never uses these — fetching daily
@@ -370,6 +390,7 @@ def build_day_trader_metrics(
     # a flood of timeouts.
     ema_crosses = fetch_ema_crosses(syms) if with_rvol else {}
     range_metrics = fetch_daily_range_metrics(syms) if with_rvol else {}
+    source = _alpaca_source(data_feed)
 
     rows: List[Dict[str, Optional[float]]] = []
     for sym in syms:
@@ -414,9 +435,18 @@ def build_day_trader_metrics(
                 "vwap": round(vwap, 2) if vwap is not None else None,
                 "vs_vwap_pct": round(vs_vwap_pct, 2) if vs_vwap_pct is not None else None,
                 "volume": int(volume) if volume else None,
+                "volume_source": source if volume else None,
                 "rvol": round(rvol, 2) if rvol is not None else None,
+                "rvol_source": (
+                    f"{source}_current_vs_20d_{source}_avg" if rvol is not None else None
+                ),
                 "close_today": round(close_today, 2) if close_today is not None else None,
                 "ema_cross": ema_crosses.get(sym),
+                "open_source": source if today_open is not None else None,
+                "last_source": source,
+                "prev_close_source": source if prev_close is not None else None,
+                "vwap_source": source if vwap is not None else None,
+                "market_data_feed": data_feed,
                 # Latest activity timestamp — lets callers drop stale/delisted
                 # names (a delisted ticker's last trade is days/weeks old).
                 "trade_ts": latest_trade.get("t") or minute_bar.get("t") or daily_bar.get("t"),

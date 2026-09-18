@@ -201,18 +201,53 @@ def format_supertrend_direction(value: object) -> str:
 
 def _ensure_day_trader_table_columns(df):
     """Return the canonical Day Trader table shape, filling missing fields."""
+    return _ensure_day_trader_table_columns_for(df, DAY_TRADER_TABLE_COLUMNS)
+
+
+def _ensure_day_trader_table_columns_for(df, columns):
+    """Return a requested Day Trader table shape, filling missing fields."""
     if pd is None:
         return df
     out = df.copy()
     text_cols = {"Ticker", "SuperTrend (13,2)"}
-    for col in DAY_TRADER_TABLE_COLUMNS:
+    for col in columns:
         if col not in out.columns:
             out[col] = "—" if col in text_cols else float("nan")
     if "SuperTrend (13,2)" in out.columns:
         out["SuperTrend (13,2)"] = out["SuperTrend (13,2)"].apply(
             lambda v: "—" if pd.isna(v) else v
         )
-    return out[DAY_TRADER_TABLE_COLUMNS]
+    return out[columns]
+
+
+def _market_feed_label(rows: List[Dict[str, Any]]) -> str:
+    feeds = {
+        str(r.get("market_data_feed") or "").strip().lower()
+        for r in rows or []
+        if r.get("market_data_feed")
+    }
+    if feeds == {"sip"}:
+        return "Alpaca SIP"
+    if feeds == {"iex"}:
+        return "Alpaca IEX"
+    if feeds:
+        return "Alpaca mixed feeds"
+    return "Alpaca"
+
+
+def _volume_column_label(rows: List[Dict[str, Any]]) -> str:
+    sources = {
+        str(r.get("volume_source") or "").strip().lower()
+        for r in rows or []
+        if r.get("volume_source")
+    }
+    if any(src.endswith("_iex") or src == "alpaca_iex" for src in sources):
+        return "Volume (IEX M)"
+    return "Volume (M)"
+
+
+def _table_columns_for_volume(volume_col: str) -> List[str]:
+    return [volume_col if c == "Volume (M)" else c for c in DAY_TRADER_TABLE_COLUMNS]
 
 
 def _parse_symbols(raw: str, max_symbols: int = 200) -> List[str]:
@@ -745,8 +780,9 @@ def _render_table(
     # see *why* each name ranked (computed from the same raw metric rows).
     if show_score:
         df["DT Score"] = [round(day_trade_score(r), 1) for r in rows]
+    volume_col = _volume_column_label(rows)
     if "Volume" in df.columns:
-        df["Volume (M)"] = pd.to_numeric(df["Volume"], errors="coerce") / 1_000_000.0
+        df[volume_col] = pd.to_numeric(df["Volume"], errors="coerce") / 1_000_000.0
     if "SuperTrend (13,2)" in df.columns:
         df["SuperTrend (13,2)"] = df["SuperTrend (13,2)"].apply(format_supertrend_direction)
     if "EMA Cross" in df.columns:
@@ -763,7 +799,7 @@ def _render_table(
             for r in df.to_dict(orient="records")
         ]
 
-    df = _ensure_day_trader_table_columns(df)
+    df = _ensure_day_trader_table_columns_for(df, _table_columns_for_volume(volume_col))
 
     # Pin Ticker so it stays put while the rest scrolls; degrade gracefully on
     # older Streamlit that lacks column_config/pinned.
@@ -787,10 +823,16 @@ def _render_table(
     st.session_state["dt_rows"] = rows
 
     now = pd.Timestamp.utcnow().strftime("%H:%M:%S UTC")
+    feed_label = _market_feed_label(rows)
+    rvol_caption = (
+        "RVOL = today's IEX volume ÷ 20-day IEX avg"
+        if volume_col == "Volume (IEX M)"
+        else "RVOL = today's volume ÷ 20-day avg"
+    )
     st.caption(
         f"As of {now} · Open = regular-session open · Gap % vs prior close · "
-        "RVOL = today's volume ÷ 20-day avg · Highlight = ±3% move or 2× RVOL · "
-        "IEX feed — verify before trading."
+        f"{rvol_caption} · Market data: {feed_label} · "
+        "Highlight = ±3% move or 2× RVOL · verify before trading."
     )
 
 
@@ -896,8 +938,9 @@ def _styled(df, moved_now: set):
         fmt["ADX"] = _one_decimal
     if "RVOL" in df.columns:
         fmt["RVOL"] = _rvol
-    if "Volume (M)" in df.columns:
-        fmt["Volume (M)"] = _vol_m
+    for col in ("Volume (M)", "Volume (IEX M)"):
+        if col in df.columns:
+            fmt[col] = _vol_m
     if "EWO" in df.columns:
         fmt["EWO"] = _signed_number
 

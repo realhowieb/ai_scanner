@@ -7,6 +7,7 @@ from data.alpaca_config import (
     DEFAULT_DATA_URL,
     alpaca_secret,
     get_alpaca_config,
+    get_alpaca_data_feed,
     get_alpaca_headers,
 )
 
@@ -53,6 +54,14 @@ class AlpacaConfigTests(unittest.TestCase):
     def test_default_when_unset(self):
         with mock.patch.dict("os.environ", {}, clear=True):
             self.assertEqual(alpaca_secret("ALPACA_DATA_URL", "fallback"), "fallback")
+
+    def test_market_data_feed_defaults_to_iex_and_accepts_sip(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(get_alpaca_data_feed(), "iex")
+        with mock.patch.dict("os.environ", {"ALPACA_FEED": "sip"}, clear=True):
+            self.assertEqual(get_alpaca_data_feed(), "sip")
+        with mock.patch.dict("os.environ", {"ALPACA_DATA_FEED": "bogus"}, clear=True):
+            self.assertEqual(get_alpaca_data_feed(), "iex")
 
     def test_all_readers_share_the_resolver(self):
         """The historical duplicate readers must delegate, not re-implement."""

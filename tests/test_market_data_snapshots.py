@@ -36,6 +36,7 @@ class SnapshotClassShareTests(unittest.TestCase):
         def fake_get(url, headers=None, params=None, timeout=None):
             syms = params["symbols"].split(",")
             sent["syms"] = syms
+            sent["feed"] = params.get("feed")
             # Dash form would 400 the whole batch; dot form is accepted.
             if any("-" in s for s in syms):
                 return _Resp(400, {})
@@ -43,13 +44,33 @@ class SnapshotClassShareTests(unittest.TestCase):
 
         with mock.patch.object(m, "_get_alpaca_headers", return_value={"k": "v"}), \
              mock.patch.object(m, "_get_alpaca_base_urls", return_value={"data_url": "https://x"}), \
+             mock.patch.object(m, "_get_alpaca_data_feed", return_value="iex"), \
              mock.patch.object(m, "requests", mock.MagicMock(get=fake_get)):
             out = m.fetch_alpaca_snapshots(["AMD", "BRK-B", "MSFT"])
 
         self.assertIn("BRK.B", sent["syms"])          # dot form sent
         self.assertNotIn("BRK-B", sent["syms"])
+        self.assertEqual(sent.get("feed"), "iex")
         self.assertEqual(set(out.keys()), {"AMD", "BRK-B", "MSFT"})  # mapped back
         self.assertTrue(out["AMD"])                   # batch not poisoned
+
+    def test_snapshot_feed_is_explicit(self):
+        import market_data as m
+
+        sent = {}
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            sent.update(params or {})
+            return _Resp(200, {"AMD": {"latestTrade": {"p": 100.0}}})
+
+        with mock.patch.object(m, "_get_alpaca_headers", return_value={"k": "v"}), \
+             mock.patch.object(m, "_get_alpaca_base_urls", return_value={"data_url": "https://x"}), \
+             mock.patch.object(m, "_get_alpaca_data_feed", return_value="sip"), \
+             mock.patch.object(m, "requests", mock.MagicMock(get=fake_get)):
+            out = m.fetch_alpaca_snapshots(["AMD"])
+
+        self.assertEqual(sent["feed"], "sip")
+        self.assertIn("AMD", out)
 
 
 if __name__ == "__main__":
