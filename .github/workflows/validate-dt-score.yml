@@ -1,0 +1,75 @@
+name: Validate DT Score
+
+# Direction-aware backtest of the Day Trader DT Score against real historical
+# intraday bars (Run 33). Runs in the cloud with the same Alpaca secrets the
+# scheduled scans use — no local setup. Uploads the report as an artifact.
+# Read-only: modifies no production state and changes no scoring.
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Comma-separated tickers (e.g. NVDA,AMD,INTC)"
+        type: string
+        default: "NVDA,AMD,INTC,PLTR,SOFI,MSFT,AAPL,TSLA,AMZN,META"
+      start:
+        description: "Start date (YYYY-MM-DD)"
+        type: string
+        required: true
+      end:
+        description: "End date (YYYY-MM-DD, optional)"
+        type: string
+        default: ""
+      sample_every:
+        description: "Sample a signal every N minute-bars"
+        type: string
+        default: "15"
+
+concurrency:
+  group: validate-dt-score
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+          python -m pip install --prefer-binary -r requirements-ml.txt -c requirements.lock
+
+      - name: Run DT Score validation
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          ALPACA_FEED: ${{ secrets.ALPACA_FEED }}
+          DTV_SYMBOLS: ${{ inputs.symbols }}
+          DTV_START: ${{ inputs.start }}
+          DTV_END: ${{ inputs.end }}
+          DTV_SAMPLE_EVERY: ${{ inputs.sample_every }}
+        run: |
+          python -m scripts.validate_day_trade_score --out artifacts
+          echo "### DT Score validation" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          sed -n '1,40p' artifacts/day_trader_validation.md >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dt-score-validation
+          path: |
+            artifacts/day_trader_validation.json
+            artifacts/day_trader_validation.md
