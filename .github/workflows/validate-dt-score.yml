@@ -6,16 +6,20 @@ name: Validate DT Score
 # Read-only: modifies no production state and changes no scoring.
 
 on:
+  schedule:
+    # Weekly, Saturday 11:00 UTC — accumulate multi-regime samples for the
+    # DT Score recalibration gate (docs/DT_SCORE_RECALIBRATION.md).
+    - cron: "0 11 * * 6"
   workflow_dispatch:
     inputs:
       symbols:
-        description: "Comma-separated tickers (e.g. NVDA,AMD,INTC)"
+        description: "Comma-separated tickers (blank = broad default set)"
         type: string
-        default: "NVDA,AMD,INTC,PLTR,SOFI,MSFT,AAPL,TSLA,AMZN,META"
+        default: ""
       start:
-        description: "Start date (YYYY-MM-DD)"
+        description: "Start date (YYYY-MM-DD, blank = trailing 30 days)"
         type: string
-        required: true
+        default: ""
       end:
         description: "End date (YYYY-MM-DD, optional)"
         type: string
@@ -54,11 +58,19 @@ jobs:
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
           ALPACA_FEED: ${{ secrets.ALPACA_FEED }}
-          DTV_SYMBOLS: ${{ inputs.symbols }}
-          DTV_START: ${{ inputs.start }}
-          DTV_END: ${{ inputs.end }}
-          DTV_SAMPLE_EVERY: ${{ inputs.sample_every }}
+          IN_SYMBOLS: ${{ inputs.symbols }}
+          IN_START: ${{ inputs.start }}
+          IN_END: ${{ inputs.end }}
+          IN_SAMPLE_EVERY: ${{ inputs.sample_every }}
         run: |
+          # Broad, multi-sector default set (large/small cap, high/low vol) so
+          # scheduled runs accumulate a regime-diverse sample.
+          DEFAULT_SYMBOLS="NVDA,AMD,INTC,MU,AVGO,SMCI,TSLA,AAPL,MSFT,AMZN,META,GOOGL,NFLX,PLTR,SOFI,COIN,MARA,DELL,CRWD,SNOW,UBER,XOM,CVX,JPM,BAC,PFE,KO,WMT,F,RIVN"
+          export DTV_SYMBOLS="${IN_SYMBOLS:-$DEFAULT_SYMBOLS}"
+          export DTV_START="${IN_START:-$(date -u -d '30 days ago' +%F)}"
+          export DTV_END="${IN_END:-}"
+          export DTV_SAMPLE_EVERY="${IN_SAMPLE_EVERY:-15}"
+          echo "Window: $DTV_START -> ${DTV_END:-now} | symbols: $(echo "$DTV_SYMBOLS" | tr ',' '\n' | wc -l)"
           python -m scripts.validate_day_trade_score --out artifacts
           echo "### DT Score validation" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
