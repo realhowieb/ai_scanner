@@ -17,6 +17,23 @@ Caveat: the no-lookahead reconstruction carries daily indicators as-of D-1, whic
 tend to agree in trending large-caps — partly inflating agreement. This is the
 honest best proxy, but a note for interpretation and a reason to sample broadly.
 
+### Cross-regime confirmation (2026-06-01 → 2026-07-10, 20 symbols incl. SPY)
+A genuine **down/bearish** regime (14,401 obs / 11,366 directional; bearish 7,890
+vs bullish 3,476, ≈69% bearish) reproduces the same structural findings:
+- **Saturation is regime-independent** — median DT = **100** again (P90 = 100).
+- **No follow-through edge** — 15m hit by bucket: 60–69 44%, 70–79 46%, 80–89 51%,
+  90–100 **49%**; flat ~48–51% at every high bucket, coin-flip at the top. Bearish
+  setups specifically also ~50% at 90–100. Higher DT ≠ better follow-through in a
+  down market either.
+- **Direction/strength separation VALIDATES** — the score correctly produced
+  predominantly bearish high-scores (6,999 bearish vs 2,794 bullish in 90–100),
+  the mirror of the up-week's bullish skew. DT Score tracks direction/regime
+  faithfully; it just does not predict 15–60m follow-through and does not spread.
+
+Takeaway: saturation (→C1/C2) and dead tiers (→C4) are structural, not artifacts
+of one bullish week; DT Score is validated as a coherence/direction indicator,
+not a predictor.
+
 ## 1. Objectives / non-goals
 **Goals:** (a) spread the score across 0–100 so it discriminates; (b) make
 Strong/Developing/Weak separate; (c) keep direction/strength separation and the
