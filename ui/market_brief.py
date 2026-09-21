@@ -1180,6 +1180,19 @@ def _render_setups(golden: List[str], top_setups: List[tuple]) -> None:
     st.caption("Educational only — not financial advice; confirm setups yourself at the open.")
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def _pick_calibration_records():
+    """Frozen opportunity outcomes normalized for PreBreakout follow-through.
+    Cached (global, non-personalized); [] when unavailable. Read-only."""
+    try:
+        from analytics.hsf_calibration import build_calibration_dataset
+        from db.signal_outcomes import fetch_opportunity_outcomes
+
+        return build_calibration_dataset(fetch_opportunity_outcomes(days_back=180))
+    except Exception:
+        return []
+
+
 def _render_picks(picks: List[Dict[str, Any]]) -> None:
     if not picks:
         return
@@ -1187,11 +1200,24 @@ def _render_picks(picks: List[Dict[str, Any]]) -> None:
     st.caption("Ranked by the PreBreakout model's calibrated likelihood — an "
                "estimate of setup follow-through, not a price forecast. Confirm "
                "the setup yourself.")
+    try:
+        from analytics.hsf_calibration import prebreakout_followthrough
+        records = _pick_calibration_records()
+    except Exception:
+        prebreakout_followthrough, records = None, []
     for i, p in enumerate(picks):
         sym = p["symbol"]
         price = f" · ${p['last']:.2f}" if p.get("last") is not None else ""
+        # Historical follow-through for this probability band — shown ONLY when
+        # enough matured picks exist (never a rate off a tiny sample).
+        hist = ""
+        if prebreakout_followthrough and records:
+            ft = prebreakout_followthrough(records, p.get("prob"))
+            if ft.get("sufficient") and ft.get("positive_rate") is not None:
+                hist = (f"  ·  similar picks followed through "
+                        f"{ft['positive_rate']*100:.0f}% (n={ft['n_matured']})")
         c1, c2 = st.columns([4, 1])
-        c1.markdown(f"**{sym}**{price} — {p['prob']:.1f}% likelihood")
+        c1.markdown(f"**{sym}**{price} — {p['prob']:.1f}% likelihood{hist}")
         if c2.button("🔬 Intel", key=f"mb_pick_intel_{i}_{sym}"):
             st.session_state["hsf_stock_ticker"] = sym
             try:

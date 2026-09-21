@@ -166,6 +166,45 @@ def summarize_score_buckets(records: List[Dict[str, Any]]) -> List[Dict[str, Any
     return [{"bucket": b, **_stat_block(groups[b])} for b, _ in [(f"{lo}-{hi}", None) for lo, hi in SCORE_BUCKETS]]
 
 
+# PreBreakout probability bands (calibrated %), for pick follow-through. The
+# calibrated floor sits ~13%, so the lowest band captures the plateau.
+_PROB_BANDS = [(0, 15, "<15%"), (15, 20, "15-20%"), (20, 25, "20-25%"), (25, 101, "25%+")]
+
+
+def _prob_band(prob: Optional[float]) -> Optional[str]:
+    if prob is None:
+        return None
+    for lo, hi, lbl in _PROB_BANDS:
+        if lo <= prob < hi:
+            return lbl
+    return None
+
+
+def summarize_prebreakout_buckets(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Matured follow-through by PreBreakout calibrated-probability band — answers
+    'do higher-probability picks follow through more often?' Reuses the canonical
+    matured/+4% positive definition."""
+    groups: Dict[str, List[Dict[str, Any]]] = {lbl: [] for _, _, lbl in _PROB_BANDS}
+    for r in records:
+        b = _prob_band(r.get("prob"))
+        if b is not None:
+            groups[b].append(r)
+    return [{"band": lbl, **_stat_block(groups[lbl])} for _, _, lbl in _PROB_BANDS]
+
+
+def prebreakout_followthrough(records: List[Dict[str, Any]], prob: Optional[float],
+                              *, min_sample: int = 10) -> Dict[str, Any]:
+    """Historical follow-through for the band a given PreBreakout probability falls
+    in. `sufficient` is False below min_sample matured (never a rate off 1-2)."""
+    band = _prob_band(prob)
+    if band is None:
+        return {"band": None, "sufficient": False, "n_matured": 0, "positive_rate": None}
+    recs = [r for r in records if _prob_band(r.get("prob")) == band]
+    blk = _stat_block(recs)
+    return {"band": band, "n_matured": blk["n_matured"], "positive_rate": blk["positive_rate"],
+            "sufficient": blk["n_matured"] >= int(min_sample)}
+
+
 def summarize_status_performance(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out = []
     for status in ("STRONG", "WATCH", "CAUTION"):
