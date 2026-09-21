@@ -1180,19 +1180,6 @@ def _render_setups(golden: List[str], top_setups: List[tuple]) -> None:
     st.caption("Educational only — not financial advice; confirm setups yourself at the open.")
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def _pick_calibration_records():
-    """Frozen opportunity outcomes normalized for PreBreakout follow-through.
-    Cached (global, non-personalized); [] when unavailable. Read-only."""
-    try:
-        from analytics.hsf_calibration import build_calibration_dataset
-        from db.signal_outcomes import fetch_opportunity_outcomes
-
-        return build_calibration_dataset(fetch_opportunity_outcomes(days_back=180))
-    except Exception:
-        return []
-
-
 def _render_picks(picks: List[Dict[str, Any]]) -> None:
     if not picks:
         return
@@ -1202,7 +1189,7 @@ def _render_picks(picks: List[Dict[str, Any]]) -> None:
                "the setup yourself.")
     try:
         from analytics.hsf_calibration import prebreakout_followthrough
-        records = _pick_calibration_records()
+        records = _calibration_records_cached()  # existing guarded, cached read
     except Exception:
         prebreakout_followthrough, records = None, []
     for i, p in enumerate(picks):
