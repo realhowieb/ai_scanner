@@ -1184,8 +1184,20 @@ def _render_picks(picks: List[Dict[str, Any]]) -> None:
     if not picks:
         return
     st.markdown("### 🧠 PreBreakout picks")
-    for p in picks:
-        st.markdown(f"- **{p['symbol']}** — {p['prob']}% model confidence")
+    st.caption("Ranked by the PreBreakout model's calibrated likelihood — an "
+               "estimate of setup follow-through, not a price forecast. Confirm "
+               "the setup yourself.")
+    for i, p in enumerate(picks):
+        sym = p["symbol"]
+        price = f" · ${p['last']:.2f}" if p.get("last") is not None else ""
+        c1, c2 = st.columns([4, 1])
+        c1.markdown(f"**{sym}**{price} — {p['prob']:.1f}% likelihood")
+        if c2.button("🔬 Intel", key=f"mb_pick_intel_{i}_{sym}"):
+            st.session_state["hsf_stock_ticker"] = sym
+            try:
+                st.switch_page("pages/stock.py")
+            except Exception:
+                st.caption("Open 'Stock Intel' from the sidebar.")
 
 
 def _render_watchlist(earnings_today: List[str]) -> None:

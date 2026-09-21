@@ -81,13 +81,26 @@ def _prebreakout_picks(df, limit: int = 3) -> List[Dict[str, Any]]:
         sym_col = _symbol_column(scored)
         if not sym_col:
             return []
-        top = scored.sort_values("PreBreakoutProb%", ascending=False).head(limit)
+        # Calibrated % is the primary rank; the raw model probability breaks ties
+        # within the calibrated floor (matches the Scanner ranking) so the picks
+        # are ordered by real discrimination, not arbitrary row order.
+        sort_cols = ["PreBreakoutProb%"]
+        if "PreBreakoutProbRaw" in scored.columns:
+            sort_cols.append("PreBreakoutProbRaw")
+        top = scored.sort_values(sort_cols, ascending=False).head(limit)
+        price_col = next((c for c in ("Last", "last", "Close", "Price") if c in scored.columns), None)
         out: List[Dict[str, Any]] = []
         for _, r in top.iterrows():
             prob = float(r.get("PreBreakoutProb%") or 0.0)
             if prob <= 0:
                 continue
-            out.append({"symbol": str(r.get(sym_col)).upper(), "prob": round(prob, 1)})
+            pick = {"symbol": str(r.get(sym_col)).upper(), "prob": round(prob, 1)}
+            if price_col is not None:
+                try:
+                    pick["last"] = round(float(r.get(price_col)), 2)
+                except (TypeError, ValueError):
+                    pass
+            out.append(pick)
         return out
     except Exception:
         return []
@@ -371,17 +384,24 @@ def _compose(
         text += [""]
 
     if picks:
+        def _pick_price(p):
+            return f" &middot; ${p['last']:.2f}" if p.get("last") is not None else ""
         items = "".join(
-            f"<li><strong>{p['symbol']}</strong> — {p['prob']}% model confidence</li>"
+            f"<li><strong>{p['symbol']}</strong>{_pick_price(p)} — "
+            f"{p['prob']:.1f}% PreBreakout likelihood</li>"
             for p in picks
         )
         label = "🧠 PreBreakout picks" if len(picks) > 1 else "🧠 PreBreakout pick"
         html.append(
             f"<h3 style='margin:16px 0 6px'>{label}</h3>"
             f"<ul style='margin:4px 0 0;padding-left:18px'>{items}</ul>"
+            "<p style='margin:4px 0 0;font-size:12px;color:#888'>Calibrated model "
+            "likelihood of setup follow-through — not a price forecast.</p>"
         )
         text += ["PreBreakout picks:"]
-        text += [f"  {p['symbol']} — {p['prob']}%" for p in picks]
+        text += [f"  {p['symbol']}"
+                 + (f" ${p['last']:.2f}" if p.get('last') is not None else "")
+                 + f" — {p['prob']:.1f}% likelihood" for p in picks]
         text += [""]
 
     return "".join(html), "\n".join(text)
