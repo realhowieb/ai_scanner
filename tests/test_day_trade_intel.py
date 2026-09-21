@@ -17,16 +17,20 @@ class DirectionTests(unittest.TestCase):
                 chg_pct=1.5, adx=31, rvol=2.4)
         intel = di.day_trade_intelligence(r)
         self.assertEqual(intel["direction"], "bullish")
-        self.assertGreaterEqual(intel["score"], 65)
+        # v2.0 (C1/C2) spreads scores off the ceiling; a strong all-agree setup
+        # now lands ~55 rather than ~100. Strong tier gates at 55 (_STRONG_THRESHOLD).
+        self.assertGreaterEqual(intel["score"], di._STRONG_THRESHOLD)
         self.assertEqual(intel["quality"], "strong")
         self.assertEqual(intel["conflicts"], [])
 
     def test_strong_bearish_high_score(self):
-        r = row(vs_vwap_pct=-0.7, supertrend_direction="red", ewo=-9.0,
-                chg_pct=-1.4, adx=29, rvol=2.1)
+        # Mirror of the strong bullish setup — a coherent short scores just as
+        # high as the coherent long (direction/strength separation).
+        r = row(vs_vwap_pct=-0.8, supertrend_direction="red", ewo=-12.4,
+                chg_pct=-1.5, adx=31, rvol=2.4)
         intel = di.day_trade_intelligence(r)
         self.assertEqual(intel["direction"], "bearish")
-        self.assertGreaterEqual(intel["score"], 65)  # bearish can score high
+        self.assertGreaterEqual(intel["score"], di._STRONG_THRESHOLD)  # bearish can score high
         self.assertEqual(intel["quality"], "strong")
 
     def test_adx_rvol_do_not_set_direction(self):
@@ -97,15 +101,15 @@ class MissingDataTests(unittest.TestCase):
 class CapTests(unittest.TestCase):
     def test_extreme_rvol_capped(self):
         base = dict(vs_vwap_pct=0.8, supertrend_direction="green", ewo=6, chg_pct=1.2, adx=28)
-        s3 = di.score_day_trade_setup(row(**base, rvol=3.0))
+        s5 = di.score_day_trade_setup(row(**base, rvol=5.0))
         s20 = di.score_day_trade_setup(row(**base, rvol=20.0))
-        self.assertEqual(s3, s20)  # rvol contribution capped at 3x
+        self.assertEqual(s5, s20)  # rvol contribution capped at 5x (_RVOL_STRONG)
 
     def test_extreme_adx_capped(self):
         base = dict(vs_vwap_pct=0.8, supertrend_direction="green", ewo=6, chg_pct=1.2, rvol=2.0)
-        s40 = di.score_day_trade_setup(row(**base, adx=40))
+        s55 = di.score_day_trade_setup(row(**base, adx=55))
         s90 = di.score_day_trade_setup(row(**base, adx=90))
-        self.assertEqual(s40, s90)  # adx contribution capped at 40
+        self.assertEqual(s55, s90)  # adx contribution capped at 55 (_ADX_FULL)
 
 
 class ReasonsTests(unittest.TestCase):

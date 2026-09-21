@@ -22,12 +22,18 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-# --- Normalization knobs (documented, centralized; starting guidelines). ------
-_ADX_FLOOR, _ADX_FULL = 15.0, 40.0     # <15 weak trend, >=40 caps at full
-_RVOL_ORDINARY, _RVOL_STRONG = 1.0, 3.0  # 1x ordinary -> 3x full (capped)
-_VWAP_FULL = 1.0                        # 1% off VWAP -> full contribution
-_MOM_FULL = 3.0                         # 3% intraday move -> full contribution
-_GAP_FULL = 3.0                         # 3% gap -> full contribution
+# Scoring version. v2.0 = Run 33 recalibration (C1 count-weighted agreement,
+# C2 raised normalization ceilings to break the ceiling saturation, C4 tiers).
+DT_SCORE_VERSION = "2.0"
+
+# --- Normalization knobs (documented, centralized). C2: ceilings raised so a
+# typical liquid mover no longer maxes every sub-score (which pinned scores at
+# ~100). Values chosen to spread the mid-range, not to fit any single regime. ---
+_ADX_FLOOR, _ADX_FULL = 15.0, 55.0     # <15 weak; ceiling 40 -> 55
+_RVOL_ORDINARY, _RVOL_STRONG = 1.0, 5.0  # 1x ordinary; ceiling 3x -> 5x
+_VWAP_FULL = 2.0                        # 1% -> 2% for full contribution
+_MOM_FULL = 5.0                         # 3% -> 5% for full contribution
+_GAP_FULL = 5.0                         # 3% -> 5% for full contribution
 _DEADBAND = 0.05                        # % noise band around 0 for direction
 
 # DT Score weights (must sum to 1.0 across all factors; renormalized when a
@@ -43,6 +49,13 @@ _WEIGHTS = {
 _CONFLICT_PENALTY = 5.0   # points removed per conflict
 _CONFLICT_PENALTY_CAP = 25.0
 _MIN_DIRECTIONAL = 2      # fewer available directional signals -> insufficient
+
+# C4: quality-tier gates re-fit to the C1/C2 spread distribution. Once the
+# ceiling saturation is broken a strong, complete, all-agree setup lands ~55-60
+# (was ~100), so Strong gates at 55 and Weak at 35 (were 65 / 40). Held-out
+# validation confirms/adjusts these before ship (docs/DT_SCORE_RECALIBRATION.md).
+_STRONG_THRESHOLD = 55.0
+_WEAK_THRESHOLD = 35.0
 
 
 def _num(v: Any) -> Optional[float]:
@@ -174,7 +187,12 @@ def score_day_trade_setup(row: Dict[str, Any]) -> Optional[float]:
     chg = _num(row.get("chg_pct"))
     gap = _num(row.get("gap_pct"))
 
-    subs: Dict[str, float] = {"agreement": _clamp01((agreement - 0.5) / 0.5)}
+    # C1: agreement is count-weighted so unanimity with few signals no longer
+    # auto-maxes — 5/5 agreeing signals score higher than 3/3. Completeness is
+    # the share of the 5 possible directional signals that are present.
+    n_dir = len([v for v in _direction_votes(row).values() if v != 0])
+    completeness = 0.4 + 0.6 * _clamp01(n_dir / 5.0)
+    subs: Dict[str, float] = {"agreement": _clamp01((agreement - 0.5) / 0.5) * completeness}
     if adx is not None:
         subs["adx"] = _clamp01((adx - _ADX_FLOOR) / (_ADX_FULL - _ADX_FLOOR))
     if rvol is not None:
@@ -209,9 +227,11 @@ def classify_setup_quality(row: Dict[str, Any]) -> str:
     conflicts = day_trade_conflicts(row)
     confirmed = (adx is not None and adx >= 20.0) or (rvol is not None and rvol >= 1.5)
 
-    if score >= 65 and agreement >= 0.75 and confirmed and len(conflicts) <= 1:
+    # C4: tiers re-fit to the spread (C2) distribution — the old 65/40 gates left
+    # everything "developing" once scores no longer pinned at ~100.
+    if score >= _STRONG_THRESHOLD and agreement >= 0.7 and confirmed and len(conflicts) <= 1:
         return "strong"
-    if score < 40 or agreement < 0.55 or (rvol is not None and rvol < _RVOL_ORDINARY) or len(conflicts) >= 3:
+    if score < _WEAK_THRESHOLD or agreement < 0.55 or (rvol is not None and rvol < _RVOL_ORDINARY) or len(conflicts) >= 3:
         return "weak"
     return "developing"
 
