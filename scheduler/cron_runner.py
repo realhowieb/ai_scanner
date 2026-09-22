@@ -68,20 +68,40 @@ def _dedupe(symbols: Iterable[str]) -> list[str]:
     return out
 
 
-def _load_universe(universe: str) -> list[str]:
+def _load_universe_result(universe: str) -> tuple[list[str], dict]:
+    """Return (symbols, metadata) for a universe. US_MARKET uses the canonical
+    live/cached Alpaca provider (no 2,000 cap); legacy universes read the static
+    files. Metadata records the source so a scheduled run can prove what it scanned.
+    """
     key = universe.strip().upper()
+    if key == "US_MARKET":
+        from data.us_market_universe import build_us_market_universe
+        res = build_us_market_universe()
+        meta = {"universe_name": "US_MARKET", "universe_source": res.get("source"),
+                "universe_generated_at": res.get("generated_at"),
+                "universe_symbol_count": res.get("symbol_count"),
+                "is_fallback": res.get("is_fallback", False),
+                "fallback_reason": res.get("fallback_reason"),
+                "provider_assets": res.get("provider_assets"),
+                "exclusions": res.get("exclusions")}
+        return list(res.get("symbols") or []), meta
     sp500 = _read_symbols(ROOT / "sp500.txt")
     nasdaq = _read_symbols(ROOT / "nasdaq.txt")
-
     if key == "SP500":
-        return sp500
+        return sp500, {"universe_name": "SP500", "universe_source": "static"}
     if key == "NASDAQ":
         limit = int(os.getenv("CRON_NASDAQ_LIMIT", "2000"))
-        return nasdaq[:limit]
+        return nasdaq[:limit], {"universe_name": "NASDAQ", "universe_source": "static"}
     if key == "COMBO":
         limit = int(os.getenv("CRON_NASDAQ_LIMIT", "2000"))
-        return _dedupe([*sp500, *nasdaq[:limit]])
+        return _dedupe([*sp500, *nasdaq[:limit]]), {"universe_name": "COMBO",
+                                                    "universe_source": "static"}
     raise ValueError(f"Unknown universe: {universe}")
+
+
+def _load_universe(universe: str) -> list[str]:
+    """Back-compat: symbols only."""
+    return _load_universe_result(universe)[0]
 
 
 def _results_to_json(results) -> str:
@@ -197,14 +217,16 @@ def _configured_universes() -> list[str]:
     """Return the universes configured for scheduled scans.
 
     Environment variable:
-    - CRON_UNIVERSES=SP500,NASDAQ,COMBO
+    - CRON_UNIVERSES=US_MARKET (default) — the canonical full U.S. market.
+    - CRON_UNIVERSES=SP500,NASDAQ,COMBO — legacy universes, still selectable.
 
-    Blank entries are ignored. If the variable is not set, preserve the
-    existing default behavior.
+    Run 44: the scheduled default is now US_MARKET (whole-market coverage), not
+    SP500,NASDAQ,COMBO (which scanned overlapping subsets three times). An explicit
+    CRON_UNIVERSES still overrides. Blank entries are ignored.
     """
-    raw = os.getenv("CRON_UNIVERSES", "SP500,NASDAQ,COMBO")
+    raw = os.getenv("CRON_UNIVERSES", "US_MARKET")
     universes = [item.strip().upper() for item in raw.split(",") if item.strip()]
-    return universes or ["SP500", "NASDAQ", "COMBO"]
+    return universes or ["US_MARKET"]
 
 
 def run_and_save(
@@ -232,7 +254,21 @@ def run_and_save(
 
     print(f"\n=== Running {universe} scan @ {dt.datetime.now(dt.timezone.utc).isoformat()} ===")
     try:
-        tickers = _load_universe(universe)
+        universe_started = time.perf_counter()
+        tickers, universe_meta = _load_universe_result(universe)
+        universe_load_sec = time.perf_counter() - universe_started
+        # Fail safely: a full-market universe with no live AND no cached source
+        # must NOT fall back to a partial list or claim coverage.
+        if universe_meta.get("universe_source") == "none":
+            raise RuntimeError(
+                f"{universe}: universe provider unavailable and no cached "
+                f"universe — scheduled scan aborted (no partial substitution).")
+        if universe_meta.get("is_fallback"):
+            print(f"⚠️ {universe}: {universe_meta.get('fallback_reason')} "
+                  f"(source={universe_meta.get('universe_source')})")
+        print(f"Universe {universe}: {len(tickers)} symbols "
+              f"(source={universe_meta.get('universe_source')}, "
+              f"load={universe_load_sec:.1f}s)")
         if not tickers:
             raise RuntimeError(f"No tickers loaded for {universe}")
 
@@ -304,6 +340,20 @@ def run_and_save(
             )
             health = classify_health(funnel)
             coverage_report_obj = coverage_report(funnel, health)
+            # Attach universe provenance + performance telemetry so an automated
+            # review can verify the whole market was actually attempted.
+            coverage_report_obj["universe"] = {
+                **universe_meta,
+                "universe_load_sec": round(universe_load_sec, 2),
+                "eligible_symbol_count": eligible,
+                "attempted_symbol_count": int(coverage_sink.get("attempted", eligible)),
+                "successfully_priced_count": price_success,
+                "skipped_symbol_count": max(0, int(coverage_sink.get("attempted", eligible)) - price_success),
+                "result_count": row_count,
+                "scan_duration_sec": round(duration, 2),
+                "symbols_per_sec": round(eligible / duration, 1) if duration else None,
+                "coverage_percentage": funnel.get("coverage_pct"),
+            }
             print(coverage_report_obj["text"])
             _write_coverage_artifact(universe, coverage_report_obj)
         except Exception as e:

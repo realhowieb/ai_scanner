@@ -154,3 +154,7 @@ validation).
 - **STALE** — inputs too old; refresh the universe or re-run in-session.
 - **FAILED** — zero coverage or no eligible universe; the scan did not represent
   the market — do not trust it.
+
+## US_MARKET default (Run 44)
+
+Scheduled scans now default to the canonical **US_MARKET** universe (full tradable U.S. equities via Alpaca assets, live + last-known-good cache + fail-safe), not `SP500,NASDAQ,COMBO`. The coverage funnel/health here apply unchanged; universe provenance and telemetry are attached to the coverage artifact. See [US_MARKET_UNIVERSE.md](US_MARKET_UNIVERSE.md).
