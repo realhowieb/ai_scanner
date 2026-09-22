@@ -76,6 +76,10 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           sed -n '1,40p' artifacts/day_trader_validation.md >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if test -f artifacts/dt_tier_diagnostic.md; then
+            echo '### Rejected v2 tier diagnostic' >> "$GITHUB_STEP_SUMMARY"
+            sed -n '1,35p' artifacts/dt_tier_diagnostic.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload validation report
         if: always()
@@ -85,3 +89,5 @@ jobs:
           path: |
             artifacts/day_trader_validation.json
             artifacts/day_trader_validation.md
+            artifacts/dt_tier_diagnostic.json
+            artifacts/dt_tier_diagnostic.md

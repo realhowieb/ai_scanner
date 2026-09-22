@@ -49,6 +49,8 @@ def build_observation(*, timestamp: str, ticker: str, features: Dict[str, Any],
         "price_at_signal": prices_after[0] if prices_after else None,
         "direction": intel["direction"], "score": intel["score"],
         "setup_quality": intel["quality"], "conflicts": intel["conflicts"],
+        "diagnostic_inputs": {key: features.get(key) for key in (
+            "chg_pct", "gap_pct", "rvol", "vs_vwap_pct", "adx", "supertrend_direction", "ewo")},
     }
     rets = forward_returns(prices_after, 0, HORIZONS)
     for h, r in rets.items():
@@ -212,6 +214,11 @@ def main() -> int:
     else:
         report = {"status": "OK", **build_report(observations, min_n=args.min_n),
                   "run32_parameters": _run32_parameters()}
+        from scripts.diagnose_dt_tiers import build_diagnostic, render_markdown
+
+        tier_report = build_diagnostic(observations, profile="rejected_v2")
+        (out_dir / "dt_tier_diagnostic.json").write_text(json.dumps(tier_report, indent=2, allow_nan=False) + "\n")
+        (out_dir / "dt_tier_diagnostic.md").write_text(render_markdown(tier_report))
 
     (out_dir / "day_trader_validation.json").write_text(json.dumps(report, indent=2, default=str))
     _write_markdown(out_dir / "day_trader_validation.md", report)
