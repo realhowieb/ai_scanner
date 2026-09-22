@@ -1,7 +1,44 @@
 # DT Score Recalibration Plan
 
-Status: **planning** (no scoring changed). Grounded in the Run 33 validation
-(`.github/workflows/validate-dt-score.yml` → `scripts/validate_day_trade_score.py`).
+Status: **CLOSED — recalibration not warranted; production v1 retained.** The
+founding premise below (§0, "ceiling saturation, median DT = 100") was later
+shown to be a **validation-harness artifact**, not real v1 behavior. See
+§8 for the decisive clean-run evidence. No scoring was changed.
+
+## 8. Resolution — the saturation was a harness bug (2026-09-22)
+
+The `median DT = 100` saturation that motivated this whole plan came from the
+`_fetch_daily_frame` bug (see [DT_V2_TIER_AUDIT.md](DT_V2_TIER_AUDIT.md) and
+[DT_RECONSTRUCTION_PARITY.md](DT_RECONSTRUCTION_PARITY.md)): every symbol fell
+back to intraday-only observations with ADX/RVOL/gap/SuperTrend/EWO all missing.
+Under v1 ceilings a 2-vote fallback row (agreement 1.0 from VWAP+momentum, VWAP
+capped at 1%, momentum capped at 3%) scores raw ≈ 100 — mechanically producing
+the pileup.
+
+With the daily-lookup fix (`3e614fd`), the F1 `chg_pct` parity fix (`67ca1b7`),
+and coverage logging confirming a **100% full-feature** population, a held-out
+window (**2026-08-04 → 08-22, 10,166 obs, 0 fallback**) shows production **v1**:
+
+- **Does NOT saturate** — median **18.3**, mean 21.9, P75 36.9, P90 48.3,
+  P95 53.1, max 76.3. Healthy spread, nothing pinned at 100.
+- **Tiers already separate** — Weak 9,892 / Developing 160 / **Strong 114**
+  (Strong fires; it only appeared "dead" in the buggy runs).
+- **Follow-through still flat** — Strong 15m hit 0.486, Developing 0.50, Weak
+  0.481; buckets 0-39 0.484, 40-59 0.472, 60-69 0.514, 70-79 0.36 (n=26, noise).
+  Coin-flip, consistent with every prior regime.
+
+**Conclusions:**
+1. The saturation problem the v2 candidate (C1/C2/C4) tried to fix **did not
+   exist in production**. v2 was correctly reverted (`f661b04`); do not revive it.
+2. v1 on clean data is a well-behaved, spread, tier-separating **coherence /
+   direction** score. Keep it; keep the "coherence, not prediction" framing.
+3. DT Score does not predict 5–60m follow-through in any regime. A predictive
+   score remains a separate (likely ML) project, out of scope here.
+4. Trust validation runs only when `feature_coverage` reports a high
+   full-feature share; treat daily-missing / intraday_fallback rows as invalid.
+
+Everything below is the ORIGINAL plan, retained for history. Its §0 baseline is
+now known to be contaminated by the harness bug.
 
 ## 0. Evidence baseline
 Wider validation run (30 symbols, ~7 weeks, **24,324 observations / 19,476
