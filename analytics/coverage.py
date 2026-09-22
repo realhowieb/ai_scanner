@@ -34,6 +34,9 @@ _PROVIDER_TO_REASON = {
     "duplicate_data": "NO_PRICE_DATA",
     "download_error": "API_ERROR",
     "invalid_data": "INDICATOR_FAILURE",
+    "budget": "TIMEOUT",          # fetch hit its time/work budget
+    "no_data": "NO_PRICE_DATA",   # symbol has no recent data (thin/new listing)
+    "policy_skip": "FILTERED_BY_POLICY",
     "other": "UNKNOWN",
     "unknown": "UNKNOWN",
 }

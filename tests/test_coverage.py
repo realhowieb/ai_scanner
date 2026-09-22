@@ -17,6 +17,15 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertEqual(cov.classify_failure("insufficient history"), "INSUFFICIENT_HISTORY")
         self.assertEqual(cov.classify_failure("untradable by policy"), "FILTERED_BY_POLICY")
 
+    def test_whole_market_tail_reasons(self):
+        # Run 44 refinement: these used to fall into UNKNOWN.
+        self.assertEqual(cov.classify_failure("over_budget"), "TIMEOUT")
+        self.assertEqual(cov.classify_failure("recent_missing:no bars"), "NO_PRICE_DATA")
+        self.assertEqual(cov.classify_failure("skipped_yf_fallback"), "FILTERED_BY_POLICY")
+        # recent_missing wrapping a recognized inner reason keeps the specific class
+        self.assertEqual(cov.classify_failure("recent_missing:error_download:ValueError"), "API_ERROR")
+        self.assertEqual(cov.classify_failure("recent_missing:empty_single"), "NO_PRICE_DATA")
+
     def test_unknown_default(self):
         self.assertEqual(cov.classify_failure(""), "UNKNOWN")
         self.assertEqual(cov.classify_failure("weird gibberish"), "UNKNOWN")

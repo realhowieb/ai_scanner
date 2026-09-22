@@ -43,6 +43,15 @@ def classify_skip_reason(reason: object) -> str:
         return "download_error"
     if "invalid_frame" in text or "error_normalize" in text:
         return "invalid_data"
+    # Run 44 refinement: the whole-market tail. `over_budget` = the fetch hit its
+    # time/work budget; `recent_missing`/`no bars` = the symbol has no recent data
+    # (thin/new listing); `skipped_yf_fallback` = deliberately skipped by policy.
+    if "over_budget" in text or "budget" in text:
+        return "budget"
+    if "skipped_yf_fallback" in text or text.startswith("skipped"):
+        return "policy_skip"
+    if "recent_missing" in text or "no_data" in text or "no bars" in text:
+        return "no_data"
     return "other"
 
 
