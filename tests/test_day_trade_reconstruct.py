@@ -57,6 +57,23 @@ class ReconstructTests(unittest.TestCase):
         self.assertIsNotNone(val)
         self.assertIsNotNone(later)
 
+    def test_chg_pct_is_gap_inclusive_from_prior_close(self):
+        # F1 parity: chg_pct must be measured vs the PRIOR daily close (like live
+        # build_day_trader_metrics), not vs today's open — so it includes the gap.
+        daily = _daily_df()
+        prior_close = float(daily["Close"].iloc[-1])  # D-1 close (08-24 is last row)
+        bars = _minute_bars(day="2026-08-25", base=prior_close + 1.0, rising=True)
+        obs = rc.reconstruct_observations("NVDA", daily, bars, sample_every=5)
+        self.assertTrue(obs)
+        o = obs[0]
+        price = o["price_at_signal"]
+        expected = (price - prior_close) / prior_close * 100
+        self.assertAlmostEqual(o["diagnostic_inputs"]["chg_pct"], expected, places=6)
+        # sanity: an intraday-from-open computation would differ here (there is a gap)
+        day_open = bars[0]["o"]
+        intraday = (price - day_open) / day_open * 100
+        self.assertNotAlmostEqual(o["diagnostic_inputs"]["chg_pct"], intraday, places=6)
+
     def test_skips_day_without_prior(self):
         daily = _daily_df()
         # minute day BEFORE the daily history -> no prior session -> skipped

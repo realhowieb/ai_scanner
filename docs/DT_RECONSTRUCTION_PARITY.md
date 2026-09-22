@@ -29,7 +29,13 @@ are in *how the value is derived*, not which indicator.
 
 ## Findings, by impact
 
-### F1 — `chg_pct` semantics differ (HIGH)
+### F1 — `chg_pct` semantics differ (HIGH) — ✅ FIXED
+Fixed in `reconstruct_observations`: `chg_pct` is now `(price − D-1 close) /
+D-1 close`, matching live's gap-inclusive move from the prior close. A
+regression test (`test_chg_pct_is_gap_inclusive_from_prior_close`) locks it. The
+description below is retained as the rationale.
+
+
 Live `chg_pct` is the **whole-day** move measured from the prior close, so it
 includes the opening gap. Reconstruct measures the **intraday** move from
 today's open. For a stock that gapped +2% and then drifted +1% intraday, live

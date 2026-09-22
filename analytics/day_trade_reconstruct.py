@@ -149,7 +149,12 @@ def reconstruct_observations(
             price = b.get("c")
             vwap = (cum_pv / cum_v) if cum_v else None
             feat = {
-                "chg_pct": ((price - day_open) / day_open * 100) if (day_open and price is not None) else None,
+                # F1 parity: live chg_pct is the gap-inclusive move vs the PRIOR
+                # daily close (market_data.build_day_trader_metrics), not the
+                # intraday move from today's open. Match it so the momentum vote,
+                # momentum sub-score, and the Losing-VWAP / Momentum-disagreement
+                # / Gap-fading conflicts see the same signal production does.
+                "chg_pct": ((price - dm1_close) / dm1_close * 100) if (dm1_close and price is not None) else None,
                 "vs_vwap_pct": ((price - vwap) / vwap * 100) if (vwap and price is not None) else None,
                 "gap_pct": gap_pct,
                 "adx": adx_val,
