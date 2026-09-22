@@ -107,8 +107,9 @@ class SchedulerIntegrationTests(unittest.TestCase):
             self.assertEqual(cron_runner._configured_universes(), ["US_MARKET"])
 
     def test_explicit_cron_universes_overrides(self):
-        from scheduler import cron_runner
         import os
+
+        from scheduler import cron_runner
         with patch.dict(os.environ, {"CRON_UNIVERSES": "SP500,COMBO"}):
             self.assertEqual(cron_runner._configured_universes(), ["SP500", "COMBO"])
 
