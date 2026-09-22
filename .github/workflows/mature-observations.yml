@@ -1,0 +1,65 @@
+name: Mature Observations
+
+# Run 38B — attach matured intraday outcomes (+5m/+15m/+30m/+60m) to captured
+# canonical observations. Idempotent and safe to rerun: each horizon matures once
+# its wall-clock elapses; already-matured pairs are skipped. Read-only w.r.t.
+# scans/scanners — only writes hsf_observation_outcomes. Non-fatal.
+
+on:
+  workflow_dispatch:
+    inputs:
+      slack_min:
+        description: "Minutes of slack before a horizon is eligible"
+        type: string
+        default: "15"
+      dry_run:
+        description: "Build outcomes without writing (true/false)"
+        type: string
+        default: "false"
+  schedule:
+    # Every 30 min during US market hours + a post-close sweep (Mon-Fri, UTC).
+    # 13:30-21:00 UTC covers 09:30-16:00 ET (plus DST slack); 22:00 sweeps the
+    # tail so the last hour's +60m horizons mature.
+    - cron: "*/30 13-22 * * 1-5"
+
+concurrency:
+  group: mature-observations
+  cancel-in-progress: false
+
+jobs:
+  mature:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+          python -m pip install --prefer-binary -r requirements-ml.txt -c requirements.lock
+      - name: Mature outcomes
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          ALPACA_FEED: ${{ secrets.ALPACA_FEED }}
+        run: |
+          DRY=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
+          python -m scripts.mature_observations --slack-min "${{ inputs.slack_min || '15' }}" $DRY --out artifacts/automation
+          echo "### Outcome maturation" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat artifacts/automation/maturation_report.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload maturation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maturation-report
+          path: artifacts/automation/maturation_report.json
+          if-no-files-found: warn

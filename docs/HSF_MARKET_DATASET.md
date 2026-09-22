@@ -131,8 +131,10 @@ Dual-backend (Neon JSONB / SQLite TEXT), idempotent, non-fatal. Two tables:
 now captures per-scanner observations (side-effect only, non-fatal, hour-bucketed
 dedupe) via `analytics.observation_capture` + `save_observations_batch`. See
 [PRODUCTION_OBSERVATION_CAPTURE.md](PRODUCTION_OBSERVATION_CAPTURE.md). Manual/UI
-paths remain intentionally uncaptured. Outcome maturation worker
-(`scripts/mature_observations.py`) is ready but not yet scheduled.
+paths remain intentionally uncaptured. Outcome maturation is **automated in Run 38B**
+(`.github/workflows/mature-observations.yml`, every 30 min in market hours);
+see [OUTCOME_MATURATION.md](OUTCOME_MATURATION.md). Read-only audit:
+`scripts/observation_audit.py`.
 
 ## 7. Versioning strategy
 

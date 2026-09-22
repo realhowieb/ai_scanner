@@ -240,6 +240,51 @@ def capture_scan_observations(
     return stats
 
 
+# Intraday maturation horizons (label -> forward minute bars).
+HORIZON_BARS = {"+5m": 5, "+15m": 15, "+30m": 30, "+60m": 60}
+# Maturation failure taxonomy (Task 8).
+MATURATION_FAILURES = (
+    "PRICE_DATA_UNAVAILABLE", "INSUFFICIENT_FUTURE_BARS", "INVALID_TIMESTAMP",
+    "MARKET_CLOSED", "PROVIDER_ERROR", "DATABASE_ERROR", "UNKNOWN",
+)
+
+
+def _parse_dt(v: Any):
+    try:
+        d = v if isinstance(v, _dt.datetime) else _dt.datetime.fromisoformat(
+            str(v).replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=_dt.timezone.utc)
+    except Exception:
+        return None
+
+
+def horizon_eligibility(
+    anchor: Any, now: Any, existing_horizons, *,
+    horizon_bars: Optional[Dict[str, int]] = None, slack_min: int = 15,
+) -> Dict[str, str]:
+    """Per-horizon maturation status, independent of the others (Task 4/7).
+
+    Returns {horizon -> "already" | "not_ready" | "ready"}. A horizon is `ready`
+    only once `now >= anchor + horizon + slack` (slack lets the provider publish
+    the bar). `already` when an outcome exists. Never marks ready before the
+    horizon's wall-clock has elapsed — no lookahead.
+    """
+    horizon_bars = horizon_bars or HORIZON_BARS
+    a, n = _parse_dt(anchor), _parse_dt(now)
+    existing = set(existing_horizons or [])
+    out: Dict[str, str] = {}
+    for h, mins in horizon_bars.items():
+        if h in existing:
+            out[h] = "already"
+        elif a is None or n is None:
+            out[h] = "not_ready"
+        elif n >= a + _dt.timedelta(minutes=mins + slack_min):
+            out[h] = "ready"
+        else:
+            out[h] = "not_ready"
+    return out
+
+
 def compute_matured_outcomes(
     observation: Dict[str, Any],
     *,

@@ -80,7 +80,11 @@ in `scan_timestamp` for outcome measurement.
 
 ## Outcome maturation (Task 10/11)
 
-`scripts/mature_observations.py` (**WORKER READY BUT NOT SCHEDULED**): finds
+**Run 38B: maturation is now automated** via
+`.github/workflows/mature-observations.yml` (every 30 min during market hours +
+post-close sweep). See [OUTCOME_MATURATION.md](OUTCOME_MATURATION.md).
+
+`scripts/mature_observations.py`: finds
 observations whose horizons matured (age ≥ `--min-age-min`), fetches minute bars,
 computes `+5m/+15m/+30m/+60m` outcomes via `analytics.observation_capture.
 compute_matured_outcomes` (reuses `day_trade_validation`; structural no-lookahead

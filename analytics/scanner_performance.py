@@ -270,6 +270,7 @@ def from_canonical_observations(observations: Iterable[Dict[str, Any]]) -> List[
         mfe = next((oc.get("mfe") for oc in outcomes.values() if oc.get("mfe") is not None), None)
         mae = next((oc.get("mae") for oc in outcomes.values() if oc.get("mae") is not None), None)
         ctx = o.get("market_context") or {}
+        dq = o.get("data_quality") or {}
         for s in (o.get("scanners") or []):
             if not s.get("triggered", True):
                 continue
@@ -280,8 +281,71 @@ def from_canonical_observations(observations: Iterable[Dict[str, Any]]) -> List[
                 "returns": dict(returns), "mfe": mfe, "mae": mae,
                 "regime": ctx.get("market_regime"), "session": o.get("session"),
                 "liquidity": ctx.get("liquidity"),
+                # Research-quality metadata (Task 13) so the scoreboard can filter.
+                "source": ctx.get("source") or str(o.get("context") or "").split(":")[0] or None,
+                "feature_completeness": dq.get("feature_completeness"),
+                "fallback": bool(dq.get("fallback_used")),
+                "stale": bool(dq.get("stale")),
             })
     return out
+
+
+# --- Research data-quality filtering (Task 13) -------------------------------
+RESEARCH_MIN_COMPLETENESS = 0.5
+
+
+def filter_research_records(
+    records: Sequence[Dict[str, Any]], *,
+    source: Optional[str] = "scheduled",
+    allow_partial: bool = True,
+    allow_fallback: bool = False,
+    allow_stale: bool = False,
+    min_completeness: float = RESEARCH_MIN_COMPLETENESS,
+) -> List[Dict[str, Any]]:
+    """Select clean research records. Defaults to scheduled production only, no
+    fallback, no stale. Never silently mixes manual/test/reconstructed sources
+    unless `source=None` is explicitly passed."""
+    out = []
+    for r in records:
+        if source is not None and (r.get("source") or "scheduled") != source:
+            continue
+        if not allow_fallback and r.get("fallback"):
+            continue
+        if not allow_stale and r.get("stale"):
+            continue
+        fc = r.get("feature_completeness")
+        if fc is not None and fc < min_completeness:
+            continue
+        if not allow_partial and fc is not None and fc < 0.999:
+            continue
+        out.append(r)
+    return out
+
+
+def sample_readiness(
+    records: Sequence[Dict[str, Any]], *,
+    horizons: Optional[Sequence[str]] = None, min_sample: int = MIN_SAMPLE,
+    strong_sample: int = STRONG_SAMPLE,
+) -> Dict[str, Any]:
+    """Progress toward Run 38's sample gates, per scanner and horizon (Task 12).
+
+    Readiness indicator ONLY — N >= min_sample does not imply statistical
+    significance, only that the scoreboard will stop reporting INSUFFICIENT_DATA.
+    """
+    horizons = list(horizons or _horizons(records))
+    by_scanner: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for r in records:
+        by_scanner[str(r.get("scanner") or "unknown")].append(r)
+    out: Dict[str, Any] = {}
+    for scanner, rows in sorted(by_scanner.items()):
+        hz = {}
+        for h in horizons:
+            n = sum(1 for r in rows if (r.get("returns") or {}).get(h) is not None)
+            hz[h] = {"n": n, "min_sample": min_sample,
+                     "ready": n >= min_sample, "strong": n >= strong_sample}
+        out[scanner] = {"signals": len(rows), "horizons": hz}
+    return {"scanners": out, "min_sample": min_sample, "strong_sample": strong_sample,
+            "note": "readiness indicator only; N>=min_sample is not significance"}
 
 
 def build_scoreboard_report(

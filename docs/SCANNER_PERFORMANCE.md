@@ -70,6 +70,13 @@ No result is fabricated: horizons/scanners without matured data report `None` /
 `INSUFFICIENT_DATA`. In an environment without the production DB, the script
 emits `{"status": "INSUFFICIENT_DATA", "n_records": 0}`.
 
+**Update (Run 38B):** outcome maturation is automated (see
+[OUTCOME_MATURATION.md](OUTCOME_MATURATION.md)); the scoreboard adapter carries
+`source`/quality fields, `filter_research_records` defaults to clean scheduled
+production data, and `sample_readiness` tracks progress toward the N gates. The
+end-to-end lifecycle (scan→observation→maturation→scoreboard) is verified by
+`tests/test_maturation_e2e.py`.
+
 **Update (Run 38A):** scheduled scans now capture per-scanner canonical
 observations (see [PRODUCTION_OBSERVATION_CAPTURE.md](PRODUCTION_OBSERVATION_CAPTURE.md)),
 and once the maturation worker is scheduled the scoreboard's
