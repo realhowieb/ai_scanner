@@ -4,9 +4,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 from analytics.day_trade_tier_diagnostic import PROFILES, diagnose_row, summarize
+
+
+def _json_safe_inputs(inputs: dict) -> dict:
+    safe = {}
+    for name, value in inputs.items():
+        if isinstance(value, (int, float)) and not math.isfinite(value):
+            safe[name] = None
+        elif value is None or isinstance(value, (str, int, float, bool)):
+            safe[name] = value
+        else:
+            safe[name] = str(value)
+    return safe
 
 
 def build_diagnostic(observations: list[dict], *, profile: str) -> dict:
@@ -19,7 +32,8 @@ def build_diagnostic(observations: list[dict], *, profile: str) -> dict:
             missing += 1
             continue
         candidate = profile == "rejected_v2"
-        row = diagnose_row(inputs, profile=profile,
+        safe_inputs = _json_safe_inputs(inputs)
+        row = diagnose_row(safe_inputs, profile=profile,
                            score=None if candidate else observation.get("score"),
                            quality=None if candidate else observation.get("setup_quality"))
         if observation.get("direction") != row["direction"]:
@@ -28,7 +42,8 @@ def build_diagnostic(observations: list[dict], *, profile: str) -> dict:
             mismatches += 1
         if row["direction"] in ("bullish", "bearish"):
             rows.append({"timestamp": observation.get("timestamp"),
-                         "ticker": observation.get("ticker"), **row})
+                         "ticker": observation.get("ticker"),
+                         "diagnostic_inputs": safe_inputs, **row})
     report = summarize(rows, profile=profile)
     report["observations"] = rows
     report["observations_received"] = len(observations)
@@ -56,13 +71,29 @@ def render_markdown(report: dict) -> str:
         return "\n".join(lines)
     n = report["directional_n"]
     lines += [f"Profile: {report['profile']}; directional observations: {n}; quality tiers: {report['quality']}.",
+              "", "## Score Distributions", "",
+              "```json", json.dumps(report["score_distribution"], indent=2), "```",
+              "", "## Signal and Confirmation Counts", "",
+              "```json", json.dumps({key: report[key] for key in (
+                  "directional_signal_count", "agreeing_signal_count", "confirmation_count",
+                  "confirmation_flags", "conflict_count")}, indent=2), "```",
               "", "## Gate Funnel", ""]
     for gate, count in report["gate_funnel"].items():
         lines.append(f"- {gate}: {count}/{n}")
-    lines += ["", "## Strong Rejection Reasons", ""]
+    lines += ["", f"Strong before conflict override: {report['tier_before_conflict']['strong']}; "
+              f"after all gates: {report['gate_sensitivity']['current']}.",
+              "", "## Strong Rejection Reasons", ""]
     for gate, item in sorted(report["rejection_reasons"].items(), key=lambda x: -x[1]["count"]):
         lines.append(f"- {gate}: {item['count']} ({item['pct']:.1%})")
     lines += ["", f"All except conflict pass: {report['rejection_combinations']['only_conflict_fails']}",
+              "", "## High Raw Score Blockers", "",
+              "```json", json.dumps(report["high_raw_blockers"], indent=2), "```",
+              "", "## Weak Tier Reachability", "",
+              f"Weak before conflict condition: {report['tier_before_conflict']['weak']}; "
+              f"eligible after all Weak conditions: {report['weak_eligible']}; "
+              f"classified Weak: {report['quality'].get('weak', 0)}; "
+              f"Strong/Weak overlap: {report['strong_and_weak_overlap']}.", "",
+              "```json", json.dumps(report["weak_gate_pass"], indent=2), "```",
               "", "## Conflict Distribution", ""]
     for group, distribution in report["conflict_distribution"].items():
         lines.append(f"- {group}: " + ", ".join(f"{bucket}={item['count']}" for bucket, item in distribution.items()))
@@ -73,6 +104,12 @@ def render_markdown(report: dict) -> str:
               "", "## Confirmation Analysis", "", "```json", json.dumps(report["confirmation"], indent=2), "```",
               "", "## Score Pileup Analysis", "", "```json", json.dumps(report["score_77_1"], indent=2), "```",
               "", "## Hypothetical Gate Sensitivity", "", "```json", json.dumps(report["gate_sensitivity"], indent=2), "```",
+              "", "## Representative Examples", "",
+              "```json", json.dumps(report["examples"], indent=2), "```",
+              "", "## Responsible Logic", "",
+              "- Rejected v2 score normalization and agreement completeness: `a6820a9:analytics/day_trade_intel.py:190-213`.",
+              "- Rejected v2 Strong, Weak, then Developing precedence: `a6820a9:analytics/day_trade_intel.py:216-236`.",
+              "- Conflict definitions: `a6820a9:analytics/day_trade_intel.py:139-173`.",
               "", "## Recommendation", ""]
     if report["gate_sensitivity"]["current"] == 0:
         candidates = [(name, count) for name, count in report["gate_sensitivity"].items() if name.startswith("without_")]

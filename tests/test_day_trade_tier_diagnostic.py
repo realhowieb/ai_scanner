@@ -1,4 +1,5 @@
 """Read-only DT tier diagnostics and historical observation plumbing."""
+import json
 import unittest
 
 from analytics.day_trade_tier_diagnostic import diagnose_row, summarize
@@ -49,6 +50,51 @@ class TierDiagnosticTests(unittest.TestCase):
         self.assertEqual(report["score_or_direction_mismatches"], 0)
         self.assertEqual(report["directional_n"], 1)
         self.assertNotEqual(diagnose_row(original, profile="rejected_v2")["score"], observation["score"])
+
+    def test_rejected_v2_has_reachable_strong_and_weak_tiers(self):
+        strong = diagnose_row(features(adx=40, rvol=3), profile="rejected_v2")
+        weak = diagnose_row(features(chg_pct=-2, gap_pct=1, rvol=0.8,
+                                     vs_vwap_pct=0.4, adx=14,
+                                     supertrend_direction="red", ewo=-2),
+                            profile="rejected_v2")
+        self.assertEqual(strong["quality"], "strong")
+        self.assertEqual(weak["quality"], "weak")
+        self.assertTrue(weak["weak_gates"]["low_rvol"])
+
+    def test_high_raw_score_can_still_be_developing(self):
+        row = diagnose_row(features(chg_pct=-5, gap_pct=-5, rvol=5,
+                                    vs_vwap_pct=2, adx=55,
+                                    supertrend_direction="green", ewo=1),
+                           profile="rejected_v2")
+        self.assertGreater(row["score_components"]["raw_score"], 70)
+        self.assertEqual(row["quality"], "developing")
+        self.assertFalse(row["gates"]["agreement_gate"])
+        self.assertFalse(row["gates"]["conflict_gate"])
+        self.assertEqual(row["conflict_count"], 2)
+
+    def test_blocker_counts_and_weak_precedence_are_reported(self):
+        rows = [diagnose_row(features(adx=40, rvol=3), profile="rejected_v2"),
+                diagnose_row(features(chg_pct=-5, gap_pct=-5, rvol=5,
+                                      vs_vwap_pct=2, adx=55,
+                                      supertrend_direction="green", ewo=1),
+                             profile="rejected_v2")]
+        report = summarize(rows, profile="rejected_v2")
+        self.assertEqual(report["directional_n"], 2)
+        self.assertEqual(report["quality"]["strong"], 1)
+        self.assertEqual(report["quality"]["developing"], 1)
+        self.assertEqual(report["high_raw_blockers"]["n"], 1)
+        self.assertEqual(report["high_raw_blockers"]["individual"]["conflict_gate"], 1)
+
+    def test_report_preserves_per_observation_evidence_and_strict_json(self):
+        observation = build_observation(timestamp="T", ticker="ABC", features=features(),
+                                        prices_after=[100] + [101] * 61)
+        report = build_diagnostic([observation], profile="rejected_v2")
+        recorded = report["observations"][0]
+        self.assertIn("raw_score", recorded["score_components"])
+        self.assertIn("weak_gates", recorded)
+        self.assertIn("confirmation_count", recorded)
+        self.assertIn("Weak Tier Reachability", render_markdown(report))
+        json.dumps(report, allow_nan=False)
 
     def test_observation_keeps_indicator_inputs_separate_from_outcomes(self):
         original = features()

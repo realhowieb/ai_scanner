@@ -76,11 +76,19 @@ def diagnose_row(features: dict[str, Any], *, profile: str = "production_v1",
         "confirmation_gate": (adx is not None and adx >= 20) or (rvol is not None and rvol >= 1.5),
         "conflict_gate": len(conflicts) <= 1,
     }
+    weak_threshold = 35 if profile == "rejected_v2" else 40
+    weak_gates = {
+        "low_score": score is not None and score < weak_threshold,
+        "low_agreement": agreement is not None and agreement < 0.55,
+        "low_rvol": rvol is not None and rvol < 1,
+        "many_conflicts": len(conflicts) >= 3,
+    }
+    strong_before_conflict = all(value for name, value in gates.items() if name != "conflict_gate")
+    weak_before_conflict = any(value for name, value in weak_gates.items() if name != "many_conflicts")
     if quality is None and profile == "rejected_v2":
         quality = ("insufficient" if agreement is None or score is None else
                    "strong" if all(gates.values()) else
-                   "weak" if score < 35 or agreement < 0.55 or
-                   (rvol is not None and rvol < 1) or len(conflicts) >= 3 else "developing")
+                   "weak" if any(weak_gates.values()) else "developing")
     return {
         "score": score, "direction": direction, "agreement": agreement,
         "directional_signals": len(votes),
@@ -88,14 +96,46 @@ def diagnose_row(features: dict[str, Any], *, profile: str = "production_v1",
         "adx": adx, "rvol": rvol,
         "adx_confirmed": adx is not None and adx >= 20,
         "rvol_confirmed": rvol is not None and rvol >= 1.5,
+        "confirmation_count": int(adx is not None and adx >= 20) + int(rvol is not None and rvol >= 1.5),
         "confirmation_status": ("both" if adx is not None and adx >= 20 and rvol is not None and rvol >= 1.5
                                 else "adx_only" if adx is not None and adx >= 20
                                 else "rvol_only" if rvol is not None and rvol >= 1.5 else "neither"),
         "conflict_count": len(conflicts), "conflicts": conflicts,
         "quality": quality if quality is not None else di.classify_setup_quality(features),
         "gates": gates,
+        "weak_gates": weak_gates,
+        "strong_before_conflict": strong_before_conflict,
+        "weak_before_conflict": weak_before_conflict,
+        "weak_eligible": any(weak_gates.values()),
         "score_components": components,
     }
+
+
+def _quantile(values: list[float], fraction: float) -> float | None:
+    values = sorted(values)
+    if not values:
+        return None
+    position = (len(values) - 1) * fraction
+    lower = int(position)
+    share = position - lower
+    return values[lower] * (1 - share) + values[min(lower + 1, len(values) - 1)] * share
+
+
+def _score_distribution(rows: list[dict[str, Any]], key: str) -> dict[str, Any]:
+    values = [r["score_components"].get("raw_score") if key == "raw" else r.get("score") for r in rows]
+    values = [v for v in values if v is not None]
+    frequencies = Counter(values)
+    return {"count": len(values), "min": min(values) if values else None,
+            "median": _quantile(values, 0.5), "p75": _quantile(values, 0.75),
+            "p90": _quantile(values, 0.9), "p95": _quantile(values, 0.95),
+            "max": max(values) if values else None,
+            "most_common": frequencies.most_common(10)}
+
+
+def _example(row: dict[str, Any]) -> dict[str, Any]:
+    return {key: row.get(key) for key in ("timestamp", "ticker", "direction", "score",
+                                         "agreement", "confirmation_count", "conflicts", "quality",
+                                         "gates", "weak_gates")}
 
 
 def _distribution(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -185,8 +225,48 @@ def summarize(rows: list[dict[str, Any]], *, profile: str = "production_v1") -> 
                 if name in r["score_components"].get("subscores", {})]
         subscore_summary[name] = {"present": len(vals), "median": median(vals) if vals else None,
                                   "capped": sum(value == 1 for value in vals)}
+    raw_threshold = _quantile([r["score_components"]["raw_score"] for r in directional
+                               if r["score_components"]], 0.75)
+    high_raw = [r for r in directional if r["score_components"] and
+                r["score_components"]["raw_score"] >= raw_threshold]
+    high_blockers = Counter(name for r in high_raw for name, passed in r["gates"].items() if not passed)
+    high_combinations = Counter(tuple(name for name, passed in r["gates"].items() if not passed)
+                                for r in high_raw)
+    weak_counts = Counter(name for r in directional for name, passed in r["weak_gates"].items() if passed)
+    component_fingerprints = Counter(
+        (tuple(sorted(r["score_components"]["subscores"].items())),
+         r["score_components"]["available_weight"], r["score_components"]["conflict_penalty"])
+        for r in pileup)
+    input_fingerprints = Counter(
+        tuple((name, r.get("diagnostic_inputs", {}).get(name)) for name in INPUTS)
+        for r in pileup)
+    examples = {}
+    for label, predicate in (
+        ("would_be_strong", lambda r: r["strong_before_conflict"] and not r["gates"]["conflict_gate"]),
+        ("developing", lambda r: r["quality"] == "developing"),
+        ("weak", lambda r: r["weak_eligible"]),
+    ):
+        examples[label] = [_example(r) for r in directional if predicate(r)][:3]
     return {"status": "OK", "profile": profile, "directional_n": n,
             "quality": dict(Counter(r["quality"] for r in directional)),
+            "score_distribution": {"raw": _score_distribution(directional, "raw"),
+                                   "final": _score_distribution(directional, "final")},
+            "directional_signal_count": dict(Counter(r["directional_signals"] for r in directional)),
+            "agreeing_signal_count": dict(Counter(r["agreeing_signals"] for r in directional)),
+            "confirmation_count": dict(Counter(r["confirmation_count"] for r in directional)),
+            "conflict_count": dict(Counter(r["conflict_count"] for r in directional)),
+            "confirmation_flags": {"adx": sum(r["adx_confirmed"] for r in directional),
+                                   "rvol": sum(r["rvol_confirmed"] for r in directional)},
+            "tier_before_conflict": {"strong": sum(r["strong_before_conflict"] for r in directional),
+                                     "weak": sum(r["weak_before_conflict"] for r in directional)},
+            "weak_gate_pass": {name: weak_counts[name] for name in ("low_score", "low_agreement", "low_rvol", "many_conflicts")},
+            "weak_eligible": sum(r["weak_eligible"] for r in directional),
+            "strong_and_weak_overlap": sum(all(r["gates"].values()) and r["weak_eligible"] for r in directional),
+            "high_raw_blockers": {"raw_p75": raw_threshold, "n": len(high_raw),
+                                  "individual": dict(high_blockers),
+                                  "combinations": [{"failed": list(combo), "count": count}
+                                                   for combo, count in high_combinations.most_common()]},
+            "examples": examples,
             "gate_pass": gate_pass, "gate_funnel": funnel,
             "rejection_reasons": blockers, "rejection_combinations": combinations,
             "conflict_distribution": {name: _distribution(group) for name, group in groups.items()},
@@ -201,4 +281,17 @@ def summarize(rows: list[dict[str, Any]], *, profile: str = "production_v1") -> 
                            "available_weight": dict(Counter(str(r["score_components"].get("available_weight")) for r in pileup)),
                            "raw_score_median": median(r["score_components"]["raw_score"] for r in pileup) if pileup else None,
                            "penalties": dict(Counter(r["score_components"].get("conflict_penalty") for r in pileup)),
-                           "common_signal_patterns": patterns.most_common(10)}}
+                           "common_signal_patterns": patterns.most_common(10),
+                           "unique_component_fingerprints": len(component_fingerprints),
+                           "unique_input_fingerprints": len(input_fingerprints),
+                           "most_common_component_fingerprints": [
+                               {"subscores": dict(fingerprint[0]), "available_weight": fingerprint[1],
+                                "penalty": fingerprint[2], "count": count}
+                               for fingerprint, count in component_fingerprints.most_common(10)],
+                           "most_common_input_fingerprints": [
+                               {"inputs": dict(fingerprint), "count": count}
+                               for fingerprint, count in input_fingerprints.most_common(5)],
+                           "representative_calculation": {
+                               "raw": pileup[0]["score_components"]["raw_score"],
+                               "penalty": pileup[0]["score_components"]["conflict_penalty"],
+                               "final": pileup[0]["score"]} if pileup else None}}
