@@ -126,6 +126,44 @@ class DeterminismTests(unittest.TestCase):
                          v.bucket_report(obs, horizons=("5m",), min_n=1))
 
 
+class FeatureCoverageTests(unittest.TestCase):
+    def _obs(self, inputs, **kw):
+        base = {"ticker": "NVDA", "diagnostic_inputs": inputs}
+        base.update(kw)
+        return base
+
+    def test_full_feature_vs_daily_missing(self):
+        full = {"chg_pct": 1.2, "gap_pct": 0.5, "rvol": 2.0, "vs_vwap_pct": 0.8,
+                "adx": 28, "supertrend_direction": "green", "ewo": 6}
+        fallback = {"chg_pct": 1.2, "gap_pct": None, "rvol": None, "vs_vwap_pct": 0.8,
+                    "adx": None, "supertrend_direction": None, "ewo": None}
+        cov = v.feature_coverage([
+            self._obs(full, feature_source="reconstruct"),
+            self._obs(fallback, feature_source="intraday_fallback"),
+        ])
+        self.assertEqual(cov["n"], 2)
+        self.assertEqual(cov["full_feature"]["count"], 1)
+        self.assertEqual(cov["daily_missing"]["count"], 1)  # all daily inputs None
+        self.assertEqual(cov["by_source"],
+                         {"reconstruct": 1, "intraday_fallback": 1})
+        self.assertEqual(cov["per_field"]["adx"]["present"], 1)
+        self.assertEqual(cov["per_field"]["chg_pct"]["present"], 2)
+
+    def test_nan_and_blank_count_as_missing(self):
+        row = {"chg_pct": float("nan"), "gap_pct": 0.5, "rvol": 2.0,
+               "vs_vwap_pct": 0.8, "adx": 28, "supertrend_direction": "  ", "ewo": 6}
+        cov = v.feature_coverage([self._obs(row)])
+        self.assertEqual(cov["per_field"]["chg_pct"]["present"], 0)  # NaN
+        self.assertEqual(cov["per_field"]["supertrend_direction"]["present"], 0)  # blank
+        self.assertEqual(cov["full_feature"]["count"], 0)
+        self.assertEqual(cov["by_source"], {"unknown": 1})
+
+    def test_empty_is_safe(self):
+        cov = v.feature_coverage([])
+        self.assertEqual(cov["n"], 0)
+        self.assertIsNone(cov["full_feature"]["pct"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

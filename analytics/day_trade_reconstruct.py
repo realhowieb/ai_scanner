@@ -163,6 +163,7 @@ def reconstruct_observations(
                 "direction": intel["direction"], "score": intel["score"],
                 "setup_quality": intel["quality"], "conflicts": intel["conflicts"],
                 "diagnostic_inputs": dict(feat),
+                "feature_source": "reconstruct",
             }
             rets = forward_returns(closes[i:], 0, HORIZONS)
             for h, r in rets.items():

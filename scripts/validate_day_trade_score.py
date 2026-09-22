@@ -62,7 +62,11 @@ def build_observation(*, timestamp: str, ticker: str, features: Dict[str, Any],
 
 def build_report(observations: List[Dict[str, Any]], *, min_n: int = 10) -> Dict[str, Any]:
     """Aggregate observations into the validation report structure (pure)."""
-    from analytics.day_trade_validation import bucket_report, score_distribution
+    from analytics.day_trade_validation import (
+        bucket_report,
+        feature_coverage,
+        score_distribution,
+    )
 
     horizons = tuple(HORIZONS.keys())
     directional = [o for o in observations if str(o.get("direction")) in ("bullish", "bearish")]
@@ -84,6 +88,7 @@ def build_report(observations: List[Dict[str, Any]], *, min_n: int = 10) -> Dict
     return {
         "sample_size": len(observations),
         "directional_n": len(directional),
+        "feature_coverage": feature_coverage(observations),
         "score_distribution": score_distribution([o.get("score") for o in observations]),
         "by_score_bucket": bucket_report(observations, horizons=horizons, min_n=min_n),
         "bullish": bucket_report(bull, horizons=horizons, min_n=min_n),
@@ -126,8 +131,10 @@ def minute_bars_to_observations(symbol: str, bars: Sequence[Dict[str, Any]],
             "gap_pct": None, "adx": None, "rvol": None,
             "supertrend_direction": None, "ewo": None,
         }
-        obs.append(build_observation(timestamp=str(b.get("t")), ticker=symbol,
-                                     features=feat, prices_after=closes[i:]))
+        o = build_observation(timestamp=str(b.get("t")), ticker=symbol,
+                              features=feat, prices_after=closes[i:])
+        o["feature_source"] = "intraday_fallback"
+        obs.append(o)
     return obs
 
 
@@ -225,7 +232,18 @@ def main() -> int:
     (out_dir / "day_trader_validation.json").write_text(json.dumps(report, indent=2, default=str))
     _write_markdown(out_dir / "day_trader_validation.md", report)
     print(f"[validate_day_trade_score] status={report['status']} -> {out_dir}")
+    cov = report.get("feature_coverage")
+    if cov:
+        ff, dm = cov.get("full_feature", {}), cov.get("daily_missing", {})
+        print(f"[validate_day_trade_score] coverage: n={cov.get('n')} "
+              f"full_feature={ff.get('count')} ({_pct1(ff.get('pct'))}) "
+              f"daily_missing={dm.get('count')} ({_pct1(dm.get('pct'))}) "
+              f"by_source={cov.get('by_source')}")
     return 0
+
+
+def _pct1(x: Optional[float]) -> str:
+    return "n/a" if x is None else f"{x * 100:.1f}%"
 
 
 def _run32_parameters() -> Dict[str, Any]:
@@ -251,8 +269,25 @@ def _write_markdown(path: Path, report: Dict[str, Any]) -> None:
     else:
         d = report.get("score_distribution", {})
         lines += ["", f"Sample: **{report.get('sample_size')}** "
-                  f"(directional {report.get('directional_n')})", "",
-                  "## Score distribution",
+                  f"(directional {report.get('directional_n')})", ""]
+        cov = report.get("feature_coverage") or {}
+        if cov:
+            ff, dm = cov.get("full_feature", {}), cov.get("daily_missing", {})
+            lines += [
+                "## Feature coverage (fidelity)",
+                f"Full-feature (all 7 inputs present): **{ff.get('count')}** "
+                f"({_pct1(ff.get('pct'))}) · "
+                f"daily-missing (intraday-only fallback): **{dm.get('count')}** "
+                f"({_pct1(dm.get('pct'))})",
+                f"By source: {cov.get('by_source')}",
+                "",
+                "| Field | Present | % |",
+                "| --- | ---: | ---: |",
+            ]
+            for f, s in (cov.get("per_field") or {}).items():
+                lines.append(f"| {f} | {s.get('present')} | {_pct1(s.get('pct'))} |")
+            lines.append("")
+        lines += ["## Score distribution",
                   f"mean {d.get('mean')} · median {d.get('median')} · std {d.get('std')} · "
                   f"P10 {d.get('p10')} · P90 {d.get('p90')}", "",
                   "## By score bucket (direction-aware)",

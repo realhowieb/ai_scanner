@@ -194,3 +194,78 @@ def spearman(xs: Sequence[float], ys: Sequence[float]) -> Optional[float]:
     if vx == 0 or vy == 0:
         return None
     return cov / (vx * vy)
+
+
+# --- Feature coverage (parity/fidelity accounting) ---------------------------
+# The seven Run 32 classifier inputs. Kept in sync with build_observation's
+# diagnostic_inputs and analytics.day_trade_intel.
+COVERAGE_FIELDS = ("chg_pct", "gap_pct", "rvol", "vs_vwap_pct",
+                   "adx", "supertrend_direction", "ewo")
+# Daily-derived inputs. When these are all missing the observation came from the
+# intraday-only fallback (no daily-indicator reconstruction), NOT a full-feature
+# row. Distinguishing the two is what the Run 33 harness bug obscured.
+_DAILY_FIELDS = ("adx", "supertrend_direction", "ewo", "gap_pct", "rvol")
+
+
+def _present(value: Any) -> bool:
+    """A feature is 'present' when it is a real, usable value (not None/NaN)."""
+    if value is None:
+        return False
+    if isinstance(value, float) and value != value:  # NaN
+        return False
+    if isinstance(value, str):
+        return value.strip() != ""
+    return True
+
+
+def feature_coverage(observations: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Per-field presence + full-fidelity accounting for a set of observations.
+
+    Reads each observation's ``diagnostic_inputs`` (the Run 32 inputs the score
+    was actually computed from) and optional ``feature_source`` tag. Returns:
+      * ``per_field``   — present count / pct for each of the 7 classifier inputs
+      * ``full_feature`` — rows with ALL 7 inputs present (true full fidelity)
+      * ``daily_missing`` — rows with EVERY daily-derived input missing
+        (intraday-only fallback; the classifier renormalizes but cannot fire
+        Strong, which needs ADX/RVOL confirmation)
+      * ``by_source``   — counts grouped by the loader path that built the row
+      * ``by_symbol``   — per-ticker full-feature / fallback share
+    Pure: no I/O, no scoring, no future data. Read-only accounting.
+    """
+    n = len(observations)
+    per_field = {f: 0 for f in COVERAGE_FIELDS}
+    full = 0
+    daily_missing = 0
+    by_source: Dict[str, int] = {}
+    by_symbol: Dict[str, Dict[str, int]] = {}
+
+    for o in observations:
+        inputs = o.get("diagnostic_inputs") or {}
+        present = {f: _present(inputs.get(f)) for f in COVERAGE_FIELDS}
+        for f, ok in present.items():
+            if ok:
+                per_field[f] += 1
+        is_full = all(present.values())
+        if is_full:
+            full += 1
+        if not any(present[f] for f in _DAILY_FIELDS):
+            daily_missing += 1
+        src = str(o.get("feature_source") or "unknown")
+        by_source[src] = by_source.get(src, 0) + 1
+        sym = str(o.get("ticker") or "?")
+        rec = by_symbol.setdefault(sym, {"n": 0, "full_feature": 0, "daily_missing": 0})
+        rec["n"] += 1
+        rec["full_feature"] += int(is_full)
+        rec["daily_missing"] += int(not any(present[f] for f in _DAILY_FIELDS))
+
+    def _pct(x: int) -> Optional[float]:
+        return (x / n) if n else None
+
+    return {
+        "n": n,
+        "per_field": {f: {"present": c, "pct": _pct(c)} for f, c in per_field.items()},
+        "full_feature": {"count": full, "pct": _pct(full)},
+        "daily_missing": {"count": daily_missing, "pct": _pct(daily_missing)},
+        "by_source": by_source,
+        "by_symbol": by_symbol,
+    }
