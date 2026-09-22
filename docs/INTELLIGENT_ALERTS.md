@@ -11,7 +11,12 @@ changed, and how urgently to surface it.**
 > created.
 
 Engine: `analytics/opportunity_view.py` (pure, deterministic, tested). Thin
-Streamlit surface: `ui/opportunity_feed.py`. Both read a canonical Run 36
+Streamlit surface: `ui/opportunity_feed.py`.
+
+**Mounted (Run 41):** the feed is live in **Market Brief** as the "🔔 Intelligent
+Alerts" section (`ui/market_brief.py::render_intelligent_alerts`), reusing this
+engine via `analytics/market_brief_view.py` — no duplicated logic. See
+[MARKET_BRIEF.md](MARKET_BRIEF.md). Both read a canonical Run 36
 observation (as produced by Run 38A production capture), so the feed integrates
 naturally with the accumulating research dataset.
 

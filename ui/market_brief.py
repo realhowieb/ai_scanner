@@ -322,6 +322,79 @@ def _render_watchlist_opportunity_matches(compared: List[Dict[str, Any]], user: 
 
 # --------------------------------- render ------------------------------------
 
+def _watched_set(user: str) -> set:
+    """Best-effort set of the user's watchlist tickers (never raises)."""
+    try:
+        from db.watchlists import get_watchlist_tickers, list_watchlists
+        out = set()
+        for wl in (list_watchlists(user) or []):
+            for t in (get_watchlist_tickers(wl.get("id"), user) or []):
+                out.add(str(t).upper())
+        return out
+    except Exception:
+        return set()
+
+
+def render_intelligent_alerts(data: Dict[str, Any], user: str) -> None:
+    """Run 40 Intelligent Opportunity Feed, mounted in Market Brief (Run 41).
+
+    Reuses analytics.opportunity_view (Run 40) + analytics.market_brief_view. No
+    new scoring, no Opportunity Score — Alert Priority is an attention signal, not
+    a prediction. Fully guarded: never breaks the page."""
+    if st is None:
+        return
+    try:
+        from analytics import market_brief_view as mb
+        from analytics import opportunity_view as ov
+        from ui.opportunities import build_opportunities
+        from ui.opportunity_feed import _render_card
+
+        opps = build_opportunities(data, base_ticker=_base_ticker, top_n=12) or []
+        watchlist = _watched_set(user)
+        prior_opps = st.session_state.get("_brief_prior_opps") or {}
+        views = mb.build_top_opportunity_views(
+            opps, watchlist=watchlist, prior_by_ticker=prior_opps, top_n=6)
+
+        st.markdown("### 🔔 Intelligent Alerts")
+        st.caption("What HSF sees right now and why. **Alert Priority is an "
+                   "attention signal, not a prediction of return.**")
+
+        # What Changed (state transitions vs the previous brief view).
+        regime = st.session_state.get("_last_market_regime")
+        cur_state = mb.summarize_brief_state(views, breadth=data.get("breadth"), regime=regime)
+        changes = mb.diff_brief_state(cur_state, st.session_state.get("_brief_prior_state"))
+        if changes:
+            st.markdown("**What changed**")
+            for c in changes[:5]:
+                st.markdown(f"- {c}")
+
+        if not views:
+            high = sum(1 for v in views if v.get("alert_priority") == "HIGH")
+            st.info(ov.empty_state_message(scanned=None, detected=len(opps),
+                                           high_priority=high)
+                    or "No opportunities detected in the latest snapshot.")
+        else:
+            for v in views:
+                with st.container():
+                    _render_card(st, v)
+                    st.divider()
+            # Watchlist intelligence (only meaningful surfaced events).
+            events = mb.build_watchlist_events(views)
+            if events:
+                st.markdown("**★ Your watchlist**")
+                for e in events:
+                    st.markdown(f"- **{e['symbol']}** — {e['state']} · "
+                                f"{e['primary_setup']} ({e['priority']})")
+
+        # Persist current state/opps for the next render's change detection.
+        st.session_state["_brief_prior_state"] = cur_state
+        st.session_state["_brief_prior_opps"] = {
+            str(o.get("ticker") or "").upper(): o for o in opps}
+    except Exception:
+        # Optional intelligence layer must never break the brief.
+        pass
+
+
 def render_market_brief() -> None:
     """Render the actionable market brief. Never raises."""
     if st is None:
@@ -357,6 +430,8 @@ def render_market_brief() -> None:
     # A. Market state — regime + compact metrics + freshness.
     render_market_header(data, phase)
     _render_claude_narrative(data)
+    # A2. Intelligent Alerts — Run 40 opportunity feed (why/changed/risk/priority).
+    render_intelligent_alerts(data, user)
     # B. Since last scan — only meaningful changes, only when history exists.
     render_since_last_scan(compared, previous)
     # C / D. Top Opportunities (score movement + status transitions) + detail.
