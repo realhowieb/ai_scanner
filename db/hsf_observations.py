@@ -139,6 +139,66 @@ def save_observation(observation: Dict[str, Any], *, conn=None) -> bool:
                 pass
 
 
+def save_observations_batch(observations, *, conn=None) -> Dict[str, int]:
+    """Persist many observations over ONE connection/transaction (Run 38A).
+
+    First-write-wins per observation_id (idempotent). Returns
+    {"attempted","written","duplicates","failed"}. Non-fatal: a per-row error is
+    counted, never raised, and never aborts the scan. Batching one connection +
+    one commit keeps overhead bounded vs a connection-per-symbol.
+    """
+    obs = [o for o in (observations or []) if o and o.get("observation_id")]
+    stats = {"attempted": len(observations or []), "written": 0,
+             "duplicates": 0, "failed": 0}
+    if not obs:
+        return stats
+    c, opened, is_sqlite = _resolve_conn(conn)
+    if c is None:
+        stats["failed"] = stats["attempted"]
+        return stats
+    try:
+        _ensure_schema(c, is_sqlite)
+        cur = c.cursor()
+        ph = _ph(is_sqlite)
+        cast = "" if is_sqlite else "::jsonb"
+        sql = (f"INSERT INTO hsf_observations "
+               f"(observation_id, symbol, timestamp, context, schema_version, record) "
+               f"VALUES ({ph},{ph},{ph},{ph},{ph},{ph}{cast}) "
+               f"ON CONFLICT (observation_id) DO NOTHING")
+        for o in obs:
+            try:
+                cur.execute(sql, (
+                    str(o.get("observation_id")),
+                    str(o.get("symbol") or "").upper(),
+                    str(o.get("timestamp")),
+                    str(o.get("context") or "default"),
+                    str(o.get("schema_version") or ""),
+                    json.dumps(o),
+                ))
+                if cur.rowcount == 1:
+                    stats["written"] += 1
+                else:
+                    stats["duplicates"] += 1
+            except Exception:
+                stats["failed"] += 1
+                try:
+                    c.rollback()
+                except Exception:
+                    pass
+        c.commit()
+        cur.close()
+        return stats
+    except Exception:
+        stats["failed"] = stats["attempted"] - stats["written"] - stats["duplicates"]
+        return stats
+    finally:
+        if opened:
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
 def save_outcome(outcome: Dict[str, Any], *, conn=None) -> bool:
     """Idempotently persist one outcome for (observation_id, horizon). First write
     wins — never rewrites the observation. Returns True only on a NEW row."""

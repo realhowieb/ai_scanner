@@ -70,6 +70,14 @@ No result is fabricated: horizons/scanners without matured data report `None` /
 `INSUFFICIENT_DATA`. In an environment without the production DB, the script
 emits `{"status": "INSUFFICIENT_DATA", "n_records": 0}`.
 
+**Update (Run 38A):** scheduled scans now capture per-scanner canonical
+observations (see [PRODUCTION_OBSERVATION_CAPTURE.md](PRODUCTION_OBSERVATION_CAPTURE.md)),
+and once the maturation worker is scheduled the scoreboard's
+`from_canonical_observations` adapter will feed it real multi-scanner intraday
+data. The clock has started; the scoreboard should be rerun only once enough
+**matured, clean, complete** production observations have accumulated (see that
+doc's caveat that scheduled breakout observations are currently PARTIAL quality).
+
 ## Running it
 
 ```bash

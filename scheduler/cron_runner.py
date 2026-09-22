@@ -341,6 +341,35 @@ def run_and_save(
         )
         print(f"Saved {row_count} rows for {universe}.")
 
+        # Canonical observation capture (Run 38A). SIDE-EFFECT ONLY: observes the
+        # completed scan and persists per-scanner canonical observations for
+        # future research. Never changes results/ranking; fully non-fatal — any
+        # failure is logged and the scan continues unchanged. Kill switch:
+        # HSF_OBSERVATION_CAPTURE=0. Dry-run: HSF_OBSERVATION_CAPTURE_DRYRUN=1.
+        if os.getenv("HSF_OBSERVATION_CAPTURE", "1").strip() != "0":
+            try:
+                from analytics.observation_capture import (
+                    capture_scan_observations,
+                    render_capture_text,
+                )
+
+                rows = results.to_dict("records") if hasattr(results, "to_dict") else list(results)
+                cap = capture_scan_observations(
+                    rows,
+                    universe=universe,
+                    scan_timestamp=scan_started_at,
+                    session=_resolve_session(),
+                    universe_version=universe,
+                    scan_id=scan_started_at.isoformat(),
+                    coverage=coverage_report_obj,
+                    dry_run=os.getenv("HSF_OBSERVATION_CAPTURE_DRYRUN", "0").strip() == "1",
+                )
+                print(render_capture_text(cap))
+                _write_coverage_artifact(f"{universe}_capture", cap)
+            except Exception as e:
+                print(f"[observation_capture] failed for {universe}: {e}")
+                _capture(e)
+
         automation_export = None
         try:
             from integrations.automation_export import publish_scan_results

@@ -127,8 +127,12 @@ Dual-backend (Neon JSONB / SQLite TEXT), idempotent, non-fatal. Two tables:
 `save_observation`, `save_outcome`, `load_observation` (rehydrates outcomes),
 `load_recent_observations`. Accepts an explicit `conn` for tests.
 
-**Not called by any live path** — production behavior is unchanged. Wiring the
-scheduled cron pipeline to `save_observation` is deferred to Run 37 (below).
+**Activated for scheduled scans in Run 38A** — `scheduler.cron_runner.run_and_save`
+now captures per-scanner observations (side-effect only, non-fatal, hour-bucketed
+dedupe) via `analytics.observation_capture` + `save_observations_batch`. See
+[PRODUCTION_OBSERVATION_CAPTURE.md](PRODUCTION_OBSERVATION_CAPTURE.md). Manual/UI
+paths remain intentionally uncaptured. Outcome maturation worker
+(`scripts/mature_observations.py`) is ready but not yet scheduled.
 
 ## 7. Versioning strategy
 
