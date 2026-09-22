@@ -121,5 +121,6 @@ jobs:
           path: |
             artifacts/automation/latest_scan.json
             artifacts/automation/status.json
+            artifacts/automation/coverage_*.json
             artifacts/automation/history/**/*.json
           if-no-files-found: warn

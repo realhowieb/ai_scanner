@@ -404,6 +404,7 @@ def run_breakout_scan(
     snapshot_id: str | None = None,
     snapshot_loader: SnapshotLoader | None = None,
     snapshot_saver: SnapshotSaver | None = None,
+    coverage_sink: dict | None = None,
 ) -> pd.DataFrame:
     """Public entry point for breakout scans.
 
@@ -653,6 +654,24 @@ def run_breakout_scan(
             _db_save_price_cache(price_data, diagnostics=diagnostics)
         except _ENGINE_BOUNDARY_ERRORS as e:
             _diag_exception(diagnostics, "DB cache save wrapper skipped", e)
+
+    # Coverage instrumentation (Run 37): capture how much of the requested
+    # universe actually got price data, plus per-symbol skip reasons. Opt-in via
+    # `coverage_sink`; default None => no behavior change. SPY (added for RS) is
+    # excluded so counts reflect the caller's universe.
+    if coverage_sink is not None:
+        try:
+            price_success = len([k for k in price_data if k != "SPY"])
+            skips = [s for s in provider_skipped
+                     if not (isinstance(s, (tuple, list)) and s
+                             and str(s[0]).upper() == "SPY")]
+            coverage_sink.update({
+                "attempted": max(0, total_requested - (1 if "SPY" in tickers_plus_spy else 0)),
+                "price_success": price_success,
+                "skipped": list(skips),
+            })
+        except _ENGINE_BOUNDARY_ERRORS as e:
+            _diag_exception(diagnostics, "coverage_sink population skipped", e)
 
     # Heartbeat before the breakout stage so users don't think the app froze.
     try:

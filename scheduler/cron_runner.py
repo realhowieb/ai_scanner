@@ -13,6 +13,20 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 SUMMARY_PATH = ROOT / "artifacts" / "scheduled_scan_summary.json"
+COVERAGE_DIR = ROOT / "artifacts" / "automation"
+
+
+def _write_coverage_artifact(universe: str, report: dict) -> None:
+    """Persist the coverage/health report as an artifact (Run 37). Best-effort;
+    mirrors the automation export's artifacts/automation location so the existing
+    scheduled-scans workflow uploads it. Never raises."""
+    try:
+        COVERAGE_DIR.mkdir(parents=True, exist_ok=True)
+        safe = "".join(c for c in str(universe).lower() if c.isalnum() or c in "-_") or "scan"
+        (COVERAGE_DIR / f"coverage_{safe}.json").write_text(
+            json.dumps(report, indent=2, default=str))
+    except Exception:
+        pass
 
 # Report best-effort task failures to Sentry when configured (no-op otherwise),
 # so silently-swallowed cron problems still get counted somewhere.
@@ -236,8 +250,10 @@ def run_and_save(
 
         scan_started_at = dt.datetime.now(dt.timezone.utc)
         started = time.perf_counter()
+        coverage_sink: dict = {}
         results = run_breakout_scan(
             tickers,
+            coverage_sink=coverage_sink,
             premarket=premarket,
             afterhours=afterhours,
             unusual_volume=unusual_volume,
@@ -258,6 +274,41 @@ def run_and_save(
 
         run_name = f"{universe} | {row_count} results | {duration:.1f}s"
         print(f"Scan completed: {run_name}")
+
+        # Coverage & data-health report (Run 37). Best-effort; never affects the
+        # scan/save outcome. Generated even for throttled/partial runs so a
+        # degraded scan is observable rather than silent.
+        coverage_report_obj = None
+        try:
+            from analytics.coverage import (
+                build_coverage_funnel,
+                classify_health,
+                coverage_report,
+            )
+
+            eligible = len(tickers)
+            expected = eligible + int(dropped_untradable)
+            price_success = int(coverage_sink.get("price_success", 0))
+            funnel = build_coverage_funnel(
+                universe_version=universe,
+                expected=expected,
+                eligible=eligible,
+                attempted=int(coverage_sink.get("attempted", eligible)),
+                price_success=price_success,
+                skipped=coverage_sink.get("skipped") or [],
+                results=row_count,
+                scan_started_at=scan_started_at,
+                scan_completed_at=completed_at,
+                market_session=_resolve_session(),
+                duration_sec=duration,
+            )
+            health = classify_health(funnel)
+            coverage_report_obj = coverage_report(funnel, health)
+            print(coverage_report_obj["text"])
+            _write_coverage_artifact(universe, coverage_report_obj)
+        except Exception as e:
+            print(f"[coverage] report failed for {universe}: {e}")
+            _capture(e)
 
         # Guard: a large universe returning almost nothing means the price fetch
         # was throttled/failed. Don't overwrite a good snapshot with garbage —
@@ -303,8 +354,8 @@ def run_and_save(
                 completed_at_utc=completed_at,
                 duration_seconds=duration,
                 symbols_requested=len(tickers),
-                symbols_processed=None,
-                symbols_skipped=None,
+                symbols_processed=coverage_sink.get("price_success"),
+                symbols_skipped=len(coverage_sink.get("skipped") or []) or None,
                 dropped_untradable=int(dropped_untradable),
                 retention_days=int(os.getenv("AUTOMATION_HISTORY_DAYS", "30")),
             )
