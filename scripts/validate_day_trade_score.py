@@ -85,10 +85,13 @@ def build_report(observations: List[Dict[str, Any]], *, min_n: int = 10) -> Dict
             out[f"avg_dir_return_{h}"] = (sum(vals) / len(vals)) if vals else None
         return out
 
+    from analytics.day_trade_parity import parity_summary
+
     return {
         "sample_size": len(observations),
         "directional_n": len(directional),
         "feature_coverage": feature_coverage(observations),
+        "parity_diagnostics": parity_summary(observations),
         "score_distribution": score_distribution([o.get("score") for o in observations]),
         "by_score_bucket": bucket_report(observations, horizons=horizons, min_n=min_n),
         "bullish": bucket_report(bull, horizons=horizons, min_n=min_n),
@@ -229,6 +232,14 @@ def main() -> int:
         (out_dir / "dt_tier_diagnostic.json").write_text(json.dumps(tier_report, indent=2, allow_nan=False) + "\n")
         (out_dir / "dt_tier_diagnostic.md").write_text(render_markdown(tier_report))
 
+        # Per-observation parity records (Run 34) — makes incomplete-data rows
+        # obvious. Capped so the artifact stays a reasonable size.
+        from analytics.day_trade_parity import parity_record
+
+        with (out_dir / "dt_parity_records.jsonl").open("w") as fh:
+            for o in observations[:20000]:
+                fh.write(json.dumps(parity_record(o), default=str) + "\n")
+
     (out_dir / "day_trader_validation.json").write_text(json.dumps(report, indent=2, default=str))
     _write_markdown(out_dir / "day_trader_validation.md", report)
     print(f"[validate_day_trade_score] status={report['status']} -> {out_dir}")
@@ -287,6 +298,27 @@ def _write_markdown(path: Path, report: Dict[str, Any]) -> None:
             for f, s in (cov.get("per_field") or {}).items():
                 lines.append(f"| {f} | {s.get('present')} | {_pct1(s.get('pct'))} |")
             lines.append("")
+        par = report.get("parity_diagnostics") or {}
+        if par:
+            c = par.get("coverage", {})
+            lines += [
+                "## Parity diagnostics (Run 34)",
+                f"full_feature **{c.get('full_feature', {}).get('count')}** "
+                f"({_pct1(c.get('full_feature', {}).get('pct'))}) · "
+                f"partial **{c.get('partial', {}).get('count')}** "
+                f"({_pct1(c.get('partial', {}).get('pct'))}) · "
+                f"fallback **{c.get('fallback', {}).get('count')}** "
+                f"({_pct1(c.get('fallback', {}).get('pct'))})",
+                "",
+                f"- directional_vote_count: {par.get('directional_vote_count')}",
+                f"- agreement: {par.get('agreement')}",
+                f"- confirmation: {par.get('confirmation')}",
+                f"- conflict_count: {par.get('conflict_count')}",
+                f"- conflict_reasons: {par.get('conflict_reasons')}",
+                f"- quality_tier: {par.get('quality_tier')}",
+                f"- direction: {par.get('direction')}",
+                "",
+            ]
         lines += ["## Score distribution",
                   f"mean {d.get('mean')} · median {d.get('median')} · std {d.get('std')} · "
                   f"P10 {d.get('p10')} · P90 {d.get('p90')}", "",

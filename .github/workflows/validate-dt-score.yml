@@ -91,3 +91,6 @@ jobs:
             artifacts/day_trader_validation.md
             artifacts/dt_tier_diagnostic.json
             artifacts/dt_tier_diagnostic.md
+            artifacts/dt_parity_records.jsonl
+            artifacts/dt_tier_diagnostic.json
+            artifacts/dt_tier_diagnostic.md
