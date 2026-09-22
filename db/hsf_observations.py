@@ -281,6 +281,41 @@ def load_observation(observation_id: str, *, conn=None) -> Optional[Dict[str, An
                 pass
 
 
+def load_observations_for_symbol(symbol: str, *, limit: int = 500,
+                                 conn=None) -> List[Dict[str, Any]]:
+    """Bounded query for one symbol's observations (Run 43 replay, Task 25).
+    Newest first; non-fatal; [] if DB unavailable. Rehydrates attached outcomes
+    per observation so replay can display them separately."""
+    c, opened, is_sqlite = _resolve_conn(conn)
+    if c is None:
+        return []
+    try:
+        _ensure_schema(c, is_sqlite)
+        cur = c.cursor()
+        ph = _ph(is_sqlite)
+        cur.execute(f"SELECT observation_id, record FROM hsf_observations "
+                    f"WHERE symbol = {ph} ORDER BY timestamp DESC LIMIT {ph}",
+                    (str(symbol).upper(), int(limit)))
+        rows = cur.fetchall() or []
+        cur.close()
+        out = []
+        for r in rows:
+            oid = r[0] if not isinstance(r, dict) else list(r.values())[0]
+            rec = _loads(r[1] if not isinstance(r, dict) else list(r.values())[1])
+            if rec:
+                rec["_observation_id"] = oid
+                out.append(rec)
+        return out
+    except Exception:
+        return []
+    finally:
+        if opened:
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
 def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
                              conn=None) -> List[Dict[str, Any]]:
     """Most recent observations (newest first). Non-fatal; [] if DB unavailable."""

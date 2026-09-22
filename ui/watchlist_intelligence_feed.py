@@ -125,6 +125,18 @@ def render_watchlist_intelligence(user: str, *, session: Optional[str] = None) -
                 for e in feed_events:
                     st.markdown(f"- **{e['symbol']}** — {e['change']}")
 
+        # Run 43: Historical Replay entry point (reachable from Watchlist).
+        with st.expander("📽️ Signal Timeline (historical replay)", expanded=False):
+            try:
+                from ui.historical_replay import render_historical_replay
+                syms = [v.get("symbol") for v in views if v.get("symbol")]
+                pick = st.selectbox("Replay symbol", syms, key="wl_replay_pick") \
+                    if syms else None
+                if pick:
+                    render_historical_replay(pick)
+            except Exception:
+                pass
+
         st.session_state["_watchlist_prior_rows"] = feed["rows_by_symbol"]
     except Exception:
         # Optional intelligence layer must never break basic watchlist.

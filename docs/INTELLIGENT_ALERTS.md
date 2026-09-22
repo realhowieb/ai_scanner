@@ -129,3 +129,5 @@ The view keeps scores namespaced and named: `prebreakout_probability`,
 labels agreement as confirmation/context and priority as an attention signal.
 
 **Watchlist (Run 42):** the same Run 40 engine powers the full Watchlist Intelligence page via `analytics/watchlist_view.py` — see [WATCHLIST_INTELLIGENCE.md](WATCHLIST_INTELLIGENCE.md). Market Brief shows the summary; the Watchlist page shows the detailed personal view, with consistent classifications.
+
+**Historical Replay (Run 43):** the same Run 40 view powers a per-symbol Signal Timeline replay of the canonical observation history — see [HISTORICAL_REPLAY.md](HISTORICAL_REPLAY.md).

@@ -110,3 +110,5 @@ research dataset.
 No Opportunity Score, no DT change, no scanner-threshold/trigger change, no ML
 retrain, no buy/sell language, no predictive claim from Alert Priority or scanner
 agreement, no Streamlit rewrite.
+
+**Historical Replay (Run 43):** each watchlist symbol has a "📽️ Signal Timeline" replay of its session history (`analytics/replay.py`, `ui/historical_replay.py`) — reuses the same Run 40 engine, with strict point-in-time integrity and outcomes shown separately. See [HISTORICAL_REPLAY.md](HISTORICAL_REPLAY.md).
