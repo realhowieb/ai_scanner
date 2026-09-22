@@ -105,7 +105,43 @@ harness writes per-observation records to `dt_parity_records.jsonl` and embeds
 
 ## Task 6 — held-out certification run
 
-See the "Certification run" section appended after the run completes.
+Window **2026-08-25 → 2026-09-12** (not used to tune DT Score), production v1,
+run [35687698315](https://github.com/realhowieb/ai_scanner/actions/runs/35687698315)
+on `dev`.
+
+- Observations: **9,279** · directional: **8,128**
+- Feature coverage: **full_feature 9,279 (100%)** · partial 0 · **fallback 0**
+- Source: `{reconstruct: 9,279}`
+
+DT Score: mean 20.8 · std 18.1 · P10 0.0 · P25 5.4 · **median 16.9** · P75 33.4 ·
+P90 48.2 · P95 56.0 · **max 75.2**
+
+Tiers: **Weak 8,987 · Developing 212 · Strong 80**
+Direction: Bullish 4,520 · Bearish 3,608 · Neutral 1,151
+Vote count: {2:12, 3:285, 4:3,187, 5:5,795} — dominated by 4–5 signals (full feature)
+Agreement: <0.55 1,151 · 0.55–0.69 3,118 · 0.70–0.79 1,056 · 0.80–0.99 1,722 · 1.00 2,232
+Confirmation: neither 5,375 · adx_only 3,755 · rvol_only 72 · both 77
+Conflict count: 0→81, 1→1,466, 2→2,217, 3→3,969, 4+→1,546
+Conflict reasons: Low participation 8,722 · Momentum disagreement 4,894 ·
+Mixed trend 4,384 · Weak trend strength 2,704 · Losing VWAP 2,500 · Gap fading 1,147
+
+### Comparison to the prior clean production-v1 run (2026-08-04 → 08-22)
+
+| Metric | Prior clean | Certification | 
+| --- | ---: | ---: |
+| Observations | 10,166 | 9,279 |
+| Full-feature % | 100% | 100% |
+| Fallback % | 0% | 0% |
+| median DT | 18.3 | 16.9 |
+| P90 | 48.3 | 48.2 |
+| P95 | 53.1 | 56.0 |
+| max | 76.3 | 75.2 |
+| Strong / Developing / Weak | 114 / 160 / 9,892 | 80 / 212 / 8,987 |
+
+The two independent full-feature held-out windows agree closely — no saturation,
+a stable spread (median ~17–18, P90 ~48, max ~75), tiers that separate with
+Strong firing. This reproducibility across periods is the core evidence for
+certification.
 
 ## Task 7 — ranked parity gaps
 
