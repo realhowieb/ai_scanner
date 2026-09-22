@@ -95,3 +95,7 @@ No Opportunity Score; DT untouched; scanner thresholds/triggers unchanged;
 PreBreakout/ML unchanged; no scanner tables copied wholesale (Market Brief
 summarizes and routes; deep-dive stays in the scanner pages); no predictive claim
 from scanner agreement.
+
+## Watchlist consistency (Run 42)
+
+Market Brief's "★ Your watchlist" and the Watchlist Intelligence page (`analytics/watchlist_view.py`, `ui/watchlist_intelligence_feed.py`) both derive lifecycle/priority/reasons from the same Run 40 `opportunity_view` engine, so the two never disagree. See [WATCHLIST_INTELLIGENCE.md](WATCHLIST_INTELLIGENCE.md).

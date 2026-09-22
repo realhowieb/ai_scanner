@@ -137,6 +137,16 @@ def render_personal_watchlist(user_id: str) -> None:
     from ui.design_system import render_page_header
 
     render_page_header("My Watchlist", "Personalized intelligence for the stocks you track.")
+
+    # Run 42: Run 40-based Watchlist Intelligence (monitoring view for every
+    # symbol). Additive + guarded — never breaks the existing watchlist below.
+    try:
+        from ui.watchlist_intelligence_feed import render_watchlist_intelligence
+        render_watchlist_intelligence(user)
+        st.markdown("---")
+    except Exception:
+        pass
+
     if not rows:
         _render_empty_watchlist(user)
         return

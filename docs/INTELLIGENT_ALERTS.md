@@ -127,3 +127,5 @@ can later be logged into the canonical dataset without new personal data.
 The view keeps scores namespaced and named: `prebreakout_probability`,
 `ai_confidence`, and `alert_priority` (attention, not probability). The renderer
 labels agreement as confirmation/context and priority as an attention signal.
+
+**Watchlist (Run 42):** the same Run 40 engine powers the full Watchlist Intelligence page via `analytics/watchlist_view.py` — see [WATCHLIST_INTELLIGENCE.md](WATCHLIST_INTELLIGENCE.md). Market Brief shows the summary; the Watchlist page shows the detailed personal view, with consistent classifications.
