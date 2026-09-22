@@ -191,7 +191,7 @@ def _render_latest_results_tab(
             try:
                 st.divider()
                 from ui.ai_summary import render_ai_summary
-                render_ai_summary(df)
+                render_ai_summary(df, context="latest_results")
             except RESULTS_TAB_ERRORS:
                 pass
             try:

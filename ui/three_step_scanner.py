@@ -360,7 +360,7 @@ def render_three_step_scanner() -> None:
             from ui.ai_summary import render_ai_summary
 
             if df is not None and len(df):
-                render_ai_summary(df)
+                render_ai_summary(df, context="three_step")
         except Exception:
             pass
 

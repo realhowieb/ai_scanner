@@ -81,24 +81,32 @@ def generate_scan_summary(df: pd.DataFrame) -> tuple[str | None, str | None]:
     )
 
 
-def render_ai_summary(df: pd.DataFrame) -> None:
-    """Streamlit UI block — button-gated, cached per scan in session_state."""
+def render_ai_summary(df: pd.DataFrame, *, context: str = "") -> None:
+    """Streamlit UI block — button-gated, cached per scan in session_state.
+
+    `context` namespaces the widget keys so the same summary can be rendered in
+    more than one place in a single run (e.g. the results tab AND the three-step
+    scanner) without colliding on Streamlit element keys.
+    """
     import streamlit as st
 
     st.markdown("#### 🧠 AI Scan Summary")
     st.caption("Claude reviews your top results and highlights the strongest setups.")
 
     fp = _results_fingerprint(df) if df is not None and len(df) else None
+    ns = f"{context}_{fp or 'none'}"
+    # Cache the SUMMARY per scan (shared across contexts); keep widget keys unique
+    # per context so two render sites in one run never collide.
     cache_key = f"_ai_summary_{fp}" if fp else None
 
     if cache_key and st.session_state.get(cache_key):
         st.markdown(st.session_state[cache_key])
-        if st.button("🔄 Regenerate", key=f"regen_{fp}"):
+        if st.button("🔄 Regenerate", key=f"regen_{ns}"):
             st.session_state.pop(cache_key, None)
             st.rerun()
         return
 
-    if st.button("✨ Generate AI summary", key=f"gen_{fp or 'none'}"):
+    if st.button("✨ Generate AI summary", key=f"gen_{ns}"):
         with st.spinner("Analyzing your scan results…"):
             summary, err = generate_scan_summary(df)
         if summary:

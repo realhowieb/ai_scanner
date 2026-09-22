@@ -56,6 +56,36 @@ class GenerateScanSummaryTest(unittest.TestCase):
         df = self._df()
         self.assertEqual(_results_fingerprint(df), _results_fingerprint(df.copy()))
 
+    def test_render_contexts_do_not_collide_on_keys(self):
+        # Regression: rendering the same df from two call sites in one run must
+        # not raise StreamlitDuplicateElementKey (button keys namespaced by
+        # context). Emulate Streamlit's per-run key registry.
+        from ui import ai_summary
+
+        seen_keys: set[str] = set()
+
+        class _DupKey(Exception):
+            pass
+
+        fake_st = MagicMock()
+
+        def _button(_label, key=None, **_kw):
+            if key in seen_keys:
+                raise _DupKey(key)
+            seen_keys.add(key)
+            return False  # not clicked
+
+        fake_st.button.side_effect = _button
+        fake_st.session_state = {}
+
+        df = self._df()
+        with patch.dict("sys.modules", {"streamlit": fake_st}):
+            ai_summary.render_ai_summary(df, context="latest_results")
+            ai_summary.render_ai_summary(df, context="three_step")  # must not raise
+
+        gen_keys = [k for k in seen_keys if k.startswith("gen_")]
+        self.assertEqual(len(gen_keys), 2)  # two distinct generate-button keys
+
 
 if __name__ == "__main__":
     unittest.main()
