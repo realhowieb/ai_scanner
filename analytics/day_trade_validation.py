@@ -269,3 +269,41 @@ def feature_coverage(observations: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         "by_source": by_source,
         "by_symbol": by_symbol,
     }
+
+
+# --- Predictive validation (does DT Score rank forward outcomes?) -------------
+def predictive_summary(observations: Sequence[Dict[str, Any]],
+                       *, horizons: Sequence[str] = ("5m", "15m", "30m", "60m"),
+                       ) -> Dict[str, Any]:
+    """Does the DT Score predict *direction-aware* forward outcomes?
+
+    For directional (non-neutral) observations only, per horizon:
+      * ``spearman`` — rank correlation between DT Score and directional return
+        (>0 means higher score → better follow-through; ~0 means no ranking edge).
+      * ``top_minus_bottom`` — mean directional return of the top score tertile
+        minus the bottom tertile (a simple long-the-strong edge in return units).
+      * ``hit_top`` / ``hit_bottom`` — hit rate in each tertile.
+      * ``n`` — usable pairs.
+    Pure: uses future outcomes ONLY to measure, never to (re)compute a feature.
+    """
+    directional = [o for o in observations
+                   if str(o.get("direction", "")).lower() in ("bullish", "bearish")
+                   and o.get("score") is not None]
+    out: Dict[str, Any] = {"directional_n": len(directional)}
+    for h in horizons:
+        pairs = [(float(o["score"]), float(o[f"directional_return_{h}"]))
+                 for o in directional
+                 if o.get(f"directional_return_{h}") is not None]
+        n = len(pairs)
+        rho = spearman([p[0] for p in pairs], [p[1] for p in pairs]) if n >= 2 else None
+        tb = ht = hb = None
+        if n >= 6:
+            pairs.sort(key=lambda p: p[0])
+            k = n // 3
+            bottom, top = pairs[:k], pairs[-k:]
+            tb = mean([p[1] for p in top]) - mean([p[1] for p in bottom])
+            ht = _rate(sum(1 for _, r in top if r > 0), len(top))
+            hb = _rate(sum(1 for _, r in bottom if r > 0), len(bottom))
+        out[h] = {"n": n, "spearman": rho, "top_minus_bottom": tb,
+                  "hit_top": ht, "hit_bottom": hb}
+    return out

@@ -65,6 +65,7 @@ def build_report(observations: List[Dict[str, Any]], *, min_n: int = 10) -> Dict
     from analytics.day_trade_validation import (
         bucket_report,
         feature_coverage,
+        predictive_summary,
         score_distribution,
     )
 
@@ -93,6 +94,7 @@ def build_report(observations: List[Dict[str, Any]], *, min_n: int = 10) -> Dict
         "feature_coverage": feature_coverage(observations),
         "parity_diagnostics": parity_summary(observations),
         "score_distribution": score_distribution([o.get("score") for o in observations]),
+        "predictive": predictive_summary(observations, horizons=horizons),
         "by_score_bucket": bucket_report(observations, horizons=horizons, min_n=min_n),
         "bullish": bucket_report(bull, horizons=horizons, min_n=min_n),
         "bearish": bucket_report(bear, horizons=horizons, min_n=min_n),
@@ -319,6 +321,20 @@ def _write_markdown(path: Path, report: Dict[str, Any]) -> None:
                 f"- direction: {par.get('direction')}",
                 "",
             ]
+        pred = report.get("predictive") or {}
+        if pred:
+            lines += ["## Predictive validation (score → forward outcome)",
+                      f"Directional observations: {pred.get('directional_n')}",
+                      "",
+                      "| Horizon | n | Spearman | top−bottom | hit top | hit bottom |",
+                      "| --- | ---: | ---: | ---: | ---: | ---: |"]
+            for h in ("5m", "15m", "30m", "60m"):
+                e = pred.get(h) or {}
+                lines.append(
+                    f"| {h} | {e.get('n')} | {e.get('spearman')} | "
+                    f"{e.get('top_minus_bottom')} | {e.get('hit_top')} | "
+                    f"{e.get('hit_bottom')} |")
+            lines.append("")
         lines += ["## Score distribution",
                   f"mean {d.get('mean')} · median {d.get('median')} · std {d.get('std')} · "
                   f"P10 {d.get('p10')} · P90 {d.get('p90')}", "",

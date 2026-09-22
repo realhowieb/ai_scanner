@@ -204,3 +204,30 @@ class ScriptPipelineTests(unittest.TestCase):
         self.assertIn("bullish", rep)
         self.assertIn("bearish", rep)
         self.assertIn("strong", rep["by_setup_quality"])
+
+
+class PredictiveSummaryTests(unittest.TestCase):
+    def _obs(self, direction, score, ret):
+        o = {"direction": direction, "score": score}
+        for h in ("5m", "15m", "30m", "60m"):
+            o[f"directional_return_{h}"] = ret
+        return o
+
+    def test_positive_edge_detected(self):
+        # higher score -> higher directional return: spearman should be positive
+        obs = [self._obs("bullish", s, s / 1000.0) for s in range(10, 100, 5)]
+        p = v.predictive_summary(obs)
+        self.assertGreater(p["15m"]["spearman"], 0.9)
+        self.assertGreater(p["15m"]["top_minus_bottom"], 0)
+
+    def test_no_edge_is_near_zero(self):
+        # returns independent of score -> spearman near 0, tb near 0
+        rets = [0.01, -0.01] * 15
+        obs = [self._obs("bullish", s, rets[i]) for i, s in enumerate(range(10, 85, 5))]
+        p = v.predictive_summary(obs)
+        self.assertLess(abs(p["15m"]["spearman"]), 0.5)
+
+    def test_neutral_excluded(self):
+        obs = [self._obs("neutral", 90, 0.05), self._obs("bullish", 20, 0.01),
+               self._obs("bearish", 30, 0.01)]
+        self.assertEqual(v.predictive_summary(obs)["directional_n"], 2)
