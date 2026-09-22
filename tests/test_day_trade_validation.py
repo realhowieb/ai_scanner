@@ -1,5 +1,8 @@
 """Run 33 — DT Score validation building blocks (direction-aware, no lookahead)."""
 import unittest
+from unittest.mock import patch
+
+import pandas as pd
 
 from analytics import day_trade_validation as v
 
@@ -128,6 +131,16 @@ if __name__ == "__main__":
 
 
 class ScriptPipelineTests(unittest.TestCase):
+    def test_daily_frame_lookup_does_not_evaluate_dataframe_truthiness(self):
+        from scripts.validate_day_trade_score import _fetch_daily_frame
+
+        daily = pd.DataFrame({"open": [10.0], "high": [11.0], "low": [9.0],
+                              "close": [10.5], "volume": [100]})
+        with patch("data.price_alpaca.download_multi_alpaca", return_value={"NVDA": daily}):
+            result = _fetch_daily_frame("NVDA")
+        self.assertIsNotNone(result)
+        self.assertEqual(list(result.columns), ["Open", "High", "Low", "Close", "Volume"])
+
     def test_build_observation_no_lookahead(self):
         from scripts.validate_day_trade_score import build_observation
         # bullish features; prices_after[0] is signal price, rest are outcomes only

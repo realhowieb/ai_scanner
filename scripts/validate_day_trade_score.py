@@ -181,7 +181,9 @@ def _fetch_daily_frame(symbol: str):
 
         frames = download_multi_alpaca([symbol], period="120d", interval="1d",
                                        prepost=False, timeout_s=20.0)
-        df = frames.get(symbol.upper()) or frames.get(symbol)
+        df = frames.get(symbol.upper())
+        if df is None:
+            df = frames.get(symbol)
         if df is None or getattr(df, "empty", True):
             return None
         # Ensure title-cased OHLCV columns the indicators expect.
