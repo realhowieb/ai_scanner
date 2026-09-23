@@ -16,6 +16,49 @@ SUMMARY_PATH = ROOT / "artifacts" / "scheduled_scan_summary.json"
 COVERAGE_DIR = ROOT / "artifacts" / "automation"
 
 
+_SCAN_LOCK = ROOT / "artifacts" / "cron_scan.lock"
+
+
+def _acquire_scan_lock(max_age_s: int = 1800) -> bool:
+    """Lightweight single-host overlap protection (Run 45, Task 9). Returns True
+    when the lock is acquired. A stale lock older than `max_age_s` is reclaimed
+    (a crashed run never blocks forever). Best-effort; never raises."""
+    try:
+        import time as _t
+        _SCAN_LOCK.parent.mkdir(parents=True, exist_ok=True)
+        if _SCAN_LOCK.exists():
+            age = _t.time() - _SCAN_LOCK.stat().st_mtime
+            if age < max_age_s:
+                return False
+        _SCAN_LOCK.write_text(str(dt.datetime.now(dt.timezone.utc).isoformat()))
+        return True
+    except Exception:
+        return True  # fail-open: never let lock IO prevent a scheduled scan
+
+
+def _release_scan_lock() -> None:
+    try:
+        if _SCAN_LOCK.exists():
+            _SCAN_LOCK.unlink()
+    except Exception:
+        pass
+
+
+def _append_perf_history(record: dict, *, keep: int = 60) -> None:
+    """Append a per-run performance record to a rolling JSONL history for
+    repeatability comparison (Run 45). Best-effort; never raises."""
+    try:
+        path = ROOT / "artifacts" / "automation" / "perf_history.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = []
+        if path.exists():
+            lines = path.read_text().splitlines()[-(keep - 1):]
+        lines.append(json.dumps(record, default=str))
+        path.write_text("\n".join(lines) + "\n")
+    except Exception:
+        pass
+
+
 def _write_coverage_artifact(universe: str, report: dict) -> None:
     """Persist the coverage/health report as an artifact (Run 37). Best-effort;
     mirrors the automation export's artifacts/automation location so the existing
@@ -451,17 +494,76 @@ def run_and_save(
             print(f"[automation_export] publish failed for {universe}: {e}")
             _capture(e)
 
-        # Promote to the day's snapshot so the track record + digest have a
-        # reliable daily is_snapshot row (idempotent per universe/day).
+        # Snapshot safety (Run 45, Task 4): only a HEALTHY scan may be promoted as
+        # the canonical daily snapshot. A DEGRADED/FAILED full-market scan keeps
+        # its artifact + diagnostics (failure evidence preserved) but must NOT
+        # overwrite a known-good snapshot. Health is unavailable only when the
+        # coverage report failed; then we preserve the prior (row-count-guarded)
+        # behavior so legacy universes are unaffected.
+        snapshot_promoted = None
+        snapshot_suppression_reason = None
         if save_snapshot:
-            try:
-                save_daily_snapshot(
-                    universe, results_json, username=username,
-                    row_count=row_count, duration_sec=duration,
-                )
-                print(f"Saved daily snapshot for {universe}.")
-            except Exception as e:
-                print(f"[cron] snapshot save failed for {universe}: {e}")
+            promote = True
+            if coverage_report_obj is not None:
+                try:
+                    from analytics.scan_reliability import snapshot_decision
+                    hstate = (coverage_report_obj.get("health") or {}).get("state")
+                    cov_pct = (coverage_report_obj.get("funnel") or {}).get("coverage_pct")
+                    decision = snapshot_decision(hstate, cov_pct)
+                    promote = decision["promote"]
+                    snapshot_suppression_reason = decision["reason"]
+                except Exception as e:
+                    _capture(e)
+            if promote:
+                try:
+                    save_daily_snapshot(
+                        universe, results_json, username=username,
+                        row_count=row_count, duration_sec=duration,
+                    )
+                    snapshot_promoted = True
+                    print(f"Saved daily snapshot for {universe}.")
+                except Exception as e:
+                    snapshot_promoted = False
+                    snapshot_suppression_reason = f"snapshot_save_error: {type(e).__name__}"
+                    print(f"[cron] snapshot save failed for {universe}: {e}")
+            else:
+                snapshot_promoted = False
+                print(f"⚠️ {universe}: snapshot NOT promoted — {snapshot_suppression_reason} "
+                      f"(artifact + diagnostics retained).")
+
+        # Human-readable performance summary + attach reliability telemetry to the
+        # coverage artifact (Run 45, Tasks 1/10/11).
+        try:
+            from analytics.scan_reliability import build_performance_record, render_run_summary
+            uni = (coverage_report_obj or {}).get("universe", {}) if coverage_report_obj else {}
+            perf = build_performance_record(
+                run_id=os.getenv("GITHUB_RUN_ID") or scan_started_at.isoformat(),
+                started_at=scan_started_at, completed_at=completed_at,
+                market_session=_resolve_session(), universe=universe,
+                universe_source=universe_meta.get("universe_source"),
+                provider_asset_count=universe_meta.get("provider_assets"),
+                eligible_symbol_count=uni.get("eligible_symbol_count") or len(tickers),
+                attempted_symbol_count=int(coverage_sink.get("attempted", len(tickers))),
+                priced_symbol_count=int(coverage_sink.get("price_success", 0)),
+                skipped_symbol_count=len(coverage_sink.get("skipped") or []),
+                candidate_count=row_count,
+                coverage_percentage=(coverage_report_obj or {}).get("funnel", {}).get("coverage_pct"),
+                coverage_health=(coverage_report_obj or {}).get("health", {}).get("state"),
+                timings={"total_runtime_seconds": round(duration, 1),
+                         "universe_load_seconds": round(universe_load_sec, 2)},
+                batch_size=int(os.getenv("CRON_BATCH_SIZE") or 0) or None,
+                skipped=coverage_sink.get("skipped") or [],
+                snapshot_promoted=snapshot_promoted,
+                snapshot_suppression_reason=snapshot_suppression_reason,
+            )
+            print(render_run_summary(perf))
+            if coverage_report_obj is not None:
+                coverage_report_obj["performance"] = perf
+                _write_coverage_artifact(universe, coverage_report_obj)
+            _append_perf_history(perf)
+        except Exception as e:
+            print(f"[reliability] performance record failed: {e}")
+            _capture(e)
         return ScanRunSummary(
             universe=universe,
             ok=True,
@@ -726,15 +828,30 @@ def main():
     # (scan.pre_post) instead of the full universe sweep; the regular slots keep
     # the standard universes + daily snapshot. Alerts/digest/etc. below run for
     # every session (each is throttled or cheap).
+    # Overlap protection (Run 45): if a prior full-market scan is still running,
+    # this invocation exits safely rather than launching a second concurrent
+    # whole-market sweep. The reason is recorded, never hidden.
+    if not _acquire_scan_lock():
+        print("⚠️ Another scheduled scan is still running — skipping (overlapping_run).")
+        _write_summary({
+            "started_at": started_at.isoformat(),
+            "completed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "ok": True, "skipped": True, "skip_reason": "OVERLAPPING_RUN", "runs": [],
+        })
+        return
+
     session = _resolve_session()
     print(f"Session: {session}")
-    if session in ("premarket", "postmarket"):
-        runs = [_run_session_scan(session)]
-    else:
-        universes = _configured_universes()
-        print(f"Configured universes: {', '.join(universes)}")
-        # Regular slots also produce the day's snapshot (per-universe, idempotent).
-        runs = [run_and_save(universe, save_snapshot=True) for universe in universes]
+    try:
+        if session in ("premarket", "postmarket"):
+            runs = [_run_session_scan(session)]
+        else:
+            universes = _configured_universes()
+            print(f"Configured universes: {', '.join(universes)}")
+            # Regular slots also produce the day's snapshot (per-universe, idempotent).
+            runs = [run_and_save(universe, save_snapshot=True) for universe in universes]
+    finally:
+        _release_scan_lock()
 
     # Evaluate per-user alerts against the fresh snapshot (best-effort; never
     # let alert failures fail the scan run).
