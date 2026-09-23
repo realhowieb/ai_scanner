@@ -1,0 +1,48 @@
+name: Observation Health
+
+# Run 46 — read-only observation dataset health report. Reads persisted canonical
+# observations from Neon and prints/uploads a dataset-health + integrity report.
+# Never mutates, dedupes, or deletes data.
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max observations to audit"
+        type: string
+        default: "50000"
+
+concurrency:
+  group: observation-health
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Run observation health report
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python -m scripts.observation_health --limit "${{ inputs.limit || '50000' }}" --out artifacts/automation
+          echo "### Observation dataset health" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat artifacts/automation/observation_health.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: observation-health
+          path: artifacts/automation/observation_health.json
+          if-no-files-found: warn
