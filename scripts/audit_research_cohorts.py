@@ -91,6 +91,8 @@ def audit_cohorts(observations: List[Dict[str, Any]],
     key_records: Dict[tuple, str] = {}    # (symbol,timestamp,context) -> record hash
     duplicate_ids = 0
     conflicting_duplicates = 0
+    # Per scan_run_id, which cohorts each symbol appeared in (overlap check, Part 2).
+    run_symbol_cohorts: Dict[str, Dict[str, set]] = defaultdict(lambda: defaultdict(set))
 
     for rec in observations or []:
         if not rec:
@@ -101,7 +103,9 @@ def audit_cohorts(observations: List[Dict[str, Any]],
         s["explicit" if _is_explicit(rec) else "legacy_inferred"] += 1
         sym = str(rec.get("symbol") or "").upper()
         s["distinct_symbols"].add(sym)
-        s["distinct_runs"].add(_scan_run(rec))
+        run_id = _scan_run(rec)
+        s["distinct_runs"].add(run_id)
+        run_symbol_cohorts[run_id][sym].add(cohort)
 
         ts = _parse_dt(rec.get("timestamp"))
         if ts is not None:
@@ -157,12 +161,29 @@ def audit_cohorts(observations: List[Dict[str, Any]],
             "explicitly_tagged": s["explicit"],
             "legacy_inferred": s["legacy_inferred"],
         }
+    # Cohort overlap within a scan_run_id (a symbol tagged as >1 cohort for the
+    # same selection event). candidate∩control is the serious one (Part 2).
+    overlap = {"candidate_control": 0, "candidate_near_miss": 0,
+               "near_miss_control": 0, "any": 0}
+    for _run, syms in run_symbol_cohorts.items():
+        for _sym, cohorts in syms.items():
+            if len(cohorts) < 2:
+                continue
+            overlap["any"] += 1
+            if CANDIDATE in cohorts and CONTROL in cohorts:
+                overlap["candidate_control"] += 1
+            if CANDIDATE in cohorts and NEAR_MISS in cohorts:
+                overlap["candidate_near_miss"] += 1
+            if NEAR_MISS in cohorts and CONTROL in cohorts:
+                overlap["near_miss_control"] += 1
+
     return {
-        "schema": "hsf-cohort-audit-1.0",
+        "schema": "hsf-cohort-audit-1.1",
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "total_observations": sum(c["observations"] for c in out_cohorts.values()),
         "duplicate_observation_ids": duplicate_ids,
         "conflicting_duplicates": conflicting_duplicates,
+        "cohort_overlap_within_run": overlap,
         "cohorts": out_cohorts,
     }
 

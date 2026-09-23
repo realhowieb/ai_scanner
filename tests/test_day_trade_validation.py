@@ -21,6 +21,20 @@ class DirectionalReturnTests(unittest.TestCase):
     def test_missing_return(self):
         self.assertIsNone(v.directional_return("bullish", None))
 
+    def test_long_short_synonyms_run53a(self):
+        # Run 53A: the scanner/observation path emits long/short, not
+        # bullish/bearish. Before the fix these returned None, silently voiding
+        # every production directional_return/MFE/MAE. long==bullish, short==bearish.
+        self.assertEqual(v.directional_return("long", 0.05), 0.05)    # LONG winner
+        self.assertEqual(v.directional_return("long", -0.03), -0.03)  # LONG loser
+        self.assertEqual(v.directional_return("short", -0.04), 0.04)  # SHORT winner
+        self.assertEqual(v.directional_return("short", 0.02), -0.02)  # SHORT loser
+        self.assertEqual(v.mfe_mae([100, 102, 101], 0, 2, "long")["mfe"], 0.02)
+        self.assertEqual(v.mfe_mae([100, 98, 99], 0, 2, "short")["mfe"], 0.02)
+        # bullish/bearish behavior is unchanged (backward compatible).
+        self.assertEqual(v.directional_return("bullish", 0.05), 0.05)
+        self.assertIsNone(v.directional_return("sideways", 0.05))
+
 
 class ForwardReturnTests(unittest.TestCase):
     def test_forward_return(self):

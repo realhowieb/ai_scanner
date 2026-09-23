@@ -1,0 +1,46 @@
+name: Research Integrity Audit
+
+# Run 53A — run the read-only research cohort integrity auditor against the live
+# production store (Neon) and publish the per-cohort report as an artifact + step
+# summary. READ-ONLY: never writes observations/outcomes/scans, never changes
+# scoring/ranking. Manual only (workflow_dispatch); this is a verification tool,
+# not a scheduled mutation. Requires the DATABASE_URL secret to reach production.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: research-integrity-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+          python -m pip install --prefer-binary -r requirements-ml.txt -c requirements.lock
+      - name: Run cohort integrity audit (read-only)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python -m scripts.audit_research_cohorts --out artifacts/automation
+          echo "### Research cohort integrity audit" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat artifacts/automation/cohort_audit.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload cohort audit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cohort-audit
+          path: artifacts/automation/cohort_audit.json
+          if-no-files-found: warn

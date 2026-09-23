@@ -24,13 +24,28 @@ SCORE_BUCKETS = [(0, 40, "0-39"), (40, 60, "40-59"), (60, 70, "60-69"),
                  (70, 80, "70-79"), (80, 90, "80-89"), (90, 101, "90-100")]
 
 
+def _norm_direction(direction: Any) -> str:
+    """Normalize a signal's direction to the canonical vocabulary. The DT-intel
+    path emits bullish/bearish; the scanner/observation path emits long/short
+    (see analytics.observation_capture.derive_scanner_triggers). Both mean the
+    same thing — long==bullish, short==bearish — so both are accepted; anything
+    else is neutral (no directional claim). Additive and backward-compatible:
+    bullish/bearish behave exactly as before (Run 53A fix)."""
+    d = str(direction or "").lower()
+    if d in ("bullish", "long", "buy"):
+        return "bullish"
+    if d in ("bearish", "short", "sell"):
+        return "bearish"
+    return "neutral"
+
+
 def directional_return(direction: str, future_return: Optional[float]) -> Optional[float]:
     """Sign the raw future return by the signal's direction so bullish and
     bearish setups are scored on one scale. Neutral is NOT a directional signal
     (returns None → excluded from hit rate / directional averages)."""
     if future_return is None:
         return None
-    d = str(direction or "").lower()
+    d = _norm_direction(direction)
     if d == "bullish":
         return future_return
     if d == "bearish":
@@ -65,7 +80,7 @@ def mfe_mae(prices: Sequence[float], t_index: int, window_bars: int,
     For a bullish signal MFE is the largest positive move and MAE the largest
     drawdown; for bearish the excursions are measured on the SHORT side (a fall is
     favorable). Neutral → both None. Uses only future bars, for OUTCOME only."""
-    d = str(direction or "").lower()
+    d = _norm_direction(direction)
     if d not in ("bullish", "bearish") or not prices or t_index >= len(prices):
         return {"mfe": None, "mae": None}
     p0 = prices[t_index]

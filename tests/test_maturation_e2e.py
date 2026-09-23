@@ -237,6 +237,38 @@ class EndToEndTests(unittest.TestCase):
             conn.close()
 
 
+class DirectionOutcomeTests(unittest.TestCase):
+    """Run 53A: compute_matured_outcomes must populate direction-adjusted return,
+    MFE and MAE for the scanner vocabulary (long/short), not silently None them."""
+
+    def _outcomes(self, prices, direction):
+        obs = {"observation_id": "id1", "symbol": "AAA",
+               "scan_timestamp": "2026-09-23T14:00:00+00:00"}
+        return oc.compute_matured_outcomes(
+            obs, prices_after=prices, horizon_bars={"+5m": 5},
+            evaluation_times={"+5m": "2026-09-23T14:05:00+00:00"},
+            direction=direction)
+
+    def test_long_winner_and_loser(self):
+        # +5m horizon = 5 bars; price[5] is the outcome bar.
+        win = self._outcomes([100, 101, 102, 103, 104, 105], "long")[0]
+        self.assertGreater(win["raw_return"], 0)
+        self.assertIsNotNone(win["directional_return"])
+        self.assertEqual(win["directional_return"], win["raw_return"])   # long: same sign
+        self.assertIsNotNone(win["mfe"])
+        lose = self._outcomes([100, 99, 98, 97, 96, 95], "long")[0]
+        self.assertLess(lose["directional_return"], 0)                   # price fell → loss
+
+    def test_short_winner_and_loser(self):
+        win = self._outcomes([100, 99, 98, 97, 96, 95], "short")[0]
+        self.assertLess(win["raw_return"], 0)                            # price fell
+        self.assertGreater(win["directional_return"], 0)                 # short: fall = win
+        self.assertIsNotNone(win["mfe"])
+        lose = self._outcomes([100, 101, 102, 103, 104, 105], "short")[0]
+        self.assertGreater(lose["raw_return"], 0)                        # price rose
+        self.assertLess(lose["directional_return"], 0)                   # short: rise = loss
+
+
 class ResearchFilterTests(unittest.TestCase):
     def test_filter_defaults_to_scheduled_clean(self):
         recs = [

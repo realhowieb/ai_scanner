@@ -68,6 +68,55 @@ class CohortAuditTests(unittest.TestCase):
         self.assertEqual(rep["total_observations"], 0)
         self.assertEqual(rep["cohorts"]["CONTROL"]["observations"], 0)
 
+    def test_candidate_control_overlap_within_run_detected(self):
+        # Same symbol tagged CANDIDATE and CONTROL for the same scan_run_id is a
+        # serious separation violation (Part 2).
+        obs = [
+            _obs("AAA", "CANDIDATE", scan_id="run1"),
+            _obs("AAA", "CONTROL", scan_id="run1"),   # overlap on AAA/run1
+            _obs("BBB", "CANDIDATE", scan_id="run1"),
+            _obs("AAA", "CONTROL", scan_id="run2"),    # different run → not an overlap
+        ]
+        rep = audit_cohorts(obs, {})
+        self.assertEqual(rep["cohort_overlap_within_run"]["candidate_control"], 1)
+
+    def test_no_overlap_when_clean(self):
+        obs = [_obs("AAA", "CANDIDATE"), _obs("BBB", "NEAR_MISS"), _obs("CCC", "CONTROL")]
+        rep = audit_cohorts(obs, {})
+        self.assertEqual(rep["cohort_overlap_within_run"]["any"], 0)
+
+
+class Run54ReadinessTests(unittest.TestCase):
+    def test_no_live_audit_is_conditional(self):
+        from scripts.run54_readiness import assess
+        rep = assess(None)
+        self.assertEqual(rep["run54_ready"], "CONDITIONAL")
+        self.assertFalse(rep["have_live_audit"])
+        self.assertEqual(rep["gates"]["long_direction"]["status"], "PASS")
+
+    def test_clean_audit_still_conditional_on_short_and_deploy(self):
+        from scripts.run54_readiness import assess
+        audit = {"total_observations": 300, "conflicting_duplicates": 0,
+                 "cohort_overlap_within_run": {"candidate_control": 0},
+                 "cohorts": {"CANDIDATE": {"explicitly_tagged": 100, "legacy_inferred": 0,
+                                           "point_in_time_violations": 0}}}
+        rep = assess(audit)
+        # LONG/outcome/legacy gates pass, but SHORT-live + maturation-deploy hold it CONDITIONAL.
+        self.assertEqual(rep["run54_ready"], "CONDITIONAL")
+        self.assertEqual(rep["gates"]["pit_integrity"]["status"], "PASS")
+        self.assertEqual(rep["gates"]["cohort_separation"]["status"], "PASS")
+
+    def test_pit_or_overlap_fails_hard(self):
+        from scripts.run54_readiness import assess
+        audit = {"total_observations": 300, "conflicting_duplicates": 5,
+                 "cohort_overlap_within_run": {"candidate_control": 2},
+                 "cohorts": {"CANDIDATE": {"explicitly_tagged": 100, "legacy_inferred": 0,
+                                           "point_in_time_violations": 3}}}
+        rep = assess(audit)
+        self.assertEqual(rep["run54_ready"], "NO")
+        self.assertEqual(rep["gates"]["pit_integrity"]["status"], "FAIL")
+        self.assertEqual(rep["gates"]["no_conflicting_duplicates"]["status"], "FAIL")
+
 
 if __name__ == "__main__":
     unittest.main()
