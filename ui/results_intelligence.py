@@ -390,19 +390,35 @@ def render_scanner_intelligence(
         items = filtered
 
     rows_out = []
+    from ui.showcase import screenshot_mode
+
+    showcase = screenshot_mode()
     for i, c in enumerate(items[:25], 1):
         tr = c.get("status_transition")
         status = f"{tr[0]} → {tr[1]}" if tr else f"{_STATUS_ICON.get(c['status'], '')} {c['status']}"
-        rows_out.append({
+        row_out = {
             "#": i, "Ticker": c["ticker"], "HSF Score": c["score"], "Change": _movement_cell(c),
             "Setup": c["primary_setup"], "Signals": c["n_signals"], "Status": status,
-        })
+        }
+        if showcase:
+            row_out = {
+                "#": i, "Ticker": c["ticker"], "Last": c.get("last"),
+                "Move %": c.get("chg_pct"), "HSF Score": c["score"],
+                "Status": status, "Change": _movement_cell(c),
+                "Setup": c["primary_setup"], "Signals": c["n_signals"],
+                "PreBreakout": c.get("prob"), "Breakout": c.get("breakout_score"),
+            }
+        rows_out.append(row_out)
     try:
         cc = st.column_config
         st.dataframe(rows_out, hide_index=True, width="stretch", column_config={
             "#": cc.NumberColumn(width="small"),
             "HSF Score": cc.ProgressColumn(min_value=0, max_value=100, format="%d"),
             "Change": cc.TextColumn(width="small"), "Signals": cc.NumberColumn(width="small"),
+            "Last": cc.NumberColumn(format="$%.2f"),
+            "Move %": cc.NumberColumn(format="%+.2f%%"),
+            "PreBreakout": cc.NumberColumn(format="%.0f%%"),
+            "Breakout": cc.NumberColumn(format="%.0f"),
         })
     except Exception:
         st.dataframe(rows_out, hide_index=True, width="stretch")

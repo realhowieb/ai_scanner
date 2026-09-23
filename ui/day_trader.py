@@ -610,6 +610,9 @@ def render_day_trader_panel(
         return
     if not DAY_TRADER_ENABLED:
         return
+    from ui.showcase import screenshot_mode
+
+    showcase = screenshot_mode()
     st.markdown("## ⚡ Day Trader — live")
     try:
         from ui.ticker_strip import render_ticker_strip
@@ -632,52 +635,58 @@ def render_day_trader_panel(
         pass
     _render_state_banner()
 
-    c1, c2, c3 = st.columns([2, 1, 1])
-    with c1:
-        source_options = [
-            "⭐ Watchlist",
-            "🔥 Top movers (S&P 500 + NASDAQ)",
-            "🔥 Top movers (S&P 500)",
-            "🔥 Top movers (NASDAQ)",
-            "🌅 Premarket movers",
-            "🌙 Postmarket movers",
-            "Today's scan picks",
-            "Mega-caps",
-            "Custom",
-        ]
+    source_options = [
+        "⭐ Watchlist",
+        "🔥 Top movers (S&P 500 + NASDAQ)",
+        "🔥 Top movers (S&P 500)",
+        "🔥 Top movers (NASDAQ)",
+        "🌅 Premarket movers",
+        "🌙 Postmarket movers",
+        "Today's scan picks",
+        "Mega-caps",
+        "Custom",
+    ]
+    if showcase:
         source = st.selectbox(
-            "Symbols source",
-            source_options,
-            index=0 if watch_tickers else source_options.index("Mega-caps"),
-            key="dt_source",
-        )
-    with c2:
-        refresh_label = st.selectbox(
-            "Auto-refresh", ["Off", "15s", "30s", "60s"], index=0, key="dt_refresh"
-        )
-    with c3:
-        st.write("")
-        if st.button("🔄 Refresh now", key="dt_refresh_btn"):
-            # Clear only this page's cached fetches — st.cache_data.clear()
-            # would nuke every app cache (models, history, quotes) and recreate
-            # the slowness the caching work eliminated.
-            for fn in (
-                "fetch_alpaca_snapshots",
-                "fetch_avg_daily_volume",
-                "fetch_ema_crosses",
-                "fetch_daily_range_metrics",
-            ):
-                try:
-                    import market_data
+            "Symbols source", source_options,
+            index=0 if watch_tickers else source_options.index("Mega-caps"), key="dt_source")
+        refresh_label = "Off"
+    else:
+        c1, c2, c3 = st.columns([2, 1, 1])
+        with c1:
+            source = st.selectbox(
+                "Symbols source",
+                source_options,
+                index=0 if watch_tickers else source_options.index("Mega-caps"),
+                key="dt_source",
+            )
+        with c2:
+            refresh_label = st.selectbox(
+                "Auto-refresh", ["Off", "15s", "30s", "60s"], index=0, key="dt_refresh"
+            )
+        with c3:
+            st.write("")
+            if st.button("🔄 Refresh now", key="dt_refresh_btn"):
+                # Clear only this page's cached fetches — st.cache_data.clear()
+                # would nuke every app cache (models, history, quotes) and recreate
+                # the slowness the caching work eliminated.
+                for fn in (
+                    "fetch_alpaca_snapshots",
+                    "fetch_avg_daily_volume",
+                    "fetch_ema_crosses",
+                    "fetch_daily_range_metrics",
+                ):
+                    try:
+                        import market_data
 
-                    getattr(market_data, fn).clear()
+                        getattr(market_data, fn).clear()
+                    except Exception:
+                        pass
+                try:
+                    _scan_picks_cached.clear()  # type: ignore[attr-defined]
                 except Exception:
                     pass
-            try:
-                _scan_picks_cached.clear()  # type: ignore[attr-defined]
-            except Exception:
-                pass
-            st.rerun()
+                st.rerun()
 
     # ⭐ Watchlist source: let the user pick WHICH of their watchlists drives the
     # symbols (default = their is_default list). Selecting a watchlist just feeds
@@ -695,28 +704,32 @@ def render_day_trader_panel(
 
     # Watch-mode movement notifications (session-local; compares each refresh
     # to the price when you started watching, resets per symbol after firing).
-    w1, w2 = st.columns([2, 1])
-    notify = w1.checkbox(
-        "🔔 Notify me on big moves while watching",
-        key="dt_notify",
-        help=(
-            "This browser tab only, while it stays open — baselines reset on "
-            "refresh/logout. For alerts that persist and email you, use the "
-            "Alerts page."
-        ),
-    )
-    if notify:
-        w1.caption("⏱️ Session-only — for persistent alerts use the 🔔 Alerts page.")
+    if showcase:
+        notify = False
+        move_thr = 2.0
+    else:
+        w1, w2 = st.columns([2, 1])
+        notify = w1.checkbox(
+            "🔔 Notify me on big moves while watching",
+            key="dt_notify",
+            help=(
+                "This browser tab only, while it stays open — baselines reset on "
+                "refresh/logout. For alerts that persist and email you, use the "
+                "Alerts page."
+            ),
+        )
+        if notify:
+            w1.caption("⏱️ Session-only — for persistent alerts use the 🔔 Alerts page.")
+        move_thr = w2.number_input(
+            "Move ≥ %", min_value=0.5, value=2.0, step=0.5, key="dt_notify_thr",
+            disabled=not notify,
+        )
     # Reset baselines when the watched symbol set changes, so stale entries
     # from a previous source can't produce confusing move calculations.
     _sym_sig = ",".join(sorted(symbols))
     if st.session_state.get("dt_watch_symbols") != _sym_sig:
         st.session_state["dt_watch_symbols"] = _sym_sig
         st.session_state.pop("dt_watch_baseline", None)
-    move_thr = w2.number_input(
-        "Move ≥ %", min_value=0.5, value=2.0, step=0.5, key="dt_notify_thr",
-        disabled=not notify,
-    )
 
     interval_s = {"Off": 0, "15s": 15, "30s": 30, "60s": 60}.get(refresh_label, 0)
 
@@ -866,6 +879,10 @@ def _render_table(
         ]
 
     df = _ensure_day_trader_table_columns_for(df, _table_columns_for_volume(volume_col))
+    from ui.showcase import DAY_TRADER_SHOWCASE_COLUMNS, screenshot_mode, select_columns
+
+    if screenshot_mode():
+        df = select_columns(df, DAY_TRADER_SHOWCASE_COLUMNS)
 
     # Pin Ticker so it stays put while the rest scrolls; degrade gracefully on
     # older Streamlit that lacks column_config/pinned.
@@ -875,7 +892,8 @@ def _render_table(
                      column_config=col_cfg)
     except Exception:
         st.dataframe(_styled(df, moved_now), hide_index=True, width="stretch")
-    st.caption("↔ Swipe the table sideways on mobile.")
+    if not screenshot_mode():
+        st.caption("↔ Swipe the table sideways on mobile.")
     if not any(
         r.get("adx") is not None or r.get("supertrend_direction") is not None or r.get("ewo") is not None
         for r in rows

@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import streamlit as st
 
-st.set_page_config(page_title="Stock Intelligence", page_icon="🔬", layout="wide")
+from ui.showcase import initial_sidebar_state
+
+st.set_page_config(page_title="Stock Intelligence", page_icon="🔬", layout="wide",
+                   initial_sidebar_state=initial_sidebar_state())
 
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:

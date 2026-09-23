@@ -35,79 +35,23 @@ def render_prebreakout_tab() -> None:
         with values in [0.0, 1.0].
     """
     st.markdown("### 🔮 Early Breakout Candidates (Model-based)")
+    from ui.showcase import screenshot_mode
+
+    showcase = screenshot_mode()
 
     # --- Model status + training controls ---
-    with st.expander("🧠 Model status & training", expanded=False):
-        bundle = load_prebreakout_model()
-        features = list(bundle.get("features", []) if bundle else [])
-        status_cols = st.columns(5)
-        status_cols[0].metric("Model loaded", "Yes" if bundle else "No")
-        status_cols[1].metric("AUC", "—" if not bundle else f"{float(bundle.get('auc') or 0):.3f}")
-        status_cols[2].metric("trained_at", "—" if not bundle else str(bundle.get("trained_at") or "unknown"))
-        status_cols[3].metric("Feature count", str(len(features)) if bundle else "0")
-        status_cols[4].metric("Source", str(bundle.get("source") or "unknown") if bundle else "—")
+    if not showcase:
+        with st.expander("🧠 Model status & training", expanded=False):
+            _render_model_controls()
 
-        if bundle:
-            feature_preview = ", ".join(features[:8])
-            if len(features) > 8:
-                feature_preview += ", ..."
-
-            st.success(
-                f"Current model loaded.\n\n"
-                f"- AUC: **{bundle.get('auc', 0):.3f}**\n"
-                f"- Validation: **{bundle.get('validation_method', 'unknown')}**\n"
-                f"- Target: **{bundle.get('target_rule', bundle.get('target', 'unknown'))}**\n"
-                f"- Trained at: **{bundle.get('trained_at', 'unknown')}**\n"
-                f"- Source: **{bundle.get('source', 'unknown')}**\n"
-                f"- Features: `{feature_preview}`"
-            )
-            if bundle.get("db_save_error"):
-                st.caption(f"⚠️ Last database save warning: {bundle.get('db_save_error')}")
-            calibration = bundle.get("calibration") or []
-            if calibration:
-                st.markdown("#### Calibration")
-                calibration_df = pd.DataFrame(calibration)
-                st.dataframe(
-                    calibration_df,
-                    width="stretch",
-                    hide_index=True,
-                    column_config={
-                        "bucket": st.column_config.TextColumn("Confidence"),
-                        "n": st.column_config.NumberColumn("Signals", format="%d"),
-                        "mean_confidence": st.column_config.NumberColumn("Avg confidence", format="%.1%%"),
-                        "hit_rate": st.column_config.NumberColumn("Hit rate", format="%.1%%"),
-                    },
-                )
-        else:
-            st.warning(
-                "No pre-breakout model is currently loaded. "
-                "No saved database model was found. Train a new model using your historical runs."
-            )
-
-        if st.button("🚀 Train / Refresh model from DB history", width="stretch"):
-            with st.spinner("Training pre-breakout model from DB history..."):
-                trained_bundle = train_prebreakout_model(
-                    days_back=90,
-                )
-            if trained_bundle:
-                st.success(
-                    f"Model trained! AUC={trained_bundle.get('auc', 0):.3f}, "
-                    f"trained_at={trained_bundle.get('trained_at', 'unknown')}, "
-                    f"source={trained_bundle.get('source', 'unknown')}"
-                )
-                if trained_bundle.get("db_save_error"):
-                    st.caption(f"⚠️ Database save warning: {trained_bundle.get('db_save_error')}")
-            else:
-                st.error(
-                    "Training failed. Check the app logs for details "
-                    "(e.g., missing history, no eligible prebreakout rows, or incomplete outcome windows)."
-                )
-
-    st.caption(
-        "These candidates are ranked by a model trained on your historical scans "
-        "to detect pre-breakout patterns (rising trend, volume pressure, and "
-        "increasing breakout scores before actual breakouts)."
-    )
+    if showcase:
+        st.caption("Candidates ranked by the existing PreBreakout model using the latest scan.")
+    else:
+        st.caption(
+            "These candidates are ranked by a model trained on your historical scans "
+            "to detect pre-breakout patterns (rising trend, volume pressure, and "
+            "increasing breakout scores before actual breakouts)."
+        )
 
     df = _get_latest_results_df()
     if df is None:
@@ -121,84 +65,120 @@ def render_prebreakout_tab() -> None:
         )
         return
 
-    # Controls row: threshold + limit
-    c1, c2, c3 = st.columns([2, 1, 1])
-    with c1:
-        threshold = st.slider(
-            "Minimum pre-breakout probability",
-            0.0,
-            1.0,
-            0.60,
-            0.01,
-            help=(
-                "Only show tickers whose model-based pre-breakout probability "
-                "is at or above this value."
-            ),
-        )
-    with c2:
-        max_rows = st.number_input(
-            "Max rows to display",
-            min_value=10,
-            max_value=500,
-            value=100,
-            step=10,
-        )
-    with c3:
-        sort_desc = st.toggle(
-            "Sort by highest probability",
-            value=True,
-            help="If enabled, highest pre-breakout probabilities appear first.",
-        )
+    # Controls row: threshold + limit. Showcase uses the same deterministic
+    # filter defaults without rendering secondary controls.
+    if showcase:
+        threshold, max_rows, sort_desc = 0.60, 25, True
+    else:
+        c1, c2, c3 = st.columns([2, 1, 1])
+        with c1:
+            threshold = st.slider(
+                "Minimum pre-breakout probability", 0.0, 1.0, 0.60, 0.01,
+                help="Only show tickers whose model probability is at or above this value.")
+        with c2:
+            max_rows = st.number_input("Max rows to display", min_value=10, max_value=500,
+                                       value=100, step=10)
+        with c3:
+            sort_desc = st.toggle("Sort by highest probability", value=True)
 
     work_df = df.copy()
-
-    # Format probability as percentage for display
     work_df["PreBreakoutProb"] = work_df["PreBreakoutProb"].astype(float)
     work_df["PreBreakoutProb%"] = (work_df["PreBreakoutProb"] * 100.0).round(1)
-
     filtered = work_df[work_df["PreBreakoutProb"] >= threshold]
-
-    if sort_desc:
-        filtered = filtered.sort_values("PreBreakoutProb", ascending=False)
-    else:
-        filtered = filtered.sort_values("PreBreakoutProb", ascending=True)
-
+    filtered = filtered.sort_values("PreBreakoutProb", ascending=not sort_desc)
     filtered = filtered.head(int(max_rows)).reset_index(drop=True)
-
-    st.caption(
-        f"{len(filtered)} ticker(s) at or above {threshold:.2f} probability. "
-        "Higher values indicate a stronger historical pre-breakout pattern."
-    )
-
-    if filtered.empty:
-        st.warning(
-            "No symbols meet the current probability threshold. "
-            "Try lowering the threshold or running a different scan."
+    if showcase:
+        st.caption(f"{len(filtered)} candidates · minimum PreBreakout {threshold * 100:.0f}%")
+    else:
+        st.caption(
+            f"{len(filtered)} ticker(s) at or above {threshold:.2f} probability. "
+            "Higher values indicate a stronger historical pre-breakout pattern."
         )
+    if filtered.empty:
+        message = "No symbols meet the current probability threshold."
+        if not showcase:
+            message += " Try lowering the threshold or running a different scan."
+        st.warning(message)
         return
 
-    # Choose a concise set of columns for display if the DF is wide
-    preferred_cols = [
-        col
-        for col in [
-            "Symbol",
-            "Ticker",
-            "Name",
-            "Last",
-            "Change",
-            "% Change",
-            "BreakoutScore",
-            "Trend10D%",
-            "Trend20D%",
-            "VolRel20",
-            "DollarVol20",
+    preferred = (
+        [
+            "Symbol", "Ticker", "Last", "% Change", "PctChange", "Direction", "Status",
+            "EMACross", "BreakoutScore", "Trend10D%", "Trend20D%", "VolRel20",
             "PreBreakoutProb%",
         ]
-        if col in filtered.columns
-    ]
-    if preferred_cols:
-        display_df = filtered[preferred_cols]
-    else:
-        display_df = filtered
+        if showcase
+        else [
+            "Symbol", "Ticker", "Name", "Last", "Change", "% Change", "BreakoutScore",
+            "Trend10D%", "Trend20D%", "VolRel20", "DollarVol20", "PreBreakoutProb%",
+        ]
+    )
+    display_df = filtered[[col for col in preferred if col in filtered.columns]]
+    st.dataframe(display_df, width="stretch", hide_index=True)
 
-    st.dataframe(display_df, width="stretch")
+
+def _render_model_controls() -> None:
+    bundle = load_prebreakout_model()
+    features = list(bundle.get("features", []) if bundle else [])
+    status_cols = st.columns(5)
+    status_cols[0].metric("Model loaded", "Yes" if bundle else "No")
+    status_cols[1].metric("AUC", "—" if not bundle else f"{float(bundle.get('auc') or 0):.3f}")
+    status_cols[2].metric("trained_at", "—" if not bundle else str(bundle.get("trained_at") or "unknown"))
+    status_cols[3].metric("Feature count", str(len(features)) if bundle else "0")
+    status_cols[4].metric("Source", str(bundle.get("source") or "unknown") if bundle else "—")
+
+    if bundle:
+        feature_preview = ", ".join(features[:8])
+        if len(features) > 8:
+            feature_preview += ", ..."
+
+        st.success(
+                f"Current model loaded.\n\n"
+                f"- AUC: **{bundle.get('auc', 0):.3f}**\n"
+                f"- Validation: **{bundle.get('validation_method', 'unknown')}**\n"
+                f"- Target: **{bundle.get('target_rule', bundle.get('target', 'unknown'))}**\n"
+                f"- Trained at: **{bundle.get('trained_at', 'unknown')}**\n"
+                f"- Source: **{bundle.get('source', 'unknown')}**\n"
+                f"- Features: `{feature_preview}`"
+        )
+        if bundle.get("db_save_error"):
+            st.caption(f"⚠️ Last database save warning: {bundle.get('db_save_error')}")
+        calibration = bundle.get("calibration") or []
+        if calibration:
+            st.markdown("#### Calibration")
+            calibration_df = pd.DataFrame(calibration)
+            st.dataframe(
+                    calibration_df,
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "bucket": st.column_config.TextColumn("Confidence"),
+                        "n": st.column_config.NumberColumn("Signals", format="%d"),
+                        "mean_confidence": st.column_config.NumberColumn("Avg confidence", format="%.1%%"),
+                        "hit_rate": st.column_config.NumberColumn("Hit rate", format="%.1%%"),
+                    },
+            )
+    else:
+        st.warning(
+                "No pre-breakout model is currently loaded. "
+                "No saved database model was found. Train a new model using your historical runs."
+        )
+
+    if st.button("🚀 Train / Refresh model from DB history", width="stretch"):
+        with st.spinner("Training pre-breakout model from DB history..."):
+            trained_bundle = train_prebreakout_model(
+                days_back=90,
+            )
+        if trained_bundle:
+            st.success(
+                    f"Model trained! AUC={trained_bundle.get('auc', 0):.3f}, "
+                    f"trained_at={trained_bundle.get('trained_at', 'unknown')}, "
+                    f"source={trained_bundle.get('source', 'unknown')}"
+            )
+            if trained_bundle.get("db_save_error"):
+                st.caption(f"⚠️ Database save warning: {trained_bundle.get('db_save_error')}")
+        else:
+            st.error(
+                    "Training failed. Check the app logs for details "
+                    "(e.g., missing history, no eligible prebreakout rows, or incomplete outcome windows)."
+            )

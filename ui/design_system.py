@@ -76,6 +76,13 @@ def freshness_label(value: Any, *, stale_after_minutes: int = 360) -> str:
 def render_page_header(title: str, subtitle: str) -> None:
     if st is None:
         return
+    try:
+        from ui.showcase import apply_showcase_styles, showcase_caption
+
+        apply_showcase_styles()
+        showcase_caption()
+    except Exception:
+        pass
     st.markdown(f"## {title}")
     if subtitle:
         st.caption(subtitle)

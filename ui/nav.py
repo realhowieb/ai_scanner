@@ -65,6 +65,12 @@ def render_sidebar_nav(*, with_header: bool = True) -> None:
     if st is None:
         return
     try:
+        from ui.showcase import apply_showcase_styles
+
+        apply_showcase_styles()
+    except Exception:
+        pass
+    try:
         with st.sidebar:
             if with_header:
                 _render_identity()

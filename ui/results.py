@@ -148,6 +148,10 @@ def render_results(
 
         render_scanner_intelligence(df, key_prefix=key_prefix,
                                     render_chart_for_ticker=render_chart_for_ticker)
+        from ui.showcase import screenshot_mode
+
+        if screenshot_mode():
+            return
         st.markdown("---")
         st.caption("Full scanner output (all columns) below.")
     except Exception:

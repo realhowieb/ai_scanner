@@ -7,7 +7,11 @@ from __future__ import annotations
 
 import streamlit as st
 
-st.set_page_config(page_title="Day Trader — live", page_icon="⚡", layout="wide")
+from ui.showcase import apply_showcase_styles, initial_sidebar_state
+
+st.set_page_config(page_title="Day Trader — live", page_icon="⚡", layout="wide",
+                   initial_sidebar_state=initial_sidebar_state())
+apply_showcase_styles()
 
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:
