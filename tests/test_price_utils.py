@@ -106,6 +106,33 @@ class PriceUtilsTests(unittest.TestCase):
         )
         prices.clear_price_cache()
 
+    def test_alpaca_batch_timeout_is_provider_reason_not_policy(self):
+        # Run 51: when the Alpaca BATCH fails (e.g. a chunk read-timeout), the
+        # unreturned symbols are a PROVIDER failure — they must NOT be mislabeled
+        # as an intentional policy skip (which hid provider trouble in telemetry).
+        import data.prices as prices
+        from analytics.coverage import classify_failure
+
+        class ReadTimeout(Exception):
+            pass
+
+        prices.clear_price_cache()
+        cfg = prices.PriceFetchConfig(tickers=["AAA", "BBB"])
+        with (
+            patch.object(prices, "_get_alpaca_config", return_value={"api_key": "key"}),
+            patch.object(prices, "_download_multi_alpaca",
+                         side_effect=ReadTimeout("Read timed out. (read timeout=10.0)")),
+            patch.object(prices, "_ALPACA_ERRORS", (ReadTimeout,)),
+            patch.object(prices, "_yf", MagicMock()),
+            patch.dict("os.environ", {"PRICE_SKIP_YF_FALLBACK": "1"}, clear=False),
+        ):
+            data, skipped = prices._download_batch(["AAA", "BBB"], cfg)
+        self.assertEqual(data, {})
+        # reasons carry the provider timeout, and the taxonomy classifies TIMEOUT
+        self.assertTrue(all("alpaca_timeout" in r for _s, r in skipped))
+        self.assertTrue(all(classify_failure(r) == "TIMEOUT" for _s, r in skipped))
+        prices.clear_price_cache()
+
     def test_alpaca_bars_request_uses_configured_feed(self):
         import data.price_alpaca as price_alpaca
 

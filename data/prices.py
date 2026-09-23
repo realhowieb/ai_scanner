@@ -16,7 +16,7 @@ import datetime as _dt
 import os
 import time as _time
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterator, List, Sequence, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as _np
 import pandas as _pd
@@ -309,6 +309,11 @@ def _download_batch(
     # is set, in which case stragglers (mostly micro-caps/warrants not on Alpaca's
     # IEX feed, which never pass filters) are skipped for a big speedup.
     alpaca_configured = _get_alpaca_config() is not None
+    # Run 51 instrumentation: when the Alpaca batch itself fails (e.g. a chunk
+    # read-timeout), the symbols it couldn't return are a PROVIDER failure, not an
+    # intentional policy skip. Record the true cause so the coverage taxonomy
+    # classifies them as TIMEOUT/PROVIDER_ERROR instead of FILTERED_BY_POLICY.
+    batch_error_reason: Optional[str] = None
     if alpaca_configured:
         try:
             alpaca_data = _download_multi_alpaca(
@@ -325,17 +330,24 @@ def _download_batch(
             got = set(data.keys())
             remaining = [s for s in remaining if s not in got]
         except _ALPACA_ERRORS as e:
-            print(f"[prices] Alpaca batch failed, falling back to yfinance: {type(e).__name__}: {e}")
+            etype = type(e).__name__
+            batch_error_reason = (f"alpaca_timeout:{etype}"
+                                  if "timeout" in etype.lower() or "timeout" in str(e).lower()
+                                  else f"alpaca_batch_error:{etype}")
+            print(f"[prices] Alpaca batch failed, falling back to yfinance: {etype}: {e}")
 
     # Skip the slow/noisy per-symbol yfinance fallback when the operator opted
     # into Alpaca-only mode. This applies even when Alpaca returns no bars for
     # the entire batch; otherwise all-empty chunks repeatedly fall through to
     # Yahoo and spam "possibly delisted" warnings for the same symbols.
     if alpaca_configured and os.getenv("PRICE_SKIP_YF_FALLBACK", "").strip() == "1":
+        # A batch-level failure attributes the skip to the provider (timeout/error);
+        # otherwise Alpaca succeeded but didn't return the symbol (policy skip).
+        reason = batch_error_reason or "skipped_yf_fallback"
         for sym in remaining:
             sym_u = str(sym).upper()
-            skipped.append((sym_u, "skipped_yf_fallback"))
-            _remember_missing(sym_u, cfg, "skipped_yf_fallback")
+            skipped.append((sym_u, reason))
+            _remember_missing(sym_u, cfg, reason)
         remaining = []
 
     for sym in remaining:
