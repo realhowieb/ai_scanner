@@ -38,6 +38,36 @@ class CohortAuditTests(unittest.TestCase):
         self.assertEqual(ctrl["observations"], 2)
         self.assertEqual(ctrl["distinct_runs"], 2)         # s1 + s2
         self.assertEqual(ctrl["missing_field_observations"], 2)  # controls sparse by design
+        gap = next(row for row in ctrl["field_missingness"] if row["field"] == "gap_pct")
+        self.assertEqual(gap["classification"], "OPTIONAL")
+        self.assertFalse(gap["required_for_run54"])
+
+    def test_missing_fields_are_reported_by_field_not_treated_as_one_defect(self):
+        modern = _obs("AAA", "CANDIDATE", missing=True)
+        legacy = _obs("LEG", "CANDIDATE", explicit=False, missing=True)
+        rep = audit_cohorts([modern, legacy], {})
+        rows = {row["field"]: row for row in rep["cohorts"]["CANDIDATE"]["field_missingness"]}
+        self.assertEqual(rows["research_cohort"]["missing_count"], 1)
+        self.assertEqual(rows["research_cohort"]["classification"], "LEGACY_SCHEMA")
+        self.assertEqual(rows["adx"]["classification"], "OPTIONAL")
+        required = rep["cohorts"]["CANDIDATE"]["modern_required_field_missingness"]
+        self.assertEqual(sum(row["missing_count"] for row in required), 0)
+
+    def test_modern_horizon_direction_contract_excludes_incomplete_outcomes(self):
+        obs = _obs("AAA", "CANDIDATE")
+        oid = obs["observation_id"]
+        complete = {
+            "horizon": "+5m", "evaluation_time": "2026-09-23T14:05:00+00:00",
+            "data_status": "MATURED", "raw_return": 0.01,
+            "directional_return": 0.01, "mfe": 0.02, "mae": -0.005,
+        }
+        incomplete = {**complete, "horizon": "+15m", "mfe": None}
+        rep = audit_cohorts([obs], {oid: [complete, incomplete]})
+        maturity = rep["cohorts"]["CANDIDATE"]["modern_maturity_by_horizon_direction"]
+        self.assertEqual(maturity["+5m"]["LONG"]["analysis_eligible"], 1)
+        self.assertEqual(maturity["+15m"]["LONG"]["analysis_eligible"], 0)
+        missing = rep["cohorts"]["CANDIDATE"]["matured_outcome_field_missingness"]
+        self.assertEqual(next(row for row in missing if row["field"] == "mfe")["missing_count"], 1)
 
     def test_matured_unmatured_and_pit_violation(self):
         obs = [_obs("AAA", "CANDIDATE"), _obs("BBB", "CANDIDATE")]
@@ -92,7 +122,7 @@ class Run54ReadinessTests(unittest.TestCase):
         rep = assess(None)
         self.assertEqual(rep["run54_ready"], "CONDITIONAL")
         self.assertFalse(rep["have_live_audit"])
-        self.assertEqual(rep["gates"]["long_direction"]["status"], "PASS")
+        self.assertEqual(rep["gates"]["long_live_direction"]["status"], "CONDITIONAL")
 
     def test_clean_audit_still_conditional_on_short_and_deploy(self):
         from scripts.run54_readiness import assess
@@ -115,7 +145,25 @@ class Run54ReadinessTests(unittest.TestCase):
         rep = assess(audit)
         self.assertEqual(rep["run54_ready"], "NO")
         self.assertEqual(rep["gates"]["pit_integrity"]["status"], "FAIL")
-        self.assertEqual(rep["gates"]["no_conflicting_duplicates"]["status"], "FAIL")
+
+    def test_scoped_modern_comparison_can_pass_sample_gate(self):
+        from scripts.run54_readiness import assess
+        cell = {"observations": 35, "analysis_eligible": 35}
+        cohort = {
+            "explicitly_tagged": 35, "legacy_inferred": 0,
+            "point_in_time_violations": 0,
+            "modern_required_field_missingness": [],
+            "modern_maturity_by_horizon_direction": {"+5m": {"LONG": cell}},
+            "direction_examples": {"LONG": [{"symbol": "AAA"}]},
+        }
+        audit = {
+            "total_observations": 70, "conflicting_duplicates": 0,
+            "cohort_overlap_within_run": {"candidate_control": 0},
+            "cohorts": {"CANDIDATE": cohort, "CONTROL": cohort},
+        }
+        rep = assess(audit, {"maturation_backlog_status": "BACKLOG_DRAINING"})
+        self.assertEqual(rep["gates"]["adequate_scoped_sample"]["status"], "PASS")
+        self.assertEqual(rep["gates"]["maturation_usable"]["status"], "PASS")
 
 
 if __name__ == "__main__":

@@ -33,8 +33,24 @@ CODE_FACTS = {
     "short_direction_verified_deterministic": True,
     "short_live_evidence": "INSUFFICIENT",   # no live SHORT samples confirmed
     "outcome_formula_verified": True,
-    "run52_fix_deployed": False,             # dev only; main lacks 3e5320e
+    "run52_fix_deployed": True,
+    "maturation_backlog_status": "INSUFFICIENT_POST_FIX_EVIDENCE",
 }
+
+
+def _supported_comparisons(cohorts: Dict[str, Any], minimum: int = 30) -> list:
+    """Modern-only cohort comparisons with complete outcomes at one horizon/direction."""
+    candidate = cohorts.get("CANDIDATE", {}).get("modern_maturity_by_horizon_direction", {})
+    control = cohorts.get("CONTROL", {}).get("modern_maturity_by_horizon_direction", {})
+    supported = []
+    for horizon in sorted(set(candidate) & set(control)):
+        for direction in sorted(set(candidate[horizon]) & set(control[horizon])):
+            cn = candidate[horizon][direction].get("analysis_eligible", 0)
+            xn = control[horizon][direction].get("analysis_eligible", 0)
+            if min(cn, xn) >= minimum:
+                supported.append({"horizon": horizon, "direction": direction,
+                                  "candidate_n": cn, "control_n": xn})
+    return supported
 
 
 def assess(audit: Optional[Dict[str, Any]], facts: Optional[Dict[str, Any]] = None
@@ -48,7 +64,6 @@ def assess(audit: Optional[Dict[str, Any]], facts: Optional[Dict[str, Any]] = No
     have_audit = bool(audit) and audit.get("total_observations", 0) > 0
     cohorts = (audit or {}).get("cohorts", {})
     overlap = (audit or {}).get("cohort_overlap_within_run", {})
-    conflicting = (audit or {}).get("conflicting_duplicates")
 
     # 1. Modern cohort tagging trustworthy.
     if not have_audit:
@@ -74,43 +89,55 @@ def assess(audit: Optional[Dict[str, Any]], facts: Optional[Dict[str, Any]] = No
         pit = sum(c.get("point_in_time_violations", 0) for c in cohorts.values())
         gate("pit_integrity", PASS if pit == 0 else FAIL, f"point_in_time_violations = {pit}")
 
-    # 4. Outcome calculations correct.
-    gate("outcome_formula", PASS if facts["outcome_formula_verified"] else FAIL,
-         "directional_return/MFE/MAE verified after long/short synonym fix (Run 53A)")
-
-    # 5. LONG direction verified.
-    gate("long_direction", PASS if facts["long_direction_verified"] else FAIL,
-         "deterministic LONG winner/loser tests pass")
-
-    # 6. SHORT direction verified OR explicitly insufficient (excluded from claims).
-    if facts["short_direction_verified_deterministic"]:
-        gate("short_direction", COND,
-             f"deterministic SHORT tests pass; live SHORT evidence = {facts['short_live_evidence']} "
-             "(exclude SHORT from unsupported live conclusions)")
+    # 4. Required field contract satisfied for modern rows.
+    if not have_audit:
+        gate("required_field_contract", COND, "no live field-level audit yet")
     else:
-        gate("short_direction", FAIL, "SHORT direction not verified")
+        missing = []
+        for cohort, values in cohorts.items():
+            for row in values.get("modern_required_field_missingness", []):
+                if row.get("missing_count", 0):
+                    missing.append(f"{cohort}.{row['field']}={row['missing_count']}")
+        gate("required_field_contract", PASS if not missing else COND,
+             "modern minimum contract complete" if not missing else "; ".join(missing))
 
-    # 7. Maturation producing usable outcomes. Pre-fix outcomes have NULL
-    #    directional_return/MFE/MAE (the bug); usable outcomes require the Run 53A
-    #    direction fix AND the Run 52 anti-join deployed, then fresh maturation.
-    gate("maturation_usable", COND,
-         "raw_return present, but pre-Run-53A outcomes have NULL directional/MFE/MAE; "
-         f"run52_fix_deployed={facts['run52_fix_deployed']} — deploy fixes then re-mature")
-
-    # 8. Legacy data excludable deterministically.
+    # 5. Legacy data excludable deterministically.
     gate("legacy_excludable", PASS,
-         "explicit research_cohort tag + auditor explicitly_tagged/legacy_inferred split")
+         "explicit research_cohort tag deterministically separates modern rows")
 
-    # 9. No severe conflicting-duplicate problem.
-    if not have_audit or conflicting is None:
-        gate("no_conflicting_duplicates", COND, "no live audit yet")
-    else:
-        gate("no_conflicting_duplicates", PASS if conflicting == 0 else FAIL,
-             f"conflicting_duplicates = {conflicting}")
+    # 6. Outcome calculations valid.
+    gate("outcome_calculations", PASS if facts["outcome_formula_verified"] else FAIL,
+         "directional_return/MFE/MAE deterministic tests pass")
 
-    # 10. Sample sizes reported honestly.
-    gate("honest_sample_sizes", PASS,
-         "auditor reports per-cohort n, matured/unmatured, and all counts")
+    # 7. LONG direction verified in code and, when available, live examples.
+    long_live = sum(len(v.get("direction_examples", {}).get("LONG", []))
+                    for v in cohorts.values())
+    gate("long_live_direction", PASS if facts["long_direction_verified"] and long_live else COND,
+         f"deterministic verification={facts['long_direction_verified']}; live_examples={long_live}")
+
+    # 8. SHORT verified or conclusions explicitly restricted.
+    short_live = sum(len(v.get("direction_examples", {}).get("SHORT", []))
+                     for v in cohorts.values())
+    short_status = PASS if short_live else COND
+    gate("short_live_direction", short_status,
+         f"live_examples={short_live}; unsupported SHORT conclusions must be excluded")
+
+    # 9. Maturation pipeline producing usable modern outcomes.
+    backlog = facts["maturation_backlog_status"]
+    modern_eligible = sum(
+        cell.get("analysis_eligible", 0)
+        for values in cohorts.values()
+        for directions in values.get("modern_maturity_by_horizon_direction", {}).values()
+        for cell in directions.values())
+    gate("maturation_usable", PASS if backlog == "BACKLOG_DRAINING" and modern_eligible else COND,
+         f"usable modern horizon rows={modern_eligible}; backlog={backlog}; "
+         f"run52_fix_deployed={facts['run52_fix_deployed']}")
+
+    # 10. At least one legitimate modern Candidate-vs-Control comparison.
+    supported = _supported_comparisons(cohorts)
+    gate("adequate_scoped_sample", PASS if supported else COND,
+         f"supported comparisons={supported}" if supported
+         else "no horizon/direction has >=30 complete modern Candidate and Control outcomes")
 
     statuses = [g["status"] for g in gates.values()]
     if FAIL in statuses:

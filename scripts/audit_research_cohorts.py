@@ -23,7 +23,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +31,75 @@ from analytics.research_cohorts import CANDIDATE, CONTROL, NEAR_MISS, cohort_of
 
 ROOT = Path(__file__).resolve().parents[1]
 _COHORTS = (CANDIDATE, NEAR_MISS, CONTROL)
+
+# Run 53B: minimum analysis contract. Optional fields remain visible in the audit,
+# but their absence never makes an otherwise valid cohort/outcome row defective.
+FIELD_CONTRACT = (
+    {"field": "observation_id", "group": "IDENTITY", "capture": True, "run54": True},
+    {"field": "symbol", "group": "IDENTITY", "capture": True, "run54": True},
+    {"field": "timestamp", "group": "IDENTITY", "capture": True, "run54": True},
+    {"field": "market_context.scan_id", "group": "IDENTITY", "capture": True, "run54": True},
+    {"field": "research_cohort", "group": "IDENTITY", "capture": True, "run54": True},
+    {"field": "direction", "group": "POINT_IN_TIME", "capture": True, "run54": True},
+    {"field": "market.price", "group": "POINT_IN_TIME", "capture": True, "run54": True},
+    {"field": "scanner_score", "group": "POINT_IN_TIME", "capture": False, "run54": False},
+    {"field": "rank", "group": "POINT_IN_TIME", "capture": False, "run54": False},
+    {"field": "models.prebreakout.probability", "group": "POINT_IN_TIME", "capture": False, "run54": False},
+    {"field": "models.ai_confidence.confidence", "group": "POINT_IN_TIME", "capture": False, "run54": False},
+)
+OUTCOME_CONTRACT = (
+    "horizon", "evaluation_time", "raw_return", "directional_return", "mfe", "mae",
+)
+
+
+def _direction(rec: Dict[str, Any]) -> Optional[str]:
+    for scanner in rec.get("scanners") or []:
+        value = str(scanner.get("direction") or "").strip().lower()
+        if value:
+            return "SHORT" if value in {"short", "bearish"} else "LONG"
+    return None
+
+
+def _field_value(rec: Dict[str, Any], field: str) -> Any:
+    if field == "research_cohort":
+        return (rec.get("research_cohort")
+                or (rec.get("market_context") or {}).get("research_cohort"))
+    if field == "direction":
+        return _direction(rec)
+    if field == "scanner_score":
+        for scanner in rec.get("scanners") or []:
+            if scanner.get("score") is not None:
+                return scanner.get("score")
+        return None
+    value: Any = rec
+    for part in field.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value
+
+
+def _present(value: Any) -> bool:
+    return value is not None and value != "" and not (
+        isinstance(value, float) and value != value)
+
+
+def _field_classification(field: str, *, explicit: bool) -> tuple[str, str]:
+    spec = next((s for s in FIELD_CONTRACT if s["field"] == field), None)
+    if field.startswith("outcome."):
+        return "EXPECTED_NULL", "required only after the specific horizon matures"
+    if field == "research_cohort" and not explicit:
+        return "LEGACY_SCHEMA", "legacy Candidate rows predate explicit Run-47 tags"
+    if spec and spec["run54"]:
+        return "ACTUAL_DATA_DEFECT", "required for the minimum Run-54 contract"
+    if spec:
+        return "OPTIONAL", "required only for analyses that use this feature"
+    return "OPTIONAL", "canonical completeness field, not a Run-54 requirement"
+
+
+def _outcome_complete(rec: Dict[str, Any], outcome: Dict[str, Any]) -> bool:
+    return (_present((rec.get("market") or {}).get("price"))
+            and all(_present(outcome.get(field)) for field in OUTCOME_CONTRACT))
 
 
 def _parse_dt(v: Any) -> Optional[_dt.datetime]:
@@ -75,6 +144,14 @@ def _empty_cohort_stats() -> Dict[str, Any]:
         "first_ts": None, "latest_ts": None, "matured": 0, "unmatured": 0,
         "missing_fields_obs": 0, "invalid_values": 0, "pit_violations": 0,
         "explicit": 0, "legacy_inferred": 0,
+        "field_missing": Counter(), "canonical_missing": Counter(),
+        "modern_field_missing": Counter(), "outcome_field_missing": Counter(),
+        "matured_outcome_records": 0,
+        "modern_matured": 0, "modern_unmatured": 0,
+        "maturity": defaultdict(lambda: defaultdict(lambda: {
+            "observations": 0, "analysis_eligible": 0,
+        })),
+        "direction_examples": defaultdict(list),
     }
 
 
@@ -125,8 +202,15 @@ def audit_cohorts(observations: List[Dict[str, Any]],
             conflicting_duplicates += 1
         key_records.setdefault(key, rec_hash)
 
-        if rec.get("data_quality", {}).get("missing_fields"):
+        canonical_missing = rec.get("data_quality", {}).get("missing_fields") or []
+        if canonical_missing:
             s["missing_fields_obs"] += 1
+        s["canonical_missing"].update(str(f) for f in canonical_missing)
+        for spec in FIELD_CONTRACT:
+            if not _present(_field_value(rec, spec["field"])):
+                s["field_missing"][spec["field"]] += 1
+                if _is_explicit(rec):
+                    s["modern_field_missing"][spec["field"]] += 1
         if _invalid_values(rec):
             s["invalid_values"] += 1
 
@@ -135,17 +219,67 @@ def audit_cohorts(observations: List[Dict[str, Any]],
             s["matured"] += 1
         else:
             s["unmatured"] += 1
+        if _is_explicit(rec):
+            s["modern_matured" if obs_outcomes else "modern_unmatured"] += 1
         # Point-in-time: an outcome must evaluate strictly AFTER the observation.
         for oc in obs_outcomes:
             eval_dt = _parse_dt(oc.get("evaluation_time"))
             if ts is not None and eval_dt is not None and eval_dt <= ts:
                 s["pit_violations"] += 1
+            if not _is_explicit(rec) or str(oc.get("data_status")) != "MATURED":
+                continue
+            s["matured_outcome_records"] += 1
+            for field in OUTCOME_CONTRACT:
+                if not _present(oc.get(field)):
+                    s["outcome_field_missing"][field] += 1
+            horizon = str(oc.get("horizon") or "UNKNOWN")
+            direction = _direction(rec) or "UNKNOWN"
+            cell = s["maturity"][horizon][direction]
+            cell["observations"] += 1
+            complete = _outcome_complete(rec, oc)
+            if complete:
+                cell["analysis_eligible"] += 1
+            if len(s["direction_examples"][direction]) < 3:
+                entry = (rec.get("market") or {}).get("price")
+                raw = oc.get("raw_return")
+                future = (float(entry) * (1.0 + float(raw))
+                          if _present(entry) and _present(raw) else None)
+                s["direction_examples"][direction].append({
+                    "symbol": sym, "horizon": horizon, "entry_price": entry,
+                    "future_price_derived": round(future, 6) if future is not None else None,
+                    "raw_return": raw, "directional_return": oc.get("directional_return"),
+                    "mfe": oc.get("mfe"), "mae": oc.get("mae"),
+                })
 
     # Finalize sets → counts + ISO timestamps.
     out_cohorts = {}
     for c, s in stats.items():
         obs = s["observations"]
         runs = len(s["distinct_runs"])
+        explicit = s["explicit"]
+        field_rows = []
+        combined_fields = set(s["canonical_missing"]) | {x["field"] for x in FIELD_CONTRACT}
+        for field in sorted(combined_fields):
+            missing = (s["field_missing"].get(field, 0)
+                       if any(x["field"] == field for x in FIELD_CONTRACT)
+                       else s["canonical_missing"].get(field, 0))
+            classification, reason = _field_classification(
+                field, explicit=not (field == "research_cohort" and missing == s["legacy_inferred"]))
+            field_rows.append({
+                "field": field, "missing_count": missing,
+                "missing_pct": round(100.0 * missing / obs, 2) if obs else 0.0,
+                "classification": classification,
+                "required_for_capture": bool(next((x["capture"] for x in FIELD_CONTRACT
+                                                     if x["field"] == field), False)),
+                "required_for_maturation": field in {"market.price", "direction"},
+                "required_for_run54": bool(next((x["run54"] for x in FIELD_CONTRACT
+                                                   if x["field"] == field), False)),
+                "detail": reason,
+            })
+        maturity = {
+            h: {d: dict(values) for d, values in directions.items()}
+            for h, directions in sorted(s["maturity"].items())
+        }
         out_cohorts[c] = {
             "observations": obs,
             "distinct_symbols": len(s["distinct_symbols"]),
@@ -160,6 +294,28 @@ def audit_cohorts(observations: List[Dict[str, Any]],
             "point_in_time_violations": s["pit_violations"],
             "explicitly_tagged": s["explicit"],
             "legacy_inferred": s["legacy_inferred"],
+            "modern_matured": s["modern_matured"],
+            "modern_unmatured": s["modern_unmatured"],
+            "field_missingness": field_rows,
+            "modern_required_field_missingness": [
+                {"field": spec["field"],
+                 "missing_count": s["modern_field_missing"].get(spec["field"], 0),
+                 "missing_pct": round(
+                     100.0 * s["modern_field_missing"].get(spec["field"], 0) / explicit, 2)
+                 if explicit else 0.0}
+                for spec in FIELD_CONTRACT if spec["run54"]
+            ],
+            "matured_outcome_field_missingness": [
+                {"field": field,
+                 "missing_count": s["outcome_field_missing"].get(field, 0),
+                 "missing_pct": round(
+                     100.0 * s["outcome_field_missing"].get(field, 0)
+                     / s["matured_outcome_records"], 2)
+                 if s["matured_outcome_records"] else 0.0}
+                for field in OUTCOME_CONTRACT
+            ],
+            "modern_maturity_by_horizon_direction": maturity,
+            "direction_examples": dict(s["direction_examples"]),
         }
     # Cohort overlap within a scan_run_id (a symbol tagged as >1 cohort for the
     # same selection event). candidate∩control is the serious one (Part 2).
@@ -178,13 +334,19 @@ def audit_cohorts(observations: List[Dict[str, Any]],
                 overlap["near_miss_control"] += 1
 
     return {
-        "schema": "hsf-cohort-audit-1.1",
+        "schema": "hsf-cohort-audit-1.2",
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "total_observations": sum(c["observations"] for c in out_cohorts.values()),
         "duplicate_observation_ids": duplicate_ids,
         "conflicting_duplicates": conflicting_duplicates,
         "cohort_overlap_within_run": overlap,
         "cohorts": out_cohorts,
+        "run54_contract": {
+            "observation_fields": list(FIELD_CONTRACT),
+            "outcome_fields_after_maturity": list(OUTCOME_CONTRACT),
+            "future_price": "derived as entry_price * (1 + raw_return); not persisted",
+            "null_policy": "exclude rows missing fields required by the specific analysis; never zero-fill",
+        },
     }
 
 
