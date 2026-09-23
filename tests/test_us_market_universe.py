@@ -160,5 +160,28 @@ class CoverageIntegrityTests(unittest.TestCase):
         self.assertGreater(funnel["coverage_pct"], 0.95)
 
 
+class BatchSizeTests(unittest.TestCase):
+    def test_cron_batch_size_env_used_and_clamped(self):
+        from config import (
+            PRICE_FETCH_CHUNK_MAX,
+            PRICE_FETCH_CHUNK_MIN,
+            PRICE_FETCH_CHUNK_SIZE,
+        )
+        from scan.engine import resolve_chunk_size
+        # session value wins over env
+        self.assertEqual(resolve_chunk_size(120, "50"),
+                         max(PRICE_FETCH_CHUNK_MIN, min(PRICE_FETCH_CHUNK_MAX, 120)))
+        # env used when no session value (scheduled/headless path)
+        self.assertEqual(resolve_chunk_size(None, "40"),
+                         max(PRICE_FETCH_CHUNK_MIN, min(PRICE_FETCH_CHUNK_MAX, 40)))
+        # default when neither set
+        self.assertEqual(resolve_chunk_size(None, None),
+                         max(PRICE_FETCH_CHUNK_MIN, min(PRICE_FETCH_CHUNK_MAX, PRICE_FETCH_CHUNK_SIZE)))
+        # clamped + invalid safe
+        self.assertEqual(resolve_chunk_size(None, "999999"), PRICE_FETCH_CHUNK_MAX)
+        self.assertEqual(resolve_chunk_size(None, "garbage"),
+                         max(PRICE_FETCH_CHUNK_MIN, min(PRICE_FETCH_CHUNK_MAX, PRICE_FETCH_CHUNK_SIZE)))
+
+
 if __name__ == "__main__":
     unittest.main()

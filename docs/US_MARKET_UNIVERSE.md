@@ -113,3 +113,39 @@ confirm operational practicality.
   (RATE_LIMIT/TIMEOUT ⇒ provider pressure; NO_PRICE_DATA ⇒ symbol/data issues).
 - **Universe looks small:** ensure `US_MARKET` (not a legacy universe) and that
   `CRON_NASDAQ_LIMIT` is not being misapplied (it does not affect US_MARKET).
+
+## Asset-type handling (explicit)
+
+| Type | Handling |
+| --- | --- |
+| Common stocks | **Included** |
+| ETFs | **Included** (tradable `us_equity`; HSF treats them as scannable equities) |
+| ADRs | **Included** (listed `us_equity` on a U.S. exchange) |
+| Preferred shares | Mostly **included**; only excluded when the symbol carries a warrant/unit/rights marker (Alpaca exposes no fine sub-type — documented limitation) |
+| Warrants / rights / units | **Excluded** (`is_spac_unit_or_warrant`) |
+| OTC securities | **Excluded** by the endpoint (`asset_class=us_equity` returns exchange-listed only) |
+| Test symbols | **Excluded** (`is_probably_delisted` blocklist / malformed filter) |
+| Crypto | **Excluded** (not `us_equity`) |
+| Options | **Excluded** (not `us_equity`) |
+
+## Batching / CRON_BATCH_SIZE (Run 44)
+
+The scheduled/headless price-fetch batch size is configurable via
+`CRON_BATCH_SIZE` (env). Resolution precedence (`scan.engine.resolve_chunk_size`,
+pure + tested): interactive Streamlit `price_fetch_chunk_size` → `CRON_BATCH_SIZE`
+→ `PRICE_FETCH_CHUNK_SIZE` default, always clamped to
+`[PRICE_FETCH_CHUNK_MIN, PRICE_FETCH_CHUNK_MAX]` (a bad value can never explode
+memory or hammer the provider; invalid input falls back to the default). The
+default behavior is unchanged when the env is unset. Batches are processed
+deterministically with per-chunk failure isolation and per-symbol skip capture,
+so one bad ticker or chunk never kills the whole scan; concurrency stays bounded
+(`fetch_price_data_parallel`, `max_workers=4`) to respect provider rate limits.
+
+## Live validation (2026-09-22, run 35758795541)
+
+Non-mocked scheduled US_MARKET run on `dev`:
+`universe_source=live` · provider_assets **14,357** → eligible **11,873**
+(excluded: 878 non-tradable, 1,297 warrants/units/unsupported, 309 wrong-exchange)
+→ eligible-after-tradability **11,827** → attempted **11,826** → priced **11,631**
+(195 failures, all `FILTERED_BY_POLICY` = deliberate yfinance-fallback skips) →
+**100 candidates** · coverage **98.3% · HEALTHY** · scan 125s · ~94.6 symbols/sec.

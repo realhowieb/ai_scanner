@@ -265,6 +265,24 @@ def _apply_scan_profile(
     effective_unusual_volume = unusual_volume or force_unusual
     return effective_min_gap, effective_unusual_volume
 
+
+def resolve_chunk_size(session_value, env_value=None) -> int:
+    """Resolve the price-fetch batch size (Run 44, deterministic + testable).
+
+    Precedence: interactive `session_value` (Streamlit) > `CRON_BATCH_SIZE`
+    env (scheduled/headless path) > `PRICE_FETCH_CHUNK_SIZE` default. Always
+    clamped to [MIN, MAX] so a bad value can never explode memory or hammer the
+    provider. Invalid input falls back to the default.
+    """
+    raw = session_value if session_value is not None else (
+        env_value if env_value not in (None, "") else PRICE_FETCH_CHUNK_SIZE)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = PRICE_FETCH_CHUNK_SIZE
+    return max(PRICE_FETCH_CHUNK_MIN, min(PRICE_FETCH_CHUNK_MAX, value))
+
+
 def safe_call(
     fn: Callable[..., T],
     *args: Any,
@@ -506,9 +524,13 @@ def run_breakout_scan(
         try:
             from data.prices import fetch_price_data_batch  # type: ignore
 
-            # Chunk size tuned to keep UI responsive without hammering Yahoo.
-            chunk_size = int(st.session_state.get("price_fetch_chunk_size", PRICE_FETCH_CHUNK_SIZE))
-            chunk_size = max(PRICE_FETCH_CHUNK_MIN, min(PRICE_FETCH_CHUNK_MAX, chunk_size))
+            # Chunk size tuned to keep UI responsive without hammering the
+            # provider. Run 44: the scheduled/headless path (empty session_state)
+            # honors CRON_BATCH_SIZE so whole-market scans can be tuned without a
+            # code change; clamped to the same safe bounds. Default unchanged.
+            chunk_size = resolve_chunk_size(
+                st.session_state.get("price_fetch_chunk_size"),
+                os.getenv("CRON_BATCH_SIZE"))
 
             tick(0, note=f"chunk_size={chunk_size}")
             processed = 0
