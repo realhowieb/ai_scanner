@@ -151,6 +151,50 @@ class WorkerTests(unittest.TestCase):
             save_fn=lambda o: True, max_symbols=0)
         self.assertEqual(len(fetched), 4)  # <=0 → no cap
 
+    def test_backlog_telemetry_reports_capacity(self):
+        # Run 52: the report must expose backlog capacity so growth is measurable.
+        def mk(sym, minute):
+            o = dict(_obs()); o["symbol"] = sym
+            o["scan_timestamp"] = f"2026-08-25T14:0{minute}:00+00:00"
+            return o
+        obs = [mk(f"S{i}", i) for i in range(5)]
+        r = worker.mature_observations(
+            obs, now="2026-08-25T16:00:00+00:00", fetch_bars=lambda s, d: _bars(),
+            save_fn=lambda o: True, max_symbols=2)
+        b = r["backlog"]
+        self.assertEqual(b["ready_symbols"], 5)
+        self.assertEqual(b["processed_symbols"], 2)
+        self.assertEqual(b["deferred_symbols"], 3)
+        self.assertEqual(b["estimated_clearance_runs"], 3)   # ceil(5/2)
+        self.assertEqual(b["matured_observations"], r["attached"])
+        # oldest still-pending = oldest DEFERRED anchor (S2 @ 14:02 → 118 min old)
+        self.assertAlmostEqual(b["oldest_pending_age_min"], 118.0, places=1)
+
+    def test_already_matured_horizons_not_refetched(self):
+        # Run 52 core fix: when the loader attaches matured horizons, a fully
+        # matured observation has NO ready horizons → it is not fetched again.
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        obs = _obs()
+        self.assertTrue(store.save_observation(obs, conn=conn))
+        # Mature every horizon once (write real outcome rows).
+        first = worker.mature_observations(
+            [obs], now="2026-08-25T16:00:00+00:00", fetch_bars=lambda s, d: _bars(),
+            save_fn=lambda o: store.save_outcome(o, conn=conn))
+        self.assertGreater(first["attached"], 0)
+        # Reload the way the worker does in production (attach_outcomes=True).
+        reloaded = store.load_recent_observations(
+            limit=10, attach_outcomes=True, conn=conn)
+        self.assertEqual(len(reloaded), 1)
+        self.assertTrue(reloaded[0].get("outcomes"))   # matured horizons attached
+        fetched = []
+        second = worker.mature_observations(
+            reloaded, now="2026-08-25T16:00:00+00:00",
+            fetch_bars=lambda s, d: fetched.append(s) or _bars(),
+            save_fn=lambda o: store.save_outcome(o, conn=conn))
+        self.assertEqual(fetched, [])                  # no redundant re-fetch
+        self.assertEqual(second["backlog"]["ready_symbols"], 0)
+
 
 class EndToEndTests(unittest.TestCase):
     def test_full_lifecycle_scan_to_scoreboard(self):

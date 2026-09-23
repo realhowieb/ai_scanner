@@ -317,8 +317,17 @@ def load_observations_for_symbol(symbol: str, *, limit: int = 500,
 
 
 def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
+                             attach_outcomes: bool = False,
                              conn=None) -> List[Dict[str, Any]]:
-    """Most recent observations (newest first). Non-fatal; [] if DB unavailable."""
+    """Most recent observations (newest first). Non-fatal; [] if DB unavailable.
+
+    When ``attach_outcomes`` is True (Run 52), each record's ``outcomes`` is
+    populated with the horizons already matured for that observation, via a single
+    aggregate LEFT JOIN (no N+1). The maturation worker needs this so a horizon
+    that is already matured is classified ``already`` instead of being re-fetched
+    every run — without it the worker cannot tell matured from unmatured work and
+    burns its bounded fetch budget re-processing completed observations. This does
+    NOT change outcome values; it only tells the worker which horizons exist."""
     c, opened, is_sqlite = _resolve_conn(conn)
     if c is None:
         return []
@@ -326,7 +335,17 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
         _ensure_schema(c, is_sqlite)
         cur = c.cursor()
         ph = _ph(is_sqlite)
-        if context is None:
+        agg = "group_concat(horizon, ',')" if is_sqlite else "string_agg(horizon, ',')"
+        if attach_outcomes:
+            select = (f"SELECT o.record, oc.horizons FROM hsf_observations o "
+                      f"LEFT JOIN (SELECT observation_id, {agg} AS horizons "
+                      f"FROM hsf_observation_outcomes GROUP BY observation_id) oc "
+                      f"ON o.observation_id = oc.observation_id")
+            where = "" if context is None else f"WHERE o.context = {ph} "
+            order = f"ORDER BY o.timestamp DESC LIMIT {ph}"
+            params = (int(limit),) if context is None else (str(context), int(limit))
+            cur.execute(f"{select} {where}{order}", params)
+        elif context is None:
             cur.execute(f"SELECT record FROM hsf_observations "
                         f"ORDER BY timestamp DESC LIMIT {ph}", (int(limit),))
         else:
@@ -334,7 +353,21 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
                         f"ORDER BY timestamp DESC LIMIT {ph}", (str(context), int(limit)))
         rows = cur.fetchall() or []
         cur.close()
-        return [_loads(r[0] if not isinstance(r, dict) else list(r.values())[0]) for r in rows]
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            vals = list(r.values()) if isinstance(r, dict) else r
+            rec = _loads(vals[0])
+            if not rec:
+                continue
+            if attach_outcomes:
+                horizons = vals[1] if len(vals) > 1 else None
+                matured = [h for h in str(horizons or "").split(",") if h]
+                if matured:
+                    rec.setdefault("outcomes", {})
+                    for h in matured:
+                        rec["outcomes"].setdefault(h, True)
+            out.append(rec)
+        return out
     except Exception:
         return []
     finally:

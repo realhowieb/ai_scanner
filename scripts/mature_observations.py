@@ -49,7 +49,7 @@ def _parse(v: Any):
 
 def _new_report() -> Dict[str, Any]:
     return {
-        "schema": "hsf-maturation-1.0",
+        "schema": "hsf-maturation-1.1",
         "generated_at": _now().isoformat(),
         "observations_scanned": 0,
         "eligible_observations": 0,
@@ -59,6 +59,18 @@ def _new_report() -> Dict[str, Any]:
                      for h in HORIZON_BARS},
         "failures": {},
         "attached": 0,
+        # Run 52 — backlog capacity telemetry (measurement only).
+        "backlog": {
+            "ready_symbols": 0,          # distinct symbols with >=1 ready horizon
+            "ready_observations": 0,     # observations with >=1 ready horizon
+            "processed_symbols": 0,      # symbols actually fetched this run (<= cap)
+            "deferred_symbols": 0,       # ready symbols not reached (cap overflow)
+            "matured_observations": 0,   # NEW outcome rows written this run
+            "failed_symbols": 0,         # symbols that failed wholesale (no maturation)
+            "oldest_pending_age_min": None,   # age of oldest READY anchor still pending
+            "estimated_clearance_runs": None,  # ceil(ready_symbols / cap), snapshot
+            "max_symbols": 0,
+        },
     }
 
 
@@ -79,6 +91,8 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
     (idempotent — deferred symbols mature on a later run). Set max_symbols<=0 for
     no cap (tests)."""
     now = now or _now()
+    if not isinstance(now, _dt.datetime):
+        now = _parse(now) or _now()
     report = _new_report()
 
     # Group by symbol so each symbol's future bars are fetched ONCE per run.
@@ -109,25 +123,50 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
     ordered = sorted(symbol_plans.items(),
                      key=lambda kv: (kv[1][1] is None, kv[1][1] or now))
     report["symbols_with_ready_horizons"] = len(ordered)
+    ready_symbols_total = len(ordered)
+    ready_observations_total = sum(len(v[0]) for _s, v in ordered)
+    deferred_symbols = 0
     if max_symbols and max_symbols > 0 and len(ordered) > max_symbols:
-        report["symbols_deferred"] = len(ordered) - max_symbols
+        deferred = ordered[max_symbols:]
+        deferred_symbols = len(deferred)
+        report["symbols_deferred"] = deferred_symbols
+        # Oldest observation still pending AFTER this run = oldest deferred anchor.
+        oldest_deferred = min((v[1] for _s, v in deferred if v[1] is not None),
+                              default=None)
+        report["backlog"]["oldest_pending_age_min"] = (
+            round((now - oldest_deferred).total_seconds() / 60.0, 1)
+            if oldest_deferred is not None else None)
         ordered = ordered[:max_symbols]
+
+    report["backlog"].update({
+        "ready_symbols": ready_symbols_total,
+        "ready_observations": ready_observations_total,
+        "processed_symbols": len(ordered),
+        "deferred_symbols": deferred_symbols,
+        "max_symbols": int(max_symbols),
+        "estimated_clearance_runs": (
+            -(-ready_symbols_total // max_symbols) if max_symbols and max_symbols > 0
+            else 1),
+    })
 
     # Pass 2 (I/O): fetch + mature the bounded set.
     for symbol, (plans, earliest) in ordered:
         report["eligible_observations"] += len(plans)
         if earliest is None:
             _fail(report, None, "INVALID_TIMESTAMP")
+            report["backlog"]["failed_symbols"] += 1
             continue
         try:
             bars = (fetch_bars or _default_fetch)(symbol, earliest.date().isoformat())
         except Exception:
             _fail(report, None, "PROVIDER_ERROR")
+            report["backlog"]["failed_symbols"] += 1
             continue
         if not bars:
             for _o, _a, ready in plans:
                 for h in ready:
                     _fail(report, h, "PRICE_DATA_UNAVAILABLE")
+            report["backlog"]["failed_symbols"] += 1
             continue
 
         for o, anchor, ready in plans:
@@ -165,6 +204,9 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
                     report["attached"] += 1
                 else:
                     report["horizons"][oc["horizon"]]["already"] += 1
+    # matured_observations counts NEW outcome rows written (real drain this run);
+    # in dry-run it mirrors would-be writes so clearance estimates stay comparable.
+    report["backlog"]["matured_observations"] = report["attached"]
     return report
 
 
@@ -190,6 +232,14 @@ def render_report_text(r: Dict[str, Any]) -> str:
                      f"not_ready={s['not_ready']} failed={s['failed']}")
     if r["failures"]:
         lines.append("Failures: " + ", ".join(f"{k}={v}" for k, v in sorted(r["failures"].items())))
+    b = r.get("backlog") or {}
+    if b:
+        lines.append(
+            f"Backlog: ready_symbols={b.get('ready_symbols')} "
+            f"processed={b.get('processed_symbols')} deferred={b.get('deferred_symbols')} "
+            f"matured={b.get('matured_observations')} failed_symbols={b.get('failed_symbols')} "
+            f"oldest_pending_min={b.get('oldest_pending_age_min')} "
+            f"clearance_runs={b.get('estimated_clearance_runs')}")
     return "\n".join(lines)
 
 
@@ -206,7 +256,10 @@ def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "artifacts" / "automation"))
     args = ap.parse_args()
 
-    observations = load_recent_observations(limit=args.limit) or []
+    # attach_outcomes=True (Run 52): matured horizons come back on each record so
+    # already-matured work is classified `already` and skipped, not re-fetched.
+    observations = load_recent_observations(limit=args.limit,
+                                            attach_outcomes=True) or []
     report = mature_observations(observations, slack_min=args.slack_min,
                                  dry_run=args.dry_run, max_symbols=args.max_symbols)
     report["dry_run"] = bool(args.dry_run)
