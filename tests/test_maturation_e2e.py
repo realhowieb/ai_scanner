@@ -116,6 +116,41 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(writes, [])
         self.assertGreater(r["attached"], 0)  # counted as would-write
 
+    def test_max_symbols_bounds_fetches(self):
+        # 5 distinct symbols, cap at 2 → only 2 fetched, 3 deferred (backlog drains
+        # on later runs). Prevents the CI timeout seen when cohort volume grew.
+        def mk(sym, minute):
+            o = dict(_obs())
+            o["symbol"] = sym
+            o["scan_timestamp"] = f"2026-08-25T14:0{minute}:00+00:00"
+            return o
+        obs = [mk(f"S{i}", i) for i in range(5)]
+        fetched = []
+
+        def fetch(sym, d):
+            fetched.append(sym)
+            return _bars()
+        r = worker.mature_observations(
+            obs, now="2026-08-25T16:00:00+00:00", fetch_bars=fetch,
+            save_fn=lambda o: True, max_symbols=2)
+        self.assertEqual(len(fetched), 2)                 # only 2 fetched
+        self.assertEqual(r["symbols_with_ready_horizons"], 5)
+        self.assertEqual(r["symbols_deferred"], 3)
+        # oldest-anchor first: S0, S1 (earliest scan_timestamps) processed
+        self.assertEqual(sorted(fetched), ["S0", "S1"])
+
+    def test_no_cap_processes_all(self):
+        def mk(sym, minute):
+            o = dict(_obs()); o["symbol"] = sym
+            o["scan_timestamp"] = f"2026-08-25T14:0{minute}:00+00:00"
+            return o
+        obs = [mk(f"S{i}", i) for i in range(4)]
+        fetched = []
+        worker.mature_observations(
+            obs, now="2026-08-25T16:00:00+00:00", fetch_bars=lambda s, d: fetched.append(s) or _bars(),
+            save_fn=lambda o: True, max_symbols=0)
+        self.assertEqual(len(fetched), 4)  # <=0 → no cap
+
 
 class EndToEndTests(unittest.TestCase):
     def test_full_lifecycle_scan_to_scoreboard(self):

@@ -53,6 +53,8 @@ def _new_report() -> Dict[str, Any]:
         "generated_at": _now().isoformat(),
         "observations_scanned": 0,
         "eligible_observations": 0,
+        "symbols_with_ready_horizons": 0,
+        "symbols_deferred": 0,
         "horizons": {h: {"new": 0, "already": 0, "not_ready": 0, "failed": 0}
                      for h in HORIZON_BARS},
         "failures": {},
@@ -67,8 +69,15 @@ def _fail(report: Dict[str, Any], horizon: str | None, reason: str) -> None:
 
 
 def mature_observations(observations, *, now=None, slack_min: int = 15,
-                        dry_run: bool = False, fetch_bars=None, save_fn=None) -> Dict[str, Any]:
-    """Pure-ish orchestration (injectable `fetch_bars`/`save_fn` for tests)."""
+                        dry_run: bool = False, fetch_bars=None, save_fn=None,
+                        max_symbols: int = 400) -> Dict[str, Any]:
+    """Pure-ish orchestration (injectable `fetch_bars`/`save_fn` for tests).
+
+    Bounded per run: at most `max_symbols` distinct symbols are fetched, in
+    oldest-anchor-first order, so the worker finishes within its CI timeout and
+    the backlog drains deterministically across the every-30-min schedule
+    (idempotent — deferred symbols mature on a later run). Set max_symbols<=0 for
+    no cap (tests)."""
     now = now or _now()
     report = _new_report()
 
@@ -78,8 +87,9 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
         report["observations_scanned"] += 1
         by_symbol[str(o.get("symbol") or "").upper()].append(o)
 
+    # Pass 1 (no I/O): build per-symbol plans + earliest ready anchor.
+    symbol_plans: Dict[str, tuple] = {}
     for symbol, obs_list in by_symbol.items():
-        # Determine which observations have any ready horizon; fetch once.
         plans = []
         for o in obs_list:
             anchor = o.get("scan_timestamp") or o.get("timestamp")
@@ -91,11 +101,21 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
             ready = [h for h, s in elig.items() if s == "ready"]
             if ready:
                 plans.append((o, anchor, ready))
-        if not plans:
-            continue
-        report["eligible_observations"] += len(plans)
+        if plans:
+            anchors = [_parse(p[1]) for p in plans if _parse(p[1])]
+            symbol_plans[symbol] = (plans, min(anchors) if anchors else None)
 
-        earliest = min(_parse(p[1]) for p in plans if _parse(p[1]))
+    # Oldest-anchor first so the backlog drains and near-complete symbols finish.
+    ordered = sorted(symbol_plans.items(),
+                     key=lambda kv: (kv[1][1] is None, kv[1][1] or now))
+    report["symbols_with_ready_horizons"] = len(ordered)
+    if max_symbols and max_symbols > 0 and len(ordered) > max_symbols:
+        report["symbols_deferred"] = len(ordered) - max_symbols
+        ordered = ordered[:max_symbols]
+
+    # Pass 2 (I/O): fetch + mature the bounded set.
+    for symbol, (plans, earliest) in ordered:
+        report["eligible_observations"] += len(plans)
         if earliest is None:
             _fail(report, None, "INVALID_TIMESTAMP")
             continue
@@ -161,7 +181,9 @@ def _default_save(outcome) -> bool:
 def render_report_text(r: Dict[str, Any]) -> str:
     lines = ["HSF Outcome Maturation", "----------------------",
              f"Eligible observations: {r['eligible_observations']} "
-             f"(scanned {r['observations_scanned']})"]
+             f"(scanned {r['observations_scanned']})",
+             f"Symbols ready: {r.get('symbols_with_ready_horizons', 0)} "
+             f"(deferred this run: {r.get('symbols_deferred', 0)})"]
     for h in HORIZON_BARS:
         s = r["horizons"][h]
         lines.append(f"{h}: new={s['new']} already={s['already']} "
@@ -177,12 +199,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Mature captured observation outcomes")
     ap.add_argument("--limit", type=int, default=5000)
     ap.add_argument("--slack-min", type=int, default=15)
+    ap.add_argument("--max-symbols", type=int, default=400,
+                    help="max distinct symbols to fetch this run (bounds runtime; "
+                         "backlog drains across the schedule). <=0 = no cap.")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--out", default=str(ROOT / "artifacts" / "automation"))
     args = ap.parse_args()
 
     observations = load_recent_observations(limit=args.limit) or []
-    report = mature_observations(observations, slack_min=args.slack_min, dry_run=args.dry_run)
+    report = mature_observations(observations, slack_min=args.slack_min,
+                                 dry_run=args.dry_run, max_symbols=args.max_symbols)
     report["dry_run"] = bool(args.dry_run)
 
     out_dir = Path(args.out)
