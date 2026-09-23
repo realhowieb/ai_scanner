@@ -120,8 +120,12 @@ def build_scan_observations(
     coverage_health: Optional[str] = None,
     market_regime: Optional[str] = None,
     ts_bucket: str = "hour",
+    research_cohort: Optional[str] = None,
+    selection_reason: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Build one canonical observation per scanner-trigger result row."""
+    """Build one canonical observation per scanner-trigger result row. When
+    `research_cohort` is given (Run 47), each observation is tagged with its
+    cohort + selection_reason (point-in-time labels only)."""
     obs_ts = bucket_timestamp(scan_timestamp, bucket=ts_bucket)
     context = f"scheduled:{str(universe).lower()}"
     out: List[Dict[str, Any]] = []
@@ -129,7 +133,7 @@ def build_scan_observations(
         sym = row.get("Ticker") or row.get("Symbol")
         if not sym:
             continue
-        out.append(build_observation(
+        o = build_observation(
             symbol=sym,
             timestamp=obs_ts,
             context=context,
@@ -143,7 +147,12 @@ def build_scan_observations(
                             "market_regime": market_regime},
             scan_timestamp=scan_timestamp,
             data_source="scheduled_breakout_scan",
-        ))
+        )
+        if research_cohort:
+            o["research_cohort"] = research_cohort
+            o["selection_reason"] = selection_reason or ""
+            o["market_context"]["research_cohort"] = research_cohort
+        out.append(o)
     return out
 
 
@@ -199,6 +208,8 @@ def capture_scan_observations(
     coverage: Optional[Dict[str, Any]] = None,
     dry_run: bool = False,
     conn=None,
+    research_cohort: Optional[str] = None,
+    selection_reason: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build and (unless dry_run) persist canonical observations for a scan.
 
@@ -210,7 +221,8 @@ def capture_scan_observations(
     observations = build_scan_observations(
         result_rows, universe=universe, scan_timestamp=scan_timestamp,
         session=session, universe_version=universe_version, scan_id=scan_id,
-        coverage_health=coverage_health,
+        coverage_health=coverage_health, research_cohort=research_cohort,
+        selection_reason=selection_reason,
     )
     cov_funnel = (coverage or {}).get("funnel") if coverage else None
     summary = summarize_capture(observations, coverage=cov_funnel)

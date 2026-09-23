@@ -253,15 +253,72 @@ def dataset_health_report(
     }
 
 
+def _cohort_of(o: Dict[str, Any]) -> str:
+    c = o.get("research_cohort") or (o.get("market_context") or {}).get("research_cohort")
+    return str(c) if c else "CANDIDATE"  # legacy untagged → CANDIDATE
+
+
+_HORIZONS = ("+5m", "+15m", "+30m", "+60m", "EOD")
+
+
+def research_dataset_report(observations: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Cohort-aware research dataset report (Task 18): per-cohort counts + outcome
+    maturity by horizon + integrity flags."""
+    from collections import defaultdict
+    by_cohort: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for o in observations:
+        by_cohort[_cohort_of(o)].append(o)
+
+    def _maturity(rows):
+        n = len(rows)
+        out = {}
+        for h in _HORIZONS:
+            matured = sum(1 for o in rows
+                          if str(((o.get("outcomes") or {}).get(h) or {}).get("data_status")) == "MATURED")
+            out[h] = round(matured / n, 4) if n else None
+        return out
+
+    timestamps = sorted(str(o.get("timestamp")) for o in observations if o.get("timestamp"))
+    invalid_obs = sum(1 for o in observations if validate_observation(o))
+    invalid_out = 0
+    for o in observations:
+        for oc in (o.get("outcomes") or {}).values():
+            if isinstance(oc, dict) and validate_outcome(oc, observation_timestamp=o.get("scan_timestamp")):
+                invalid_out += 1
+    pit = sum(1 for o in observations if check_point_in_time(o))
+    cohorts = {c: {"count": len(rows), "outcome_maturity": _maturity(rows)}
+               for c, rows in sorted(by_cohort.items())}
+    state = "HEALTHY"
+    if pit:
+        state = "FAILED"
+    elif invalid_out or invalid_obs or not by_cohort.get("NEAR_MISS") or not by_cohort.get("CONTROL"):
+        state = "DEGRADED"
+    return {
+        "schema": SCHEMA_VERSION,
+        "period": {"first": timestamps[0] if timestamps else None,
+                   "last": timestamps[-1] if timestamps else None},
+        "scan_runs": len({str((o.get("market_context") or {}).get("scan_id")) for o in observations}),
+        "cohorts": cohorts,
+        "point_in_time_violations": pit,
+        "invalid_observations": invalid_obs,
+        "invalid_outcomes": invalid_out,
+        "dataset_health": state,
+    }
+
+
 def research_export(
     observations: Sequence[Dict[str, Any]], *,
     healthy_only: bool = False, start: Optional[str] = None, end: Optional[str] = None,
+    cohorts: Optional[Sequence[str]] = None, include_outcomes: bool = False,
+    horizons: Optional[Sequence[str]] = None,
 ) -> List[Dict[str, Any]]:
-    """Deterministic, point-in-time-safe research export (Task 16).
+    """Deterministic, point-in-time-safe research export (Task 16/19).
 
-    Stable column set, deterministic ordering (by timestamp, symbol). Outcome
-    fields are EXCLUDED by default — the export carries features known at T only.
-    Optional HEALTHY-scan filter and date range."""
+    Stable column set, deterministic ordering (by timestamp, symbol). **Outcome
+    fields are EXCLUDED by default** — features known at T only. `include_outcomes
+    =True` explicitly joins matured outcomes under an obvious `outcomes` key.
+    Optional HEALTHY-scan filter, date range, and cohort filter."""
+    cohort_set = {str(c).upper() for c in cohorts} if cohorts else None
     rows: List[Dict[str, Any]] = []
     for o in observations:
         ts = str(o.get("timestamp") or "")
@@ -271,6 +328,8 @@ def research_export(
             continue
         ctx = o.get("market_context") or {}
         if healthy_only and str(ctx.get("coverage_health")) != "HEALTHY":
+            continue
+        if cohort_set is not None and _cohort_of(o) not in cohort_set:
             continue
         mkt, ind = o.get("market") or {}, o.get("indicators") or {}
         models = o.get("models") or {}
@@ -282,6 +341,8 @@ def research_export(
             "session": o.get("session"),
             "universe": o.get("universe_version"),
             "scan_id": ctx.get("scan_id"),
+            "research_cohort": _cohort_of(o),
+            "selection_reason": o.get("selection_reason"),
             "coverage_health": ctx.get("coverage_health"),
             "market_regime": ctx.get("market_regime"),
             "schema_version": o.get("schema_version"),
@@ -295,10 +356,37 @@ def research_export(
             row[f"ind_{i}"] = ind.get(i)
         row["prebreakout_probability"] = (models.get("prebreakout") or {}).get("probability")
         row["ai_confidence"] = (models.get("ai_confidence") or {}).get("confidence")
-        # NOTE: no outcome fields — by design (Run 47 consumes outcomes separately).
+        if include_outcomes:
+            # Explicit, obvious opt-in — outcomes are the ONLY future data here.
+            ocs = o.get("outcomes") or {}
+            wanted = horizons or list(ocs.keys())
+            row["outcomes"] = {h: ocs.get(h) for h in wanted if ocs.get(h) is not None}
         rows.append(row)
     rows.sort(key=lambda r: (str(r.get("timestamp") or ""), str(r.get("symbol") or "")))
     return rows
+
+
+def validate_outcome(outcome: Dict[str, Any], *, observation_timestamp: Any = None) -> List[str]:
+    """Outcome data-quality checks (Task 15). Never silently zero-fills."""
+    issues: List[str] = []
+    for key in ("raw_return", "directional_return", "mfe", "mae"):
+        v = _num(outcome.get(key))
+        if v is not None and not math.isfinite(v):
+            issues.append(f"nonfinite:{key}")
+    et = _parse(outcome.get("evaluation_time"))
+    obs_t = _parse(observation_timestamp) if observation_timestamp is not None else \
+        _parse(outcome.get("observation_timestamp"))
+    if outcome.get("data_status") == "MATURED":
+        if et is None:
+            issues.append("missing_evaluation_time")
+        elif obs_t is not None and et <= obs_t:
+            issues.append("outcome_before_observation")
+    fut = outcome.get("future_high"), outcome.get("future_low")
+    for name, v in zip(("future_high", "future_low"), fut):
+        fv = _num(v)
+        if fv is not None and fv <= 0:
+            issues.append(f"invalid_price:{name}")
+    return issues
 
 
 EXPORT_COLUMNS = ["observation_id", "symbol", "timestamp", "scan_timestamp",

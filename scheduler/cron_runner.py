@@ -44,6 +44,45 @@ def _release_scan_lock() -> None:
         pass
 
 
+def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_id,
+                              candidate_symbols, coverage_report_obj) -> None:
+    """Persist bounded NEAR_MISS + CONTROL research observations (Run 47).
+    Best-effort, non-fatal; side-effect only — never touches results/snapshots."""
+    try:
+        from analytics.research_cohorts import (
+            build_control_observations,
+            build_near_miss_observations,
+            cohort_balance,
+            select_control_symbols,
+        )
+        from db.hsf_observations import save_observations_batch
+
+        health = (coverage_report_obj or {}).get("health", {}).get("state")
+        session = _resolve_session()
+        near_miss = build_near_miss_observations(
+            research_sink.get("near_miss_rows") or [], universe=universe,
+            scan_timestamp=scan_started_at, session=session, scan_id=scan_id,
+            coverage_health=health)
+        controls = select_control_symbols(
+            research_sink.get("evaluated_symbols") or [], scan_run_id=scan_id,
+            exclude=candidate_symbols)
+        control_obs = build_control_observations(
+            controls, research_sink.get("price_snapshot") or {}, universe=universe,
+            scan_timestamp=scan_started_at, session=session, scan_id=scan_id,
+            coverage_health=health)
+        res = save_observations_batch(near_miss + control_obs)
+        bal = cohort_balance(
+            [{"research_cohort": "CANDIDATE"}] * len(candidate_symbols)
+            + near_miss + control_obs,
+            evaluated=len((research_sink.get("evaluated_symbols") or [])))
+        print(f"[research_cohorts] {universe}: candidates={bal['candidate']} "
+              f"near_miss={bal['near_miss']} control={bal['control']} "
+              f"written={res.get('written')} (evaluated={bal['evaluated']})")
+    except Exception as e:
+        print(f"[research_cohorts] failed for {universe}: {e}")
+        _capture(e)
+
+
 def _append_perf_history(record: dict, *, keep: int = 60) -> None:
     """Append a per-run performance record to a rolling JSONL history for
     repeatability comparison (Run 45). Best-effort; never raises."""
@@ -330,9 +369,19 @@ def run_and_save(
         scan_started_at = dt.datetime.now(dt.timezone.utc)
         started = time.perf_counter()
         coverage_sink: dict = {}
+        # Run 47 research capture (opt-in, bounded, hard-capped): request the
+        # NEAR_MISS slice + a control snapshot. Production results are unchanged.
+        research_sink: dict | None = None
+        if os.getenv("HSF_RESEARCH_CAPTURE", "1").strip() != "0":
+            try:
+                from analytics.research_cohorts import near_miss_n
+                research_sink = {"near_miss_n": near_miss_n()}
+            except Exception:
+                research_sink = None
         results = run_breakout_scan(
             tickers,
             coverage_sink=coverage_sink,
+            research_sink=research_sink,
             premarket=premarket,
             afterhours=afterhours,
             unusual_volume=unusual_volume,
@@ -456,9 +505,20 @@ def run_and_save(
                     scan_id=scan_started_at.isoformat(),
                     coverage=coverage_report_obj,
                     dry_run=os.getenv("HSF_OBSERVATION_CAPTURE_DRYRUN", "0").strip() == "1",
+                    research_cohort="CANDIDATE", selection_reason="top_n_candidate",
                 )
                 print(render_capture_text(cap))
                 _write_coverage_artifact(f"{universe}_capture", cap)
+
+                # Run 47: NEAR_MISS + CONTROL research cohorts (bounded, guarded,
+                # side-effect only). Never affects results/ranking/snapshots.
+                if research_sink and os.getenv("HSF_OBSERVATION_CAPTURE_DRYRUN", "0").strip() != "1":
+                    _capture_research_cohorts(
+                        research_sink, universe=universe, scan_started_at=scan_started_at,
+                        scan_id=scan_started_at.isoformat(),
+                        candidate_symbols=[str(r.get("Ticker") or r.get("Symbol") or "").upper()
+                                           for r in rows],
+                        coverage_report_obj=coverage_report_obj)
             except Exception as e:
                 print(f"[observation_capture] failed for {universe}: {e}")
                 _capture(e)

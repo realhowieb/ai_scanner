@@ -423,6 +423,7 @@ def run_breakout_scan(
     snapshot_loader: SnapshotLoader | None = None,
     snapshot_saver: SnapshotSaver | None = None,
     coverage_sink: dict | None = None,
+    research_sink: dict | None = None,
 ) -> pd.DataFrame:
     """Public entry point for breakout scans.
 
@@ -723,6 +724,18 @@ def run_breakout_scan(
         except _STREAMLIT_UI_ERRORS:
             pass
 
+    # Run 47 research capture (opt-in via research_sink): request a few extra
+    # ranked rows so the NEAR_MISS cohort (just below the TOP_N cut) can be
+    # captured for research. Production still receives EXACTLY top_n — the extra
+    # rows never enter results/ranking/snapshots. No scoring/ranking changed.
+    nm_n = 0
+    if research_sink is not None:
+        try:
+            nm_n = max(0, min(int(research_sink.get("near_miss_n", 0)), 500))
+        except (TypeError, ValueError):
+            nm_n = 0
+    effective_top_n = top_n + nm_n
+
     try:
         df = legacy_breakout.run_breakout_scan(
             price_data=price_data_no_spy,
@@ -733,13 +746,35 @@ def run_breakout_scan(
             min_gap=effective_min_gap,
             min_price=min_price,
             max_price=max_price,
-            top_n=top_n,
+            top_n=effective_top_n,
             diagnostics=diagnostics,
             min_dollar_vol=min_dollar_vol,
         )
     except _ENGINE_BOUNDARY_ERRORS as e:
         _log_scan_error(e, context="legacy_breakout.run_breakout_scan", tickers=tickers)
         raise
+
+    if research_sink is not None and df is not None and hasattr(df, "iloc"):
+        try:
+            # Candidates = the production top_n; near-misses = the next nm_n rows.
+            near_miss = df.iloc[top_n:top_n + nm_n] if nm_n else df.iloc[0:0]
+            research_sink["near_miss_rows"] = near_miss.to_dict("records")
+            research_sink["evaluated_symbols"] = [k for k in price_data if k != "SPY"]
+            # Cheap last price/volume for the CONTROL cohort (compact records) —
+            # already-computed values, no extra provider calls.
+            snap = {}
+            for k, v in price_data.items():
+                if k == "SPY":
+                    continue
+                try:
+                    snap[k] = {"price": float(v["Close"].iloc[-1]),
+                               "volume": float(v["Volume"].iloc[-1])}
+                except (KeyError, IndexError, ValueError, TypeError):
+                    continue
+            research_sink["price_snapshot"] = snap
+            df = df.head(top_n)  # production output unchanged
+        except _ENGINE_BOUNDARY_ERRORS as e:
+            _diag_exception(diagnostics, "research_sink population skipped", e)
 
     if diagnostics:
         try:
