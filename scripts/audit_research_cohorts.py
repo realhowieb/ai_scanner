@@ -52,6 +52,16 @@ OUTCOME_CONTRACT = (
 )
 
 
+def _evidence_level(n: int) -> str:
+    if n < 30:
+        return "INSUFFICIENT"
+    if n < 100:
+        return "PRELIMINARY"
+    if n < 500:
+        return "MODERATE"
+    return "STRONG"
+
+
 def _direction(rec: Dict[str, Any]) -> Optional[str]:
     for scanner in rec.get("scanners") or []:
         value = str(scanner.get("direction") or "").strip().lower()
@@ -276,10 +286,15 @@ def audit_cohorts(observations: List[Dict[str, Any]],
                                                    if x["field"] == field), False)),
                 "detail": reason,
             })
-        maturity = {
-            h: {d: dict(values) for d, values in directions.items()}
-            for h, directions in sorted(s["maturity"].items())
-        }
+        maturity = {}
+        for horizon, directions in sorted(s["maturity"].items()):
+            maturity[horizon] = {}
+            for direction, values in directions.items():
+                maturity[horizon][direction] = {
+                    **values,
+                    "raw_outcome_evidence": _evidence_level(values["observations"]),
+                    "run54_evidence": _evidence_level(values["analysis_eligible"]),
+                }
         out_cohorts[c] = {
             "observations": obs,
             "distinct_symbols": len(s["distinct_symbols"]),

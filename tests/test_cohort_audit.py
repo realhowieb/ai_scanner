@@ -131,8 +131,8 @@ class Run54ReadinessTests(unittest.TestCase):
                  "cohorts": {"CANDIDATE": {"explicitly_tagged": 100, "legacy_inferred": 0,
                                            "point_in_time_violations": 0}}}
         rep = assess(audit)
-        # LONG/outcome/legacy gates pass, but SHORT-live + maturation-deploy hold it CONDITIONAL.
-        self.assertEqual(rep["run54_ready"], "CONDITIONAL")
+        # An old aggregate-only audit cannot prove a complete modern comparison.
+        self.assertEqual(rep["run54_ready"], "NO")
         self.assertEqual(rep["gates"]["pit_integrity"]["status"], "PASS")
         self.assertEqual(rep["gates"]["cohort_separation"]["status"], "PASS")
 

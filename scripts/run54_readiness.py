@@ -98,7 +98,7 @@ def assess(audit: Optional[Dict[str, Any]], facts: Optional[Dict[str, Any]] = No
             for row in values.get("modern_required_field_missingness", []):
                 if row.get("missing_count", 0):
                     missing.append(f"{cohort}.{row['field']}={row['missing_count']}")
-        gate("required_field_contract", PASS if not missing else COND,
+        gate("required_field_contract", PASS if not missing else FAIL,
              "modern minimum contract complete" if not missing else "; ".join(missing))
 
     # 5. Legacy data excludable deterministically.
@@ -110,14 +110,18 @@ def assess(audit: Optional[Dict[str, Any]], facts: Optional[Dict[str, Any]] = No
          "directional_return/MFE/MAE deterministic tests pass")
 
     # 7. LONG direction verified in code and, when available, live examples.
-    long_live = sum(len(v.get("direction_examples", {}).get("LONG", []))
-                    for v in cohorts.values())
+    long_live = sum(
+        1 for v in cohorts.values()
+        for example in v.get("direction_examples", {}).get("LONG", [])
+        if example.get("directional_return") is not None)
     gate("long_live_direction", PASS if facts["long_direction_verified"] and long_live else COND,
          f"deterministic verification={facts['long_direction_verified']}; live_examples={long_live}")
 
     # 8. SHORT verified or conclusions explicitly restricted.
-    short_live = sum(len(v.get("direction_examples", {}).get("SHORT", []))
-                     for v in cohorts.values())
+    short_live = sum(
+        1 for v in cohorts.values()
+        for example in v.get("direction_examples", {}).get("SHORT", [])
+        if example.get("directional_return") is not None)
     short_status = PASS if short_live else COND
     gate("short_live_direction", short_status,
          f"live_examples={short_live}; unsupported SHORT conclusions must be excluded")
@@ -129,13 +133,16 @@ def assess(audit: Optional[Dict[str, Any]], facts: Optional[Dict[str, Any]] = No
         for values in cohorts.values()
         for directions in values.get("modern_maturity_by_horizon_direction", {}).values()
         for cell in directions.values())
-    gate("maturation_usable", PASS if backlog == "BACKLOG_DRAINING" and modern_eligible else COND,
+    maturation_status = (PASS if backlog == "BACKLOG_DRAINING" and modern_eligible
+                         else FAIL if have_audit and modern_eligible == 0
+                         else COND)
+    gate("maturation_usable", maturation_status,
          f"usable modern horizon rows={modern_eligible}; backlog={backlog}; "
          f"run52_fix_deployed={facts['run52_fix_deployed']}")
 
     # 10. At least one legitimate modern Candidate-vs-Control comparison.
     supported = _supported_comparisons(cohorts)
-    gate("adequate_scoped_sample", PASS if supported else COND,
+    gate("adequate_scoped_sample", PASS if supported else FAIL if have_audit else COND,
          f"supported comparisons={supported}" if supported
          else "no horizon/direction has >=30 complete modern Candidate and Control outcomes")
 
