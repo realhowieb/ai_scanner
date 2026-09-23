@@ -50,6 +50,22 @@ class FilterTests(unittest.TestCase):
         self.assertGreaterEqual(res["exclusions"]["unsupported_asset_type"], 1)
         self.assertGreaterEqual(res["exclusions"]["wrong_exchange"], 1)
 
+    def test_preferred_shares_excluded_commons_kept(self):
+        # Preferred-class symbols (.PR<letter>) are illiquid, cause provider
+        # timeouts / no-data, and are not scan targets → excluded. Common stocks
+        # that merely start with PR/PS must NOT be excluded.
+        def a(sym):
+            return {"symbol": sym, "status": "active", "tradable": True,
+                    "class": "us_equity", "exchange": "NYSE"}
+        prefs = ["PSA.PRF", "PRIF.PRD", "PSEC.PRA", "PSA.PRK"]
+        commons = ["PRE", "PRI", "PRG", "PSA", "PRGO", "PSX"]
+        res = um.filter_assets([a(s) for s in prefs + commons])
+        kept = set(res["symbols"])
+        self.assertEqual(res["exclusions"]["preferred_share"], len(prefs))
+        for c in commons:
+            self.assertIn(um.normalize_ticker(c), kept)  # common stocks preserved
+        self.assertFalse(any(um._is_preferred(um.normalize_ticker(c)) for c in commons))
+
     def test_deterministic(self):
         self.assertEqual(um.filter_assets(_assets(50)), um.filter_assets(_assets(50)))
 

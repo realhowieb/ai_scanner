@@ -32,6 +32,11 @@ offline.
 - `non_tradable` — `tradable=False`.
 - `unsupported_asset_type` — non-equity class, or SPAC **units / warrants /
   rights** (via `is_spac_unit_or_warrant`) and delisted-pattern symbols.
+- `preferred_share` — **preferred shares** (`.PR<letter>` class suffix, e.g.
+  `PSA.PRF`, `PRIF.PRD`). Illiquid / fixed-income-like, not breakout-scan targets;
+  they padded the universe and caused provider read timeouts /
+  `PRICE_DATA_UNAVAILABLE`. The required separator protects common stocks (PRE,
+  PRI, PSX never match).
 - `malformed_symbol` — empty / non-alphanumeric / >10 chars.
 - `wrong_exchange` — non-U.S. / unsupported venue.
 - `duplicate` — repeated symbol.
@@ -121,7 +126,7 @@ confirm operational practicality.
 | Common stocks | **Included** |
 | ETFs | **Included** (tradable `us_equity`; HSF treats them as scannable equities) |
 | ADRs | **Included** (listed `us_equity` on a U.S. exchange) |
-| Preferred shares | Mostly **included**; only excluded when the symbol carries a warrant/unit/rights marker (Alpaca exposes no fine sub-type — documented limitation) |
+| Preferred shares | **Excluded** — `.PR<letter>` class suffix (`PSA.PRF`, `PRIF.PRD`). Common stocks starting with PR/PS are kept (separator-anchored pattern) |
 | Warrants / rights / units | **Excluded** (`is_spac_unit_or_warrant`) |
 | OTC securities | **Excluded** by the endpoint (`asset_class=us_equity` returns exchange-listed only) |
 | Test symbols | **Excluded** (`is_probably_delisted` blocklist / malformed filter) |

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import re as _re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -69,11 +70,22 @@ def _is_malformed(symbol: str) -> bool:
     return not core.isalnum() or len(symbol) > 10
 
 
+# Preferred-share class suffix (Alpaca/Nasdaq convention): a "."/"-" separator then
+# "PR" then an optional single class letter, e.g. PSA.PRF, PRIF.PRD, PSEC.PRA, X.PR.
+# The required separator protects common stocks (PRE, PRI, PSPR never match).
+_PREFERRED_RE = _re.compile(r"[.\-]PR[A-Z]?$")
+
+
+def _is_preferred(symbol: str) -> bool:
+    return bool(_PREFERRED_RE.search(str(symbol).upper()))
+
+
 def filter_assets(assets: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Apply the US_MARKET eligibility rules to raw provider assets. Pure —
     returns {symbols (sorted, deduped), exclusions (counts), provider_assets}."""
     excl = {"inactive": 0, "non_tradable": 0, "unsupported_asset_type": 0,
-            "malformed_symbol": 0, "wrong_exchange": 0, "duplicate": 0}
+            "preferred_share": 0, "malformed_symbol": 0, "wrong_exchange": 0,
+            "duplicate": 0}
     seen = set()
     out: List[str] = []
     for a in assets or []:
@@ -99,6 +111,12 @@ def filter_assets(assets: List[Dict[str, Any]]) -> Dict[str, Any]:
             continue
         if is_spac_unit_or_warrant(sym) or is_probably_delisted(sym):
             excl["unsupported_asset_type"] += 1
+            continue
+        # Exclude preferred shares (illiquid, fixed-income-like, not breakout-scan
+        # targets; they were padding US_MARKET and causing provider read timeouts /
+        # PRICE_DATA_UNAVAILABLE). See docs/US_MARKET_UNIVERSE.md.
+        if _is_preferred(sym):
+            excl["preferred_share"] += 1
             continue
         if sym in seen:
             excl["duplicate"] += 1
