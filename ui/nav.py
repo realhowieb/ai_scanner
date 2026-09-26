@@ -44,7 +44,7 @@ _NAV_SECTIONS = [
 _NAV = [item for _section, items in _NAV_SECTIONS for item in items]
 
 
-def _render_identity() -> None:
+def _render_identity(*, key_suffix: str = "sidebar") -> None:
     """Compact account header (name · plan · log out) from session state.
 
     Gives sub-pages the same identity block the main app renders, so the sidebar
@@ -61,7 +61,7 @@ def _render_identity() -> None:
         plan = "Admin" if is_admin else str(st.session_state.get("tier_key") or "basic").title()
         st.markdown(f"### 👤 {name}")
         st.markdown(f"**Plan:** `{plan}`")
-        if st.button("Log out", key="nav_logout"):
+        if st.button("Log out", key=f"nav_logout_{key_suffix}"):
             try:
                 from ui.auth import logout_and_reset_session
 
@@ -84,6 +84,7 @@ def render_top_menu() -> None:
     try:
         with st.container(key=TOP_MENU_KEY):
             with st.popover("☰ Menu"):
+                _render_identity(key_suffix="mobile")
                 for section, items in _NAV_SECTIONS:
                     st.caption(section.upper())
                     for path, label, icon in items:

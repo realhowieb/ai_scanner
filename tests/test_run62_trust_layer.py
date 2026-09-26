@@ -347,7 +347,12 @@ class PerformancePresentationTests(unittest.TestCase):
 class ChromeTests(unittest.TestCase):
     def test_only_the_toolbar_actions_container_is_hidden(self):
         self.assertIn('[data-testid="stToolbarActions"]{display:none !important;}', chrome.CHROME_CSS)
+        # Run 80 intentionally hides the duplicate sidebar at phone widths;
+        # desktop sidebar/header/menu chrome must remain available.
+        desktop_css = chrome.CHROME_CSS.split("@media (max-width:640px)", 1)[0]
         for keep in ("stSidebar", "stHeader", "stToolbar\"]", "stMainMenu", "stExpandSidebarButton"):
+            self.assertNotIn(keep, desktop_css)
+        for keep in ("stHeader", "stToolbar\"]", "stMainMenu", "stExpandSidebarButton"):
             self.assertNotIn(keep, chrome.CHROME_CSS)
 
     def test_applied_before_sign_in_and_on_sub_pages(self):

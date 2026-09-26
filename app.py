@@ -628,10 +628,10 @@ def main():
         "The latest full-market opportunities are already shown above. "
         "Open this only when you want to run your own scan."
     )
-    # Run 67: filters live in a popover next to the scan tools (one tap on a
-    # phone) instead of the sidebar. They still render every run, so their
-    # widget state and saved defaults are kept.
-    _filters_box = custom_scan_box.popover("Scan filters")
+    # Keep one collapsed Custom scan entry point. Filters render in its bounded
+    # container so phone users do not have to operate a nested popover.
+    _filters_box = custom_scan_box.container(border=True)
+    _filters_box.markdown("#### Scan filters")
     # Pre-clamp diagnostics BEFORE filters render widgets.
     # Streamlit forbids mutating widget-bound session_state keys after widget creation.
     if not flags.get("can_diagnostics"):

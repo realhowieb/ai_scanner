@@ -37,6 +37,48 @@ LENS_KEY = "hsf_lens"
 PENDING_LENS_KEY = "hsf_lens_pending"
 VIEW_KEY = "hsf_results_view"
 NEW_SET_KEY = "hsf_new_since_visit"
+VIEW_PREF = "hsf_results_view_pref"
+LENS_PREF = "hsf_lens_pref"
+PREFS_LOADED_KEY = "hsf_discover_prefs_loaded"
+
+
+def mobile_request(headers: Any = None) -> bool:
+    """Conservative phone detection used only for an unset view preference."""
+    try:
+        ua = str((headers or {}).get("User-Agent", "")).lower()
+    except Exception:
+        return False
+    return any(token in ua for token in ("iphone", "android", "mobile"))
+
+
+def load_discover_preferences(session_state: Any, headers: Any = None) -> None:
+    """Load browser conveniences once; no database or account data is involved."""
+    if session_state.get(PREFS_LOADED_KEY):
+        return
+    from ui.browser_prefs import get, get_json
+
+    saved_view = get(VIEW_PREF)
+    session_state.setdefault(VIEW_KEY, saved_view if saved_view in {"Table", "Cards"}
+                             else ("Cards" if mobile_request(headers) else "Table"))
+    saved_lenses = get_json(LENS_PREF, [])
+    if isinstance(saved_lenses, list):
+        session_state.setdefault(LENS_KEY, [k for k in saved_lenses if k in LENSES and k != "all"])
+    session_state[PREFS_LOADED_KEY] = True
+
+
+def _persist_view() -> None:
+    from ui.browser_prefs import put
+
+    value = st.session_state.get(VIEW_KEY)
+    if value in {"Table", "Cards"}:
+        put(VIEW_PREF, value)
+
+
+def _persist_lenses() -> None:
+    from ui.browser_prefs import put_json
+
+    value = st.session_state.get(LENS_KEY, [])
+    put_json(LENS_PREF, [k for k in value if k in LENSES and k != "all"])
 
 
 def _num(v: Any) -> Optional[float]:
@@ -214,6 +256,12 @@ def render_discover_bar(df: Any) -> Any:
     try:
         from ui.market_default import MARKET_VIEW_KEY
 
+        try:
+            headers = st.context.headers
+        except Exception:
+            headers = {}
+        load_discover_preferences(st.session_state, headers)
+
         new_set: Set[str] = set()
         if st.session_state.get(MARKET_VIEW_KEY):
             from ui.last_visit import new_since_last_visit
@@ -228,16 +276,18 @@ def render_discover_bar(df: Any) -> Any:
         if isinstance(current, str):            # older single-lens state (e.g. Today's link)
             current = [] if current == "all" else [current]
         st.session_state[LENS_KEY] = [k for k in (current or []) if k in options]
+        if pending is not None:
+            _persist_lenses()
         c1, c2 = st.columns([4, 1])
         with c1:
             chosen = st.pills(
                 "Lenses", options, key=LENS_KEY, selection_mode="multi",
                 format_func=lambda k: f"{LENSES[k][0]} ({counts.get(k, 0)})",
-                label_visibility="collapsed",
+                label_visibility="collapsed", on_change=_persist_lenses,
             ) or []
         with c2:
-            st.segmented_control("View", ["Table", "Cards"], key=VIEW_KEY, default="Table",
-                                 label_visibility="collapsed")
+            st.segmented_control("View", ["Table", "Cards"], key=VIEW_KEY,
+                                 label_visibility="collapsed", on_change=_persist_view)
         st.page_link("pages/day_trader.py", label="Live movers (Day Trader)", icon="⚡")
         _render_screens(list(chosen))
         filtered = apply_lenses(df, list(chosen), new_set)

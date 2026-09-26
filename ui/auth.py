@@ -691,21 +691,8 @@ def logout_and_reset_session() -> None:
     except _AUTH_BACKEND_ERRORS:
         pass
 
-    auth_keys = [
-        "user_id",
-        "username",
-        "display_name",
-        "plan",
-        "tier",
-        "is_admin",
-        "authentication_status",
+    filter_keys = (
         COOKIE_MANAGER_STATE_KEY,
-        # Common app-level keys we control
-        "results_df",
-        "last_scan_at",
-        "last_scan_universe",
-        "scan_settings",
-        "user_settings",
         # Filter / scan settings we want to reset on logout so defaults reload from DB on next login
         "universe",
         "min_price",
@@ -721,12 +708,11 @@ def logout_and_reset_session() -> None:
         "premarket",
         "afterhours",
         "unusual_vol",
-        "profile_loaded_for_user", "user_profile_loaded", "hsf_today_landed_for",
-    ]
+    )
     try:
-        for key in auth_keys:
-            if key in st.session_state:
-                st.session_state.pop(key, None)
+        from ui.app_session import clear_account_session_state
+
+        clear_account_session_state(st.session_state, filter_keys)
     except _AUTH_BACKEND_ERRORS:
         # Best-effort cleanup; ignore any issues here.
         pass

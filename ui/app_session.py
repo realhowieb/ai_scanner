@@ -33,6 +33,30 @@ ALERT_LIMIT_BY_TIER: dict[str, int] = {
 }
 TODAY_LANDING_KEY = "hsf_today_landed_for"
 
+# Account-derived values must never survive logout into another user's session.
+# Browser convenience preferences (tour, Scanner view/lenses, saved screens) are
+# intentionally absent: they belong to the browser, not to an account.
+ACCOUNT_SESSION_KEYS = (
+    "user_id", "username", "display_name", "plan", "tier", "tier_key",
+    "entitlements", "is_admin", "authentication_status",
+    "active_watchlist_id", "active_watchlist_tickers",
+    "results_df", "last_scan_at", "last_scan_universe", "scan_settings",
+    "user_settings", "profile_loaded_for_user", "user_profile_loaded",
+    TODAY_LANDING_KEY, "hsf_after_login_page",
+    "hsf_stock_opp", "hsf_stock_row", "hsf_stock_ticker",
+    "hsf_stock_ticker_input", "hsf_stock_view_selected",
+    "hsf_alert_prefill_ticker", "hsf_alert_prefill_event",
+)
+
+
+def clear_account_session_state(session_state: Any, extra_keys: tuple[str, ...] = ()) -> None:
+    """Remove account-specific state while preserving browser UI preferences."""
+    for key in (*ACCOUNT_SESSION_KEYS, *extra_keys):
+        try:
+            session_state.pop(key, None)
+        except Exception:
+            continue
+
 
 def should_land_on_today(session_state: Any, username: object) -> bool:
     """Return true once per authenticated user session, then remember it."""

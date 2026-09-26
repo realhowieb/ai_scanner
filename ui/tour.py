@@ -74,7 +74,7 @@ def render_tour(where: str) -> None:
             st.markdown(f"#### {title}")
             st.markdown(body)
             st.page_link(page, label=link)
-            b1, b2, b3 = st.columns(3)
+            b1, b2 = st.columns(2)
             if b1.button("Back", key=f"tour_back_{where}", disabled=i == 0):
                 st.session_state[STEP_KEY] = i - 1
                 st.rerun()
@@ -85,7 +85,7 @@ def render_tour(where: str) -> None:
                 else:
                     st.session_state[STEP_KEY] = i + 1
                 st.rerun()
-            if b3.button("Skip tour", key=f"tour_skip_{where}"):
+            if st.button("Skip tour", key=f"tour_skip_{where}", width="stretch"):
                 _finish()
                 st.rerun()
     except Exception as exc:

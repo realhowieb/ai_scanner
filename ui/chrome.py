@@ -27,6 +27,10 @@ CHROME_CSS = (
     ".block-container{padding-left:1rem !important;padding-right:1rem !important;padding-top:1.25rem !important;}"
     "h1{font-size:1.6rem !important;}h2{font-size:1.3rem !important;}h3{font-size:1.1rem !important;}"
     ".st-key-hsf_top_menu{display:block !important;}"
+    # One phone navigation pattern: the top menu includes identity/logout.
+    '[data-testid="stSidebar"],[data-testid="stSidebarCollapsedControl"]{display:none !important;}'
+    # Practical phone touch targets without enlarging desktop controls.
+    '.stButton>button,.stPageLink a,[data-baseweb="tab"],div[role="radiogroup"] label{min-height:44px !important;}'
     "}"
     "</style>"
 )

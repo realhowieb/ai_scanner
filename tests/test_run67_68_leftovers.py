@@ -20,7 +20,7 @@ class FiltersPopoverTests(unittest.TestCase):
         app = (ROOT / "app.py").read_text()
         main = app[app.index("def main():"):]
         head = main.index('st.expander("Custom scan"')
-        pop = main.index('_filters_box = custom_scan_box.popover("Scan filters")')
+        pop = main.index('_filters_box = custom_scan_box.container(border=True)')
         call = main.index("render_filters(tier, container=_filters_box)")
         self.assertLess(head, pop)
         self.assertLess(pop, call)
