@@ -256,13 +256,10 @@ def eval_scanner(scan_runs: Optional[Sequence[Mapping[str, Any]]], db_runs: Opti
         if dur > SCAN_MAX_DURATION_MIN:
             f.append(finding("ABNORMAL_DURATION", "WARNING", f"last scan took {dur} min (> {SCAN_MAX_DURATION_MIN})",
                              detected_at=last_ok["created"], action="check provider latency / universe size"))
+    # Result-row counts are NOT a health signal (few candidates is a market outcome,
+    # and the scanner itself refuses to save a throttled full-universe scan).
+    # PARTIAL_SCAN needs attempted/processed coverage telemetry, not yet persisted.
     recent_db = [r for r in (db_runs or []) if _parse(r.get("created_at"))]
-    partial = [r for r in recent_db if (r.get("row_count") or 0) < 10]
-    if partial:
-        f.append(finding("PARTIAL_SCAN", "WARNING", f"{len(partial)} saved scan(s) with < 10 result rows",
-                         evidence=[{"label": r.get("label"), "rows": r.get("row_count")} for r in partial[:5]],
-                         detected_at=_parse(partial[0].get("created_at")),
-                         action="check price-provider coverage for those runs"))
     detail = "MARKET_CLOSED_EXPECTED_IDLE" if not slots or not mc.is_trading_day(today) and not f else (
         "HEALTHY" if not f else f[0]["code"])
     return subsystem("HEALTHY", detail=detail,
@@ -300,9 +297,16 @@ def eval_research_capture(summary: Optional[Mapping[str, Any]], scan_runs: Optio
                          f"{len(zero)} successful regular-session scan(s) captured no research observations",
                          evidence=[_iso(t) for t in zero[-6:]], detected_at=zero[0],
                          action="check HSF_OBSERVATION_CAPTURE / HSF_RESEARCH_CAPTURE and capture logs"))
-    thin = [p for p in per_scan.values() if any((p.get("by_cohort") or {}).get(c, 0) == 0
-                                                for c in ("CANDIDATE", "NEAR_MISS", "CONTROL"))
-            and _parse(p.get("scan_time")) and mc.is_market_open(_parse(p.get("scan_time")))]
+    # A second scan in the same hour re-derives the same hour-bucketed observation
+    # ids, so its CANDIDATE/NEAR_MISS rows are deduplicated by design (first write
+    # wins). Only scans alone in their hour bucket must contain every cohort.
+    hour_counts: Dict[Any, int] = {}
+    for t in per_scan:
+        hour_counts[t.replace(minute=0, second=0, microsecond=0)] = hour_counts.get(
+            t.replace(minute=0, second=0, microsecond=0), 0) + 1
+    thin = [p for t, p in per_scan.items() if any((p.get("by_cohort") or {}).get(c, 0) == 0
+                                                  for c in ("CANDIDATE", "NEAR_MISS", "CONTROL"))
+            and mc.is_market_open(t) and hour_counts[t.replace(minute=0, second=0, microsecond=0)] == 1]
     if thin:
         f.append(finding("COHORT_MISSING_IN_SCAN", "WARNING",
                          f"{len(thin)} regular-session scan(s) missing a research cohort",
@@ -384,7 +388,9 @@ def eval_maturation(report: Optional[Mapping[str, Any]], runs: Optional[Sequence
         f.append(finding("BACKLOG_GROWING" if growing else "MATURATION_CAP_BINDING", "WARNING",
                          f"{deferred} ready symbols deferred by the per-run cap"
                          + (f" (ready {prev_ready} → {ready})" if growing else ""),
-                         evidence={"ready_symbols": ready, "deferred": deferred},
+                         evidence={"ready_symbols": ready, "deferred": deferred,
+                                   "report_generated_at": r.get("generated_at"),
+                                   "report_schema": r.get("schema"), "max_symbols": b.get("max_symbols")},
                          detected_at=_parse(r.get("generated_at")), human="WATCH",
                          action="cohort-neutral only while the cap does not bind (Run 58); review MAX_SYMBOLS"))
     retired = int(((r.get("retired") or {}).get("observations")) or 0)
@@ -450,8 +456,12 @@ def eval_market_data(report: Optional[Mapping[str, Any]], universe: Optional[Map
         "provider": "yfinance", "instrumented": False,
         "note": "possible price-fetch fallback in the scan path; per-provider counts are not persisted",
     }]
+    no_req = r.get("alpaca_requests") is None
+    reason = ("Alpaca healthy" if not no_req else
+              f"Alpaca assets endpoint {'OK' if uni_ok else 'not probed'}; no request telemetry in the latest "
+              f"maturation report (schema {r.get('schema') or 'n/a'}, pre-hardening)")
     return subsystem("HEALTHY", detail="HEALTHY" if not f else f[0]["code"],
-                     reason="Alpaca healthy" if not f else f[0]["summary"],
+                     reason=reason if not f else f[0]["summary"],
                      observed={"alpaca_requests": r.get("alpaca_requests"), "http_429": r.get("alpaca_429_count")},
                      expected="no persistent provider failures", last_updated=_parse(r.get("generated_at")),
                      findings=f, action="none" if not f else f[0]["recommended_action"],

@@ -393,6 +393,26 @@ class ScenarioTests(unittest.TestCase):
         self.assertEqual(b, before)
 
 
+class FalsePositiveTests(unittest.TestCase):
+    def test_small_saved_scan_is_not_partial(self):
+        b = baseline()
+        b["db_runs"] = [{"created_at": WED.isoformat(), "label": "SP500", "row_count": 3, "duration_sec": 20}]
+        r = run(b)
+        self.assertNotIn("PARTIAL_SCAN", codes(r))
+        self.assertEqual(r["system_status"], "HEALTHY")
+
+    def test_same_hour_second_scan_dedup_is_expected(self):
+        b = baseline()
+        first = b["observations_summary"]["per_scan"][-1]
+        t = dt.datetime.fromisoformat(first["scan_time"]) + dt.timedelta(minutes=19)
+        b["observations_summary"]["per_scan"].append(
+            {"scan_time": t.isoformat(), "n": 110, "by_cohort": {"NEAR_MISS": 10, "CONTROL": 100}})
+        self.assertNotIn("COHORT_MISSING_IN_SCAN", codes(run(b)))
+        lone = dict(first, by_cohort={"CANDIDATE": 100, "NEAR_MISS": 50, "CONTROL": 0})
+        b["observations_summary"]["per_scan"] = [lone]
+        self.assertIn("COHORT_MISSING_IN_SCAN", codes(run(b)))
+
+
 class StoreAndScriptTests(unittest.TestCase):
     def test_snapshot_store_roundtrip(self):
         import sqlite3

@@ -301,6 +301,9 @@ def main() -> int:
     report = sh.evaluate(inputs)
     report["collection_timings_sec"] = inputs.get("collection_timings_sec")
     report["generation_seconds"] = round(time.perf_counter() - t0, 2)
+    if args.persist:
+        from db.system_health import save_snapshot
+        report["persisted"] = save_snapshot(report)
     sh.assert_clean(report)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -309,9 +312,6 @@ def main() -> int:
     if sh.forbidden_text(md):
         raise ValueError("anti-peeking contract violated in markdown")
     (out / "system_health.md").write_text(md)
-    if args.persist:
-        from db.system_health import save_snapshot
-        report["persisted"] = save_snapshot(report)
     print(f"SYSTEM STATUS: {report['system_status']} · score {report['health_score']} · "
           f"human action {report['human_action']} · autonomy {report['autonomy_readiness']['state']}")
     for n in sh.SUBSYSTEMS:
