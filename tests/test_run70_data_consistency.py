@@ -218,6 +218,7 @@ class ScannerEndToEndTests(unittest.TestCase):
 
         at = AppTest.from_string(SCANNER_SCRIPT, default_timeout=120)
         at.session_state["username"] = "tester@example.com"
+        at.session_state["hsf_today_landed_for"] = "tester@example.com"
         for k, v in state.items():
             at.session_state[k] = v
         at.run()
@@ -227,8 +228,7 @@ class ScannerEndToEndTests(unittest.TestCase):
     def test_market_default_renders_results_first(self):
         at = self._run()
         self.assertIn("📊 Latest market scan (2 setups)", [t.label for t in at.tabs])
-        heads = [m.value for m in at.markdown if m.value.startswith("## ")]
-        self.assertLess(heads.index("## Scanner"), heads.index("## Run your own scan"))
+        self.assertEqual([e.label for e in at.expander].count("Custom scan"), 1)
         self.assertTrue(any(c.value.startswith("Latest full-market scan") for c in at.caption))
         self.assertFalse(any(b.label.startswith("↩ Back") for b in at.button))    # already on the market view
 

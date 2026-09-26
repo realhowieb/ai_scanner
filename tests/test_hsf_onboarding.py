@@ -112,17 +112,18 @@ class HsfOnboardingTests(unittest.TestCase):
             self.assertNotIn(token, source)
         self.assertIn("add_to_watchlist", source)
 
-    def test_pages_have_first_run_orientation_without_changing_core_pages(self):
+    def test_tour_is_the_only_onboarding_surface(self):
         app = (ROOT / "app.py").read_text()
         brief = (ROOT / "pages" / "brief.py").read_text()
         stock = (ROOT / "pages" / "stock.py").read_text()
         alerts = (ROOT / "pages" / "alerts.py").read_text()
         watchlists = (ROOT / "ui" / "personal_watchlist.py").read_text()
-        self.assertIn("render_hsf_onboarding_entry", app)
-        self.assertIn("render_scanner_orientation", app)
-        self.assertIn("render_market_brief_orientation", brief)
-        self.assertIn("render_stock_intelligence_orientation", stock)
-        self.assertIn("render_alerts_orientation", alerts)
+        self.assertIn('render_tour("scanner")', app)
+        self.assertNotIn("render_hsf_onboarding_entry", app)
+        self.assertNotIn("render_scanner_orientation", app)
+        self.assertNotIn("render_market_brief_orientation", brief)
+        self.assertNotIn("render_stock_intelligence_orientation", stock)
+        self.assertNotIn("render_alerts_orientation", alerts)
         self.assertIn("Build your personalized market view", watchlists)
 
 

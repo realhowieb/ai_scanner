@@ -30,11 +30,9 @@ from ui.alerts_page import session_watch_tickers as _session_watch_tickers  # no
 
 try:
     from ui.header import render_page_logo
-    from ui.onboarding import render_alerts_orientation
 
     render_page_logo()
     render_page_header("Alerts", "Meaningful intelligence changes for watched stocks.")
-    render_alerts_orientation(_username)
 except Exception as e:
     from ui.safe_errors import show_error
 

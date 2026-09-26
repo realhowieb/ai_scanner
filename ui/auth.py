@@ -721,8 +721,7 @@ def logout_and_reset_session() -> None:
         "premarket",
         "afterhours",
         "unusual_vol",
-        "profile_loaded_for_user",
-        "user_profile_loaded",
+        "profile_loaded_for_user", "user_profile_loaded", "hsf_today_landed_for",
     ]
     try:
         for key in auth_keys:

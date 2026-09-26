@@ -31,6 +31,16 @@ ALERT_LIMIT_BY_TIER: dict[str, int] = {
     "premium": 25,
     "admin": 25,
 }
+TODAY_LANDING_KEY = "hsf_today_landed_for"
+
+
+def should_land_on_today(session_state: Any, username: object) -> bool:
+    """Return true once per authenticated user session, then remember it."""
+    user = str(username or "").strip().lower()
+    if not user or session_state.get(TODAY_LANDING_KEY) == user:
+        return False
+    session_state[TODAY_LANDING_KEY] = user
+    return True
 
 
 def alert_limit_for_tier(tier_key: object | None) -> int:

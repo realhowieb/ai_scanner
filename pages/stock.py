@@ -44,12 +44,6 @@ except Exception:
 from ui.design_system import render_page_header
 
 render_page_header("Stock Intelligence", "Understand the current HSF state of one ticker.")
-try:
-    from ui.onboarding import render_stock_intelligence_orientation
-
-    render_stock_intelligence_orientation(_username)
-except Exception:
-    pass
 
 _default = (st.session_state.get("hsf_stock_ticker") or "").strip().upper()
 _ticker = st.text_input("Ticker", value=_default, placeholder="e.g. NVDA",

@@ -16,11 +16,11 @@ class FiltersPopoverTests(unittest.TestCase):
                 # the sidebar is only the default, never written to directly
                 self.assertEqual(src.count("st.sidebar"), 1 + (1 if rel.endswith("user_settings.py") else 0))
 
-    def test_scanner_renders_filters_in_a_popover_under_run_your_own_scan(self):
+    def test_scanner_renders_filters_in_the_custom_scan_entry(self):
         app = (ROOT / "app.py").read_text()
         main = app[app.index("def main():"):]
-        head = main.index('st.markdown("## Run your own scan")')
-        pop = main.index('_filters_box = st.popover("⚙️ Scan filters")')
+        head = main.index('st.expander("Custom scan"')
+        pop = main.index('_filters_box = custom_scan_box.popover("Scan filters")')
         call = main.index("render_filters(tier, container=_filters_box)")
         self.assertLess(head, pop)
         self.assertLess(pop, call)

@@ -16,8 +16,8 @@ class ScannerLayoutTests(unittest.TestCase):
         m = _main_src()
         slot = m.index("results_slot = st.container()")
         self.assertLess(m.index("render_market_snapshot("), slot)
-        for later in ("render_watchlists_panel(", 'st.markdown("## Run your own scan")',
-                      "render_earnings_controls(", "render_scan_controls(", "render_three_step_scanner()"):
+        for later in ("render_watchlists_panel(", 'st.expander("Custom scan"',
+                      "render_earnings_controls(", "render_scan_controls(", "render_three_step_scanner("):
             self.assertLess(slot, m.index(later), later)
 
     def test_results_fill_after_the_scan_tools_run(self):
@@ -26,7 +26,7 @@ class ScannerLayoutTests(unittest.TestCase):
         m = _main_src()
         fill = m.index("with results_slot:")
         self.assertLess(m.index("render_scan_controls("), fill)
-        self.assertLess(m.index("render_three_step_scanner()"), fill)
+        self.assertLess(m.index("render_three_step_scanner("), fill)
         self.assertLess(fill, m.index("render_results_tabs("))
         self.assertLess(fill, m.index("default_results(get_results_df())"))
         self.assertLess(m.index("force_results_refresh"), fill)   # rerun check still precedes rendering

@@ -65,6 +65,7 @@ try:
         compute_entitlements,
         is_admin_user,
         normalize_admin_users,
+        should_land_on_today,
     )
     from ui.app_session import (
         tier_key as _tier_key,
@@ -218,9 +219,7 @@ try:
     from ui.footer import render_footer
     from ui.header import render_header, render_market_snapshot, render_price_ticker
     from ui.headline_score import add_hsf_score_column
-    from ui.history import render_history_expander
     from ui.market_default import default_results, render_back_to_market
-    from ui.onboarding import render_hsf_onboarding_entry, render_scanner_orientation
     from ui.prebreakout_tab import render_prebreakout_tab
     from ui.result_explain import add_why_column
     from ui.results import get_results_df, render_results
@@ -247,7 +246,6 @@ except Exception as _e:
         st.stop()
 
     render_admin_users_panel = _missing  # type: ignore
-    render_history_expander = _missing  # type: ignore
     render_results = _missing  # type: ignore
     get_results_df = lambda: None  # type: ignore
     render_scan_controls = _missing  # type: ignore
@@ -267,8 +265,6 @@ except Exception as _e:
     render_watchlists_panel = _missing  # type: ignore
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
-    render_hsf_onboarding_entry = lambda *a, **k: None  # type: ignore
-    render_scanner_orientation = lambda *a, **k: None  # type: ignore
     add_why_column = lambda df: df  # type: ignore
     render_user_settings_footer = _missing  # type: ignore
 
@@ -425,6 +421,7 @@ def main():
         # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
     if st.session_state.get("hsf_after_login_page"):  # P2-5: return to a shared link
+        st.session_state["hsf_today_landed_for"] = str(username or "").strip().lower()
         st.switch_page(st.session_state.pop("hsf_after_login_page"))
 
     # If non-auth modules failed to import, surface the error after login.
@@ -437,6 +434,8 @@ def main():
     username = (username or "").strip().lower()
     if username:
         st.session_state["username"] = username
+    if should_land_on_today(st.session_state, username):
+        st.switch_page("pages/today.py")
 
     # At this point, auth_ui has decided we're logged in.
     # The login form might still be in the DOM for this rerun, so hide it with CSS.
@@ -500,8 +499,6 @@ def main():
 
     # Day 6 – Item 2: centralized entitlements
     flags = compute_entitlements(tier_obj=tier_for_flags, is_admin=is_admin)
-    tier_name = "Admin" if is_admin else tier_key.upper()
-
     # Persist tier + flags in session for downstream UI modules
     st.session_state["tier"] = tier_for_flags
     st.session_state["tier_key"] = tier_key
@@ -576,9 +573,6 @@ def main():
     except Exception:
         pass
 
-    render_hsf_onboarding_entry(username, tier_name=tier_name, show_returning=False)  # Run 71: summary moved to Today
-    st.markdown("---")
-
     # -------- Provider Health (admin diagnostics) --------
     if flags.get("can_diagnostics"):
         try:
@@ -628,11 +622,15 @@ def main():
     st.session_state["active_watchlist_id"] = watch_id
     st.session_state["active_watchlist_tickers"] = watch_tickers
     st.markdown("---")
-    st.markdown("## Run your own scan")
+    custom_scan_box = st.expander("Custom scan", expanded=False)
+    custom_scan_box.caption(
+        "The latest full-market opportunities are already shown above. "
+        "Open this only when you want to run your own scan."
+    )
     # Run 67: filters live in a popover next to the scan tools (one tap on a
     # phone) instead of the sidebar. They still render every run, so their
     # widget state and saved defaults are kept.
-    _filters_box = st.popover("⚙️ Scan filters")
+    _filters_box = custom_scan_box.popover("Scan filters")
     # Pre-clamp diagnostics BEFORE filters render widgets.
     # Streamlit forbids mutating widget-bound session_state keys after widget creation.
     if not flags.get("can_diagnostics"):
@@ -657,21 +655,22 @@ def main():
     # Enforce admin-only diagnostics (even if UI/modules accidentally expose it)
     if not flags.get("can_diagnostics"):
         diagnostics = False
-    render_active_filters_summary(
-        universe=st.session_state.get("universe"),
-        min_price=float(min_price),
-        max_price=float(max_price),
-        min_dollar_vol=float(min_dollar_vol),
-        top_n=int(top_n),
-        premarket=bool(premarket),
-        afterhours=bool(afterhours),
-        include_ta=bool(include_ta),
-        unusual_vol=bool(unusual_vol),
-        apply_gap_filter=bool(apply_gap_filter),
-        min_gap=float(min_gap),
-        max_nasdaq_scan=int(max_nasdaq_scan),
-        max_combo_scan=int(max_combo_scan),
-    )
+    with custom_scan_box:
+        render_active_filters_summary(
+            universe=st.session_state.get("universe"),
+            min_price=float(min_price),
+            max_price=float(max_price),
+            min_dollar_vol=float(min_dollar_vol),
+            top_n=int(top_n),
+            premarket=bool(premarket),
+            afterhours=bool(afterhours),
+            include_ta=bool(include_ta),
+            unusual_vol=bool(unusual_vol),
+            apply_gap_filter=bool(apply_gap_filter),
+            min_gap=float(min_gap),
+            max_nasdaq_scan=int(max_nasdaq_scan),
+            max_combo_scan=int(max_combo_scan),
+        )
 
     # -------- Market session gating for extended-hours toggles --------
     session = get_market_session()
@@ -715,10 +714,11 @@ def main():
         is_admin=bool(st.session_state.get("is_admin")),
     )
 
-    render_earnings_controls(
-        flags=flags,
-        render_earnings_this_week_panel=render_earnings_this_week_panel,
-    )
+    with custom_scan_box:
+        render_earnings_controls(
+            flags=flags,
+            render_earnings_this_week_panel=render_earnings_this_week_panel,
+        )
 
     # -------- Scan Controls --------
     render_scan_controls(
@@ -736,6 +736,7 @@ def main():
         unusual_vol=bool(unusual_vol),
         diagnostics=bool(diagnostics),
         username=username,
+        container=custom_scan_box,
     )
 
     # ✅ Force results refresh after a scan completes (prevents blank / stale results)
@@ -751,8 +752,7 @@ def main():
                 pass
         st.rerun()
 
-    if st.session_state.get("hsf_first_run"): render_scanner_orientation(username)
-    render_three_step_scanner()
+    render_three_step_scanner(container=custom_scan_box)
 
     with results_slot:  # rendered up top (see results_slot above)
         render_back_to_market()  # Run 70 (P1-10)

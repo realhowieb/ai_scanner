@@ -7,6 +7,7 @@ stay focused on the legacy manual scan controls.
 from __future__ import annotations
 
 import time
+from typing import Any
 
 import pandas as pd
 
@@ -249,8 +250,11 @@ def nl_to_scan_settings(description: str) -> dict | None:
         return None
 
 
-def render_three_step_scanner() -> None:
+def render_three_step_scanner(container: Any = None) -> None:
     """Render the premium three-step scanner layout."""
+    if container is not None:
+        with container:
+            return render_three_step_scanner()
     tier = st.session_state.get("tier")
     if not require_min_tier(tier, "premium", "EZ 3-Step AI Scanner"):
         return

@@ -82,12 +82,32 @@ def render_scan_controls(
     diagnostics: bool,
     username: str,
     apply_gap_filter: bool = False,
+    container: Any = None,
 ) -> None:
     """Render scan buttons and run scans when clicked.
 
     This function updates `st.session_state.results_df` with the latest scan results
     and also updates the universe-related keys used elsewhere in the app.
     """
+
+    if container is not None:
+        with container:
+            return render_scan_controls(
+                can_scan_sp500=can_scan_sp500,
+                can_scan_nasdaq=can_scan_nasdaq,
+                max_nasdaq_scan=max_nasdaq_scan,
+                max_combo_scan=max_combo_scan,
+                min_gap=min_gap,
+                min_price=min_price,
+                max_price=max_price,
+                top_n=top_n,
+                premarket=premarket,
+                afterhours=afterhours,
+                unusual_vol=unusual_vol,
+                diagnostics=diagnostics,
+                username=username,
+                apply_gap_filter=apply_gap_filter,
+            )
 
     # Admin override: allow larger universe caps + result caps inside this module
     max_nasdaq_scan, max_combo_scan, top_n = _admin_override_caps(
@@ -99,7 +119,7 @@ def render_scan_controls(
 
     # One compact header row: title + scan-profile selector side by side.
     hq1, hq2 = st.columns([2, 2])
-    hq1.subheader("⚡ Quick Market Scans")
+    hq1.subheader("Choose a market")
     with hq2:
         profile_label = st.radio(
             "Scan profile",

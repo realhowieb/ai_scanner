@@ -67,7 +67,7 @@ class SummaryAndCacheWiringTests(unittest.TestCase):
 
     def test_returning_user_block_is_off_the_scanner_and_on_today(self):
         app = (ROOT / "app.py").read_text()
-        self.assertIn("render_hsf_onboarding_entry(username, tier_name=tier_name, show_returning=False)", app)
+        self.assertNotIn("render_hsf_onboarding_entry", app)
         self.assertIn("watchlist_summary(username)", (ROOT / "ui" / "today.py").read_text())
 
     @unittest.skipUnless(HAS_ST, "needs streamlit")
@@ -91,6 +91,7 @@ import streamlit as st
 from streamlit.delta_generator import DeltaGenerator
 st.page_link = lambda *a, **k: None
 DeltaGenerator.page_link = lambda self, *a, **k: None
+st.session_state["hsf_today_landed_for"] = "tester@example.com"
 # AppTest can't serialise a single-select segmented_control on rerun (harness
 # limitation, not app behaviour): stand in with its current/default value.
 def _seg(*a, key=None, default=None, **k):

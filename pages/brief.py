@@ -25,14 +25,12 @@ try:
     from ui.design_system import render_page_header
     from ui.header import render_page_logo
     from ui.market_brief import render_market_brief
-    from ui.onboarding import render_market_brief_orientation
 
     render_page_logo()
     render_page_header("Market Brief", "What matters in the market right now.")
     from ui.trust_banner import render_trust_banner
 
     render_trust_banner()
-    render_market_brief_orientation(_username)
     render_market_brief()
 except Exception as e:
     from ui.safe_errors import show_error
