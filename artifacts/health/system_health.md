@@ -3,7 +3,7 @@
 **System Status: DEGRADED**  
 Health Score: 90/100  
 Human Action: **WATCH**  
-Generated: 2026-09-26T08:38:17.940346+00:00
+Generated: 2026-09-26T08:58:50.619787+00:00
 
 - Universe: **HEALTHY** — 11533 tradable US-listed symbols (live)
 - Scanner: **HEALTHY** — 18/18 expected slots in the last 3 days ran successfully
@@ -13,7 +13,7 @@ Generated: 2026-09-26T08:38:17.940346+00:00
 - Cohort Parity: **COLLECTING** — forward parity not yet measurable; historical parity CRITICAL (explained: MARKET_DATA_AVAILABILITY_EFFECT)
 - Forward Evidence: **NO_FORWARD_DATA** — NO_FORWARD_DATA: day 0/20, runs 0/100
 - Workflows: **HEALTHY** — 6/6 workflows healthy
-- Database: **HEALTHY** — connected, 161.0 ms
+- Database: **HEALTHY** — connected, 19.6 ms
 - Artifact Freshness: **HEALTHY** — 4/4 artifacts fresh
 
 ## Forward Evidence
@@ -28,26 +28,26 @@ Generated: 2026-09-26T08:38:17.940346+00:00
 ## Incidents
 
 None requiring human action.
-1. **maturation:MATURATION_CAP_BINDING** — WARNING · age 8.9h · human action WATCH · automation candidate NO
+1. **maturation:MATURATION_CAP_BINDING** — WARNING · age 9.3h · human action WATCH · automation candidate NO
    1213 ready symbols deferred by the per-run cap. Recommended: cohort-neutral only while the cap does not bind (Run 58); review MAX_SYMBOLS
 
 Next expected scan: 2026-09-28T12:35:00+00:00 (trading day today: False, market open: False)
 
 ## Autonomy Readiness
 
-**OBSERVABLE**
+**RECOVERY_READY**
 
 Blockers to RECOVERY_READY:
-- no automatic re-dispatch of stale/missed workflows (scan, maturation, readiness, parity audit)
-- no automatic maturation retry escalation
-- no incident notification layer (email/Slack) for HUMAN_ACTION_REQUIRED
-- no recovery audit trail / guardrails (rate limits, max retries, kill switch)
 
 Additional blockers to AUTONOMOUS:
+- Run 61 certification not performed (AUTONOMOUS is never self-declared)
+- scanner rerun idempotency not proven: missed/failed scans always escalate
+- no notification delivery for HUMAN_ACTION_REQUIRED (escalation artifact only)
 - scanner coverage telemetry (symbols attempted/processed) not persisted
 - yfinance fallback usage not instrumented
 - calendar covers 2025-2027 only (needs yearly update or Alpaca calendar cross-check)
 - formal evaluation requires explicit human approval by design (never automatic)
+- production recovery is OBSERVE_ONLY (kill switch off (HSF_AUTONOMY_ENABLED != true))
 
 ## Provider Health
 
@@ -65,16 +65,16 @@ Additional blockers to AUTONOMOUS:
 | Universe refresh | weekly | 2026-09-20T14:16:52+00:00 | None | HEALTHY |
 | Research readiness (Run 56) | trading_day | 2026-09-26T07:57:34+00:00 | None | HEALTHY |
 | Maturation parity audit (Run 58) | manual | 2026-09-26T08:13:12+00:00 | None | HEALTHY |
-| System health (Run 59) | trading_day | 2026-09-26T08:34:53+00:00 | None | HEALTHY |
+| System health (Run 59) | trading_day | 2026-09-26T08:37:46+00:00 | None | HEALTHY |
 
 ## Artifact Freshness
 
 | Artifact | Generated | Age (h) | Expected | Status |
 |---|---|---|---|---|
-| Run 56 readiness | 2026-09-26T07:57:34+00:00 | 0.7 | ≤ 1 completed trading day | FRESH |
-| Run 58 maturation parity | 2026-09-26T08:13:57.542686+00:00 | 0.4 | ≤ 7 days | FRESH |
-| Latest scanner research capture | 2026-09-25T19:40:02.460183+00:00 | 13.0 | ≤ 1 completed trading day | FRESH |
-| Previous health snapshot | 2026-09-26T08:35:36.744422+00:00 | 0.0 | ≤ 1 completed trading day | FRESH |
+| Run 56 readiness | 2026-09-26T07:57:34+00:00 | 1.0 | ≤ 1 completed trading day | FRESH |
+| Run 58 maturation parity | 2026-09-26T08:13:57.542686+00:00 | 0.7 | ≤ 7 days | FRESH |
+| Latest scanner research capture | 2026-09-25T19:40:02.460183+00:00 | 13.3 | ≤ 1 completed trading day | FRESH |
+| Previous health snapshot | 2026-09-26T08:57:24.734682+00:00 | 0.0 | ≤ 1 completed trading day | FRESH |
 
 ## Research Data Quality
 

@@ -1,0 +1,51 @@
+{
+  "allowlist": [
+    "REGENERATE_FORWARD_READINESS",
+    "REGENERATE_SYSTEM_HEALTH",
+    "RERUN_PARITY_AUDIT",
+    "RETRY_MATURATION",
+    "RETRY_SAFE_SCANNER_RUN",
+    "RETRY_TRANSIENT_PROVIDER_OPERATION",
+    "RETRY_UNIVERSE_PROBE",
+    "RETRY_UNIVERSE_REFRESH"
+  ],
+  "autonomy": {
+    "enabled": false,
+    "execution_permitted": false,
+    "mode": "observe",
+    "production_state": "OBSERVE_ONLY",
+    "reason": "kill switch off (HSF_AUTONOMY_ENABLED != true)"
+  },
+  "circuit_breaker": {
+    "open": false,
+    "reasons": [],
+    "state": "CLOSED"
+  },
+  "decisions": [
+    {
+      "action": null,
+      "attempt_limit": null,
+      "cooldown_min": null,
+      "fallback": "ESCALATE",
+      "idempotency": null,
+      "incident_id": "maturation:MATURATION_CAP_BINDING",
+      "incident_type": "MATURATION_CAP_BINDING",
+      "policy": "WATCH",
+      "reason": "expected or self-clearing; no recovery needed now",
+      "requires_human": false,
+      "risk_class": null,
+      "severity": "WARNING",
+      "subsystem": "maturation",
+      "verification": null
+    }
+  ],
+  "escalations": [],
+  "generated_at": "2026-09-26T08:57:13.138923+00:00",
+  "health_generated_at": "2026-09-26T08:57:13.159598+00:00",
+  "human_action_required": false,
+  "ledger_available": true,
+  "schema": "hsf-recovery-plan-1.0",
+  "system_status": "DEGRADED",
+  "to_execute": [],
+  "would_execute": []
+}
