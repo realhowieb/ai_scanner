@@ -36,6 +36,7 @@ jobs:
         run: python -m pytest -q tests/test_autonomy_certification.py tests/test_autonomous_recovery.py tests/test_system_health.py
       - name: Certification verdict + read-only production snapshot
         id: cert
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -889,7 +889,16 @@ def gate_u_frozen_scanner() -> Dict[str, Any]:
     cur = frozen_scanner_snapshot()
     conds = {k: cur[k] == golden[k] for k in ("tickers", "scores", "near_miss", "controls")}
     conds["observations (signal fields) identical"] = cur["obs"] == golden["obs"]
-    return _gate(_check(conds), {"checks": conds, "n_observations": len(cur["obs"])},
+    diffs = []
+    for a, b in zip(golden["obs"], cur["obs"]):
+        for k in sorted(set(a) | set(b)):
+            if a.get(k) != b.get(k):
+                diffs.append({"symbol": a.get("symbol"), "field": k, "golden": a.get(k), "current": b.get(k)})
+        if len(diffs) >= 5:
+            break
+    import platform
+    return _gate(_check(conds), {"checks": conds, "n_observations": len(cur["obs"]), "first_diffs": diffs,
+                                 "python": platform.python_version()},
                  "tests/fixtures/frozen_scanner_golden.json (generated at 8e613e5; identical at ebd00a6)")
 
 
