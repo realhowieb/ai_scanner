@@ -38,12 +38,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
-      - name: Fetch latest maturation report (optional, run-level RATE_LIMITED)
+      - name: Fetch latest scheduled (non-dry-run) maturation report (optional, run-level RATE_LIMITED)
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RID=$(gh run list --workflow mature-observations.yml --status success -L 1 --json databaseId -q '.[0].databaseId')
+          RID=$(gh run list --workflow mature-observations.yml --event schedule --status success -L 1 --json databaseId -q '.[0].databaseId')
           if [ -n "$RID" ]; then gh run download "$RID" -n maturation-report -D artifacts/maturation || true; fi
       - name: Forward evidence readiness (read-only)
         id: monitor
