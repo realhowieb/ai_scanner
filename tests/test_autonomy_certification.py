@@ -87,5 +87,23 @@ class VerdictTests(unittest.TestCase):
             self.assertNotIn(bad, src)
 
 
+class FrozenScannerComparisonTests(unittest.TestCase):
+    """Gate U tolerates last-ulp float noise across platforms, nothing else."""
+
+    def test_last_ulp_float_noise_is_equal(self):
+        self.assertTrue(ac._same({"atr_pct": 2.4066578582077636, "price": 26.610831047699122},
+                                 {"atr_pct": 2.406657858207766, "price": 26.61083104769912}))
+
+    def test_real_changes_still_fail(self):
+        self.assertFalse(ac._same(2.4066, 2.4067))                     # numeric change
+        self.assertFalse(ac._same(["AAA", "BBB"], ["BBB", "AAA"]))      # order
+        self.assertFalse(ac._same(["AAA"], ["AAA", "BBB"]))             # membership
+        self.assertFalse(ac._same({"tier": "A"}, {"tier": "B"}))        # strings exact
+        self.assertFalse(ac._same({"a": 1.0}, {"a": 1.0, "b": 2}))      # structure
+        self.assertFalse(ac._same(1.0, "1.0"))
+        self.assertFalse(ac._same(True, 1.0))
+        self.assertFalse(ac._same(7, 8))                                # ints exact
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import datetime as _dt
 import json
+import math
 import re
 import sqlite3
 from pathlib import Path
@@ -884,21 +885,39 @@ def frozen_scanner_snapshot() -> Dict[str, Any]:
                                   "obs": [strip(o) for o in cand + nm + ctrl]}, default=str, sort_keys=True))
 
 
+# Floats are compared at rel_tol 1e-12: libm/CPython builds (macOS 3.12 vs Linux 3.13)
+# differ in the last ulp of derived indicators (e.g. atr_pct). Everything else —
+# tickers, order, membership, IDs, strings, structure, ints, bools — is exact.
+FLOAT_REL_TOL = 1e-12
+
+
+def _same(a: Any, b: Any) -> bool:
+    if isinstance(a, float) or isinstance(b, float):
+        if isinstance(a, bool) or isinstance(b, bool) or not all(isinstance(x, (int, float)) for x in (a, b)):
+            return False
+        return math.isclose(a, b, rel_tol=FLOAT_REL_TOL, abs_tol=1e-12)
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return type(a) is type(b) and len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    return a == b
+
+
 def gate_u_frozen_scanner() -> Dict[str, Any]:
     golden = json.loads(GOLDEN.read_text())
     cur = frozen_scanner_snapshot()
-    conds = {k: cur[k] == golden[k] for k in ("tickers", "scores", "near_miss", "controls")}
-    conds["observations (signal fields) identical"] = cur["obs"] == golden["obs"]
+    conds = {k: _same(cur[k], golden[k]) for k in ("tickers", "scores", "near_miss", "controls")}
+    conds["observations (signal fields) identical"] = _same(cur["obs"], golden["obs"])
     diffs = []
     for a, b in zip(golden["obs"], cur["obs"]):
         for k in sorted(set(a) | set(b)):
-            if a.get(k) != b.get(k):
+            if not _same(a.get(k), b.get(k)):
                 diffs.append({"symbol": a.get("symbol"), "field": k, "golden": a.get(k), "current": b.get(k)})
         if len(diffs) >= 5:
             break
     import platform
     return _gate(_check(conds), {"checks": conds, "n_observations": len(cur["obs"]), "first_diffs": diffs,
-                                 "python": platform.python_version()},
+                                 "python": platform.python_version(), "float_rel_tol": FLOAT_REL_TOL},
                  "tests/fixtures/frozen_scanner_golden.json (generated at 8e613e5; identical at ebd00a6)")
 
 

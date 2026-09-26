@@ -160,5 +160,13 @@ America/New_York, update `SCAN_SLOTS_UTC` (and re-certify), or the health plane
 will report false missed scans in winter. The yearly calendar update is due
 before 2028.
 
+## Frozen-scanner gate (Gate U) comparison rule
+
+Tickers, scores, ordering, near-miss/control membership, IDs, strings and ints
+must match `tests/fixtures/frozen_scanner_golden.json` exactly. Floats match at
+a relative tolerance of 1e-12, because macOS/Python 3.12 and Linux/Python 3.13
+differ in the last digit of derived indicators such as `atr_pct`. Any real
+change is many orders of magnitude larger than that tolerance.
+
 **Release identity:** HSF Autonomous Research Mode v1. The certified commit is in
 `artifacts/health/autonomy_certification.json` → `certified_commit`.
