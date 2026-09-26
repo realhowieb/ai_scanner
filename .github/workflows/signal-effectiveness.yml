@@ -1,0 +1,44 @@
+name: Signal Effectiveness Analysis
+
+# Run 55 — read-only research evidence & signal effectiveness analysis against the
+# live production store (Neon). READ-ONLY: never writes observations, outcomes,
+# scans, or scanners, and never changes scoring/ranking/tiers. Manual only
+# (workflow_dispatch). Uploads the JSON/Markdown report plus the exact input
+# snapshot so the verdict can be replayed offline:
+#   python -m scripts.analyze_signal_effectiveness --input run55_input_snapshot.json
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: signal-effectiveness
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+          python -m pip install --prefer-binary -r requirements-ml.txt -c requirements.lock
+      - name: Analyze signal effectiveness (read-only)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python -m scripts.analyze_signal_effectiveness --out artifacts/research --snapshot
+          cat artifacts/research/run55_signal_effectiveness.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: signal-effectiveness
+          path: artifacts/research/
+          if-no-files-found: warn
