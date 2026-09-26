@@ -63,6 +63,13 @@ class HsfScoreColumnTests(unittest.TestCase):
         self.assertEqual(hs.visible_columns(cols, show_details=False), ["Ticker", "Why", "HSF Score", "Last"])
         self.assertEqual(hs.visible_columns(cols, show_details=True), cols)
 
+    def test_toggle_label_names_only_present_columns(self):
+        self.assertEqual(hs.details_toggle_label(["Ticker", "BreakoutScore"]), "Show model details (Breakout score)")
+        self.assertEqual(hs.details_toggle_label(["BreakoutScore", "PreBreakoutProb%"]),
+                         "Show model details (Breakout score, PreBreakout)")
+        self.assertEqual(hs.details_toggle_label(["AI Confidence", "BreakoutScore"]),
+                         "Show model details (Breakout score, AI Confidence)")
+
     def test_detail_card_text(self):
         df = hs.add_hsf_score_column(pd.DataFrame(_rows()))
         self.assertRegex(hs.hsf_metric_text(df.iloc[0]), r"^\d+$")

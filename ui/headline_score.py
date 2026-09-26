@@ -24,7 +24,15 @@ MODEL_DETAIL_COLS = ("BreakoutScore", "PreBreakoutProb%", "AI Confidence")
 HSF_SCORE_HELP = ("HSF Score (0–100) ranks how strongly a setup's current evidence lines up: "
                   "confirming signals, model strength and momentum. It is a ranking, not a "
                   "probability of profit.")
-DETAILS_TOGGLE_LABEL = "Show model details (Breakout score, PreBreakout)"
+# Display names for the model-detail columns (toggle label lists only those present).
+MODEL_DETAIL_LABELS = {"BreakoutScore": "Breakout score", "PreBreakoutProb%": "PreBreakout",
+                       "AI Confidence": "AI Confidence"}
+
+
+def details_toggle_label(columns: Iterable[str]) -> str:
+    """'Show model details (Breakout score)' — names only the columns present."""
+    present = [MODEL_DETAIL_LABELS[c] for c in MODEL_DETAIL_COLS if c in set(columns)]
+    return f"Show model details ({', '.join(present)})" if present else "Show model details"
 
 
 def hsf_scores_by_ticker(rows: Iterable[Dict[str, Any]]) -> Dict[str, int]:
@@ -102,7 +110,7 @@ def model_details_view(df: Any, *, key: str) -> Any:
             return df
         import streamlit as st
 
-        show = st.toggle(DETAILS_TOGGLE_LABEL, value=False, key=f"{key}_model_details")
+        show = st.toggle(details_toggle_label(df.columns), value=False, key=f"{key}_model_details")
         return df[visible_columns(df.columns, show_details=bool(show))]
     except Exception:
         return df

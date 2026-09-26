@@ -198,7 +198,8 @@ _IMPORT_ERROR: str | None = None
 
 try:
     from db.runs import list_runs, load_run_results, save_daily_snapshot, save_run
-    from db.users import load_users, seed_neon_users_from_local
+    from db.users import seed_neon_users_from_local
+    from ui.user_lookup import load_user_map
 
     # User settings (per-user defaults) – optional Neon-backed feature
     try:
@@ -233,7 +234,7 @@ except Exception as _e:
     _IMPORT_ERROR = f"{type(_e).__name__}: {_e}"
 
     seed_neon_users_from_local = None  # type: ignore
-    load_users = lambda: {}  # type: ignore
+    load_user_map = lambda _u: {}  # type: ignore
     save_run = save_daily_snapshot = list_runs = load_run_results = None  # type: ignore
 
     get_user_settings = None
@@ -453,7 +454,7 @@ def main():
     render_price_ticker()
     render_header()
     # -------- Load Users + Tier (DB-first via Tier Sync) --------
-    users_map = load_users()
+    users_map = load_user_map(username)  # P0-8: this user only, not the whole table
 
     # Resolve tier using Tier Sync (DB-first), with legacy fallback
     tier_state = _resolve_tier_state(username, users_map)

@@ -31,6 +31,25 @@ def _fmt_win(v: Any) -> str:
         return "—"
 
 
+# P0-8: rendered inside a tab that runs on every Scanner rerun; the leaderboard
+# is recomputed daily by the cron, so a 10-minute cache is safe.
+def _horizons_uncached() -> list:
+    from db.signal_leaderboard import leaderboard_horizons
+
+    return list(leaderboard_horizons() or [])
+
+
+def _leaderboard_uncached(horizon: int, entry_mode: str) -> list:
+    from db.signal_leaderboard import load_leaderboard
+
+    return list(load_leaderboard(horizon, entry_mode=entry_mode) or [])
+
+
+_cache = st.cache_data(ttl=600, show_spinner=False) if st is not None else (lambda f: f)
+_horizons_cached = _cache(_horizons_uncached)
+_leaderboard_cached = _cache(_leaderboard_uncached)
+
+
 def render_signal_leaderboard() -> None:
     """Signal leaderboard section for the Track Record / Strategy Lab. Never raises."""
     if st is None:
@@ -42,9 +61,7 @@ def render_signal_leaderboard() -> None:
             "top picks per day, measured as excess return vs SPY over the holding "
             "period. Past performance is not indicative of future results."
         )
-        from db.signal_leaderboard import leaderboard_horizons, load_leaderboard
-
-        horizons = leaderboard_horizons() or [1, 5, 20]
+        horizons = _horizons_cached() or [1, 5, 20]
         default_idx = horizons.index(DEFAULT_HORIZON) if DEFAULT_HORIZON in horizons else 0
         c1, c2 = st.columns(2)
         horizon = c1.selectbox(
@@ -60,7 +77,7 @@ def render_signal_leaderboard() -> None:
             ),
         )
         entry_mode = "open" if entry_label == "Open" else "close"
-        rows = load_leaderboard(int(horizon), entry_mode=entry_mode)
+        rows = _leaderboard_cached(int(horizon), entry_mode)
         if not rows:
             st.info(
                 "The leaderboard is still gathering history — it populates once "

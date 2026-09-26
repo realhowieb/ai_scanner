@@ -31,6 +31,9 @@ def _fmt_win(value: Any) -> str:
         return "-"
 
 
+# P0-8: this tab's contents run on every Scanner rerun (Streamlit renders all
+# tabs), and the summaries are recomputed only daily by the cron, so cache them.
+@st.cache_data(ttl=600, show_spinner=False)
 def _load_summary_rows(horizons: tuple[int, ...] = DEFAULT_HORIZONS) -> list[dict[str, Any]]:
     try:
         from db.track_record import load_latest_track_record
@@ -155,11 +158,16 @@ def _render_ab_chart(rows: list[dict[str, Any]]) -> None:
     st.plotly_chart(fig, config={"displayModeBar": False}, width="stretch", key="track_record_ab_chart")
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _daily_excess_cached(ranking: str, horizon: int) -> list:
+    from db.track_record import load_daily_excess
+
+    return list(load_daily_excess(ranking, horizon, days=120) or [])
+
+
 def _render_daily_heatmap(ranking: str, horizon: int) -> None:
     try:
-        from db.track_record import load_daily_excess
-
-        daily = [d for d in load_daily_excess(ranking, horizon, days=120) if d[1] is not None]
+        daily = [d for d in _daily_excess_cached(ranking, horizon) if d[1] is not None]
     except Exception:
         daily = []
     if len(daily) < 5:
