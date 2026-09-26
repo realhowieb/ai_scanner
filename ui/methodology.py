@@ -27,11 +27,13 @@ METHODOLOGY_SECTIONS: List[Tuple[str, str]] = [
      "the current technical evidence lines up. It is **not** a probability of profit, **not** an "
      "expected return and **not** a prediction or guarantee. A higher score means a stronger "
      "current setup, not a better outcome."),
-    ("Other numbers you may see",
-     "Some views show model outputs next to the score. **PreBreakout** estimates how likely a "
-     "stock is to develop a high-scoring scanner setup in the next few trading days. "
-     "**AI Confidence** is a model estimate for a defined short-term price-move event. Both are "
-     "research estimates of technical events, not probabilities of profit."),
+    ("Model details",
+     "Some views provide supporting model outputs beneath HSF Score. **Breakout score** measures "
+     "technical setup strength. **PreBreakout setup probability** estimates whether a quality "
+     "setup will form in the next few trading days and subsequently meet its defined outcome. "
+     "**5D outcome probability** is the calibrated model probability of reaching +4% before "
+     "-2% within five trading days. These are research estimates for defined events, not "
+     "probabilities of profit, and they do not replace the HSF Score ranking."),
     ("Why a stock appears",
      "Each result lists the technical and contextual evidence that put it there, such as relative "
      "volume, a price gap, trend over recent days, position against its recent high, strength "
@@ -42,7 +44,9 @@ METHODOLOGY_SECTIONS: List[Tuple[str, str]] = [
      "shown, and they are never revised with hindsight. Check the scan time before acting on any "
      "result, especially outside market hours."),
     ("How HSF evaluates itself",
-     "HSF records its scanner observations as they happen and measures its methods forward, on "
+     "Live ranking asks what looks interesting now. Historical Research separately asks how "
+     "similar saved HSF observations behaved afterward. HSF records scanner observations as "
+     "they happen and measures its methods forward, on "
      "data collected after the method was fixed. HSF will not publish performance claims until "
      "that forward research supports them. Any historical figures shown in the app are labelled "
      "as historical research: they are descriptive and do not represent validated forward "

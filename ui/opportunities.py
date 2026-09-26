@@ -194,6 +194,9 @@ def build_opportunities(
 # opportunities keep the version they were scored under, so calibration can
 # compare v1.0 vs a future v1.1 without overwriting history.
 HSF_SCORE_VERSION = "1.0"
+# Canonical boundary for the existing STRONG status. Presentation surfaces
+# that need a quality floor must import this instead of duplicating 75.
+HSF_STRONG_MIN = 75
 
 
 def score_breakdown(
@@ -260,7 +263,7 @@ def _primary_setup(pos_signals: List[str], fading: bool) -> str:
 def _status(score: int, fading: bool) -> str:
     if fading:
         return "CAUTION"
-    if score >= 75:
+    if score >= HSF_STRONG_MIN:
         return "STRONG"
     if score < 50:
         return "CAUTION"
@@ -288,7 +291,11 @@ def build_opportunity_explanation(
         reasons.append(f"Breakout setup (score {bs:g})" if bs is not None else "Breakout setup")
     if "prebreakout" in signals:
         prob = opp.get("prob")
-        reasons.append(f"PreBreakout model confidence {prob:g}%" if prob is not None else "PreBreakout model pick")
+        reasons.append(
+            f"PreBreakout setup probability {prob:g}%"
+            if prob is not None
+            else "PreBreakout model pick"
+        )
     if "gapper" in signals:
         gap = opp.get("gap_pct")
         reasons.append(f"Gapping {gap:+.1f}%" if gap is not None else "Gapping today")

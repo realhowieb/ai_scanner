@@ -26,8 +26,11 @@ HSF_SCORE_HELP = ("HSF Score (0–100) ranks how strongly a setup's current evid
                   "confirming signals, model strength and momentum. It is a ranking, not a "
                   "probability of profit.")
 # Display names for the model-detail columns (toggle label lists only those present).
-MODEL_DETAIL_LABELS = {"BreakoutScore": "Breakout score", "PreBreakoutProb%": "PreBreakout",
-                       "AI Confidence": "AI Confidence"}
+MODEL_DETAIL_LABELS = {
+    "BreakoutScore": "Breakout score",
+    "PreBreakoutProb%": "PreBreakout setup probability",
+    "AI Confidence": "5D outcome probability",
+}
 
 
 def details_toggle_label(columns: Iterable[str]) -> str:

@@ -113,9 +113,8 @@ def render_results(
         # Treat AI Notes as Premium-only; fall back to passed flag if not present.
         can_ai_notes = bool(ent.get("can_ai_notes", can_ai_notes))
 
-    # AI Confidence is an admin-only evaluation feature for now: it predicts the
-    # present breakout label from features that include BreakoutScore, so it adds
-    # little user-facing signal beyond BreakoutScore/PreBreakout. Keep it visible
+    # The internal AI Confidence column is an admin-only evaluation feature for
+    # now. Keep its calibrated 5D outcome probability visible
     # to admins for A/B evaluation, but hide the column (and its caption) from
     # everyone else so users see one clean signal.
     is_admin_view = bool(ent.get("can_diagnostics"))
@@ -167,11 +166,11 @@ def render_results(
         st.caption(f"⚠️ {ai_warning}")
     if is_admin_view and ai_trained_at:
         source_text = f" • source: {ai_source}" if ai_source else ""
-        st.caption(f"AI Confidence model trained at: {ai_trained_at}{source_text}")
+        st.caption(f"5D outcome model trained at: {ai_trained_at}{source_text}")
     if is_admin_view and ai_target_rule:
-        st.caption(f"AI Confidence target: {ai_target_rule}")
+        st.caption(f"5D outcome target: {ai_target_rule}")
     if is_admin_view:
-        render_calibration_table(ai_calibration, title="AI Confidence calibration")
+        render_calibration_table(ai_calibration, title="5D outcome probability calibration")
         try:
             from ui.ai_confidence_explain import render_confidence_explainer
 

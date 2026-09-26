@@ -71,9 +71,9 @@ def classify_watchlist_signal(row: Any) -> tuple[str, str]:
     is_breakout = _to_bool(row.get("IsBreakout")) if hasattr(row, "get") else False
 
     if is_breakout or (ai_conf is not None and ai_conf >= 70):
-        return "Active breakout", "AI confidence or breakout flag is high."
+        return "Active breakout", "5D outcome probability or breakout flag is high."
     if pre is not None and pre >= 60:
-        return "Heating up", "Pre-breakout probability is elevated."
+        return "Heating up", "PreBreakout setup probability is elevated."
     if score is not None and score >= 20:
         return "Strong setup", "Breakout score is elevated."
     if pre is not None and pre <= 5 and ai_conf is not None and ai_conf <= 5:
@@ -333,8 +333,10 @@ def render_watchlist_intelligence(tickers: List[str]) -> None:
                 key="watchlist_intelligence_now",
                 column_config={
                     "PreBreakout": st.column_config.NumberColumn("PreBreakout", format="%.1f%%"),
-                    "AI Confidence": st.column_config.NumberColumn(format="%.1f%%"),
-                    "Score": st.column_config.NumberColumn(format="%.1f"),
+                    "AI Confidence": st.column_config.NumberColumn(
+                        "5D outcome probability", format="%.1f%%"
+                    ),
+                    "Score": st.column_config.NumberColumn("Breakout score", format="%.1f"),
                 },
             )
         except (RuntimeError, TypeError, ValueError, OSError, ImportError, AttributeError):

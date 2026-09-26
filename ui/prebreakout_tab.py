@@ -60,8 +60,8 @@ def render_prebreakout_tab() -> None:
 
     if "PreBreakoutProb" not in df.columns:
         st.info(
-            "No pre-breakout predictions are available yet. "
-            "Train the model and rerun a scan to populate 'PreBreakoutProb'."
+            "No PreBreakout model outputs are available yet. "
+            "Train the model and rerun a scan to populate the setup probability."
         )
         return
 

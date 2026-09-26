@@ -493,7 +493,7 @@ def _render_signals_and_model(intel: Dict[str, Any]) -> None:
         st.markdown("\n".join(f"- ✓ {_SETUP_LABELS.get(s, s)}" for s in sigs))
     comps = intel.get("score_components")
     model = intel.get("model") or {}
-    with st.expander("HSF Score breakdown & model metrics", expanded=False):
+    with st.expander("Why HSF scored it this way", expanded=False):
         if comps:
             st.markdown(
                 f"Signals {comps.get('signals_component')}/48 · "
@@ -501,13 +501,15 @@ def _render_signals_and_model(intel: Dict[str, Any]) -> None:
                 f"Momentum {comps.get('momentum_component')}/14 · "
                 f"Risk penalty -{comps.get('fading_penalty')}  ->  **HSF Score {intel['hsf_score']}**")
         st.caption("HSF Score is an opportunity ranking (0–100), NOT a probability.")
-        bits = []
-        if model.get("breakout_score") is not None:
-            bits.append(f"BreakoutScore {model['breakout_score']:g}")
-        if model.get("prebreakout_prob") is not None:
-            bits.append(f"PreBreakout model confidence {model['prebreakout_prob']:g}%")
-        if bits:
-            st.markdown("Model outputs (separate from HSF Score): " + " · ".join(bits))
+    bits = []
+    if model.get("breakout_score") is not None:
+        bits.append(f"Breakout score {model['breakout_score']:g}")
+    if model.get("prebreakout_prob") is not None:
+        bits.append(f"PreBreakout setup probability {model['prebreakout_prob']:g}%")
+    if bits:
+        with st.expander("Model details", expanded=False):
+            st.caption("Supporting model outputs are separate from the headline HSF Score.")
+            st.markdown(" · ".join(bits))
 
 
 def _render_watch_next(intel: Dict[str, Any]) -> None:

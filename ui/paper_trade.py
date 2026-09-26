@@ -6,7 +6,7 @@ Thin vertical slice (Phase 1a). Premium-gated. Flow:
   2. Order: a "Paper Trade This Setup" button beside the trade plan opens an
      inline confirmation. Nothing is sent until the user explicitly confirms —
      every order requires that confirmation. On fill the trade imports into the
-     journal with the scanner BreakoutScore and AI confidence attached.
+     journal with the scanner Breakout score and 5D outcome probability attached.
 
 Never raises into the results view; degrades to a caption when unavailable.
 """
@@ -164,7 +164,7 @@ def render_paper_trade_button(row: Mapping[str, Any], *, shares: int, plan: Mapp
 
     Sends a whole-share market order only after the user explicitly confirms in
     the inline form. On success the fill imports into the journal with the
-    scanner score and AI confidence attached.
+    scanner score and 5D outcome probability attached.
     """
     if st is None:
         return

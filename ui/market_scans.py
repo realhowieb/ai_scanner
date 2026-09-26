@@ -73,13 +73,25 @@ def diff_tickers(before: Iterable[str], after: Iterable[str]) -> Dict[str, List[
     return {"entered": [t for t in a if t not in bs], "left": [t for t in b if t not in as_]}
 
 
-def top_setups(df: Any, n: int = 5) -> List[Dict[str, Any]]:
-    """Top-n HSF opportunities in a scan via the canonical HSF Score ranking."""
+def top_setups(
+    df: Any,
+    n: int = 5,
+    *,
+    minimum_score: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """Top-n canonical HSF opportunities, optionally applying a display floor.
+
+    The optional floor filters the already-scored presentation result only. It
+    never changes the saved scan, Scanner rows, or HSF score calculation.
+    """
     if df is None or getattr(df, "empty", True):
         return []
     from ui.results_intelligence import consolidate_scanner_results
 
-    return consolidate_scanner_results(df.to_dict(orient="records"), top_n=n)
+    opportunities = consolidate_scanner_results(df.to_dict(orient="records"), top_n=None)
+    if minimum_score is not None:
+        opportunities = [o for o in opportunities if int(o.get("score") or 0) >= int(minimum_score)]
+    return opportunities[:max(0, int(n))]
 
 
 # ---- cached loaders (read-only) ------------------------------------------------------------------

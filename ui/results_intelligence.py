@@ -406,7 +406,6 @@ def render_scanner_intelligence(
                 "Move %": c.get("chg_pct"), "HSF Score": c["score"],
                 "Status": status, "Change": _movement_cell(c),
                 "Setup": c["primary_setup"], "Signals": c["n_signals"],
-                "PreBreakout": c.get("prob"), "Breakout": c.get("breakout_score"),
             }
         rows_out.append(row_out)
     try:
@@ -417,8 +416,6 @@ def render_scanner_intelligence(
             "Change": cc.TextColumn(width="small"), "Signals": cc.NumberColumn(width="small"),
             "Last": cc.NumberColumn(format="$%.2f"),
             "Move %": cc.NumberColumn(format="%+.2f%%"),
-            "PreBreakout": cc.NumberColumn(format="%.0f%%"),
-            "Breakout": cc.NumberColumn(format="%.0f"),
         })
     except Exception:
         st.dataframe(rows_out, hide_index=True, width="stretch")

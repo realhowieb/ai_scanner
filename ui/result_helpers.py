@@ -161,9 +161,10 @@ def results_column_config() -> dict:
                  "share a calibrated floor, so many rows show the same %. Ties break by "
                  "the underlying model score."),
         "AI Confidence": cc.NumberColumn(
+            "5D outcome probability",
             format="%.1f%%",
-            help="Model estimate for a defined short-term price-move event. A research "
-                 "estimate, not a validated probability of profit."),
+            help="Calibrated model probability of reaching +4% before -2% within five "
+                 "trading days. Research evidence, not a validated probability of profit."),
         "PctChange": cc.NumberColumn("Day %", format="%.2f%%"),
         "Spark10D": cc.LineChartColumn("10-day", width="small"),
         "EMACross": cc.TextColumn("EMA 9/21", width="small"),

@@ -58,7 +58,7 @@ def explain_confidence(
     earnings_days: Optional[int] = None,
     username: Optional[str] = None,
 ) -> tuple[Optional[str], Optional[str]]:
-    """Ask Claude to explain one ticker's calibrated AI Confidence score.
+    """Ask Claude to explain one ticker's calibrated 5D outcome probability.
 
     Grounded strictly on the provided feature values (+ a real earnings catalyst
     when known). Returns (text, error); never raises.
@@ -87,7 +87,7 @@ def explain_confidence(
         catalyst = f"\nReal catalyst on file: earnings in {int(earnings_days)} trading day(s)."
 
     system = (
-        "You explain a stock scanner's calibrated 'AI Confidence' score to an "
+        "You explain a stock scanner's calibrated 5D outcome probability to an "
         "experienced trader. The score is a walk-forward-validated, isotonic-"
         "calibrated probability that the setup reaches +4% before -2% within 5 "
         "trading days. In 1-2 sentences, explain WHY the model likely scored it "
@@ -98,7 +98,7 @@ def explain_confidence(
     )
     user = (
         f"Ticker: {ticker}\n"
-        f"Calibrated AI Confidence: {conf}% (tier: {confidence_tier(conf)})\n"
+        f"Calibrated 5D outcome probability: {conf}% (tier: {confidence_tier(conf)})\n"
         f"Model feature values:\n" + "\n".join(feats) + catalyst
     )
     return ask_claude(
@@ -135,7 +135,7 @@ def render_confidence_explainer(df: Any) -> None:
         return
 
     username = st.session_state.get("username")
-    with st.expander("🧠 Why this AI Confidence? (Claude explains the score)", expanded=False):
+    with st.expander("Model details · 5D outcome probability", expanded=False):
         st.caption(
             "Claude explains the model's number from its feature values and any "
             "real earnings catalyst. It never sets the score or invents news."

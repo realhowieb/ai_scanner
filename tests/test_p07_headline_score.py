@@ -66,9 +66,9 @@ class HsfScoreColumnTests(unittest.TestCase):
     def test_toggle_label_names_only_present_columns(self):
         self.assertEqual(hs.details_toggle_label(["Ticker", "BreakoutScore"]), "Show model details (Breakout score)")
         self.assertEqual(hs.details_toggle_label(["BreakoutScore", "PreBreakoutProb%"]),
-                         "Show model details (Breakout score, PreBreakout)")
+                         "Show model details (Breakout score, PreBreakout setup probability)")
         self.assertEqual(hs.details_toggle_label(["AI Confidence", "BreakoutScore"]),
-                         "Show model details (Breakout score, AI Confidence)")
+                         "Show model details (Breakout score, 5D outcome probability)")
 
     def test_detail_card_text(self):
         df = hs.add_hsf_score_column(pd.DataFrame(_rows()))

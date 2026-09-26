@@ -31,6 +31,21 @@ def watchlist_in_scan(watch: List[str], scan_df: Any) -> Dict[str, Any]:
     return {"found": found, "missing": missing}
 
 
+def today_top_setups(scan_df: Any, n: int = 5) -> Dict[str, Any]:
+    """Qualifying Today setups plus an explicit empty/weak-market state."""
+    if scan_df is None or getattr(scan_df, "empty", True):
+        return {"state": "empty_scan", "setups": [], "threshold": None}
+    from ui.market_scans import top_setups
+    from ui.opportunities import HSF_STRONG_MIN
+
+    setups = top_setups(scan_df, n=n, minimum_score=HSF_STRONG_MIN)
+    return {
+        "state": "qualifying" if setups else "no_qualifying",
+        "setups": setups,
+        "threshold": HSF_STRONG_MIN,
+    }
+
+
 def _open_button(ticker: str, key: str, *, scan_df: Any = None, opp: Optional[Dict[str, Any]] = None) -> None:
     # Run 70: hand over the same scan/opportunity this page shows (P0-9).
     if st.button("Open", key=key):
@@ -56,12 +71,14 @@ def _user_watchlist(username: str) -> List[str]:
 
 
 def _section_top(scan_df: Any) -> None:
-    from ui.market_scans import top_setups
-
     st.markdown("### Top setups right now")
-    tops = top_setups(scan_df, n=5)
+    result = today_top_setups(scan_df, n=5)
+    tops = result["setups"]
     if not tops:
-        st.caption("No ranked setups in the latest scan.")
+        st.info(
+            "No high-quality setups meet the current HSF threshold. The market scan "
+            "completed successfully; open the Scanner to inspect the full ranked market."
+        )
         return
     for i, o in enumerate(tops):
         with st.container(border=True):
@@ -77,7 +94,10 @@ def _section_top(scan_df: Any) -> None:
             if facts:
                 st.caption(" · ".join(facts))
             _open_button(o["ticker"], f"today_top_{i}_{o['ticker']}", scan_df=scan_df, opp=o)
-    st.caption("Ranked by HSF Score, an opportunity ranking — not a probability of profit.")
+    st.caption(
+        f"HSF Score {result['threshold']}+ (STRONG) · ranked by HSF Score, "
+        "an opportunity ranking — not a probability of profit."
+    )
 
 
 def _section_new(scan_df: Any, run_id: Optional[int]) -> None:

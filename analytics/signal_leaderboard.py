@@ -28,8 +28,8 @@ TOP_N = 5
 # We rank top-N by the first present column (descending = most bullish).
 SIGNALS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("breakout", "Breakout score", ("BreakoutScore",)),
-    ("prebreakout", "Pre-breakout prob", ("PreBreakoutProb%",)),
-    ("ai_confidence", "AI confidence", ("AI Confidence",)),
+    ("prebreakout", "PreBreakout setup probability", ("PreBreakoutProb%",)),
+    ("ai_confidence", "5D outcome probability", ("AI Confidence",)),
     ("rel_volume", "Relative volume", ("VolRel20", "RelVol")),
     ("day_move", "Day move %", ("PctChange",)),
     ("gap", "Gap %", ("GapPct",)),
