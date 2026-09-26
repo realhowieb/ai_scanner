@@ -27,7 +27,8 @@ def _make(letter):
     def test(self):
         g = gates()["gates"][letter]
         failing = {k: v for k, v in (g["evidence"].get("checks") or {}).items() if not v}
-        detail = json.dumps({"failing": failing, "first_diffs": g["evidence"].get("first_diffs")}, default=str)[:1500]
+        detail = json.dumps({"failing": failing, "error": g["evidence"].get("error"),
+                             "first_diffs": g["evidence"].get("first_diffs")}, default=str)[:1500]
         self.assertEqual(g["status"], "PASS", f"Gate {letter} ({g['title']}) failed: {detail}")
         self.assertTrue(g["mandatory"])
     test.__name__ = f"test_gate_{letter}"
