@@ -1,0 +1,63 @@
+name: System Health
+
+# Run 59 — HSF autonomous research & operations health control plane.
+# READ-ONLY with respect to the experiment: builds one health model from existing
+# telemetry, uploads system_health.{json,md}, and appends one snapshot to the
+# separate operational table hsf_system_health (for the Streamlit view and trend
+# comparison). No self-healing, no effectiveness statistics (anti-peeking).
+#
+# Cadence: after the final scan + maturation cycles of each trading day, plus a
+# midday check. Weekend/holiday runs are harmless (the model is calendar-aware).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "5 17 * * 1-5"   # ~13:05 ET, after the 12:35 ET scan
+    - cron: "45 23 * * 1-5"  # after the last maturation cycle and the readiness monitor
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: system-health
+  cancel-in-progress: false
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: System health (read-only)
+        id: health
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          ALPACA_FEED: ${{ secrets.ALPACA_FEED }}
+        run: |
+          python -m scripts.system_health --out artifacts/health --persist
+          cat artifacts/health/system_health.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Surface human action (no automatic action)
+        if: steps.health.outputs.human_action == 'HUMAN_ACTION_REQUIRED'
+        run: echo "::warning title=HSF needs attention::System health reports HUMAN_ACTION_REQUIRED — see the step summary."
+      - name: Upload health report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: system-health
+          path: |
+            artifacts/health/system_health.json
+            artifacts/health/system_health.md
+          if-no-files-found: warn

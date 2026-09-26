@@ -52,6 +52,15 @@ def render_admin_tab(
 
         if bool(st.session_state.get("is_admin")):
             st.markdown("---")
+            # Run 59 System Health (guarded import: a stale Streamlit Cloud module
+            # must never break the admin tab).
+            try:
+                from ui.system_health_view import render_system_health
+
+                render_system_health()
+            except (*ADMIN_TAB_ERRORS, KeyError) as exc:
+                st.caption(f"System Health unavailable: {type(exc).__name__}")
+            st.markdown("---")
             st.markdown("### 📊 Diagnostics")
             _render_billing_health_badge()
             diag_col1, diag_col2 = st.columns(2)
