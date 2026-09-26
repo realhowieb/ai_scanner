@@ -52,6 +52,12 @@ BATCH_SIZE = 100
 # symbols need calendar time to accrue 60 bars; 4 days spans a weekend + holiday,
 # matching the legacy open-ended (start → now) fetch for all practical purposes.
 FORWARD_WINDOW = _dt.timedelta(days=4)
+# Retirement: once anchor + FORWARD_WINDOW + grace has passed, the bounded fetch
+# window is complete, so a retry cannot change the result (sparse / no-data
+# symbols would otherwise be retried forever). The 2-day grace gives every
+# observation many attempts first. Non-destructive: nothing is written; pass
+# retire_after=None (CLI --retire-after-days 0) to re-attempt for a backfill.
+RETIRE_AFTER = FORWARD_WINDOW + _dt.timedelta(days=2)
 
 
 def _now() -> _dt.datetime:
@@ -108,6 +114,9 @@ def _new_report() -> Dict[str, Any]:
         "rate_limited_symbols": 0,     # symbols skipped because of persistent 429 (retry next run)
         "provider_error_symbols": 0,
         "ineligible": {"symbols": 0, "observations": 0, "reasons": {}},
+        # Ready horizons skipped because their bounded window closed long ago.
+        "retired": {"observations": 0, "horizons": 0, "symbols": 0,
+                    "retire_after_days": None},
         "fetch_mode": None,
     }
 
@@ -181,7 +190,8 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
                         dry_run: bool = False, fetch_bars=None, save_fn=None,
                         max_symbols: int = MAX_SYMBOLS, fetch_bars_batch=None,
                         request_stats=None, batch_size: int = BATCH_SIZE,
-                        exclusion_reason=None) -> Dict[str, Any]:
+                        exclusion_reason=None,
+                        retire_after=RETIRE_AFTER) -> Dict[str, Any]:
     """Pure-ish orchestration (injectable `fetch_bars`/`save_fn` for tests).
 
     Bounded per run: at most `max_symbols` distinct symbols are fetched, in
@@ -220,10 +230,15 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
             inel["reasons"][reason] = inel["reasons"].get(reason, 0) + 1
             del by_symbol[symbol]
 
+    retired = report["retired"]
+    if retire_after is not None:
+        retired["retire_after_days"] = round(retire_after.total_seconds() / 86400.0, 3)
+
     # Pass 1 (no I/O): build per-symbol plans + earliest ready anchor.
     symbol_plans: Dict[str, tuple] = {}
     for symbol, obs_list in by_symbol.items():
         plans = []
+        symbol_retired = False
         for o in obs_list:
             anchor = o.get("scan_timestamp") or o.get("timestamp")
             elig = horizon_eligibility(anchor, now, (o.get("outcomes") or {}).keys(),
@@ -232,8 +247,16 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
                 if status in ("already", "not_ready"):
                     report["horizons"][h][status] += 1
             ready = [h for h, s in elig.items() if s == "ready"]
+            a = _parse(anchor)
+            if ready and retire_after is not None and a is not None and now >= a + retire_after:
+                retired["observations"] += 1
+                retired["horizons"] += len(ready)
+                symbol_retired = True
+                continue
             if ready:
                 plans.append((o, anchor, ready))
+        if not plans and symbol_retired:
+            retired["symbols"] += 1  # every ready horizon of this symbol retired
         if plans:
             anchors = [_parse(p[1]) for p in plans if _parse(p[1])]
             symbol_plans[symbol] = (plans, min(anchors) if anchors else None)
@@ -390,6 +413,10 @@ def render_report_text(r: Dict[str, Any]) -> str:
         f"no_data_symbols={r.get('price_data_unavailable_symbols')} "
         f"rate_limited_symbols={r.get('rate_limited_symbols')} "
         f"ineligible_symbols={(r.get('ineligible') or {}).get('symbols')}")
+    ret = r.get("retired") or {}
+    lines.append(f"Retired (window closed > {ret.get('retire_after_days')}d): "
+                 f"observations={ret.get('observations')} horizons={ret.get('horizons')} "
+                 f"symbols={ret.get('symbols')}")
     if r["failures"]:
         lines.append("Failures: " + ", ".join(f"{k}={v}" for k, v in sorted(r["failures"].items())))
     b = r.get("backlog") or {}
@@ -414,6 +441,10 @@ def main() -> int:
                          "backlog drains across the schedule). <=0 = no cap.")
     ap.add_argument("--batch-size", type=int, default=BATCH_SIZE,
                     help="symbols per multi-symbol Alpaca request series")
+    ap.add_argument("--retire-after-days", type=float,
+                    default=RETIRE_AFTER.total_seconds() / 86400.0,
+                    help="skip ready horizons whose anchor is older than this "
+                         "(bounded window closed; retry cannot help). 0 = never retire.")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--out", default=str(ROOT / "artifacts" / "automation"))
     args = ap.parse_args()
@@ -424,7 +455,9 @@ def main() -> int:
                                             attach_outcomes=True) or []
     report = mature_observations(observations, slack_min=args.slack_min,
                                  dry_run=args.dry_run, max_symbols=args.max_symbols,
-                                 batch_size=args.batch_size)
+                                 batch_size=args.batch_size,
+                                 retire_after=(_dt.timedelta(days=args.retire_after_days)
+                                               if args.retire_after_days > 0 else None))
     report["dry_run"] = bool(args.dry_run)
 
     out_dir = Path(args.out)

@@ -92,3 +92,20 @@ INSUFFICIENT_FUTURE_BARS rose from 657 to 921 horizons. At 0.01 requests per
 symbol the cap no longer protects runtime, so `MAX_SYMBOLS` is now **2000**. That
 covers the whole ready set (~1.6k symbols, ~16 requests) in one run. Sparse
 symbols retrying forever is still the open follow-up.
+
+## Retirement of closed-window observations
+
+Sparse and no-data symbols used to stay "ready" forever. A ready horizon is now
+**retired** (skipped, not fetched, not counted as a failure) once
+`now >= anchor + RETIRE_AFTER`, where `RETIRE_AFTER` = `FORWARD_WINDOW` (4 days)
+plus a 2-day grace period, i.e. 6 days. After that point the bounded fetch window
+is complete, so a retry would return the same bars. The grace period covers ~20
+attempts at the measured 3–4 runs per day, so a short provider or CI outage does
+not cost any data.
+
+- Non-destructive: nothing is written or deleted. Retired observations stay in
+  `hsf_observations`, and outcomes stay first-write-wins.
+- Backfill: `python -m scripts.mature_observations --retire-after-days 0` turns
+  retirement off and re-attempts everything.
+- Report: `retired {observations, horizons, symbols, retire_after_days}`. It is
+  kept separate from `failures` and excluded from `ready_symbols` and clearance.

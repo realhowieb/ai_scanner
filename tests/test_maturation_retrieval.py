@@ -247,6 +247,42 @@ class BatchedWorkerTests(unittest.TestCase):
         self.assertEqual(sorted(a, key=key), sorted(b, key=key))
 
 
+class RetirementTests(unittest.TestCase):
+    OLD = "2026-08-18T14:00:00+00:00"   # 7 days before NOW > 6-day threshold
+    RECENT = "2026-08-21T14:00:00+00:00"  # 4 days before NOW: still retried
+
+    def test_closed_window_observations_are_retired_not_fetched(self):
+        fetched = []
+        obs = [_obs("OLDX", self.OLD), _obs("MIXD", self.OLD), _obs("MIXD", self.RECENT),
+               _obs("NVDA", "2026-08-25T14:00:00+00:00")]
+        r = worker.mature_observations(
+            obs, now=NOW, save_fn=lambda o: True,
+            fetch_bars_batch=lambda s, a, b: fetched.extend(s) or {x: _bars() for x in s})
+        self.assertEqual(sorted(fetched), ["MIXD", "NVDA"])
+        self.assertEqual(r["retired"], {"observations": 2, "horizons": 8, "symbols": 1,
+                                        "retire_after_days": 6.0})
+        self.assertEqual(r["backlog"]["ready_symbols"], 2)
+        self.assertEqual(r["eligible_observations"], 2)
+        self.assertEqual(r["failures"], {})  # retirement is not a failure
+        self.assertIn("Retired (window closed > 6.0d)", worker.render_report_text(r))
+
+    def test_already_matured_horizons_are_not_counted_as_retired(self):
+        o = _obs("OLDX", self.OLD)
+        o["outcomes"] = {h: True for h in oc.HORIZON_BARS}
+        r = worker.mature_observations([o], now=NOW, save_fn=lambda x: True,
+                                       fetch_bars_batch=lambda s, a, b: {})
+        self.assertEqual(r["retired"]["observations"], 0)
+
+    def test_retirement_disabled_reattempts_for_backfill(self):
+        fetched = []
+        r = worker.mature_observations(
+            [_obs("OLDX", self.OLD)], now=NOW, save_fn=lambda o: True, retire_after=None,
+            fetch_bars_batch=lambda s, a, b: fetched.extend(s) or {})
+        self.assertEqual(fetched, ["OLDX"])
+        self.assertEqual(r["retired"]["observations"], 0)
+        self.assertIsNone(r["retired"]["retire_after_days"])
+
+
 class SymbolExclusionTests(unittest.TestCase):
     def test_reasons(self):
         from data.us_market_universe import symbol_exclusion_reason as f

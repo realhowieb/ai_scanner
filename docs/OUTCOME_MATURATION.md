@@ -80,6 +80,11 @@ request is `PROVIDER_ERROR` — neither is ever reported as missing data.
 (`ON CONFLICT DO NOTHING`). Reruns skip already-matured horizons; nothing is
 overwritten. Safe to run every 30 minutes indefinitely.
 
+Ready horizons older than 6 days (4-day bounded fetch window plus 2-day grace)
+are **retired**: they are skipped without fetching, because a retry cannot change
+the result. This writes nothing. `--retire-after-days 0` re-attempts them for a
+backfill. See `docs/MATURATION_RETRIEVAL_HARDENING.md`.
+
 ## Quality filtering & scoreboard integration
 
 `analytics.scanner_performance.from_canonical_observations` now carries
