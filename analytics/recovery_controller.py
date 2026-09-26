@@ -156,6 +156,24 @@ def run_cycle(health: Mapping[str, Any], ledger: Sequence[Mapping[str, Any]], en
                     new_critical=new_crit)
         append(ev)
         executed.append(ev)
+        # Run 61 fix: the same execution also counts as an attempt for every other
+        # incident that maps to this action in this cycle (incident-specific verify),
+        # so sibling incidents cannot bypass attempt limits or cooldowns.
+        for sib in plan["decisions"]:
+            if sib["policy"] != "AUTO_RECOVER" or sib["action"] != d["action"] or sib["incident_id"] == iid:
+                continue
+            sver = verify(sib, health, after) if after else {"result": "NOT_RUN", "checks": {}}
+            sres = ("FAILED" if not res.get("ok") else
+                    "SUCCESS" if sver["result"] in ("CLEARED", "IMPROVED") else "VERIFICATION_FAILED")
+            sat = (sib.get("attempts") or {}).get("attempt_count", 0) + 1
+            sev = _event(sib, result=sres, now=now, started=started, completed=clock(), attempt=sat,
+                         verification=sver, error=res.get("error"), health_before=health, health_after=after,
+                         reason=f"shared execution of {d['action']} for {iid}")
+            sev["shared_execution"] = ev["recovery_id"]   # set BEFORE persisting
+            append(sev)
+            if sres != "SUCCESS" and sat >= spec["max_attempts"]:
+                append(_event(sib, result="ESCALATED", now=now, started=clock(), attempt=sat,
+                              reason=f"attempt limit {sat}/{spec['max_attempts']} reached without verified recovery"))
         if new_crit:
             stop = True   # recovery created new critical incidents → breaker opens next cycle
         if result != "SUCCESS" and attempt >= spec["max_attempts"]:

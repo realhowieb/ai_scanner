@@ -1,0 +1,61 @@
+name: Autonomy Certification
+
+# Run 61 — HSF Autonomous Research Mode v1 certification. A deliberate release
+# event: workflow_dispatch ONLY (never scheduled). Runs the certification suite
+# (gates A–X), anti-peeking and frozen-scanner checks, takes a READ-ONLY live
+# production snapshot, and uploads the certification artifacts. It never changes
+# repository variables, secrets, the recovery ledger or research data, and never
+# enables recovery.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: autonomy-certification
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+          python -m pip install --prefer-binary pytest pyyaml -c requirements.lock
+      - name: Certification suite (gates A–X, anti-peeking, frozen scanner)
+        run: python -m pytest -q tests/test_autonomy_certification.py tests/test_autonomous_recovery.py tests/test_system_health.py
+      - name: Certification verdict + read-only production snapshot
+        id: cert
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          ALPACA_FEED: ${{ secrets.ALPACA_FEED }}
+          # Read-only: reported, never changed.
+          HSF_AUTONOMY_ENABLED: ${{ vars.HSF_AUTONOMY_ENABLED || 'false' }}
+          HSF_AUTONOMY_MODE: ${{ vars.HSF_AUTONOMY_MODE || 'observe' }}
+        run: |
+          python -m scripts.autonomy_certification --live --out artifacts/health
+          cat artifacts/health/autonomy_certification.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload certification artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: autonomy-certification
+          path: |
+            artifacts/health/autonomy_certification.json
+            artifacts/health/autonomy_certification.md
+          if-no-files-found: warn

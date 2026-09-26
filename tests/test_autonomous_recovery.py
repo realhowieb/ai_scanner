@@ -414,3 +414,38 @@ class ScriptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SiblingIncidentRegressionTests(unittest.TestCase):
+    """Run 61 certification defect: incidents sharing an action (MATURATION_STALE /
+    MATURATION_FAILING / CONSECUTIVE_FAILURES → RETRY_MATURATION) must not bypass the
+    per-action cooldown or attempt limits, and bookkeeping rows must not trip the breaker."""
+
+    def _world(self):
+        from analytics import autonomy_certification as ac
+        t0 = dt.datetime(2026, 11, 25, 15, 0, tzinfo=UTC)
+        return ac._stale_world(t0), t0
+
+    def test_sibling_cannot_bypass_cooldown(self):
+        from analytics import autonomy_certification as ac
+        w, t0 = self._world()
+        h = w.health(t0)
+        self.assertGreaterEqual(sum(1 for d in rp.build_plan(h, [], RECOVER, now=t0)["decisions"]
+                                    if d["action"] == "RETRY_MATURATION"), 2)
+        ledger, calls = [], []
+        for k in range(8):
+            ac.cycle(h, ledger, RECOVER, t0 + dt.timedelta(minutes=5 * k),
+                     lambda a, s: calls.append(a) or {"ok": False, "error": "x"}, lambda: h)
+        self.assertEqual(calls.count("RETRY_MATURATION"), 1)
+
+    def test_shared_execution_recorded_per_incident_and_flagged_before_persist(self):
+        from analytics import autonomy_certification as ac
+        w, t0 = self._world()
+        persisted = []
+        rc.run_cycle(w.health(t0), [], RECOVER, execute_fn=lambda a, s: {"ok": False, "error": "x"},
+                     verify_fn=lambda: w.health(t0), append_fn=lambda e: persisted.append(json.loads(json.dumps(e))),
+                     now=t0, clock=lambda: t0)
+        mat = [e for e in persisted if e.get("action") == "RETRY_MATURATION" and e["result"] == "FAILED"]
+        self.assertGreaterEqual(len(mat), 2)
+        self.assertEqual(sum(1 for e in mat if not e.get("shared_execution")), 1)   # one real execution
+        self.assertFalse(rp.circuit_state(w.health(t0), persisted, t0)["open"])      # not 3 "failures"

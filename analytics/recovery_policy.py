@@ -242,6 +242,19 @@ def attempt_state(ledger: Sequence[Mapping[str, Any]], incident_id: str, action:
             "in_cooldown": bool(next_ok and now < next_ok)}
 
 
+def action_cooldown(ledger: Sequence[Mapping[str, Any]], action: str, now: _dt.datetime) -> Dict[str, Any]:
+    """Run 61 fix: cooldown is per ACTION, across every incident that maps to it, so a
+    sibling incident (e.g. MATURATION_FAILING vs MATURATION_STALE) cannot re-launch the
+    same recovery inside its cooldown."""
+    tries = [e for e in ledger if e.get("action") == action and e.get("result") in ATTEMPT_RESULTS]
+    last_t = max((_parse(e.get("completed_at") or e.get("started_at")) for e in tries
+                  if _parse(e.get("completed_at") or e.get("started_at"))), default=None)
+    nxt = last_t + _dt.timedelta(minutes=ALLOWLIST.get(action, {}).get("cooldown_min", 60)) if last_t else None
+    return {"last_action_attempt_at": last_t.isoformat() if last_t else None,
+            "next_allowed_action_attempt": nxt.isoformat() if nxt else None,
+            "in_cooldown": bool(nxt and now < nxt)}
+
+
 def circuit_state(health: Mapping[str, Any], ledger: Sequence[Mapping[str, Any]],
                   now: _dt.datetime) -> Dict[str, Any]:
     """Global breaker. Once opened it stays open until a human appends CIRCUIT_RESET."""
@@ -252,11 +265,14 @@ def circuit_state(health: Mapping[str, Any], ledger: Sequence[Mapping[str, Any]]
     if opened and (not reset or str(reset[-1].get("started_at")) < str(opened[-1].get("started_at"))):
         reasons.append(f"circuit opened at {opened[-1].get('started_at')} and not reset by a human")
     recent = [e for e in ordered if (_parse(e.get("started_at")) or now) >= now - CB_WINDOW]
-    fails = [e for e in recent if e.get("result") in ("FAILED", "VERIFICATION_FAILED")]
+    # Count distinct executions: sibling bookkeeping rows (`shared_execution`) repeat
+    # one execution's result for other incidents and must not inflate the breaker.
+    fails = [e for e in recent if e.get("result") in ("FAILED", "VERIFICATION_FAILED")
+             and not e.get("shared_execution")]
     if len(fails) >= CB_MAX_FAILURES:
         reasons.append(f"{len(fails)} recovery failures within {CB_WINDOW}")
     streak = 0
-    for e in reversed([e for e in ordered if e.get("result") in ATTEMPT_RESULTS]):
+    for e in reversed([e for e in ordered if e.get("result") in ATTEMPT_RESULTS and not e.get("shared_execution")]):
         if e.get("result") == "VERIFICATION_FAILED":
             streak += 1
         else:
@@ -355,9 +371,10 @@ def decide(incident: Mapping[str, Any], health: Mapping[str, Any], ledger: Seque
     if st["attempt_count"] >= spec["max_attempts"]:
         return out("ESCALATE", f"attempt limit reached ({st['attempt_count']}/{spec['max_attempts']})",
                    action, True, {"result_hint": "ATTEMPT_LIMIT"})
-    if st["in_cooldown"]:
-        return out("WATCH", f"cooldown until {st['next_allowed_attempt']}", action,
-                   extra={"result_hint": "COOLDOWN"})
+    acd = action_cooldown(ledger, action, now)
+    if st["in_cooldown"] or acd["in_cooldown"]:
+        until = max(x for x in (st["next_allowed_attempt"], acd["next_allowed_action_attempt"]) if x)
+        return out("WATCH", f"cooldown until {until}", action, extra={"result_hint": "COOLDOWN"})
     return out("AUTO_RECOVER", f"allowlisted {spec['risk']} recovery", action)
 
 
