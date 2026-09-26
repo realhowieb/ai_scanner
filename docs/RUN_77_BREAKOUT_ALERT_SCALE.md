@@ -53,4 +53,8 @@ Coverage verifies the visible explanation and legend, default threshold,
 unambiguous saved-alert label, preserved runner comparison, empirical preview
 wiring, and separation between UI, storage, and evaluation logic.
 
+The deterministic copy and label formatter live in dependency-free
+`ui/alert_copy.py`, so the lightweight CI test job does not need Streamlit to
+collect or verify these contracts.
+
 P1-12 can be marked **DONE**.

@@ -13,6 +13,13 @@ from typing import List
 
 import streamlit as st
 
+from ui.alert_copy import (
+    BREAKOUT_ALERT_DEFAULT,
+    BREAKOUT_ALERT_SCALE_COPY,
+    BREAKOUT_ALERT_SCALE_LEGEND,
+    breakout_alert_label,
+)
+
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _cached_scorecards(user_id: str):
@@ -54,15 +61,6 @@ _ALERT_TYPE_LABELS = {
     "ema_cross": "📈 EMA cross",
     "ewo_cross": "📉 EWO cross",
 }
-
-BREAKOUT_ALERT_DEFAULT = 8.0
-BREAKOUT_ALERT_SCALE_COPY = (
-    "**Breakout Score threshold** uses the scanner's supporting technical score, "
-    "not the 0-100 HSF Score. Lower thresholds fire more often; higher thresholds "
-    "are more selective. The alert fires when Breakout Score is at or above your value."
-)
-BREAKOUT_ALERT_SCALE_LEGEND = "Lower / more frequent  ←  8.0 default  →  Higher / more selective"
-
 
 def _default_value_kwargs(key: str, value):
     return {} if key in st.session_state else {"value": value}
@@ -148,8 +146,7 @@ def _fmt_alert(a: dict) -> str:
     """One-line human description of an alert row."""
     t = a.get("alert_type")
     if t == "breakout":
-        scope = "watchlist only" if a.get("watchlist_only") else "all tickers"
-        return f"🚀 Breakout Score ≥ {float(a.get('threshold') or 0):g} ({scope})"
+        return breakout_alert_label(a.get("threshold"), bool(a.get("watchlist_only")))
     if t == "watchlist":
         return "📋 Watchlist — any holding appears in scan results"
     if t == "price":

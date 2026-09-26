@@ -1,11 +1,11 @@
 """P1-12: Breakout alert threshold is visible and unambiguous."""
 from pathlib import Path
 
-from ui.alerts import (
+from ui.alert_copy import (
     BREAKOUT_ALERT_DEFAULT,
     BREAKOUT_ALERT_SCALE_COPY,
     BREAKOUT_ALERT_SCALE_LEGEND,
-    _fmt_alert,
+    breakout_alert_label,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +26,7 @@ def test_visible_legend_names_default_and_direction():
 
 
 def test_saved_alert_label_names_the_actual_score():
-    text = _fmt_alert({"alert_type": "breakout", "threshold": 8, "watchlist_only": False})
+    text = breakout_alert_label(8, watchlist_only=False)
     assert text == "🚀 Breakout Score ≥ 8 (all tickers)"
 
 
