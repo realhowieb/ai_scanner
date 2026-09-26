@@ -42,6 +42,10 @@ from analytics.observation_capture import (
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Per-run distinct-symbol cap. Raised 400 -> 2000 after dry-run 36224599421
+# measured 4 requests / 400 symbols (0.01 req/symbol, 0 x 429, 55 s job) with
+# batched retrieval; 2000 covers the full ready set (~1.6k) in one run.
+MAX_SYMBOLS = 2000
 # Symbols per multi-symbol request series (URL length stays well under limits).
 BATCH_SIZE = 100
 # Forward window after a batch's latest anchor. Bars are bar-indexed, so sparse
@@ -175,7 +179,7 @@ def _retrieve_bars(ordered, report, *, now, fetch_bars, fetch_bars_batch,
 
 def mature_observations(observations, *, now=None, slack_min: int = 15,
                         dry_run: bool = False, fetch_bars=None, save_fn=None,
-                        max_symbols: int = 400, fetch_bars_batch=None,
+                        max_symbols: int = MAX_SYMBOLS, fetch_bars_batch=None,
                         request_stats=None, batch_size: int = BATCH_SIZE,
                         exclusion_reason=None) -> Dict[str, Any]:
     """Pure-ish orchestration (injectable `fetch_bars`/`save_fn` for tests).
@@ -405,7 +409,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Mature captured observation outcomes")
     ap.add_argument("--limit", type=int, default=5000)
     ap.add_argument("--slack-min", type=int, default=15)
-    ap.add_argument("--max-symbols", type=int, default=400,
+    ap.add_argument("--max-symbols", type=int, default=MAX_SYMBOLS,
                     help="max distinct symbols to fetch this run (bounds runtime; "
                          "backlog drains across the schedule). <=0 = no cap.")
     ap.add_argument("--batch-size", type=int, default=BATCH_SIZE,

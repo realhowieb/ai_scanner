@@ -32,7 +32,8 @@ schema, and first-write-wins persistence are unchanged.
 | 6 | Bounded window: `[earliest anchor in batch (minute floor), min(now, latest anchor + 4 days)]`. The old window ran from the anchor date to now. Horizons count bars, so 4 days leaves sparse names time to reach 61 bars across a weekend or holiday. Outcomes are identical to the legacy fetch unless the 61st bar comes more than 4 days after the anchor | `FORWARD_WINDOW` |
 | 7 | A mid-pagination failure raises. Partial bar series are never used | `fetch_minute_bars_multi` |
 
-The per-run cap stays at **400 symbols**. The legacy injectable
+The per-run cap was kept at 400 for the first measurement, then raised to
+**2000** based on the measured dry run below. The legacy injectable
 `fetch_bars(symbol, start_date)` path still works, and a test asserts that it
 produces outcomes identical to the batched path.
 
@@ -74,3 +75,20 @@ low `requests_per_processed_symbol` and short runtime, raising `--max-symbols` t
 ~2000 would clear the ready set in **one run** for about 50–150 requests.
 A separate follow-up is to retire observations whose bounded window has fully
 elapsed, because retrying them cannot change the result.
+
+## Measured: dry run 36224599421 (2026-09-26 06:43 UTC, cap 400)
+
+| 400-symbol batch | Before (#12) | Measured |
+|---|---|---|
+| Alpaca requests | ~400 | **4** (one page per 100-symbol batch) |
+| 429 responses / retries | 141 symbols, 0 retries | **0 / 0** |
+| No-data symbols | mixed with throttling | 119 (all genuine) |
+| Outcomes matured | 18 | **140** (would-be writes) |
+| Ineligible symbols skipped | fetched | 17 |
+| Job time | 1m13s | 55s |
+
+Formerly throttled symbols now return data, but many are too sparse to label:
+INSUFFICIENT_FUTURE_BARS rose from 657 to 921 horizons. At 0.01 requests per
+symbol the cap no longer protects runtime, so `MAX_SYMBOLS` is now **2000**. That
+covers the whole ready set (~1.6k symbols, ~16 requests) in one run. Sparse
+symbols retrying forever is still the open follow-up.
