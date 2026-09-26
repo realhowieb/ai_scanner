@@ -291,7 +291,7 @@ def render_results(
             if auto_t:
                 with st.expander(f"📌 {auto_t} details", expanded=False):
                     st.caption(
-                        "📌 **Top breakout candidate (auto-selected)**  \n"
+                        "📌 **Top HSF opportunity (auto-selected)**  \n"
                         + upgrade_message("can_export_csv")
                     )
                     r0 = find_row_for_ticker(df, auto_t)
@@ -640,7 +640,7 @@ def render_results(
         if auto_t:
             with st.expander(f"📌 {auto_t} details", expanded=False):
                 st.caption(
-                    "📌 **Top breakout candidate (auto-selected)**  \n"
+                    "📌 **Top HSF opportunity (auto-selected)**  \n"
                     + upgrade_message("can_export_csv")
                 )
                 r0 = find_row_for_ticker(df, auto_t)

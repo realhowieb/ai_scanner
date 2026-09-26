@@ -218,7 +218,7 @@ try:
     from ui.filters import render_filters
     from ui.footer import render_footer
     from ui.header import render_header, render_market_snapshot, render_price_ticker
-    from ui.headline_score import add_hsf_score_column
+    from ui.headline_score import add_hsf_score_column, rank_hsf_opportunities
     from ui.market_default import default_results, render_back_to_market
     from ui.prebreakout_tab import render_prebreakout_tab
     from ui.result_explain import add_why_column
@@ -266,6 +266,7 @@ except Exception as _e:
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
     add_why_column = lambda df: df  # type: ignore
+    rank_hsf_opportunities = lambda df: df  # type: ignore
     render_user_settings_footer = _missing  # type: ignore
 
 # --------------- Earnings (shared implementation) ----------------
@@ -766,6 +767,7 @@ def main():
         )
         df = add_why_column(df)  # plain-English "why this passed" per row
         df = add_hsf_score_column(df)  # P0-7: HSF Score is the headline number
+        df = rank_hsf_opportunities(df)  # Run 76: product presentation follows its headline score
         df = render_discover_bar(df)  # P1-3/4/9: lens pills, table/cards view, 🆕 markers
         render_results_tabs(
             df=df,

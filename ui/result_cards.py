@@ -4,7 +4,7 @@ One bordered card per setup: ticker, HSF Score, primary setup, the "Why"
 evidence, price / day change / relative volume, and an Open button that goes
 straight to Stock Intelligence for that ticker. Built from native Streamlit
 containers, so cards stack cleanly at phone width with no horizontal scroll.
-Presentation only (row order and values as given).
+Presentation only. The shared Scanner pipeline supplies HSF-ranked rows.
 """
 from __future__ import annotations
 

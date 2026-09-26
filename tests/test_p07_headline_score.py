@@ -82,6 +82,10 @@ class WiringTests(unittest.TestCase):
     def test_app_adds_the_column_after_why(self):
         app = (ROOT / "app.py").read_text()
         self.assertLess(app.index("df = add_why_column(df)"), app.index("df = add_hsf_score_column(df)"))
+        self.assertLess(app.index("df = add_hsf_score_column(df)"),
+                        app.index("df = rank_hsf_opportunities(df)"))
+        self.assertLess(app.index("df = rank_hsf_opportunities(df)"),
+                        app.index("df = render_discover_bar(df)"))
 
     def test_detail_cards_lead_with_hsf_score(self):
         src = (ROOT / "ui" / "results.py").read_text()

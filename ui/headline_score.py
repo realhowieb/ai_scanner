@@ -11,7 +11,8 @@ This module is presentation only:
   ticker shows the same score everywhere. No new formula, no new signal.
 - Model outputs (BreakoutScore, PreBreakout %, AI Confidence) stay available
   as "model details", hidden from the grid unless the user asks for them.
-- Row order is untouched: the table keeps the scanner's ranking.
+- Raw row order is untouched while the score is added. Call
+  ``rank_hsf_opportunities`` at the presentation boundary to rank a copy.
 """
 from __future__ import annotations
 
@@ -68,6 +69,50 @@ def add_hsf_score_column(df: Any) -> Any:
     after = "Why" if "Why" in out.columns else tcol
     out.insert(list(out.columns).index(after) + 1, HSF_SCORE_COL, values)
     return out
+
+
+def rank_hsf_opportunities(df: Any) -> Any:
+    """Return a presentation copy ranked by canonical HSF Score.
+
+    Ties use BreakoutScore descending when available, then ticker ascending,
+    then stable source position. Missing or malformed HSF Scores sort last.
+    The caller's frame, columns, index values, and attrs remain untouched.
+    """
+    if df is None or getattr(df, "empty", True) or HSF_SCORE_COL not in getattr(df, "columns", []):
+        return df
+    try:
+        import pandas as pd
+
+        out = df.copy()
+        original_columns = list(out.columns)
+        attrs = dict(getattr(df, "attrs", {}))
+        out["__hsf_score_sort"] = pd.to_numeric(out[HSF_SCORE_COL], errors="coerce")
+        sort_columns = ["__hsf_score_sort"]
+        ascending = [False]
+        if "BreakoutScore" in out.columns:
+            out["__hsf_breakout_sort"] = pd.to_numeric(out["BreakoutScore"], errors="coerce")
+            sort_columns.append("__hsf_breakout_sort")
+            ascending.append(False)
+        ticker_col = _ticker_col(out)
+        if ticker_col is not None:
+            out["__hsf_ticker_sort"] = out[ticker_col].map(
+                lambda value: str(value or "").strip().upper()
+            )
+            sort_columns.append("__hsf_ticker_sort")
+            ascending.append(True)
+        out["__hsf_source_order"] = range(len(out))
+        sort_columns.append("__hsf_source_order")
+        ascending.append(True)
+        out = out.sort_values(
+            sort_columns,
+            ascending=ascending,
+            na_position="last",
+            kind="mergesort",
+        )[original_columns]
+        out.attrs = attrs
+        return out
+    except Exception:
+        return df.copy()
 
 
 def visible_columns(columns: Iterable[str], *, show_details: bool) -> List[str]:

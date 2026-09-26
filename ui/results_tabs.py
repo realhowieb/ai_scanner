@@ -18,8 +18,6 @@ RESULTS_TAB_ERRORS = (
     OSError,
 )
 
-
-
 def render_results_tabs(
     *,
     df: pd.DataFrame | None,
@@ -330,6 +328,8 @@ def _render_scan_history_tab(
 
         st.markdown("### Results for selected run")
         try:
+            from ui.headline_score import add_hsf_score_column, rank_hsf_opportunities
+            run_df_norm = rank_hsf_opportunities(add_hsf_score_column(run_df_norm))
             render_results(
                 run_df_norm,
                 flags.get("can_export_csv", False),
