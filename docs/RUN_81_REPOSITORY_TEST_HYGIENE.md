@@ -222,6 +222,20 @@ Reproduced locally, step by step, from `.github/workflows/smoke.yml`:
 
 CI configuration was not changed.
 
+**GitHub Actions on dev @ b044903 (Smoke Checks run 36278574952):**
+
+| Job | Result |
+|---|---|
+| `smoke` | success |
+| `core-dependency-import-smoke` | success (`Ran 1821 tests`) |
+| `full-dependency-import-smoke` | success |
+| `billing-contract` | success (85 passed, 1 skipped) |
+| `dependency-audit` | failure, same as before: the open P1-21 dependency pins |
+
+- ResourceWarning lines in the Python 3.13 CI log: **8 on main @ 4dcf880 → 0**.
+- The remaining `ReadTimeout` log line comes from `test_price_utils`, which simulates the
+  timeout with a mock; it is not a network call.
+
 Entry-point imports checked:
 - UI: app, Today, Scanner (`ui.scans`, `ui.results`), Stock Intelligence, My Stocks
   (`ui.watchlists`), nav, auth, pricing, landing.
