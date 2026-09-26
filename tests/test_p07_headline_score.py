@@ -91,7 +91,7 @@ class WiringTests(unittest.TestCase):
 
     def test_copy_no_longer_sells_breakout_score_as_the_headline(self):
         self.assertNotIn("Breakout Score (technical setup quality)", (ROOT / "ui" / "auth.py").read_text())
-        self.assertIn("Latest full-market ranking (HSF Score)", (ROOT / "pages" / "billing.py").read_text())
+        self.assertIn("Latest full-market ranking (HSF Score)", (ROOT / "ui" / "pricing.py").read_text())
         self.assertIn("Breakout score map (model detail)", (ROOT / "ui" / "score_map.py").read_text())
 
     @unittest.skipUnless(importlib.util.find_spec("streamlit"), "needs streamlit")

@@ -173,9 +173,11 @@ class PricingCopyTests(unittest.TestCase):
         self.assertEqual(FEATURE_MIN_TIER["can_track_record"], "pro")       # "historical research" row
         self.assertEqual(FEATURE_MIN_TIER["can_paper_trade"], "premium")    # "Paper trading" row
         self.assertEqual(FEATURE_MIN_TIER["can_diagnostics"], "admin")      # so never sold as Premium
-        billing = (ROOT / "pages" / "billing.py").read_text()
-        self.assertIn("Scan history & historical research | ❌ | ✅ | ✅", billing)
-        self.assertIn("Paper trading (Alpaca) | ❌ | ❌ | ✅", billing)
+        from ui.pricing import pricing_markdown
+
+        table = pricing_markdown()          # Run 72: generated from FEATURE_MIN_TIER
+        self.assertIn("Scan history & historical research | ❌ | ✅ | ✅", table)
+        self.assertIn("Paper trading (Alpaca) | ❌ | ❌ | ✅", table)
 
 
 SCANNER_SCRIPT = '''

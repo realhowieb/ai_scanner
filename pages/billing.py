@@ -179,38 +179,18 @@ def _refresh_tier_from_db(email: str) -> str | None:
 # =========================
 
 def _pricing_table() -> None:
-    st.markdown(
-        """
-| Feature | Basic | Pro | Premium |
-|---|---:|---:|---:|
-| **Price** | **Free** | **$19/mo** | **$39/mo** |
-| Latest full-market ranking (HSF Score), Today, Stock Intelligence | ✅ | ✅ | ✅ |
-| Lenses, card view & saved screens | ✅ | ✅ | ✅ |
-| My Stocks (watchlists) & charts | ✅ | ✅ | ✅ |
-| Your own S&P 500 scans | ✅ | ✅ | ✅ |
-| Alerts (Breakout / Watchlist / Price) | 1 | 5 | 25 |
-| Email alert delivery | ❌ | ✅ | ✅ |
-| CSV export & interactive results table | ❌ | ✅ | ✅ |
-| Your own Nasdaq scans & advanced scan filters | ❌ | ✅ | ✅ |
-| Earnings calendar & filters | ❌ | ✅ | ✅ |
-| Scan history & historical research | ❌ | ✅ | ✅ |
-| AI notes, summaries & chat | ❌ | ❌ | ✅ |
-| Early Breakout candidates (model) | ❌ | ❌ | ✅ |
-| Your own full-universe scans (3-step scanner) | ❌ | ❌ | ✅ |
-| Paper trading (Alpaca) | ❌ | ❌ | ✅ |
-"""
-    )
+    # Run 72: generated from ui.pricing (derived from FEATURE_MIN_TIER), so the
+    # table always matches what each plan actually unlocks.
+    from ui.pricing import pricing_markdown
+
+    st.markdown(pricing_markdown())
 
 
 def _benefits_block() -> None:
-    st.subheader("What’s locked + why")
-    st.markdown(
-        """
-- **Everyone** gets **1 alert** (Breakout / Watchlist / Price), checked automatically a few times a day — delivered in-app.
-- **🔒 Pro** adds reach and export: **5 alerts with email delivery**, CSV export and the interactive results table, Nasdaq scans and advanced filters, the earnings calendar, scan history and historical research.
-- **🔒 Premium** adds AI and deeper tools: **25 alerts**, AI notes / summaries / chat, Early Breakout candidates, your own full-universe scans, and Alpaca paper trading.
-"""
-    )
+    from ui.pricing import benefits_markdown
+
+    st.subheader("What each plan adds")
+    st.markdown(benefits_markdown())
 
 
 def _upgrade_buttons(current_tier_key: str) -> None:
@@ -281,6 +261,16 @@ def render_billing_page() -> None:
     from ui.design_system import render_page_header
 
     render_page_header("Plans & Billing", "Upgrade anytime. Downgrade anytime. No lock-in.")
+
+    # Run 72 (P1-15): signed-out visitors see the plans and how to start —
+    # not "You're currently on Basic" / "isn't linked to an email address".
+    if not (st.session_state.get("username") or "").strip():
+        st.caption("Start free — no credit card. Upgrade any time from this page after signing in.")
+        _pricing_table()
+        _benefits_block()
+        st.page_link("app.py", label="Create a free account or sign in", icon="🔐")
+        st.page_link("pages/methodology.py", label="How HSF works", icon="📖")
+        st.stop()
 
     tier_key = (st.session_state.get("tier_key") or st.session_state.get("tier") or "basic").strip().lower()
     current_label = _current_plan_label(tier_key)

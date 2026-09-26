@@ -24,6 +24,7 @@ try:
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
+from ui.pricing import plans_html
 from ui.product_copy import (
     DISCLAIMER,
     PILLARS,
@@ -123,6 +124,8 @@ def details_html() -> str:
         f'<div class="hsf-ex">{rows}</div><p class="hsf-note">{html.escape(EXAMPLE_NOTE)}</p></section>'
         f'<section class="hsf-sec" aria-labelledby="hsf-trust"><h2 id="hsf-trust">Why you can trust what you see</h2>'
         f'<div class="hsf-grid">{trust}</div></section>'
+        f'<section class="hsf-sec" aria-labelledby="hsf-plans"><h2 id="hsf-plans">Plans</h2>'
+        f'{plans_html()}<p class="hsf-note">Start free — no credit card required.</p></section>'
         f'<p class="hsf-disc">{html.escape(DISCLAIMER)}</p>'
         '</div>'
     )
@@ -147,6 +150,7 @@ def render_signed_out_details() -> None:
     try:
         st.markdown(details_html(), unsafe_allow_html=True)
         st.page_link("pages/methodology.py", label="How HSF works (methodology)")
+        st.page_link("pages/billing.py", label="Compare plans in detail")
     except Exception as exc:
         from ui.safe_errors import report_error
 

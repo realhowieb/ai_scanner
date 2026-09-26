@@ -111,6 +111,10 @@ def render_sidebar_nav(*, with_header: bool = True) -> None:
         apply_showcase_styles()
     except Exception:
         pass
+    # Run 72: navigation is for signed-in users; a signed-out visitor (e.g. on
+    # the public Plans page) would only get "please sign in" behind every link.
+    if not str(st.session_state.get("username") or "").strip():
+        return
     render_top_menu()
     try:
         with st.sidebar:
