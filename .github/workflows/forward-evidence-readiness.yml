@@ -1,0 +1,70 @@
+name: Forward Evidence Readiness
+
+# Run 56 — READ-ONLY forward-evidence readiness monitor. Answers "do we have
+# enough trustworthy forward production evidence to rerun Run 55?" using evidence
+# quantity/quality only; it never computes or publishes effectiveness statistics
+# (anti-peeking). It writes nothing to the store, changes no scanner/scoring, and
+# does NOT trigger Run 55: when ready it only surfaces RUN55_RERUN_RECOMMENDED=true.
+#
+# Runs once per trading day after the final Mature Observations cycle (its cron
+# ends 22:30 UTC), plus manual dispatch.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 23 * * 1-5"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: forward-evidence-readiness
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      RUN55_RERUN_RECOMMENDED: ${{ steps.monitor.outputs.RUN55_RERUN_RECOMMENDED }}
+      state: ${{ steps.monitor.outputs.state }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Fetch latest maturation report (optional, run-level RATE_LIMITED)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RID=$(gh run list --workflow mature-observations.yml --status success -L 1 --json databaseId -q '.[0].databaseId')
+          if [ -n "$RID" ]; then gh run download "$RID" -n maturation-report -D artifacts/maturation || true; fi
+      - name: Forward evidence readiness (read-only)
+        id: monitor
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python -m scripts.forward_evidence_readiness --out artifacts/research \
+            --maturation-report artifacts/maturation/maturation_report.json
+          cat artifacts/research/forward_evidence_readiness.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Surface rerun recommendation (no automatic action)
+        if: steps.monitor.outputs.RUN55_RERUN_RECOMMENDED == 'true'
+        run: |
+          echo "::notice title=RUN55_RERUN_RECOMMENDED=true::Forward evidence gates pass. Run 55 may be rerun manually (Signal Effectiveness Analysis). No action taken."
+          echo "## ✅ RUN55_RERUN_RECOMMENDED=true — rerun Run 55 manually; nothing was triggered." >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload readiness report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: forward-evidence-readiness
+          path: |
+            artifacts/research/forward_evidence_readiness.json
+            artifacts/research/forward_evidence_readiness.md
+          if-no-files-found: warn
