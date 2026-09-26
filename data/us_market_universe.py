@@ -80,6 +80,19 @@ def _is_preferred(symbol: str) -> bool:
     return bool(_PREFERRED_RE.search(str(symbol).upper()))
 
 
+def symbol_exclusion_reason(symbol: str) -> Optional[str]:
+    """Symbol-only US_MARKET rules usable without provider asset metadata
+    (e.g. on stored observations): "preferred_share" / "malformed_symbol", else
+    None. Deliberately excludes the SPAC unit/warrant heuristic, whose bare U/W
+    suffix check also matches common stocks (MU, SNOW) outside this filter."""
+    sym = normalize_ticker(str(symbol or ""))
+    if _is_malformed(sym):
+        return "malformed_symbol"
+    if _is_preferred(sym):
+        return "preferred_share"
+    return None
+
+
 def filter_assets(assets: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Apply the US_MARKET eligibility rules to raw provider assets. Pure —
     returns {symbols (sorted, deduped), exclusions (counts), provider_assets}."""

@@ -66,8 +66,13 @@ preserved independently of direction. Fields with no data are omitted, not zeroe
 ## Failure taxonomy (Task 8)
 
 `PRICE_DATA_UNAVAILABLE, INSUFFICIENT_FUTURE_BARS, INVALID_TIMESTAMP,
-MARKET_CLOSED, PROVIDER_ERROR, DATABASE_ERROR, UNKNOWN`. Counted per run; one bad
-symbol never blocks others (each symbol group is isolated in try/except).
+MARKET_CLOSED, PROVIDER_ERROR, DATABASE_ERROR, UNKNOWN, RATE_LIMITED`. Counted per
+run; one bad symbol never blocks others (each symbol group is isolated in try/except).
+
+Since the maturation-hardening run, `PRICE_DATA_UNAVAILABLE` means the provider
+**answered** and had no bars (true missing data). HTTP 429 that persists through
+bounded retries is `RATE_LIMITED` (symbol-level, retried next run) and a failed
+request is `PROVIDER_ERROR` — neither is ever reported as missing data.
 
 ## Idempotency
 
@@ -89,8 +94,10 @@ is not statistical significance).
 
 - Executions: ~18 runs/trading day (every 30 min, 13:00–22:00 UTC).
 - Observations evaluated/run: bounded by `--limit` (default 5,000).
-- **Price requests: one per distinct symbol with a ready horizon per run**
-  (symbol-grouped), not one per observation.
+- **Price requests: one paginated multi-symbol series per 100-symbol batch**
+  (`/v2/stocks/bars?symbols=…`, 10k bars/page shared across symbols), not one
+  request per symbol. Each symbol's bars are retrieved once per run and reused by
+  all its observations. See `docs/MATURATION_RETRIEVAL_HARDENING.md`.
 - DB: reads = recent observations; writes = only new matured outcome rows.
 
 ## Retention

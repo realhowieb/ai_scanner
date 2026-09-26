@@ -15,6 +15,15 @@ hsf_observation_outcomes and never touches scans, observations, or scanners.
 
 Scheduling: `.github/workflows/mature-observations.yml` (every 30 min during/after
 US market hours, workflow_dispatch supported).
+
+Run 51 (maturation hardening): bars are fetched with the multi-symbol Alpaca
+endpoint in batches of `batch_size` symbols (one paginated request series per
+batch, 10k bars/page shared across symbols) instead of one request per symbol,
+through a retrying client (429 → Retry-After/backoff+jitter, bounded). Each
+symbol's bars are retrieved once per run and reused by all its observations.
+Persistent throttling is reported as RATE_LIMITED (retried next run), never as
+PRICE_DATA_UNAVAILABLE, and stops further requests this run. Symbols the
+US_MARKET rules exclude (preferred shares, malformed) never reach retrieval.
 """
 from __future__ import annotations
 
@@ -33,6 +42,13 @@ from analytics.observation_capture import (
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Symbols per multi-symbol request series (URL length stays well under limits).
+BATCH_SIZE = 100
+# Forward window after a batch's latest anchor. Bars are bar-indexed, so sparse
+# symbols need calendar time to accrue 60 bars; 4 days spans a weekend + holiday,
+# matching the legacy open-ended (start → now) fetch for all practical purposes.
+FORWARD_WINDOW = _dt.timedelta(days=4)
+
 
 def _now() -> _dt.datetime:
     return _dt.datetime.now(_dt.timezone.utc)
@@ -49,7 +65,7 @@ def _parse(v: Any):
 
 def _new_report() -> Dict[str, Any]:
     return {
-        "schema": "hsf-maturation-1.1",
+        "schema": "hsf-maturation-1.2",
         "generated_at": _now().isoformat(),
         "observations_scanned": 0,
         "eligible_observations": 0,
@@ -71,6 +87,24 @@ def _new_report() -> Dict[str, Any]:
             "estimated_clearance_runs": None,  # ceil(ready_symbols / cap), snapshot
             "max_symbols": 0,
         },
+        # Run 51 — market-data retrieval telemetry. Horizon-level counts
+        # (price_data_failures / insufficient_future_bars) mirror `failures`;
+        # symbol-level counts separate true missing data from throttling.
+        "alpaca_requests": 0,          # HTTP attempts sent (incl. retries)
+        "alpaca_429_count": 0,         # HTTP 429 responses received
+        "alpaca_retry_count": 0,       # attempts re-sent after 429/5xx/timeout
+        "unique_symbols_requested": 0,
+        "cache_hits": 0,               # observations served from a symbol's already-retrieved bars
+        "cache_misses": 0,             # symbol bar series retrieved from the provider
+        "symbols_processed": 0,
+        "outcomes_matured": 0,          # (symbols_deferred: see above)
+        "price_data_failures": 0,      # horizons: provider answered, no bars (true missing)
+        "insufficient_future_bars": 0,  # horizons: bars exist but too few after anchor
+        "price_data_unavailable_symbols": 0,
+        "rate_limited_symbols": 0,     # symbols skipped because of persistent 429 (retry next run)
+        "provider_error_symbols": 0,
+        "ineligible": {"symbols": 0, "observations": 0, "reasons": {}},
+        "fetch_mode": None,
     }
 
 
@@ -80,16 +114,83 @@ def _fail(report: Dict[str, Any], horizon: str | None, reason: str) -> None:
         report["horizons"][horizon]["failed"] += 1
 
 
+def _default_exclusion_reason(symbol: str):
+    from data.us_market_universe import symbol_exclusion_reason
+    return symbol_exclusion_reason(symbol)
+
+
+def _batch_windows(ordered, now, batch_size: int):
+    """Yield (symbols, start_iso, end_iso) per batch. `ordered` is oldest-anchor
+    first, so batch members share similar start times (little over-fetch)."""
+    batch_size = max(1, int(batch_size))
+    for i in range(0, len(ordered), batch_size):
+        chunk = [(sym, plans, earliest) for sym, (plans, earliest) in ordered[i:i + batch_size]
+                 if earliest is not None]
+        if not chunk:
+            continue
+        start = min(e for _s, _p, e in chunk).replace(second=0, microsecond=0)
+        latest = max(_parse(a) or e for _s, plans, e in chunk for _o, a, _r in plans)
+        end = min(now, latest + FORWARD_WINDOW)
+        yield ([sym for sym, _p, _e in chunk],
+               start.isoformat().replace("+00:00", "Z"),
+               end.isoformat().replace("+00:00", "Z"))
+
+
+def _retrieve_bars(ordered, report, *, now, fetch_bars, fetch_bars_batch,
+                   batch_size: int):
+    """Pass 2a — fetch each processed symbol's bars ONCE. Returns
+    ({symbol: bars}, {symbol: failure_reason}) where failure_reason is one of
+    PROVIDER_ERROR / RATE_LIMITED (wholesale, retried next run)."""
+    bars_by_symbol: Dict[str, list] = {}
+    errors: Dict[str, str] = {}
+    fetchable = [(s, v) for s, v in ordered if v[1] is not None]
+    report["unique_symbols_requested"] = len(fetchable)
+    if fetch_bars is not None:  # legacy per-symbol injectable (tests / tooling)
+        report["fetch_mode"] = "per_symbol"
+        for symbol, (_plans, earliest) in fetchable:
+            try:
+                bars_by_symbol[symbol] = fetch_bars(symbol, earliest.date().isoformat()) or []
+            except Exception as exc:
+                errors[symbol] = ("RATE_LIMITED" if getattr(exc, "rate_limited", False)
+                                  else "PROVIDER_ERROR")
+        return bars_by_symbol, errors
+    report["fetch_mode"] = "batch"
+    throttled = False
+    for symbols, start, end in _batch_windows(fetchable, now, batch_size):
+        if throttled:  # circuit breaker: don't keep hammering a throttled provider
+            errors.update({s: "RATE_LIMITED" for s in symbols})
+            continue
+        try:
+            got = fetch_bars_batch(symbols, start, end) or {}
+        except Exception as exc:
+            rate_limited = bool(getattr(exc, "rate_limited", False))
+            throttled = throttled or rate_limited
+            errors.update({s: "RATE_LIMITED" if rate_limited else "PROVIDER_ERROR"
+                           for s in symbols})
+            continue
+        for s in symbols:
+            bars_by_symbol[s] = got.get(s) or []
+    return bars_by_symbol, errors
+
+
 def mature_observations(observations, *, now=None, slack_min: int = 15,
                         dry_run: bool = False, fetch_bars=None, save_fn=None,
-                        max_symbols: int = 400) -> Dict[str, Any]:
+                        max_symbols: int = 400, fetch_bars_batch=None,
+                        request_stats=None, batch_size: int = BATCH_SIZE,
+                        exclusion_reason=None) -> Dict[str, Any]:
     """Pure-ish orchestration (injectable `fetch_bars`/`save_fn` for tests).
 
     Bounded per run: at most `max_symbols` distinct symbols are fetched, in
     oldest-anchor-first order, so the worker finishes within its CI timeout and
     the backlog drains deterministically across the every-30-min schedule
     (idempotent — deferred symbols mature on a later run). Set max_symbols<=0 for
-    no cap (tests)."""
+    no cap (tests).
+
+    Retrieval: `fetch_bars(symbol, start_date)` (legacy, one call per symbol) if
+    given, else `fetch_bars_batch(symbols, start_iso, end_iso) -> {symbol: bars}`
+    (default: batched Alpaca). `request_stats` (AlpacaRequestStats-like) feeds the
+    request/429/retry counters. `exclusion_reason(symbol) -> str|None` drops
+    US_MARKET-ineligible symbols before they consume the per-run budget."""
     now = now or _now()
     if not isinstance(now, _dt.datetime):
         now = _parse(now) or _now()
@@ -100,6 +201,20 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
     for o in observations or []:
         report["observations_scanned"] += 1
         by_symbol[str(o.get("symbol") or "").upper()].append(o)
+
+    # Ineligible instruments never reach retrieval nor the per-run cap.
+    exclusion_reason = exclusion_reason or _default_exclusion_reason
+    inel = report["ineligible"]
+    for symbol in list(by_symbol):
+        try:
+            reason = exclusion_reason(symbol)
+        except Exception:
+            reason = None
+        if reason:
+            inel["symbols"] += 1
+            inel["observations"] += len(by_symbol[symbol])
+            inel["reasons"][reason] = inel["reasons"].get(reason, 0) + 1
+            del by_symbol[symbol]
 
     # Pass 1 (no I/O): build per-symbol plans + earliest ready anchor.
     symbol_plans: Dict[str, tuple] = {}
@@ -149,25 +264,37 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
             else 1),
     })
 
-    # Pass 2 (I/O): fetch + mature the bounded set.
+    # Pass 2a (I/O): retrieve each symbol's bars once (batched, retried, cached).
+    if fetch_bars is None and fetch_bars_batch is None:
+        fetch_bars_batch, request_stats = _default_fetch_batch_factory(request_stats)
+    bars_by_symbol, fetch_errors = _retrieve_bars(
+        ordered, report, now=now, fetch_bars=fetch_bars,
+        fetch_bars_batch=fetch_bars_batch, batch_size=batch_size)
+
+    # Pass 2b (no provider I/O): mature from the retrieved bars.
     for symbol, (plans, earliest) in ordered:
         report["eligible_observations"] += len(plans)
         if earliest is None:
             _fail(report, None, "INVALID_TIMESTAMP")
             report["backlog"]["failed_symbols"] += 1
             continue
-        try:
-            bars = (fetch_bars or _default_fetch)(symbol, earliest.date().isoformat())
-        except Exception:
-            _fail(report, None, "PROVIDER_ERROR")
+        if symbol in fetch_errors:
+            reason = fetch_errors[symbol]
+            _fail(report, None, reason)
             report["backlog"]["failed_symbols"] += 1
+            report["rate_limited_symbols" if reason == "RATE_LIMITED"
+                   else "provider_error_symbols"] += 1
             continue
+        bars = bars_by_symbol.get(symbol) or []
+        report["cache_misses"] += 1
         if not bars:
             for _o, _a, ready in plans:
                 for h in ready:
                     _fail(report, h, "PRICE_DATA_UNAVAILABLE")
             report["backlog"]["failed_symbols"] += 1
+            report["price_data_unavailable_symbols"] += 1
             continue
+        report["cache_hits"] += len(plans) - 1
 
         for o, anchor, ready in plans:
             a = _parse(anchor)
@@ -207,12 +334,33 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
     # matured_observations counts NEW outcome rows written (real drain this run);
     # in dry-run it mirrors would-be writes so clearance estimates stay comparable.
     report["backlog"]["matured_observations"] = report["attached"]
+    report.update({
+        "symbols_processed": report["backlog"]["processed_symbols"],
+        "symbols_deferred": report["backlog"]["deferred_symbols"],
+        "outcomes_matured": report["attached"],
+        "price_data_failures": report["failures"].get("PRICE_DATA_UNAVAILABLE", 0),
+        "insufficient_future_bars": report["failures"].get("INSUFFICIENT_FUTURE_BARS", 0),
+    })
+    if request_stats is not None:
+        report.update({
+            "alpaca_requests": int(getattr(request_stats, "requests", 0)),
+            "alpaca_429_count": int(getattr(request_stats, "rate_limited", 0)),
+            "alpaca_retry_count": int(getattr(request_stats, "retries", 0)),
+        })
+    processed = report["symbols_processed"]
+    report["requests_per_processed_symbol"] = (
+        round(report["alpaca_requests"] / processed, 3) if processed else None)
     return report
 
 
-def _default_fetch(symbol: str, start: str):
-    from data.price_alpaca import fetch_minute_bars
-    return fetch_minute_bars(symbol, start, None) or []
+def _default_fetch_batch_factory(stats=None):
+    """Batched Alpaca fetcher bound to a shared per-run request-stats object."""
+    from data.price_alpaca import AlpacaRequestStats, fetch_minute_bars_multi
+    stats = stats if stats is not None else AlpacaRequestStats()
+
+    def _fetch(symbols, start, end):
+        return fetch_minute_bars_multi(symbols, start, end, stats=stats)
+    return _fetch, stats
 
 
 def _default_save(outcome) -> bool:
@@ -230,6 +378,14 @@ def render_report_text(r: Dict[str, Any]) -> str:
         s = r["horizons"][h]
         lines.append(f"{h}: new={s['new']} already={s['already']} "
                      f"not_ready={s['not_ready']} failed={s['failed']}")
+    lines.append(
+        f"Retrieval ({r.get('fetch_mode')}): requests={r.get('alpaca_requests')} "
+        f"429s={r.get('alpaca_429_count')} retries={r.get('alpaca_retry_count')} "
+        f"symbols_requested={r.get('unique_symbols_requested')} "
+        f"cache_hits={r.get('cache_hits')} cache_misses={r.get('cache_misses')} "
+        f"no_data_symbols={r.get('price_data_unavailable_symbols')} "
+        f"rate_limited_symbols={r.get('rate_limited_symbols')} "
+        f"ineligible_symbols={(r.get('ineligible') or {}).get('symbols')}")
     if r["failures"]:
         lines.append("Failures: " + ", ".join(f"{k}={v}" for k, v in sorted(r["failures"].items())))
     b = r.get("backlog") or {}
@@ -252,6 +408,8 @@ def main() -> int:
     ap.add_argument("--max-symbols", type=int, default=400,
                     help="max distinct symbols to fetch this run (bounds runtime; "
                          "backlog drains across the schedule). <=0 = no cap.")
+    ap.add_argument("--batch-size", type=int, default=BATCH_SIZE,
+                    help="symbols per multi-symbol Alpaca request series")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--out", default=str(ROOT / "artifacts" / "automation"))
     args = ap.parse_args()
@@ -261,7 +419,8 @@ def main() -> int:
     observations = load_recent_observations(limit=args.limit,
                                             attach_outcomes=True) or []
     report = mature_observations(observations, slack_min=args.slack_min,
-                                 dry_run=args.dry_run, max_symbols=args.max_symbols)
+                                 dry_run=args.dry_run, max_symbols=args.max_symbols,
+                                 batch_size=args.batch_size)
     report["dry_run"] = bool(args.dry_run)
 
     out_dir = Path(args.out)
