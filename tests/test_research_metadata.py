@@ -1,6 +1,5 @@
 """Run 57 — point-in-time research metadata (persist what the scanner knew)."""
 import copy
-import datetime as dt
 import json
 import sqlite3
 import unittest

@@ -1,7 +1,6 @@
 """Results, charts, and AI notes UI module."""
 from __future__ import annotations
 
-import re
 from typing import Callable, Optional
 
 import pandas as pd
@@ -14,22 +13,13 @@ from ui.result_helpers import (
     as_optional_float,
     auto_details_ticker,
     find_row_for_ticker,
-    get_results_df,
+    get_results_df,  # noqa: F401  (re-exported to app.py)
     move_column_after,
     quiet_provider_loggers,
     render_calibration_table,
     render_track_record_badge,
     row_to_jsonable_dict,
     sync_selected_ticker_from_table,
-)
-from ui.result_helpers import (
-    disable_yfinance_for_session as _disable_yfinance_for_session,
-)
-from ui.result_helpers import (
-    is_yahoo_crumb_error as _is_yahoo_crumb_error,
-)
-from ui.result_helpers import (
-    warn_yfinance_disabled_once as _warn_yfinance_disabled_once,
 )
 from ui.result_tables import render_static_results_table
 from ui.result_watchlist import render_watchlist_action

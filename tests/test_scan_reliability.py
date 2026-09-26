@@ -154,12 +154,15 @@ class RepeatabilityTests(unittest.TestCase):
 
 class OverlapLockTests(unittest.TestCase):
     def test_lock_acquire_and_release(self):
+        import shutil
         import tempfile
         from pathlib import Path
         from unittest.mock import patch
 
         from scheduler import cron_runner
-        lock = Path(tempfile.mkdtemp()) / "cron_scan.lock"
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        lock = Path(tmp) / "cron_scan.lock"
         with patch.object(cron_runner, "_SCAN_LOCK", lock):
             self.assertTrue(cron_runner._acquire_scan_lock())     # first acquires
             self.assertFalse(cron_runner._acquire_scan_lock())    # second blocked
@@ -168,13 +171,16 @@ class OverlapLockTests(unittest.TestCase):
 
     def test_stale_lock_reclaimed(self):
         import os
+        import shutil
         import tempfile
         import time
         from pathlib import Path
         from unittest.mock import patch
 
         from scheduler import cron_runner
-        lock = Path(tempfile.mkdtemp()) / "cron_scan.lock"
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        lock = Path(tmp) / "cron_scan.lock"
         lock.write_text("old")
         os.utime(lock, (time.time() - 4000, time.time() - 4000))  # very old
         with patch.object(cron_runner, "_SCAN_LOCK", lock):

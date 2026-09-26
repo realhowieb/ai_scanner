@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
@@ -81,7 +82,7 @@ class ShowcaseIsolationTests(unittest.TestCase):
         self.assertEqual(normal, showcase)
 
     def test_showcase_module_has_no_trading_or_persistence_imports(self):
-        source = open("ui/showcase.py", encoding="utf-8").read()
+        source = Path("ui/showcase.py").read_text(encoding="utf-8")
         for forbidden in ("from scan", "from ml_", "from db", "research_cohort", "save_"):
             self.assertNotIn(forbidden, source)
 

@@ -1,5 +1,5 @@
 """Run 44 — canonical US_MARKET universe tests (mocked provider, no network)."""
-import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -73,6 +73,7 @@ class FilterTests(unittest.TestCase):
 class BuildTests(unittest.TestCase):
     def _tmp_cache(self):
         d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
         return Path(d) / "us_market.json"
 
     def test_live_source_and_no_2000_cap(self):

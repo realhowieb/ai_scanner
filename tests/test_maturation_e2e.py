@@ -174,6 +174,7 @@ class WorkerTests(unittest.TestCase):
         # Run 52 core fix: when the loader attaches matured horizons, a fully
         # matured observation has NO ready horizons → it is not fetched again.
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.row_factory = sqlite3.Row
         obs = _obs()
         self.assertTrue(store.save_observation(obs, conn=conn))

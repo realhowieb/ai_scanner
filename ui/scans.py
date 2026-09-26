@@ -6,11 +6,8 @@ that runs the breakout scan and persists results to the runs DB.
 
 import time
 import traceback
-from datetime import datetime, timedelta
 from typing import Any, List, Optional
-from zoneinfo import ZoneInfo
 
-import pandas as pd
 import streamlit as st
 
 from db.runs import list_runs, save_daily_snapshot, save_run
@@ -18,13 +15,13 @@ from scan.engine import run_breakout_scan, safe_call
 from scan.execution import run_manual_scan_execution
 from scan.options import apply_admin_caps
 from scan.universe_selection import resolve_scan_universe
-from ui.scan_diagnostics import render_data_provider_diagnostics
+from ui.scan_diagnostics import render_data_provider_diagnostics  # noqa: F401  (extraction contract test)
 from ui.scan_providers import (
     apply_alpaca_extended_prices,
     sanitize_universe_symbols,
 )
 from ui.single_ticker import handle_single_ticker_actions, render_single_ticker_panel
-from ui.three_step_scanner import render_three_step_scanner
+from ui.three_step_scanner import render_three_step_scanner  # noqa: F401  (re-exported to app.py)
 from ui.watchlists import handle_active_watchlist_actions
 
 

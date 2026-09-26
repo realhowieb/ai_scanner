@@ -225,15 +225,6 @@ def _extract_earnings_date(item: Any) -> Any:
     return getattr(item, "earnings_date", None)
 
 
-def _ensure_earnings_table(conn: Any) -> None:
-    try:
-        from db.earnings import ensure_earnings_table  # type: ignore
-
-        ensure_earnings_table(conn)
-    except ADMIN_TAB_ERRORS:
-        return
-
-
 def _populate_earnings(conn: Any, symbols: list[str]) -> Any:
     import db.earnings as earn_mod  # type: ignore
 

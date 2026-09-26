@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional

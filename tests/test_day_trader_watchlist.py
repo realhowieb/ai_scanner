@@ -1,5 +1,7 @@
 """Day Trader -> watchlist action wiring (selector, routing, persistence, dedup)."""
 import contextlib
+import sys
+import types
 import unittest
 from unittest import mock
 
@@ -80,6 +82,10 @@ class SelectorRoutingTests(unittest.TestCase):
         with (
             mock.patch.object(dt, "st", fake),
             mock.patch.object(dt, "_render_watchlist_action") as wl,
+            # the chart action would otherwise download live prices (yfinance);
+            # a stub module also keeps this runnable without streamlit/plotly
+            mock.patch.dict(sys.modules, {"ui.charts": types.SimpleNamespace(
+                render_chart_for_ticker=mock.MagicMock())}),
         ):
             dt._render_row_actions()
         return fake, wl

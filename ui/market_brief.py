@@ -511,22 +511,6 @@ _TOGGLEABLE = [
 ]
 
 
-def _render_breadth_sectors(data: Dict[str, Any]) -> None:
-    b = data.get("breadth")
-    sec = data.get("sectors") or []
-    if not b and not sec:
-        return
-    c1, c2 = st.columns([1, 2])
-    if b:
-        c1.metric("Breadth (adv/dec)", f"{b[0]} / {b[1]}")
-    if sec:
-        lead, lag = sec[0], sec[-1]
-        c2.caption(
-            f"🟢 Leading: **{lead[0]}** {lead[1]:+.1f}%   ·   "
-            f"🔴 Lagging: **{lag[0]}** {lag[1]:+.1f}%"
-        )
-
-
 def _open_positions(user: str) -> List[tuple]:
     """[(ticker, pnl_pct)] for open journal trades marked to now. Or []."""
     try:

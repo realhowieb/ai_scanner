@@ -4,8 +4,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import unittest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 _PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
 
