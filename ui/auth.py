@@ -4,8 +4,14 @@ import bcrypt
 import streamlit as st
 
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
-from ui.landing import render_signed_out_details, render_signed_out_hero
-from ui.safe_errors import show_error
+
+try:  # optional: a mid-redeploy import race must never block sign-in
+    from ui.landing import render_signed_out_details, render_signed_out_hero
+    from ui.safe_errors import show_error
+except (ImportError, KeyError):  # KeyError: module cache cleared mid-reload
+    render_signed_out_hero = render_signed_out_details = lambda: None  # noqa: E731
+    def show_error(section, exc=None, *, level="warning", message=None) -> None:
+        st.error(message or "Something went wrong. Try again shortly.")
 
 _SIGNUP_FAILED = "HSF couldn't create your account right now. Try again shortly."
 _SIGNIN_FAILED = "HSF couldn't sign you in right now. Try again shortly."

@@ -555,10 +555,11 @@ def main():
         render_data_health_banner(is_admin=bool(st.session_state.get("is_admin")))
     except Exception:
         pass
-
-    from ui.trust_banner import render_trust_banner  # Run 62: operational freshness only
-
-    render_trust_banner()
+    try:  # Run 62: operational freshness only; optional like the banner above
+        from ui.trust_banner import render_trust_banner
+        render_trust_banner()
+    except Exception:
+        pass
 
     render_hsf_onboarding_entry(username, tier_name=tier_name)
     st.markdown("---")

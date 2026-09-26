@@ -186,17 +186,35 @@ def install_streamlit_compat() -> None:
 
 def configure_page() -> None:
     """Apply Streamlit page config for the scanner app."""
-    from ui.product_copy import PAGE_TITLE
-    from ui.showcase import initial_sidebar_state
+    # Imports here are guarded: during a Streamlit Cloud redeploy the module
+    # cache can be mid-reload (KeyError: 'ui'), and this runs on every page
+    # load, so a failure must degrade to defaults instead of crashing the app.
+    try:
+        from ui.product_copy import PAGE_TITLE
+    except Exception:
+        PAGE_TITLE = "HSF AI Stock Scanner · HSFinest.AI"
+    try:
+        from ui.showcase import initial_sidebar_state
+
+        sidebar_state = initial_sidebar_state()
+    except Exception:
+        sidebar_state = "auto"
 
     st.set_page_config(
         page_title=PAGE_TITLE,
         page_icon="📈",
         layout="wide",
-        initial_sidebar_state=initial_sidebar_state(),
+        initial_sidebar_state=sidebar_state,
     )
-    from ui.chrome import hide_developer_chrome
-    from ui.showcase import apply_showcase_styles
+    try:
+        from ui.chrome import hide_developer_chrome
 
-    hide_developer_chrome()
-    apply_showcase_styles()
+        hide_developer_chrome()
+    except Exception:
+        pass
+    try:
+        from ui.showcase import apply_showcase_styles
+
+        apply_showcase_styles()
+    except Exception:
+        pass

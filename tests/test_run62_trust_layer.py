@@ -361,3 +361,38 @@ class ChromeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RedeployImportRaceTests(unittest.TestCase):
+    """Streamlit Cloud can clear the module cache mid-run during a redeploy
+    (KeyError: 'ui'). Run 62's hot-path imports must degrade, not crash."""
+
+    def test_configure_page_survives_import_race(self):
+        import builtins
+        import importlib.util
+        from unittest import mock
+
+        if importlib.util.find_spec("streamlit") is None:
+            self.skipTest("streamlit not installed")
+        from ui import app_boot
+
+        real_import = builtins.__import__
+
+        def racing_import(name, *args, **kwargs):
+            if name in ("ui.chrome", "ui.product_copy", "ui.showcase"):
+                raise KeyError("ui")
+            return real_import(name, *args, **kwargs)
+
+        fake_st = mock.MagicMock()
+        with mock.patch.object(app_boot, "st", fake_st), mock.patch("builtins.__import__", racing_import):
+            app_boot.configure_page()        # must not raise
+        kwargs = fake_st.set_page_config.call_args.kwargs
+        self.assertEqual(kwargs["page_title"], "HSF AI Stock Scanner · HSFinest.AI")
+        self.assertEqual(kwargs["initial_sidebar_state"], "auto")
+
+    def test_auth_and_app_guard_run62_imports(self):
+        auth = (ROOT / "ui" / "auth.py").read_text()
+        self.assertIn("except (ImportError, KeyError):", auth)
+        app = (ROOT / "app.py").read_text()
+        i = app.index("from ui.trust_banner import render_trust_banner")
+        self.assertIn("try:", app[i - 120:i])
