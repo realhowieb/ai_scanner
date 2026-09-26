@@ -78,13 +78,18 @@ try:
         render_admin_build_stamp,
         set_latest_results_snapshot,
     )
-except KeyError:
+except (KeyError, ImportError) as _boot_err:
     # Streamlit Cloud hot-redeploy race: the module table is mid-swap when the
     # watcher re-executes this script, so imports raise KeyError instead of
-    # loading (same failure app_boot guards above). Retry a few reruns, then
-    # surface the real error instead of looping forever.
+    # loading (same failure app_boot guards above). An ImportError means a stale
+    # pre-redeploy copy of one of our modules is still cached: drop it so the
+    # rerun imports the file on disk. Retry a few reruns, then surface the real
+    # error instead of looping forever.
     import time as _boot_time
 
+    _stale = getattr(_boot_err, "name", None) or ""
+    if _stale.split(".")[0] in {"ui", "auth", "db", "scan", "data", "utils", "analytics"}:
+        sys.modules.pop(_stale, None)
     _boot_retries = int(st.session_state.get("_boot_import_retries", 0))
     st.session_state["_boot_import_retries"] = _boot_retries + 1
     if _boot_retries < 3:
