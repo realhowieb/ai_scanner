@@ -346,7 +346,7 @@ def auth_ui():
 
             with st.expander("✅ What you get with a free Basic account", expanded=True):
                 st.write("- ✔️ Access to curated breakout scans")
-                st.write("- ✔️ Breakout Score (technical setup quality)")
+                st.write("- ✔️ HSF Score (0–100 opportunity ranking) with the evidence behind it")
                 st.write("- ✔️ Interactive charts")
                 st.write("- ✔️ Works on desktop and phone")
                 st.write("- ✔️ No credit card required")

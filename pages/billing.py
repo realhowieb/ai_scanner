@@ -185,7 +185,7 @@ def _pricing_table() -> None:
 |---|---:|---:|---:|
 | **Price** | **Free** | **$19/mo** | **$39/mo** |
 | Curated Breakout Scans | ✅ | ✅ | ✅ |
-| Breakout Score | ✅ | ✅ | ✅ |
+| HSF Score (opportunity ranking) | ✅ | ✅ | ✅ |
 | Charts | ✅ | ✅ | ✅ |
 | Watchlists | ✅ | ✅ | ✅ |
 | Alerts (Breakout / Watchlist / Price) | 1 | 5 | 25 |

@@ -65,7 +65,7 @@ def render_score_map(df, key: str = "main") -> None:
     if "BreakoutScore" not in df.columns or "Ticker" not in df.columns:
         return
     try:
-        with st.expander("🗺️ Score map", expanded=False):
+        with st.expander("🗺️ Breakout score map (model detail)", expanded=False):
             view = st.radio(
                 "View", ["🗺️ Treemap", "🫧 Bubbles"], horizontal=True,
                 key=f"score_map_view_{key}", label_visibility="collapsed",

@@ -215,6 +215,7 @@ try:
     from ui.filters import render_filters
     from ui.footer import render_footer
     from ui.header import render_header, render_market_snapshot, render_price_ticker
+    from ui.headline_score import add_hsf_score_column
     from ui.history import render_history_expander
     from ui.market_default import default_results
     from ui.onboarding import render_hsf_onboarding_entry, render_scanner_orientation
@@ -748,6 +749,7 @@ def main():
             quiet_external_calls=_quiet_external_calls,
         )
         df = add_why_column(df)  # plain-English "why this passed" per row
+        df = add_hsf_score_column(df)  # P0-7: HSF Score is the headline number
         render_results_tabs(
             df=df,
             flags=flags,

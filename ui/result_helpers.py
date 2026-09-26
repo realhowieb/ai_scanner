@@ -7,6 +7,8 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+from ui.headline_score import HSF_SCORE_HELP as _HSF_SCORE_HELP
+
 # Don't surface a track record until it's statistically meaningful — a handful
 # of snapshots over one week is noise and can misrepresent the signal in either
 # direction. Require a real sample before showing anything to users.
@@ -139,7 +141,9 @@ def results_column_config() -> dict:
     """
     cc = st.column_config
     return {
-        "BreakoutScore": cc.NumberColumn("Score", format="%.1f"),
+        "HSF Score": cc.NumberColumn("HSF Score", format="%d", help=_HSF_SCORE_HELP),
+        "BreakoutScore": cc.NumberColumn("Breakout score", format="%.1f",
+                                         help="Model input to HSF Score (technical setup strength)."),
         "Last": cc.NumberColumn(format="%.2f"),
         "Volume": cc.NumberColumn(format="localized"),
         "GapPct": cc.NumberColumn("Gap %", format="%.2f%%"),

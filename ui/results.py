@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from scan import ai_confidence as aic
+from ui.headline_score import breakout_score_help, hsf_metric_text, model_details_view
 from ui.result_helpers import (
     as_optional_float,
     auto_details_ticker,
@@ -248,7 +249,7 @@ def render_results(
                 columns=list(RESULTS_HIDDEN_COLUMNS), errors="ignore"
             )
             table_df = format_ema_cross_column(table_df)
-            table_df = move_column_after(table_df, "Spark10D", "Ticker")
+            table_df = model_details_view(move_column_after(table_df, "Spark10D", "Ticker"), key=key_prefix)
             _tbl = st.dataframe(
                 table_df,
                 width="stretch",
@@ -266,7 +267,7 @@ def render_results(
             )
         else:
             # Basic: keep non-interactive rendering. Use plain HTML (much faster than styled.to_html).
-            render_static_results_table(_format_earnings_for_display(df).drop(columns=["Spark10D"], errors="ignore"), fallback_df=df)
+            render_static_results_table(model_details_view(_format_earnings_for_display(df).drop(columns=["Spark10D"], errors="ignore"), key=key_prefix), fallback_df=df)
 
         # Export (tier-gated) still available even in fast mode
         if can_export_csv:
@@ -301,7 +302,7 @@ def render_results(
                         gap = as_optional_float(r0.get("GapPct"))
                         dv = as_optional_float(r0.get("DollarVol20"))
 
-                        c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
+                        c1.metric("HSF Score", hsf_metric_text(r0), help=breakout_score_help(bs))
                         c2.metric("Last", "—" if last is None else f"{last:.2f}")
                         c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
                         c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
@@ -372,7 +373,7 @@ def render_results(
                     gap = as_optional_float(r0.get("GapPct"))
                     dv = as_optional_float(r0.get("DollarVol20"))
 
-                    c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
+                    c1.metric("HSF Score", hsf_metric_text(r0), help=breakout_score_help(bs))
                     c2.metric("Last", "—" if last is None else f"{last:.2f}")
                     c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
                     c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
@@ -650,7 +651,7 @@ def render_results(
                     gap = as_optional_float(r0.get("GapPct"))
                     dv = as_optional_float(r0.get("DollarVol20"))
 
-                    c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
+                    c1.metric("HSF Score", hsf_metric_text(r0), help=breakout_score_help(bs))
                     c2.metric("Last", "—" if last is None else f"{last:.2f}")
                     c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
                     c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
@@ -720,7 +721,7 @@ def render_results(
                     gap = as_optional_float(r0.get("GapPct"))
                     dv = as_optional_float(r0.get("DollarVol20"))
 
-                    c1.metric("BreakoutScore", "—" if bs is None else f"{bs:.2f}")
+                    c1.metric("HSF Score", hsf_metric_text(r0), help=breakout_score_help(bs))
                     c2.metric("Last", "—" if last is None else f"{last:.2f}")
                     c3.metric("Gap%", "—" if gap is None else f"{gap:.2f}%")
                     c4.metric("$Vol20", "—" if dv is None else f"{dv:,.0f}")
