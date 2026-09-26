@@ -1,0 +1,560 @@
+{
+  "schema": "hsf-forward-readiness-1.0",
+  "generated_at": "2026-09-26T07:43:25.036718+00:00",
+  "epoch": {
+    "forward_epoch_start_timestamp": "2026-09-26T07:23:11+00:00",
+    "run55_evaluation_commit": "284e2ac8ec8640d73679c55555772eeda2505485",
+    "run55_criteria_commit": "c5d34a751d00b9245a43d34e98694ce1e94de1dc",
+    "run55_workflow_run": 36226568240,
+    "research_schema_version": "hsf-obs-1.0",
+    "outcome_schema_version": "hsf-outcome-1.0",
+    "forward_epoch_start_scan_run": null,
+    "scanner_scoring_version": null
+  },
+  "state": "COLLECTING",
+  "state_reason": "no regular-session forward observations yet",
+  "limiting_factor": "NO_FORWARD_DATA",
+  "RUN55_RERUN_RECOMMENDED": false,
+  "long_readiness": "COLLECTING",
+  "short_readiness": "INSUFFICIENT",
+  "gates": {
+    "A_trading_days": {
+      "status": "FAIL",
+      "detail": "0 completed forward trading days (min 10, preferred 20)",
+      "value": 0
+    },
+    "B_scan_runs": {
+      "status": "FAIL",
+      "detail": "0 regular-session forward scan runs (min 50, preferred 100)",
+      "value": 0
+    },
+    "C_cohort_clusters": {
+      "status": "FAIL",
+      "detail": "min matured scan-run clusters = 0 (CANDIDATE at +15m); need >= 30 for every cohort at every horizon",
+      "value": 0,
+      "by_horizon": {
+        "+5m": {
+          "CANDIDATE": 0,
+          "NEAR_MISS": 0,
+          "CONTROL": 0
+        },
+        "+15m": {
+          "CANDIDATE": 0,
+          "NEAR_MISS": 0,
+          "CONTROL": 0
+        },
+        "+30m": {
+          "CANDIDATE": 0,
+          "NEAR_MISS": 0,
+          "CONTROL": 0
+        },
+        "+60m": {
+          "CANDIDATE": 0,
+          "NEAR_MISS": 0,
+          "CONTROL": 0
+        }
+      }
+    },
+    "D_horizon_maturation": {
+      "status": "FAIL",
+      "detail": "+5m: no eligible observations yet (need 80%) \u2192 FAIL; +15m: no eligible observations yet (need 80%) \u2192 FAIL; +30m: no eligible observations yet (need 80%) \u2192 FAIL; +60m: no eligible observations yet (need 70%) \u2192 FAIL"
+    },
+    "E_maturation_parity": {
+      "status": "FAIL",
+      "detail": "+5m: not measurable yet (a cohort has no eligible observations) \u2192 FAIL; +15m: not measurable yet (a cohort has no eligible observations) \u2192 FAIL; +30m: not measurable yet (a cohort has no eligible observations) \u2192 FAIL; +60m: not measurable yet (a cohort has no eligible observations) \u2192 FAIL"
+    },
+    "F_directional_integrity": {
+      "status": "FAIL",
+      "detail": "0 matured forward outcomes (need >= 100 to judge); coverage {'directional_return': None, 'mfe': None, 'mae': None}",
+      "judged": false
+    },
+    "G_effective_clusters": {
+      "status": "FAIL",
+      "detail": "min paired scan-run clusters = 0 (min 20 = Run 55 STRONG, preferred 30); observations within one run are not independent",
+      "value": 0,
+      "by_comparison": {
+        "candidate_vs_control": {
+          "+5m": 0,
+          "+15m": 0,
+          "+30m": 0,
+          "+60m": 0
+        },
+        "candidate_vs_near_miss": {
+          "+5m": 0,
+          "+15m": 0,
+          "+30m": 0,
+          "+60m": 0
+        }
+      }
+    },
+    "H_research_integrity": {
+      "status": "PASS",
+      "detail": "no integrity issues found"
+    }
+  },
+  "time_coverage": {
+    "forward_trading_days": 0,
+    "completed_forward_trading_days": 0,
+    "calendar_days": 0,
+    "first_forward_observation": null,
+    "latest_forward_observation": null,
+    "trading_dates": []
+  },
+  "scan_coverage": {
+    "total_forward_scan_runs": 0,
+    "regular_session_scan_runs": 0,
+    "successful_scan_runs": 0,
+    "successful_definition": "regular-session run containing all three cohorts",
+    "unique_symbols": 0,
+    "forward_observations_all_sessions": 0,
+    "forward_observations_regular_session": 0
+  },
+  "cohorts": {
+    "CANDIDATE": {
+      "observations": 0,
+      "unique_symbols": 0,
+      "unique_scan_runs": 0,
+      "matured_observations": 0,
+      "unmatured_observations": 0
+    },
+    "NEAR_MISS": {
+      "observations": 0,
+      "unique_symbols": 0,
+      "unique_scan_runs": 0,
+      "matured_observations": 0,
+      "unmatured_observations": 0
+    },
+    "CONTROL": {
+      "observations": 0,
+      "unique_symbols": 0,
+      "unique_scan_runs": 0,
+      "matured_observations": 0,
+      "unmatured_observations": 0
+    }
+  },
+  "horizons": {
+    "+5m": {
+      "CANDIDATE": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      },
+      "NEAR_MISS": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      },
+      "CONTROL": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      }
+    },
+    "+15m": {
+      "CANDIDATE": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      },
+      "NEAR_MISS": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      },
+      "CONTROL": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      }
+    },
+    "+30m": {
+      "CANDIDATE": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      },
+      "NEAR_MISS": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      },
+      "CONTROL": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      }
+    },
+    "+60m": {
+      "CANDIDATE": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      },
+      "NEAR_MISS": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      },
+      "CONTROL": {
+        "observations": 0,
+        "eligible_observations": 0,
+        "matured_observations": 0,
+        "maturation_pct": null,
+        "directional_return_coverage_pct": null,
+        "mfe_coverage_pct": null,
+        "mae_coverage_pct": null,
+        "matured_scan_run_clusters": 0,
+        "unmatured_reasons": {
+          "NOT_YET_ELIGIBLE": 0,
+          "PRICE_DATA_UNAVAILABLE": 0,
+          "INSUFFICIENT_FUTURE_BARS": 0,
+          "RATE_LIMITED": 0,
+          "RETIRED": 0,
+          "FILTERED_BY_POLICY": 0,
+          "OTHER": 0
+        }
+      }
+    }
+  },
+  "directions": {
+    "LONG": {
+      "observations": 0,
+      "matured_observations_60m": 0,
+      "scan_runs": 0,
+      "matured_scan_run_clusters_60m": 0
+    },
+    "SHORT": {
+      "observations": 0,
+      "matured_observations_60m": 0,
+      "scan_runs": 0,
+      "matured_scan_run_clusters_60m": 0
+    },
+    "CONTROL_UNDIRECTED": {
+      "observations": 0,
+      "matured_observations_60m": 0,
+      "scan_runs": 0,
+      "matured_scan_run_clusters_60m": 0
+    }
+  },
+  "maturation_parity": {
+    "+5m": {
+      "candidate_maturation_pct": null,
+      "near_miss_maturation_pct": null,
+      "control_maturation_pct": null,
+      "maturation_parity_gap": null,
+      "measurable": false
+    },
+    "+15m": {
+      "candidate_maturation_pct": null,
+      "near_miss_maturation_pct": null,
+      "control_maturation_pct": null,
+      "maturation_parity_gap": null,
+      "measurable": false
+    },
+    "+30m": {
+      "candidate_maturation_pct": null,
+      "near_miss_maturation_pct": null,
+      "control_maturation_pct": null,
+      "maturation_parity_gap": null,
+      "measurable": false
+    },
+    "+60m": {
+      "candidate_maturation_pct": null,
+      "near_miss_maturation_pct": null,
+      "control_maturation_pct": null,
+      "maturation_parity_gap": null,
+      "measurable": false
+    }
+  },
+  "directional_field_coverage_pct": {
+    "directional_return": null,
+    "mfe": null,
+    "mae": null
+  },
+  "data_quality": {
+    "pre_epoch_observations_excluded": 3713,
+    "legacy_untagged_excluded": 520,
+    "missing_anchor_excluded": 0,
+    "duplicate_observation_ids": 0,
+    "conflicting_observation_ids": 0,
+    "duplicate_outcomes": 0,
+    "conflicting_outcomes": 0,
+    "orphan_forward_outcomes": 0,
+    "point_in_time_violations": 0,
+    "direction_transform_mismatches": 0,
+    "invalid_market_values": 0,
+    "cohort_overlap": {},
+    "scoring_versions": [],
+    "scoring_version_drift": false,
+    "maturation_run_report": {
+      "generated_at": "2026-09-25T23:42:47.808993+00:00",
+      "schema": "hsf-maturation-1.1",
+      "symbols_deferred": 1213,
+      "dry_run": false,
+      "retired": null,
+      "failures": {
+        "INSUFFICIENT_FUTURE_BARS": 657,
+        "PRICE_DATA_UNAVAILABLE": 911
+      }
+    },
+    "unmatured_reason_note": "per-observation failure reasons are not persisted; PRICE_DATA_UNAVAILABLE and INSUFFICIENT_FUTURE_BARS are inferred, RATE_LIMITED is only visible run-level in maturation_run_report"
+  },
+  "progress": {
+    "trading_days_progress": 0.0,
+    "scan_runs_progress": 0.0,
+    "candidate_cluster_progress": 0.0,
+    "near_miss_cluster_progress": 0.0,
+    "control_cluster_progress": 0.0,
+    "horizon_coverage_progress": 0.0,
+    "maturation_parity_progress": 0.0,
+    "bottleneck": "trading_days_progress",
+    "sample_size_progress": 0.0
+  },
+  "estimated_trading_days_until_ready": "UNKNOWN",
+  "estimate_basis": "non-sample gates failing (D_horizon_maturation, E_maturation_parity, F_directional_integrity); their rate of improvement is not a collection rate. Sample-size gates alone: UNKNOWN (only 0 completed forward trading day(s); need >= 2 to measure collection rates)",
+  "estimated_trading_days_until_sample_gates": "UNKNOWN",
+  "run55_comparison": [
+    {
+      "metric": "Trading days",
+      "run55": 3,
+      "forward": 0,
+      "gate": ">= 10 (pref 20)"
+    },
+    {
+      "metric": "Scan runs (regular session)",
+      "run55": 13,
+      "forward": 0,
+      "gate": ">= 50 (pref 100)"
+    },
+    {
+      "metric": "+60m CANDIDATE maturation %",
+      "run55": 47.6,
+      "forward": null,
+      "gate": ">= 70%"
+    },
+    {
+      "metric": "+60m CONTROL maturation %",
+      "run55": 8.6,
+      "forward": null,
+      "gate": ">= 70%"
+    },
+    {
+      "metric": "+60m parity gap (pp)",
+      "run55": 39.0,
+      "forward": null,
+      "gate": "<= 10 (pref 5)"
+    },
+    {
+      "metric": "+60m CANDIDATE\u2229CONTROL clusters",
+      "run55": 9,
+      "forward": 0,
+      "gate": ">= 20 (pref 30)"
+    },
+    {
+      "metric": "LONG matured clusters (+60m)",
+      "run55": null,
+      "forward": 0,
+      "gate": ">= 30"
+    },
+    {
+      "metric": "SHORT matured clusters (+60m)",
+      "run55": 0,
+      "forward": 0,
+      "gate": "separate"
+    },
+    {
+      "metric": "Directional/MFE/MAE coverage %",
+      "run55": 54.7,
+      "forward": null,
+      "gate": ">= 90%"
+    }
+  ],
+  "pre_registered_gates": {
+    "A_trading_days": {
+      "min": 10,
+      "preferred": 20
+    },
+    "B_scan_runs": {
+      "min": 50,
+      "preferred": 100
+    },
+    "C_cohort_clusters": {
+      "min": 30
+    },
+    "D_horizon_maturation": {
+      "short_horizons": 0.8,
+      "long_horizon": 0.7,
+      "cohort_neutral_gap_pp": 5.0
+    },
+    "E_maturation_parity": {
+      "max_gap_pp": 10.0,
+      "preferred_gap_pp": 5.0
+    },
+    "F_directional_integrity": {
+      "min_coverage": 0.9,
+      "min_outcomes_to_judge": 100
+    },
+    "G_effective_clusters": {
+      "min": 20,
+      "preferred": 30
+    },
+    "H_research_integrity": {
+      "max_minor_overlap_rate": 0.01
+    }
+  },
+  "anti_peeking": "Evidence quantity/quality only. No win rate, return, cohort difference, correlation, bucket or threshold statistics are computed or reported."
+}
