@@ -42,7 +42,8 @@ try:
             "positions here."
         )
 except Exception as e:
-    st.error("Journal failed to load.")
-    st.caption(f"{type(e).__name__}: {e}")
+    from ui.safe_errors import show_error
+
+    show_error("your journal", e)
 
 st.page_link("app.py", label="← Back to scanner", icon="🏠")

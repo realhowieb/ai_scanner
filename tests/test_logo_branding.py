@@ -6,6 +6,13 @@ class LogoBrandingTests(unittest.TestCase):
     def test_uploaded_logo_asset_exists(self):
         self.assertTrue(Path("assets/hsfinest_logo_512.png").exists())
 
+    def test_tagline_free_logo_is_preferred(self):
+        # Run 62: the cropped mark (no "TRADE. WIN." tagline) comes first.
+        self.assertTrue(Path("assets/hsfinest_logo_mark.png").exists())
+        source = Path("ui/header.py").read_text()
+        self.assertLess(source.index('"assets/hsfinest_logo_mark.png"'),
+                        source.index('"assets/hsfinest_logo_512.png"'))
+
     def test_logo_candidate_prefers_uploaded_asset(self):
         source = Path("ui/header.py").read_text()
         self.assertIn("def render_page_logo", source)

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ui.safe_errors import show_error as _show_error
+
 _DIFF_COLS = ["Ticker", "Symbol", "BreakoutScore", "GapPct", "Gap%", "Trend20D%", "VolRel20", "DollarVol20"]
 _SCORE_COL = "BreakoutScore"
 
@@ -212,7 +214,7 @@ def render_watchlist_alert_preview(tickers: list[str], df, *, max_alerts: int = 
                 "Slack not configured (set SLACK_WEBHOOK_URL)."
             )
         except Exception as e:
-            st.warning(f"Could not send to Slack: {e}")
+            _show_error("Slack", e, message="HSF couldn't send this to Slack right now. Check the webhook in Settings and try again.")
 
 
 # ---------------------------------------------------------------------------

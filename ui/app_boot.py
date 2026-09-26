@@ -186,14 +186,17 @@ def install_streamlit_compat() -> None:
 
 def configure_page() -> None:
     """Apply Streamlit page config for the scanner app."""
+    from ui.product_copy import PAGE_TITLE
     from ui.showcase import initial_sidebar_state
 
     st.set_page_config(
-        page_title="HSFinest.AI — Scan. Analyze. Trade. Win.",
+        page_title=PAGE_TITLE,
         page_icon="📈",
         layout="wide",
         initial_sidebar_state=initial_sidebar_state(),
     )
+    from ui.chrome import hide_developer_chrome
     from ui.showcase import apply_showcase_styles
 
+    hide_developer_chrome()
     apply_showcase_styles()

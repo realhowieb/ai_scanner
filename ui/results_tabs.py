@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from ui.admin_results_tab import render_admin_tab
+from ui.results_empty import results_empty_message, results_tab_label
 
 RESULTS_TAB_ERRORS = (
     RuntimeError,
@@ -14,6 +15,7 @@ RESULTS_TAB_ERRORS = (
     AttributeError,
     OSError,
 )
+
 
 
 def render_results_tabs(
@@ -42,10 +44,10 @@ def render_results_tabs(
         or flags.get("can_early_breakout")
         or flags.get("can_admin_panel")
     ):
-        tab_names = [f"📊 Latest scan results ({rows} rows)"]
+        tab_names = [results_tab_label(df)]
 
         if flags.get("can_track_record"):
-            tab_names.append("📈 Track Record")
+            tab_names.append("📚 Historical research")
         if flags.get("can_early_breakout"):
             tab_names.append("🔮 Early Breakout Candidates")
         if flags.get("can_scan_history"):
@@ -77,7 +79,7 @@ def render_results_tabs(
         if flags.get("can_admin_panel"):
             tab_admin = tabs[idx]
     else:
-        (tab_latest,) = st.tabs([f"📊 Latest scan results ({rows} rows)"])
+        (tab_latest,) = st.tabs([results_tab_label(df)])
         tab_track = None
         tab_early = None
         tab_history = None
@@ -139,11 +141,9 @@ def _render_track_record_tab(*, tab_track: Any) -> None:
 
             render_track_record_dashboard()
         except RESULTS_TAB_ERRORS as e:
-            st.error("Track Record failed to render.")
-            try:
-                st.exception(e)
-            except RESULTS_TAB_ERRORS:
-                st.caption(f"{type(e).__name__}: {e}")
+            from ui.safe_errors import show_error
+
+            show_error("historical research", e)
 
 
 def _render_latest_results_tab(
@@ -169,14 +169,10 @@ def _render_latest_results_tab(
                 st.caption("🕒 Scan run time available")
 
         if rows == 0:
-            with st.expander(f"📊 Latest scan results ({rows} rows)", expanded=False):
-                render_results(
-                    df,
-                    flags["can_export_csv"],
-                    flags["can_ai_notes"],
-                    render_chart_for_ticker,
-                    generate_ai_note,
-                )
+            # Run 62: say which empty state this is. "No personal scan yet"
+            # and "your scan matched nothing" are different from "no market
+            # scan available" (the trust banner above reports that one).
+            st.info(results_empty_message(df))
         else:
             render_results(
                 df,
@@ -225,11 +221,9 @@ def _render_early_breakout_tab(
             except RESULTS_TAB_ERRORS:
                 st.info("Early Breakout Candidates panel is not available in this build.")
         except RESULTS_TAB_ERRORS as e:
-            st.error("Early Breakout Candidates failed to render.")
-            try:
-                st.exception(e)
-            except RESULTS_TAB_ERRORS:
-                st.caption(f"{type(e).__name__}: {e}")
+            from ui.safe_errors import show_error
+
+            show_error("early breakout candidates", e)
 
 
 def _render_scan_history_tab(
@@ -260,11 +254,9 @@ def _render_scan_history_tab(
             except TypeError:
                 runs = list_runs()
         except RESULTS_TAB_ERRORS as e:
-            st.error("Failed to load scan history.")
-            try:
-                st.exception(e)
-            except RESULTS_TAB_ERRORS:
-                st.caption(f"{type(e).__name__}: {e}")
+            from ui.safe_errors import show_error
+
+            show_error("your scan history", e)
 
         if not runs:
             st.info("No saved scans yet. Run a scan and make sure it saves to history.")
@@ -311,11 +303,9 @@ def _render_scan_history_tab(
             except TypeError:
                 run_df = load_run_results(str(picked))
         except RESULTS_TAB_ERRORS as e:
-            st.error("Failed to load results for the selected run.")
-            try:
-                st.exception(e)
-            except RESULTS_TAB_ERRORS:
-                st.caption(f"{type(e).__name__}: {e}")
+            from ui.safe_errors import show_error
+
+            show_error("that scan's results", e)
 
         run_df_norm = normalize_results_to_df(run_df)
 

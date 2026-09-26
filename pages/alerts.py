@@ -78,7 +78,8 @@ try:
         email_enabled=_email_ok,
     )
 except Exception as e:
-    st.error("Alerts failed to load.")
-    st.caption(f"{type(e).__name__}: {e}")
+    from ui.safe_errors import show_error
+
+    show_error("your alerts", e)
 
 st.page_link("app.py", label="← Back to scanner", icon="🏠")

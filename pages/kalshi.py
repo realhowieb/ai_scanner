@@ -22,7 +22,8 @@ try:
     render_page_logo()
     render_kalshi_scanner()
 except Exception as e:
-    st.error("Kalshi BTC scanner failed to load.")
-    st.caption(f"{type(e).__name__}: {e}")
+    from ui.safe_errors import show_error
+
+    show_error("the Kalshi BTC monitor", e)
 
 st.page_link("app.py", label="← Back to scanner", icon="🏠")

@@ -65,8 +65,10 @@ def render_sidebar_nav(*, with_header: bool = True) -> None:
     if st is None:
         return
     try:
+        from ui.chrome import hide_developer_chrome
         from ui.showcase import apply_showcase_styles
 
+        hide_developer_chrome()
         apply_showcase_styles()
     except Exception:
         pass

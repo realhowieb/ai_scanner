@@ -167,6 +167,16 @@ except Exception:
 ADMIN_USERS = normalize_admin_users(ADMIN_USERS)
 
 # --------------- AUTH (must load even if other modules fail) ----------------
+def _startup_problem(detail: object) -> None:
+    """Run 62: plain message for users; details logged, and shown to admins only."""
+    try:
+        from ui.safe_errors import show_startup_problem
+
+        show_startup_problem(detail)
+    except Exception:
+        st.error("HSF is having trouble starting right now. Try again in a few minutes.")
+
+
 _AUTH_IMPORT_ERROR: str | None = None
 try:
     from ui.auth import auth_ui, logout_and_reset_session  # type: ignore
@@ -174,8 +184,7 @@ except Exception as _e:
     _AUTH_IMPORT_ERROR = f"{type(_e).__name__}: {_e}"
 
     def auth_ui():
-        st.error("Auth module failed to import. Cannot render login.")
-        st.code(_AUTH_IMPORT_ERROR or "unknown auth import error")
+        _startup_problem(_AUTH_IMPORT_ERROR or "unknown auth import error")
         return (False, None, None)
 
     def logout_and_reset_session():
@@ -230,11 +239,7 @@ except Exception as _e:
     upsert_user_settings = None
 
     def _missing(*args, **kwargs):
-        st.error(
-            "A required module failed to import. "
-            "Login is available, but the app cannot run until imports are fixed.\n\n"
-            f"Import error: {_IMPORT_ERROR}"
-        )
+        _startup_problem(f"Import error: {_IMPORT_ERROR}")
         st.stop()
 
     render_admin_users_panel = _missing  # type: ignore
@@ -404,18 +409,13 @@ def main():
     # -------- AUTH FIRST (NOW FIRST) --------
     # If auth import failed, show a clear error instead of a blank screen.
     if _AUTH_IMPORT_ERROR:
-        st.error("Auth failed to load; cannot continue.")
-        st.code(_AUTH_IMPORT_ERROR)
+        _startup_problem(_AUTH_IMPORT_ERROR)
         st.stop()
 
     try:
         authed, username, display_name = auth_ui()
     except Exception as e:
-        st.error("Login failed to render due to an auth error.")
-        try:
-            st.exception(e)
-        except Exception:
-            st.caption(f"Auth error: {type(e).__name__}: {e}")
+        _startup_problem(e)
         st.stop()
 
     if not authed:
@@ -425,10 +425,7 @@ def main():
     # If non-auth modules failed to import, surface the error after login.
     # This ensures users can still log in and we get a visible failure reason.
     if _IMPORT_ERROR:
-        st.error(
-            "Login succeeded, but the app failed to initialize due to an import error.\n\n"
-            f"Import error: {_IMPORT_ERROR}"
-        )
+        _startup_problem(f"Import error: {_IMPORT_ERROR}")
         st.stop()
 
     # Normalize and persist username for downstream modules (billing/settings rely on this)
@@ -558,6 +555,10 @@ def main():
         render_data_health_banner(is_admin=bool(st.session_state.get("is_admin")))
     except Exception:
         pass
+
+    from ui.trust_banner import render_trust_banner  # Run 62: operational freshness only
+
+    render_trust_banner()
 
     render_hsf_onboarding_entry(username, tier_name=tier_name)
     st.markdown("---")
@@ -792,8 +793,9 @@ def main():
     except Exception as e:
         # Don't vanish silently — a swallowed error here previously left the
         # connect panel showing its intro caption but no input fields.
-        st.error("Alpaca paper-trading panel failed to render.")
-        st.caption(f"{type(e).__name__}: {e}")
+        from ui.safe_errors import show_error
+
+        show_error("the paper-trading panel", e)
 
     # Live paper-account activity feed (positions + orders; poll-on-refresh).
     try:
@@ -831,9 +833,5 @@ if __name__ == "__main__":
             capture(e)
         except Exception:
             pass
-        st.error("❌ App failed during startup.")
-        try:
-            st.exception(e)
-        except Exception:
-            st.write(f"{type(e).__name__}: {e}")
+        _startup_problem(e)
         st.stop()

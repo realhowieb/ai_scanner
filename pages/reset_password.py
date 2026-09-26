@@ -5,6 +5,8 @@ import re
 
 import streamlit as st
 
+from ui.safe_errors import show_error as _show_error
+
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _PW_MIN_LEN = 8
 
@@ -98,7 +100,7 @@ def _set_new_password_form(token: str) -> None:
         st.success("Password updated! You can now log in with your new password.")
         st.page_link("app.py", label="Go to login →")
     except Exception as exc:
-        st.error(f"Password update failed: {exc}")
+        _show_error("your password update", exc, level="error", message="HSF couldn't update your password right now. Try again shortly.")
 
 
 def main() -> None:

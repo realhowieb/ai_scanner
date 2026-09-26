@@ -10,3 +10,8 @@ def render_footer():
         "do your own research and consult a licensed financial advisor before making "
         "any investment decision. Past performance does not guarantee future results."
     )
+    # Run 62: methodology is one click from every page that renders the footer.
+    try:
+        st.page_link("pages/methodology.py", label="How HSF works")
+    except Exception:
+        pass

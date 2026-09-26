@@ -26,10 +26,14 @@ try:
 
     render_page_logo()
     render_page_header("Market Brief", "What matters in the market right now.")
+    from ui.trust_banner import render_trust_banner
+
+    render_trust_banner()
     render_market_brief_orientation(_username)
     render_market_brief()
 except Exception as e:
-    st.error("Market brief failed to load.")
-    st.caption(f"{type(e).__name__}: {e}")
+    from ui.safe_errors import show_error
+
+    show_error("the market brief", e)
 
 st.page_link("app.py", label="← Back to scanner", icon="🏠")

@@ -4,6 +4,11 @@ import bcrypt
 import streamlit as st
 
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
+from ui.landing import render_signed_out_details, render_signed_out_hero
+from ui.safe_errors import show_error
+
+_SIGNUP_FAILED = "HSF couldn't create your account right now. Try again shortly."
+_SIGNIN_FAILED = "HSF couldn't sign you in right now. Try again shortly."
 
 try:
     from db.users import is_login_rate_limited as _is_login_rate_limited_db
@@ -292,25 +297,15 @@ def auth_ui():
         st.caption("Restoring session…")
         st.rerun()
 
-    # Brand logo, centered above the login / sign-up tabs.
-    try:
-        from ui.header import _logo_path
-
-        # Narrow center column keeps the logo a tasteful size on desktop; on
-        # mobile Streamlit stacks columns so it still renders full-width.
-        _lc1, _lc2, _lc3 = st.columns([2, 1, 2])
-        with _lc2:
-            st.image(_logo_path(), width="stretch")
-    except (ImportError, *_AUTH_BACKEND_ERRORS):
-        pass
+    render_signed_out_hero()  # Run 62: compact hero keeps the form in the first phone viewport
 
     login_placeholder = st.empty()
     with login_placeholder.container():
-        tabs = st.tabs(["🔐 Log In", "🧠 Sign Up"])
+        tabs = st.tabs(["Sign in", "Create account"])
 
         # ---- Login tab ----
         with tabs[0]:
-            st.markdown("### 🔐 Login")
+            st.markdown("### Sign in")
             card = st.container(border=True)
             with card:
                 # st.form batches typing: the app no longer reruns after each
@@ -319,13 +314,13 @@ def auth_ui():
                 with st.form("login_form", clear_on_submit=False):
                     username = st.text_input("Email or Username", key="login_username")
                     password = st.text_input("Password", type="password", key="login_password")
-                    login_clicked = st.form_submit_button("Login")
+                    login_clicked = st.form_submit_button("Sign in")
                 st.page_link("pages/reset_password.py", label="Forgot password?", icon="🔑")
 
         # ---- Sign Up tab ----
         with tabs[1]:
-            st.markdown("### 🧠 Create Your Free Account")
-            st.caption("Start finding breakout opportunities in minutes.")
+            st.markdown("### Create your free account")
+            st.caption("Start scanning the U.S. market in minutes.")
 
             signup_card = st.container(border=True)
             with signup_card:
@@ -347,7 +342,7 @@ def auth_ui():
                 st.write("- ✔️ Access to curated breakout scans")
                 st.write("- ✔️ Breakout Score (technical setup quality)")
                 st.write("- ✔️ Interactive charts")
-                st.write("- ✔️ Mobile-friendly results")
+                st.write("- ✔️ Works on desktop and phone")
                 st.write("- ✔️ No credit card required")
                 st.caption("Upgrade anytime to unlock advanced filters, AI-powered rankings, and export features.")
 
@@ -396,7 +391,7 @@ def auth_ui():
         try:
             users = load_users() or {}
         except _AUTH_BACKEND_ERRORS as e:
-            st.error(f"Sign up failed while loading users: {e}")
+            show_error("account creation", e, level="error", message=_SIGNUP_FAILED)
             return False, None, None
 
         if email_raw in users or username_raw.lower() in users:
@@ -435,7 +430,7 @@ def auth_ui():
                         # Last-resort: just pass email + hash
                         created_user = create_fn(email_raw, pw_hash)
         except _AUTH_BACKEND_ERRORS as e:
-            st.error(f"Sign up failed: {e}")
+            show_error("account creation", e, level="error", message=_SIGNUP_FAILED)
             return False, None, None
 
         # Best-effort: persist chosen Username into DB full_name so username-login works
@@ -544,7 +539,7 @@ def auth_ui():
         try:
             users = load_users() or {}
         except _AUTH_BACKEND_ERRORS as e:
-            st.error(f"Login failed while loading users: {e}")
+            show_error("sign-in", e, level="error", message=_SIGNIN_FAILED)
             return False, None, None
 
         # Primary lookup: email (stored as `username` in DB)
@@ -665,6 +660,7 @@ def auth_ui():
             st.experimental_rerun()
         return True, login_key, display_name
 
+    render_signed_out_details()  # Run 62: below the form so errors stay next to the fields
     return False, None, None
 
 def logout_and_reset_session() -> None:

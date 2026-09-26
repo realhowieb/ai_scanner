@@ -121,8 +121,9 @@ def render_connect_panel(user_id: str) -> None:
             )
             submitted = st.button("Validate & connect", key="pt_connect_btn")
         except Exception as e:
-            st.error("Couldn't render the connect form.")
-            st.caption(f"{type(e).__name__}: {e}")
+            from ui.safe_errors import show_error
+
+            show_error("the broker connection form", e)
             return
         if not submitted:
             return

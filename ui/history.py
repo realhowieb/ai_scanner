@@ -8,6 +8,7 @@ import streamlit as st
 
 from auth.tiering import has_min_tier
 from db.runs import list_runs, load_run_results
+from ui.safe_errors import show_error as _show_error
 
 
 def render_history_expander(db_status: str) -> None:
@@ -22,7 +23,7 @@ def render_history_expander(db_status: str) -> None:
         try:
             runs_list = list_runs()
         except Exception as e:
-            st.error(f"History unavailable (DB error): {e}")
+            _show_error("your scan history", e)
             try:
                 st.code(traceback.format_exc())
             except Exception:
@@ -67,7 +68,7 @@ def render_history_expander(db_status: str) -> None:
                             st.session_state.results_df = hist_df
                             st.success(f"Loaded scan #{selected_id} from history with {len(hist_df)} rows.")
                         except Exception as e:
-                            st.error(f"Failed to load scan #{selected_id}: {e}")
+                            _show_error(f"scan #{selected_id}", e, level="error")
                 with col_hist2:
                     if db_status == "neon":
                         st.caption(

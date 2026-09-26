@@ -105,7 +105,10 @@ def render_alert_edge(user_id: str, min_fires: int = 5) -> None:
         except Exception:
             HIT_TARGET_PCT, HORIZON_DAYS = 5.0, 3
 
-        with st.expander("📈 Which alerts pay off (by type)", expanded=False):
+        from ui.product_copy import HISTORICAL_RESEARCH_LABEL, HISTORICAL_RESEARCH_NOTE
+
+        with st.expander(f"📚 {HISTORICAL_RESEARCH_LABEL}: alert follow-through by type", expanded=False):
+            st.caption(HISTORICAL_RESEARCH_NOTE)
             st.caption(
                 f"Share of fires that reached +{HIT_TARGET_PCT:g}% within "
                 f"{HORIZON_DAYS} trading days, and the average {HORIZON_DAYS}-day "
@@ -220,9 +223,9 @@ def render_alerts_panel(
     try:
         existing = list_alerts(user_id)
     except Exception as e:
-        st.caption("Alerts require Neon DB (cloud) and are currently unavailable.")
-        with st.expander("Alert error details", expanded=False):
-            st.code(f"{type(e).__name__}: {e}\n{repr(e)}")
+        from ui.safe_errors import show_error
+
+        show_error("your alerts", e, level="info")
         return
 
     used = len(existing)
@@ -597,11 +600,13 @@ def _guarded_create(existing: list, max_per_user: int, do_create) -> None:
         st.warning(str(e))
         return
     except Exception as e:
-        # Surface the real reason instead of a vague message so DB/permission
-        # issues are diagnosable.
-        st.error(f"Could not create alert: {type(e).__name__}: {e}")
-        with st.expander("Create error details", expanded=True):
-            st.code(repr(e))
+        # Run 62: users get a plain message; the real reason is logged and, for
+        # admins, shown under "Technical details" so DB/permission issues stay
+        # diagnosable.
+        from ui.safe_errors import show_error
+
+        show_error("alert creation", e, level="error",
+                   message="HSF couldn't create that alert right now. Try again shortly.")
         return
     # toast survives the rerun so the user gets confirmation even though the
     # script restarts immediately to refresh the alert list.

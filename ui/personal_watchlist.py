@@ -128,8 +128,9 @@ def render_personal_watchlist(user_id: str) -> None:
 
         intel = build_watchlist_intelligence(user)
     except Exception as exc:
-        st.warning("Watchlist intelligence is temporarily unavailable.")
-        st.caption(f"{type(exc).__name__}: {exc}")
+        from ui.safe_errors import show_error
+
+        show_error("watchlist intelligence", exc)
         return
 
     summary = intel.get("summary") or {}

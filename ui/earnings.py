@@ -11,6 +11,7 @@ from db.earnings import (
     add_earnings_days_column,
     fetch_earnings_this_week,
 )
+from ui.safe_errors import show_error as _show_error
 
 # Column name used everywhere
 EARN_COL_DAYS = "earnings_in_days"
@@ -28,7 +29,7 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
     try:
         rows = fetch_earnings_this_week()
     except Exception as e:
-        st.error(f"Failed to load earnings calendar: {e}")
+        _show_error("the earnings calendar", e)
         return
 
     if not rows:

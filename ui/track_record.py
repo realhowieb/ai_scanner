@@ -61,26 +61,28 @@ def _best_summary(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def _render_summary_metrics(rows: list[dict[str, Any]]) -> None:
-    best = _best_summary(rows)
-    if not best:
-        st.info("No track-record summary is available yet. Run scheduled scans long enough to build history.")
+    """Neutral research context for the historical comparison (Run 62).
+
+    The old headline showed the maximum average return across every ranking ×
+    horizon combination ("Best signal vs SPY"): a cherry-picked number. The
+    comparison now opens with what was measured, not the best-looking result;
+    every combination is still in the table below. `_best_summary` is kept
+    for research/admin use.
+    """
+    if not rows:
+        st.info("No historical comparison is available yet. It builds as scheduled scans accumulate history.")
         return
-
-    sample = int(best.get("sample_size") or 0)
-    runs = int(best.get("runs_used") or 0)
-    bench = best.get("benchmark") or "SPY"
-    top_n = best.get("top_n") or 5
-    horizon = best.get("horizon_days")
-    label = best.get("ranking_label") or best.get("ranking") or "Signal"
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric(f"Best signal vs {bench}", _fmt_pct(best.get("avg_return")), help=f"{label}, {horizon}D, top-{top_n}")
-    c2.metric("Beat rate", _fmt_win(best.get("win_rate")))
-    c3.metric("Samples", f"{sample:,}")
-    c4.metric("Runs used", f"{runs:,}")
-
-    if sample < MIN_SAMPLE_SIZE:
-        st.caption("Small sample so far. Treat direction as more meaningful than exact percentages.")
+    signals = sorted({str(r.get("ranking_label") or r.get("ranking") or "") for r in rows} - {""})
+    horizons = sorted({int(r.get("horizon_days")) for r in rows if r.get("horizon_days") is not None})
+    runs = max(int(r.get("runs_used") or 0) for r in rows)
+    computed = max(str(r.get("computed_at") or "")[:10] for r in rows)
+    parts = [f"{len(signals)} ranking method(s)" if signals else None,
+             f"horizons {', '.join(f'{h}D' for h in horizons)}" if horizons else None,
+             f"up to {runs:,} saved scans" if runs else None,
+             f"computed {computed}" if computed else None]
+    st.caption("Compared: " + " · ".join(p for p in parts if p) + ". Every combination is shown; none is singled out.")
+    if any(int(r.get("sample_size") or 0) < MIN_SAMPLE_SIZE for r in rows):
+        st.caption("Some combinations have small samples. Treat direction as more meaningful than exact percentages.")
 
 
 def _render_summary_table(rows: list[dict[str, Any]]) -> None:
@@ -208,36 +210,44 @@ def _render_daily_heatmap(ranking: str, horizon: int) -> None:
 
 
 def render_track_record_dashboard() -> None:
-    """Render a user-facing backtested signal performance dashboard."""
-    st.markdown("## Track Record")
-    st.caption("Forward returns of saved scan picks compared with SPY. Past performance is not indicative of future results.")
+    """Historical research: saved scan picks vs SPY (descriptive only)."""
+    from ui.product_copy import HISTORICAL_RESEARCH_LABEL, HISTORICAL_RESEARCH_NOTE
+
+    st.markdown(f"## {HISTORICAL_RESEARCH_LABEL}: saved scan picks vs SPY")
+    st.info(
+        f"{HISTORICAL_RESEARCH_NOTE} These figures are backtested on saved scan snapshots "
+        "and are not evidence that HSF signals work. Past performance is not indicative "
+        "of future results."
+    )
 
     rows = _load_summary_rows()
     _render_summary_metrics(rows)
     if not rows:
         return
 
-    st.markdown("### Signal Comparison")
-    _render_ab_chart(rows)
-    _render_summary_table(rows)
+    with st.expander("Show historical comparison (all signals and horizons)", expanded=False):
+        _render_ab_chart(rows)
+        _render_summary_table(rows)
 
-    st.markdown("### Daily Result Heatmap")
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        ranking = st.selectbox(
-            "Signal",
-            list(RANKING_LABELS.keys()),
-            format_func=lambda key: RANKING_LABELS.get(key, key),
-            key="track_record_heatmap_ranking",
-        )
-    with c2:
-        horizon = st.selectbox("Horizon", [1, 3, 5, 10, 20], index=2, key="track_record_heatmap_horizon")
-    _render_daily_heatmap(str(ranking), int(horizon))
+        st.markdown("#### Daily results")
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            ranking = st.selectbox(
+                "Signal",
+                list(RANKING_LABELS.keys()),
+                format_func=lambda key: RANKING_LABELS.get(key, key),
+                key="track_record_heatmap_ranking",
+            )
+        with c2:
+            horizon = st.selectbox("Horizon", [1, 3, 5, 10, 20], index=2, key="track_record_heatmap_horizon")
+        _render_daily_heatmap(str(ranking), int(horizon))
 
-    st.markdown("---")
-    try:
-        from ui.strategy_lab import render_signal_leaderboard
+    with st.expander("Show signal leaderboard (historical)", expanded=False):
+        try:
+            from ui.strategy_lab import render_signal_leaderboard
 
-        render_signal_leaderboard()
-    except Exception:
-        pass
+            render_signal_leaderboard()
+        except Exception as exc:
+            from ui.safe_errors import show_error
+
+            show_error("the signal leaderboard", exc)

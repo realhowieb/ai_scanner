@@ -451,26 +451,31 @@ def _render_historical(intel: Dict[str, Any]) -> None:
     summ = intel.get("history_summary")
     if not ctx and not summ and not intel.get("outcome_cohort"):
         return
-    st.markdown("#### Historical context")
-    if ctx and ctx.get("sufficient"):
-        st.caption(f"HSF {ctx['bucket']} · positive-outcome rate {ctx['positive_rate']*100:.0f}% "
-                   f"(reached +4% in 5D) · n={ctx['n']} · {ctx['confidence'].title()}")
-    elif ctx and ctx.get("n"):
-        st.caption(f"HSF {ctx['bucket']} · Still building history · n={ctx['n']}")
-    else:
-        st.caption("Still building history.")
-    if summ and summ["observations"]:
-        st.caption(f"This ticker: {summ['observations']} prior HSF observation(s), "
-                   f"{summ['matured']} matured, {summ['positive']} positive "
-                   "(observations, not trades).")
-    coh = intel.get("outcome_cohort")
-    if coh and coh.get("available") and coh.get("follow_through_rate") is not None:
-        st.caption(
-            f"Similar HSF states (status {coh['status']} · HSF score {coh['score_band']}, "
-            f"{coh['horizon']}): {coh['comparable']} observations, "
-            f"{coh['follow_through_rate']*100:.0f}% persisted or strengthened "
-            f"· evidence strength: {str(coh.get('evidence_strength', 'EARLY')).title()} "
-            "(historical HSF-state persistence, not a price probability).")
+    from ui.product_copy import HISTORICAL_RESEARCH_LABEL, HISTORICAL_RESEARCH_NOTE
+
+    # Run 62: historical rates are research context, collapsed and labelled,
+    # not part of the headline read on the ticker.
+    with st.expander(f"{HISTORICAL_RESEARCH_LABEL} (descriptive)", expanded=False):
+        st.caption(HISTORICAL_RESEARCH_NOTE)
+        if ctx and ctx.get("sufficient"):
+            st.caption(f"HSF {ctx['bucket']} · positive-outcome rate {ctx['positive_rate']*100:.0f}% "
+                       f"(reached +4% in 5D) · n={ctx['n']} · {ctx['confidence'].title()}")
+        elif ctx and ctx.get("n"):
+            st.caption(f"HSF {ctx['bucket']} · Still building history · n={ctx['n']}")
+        else:
+            st.caption("Still building history.")
+        if summ and summ["observations"]:
+            st.caption(f"This ticker: {summ['observations']} prior HSF observation(s), "
+                       f"{summ['matured']} matured, {summ['positive']} positive "
+                       "(observations, not trades).")
+        coh = intel.get("outcome_cohort")
+        if coh and coh.get("available") and coh.get("follow_through_rate") is not None:
+            st.caption(
+                f"Similar HSF states (status {coh['status']} · HSF score {coh['score_band']}, "
+                f"{coh['horizon']}): {coh['comparable']} observations, "
+                f"{coh['follow_through_rate']*100:.0f}% persisted or strengthened "
+                f"· evidence strength: {str(coh.get('evidence_strength', 'EARLY')).title()} "
+                "(historical HSF-state persistence, not a price probability).")
 
 
 def _render_actions(intel: Dict[str, Any], render_chart_for_ticker) -> None:

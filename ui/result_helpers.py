@@ -151,11 +151,15 @@ def results_column_config() -> dict:
         "RSvsSPY": cc.NumberColumn("RS vs SPY", format="%.2f"),
         "PreBreakoutProb%": cc.NumberColumn(
             "PreBreakout", format="%.1f%%",
-            help="Calibrated PreBreakout likelihood (isotonic, out-of-sample). "
-                 "Low-signal setups share a calibrated floor, so many rows show "
-                 "the same % — that is the estimated likelihood, not a per-ticker "
-                 "precision value. Ties break by the underlying model score."),
-        "AI Confidence": cc.NumberColumn(format="%.1f%%"),
+            help="Model-estimated likelihood that this stock develops a high-scoring "
+                 "scanner setup in the next few trading days (calibrated, out-of-sample). "
+                 "Not a probability of profit or an expected return. Low-signal setups "
+                 "share a calibrated floor, so many rows show the same %. Ties break by "
+                 "the underlying model score."),
+        "AI Confidence": cc.NumberColumn(
+            format="%.1f%%",
+            help="Model estimate for a defined short-term price-move event. A research "
+                 "estimate, not a validated probability of profit."),
         "PctChange": cc.NumberColumn("Day %", format="%.2f%%"),
         "Spark10D": cc.LineChartColumn("10-day", width="small"),
         "EMACross": cc.TextColumn("EMA 9/21", width="small"),

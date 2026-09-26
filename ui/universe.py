@@ -7,6 +7,7 @@ from typing import List
 import pandas as pd
 import streamlit as st
 
+from ui.safe_errors import report_error as _report_error
 from ui.universe_db import db_get_universe, db_upsert_universe, try_import
 
 try:
@@ -228,7 +229,7 @@ def load_sp500_universe() -> List[str]:
                         f"Local {os.path.basename(path)} returned {len(out)} tickers; expecting full list."
                     )
         except UNIVERSE_PROVIDER_ERRORS as e:
-            st.caption(f"Failed loading local SP500 file at {path}: {e}")
+            _report_error("local S&P 500 universe file", e)
 
     # 1) Prefer your local/custom loader if it exists
     if callable(_load_sp500):
@@ -293,7 +294,7 @@ def load_nasdaq_universe() -> List[str]:
                 db_upsert_universe("nasdaq", local, source="local_loader")
                 return filter_universe(local)
         except UNIVERSE_PROVIDER_ERRORS as e:
-            st.caption(f"Local NASDAQ universe loader failed: {e}. Falling back.")
+            _report_error("local NASDAQ universe loader", e)
 
     # 3) Official NASDAQ Trader listings (NASDAQ Composite-ish universe)
     try:
@@ -303,7 +304,7 @@ def load_nasdaq_universe() -> List[str]:
             db_upsert_universe("nasdaq", tickers, source="nasdaqtrader")
             return filter_universe(tickers)
     except UNIVERSE_PROVIDER_ERRORS as e:
-        st.caption(f"Official NASDAQ listings fallback failed: {e}")
+        _report_error("NASDAQ listings fallback", e)
 
     # 4) Yahoo Finance predefined screener fallback (Nasdaq 100)
     try:

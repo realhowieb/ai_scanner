@@ -59,7 +59,8 @@ try:
         st.session_state["_wl_pending_scan_all"] = bool(_scan_all)
         st.switch_page("app.py")
 except Exception as e:
-    st.error("Watchlists failed to load.")
-    st.caption(f"{type(e).__name__}: {e}")
+    from ui.safe_errors import show_error
+
+    show_error("your watchlists", e)
 
 st.page_link("app.py", label="← Back to scanner", icon="🏠")

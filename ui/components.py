@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from ui.arrow_safe import arrow_safe
+from ui.safe_errors import show_error as _show_error
 
 # Optional diagnostics (no-op if not available)
 try:
@@ -30,7 +31,7 @@ def runs_table(list_runs, load_run_results, max_rows: int = 200):
     try:
         runs_df = list_runs(limit=max_rows)
     except Exception as e:
-        st.error(f"Failed to load history: {e}")
+        _show_error("your scan history", e)
         return
     if runs_df is None or runs_df.empty:
         st.write("No runs saved yet.")
@@ -55,7 +56,7 @@ def runs_table(list_runs, load_run_results, max_rows: int = 200):
                     else:
                         st.write("This run has no saved rows.")
                 except Exception as e:
-                    st.error(f"Failed to load run #{run_id} details: {e}")
+                    _show_error(f"scan #{run_id}", e)
 
 
 # Enhanced run_button with diagnostics and flexible result preview

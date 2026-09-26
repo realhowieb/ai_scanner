@@ -33,7 +33,8 @@ try:
     render_page_logo()
     render_day_trader_panel(watch_tickers=_session_watch_tickers())
 except Exception as e:
-    st.error("Day Trader monitor failed to load.")
-    st.caption(f"{type(e).__name__}: {e}")
+    from ui.safe_errors import show_error
+
+    show_error("the Day Trader monitor", e)
 
 st.page_link("app.py", label="← Back to scanner", icon="🏠")

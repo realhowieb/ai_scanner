@@ -176,7 +176,8 @@ def render_results(
             render_confidence_explainer(df)
         except Exception:
             pass
-    render_track_record_badge()
+    if is_admin_view:  # Run 62: backtest badge is historical research, not a user trust headline
+        render_track_record_badge()
     try:
         from ui.score_map import render_score_map
 

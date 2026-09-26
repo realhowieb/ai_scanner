@@ -627,40 +627,45 @@ def render_signal_scorecard() -> None:
     flagged = completed + pending
     if flagged == 0:
         return
-    st.markdown("### 📈 HSF Signal Performance — 7d")
-    if completed == 0:
-        st.caption(
-            f"{flagged} signal(s) flagged — outcomes still maturing (5-day "
-            "window). Positive-outcome rates fill in as signals complete."
-        )
-        return
-    rate = s.get("hit_rate")
-    aw = s.get("avg_winner")
-    al = s.get("avg_loser")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Flagged", flagged, help=f"{completed} matured · {pending} maturing")
-    c2.metric("Positive outcomes", f"{rate*100:.0f}%" if rate is not None else "—",
-              help="Share that made a +4% move within 5 trading days. Not a "
-                   "trading win rate — no defined entries/exits.")
-    c3.metric("Avg positive move", f"{aw*100:+.1f}%" if aw is not None else "—")
-    c4.metric("Avg negative move", f"{al*100:+.1f}%" if al is not None else "—")
+    from ui.product_copy import HISTORICAL_RESEARCH_LABEL, HISTORICAL_RESEARCH_NOTE
 
-    try:
-        by_type = summarize_outcomes_by_type(days_back=7)
-    except Exception:
-        by_type = []
-    if by_type:
-        st.caption("By signal type (positive-outcome rate):")
-        st.markdown("\n".join(
-            f"- **{r['signal_type']}** — {r['positive_rate']*100:.0f}%"
-            f" ({r['completed']} matured)"
-            for r in by_type if r.get("positive_rate") is not None
-        ))
-    best_t, best_r = s.get("best_ticker"), s.get("best_return")
-    if best_t and best_r is not None:
-        st.caption(f"Best 5-day move: **{best_t}** {best_r*100:+.1f}%")
-    st.caption("Outcome = 5-day positive move (reached +4% before −2%), the "
-               "models' target — educational, not a trading result.")
+    # Run 62: historical outcome statistics are research context, not a trust
+    # headline. Collapsed, labelled, and without the single best-move pick.
+    with st.expander(f"{HISTORICAL_RESEARCH_LABEL}: flagged-signal outcomes (last 7 days)", expanded=False):
+        st.caption(HISTORICAL_RESEARCH_NOTE)
+        if completed == 0:
+            st.caption(
+                f"{flagged} signal(s) flagged — outcomes still maturing (5-day "
+                "window). Positive-outcome rates fill in as signals complete."
+            )
+            return
+        rate = s.get("hit_rate")
+        aw = s.get("avg_winner")
+        al = s.get("avg_loser")
+        c1, c2 = st.columns(2)
+        c1.metric("Flagged", flagged, help=f"{completed} matured · {pending} maturing")
+        c2.metric("Positive outcomes", f"{rate*100:.0f}%" if rate is not None else "—",
+                  help="Share that made a +4% move within 5 trading days. Not a "
+                       "trading win rate — no defined entries/exits.")
+        c3, c4 = st.columns(2)
+        c3.metric("Avg positive move", f"{aw*100:+.1f}%" if aw is not None else "—")
+        c4.metric("Avg negative move", f"{al*100:+.1f}%" if al is not None else "—")
+        try:
+            by_type = summarize_outcomes_by_type(days_back=7)
+        except Exception:
+            by_type = []
+        if by_type:
+            st.caption("By signal type (positive-outcome rate):")
+            st.markdown("\n".join(
+                f"- **{r['signal_type']}** — {r['positive_rate']*100:.0f}%"
+                f" ({r['completed']} matured)"
+                for r in by_type if r.get("positive_rate") is not None
+            ))
+        best_t, best_r = s.get("best_ticker"), s.get("best_return")
+        if best_t and best_r is not None and bool(st.session_state.get("is_admin")):
+            st.caption(f"Best 5-day move (admin): **{best_t}** {best_r*100:+.1f}%")
+        st.caption("Outcome = 5-day positive move (reached +4% before −2%), the "
+                   "models' target — educational, not a trading result.")
 
 
 def _brief_narrative_facts(data: Dict[str, Any]) -> str:

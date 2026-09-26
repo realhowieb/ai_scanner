@@ -7,6 +7,7 @@ from typing import Optional
 import streamlit as st
 
 from db.watchlists import get_watchlist_tickers, set_watchlist_tickers
+from ui.safe_errors import show_error as _show_error
 
 BannerFn = Callable[[str, str], None]
 ScanFn = Callable[[list[str], str], None]
@@ -74,7 +75,7 @@ def render_single_symbol_chart(symbol: str, days: int = 90) -> None:
 
         hist = _fetch_unadjusted_ohlc(sym, period="6mo", interval="1d")
     except Exception as e:
-        st.error(f"Failed to load price history for {sym}: {e}")
+        _show_error(f"price history for {sym}", e, level="error")
         return
 
     if hist is None or hist.empty:
@@ -158,7 +159,7 @@ def render_single_symbol_chart(symbol: str, days: int = 90) -> None:
     try:
         st.plotly_chart(fig, width="stretch", key=f"single_ticker_chart_{_safe_chart_key(sym)}")
     except Exception as e:
-        st.warning(f"Failed to render chart for {sym} due to an internal plotting error: {e}")
+        _show_error(f"the chart for {sym}", e)
         try:
             st.caption("Raw Close-series data (tail):")
             st.dataframe(price_series.to_frame(name="Close").tail(), width="stretch")

@@ -17,6 +17,8 @@ import datetime as dt
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
+from ui.safe_errors import show_error as _show_error
+
 try:
     import pandas as pd
 except Exception:  # pragma: no cover - pandas may be absent in minimal envs
@@ -775,9 +777,7 @@ def _render_table(
     try:
         rows = build_day_trader_metrics(symbols)
     except Exception as e:
-        st.caption("Live data is temporarily unavailable.")
-        with st.expander("Details", expanded=False):
-            st.code(f"{type(e).__name__}: {e}")
+        _show_error("live data", e, level="info")
         return
     if not rows:
         st.caption("No live data (market closed, Alpaca not configured, or symbols not found).")
