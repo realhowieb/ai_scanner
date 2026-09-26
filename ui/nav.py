@@ -73,6 +73,28 @@ def _render_identity() -> None:
         pass
 
 
+TOP_MENU_KEY = "hsf_top_menu"
+
+
+def render_top_menu() -> None:
+    """Run 67: phone-width menu at the top of the page (the sidebar hides behind
+    an arrow on phones). CSS in ui.chrome shows it only under 640px. Never raises."""
+    if st is None:
+        return
+    try:
+        with st.container(key=TOP_MENU_KEY):
+            with st.popover("☰ Menu"):
+                for section, items in _NAV_SECTIONS:
+                    st.caption(section.upper())
+                    for path, label, icon in items:
+                        try:
+                            st.page_link(path, label=label, icon=icon)
+                        except Exception:
+                            pass
+    except Exception:
+        pass
+
+
 def render_sidebar_nav(*, with_header: bool = True) -> None:
     """Render the curated sidebar navigation. Safe to call on every page.
 
@@ -89,6 +111,7 @@ def render_sidebar_nav(*, with_header: bool = True) -> None:
         apply_showcase_styles()
     except Exception:
         pass
+    render_top_menu()
     try:
         with st.sidebar:
             if with_header:

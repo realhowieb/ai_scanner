@@ -1,6 +1,6 @@
 """Sidebar filters UI module."""
 
-from typing import Tuple
+from typing import Any, Tuple
 
 import streamlit as st
 
@@ -23,7 +23,7 @@ def _clamp_float(value, *, minimum: float, maximum: float, fallback: float) -> f
     return max(minimum, min(maximum, current))
 
 
-def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool, bool, bool, float, bool, bool]:
+def render_filters(tier, container: Any = None) -> Tuple[float, float, float, int, int, int, bool, bool, bool, bool, float, bool, bool]:
     """Render the sidebar filters and return the selected values.
 
     Returns:
@@ -43,7 +43,9 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             apply_gap_filter,
         )
     """
-    st.sidebar.markdown("## Filters")
+    # Run 67: callers may pass a main-area container (a popover) instead of the sidebar.
+    sb = container if container is not None else st.sidebar
+    sb.markdown("## Filters")
     # Centralized entitlements (preferred). Fallback to tier checks if missing.
     ent = st.session_state.get("entitlements") or {}
 
@@ -52,7 +54,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         try:
             from ui.ai import is_configured
             if is_configured():
-                with st.sidebar.expander("💬 AI Assistant", expanded=False):
+                with sb.expander("💬 AI Assistant", expanded=False):
                     from ui.ai_screener import render_nl_screener
                     render_nl_screener()
         except Exception:
@@ -115,7 +117,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
 
     min_gap_disabled = (not is_pro_plus) or (not st.session_state.get("apply_gap_filter", False))
 
-    min_gap = st.sidebar.slider(
+    min_gap = sb.slider(
         "Min Gap %",
         0.0,
         20.0,
@@ -126,8 +128,8 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     )
 
     if not is_pro_plus:
-        st.sidebar.caption("🔒 Pro+ feature")
-        st.sidebar.markdown("<br>", unsafe_allow_html=True)
+        sb.caption("🔒 Pro+ feature")
+        sb.markdown("<br>", unsafe_allow_html=True)
 
     # Initialize min_price through session_state if not already set
     if "min_price" not in st.session_state:
@@ -140,7 +142,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             fallback=default_min_price,
         )
 
-    min_price = st.sidebar.number_input(
+    min_price = sb.number_input(
         "Min Price",
         0.5,
         500.0,
@@ -159,7 +161,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             fallback=default_max_price,
         )
 
-    max_price = st.sidebar.number_input(
+    max_price = sb.number_input(
         "Max Price",
         1.0,
         5000.0,
@@ -178,7 +180,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             fallback=default_top_n,
         )
 
-    top_n = st.sidebar.slider(
+    top_n = sb.slider(
         "Top N Results",
         5,
         tier.max_results,
@@ -217,7 +219,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         st.session_state["max_nasdaq_scan"] = current_max_nasdaq
 
     if not is_pro_plus:
-        max_nasdaq_scan = st.sidebar.number_input(
+        max_nasdaq_scan = sb.number_input(
             "Max NASDAQ tickers to scan",
             min_value=100,
             max_value=nasdaq_cap,
@@ -226,10 +228,10 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             disabled=True,
             help="NASDAQ scan limits are a Pro+ feature.",
         )
-        st.sidebar.caption("🔒 Pro+ feature – NASDAQ scans are not available on Basic.")
-        st.sidebar.markdown("<br>", unsafe_allow_html=True)
+        sb.caption("🔒 Pro+ feature – NASDAQ scans are not available on Basic.")
+        sb.markdown("<br>", unsafe_allow_html=True)
     else:
-        max_nasdaq_scan = st.sidebar.number_input(
+        max_nasdaq_scan = sb.number_input(
             "Max NASDAQ tickers to scan",
             min_value=100,
             max_value=nasdaq_cap,
@@ -238,7 +240,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             help="Caps NASDAQ universe to speed up scans. Applied to NASDAQ + Combo scans.",
         )
         # Tiny hint so users know why they can't go higher
-        st.sidebar.caption(f"🔒 Your plan caps NASDAQ scans at {nasdaq_cap} tickers.")
+        sb.caption(f"🔒 Your plan caps NASDAQ scans at {nasdaq_cap} tickers.")
 
     # Initialize max_combo_scan through session_state if not already set
     if "max_combo_scan" not in st.session_state:
@@ -252,7 +254,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         )
 
     if not is_pro_plus:
-        max_combo_scan = st.sidebar.number_input(
+        max_combo_scan = sb.number_input(
             "Max Combo tickers to scan",
             min_value=100,
             max_value=6000,
@@ -261,10 +263,10 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
             disabled=True,
             help="Combo scans are a Pro+ feature.",
         )
-        st.sidebar.caption("🔒 Pro+ feature – Combo scans are not available on Basic.")
-        st.sidebar.markdown("<br>", unsafe_allow_html=True)
+        sb.caption("🔒 Pro+ feature – Combo scans are not available on Basic.")
+        sb.markdown("<br>", unsafe_allow_html=True)
     else:
-        max_combo_scan = st.sidebar.number_input(
+        max_combo_scan = sb.number_input(
             "Max Combo tickers to scan",
             min_value=100,
             max_value=6000,
@@ -277,7 +279,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     if "min_dollar_vol" not in st.session_state:
         st.session_state["min_dollar_vol"] = default_min_dollar_vol
 
-    min_dollar_vol = st.sidebar.number_input(
+    min_dollar_vol = sb.number_input(
         "Min Dollar Volume",
         min_value=0.0,
         step=100_000.0,
@@ -306,7 +308,7 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
         default_session_mode = "Regular"
     default_index = session_options.index(default_session_mode)
 
-    session_mode = st.sidebar.radio(
+    session_mode = sb.radio(
         "Session mode",
         options=session_options,
         index=default_index,
@@ -330,14 +332,14 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     elif not getattr(tier, "can_unusual_volume", False):
         st.session_state["unusual_vol"] = False
 
-    unusual_vol = st.sidebar.checkbox(
+    unusual_vol = sb.checkbox(
         "Unusual Volume Filter",
         key="unusual_vol",
         disabled=not getattr(tier, "can_unusual_volume", False),
     )
     if not getattr(tier, "can_unusual_volume", False):
-        st.sidebar.caption("🔒 Pro+ feature")
-        st.sidebar.markdown("<br>", unsafe_allow_html=True)
+        sb.caption("🔒 Pro+ feature")
+        sb.markdown("<br>", unsafe_allow_html=True)
 
     # Initialize include_ta through session_state if not already set
     if "include_ta" not in st.session_state:
@@ -347,14 +349,14 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     if not is_pro_plus:
         st.session_state["include_ta"] = False
 
-    include_ta = st.sidebar.checkbox(
+    include_ta = sb.checkbox(
         "Include Technical Indicators",
         key="include_ta",
         disabled=not is_pro_plus,
     )
     if not is_pro_plus:
-        st.sidebar.caption("🔒 Pro+ feature")
-        st.sidebar.markdown("<br>", unsafe_allow_html=True)
+        sb.caption("🔒 Pro+ feature")
+        sb.markdown("<br>", unsafe_allow_html=True)
 
     # Initialize apply_gap_filter through session_state if not already set
     if "apply_gap_filter" not in st.session_state:
@@ -364,28 +366,28 @@ def render_filters(tier) -> Tuple[float, float, float, int, int, int, bool, bool
     if not is_pro_plus:
         st.session_state["apply_gap_filter"] = False
 
-    apply_gap_filter = st.sidebar.checkbox(
+    apply_gap_filter = sb.checkbox(
         "Apply Gap Filter",
         key="apply_gap_filter",
         disabled=not is_pro_plus,
     )
     if not is_pro_plus:
-        st.sidebar.caption("🔒 Pro+ feature")
-        st.sidebar.markdown("<br>", unsafe_allow_html=True)
+        sb.caption("🔒 Pro+ feature")
+        sb.markdown("<br>", unsafe_allow_html=True)
 
     # Initialize show_diagnostics_ui through session_state if not already set
     if "show_diagnostics_ui" not in st.session_state:
         st.session_state["show_diagnostics_ui"] = default_diagnostics
 
-    st.sidebar.divider()
-    diagnostics = st.sidebar.checkbox(
+    sb.divider()
+    diagnostics = sb.checkbox(
         "Show diagnostics",
         key="show_diagnostics_ui",
         disabled=not can_diagnostics,
     )
     if not can_diagnostics:
-        st.sidebar.caption("🔒 Admin feature")
-        st.sidebar.markdown("<br>", unsafe_allow_html=True)
+        sb.caption("🔒 Admin feature")
+        sb.markdown("<br>", unsafe_allow_html=True)
 
     return (
         float(min_gap),

@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from ui.admin_results_tab import render_admin_tab
+from ui.lazy_panel import lazy_open
 from ui.market_default import MARKET_VIEW_KEY, market_view_caption
 from ui.results_empty import results_empty_message, results_tab_label
 
@@ -137,6 +138,8 @@ def render_results_tabs(
 
 def _render_track_record_tab(*, tab_track: Any) -> None:
     with tab_track:
+        if not lazy_open("research", "Load historical research"):
+            return
         try:
             from ui.track_record import render_track_record_dashboard
 
@@ -219,6 +222,8 @@ def _render_early_breakout_tab(
     render_prebreakout_tab: Callable[..., Any],
 ) -> None:
     with tab_early:
+        if not lazy_open("early", "Load early breakout candidates"):
+            return
         try:
             render_prebreakout_tab()
         except TypeError:
@@ -246,6 +251,8 @@ def _render_scan_history_tab(
 ) -> None:
     with tab_history:
         st.markdown("## 📚 Scan History")
+        if not lazy_open("history", "Load scan history"):
+            return
 
         if not callable(list_runs) or not callable(load_run_results):
             st.info("Scan history is not available (DB runs module not configured).")

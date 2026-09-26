@@ -13,15 +13,18 @@ def render_user_settings_footer(
     diagnostics: bool | None = None,
     get_user_settings: Callable[..., Any] | None = None,
     upsert_user_settings: Callable[..., Any] | None = None,
+    container: Any = None,
 ) -> None:
-    """Render sidebar controls for saving and reloading per-user scan defaults."""
+    """Render controls for saving and reloading per-user scan defaults
+    (in the sidebar by default, or in the given container)."""
+    sb = container if container is not None else st.sidebar
     session_username = username or st.session_state.get("username") or st.session_state.get("user")
     if session_username:
         st.session_state["username"] = session_username
 
     # Debug status line only when diagnostics are on (kept out of the default UI).
     if st.session_state.get("show_diagnostics_ui"):
-        st.sidebar.caption(
+        sb.caption(
             f"User settings status — user: {session_username or 'not set'}, "
             f"storage: {'available' if callable(upsert_user_settings) else 'unavailable'}"
         )
@@ -30,18 +33,19 @@ def render_user_settings_footer(
         return
 
     if callable(upsert_user_settings):
-        if st.sidebar.button("💾 Save as my default settings"):
+        if sb.button("💾 Save as my default settings"):
             _save_user_settings(
                 session_username=session_username,
                 min_price=min_price,
                 max_price=max_price,
                 diagnostics=diagnostics,
                 upsert_user_settings=upsert_user_settings,
+                sb=sb,
             )
 
-    if callable(get_user_settings) and st.sidebar.button("🔄 Reset to saved profile"):
+    if callable(get_user_settings) and sb.button("🔄 Reset to saved profile"):
         st.session_state["profile_loaded_for_user"] = None
-        st.sidebar.info("Reloading your saved profile...")
+        sb.info("Reloading your saved profile...")
         st.rerun()
 
 
@@ -52,7 +56,9 @@ def _save_user_settings(
     max_price: float | None,
     diagnostics: bool | None,
     upsert_user_settings: Callable[..., Any],
+    sb: Any = None,
 ) -> None:
+    sb = sb if sb is not None else st.sidebar
     min_price_val = min_price if min_price is not None else st.session_state.get("min_price")
     max_price_val = max_price if max_price is not None else st.session_state.get("max_price")
     show_diag_val = diagnostics if diagnostics is not None else st.session_state.get("show_diagnostics_ui")
@@ -76,6 +82,9 @@ def _save_user_settings(
             unusual_vol=st.session_state.get("unusual_vol"),
             enable_earnings_enrichment=st.session_state.get("enable_earnings_enrichment"),
         )
-        st.sidebar.success("Default scan settings saved for your account.")
+        sb.success("Default scan settings saved for your account.")
     except Exception as e:
-        st.sidebar.error(f"Failed to save default settings: {e}")
+        from ui.safe_errors import report_error
+
+        report_error("saving default settings", e)
+        sb.error("HSF couldn't save your default settings right now. Try again shortly.")
