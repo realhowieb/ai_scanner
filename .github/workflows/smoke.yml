@@ -9,6 +9,43 @@ on:
   workflow_dispatch:
 
 jobs:
+  billing-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: requirements-billing-test.txt
+
+      - name: Install isolated billing test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-billing-test.txt
+
+      - name: Verify mocked billing contract
+        env:
+          # Deliberately fake. Tests mock Stripe and Postgres and make no network calls.
+          STRIPE_SECRET_KEY: sk_test_ci_not_a_secret
+          STRIPE_WEBHOOK_SECRET: whsec_ci_not_a_secret
+          STRIPE_PRICE_PRO: price_ci_pro
+          STRIPE_PRICE_PREMIUM: price_ci_premium
+        run: |
+          python -c "import fastapi, httpx"
+          python -m pytest \
+            tests/test_billing_service.py \
+            tests/test_run72_pricing.py \
+            tests/test_run73_tier_differentiation.py \
+            tests/test_tier_enforcement.py \
+            tests/test_app_session.py \
+            -v --tb=short
+
   smoke:
     runs-on: ubuntu-latest
 
