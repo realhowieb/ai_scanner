@@ -23,7 +23,9 @@ def render_earnings_this_week_panel(*, can_earnings: bool) -> None:
     DB-only. Never fetches from Yahoo.
     """
     if not can_earnings:
-        st.caption("🔒 Earnings calendar is a Pro feature.")
+        from ui.pricing import upgrade_message
+
+        st.caption(upgrade_message("can_earnings"))
         return
 
     try:

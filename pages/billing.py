@@ -134,7 +134,7 @@ def _current_plan_label(tier_key: str) -> str:
         return "Premium"
     if t == "pro":
         return "Pro"
-    return "Basic"
+    return "Free"
 
 
 def _refresh_tier_from_db(email: str) -> str | None:
@@ -194,6 +194,8 @@ def _benefits_block() -> None:
 
 
 def _upgrade_buttons(current_tier_key: str) -> None:
+    from ui.pricing import TAGLINES
+
     focus = (st.session_state.get("pricing_focus") or "").strip().lower()
 
     email = _logged_in_email()
@@ -231,16 +233,18 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             st.caption(f"⚠️ {err}")
 
     with col_pro:
-        st.markdown("### 🚀 Pro · $19/mo")
-        st.caption("Unlock email alerts + exports + advanced filters + scan history")
+        st.markdown("### Pro · $19/mo · Most popular")
+        st.caption(TAGLINES["pro"])
+        st.caption("5 alerts, email delivery, interactive results, CSV export, advanced scans and history.")
         if current_tier_key in ("pro", "premium", "admin"):
             st.success("You already have Pro (or higher).")
         else:
             _plan_button("pro", "billing_upgrade_pro")
 
     with col_premium:
-        st.markdown("### ⭐ Premium · $39/mo")
-        st.caption("Adds AI notes, Early Breakout candidates, your own full-universe scans and paper trading")
+        st.markdown("### Premium · $39/mo")
+        st.caption(TAGLINES["premium"])
+        st.caption("25 alerts, AI research, Early Breakout research, custom full-market scans and paper trading.")
         if current_tier_key in ("premium", "admin"):
             st.success("You already have Premium (or Admin).")
         else:

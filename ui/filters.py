@@ -5,6 +5,7 @@ from typing import Any, Tuple
 import streamlit as st
 
 from auth.tiering import has_min_tier  # fallback only; entitlements are preferred
+from ui.pricing import upgrade_message
 
 
 def _clamp_int(value, *, minimum: int, maximum: int, fallback: int) -> int:
@@ -228,7 +229,7 @@ def render_filters(tier, container: Any = None) -> Tuple[float, float, float, in
             disabled=True,
             help="NASDAQ scan limits are a Pro+ feature.",
         )
-        sb.caption("🔒 Pro+ feature – NASDAQ scans are not available on Basic.")
+        sb.caption(upgrade_message("can_scan_nasdaq"))
         sb.markdown("<br>", unsafe_allow_html=True)
     else:
         max_nasdaq_scan = sb.number_input(
@@ -263,7 +264,7 @@ def render_filters(tier, container: Any = None) -> Tuple[float, float, float, in
             disabled=True,
             help="Combo scans are a Pro+ feature.",
         )
-        sb.caption("🔒 Pro+ feature – Combo scans are not available on Basic.")
+        sb.caption(upgrade_message("can_scan_nasdaq"))
         sb.markdown("<br>", unsafe_allow_html=True)
     else:
         max_combo_scan = sb.number_input(
@@ -338,7 +339,7 @@ def render_filters(tier, container: Any = None) -> Tuple[float, float, float, in
         disabled=not getattr(tier, "can_unusual_volume", False),
     )
     if not getattr(tier, "can_unusual_volume", False):
-        sb.caption("🔒 Pro+ feature")
+        sb.caption(upgrade_message("can_premarket"))
         sb.markdown("<br>", unsafe_allow_html=True)
 
     # Initialize include_ta through session_state if not already set
@@ -355,7 +356,7 @@ def render_filters(tier, container: Any = None) -> Tuple[float, float, float, in
         disabled=not is_pro_plus,
     )
     if not is_pro_plus:
-        sb.caption("🔒 Pro+ feature")
+        sb.caption(upgrade_message("can_premarket"))
         sb.markdown("<br>", unsafe_allow_html=True)
 
     # Initialize apply_gap_filter through session_state if not already set
@@ -372,7 +373,7 @@ def render_filters(tier, container: Any = None) -> Tuple[float, float, float, in
         disabled=not is_pro_plus,
     )
     if not is_pro_plus:
-        sb.caption("🔒 Pro+ feature")
+        sb.caption(upgrade_message("can_premarket"))
         sb.markdown("<br>", unsafe_allow_html=True)
 
     # Initialize show_diagnostics_ui through session_state if not already set

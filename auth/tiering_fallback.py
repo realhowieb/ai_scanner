@@ -12,7 +12,7 @@ ADMIN_USERS = set()
 
 @dataclass
 class Tier:
-    name: str = "Basic"
+    name: str = "Free"
     max_results: int = 25
     can_scan_sp500: bool = True
     can_scan_nasdaq: bool = False
@@ -45,7 +45,7 @@ def get_user_tier(username: str, users: Dict[str, Dict[str, Any]]):
                             can_unusual_volume=True, can_export_csv=True,
                             can_ai_notes=True)
             if name.lower() == "basic":
-                return Tier(name="Basic", max_results=25, can_scan_nasdaq=False)
+                return Tier(name="Free", max_results=25, can_scan_nasdaq=False)
     except Exception:
         pass
 

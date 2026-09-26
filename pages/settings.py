@@ -26,8 +26,10 @@ try:
     from ui.app_session import tier_key
 
     tier = (tier_key(st.session_state.get("tier")) or "basic").upper()
+    if tier == "BASIC":
+        tier = "FREE"
 except Exception:
-    tier = "BASIC"
+    tier = "FREE"
 verified = None
 try:
     from db.email_verification import is_email_verified
@@ -83,8 +85,9 @@ if can_paper:
     except Exception:
         st.caption("Paper-account connection is unavailable right now.")
 else:
-    st.caption("Connect an Alpaca **paper** account to place practice trades — a "
-               "Premium feature.")
+    from ui.pricing import upgrade_message
+
+    st.caption(upgrade_message("can_paper_trade"))
 
 st.divider()
 

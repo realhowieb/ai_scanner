@@ -214,10 +214,11 @@ def render_alerts_panel(
             "Checked automatically a few times a day."
         )
     else:
+        from ui.pricing import upgrade_message
+
         st.caption(
             "Get notified in-app when your conditions hit, checked automatically "
-            "a few times a day. 📧 **Email alerts are a Pro feature** — upgrade to "
-            "get them in your inbox."
+            "a few times a day. " + upgrade_message("can_email_alerts")
         )
 
     try:
@@ -230,9 +231,12 @@ def render_alerts_panel(
 
     used = len(existing)
     if used >= int(max_alerts):
+        from ui.pricing import alert_upgrade_message
+
+        current_tier = "basic" if int(max_alerts) <= 1 else "pro"
         st.warning(
             f"You're using all **{used}/{max_alerts}** alerts on your plan. "
-            "Upgrade for more alert slots."
+            + alert_upgrade_message(current_tier)
         )
         if used > int(max_alerts):
             st.caption(

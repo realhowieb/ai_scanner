@@ -166,16 +166,16 @@ STRIPE_YEARLY_LINKS = {
 # ---------- Tier Metadata ----------
 TIERS_CONFIG = {
     "basic": {
-        "name": "Basic",
-        "price_monthly": 19,
-        "price_yearly": 190,
+        "name": "Free",
+        "price_monthly": 0,
+        "price_yearly": 0,
         "features": ["SP500 Scan"],
         "max_results": 25,
     },
     "pro": {
         "name": "Pro",
-        "price_monthly": 25,
-        "price_yearly": 250,
+        "price_monthly": 19,
+        "price_yearly": 190,
         "features": [
             "SP500 Scan",
             "NASDAQ",
@@ -188,8 +188,8 @@ TIERS_CONFIG = {
     },
     "premium": {
         "name": "Premium",
-        "price_monthly": 49,
-        "price_yearly": 490,
+        "price_monthly": 39,
+        "price_yearly": 390,
         "features": [
             "SP500 Scan",
             "NASDAQ",

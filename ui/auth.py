@@ -344,13 +344,13 @@ def auth_ui():
                     su_agree = st.checkbox("I agree to use this tool for educational/informational purposes only.", key="signup_agree")
                     signup_clicked = st.form_submit_button("🟢 Create Free Account")
 
-            with st.expander("✅ What you get with a free Basic account", expanded=True):
+            with st.expander("What you get with a Free account", expanded=True):
                 st.write("- ✔️ The latest full-market ranking, updated through the trading day")
                 st.write("- ✔️ HSF Score (0–100 opportunity ranking) with the evidence behind it")
-                st.write("- ✔️ Interactive charts")
-                st.write("- ✔️ Works on desktop and phone")
+                st.write("- ✔️ Basic Stock Intelligence for current opportunities")
+                st.write("- ✔️ Market discovery, watchlists and one in-app alert on desktop or phone")
                 st.write("- ✔️ No credit card required")
-                st.caption("Upgrade anytime for email alerts, CSV export, AI notes and more.")
+                st.caption("Pro adds monitoring, email alerts, interactive results, exports and history.")
 
             st.caption("🔐 Passwords are securely encrypted. We never store plain-text passwords.")
 

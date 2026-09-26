@@ -177,7 +177,7 @@ class PricingCopyTests(unittest.TestCase):
 
         table = pricing_markdown()          # Run 72: generated from FEATURE_MIN_TIER
         self.assertIn("Scan history & historical research | ❌ | ✅ | ✅", table)
-        self.assertIn("Paper trading (Alpaca) | ❌ | ❌ | ✅", table)
+        self.assertIn("Alpaca paper-trading workflow | ❌ | ❌ | ✅", table)
 
 
 SCANNER_SCRIPT = '''

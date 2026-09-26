@@ -76,7 +76,9 @@ class DerivedPricingTests(unittest.TestCase):
         from ui.pricing import plans_html
 
         out = plans_html()
-        self.assertEqual(out.count('class="hsf-plan"'), 3)
+        cards = out.count('class="hsf-plan"') + out.count('class="hsf-plan featured"')
+        self.assertEqual(cards, 3)
+        self.assertEqual(out.count("Most popular"), 1)
         self.assertIn("$0", out)
         self.assertIn("Everything in Free", out)
         self.assertIn("Everything in Pro", out)

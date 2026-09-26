@@ -88,7 +88,9 @@ def prepare_results_with_earnings(
         _ensure_earnings_columns(df, earn_col_days)
 
     if not flags.get("can_earnings"):
-        st.sidebar.caption("🔒 Earnings timing is a Pro feature.")
+        from ui.pricing import upgrade_message
+
+        st.sidebar.caption(upgrade_message("can_earnings"))
 
     signature = str(st.session_state.get("results_signature") or "")
     cached_signature = str(st.session_state.get("earnings_enriched_signature") or "")

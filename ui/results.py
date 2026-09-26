@@ -9,6 +9,7 @@ import streamlit as st
 
 from scan import ai_confidence as aic
 from ui.headline_score import breakout_score_help, hsf_metric_text, model_details_view
+from ui.pricing import upgrade_message
 from ui.result_helpers import (
     as_optional_float,
     auto_details_ticker,
@@ -230,7 +231,7 @@ def render_results(
 
     # Show Basic upsell message for earnings filters, if earnings column exists and user is Basic
     if earn_col in df.columns and is_basic:
-        st.info("🔒 Pro feature — earnings filters (exclude earnings soon / only within X days)")
+        st.info(upgrade_message("can_earnings"))
 
     # Always use the fast, non-Styler table path. It is more reliable on Streamlit Cloud
     # and avoids optional matplotlib/Pandas Styler deployment failures.
@@ -281,7 +282,7 @@ def render_results(
                 key=f"{key_prefix}_download_csv_fast",
             )
         else:
-            st.info("🔒 Pro feature — export scan results to CSV")
+            st.info(upgrade_message("can_export_csv"))
 
         # Continue with charts / details / AI notes
         if is_basic:
@@ -291,7 +292,7 @@ def render_results(
                 with st.expander(f"📌 {auto_t} details", expanded=False):
                     st.caption(
                         "📌 **Top breakout candidate (auto-selected)**  \n"
-                        "🔒 Upgrade to Pro to select tickers, view charts, and export CSV."
+                        + upgrade_message("can_export_csv")
                     )
                     r0 = find_row_for_ticker(df, auto_t)
                     if r0 is not None:
@@ -322,7 +323,7 @@ def render_results(
                 st.caption("⭐ Premium feature")
                 st.caption("AI notes require a selectable ticker; upgrade to Pro/Premium.")
             else:
-                st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
+                st.info(upgrade_message("can_ai_notes"))
 
             return
 
@@ -426,7 +427,7 @@ def render_results(
             except (RuntimeError, TypeError, ValueError):
                 st.caption("AI notes are unavailable for the selected row.")
         else:
-            st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
+            st.info(upgrade_message("can_ai_notes"))
 
         return
 
@@ -631,7 +632,7 @@ def render_results(
             key=f"{key_prefix}_download_csv_styled",
         )
     else:
-        st.info("🔒 Pro feature — export scan results to CSV")
+        st.info(upgrade_message("can_export_csv"))
 
     # Chart picker/details/AI notes: Option A logic for non-fast (styled) branch
     if is_basic:
@@ -640,7 +641,7 @@ def render_results(
             with st.expander(f"📌 {auto_t} details", expanded=False):
                 st.caption(
                     "📌 **Top breakout candidate (auto-selected)**  \n"
-                    "🔒 Upgrade to Pro to select tickers, view charts, and export CSV."
+                    + upgrade_message("can_export_csv")
                 )
                 r0 = find_row_for_ticker(df, auto_t)
                 if r0 is not None:
@@ -671,7 +672,7 @@ def render_results(
             st.caption("⭐ Premium feature")
             st.caption("AI notes require a selectable ticker; upgrade to Pro/Premium.")
         else:
-            st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
+            st.info(upgrade_message("can_ai_notes"))
 
         return
     else:
@@ -765,7 +766,7 @@ def render_results(
         except (RuntimeError, TypeError, ValueError):
             st.caption("AI notes are unavailable for the selected row.")
     else:
-        st.info("🔒 Premium feature — AI-powered notes for the selected ticker")
+        st.info(upgrade_message("can_ai_notes"))
 
 
 def _format_earnings_for_display(df: pd.DataFrame) -> pd.DataFrame:

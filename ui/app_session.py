@@ -7,6 +7,9 @@ from typing import Any
 FEATURE_MIN_TIER: dict[str, str] = {
     "can_scan_sp500": "basic",
     "can_scan_nasdaq": "pro",
+    "can_premarket": "pro",
+    "can_afterhours": "pro",
+    "can_unusual_volume": "pro",
     "can_export_csv": "pro",
     "can_earnings": "pro",
     "can_ai_notes": "premium",

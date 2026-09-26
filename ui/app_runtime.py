@@ -203,7 +203,7 @@ def render_sidebar_upgrade_card(
     *,
     has_min_tier: Callable[[object | None, str], bool],
 ) -> None:
-    """Show the upgrade CTA card for Basic users in the sidebar."""
+    """Show the primary Pro upgrade path for Free users in the sidebar."""
     try:
         # Admins never see the upgrade card regardless of tier_obj key.
         import streamlit as _st
@@ -215,18 +215,12 @@ def render_sidebar_upgrade_card(
         return
 
     with st.sidebar.container(border=True):
-        st.markdown("### You're on Basic")
+        st.markdown("### You're on Free")
         st.caption(
-            "You're seeing a limited scan.\n"
-            "Upgrade to unlock advanced filters, exports, and AI signals."
+            "Discover today's market opportunities with HSF Score and basic Stock Intelligence."
         )
-
-        c1, c2 = st.columns(2)
-        with c1:
-            _upgrade_button("Upgrade to Pro", "pro", "upgrade_to_pro")
-        with c2:
-            _upgrade_button("Upgrade to Premium", "premium", "upgrade_to_premium")
-
+        _upgrade_button("Upgrade to Pro", "pro", "upgrade_to_pro")
         st.caption(
-            "Pro unlocks exports and advanced filters. Premium unlocks full-universe and Early Breakout."
+            "Pro adds monitoring and investigation: 5 alerts, email delivery, interactive results, exports and history."
         )
+        st.page_link("pages/billing.py", label="Compare all plans")

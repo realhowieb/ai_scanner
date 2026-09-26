@@ -1167,7 +1167,9 @@ def _render_email_button(user: str, data: Dict[str, Any]) -> None:
         return
     ent = st.session_state.get("entitlements") or {}
     if not ent.get("can_email_alerts"):
-        st.caption("📧 Emailing this brief on demand is a Pro feature.")
+        from ui.pricing import upgrade_message
+
+        st.caption(upgrade_message("can_email_alerts"))
         return
     if not st.button("📧 Email me this brief", key="brief_email"):
         return
