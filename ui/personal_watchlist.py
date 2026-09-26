@@ -107,7 +107,7 @@ def _render_empty_watchlist(user_id: str) -> None:
                         f"{result.ticker} is not currently ranked as an HSF opportunity. "
                         "HSF will continue organizing meaningful changes for watched stocks."
                     )
-                    st.page_link("pages/watchlists.py", label="Refresh My Watchlist", icon="📋")
+                    st.page_link("pages/watchlists.py", label="Refresh My Stocks", icon="📋")
         except Exception:
             st.warning("Ticker saved state is temporarily unavailable. Please try again.")
     c1, c2, c3 = st.columns(3)

@@ -36,6 +36,13 @@ try:
 except Exception:
     pass
 
+# P1-2: deep links (?ticker=NVDA) pre-select a ticker.
+_qp_ticker = str(st.query_params.get("ticker") or "").strip().upper()
+if _qp_ticker:
+    if _qp_ticker.replace(".", "").replace("-", "").isalnum() and len(_qp_ticker) <= 10:
+        st.session_state["hsf_stock_ticker"] = _qp_ticker
+        st.session_state.pop("hsf_stock_ticker_input", None)
+    st.query_params.pop("ticker", None)   # consume once, so typing a new ticker isn't overridden
 _default = (st.session_state.get("hsf_stock_ticker") or "").strip().upper()
 _ticker = st.text_input("Ticker", value=_default, placeholder="e.g. NVDA",
                         key="hsf_stock_ticker_input").strip().upper()

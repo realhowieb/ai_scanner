@@ -95,7 +95,7 @@ try:
     a, b, c = st.columns(3)
     a.page_link("pages/brief.py", label="Market Brief", icon="📬")
     b.page_link("pages/alerts.py", label="Alerts", icon="🔔")
-    c.page_link("pages/watchlists.py", label="My Watchlist", icon="📋")
+    c.page_link("pages/watchlists.py", label="My Stocks", icon="📋")
 except Exception:
     pass
 

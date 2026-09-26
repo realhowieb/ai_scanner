@@ -19,6 +19,12 @@ except Exception:  # pragma: no cover
 CHROME_CSS = (
     "<style>"
     '[data-testid="stToolbarActions"]{display:none !important;}'
+    # P1-4: phone widths get tighter gutters and smaller headings so content,
+    # not padding, fills the first screen. Streamlit already stacks columns.
+    "@media (max-width:640px){"
+    ".block-container{padding-left:1rem !important;padding-right:1rem !important;padding-top:1.25rem !important;}"
+    "h1{font-size:1.6rem !important;}h2{font-size:1.3rem !important;}h3{font-size:1.1rem !important;}"
+    "}"
     "</style>"
 )
 

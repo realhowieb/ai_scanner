@@ -22,64 +22,21 @@ if not _username:
     st.stop()
 
 
-def _session_watch_tickers() -> list[str]:
-    """Use tickers already loaded on the main page; avoid DB work before first paint."""
-    tickers = st.session_state.get("active_watchlist_tickers") or []
-    return sorted({str(t).strip().upper() for t in tickers if str(t).strip()})
-
-
-def _tier_limits() -> tuple[int, bool]:
-    """(max_alerts, email_enabled) for the current session's tier.
-
-    Normalize through tier_key(): session state can hold a Tier object or a
-    differently-cased value, and a raw string compare silently downgraded
-    Premium accounts to Basic limits here.
-    """
-    raw = st.session_state.get("tier") or st.session_state.get("plan")
-    try:
-        from ui.app_session import alert_limit_for_tier, tier_key
-
-        key = tier_key(raw) or "basic"
-        is_admin = key == "admin"
-        max_alerts = 25 if is_admin else alert_limit_for_tier(key)
-    except Exception:
-        key = str(raw or "basic").strip().lower()
-        is_admin = key == "admin"
-        max_alerts = 25 if is_admin else 1
-    email_ok = key in ("pro", "premium", "admin")
-    return int(max_alerts), bool(email_ok)
-
+from ui.alerts_page import render_alerts_body  # noqa: E402
+from ui.alerts_page import session_watch_tickers as _session_watch_tickers  # noqa: E402
 
 try:
-    from ui.alerts import render_alerts_panel
     from ui.header import render_page_logo
     from ui.onboarding import render_alerts_orientation
 
     render_page_logo()
     render_page_header("Alerts", "Meaningful intelligence changes for watched stocks.")
     render_alerts_orientation(_username)
-    # HSF Intelligence Alerts (state-change) sit above the existing static alerts.
-    try:
-        from ui.intelligence_alerts_ui import render_intelligence_alerts
-
-        st.caption(
-            "HSF Intelligence alerts are generated for watched opportunities by background detection; "
-            "opening this page only reads saved alert state."
-        )
-        render_intelligence_alerts(_username)
-        st.markdown("---")
-    except Exception:
-        pass
-    _max_alerts, _email_ok = _tier_limits()
-    render_alerts_panel(
-        _username,
-        watch_tickers=_session_watch_tickers(),
-        max_alerts=_max_alerts,
-        email_enabled=_email_ok,
-    )
 except Exception as e:
     from ui.safe_errors import show_error
 
-    show_error("your alerts", e)
-
+    show_error("the alerts page", e)
+render_alerts_body(_username, watch_tickers=_session_watch_tickers())
+st.caption("Alerts also live on **My Stocks**, next to your watchlists.")
+st.page_link("pages/watchlists.py", label="Open My Stocks", icon="📋")
 st.page_link("app.py", label="← Back to scanner", icon="🏠")

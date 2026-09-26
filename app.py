@@ -212,6 +212,7 @@ try:
     from ui.alerts import render_alerts_panel
     from ui.day_trader import render_day_trader_panel
     from ui.db_status import render_db_status_badge
+    from ui.discover import render_discover_bar, with_card_view
     from ui.earnings_results import prepare_results_with_earnings, render_earnings_controls
     from ui.filters import render_filters
     from ui.footer import render_footer
@@ -751,6 +752,7 @@ def main():
         )
         df = add_why_column(df)  # plain-English "why this passed" per row
         df = add_hsf_score_column(df)  # P0-7: HSF Score is the headline number
+        df = render_discover_bar(df)  # P1-3/4/9: lens pills, table/cards view, 🆕 markers
         render_results_tabs(
             df=df,
             flags=flags,
@@ -760,7 +762,7 @@ def main():
             admin_users=ADMIN_USERS,
             list_runs=list_runs,
             load_run_results=load_run_results,
-            render_results=render_results,
+            render_results=with_card_view(render_results),
             render_prebreakout_tab=render_prebreakout_tab,
             render_admin_users_panel=render_admin_users_panel,
             render_chart_for_ticker=render_chart_for_ticker,

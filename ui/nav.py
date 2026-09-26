@@ -12,19 +12,36 @@ try:
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
-# Feature pages only — reset_password / verify_email are intentionally omitted.
-_NAV = [
-    ("pages/brief.py", "Market Brief", "📬"),
-    ("app.py", "Scanner", "🔎"),
-    ("pages/watchlists.py", "My Watchlist", "📋"),
-    ("pages/stock.py", "Stock Intelligence", "🔬"),
-    ("pages/alerts.py", "Alerts", "🔔"),
-    ("pages/day_trader.py", "Day Trader", "⚡"),
-    ("pages/journal.py", "Journal", "📓"),
-    ("pages/kalshi.py", "Kalshi BTC", "🪙"),
-    ("pages/settings.py", "Settings", "⚙️"),
-    ("pages/billing.py", "Billing", "💳"),
+# P1-1: grouped navigation. Feature pages only — reset_password / verify_email
+# are intentionally omitted (reachable by their email-link URLs and Settings).
+# Alerts lives inside My Stocks; its own page stays reachable for shortcuts.
+_NAV_SECTIONS = [
+    ("Today", [
+        ("pages/today.py", "Today", "📅"),
+        ("pages/brief.py", "Market Brief", "📬"),
+    ]),
+    ("Discover", [
+        ("app.py", "Scanner", "🔎"),
+        ("pages/day_trader.py", "Day Trader", "⚡"),
+    ]),
+    ("Research", [
+        ("pages/stock.py", "Stock Intelligence", "🔬"),
+        ("pages/methodology.py", "How HSF works", "📖"),
+    ]),
+    ("My Stocks", [
+        ("pages/watchlists.py", "My Stocks", "📋"),
+        ("pages/journal.py", "Journal", "📓"),
+    ]),
+    ("Account", [
+        ("pages/settings.py", "Settings", "⚙️"),
+        ("pages/billing.py", "Billing", "💳"),
+    ]),
+    ("Labs", [
+        ("pages/kalshi.py", "Kalshi BTC", "🪙"),
+    ]),
 ]
+# Flat list kept for callers/tests that only need the set of nav pages.
+_NAV = [item for _section, items in _NAV_SECTIONS for item in items]
 
 
 def _render_identity() -> None:
@@ -80,10 +97,12 @@ def render_sidebar_nav(*, with_header: bool = True) -> None:
                 # Main app renders its own identity block above us; add the
                 # divider here so the nav is visually separated everywhere.
                 st.divider()
-            for path, label, icon in _NAV:
-                try:
-                    st.page_link(path, label=label, icon=icon)
-                except Exception:
-                    pass
+            for section, items in _NAV_SECTIONS:
+                st.caption(section.upper())
+                for path, label, icon in items:
+                    try:
+                        st.page_link(path, label=label, icon=icon)
+                    except Exception:
+                        pass
     except Exception:
         pass

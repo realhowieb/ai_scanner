@@ -340,8 +340,8 @@ def render_stock_intelligence(
     _render_lifecycle(intel)
     _render_signals_and_model(intel)
     _render_watch_next(intel)
-    _render_historical(intel)
     _render_actions(intel, render_chart_for_ticker)
+    _render_historical(intel)
 
 
 def _render_header(intel: Dict[str, Any]) -> None:
@@ -386,9 +386,9 @@ def _render_header(intel: Dict[str, Any]) -> None:
 
 def _render_why_and_risks(intel: Dict[str, Any]) -> None:
     if intel.get("reasons"):
-        st.markdown("#### Why HSF cares")
+        st.markdown("#### Why HSF is showing this")
         st.markdown("\n".join(f"- ✓ {r}" for r in intel["reasons"]))
-    st.markdown("#### Risks / conflicts")
+    st.markdown("#### Watch")
     if intel.get("risks"):
         st.markdown("\n".join(f"- ⚠ {r}" for r in intel["risks"]))
     else:
@@ -396,22 +396,65 @@ def _render_why_and_risks(intel: Dict[str, Any]) -> None:
                    "(This does not imply the stock is safe.)")
 
 
+TIMELINE_RECENT = 8
+
+
+def _fmt_event_time(t: Any) -> str:
+    """'Sep 25, 12:35 PM ET' (history times are stored in UTC)."""
+    try:
+        import datetime as _dt
+
+        from analytics.market_calendar import ET
+
+        ts = t if isinstance(t, _dt.datetime) else _dt.datetime.fromisoformat(str(t).replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=_dt.timezone.utc)
+        et = ts.astimezone(ET)
+        return f"{et.strftime('%b')} {et.day}, {et.strftime('%I:%M %p').lstrip('0')} ET"
+    except Exception:
+        return str(t)
+
+
+def timeline_summary(life: List[Dict[str, Any]]) -> Optional[str]:
+    """'First recorded Sep 22, 10:35 AM ET at HSF 58 · now HSF 71 (+13) across 6 updates'."""
+    if not life:
+        return None
+    first, last = life[0], life[-1]
+    text = f"First recorded {_fmt_event_time(first['time'])} at HSF {first['score']}"
+    if len(life) > 1:
+        same_version = str(first.get("score_version")) == str(last.get("score_version"))
+        delta = int(round(last["score"] - first["score"])) if same_version else None
+        text += f" · now HSF {last['score']}" + (f" ({delta:+d})" if delta is not None else "")
+        text += f" across {len(life) - 1} update{'s' if len(life) > 2 else ''}"
+    return text
+
+
+def _timeline_line(ev: Dict[str, Any]) -> str:
+    label = "First recorded by HSF" if ev.get("first") else ev.get("label", "")
+    added = f" · +{', '.join(ev['signals_added'])}" if ev.get("signals_added") else ""
+    removed = f" · −{', '.join(ev['signals_removed'])}" if ev.get("signals_removed") else ""
+    return (f"- **{_fmt_event_time(ev['time'])}** — {label} · HSF {ev['score']} · "
+            f"{ev.get('status') or ''}{added}{removed}")
+
+
 def _render_lifecycle(intel: Dict[str, Any]) -> None:
+    """P1-2: 'What changed since HSF first noticed it' — scanner state only
+    (opportunity history: score, status, signals). Never outcomes or research data."""
     life = intel.get("lifecycle") or []
     if not life:
         return
-    st.markdown("#### Opportunity lifecycle")
+    st.markdown("#### What changed since HSF first noticed it")
+    summary = timeline_summary(life)
+    if summary:
+        st.caption(summary)
     if len(life) == 1:
         st.caption("Only one recorded HSF observation so far — the timeline "
                    "appears as history accumulates.")
-    for ev in life:
-        try:
-            ts = ev["time"].strftime("%b %d %I:%M %p") if hasattr(ev["time"], "strftime") else str(ev["time"])
-        except Exception:
-            ts = str(ev["time"])
-        label = ev.get("label", "")
-        added = f" · +{', '.join(ev['signals_added'])}" if ev.get("signals_added") else ""
-        st.markdown(f"- **{ts}** — {label} · HSF {ev['score']} · {ev.get('status') or ''}{added}")
+    older, recent = life[:-TIMELINE_RECENT], life[-TIMELINE_RECENT:]
+    if older:
+        with st.expander(f"Earlier history ({len(older)})", expanded=False):
+            st.markdown("\n".join(_timeline_line(ev) for ev in older))
+    st.markdown("\n".join(_timeline_line(ev) for ev in recent))
 
 
 def _render_signals_and_model(intel: Dict[str, Any]) -> None:

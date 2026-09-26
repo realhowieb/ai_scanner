@@ -225,7 +225,7 @@ def _render_returning_user(user: str, watchlist: List[str], *, tier_name: str = 
         f"{strengthening} strengthening · {fading} fading"
     )
     c1, c2 = st.columns(2)
-    c1.page_link("pages/watchlists.py", label="Open My Watchlist", icon="📋")
+    c1.page_link("pages/watchlists.py", label="Open My Stocks", icon="📋")
     c2.page_link("pages/brief.py", label="Explore Market Brief", icon="📬")
 
 
@@ -258,7 +258,7 @@ def _render_first_value(result: FirstTickerResult) -> None:
             f"**{result.ticker} is not currently ranked as an HSF opportunity.**  \n"
             "HSF will continue organizing meaningful changes for watched stocks."
         )
-        st.page_link("pages/watchlists.py", label="Open My Watchlist", icon="📋")
+        st.page_link("pages/watchlists.py", label="Open My Stocks", icon="📋")
 
 
 def _render_dismissible_orientation(username: str, key: str, title: str, body: str) -> None:
