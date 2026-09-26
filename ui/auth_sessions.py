@@ -138,8 +138,18 @@ def ensure_auth_sessions_schema(conn) -> None:
     cur.close()
 
 
+# Set by delete_session (called only by logout). Logout reruns before the
+# browser has dropped the cookie, so the next run still finds the now-deleted
+# session id; this flag lets that run say "signed out", not "expired".
+SIGNED_OUT_FLAG = "_hsf_signed_out"
+
+
 def create_session(username: str, ttl_days: int | None = None) -> Optional[str]:
     """Create a new session row and return session_id as str."""
+    try:  # a fresh sign-in ends any pending "signed out" notice
+        st.session_state.pop(SIGNED_OUT_FLAG, None)
+    except (RuntimeError, AttributeError):
+        pass
     if ttl_days is None:
         try:
             from config import SESSION_TTL_DAYS
@@ -218,6 +228,10 @@ def get_username_for_session(session_id: str) -> Optional[str]:
 
 
 def delete_session(session_id: str) -> None:
+    try:
+        st.session_state[SIGNED_OUT_FLAG] = True
+    except (RuntimeError, AttributeError):
+        pass
     try:
         if get_neon_conn is None:
             return

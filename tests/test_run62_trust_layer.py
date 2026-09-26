@@ -396,3 +396,43 @@ class RedeployImportRaceTests(unittest.TestCase):
         app = (ROOT / "app.py").read_text()
         i = app.index("from ui.trust_banner import render_trust_banner")
         self.assertIn("try:", app[i - 120:i])
+
+
+class LogoutMessageTests(unittest.TestCase):
+    """Logging out reruns before the browser drops the cookie, so the next run
+    finds a deleted session. It must say "signed out", not "expired"."""
+
+    def test_delete_session_marks_signed_out(self):
+        import importlib.util
+        from unittest import mock
+
+        if importlib.util.find_spec("streamlit") is None:
+            self.skipTest("streamlit not installed")
+        from ui import auth_sessions
+
+        fake_state = {}
+        with mock.patch.object(auth_sessions.st, "session_state", fake_state), \
+                mock.patch.object(auth_sessions, "get_neon_conn", None):
+            auth_sessions.delete_session("abc")
+        self.assertTrue(fake_state.get(auth_sessions.SIGNED_OUT_FLAG))
+
+    def test_restore_branch_uses_the_same_flag(self):
+        auth = (ROOT / "ui" / "auth.py").read_text()
+        sessions = (ROOT / "ui" / "auth_sessions.py").read_text()
+        self.assertIn('SIGNED_OUT_FLAG = "_hsf_signed_out"', sessions)
+        self.assertIn('st.session_state.pop("_hsf_signed_out", False)', auth)
+        self.assertIn("You've signed out.", auth)
+
+    def test_new_sign_in_clears_the_flag(self):
+        import importlib.util
+        from unittest import mock
+
+        if importlib.util.find_spec("streamlit") is None:
+            self.skipTest("streamlit not installed")
+        from ui import auth_sessions
+
+        fake_state = {auth_sessions.SIGNED_OUT_FLAG: True}
+        with mock.patch.object(auth_sessions.st, "session_state", fake_state), \
+                mock.patch.object(auth_sessions, "get_neon_conn", None):
+            auth_sessions.create_session("someone")
+        self.assertNotIn(auth_sessions.SIGNED_OUT_FLAG, fake_state)

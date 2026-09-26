@@ -247,7 +247,7 @@ def auth_ui():
                     _save_cookies(cookies)
                 except _AUTH_BACKEND_ERRORS:
                     pass
-                st.info("Your session has expired. Please log in again.")
+                st.info("You've signed out." if st.session_state.pop("_hsf_signed_out", False) else "Your session has expired. Please log in again.")
 
     # Handle Stripe redirects: ?checkout=success, ?checkout=cancel, ?portal=return
     try:
