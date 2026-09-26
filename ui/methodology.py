@@ -55,8 +55,9 @@ def render_methodology() -> None:
     if st is None:
         return
     try:
-        st.title("How HSF works")
-        st.caption(PRODUCT_NAME)
+        from ui.design_system import render_page_header
+
+        render_page_header("How HSF works", PRODUCT_NAME)
         st.markdown(f"**{TAGLINE}**")
         st.markdown(POSITIONING_LONG)
         for heading, body in METHODOLOGY_SECTIONS:

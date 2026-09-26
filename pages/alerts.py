@@ -14,6 +14,9 @@ from ui.showcase import initial_sidebar_state
 
 st.set_page_config(page_title="Alerts", page_icon="🔔", layout="wide",
                    initial_sidebar_state=initial_sidebar_state())
+from ui.chrome import hide_developer_chrome  # noqa: E402
+
+hide_developer_chrome()  # Run 62/P2: before any sign-in gate
 
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:

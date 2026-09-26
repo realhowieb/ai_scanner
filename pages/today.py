@@ -4,6 +4,9 @@ from __future__ import annotations
 import streamlit as st
 
 st.set_page_config(page_title="Today · HSF AI Stock Scanner", page_icon="📅", layout="centered")
+from ui.chrome import hide_developer_chrome  # noqa: E402
+
+hide_developer_chrome()  # Run 62/P2: before any sign-in gate
 
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:

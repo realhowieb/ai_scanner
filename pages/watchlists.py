@@ -14,6 +14,9 @@ from ui.showcase import initial_sidebar_state
 
 st.set_page_config(page_title="My Stocks", page_icon="📋", layout="wide",
                    initial_sidebar_state=initial_sidebar_state())
+from ui.chrome import hide_developer_chrome  # noqa: E402
+
+hide_developer_chrome()  # Run 62/P2: before any sign-in gate
 
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:
@@ -64,7 +67,9 @@ try:
 
     st.session_state["hsf_my_watchlist_viewed"] = True
     render_page_logo()
-    st.title("My Stocks")
+    from ui.design_system import render_page_header
+
+    render_page_header("My Stocks", "Your watchlists and alerts in one place.")
     _tab_watch, _tab_alerts = st.tabs(["📋 Watchlist", "🔔 Alerts"])
     with _tab_watch:
         _render_watchlist_tab()

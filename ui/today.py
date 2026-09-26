@@ -89,7 +89,7 @@ def _section_new(scan_df: Any, run_id: Optional[int]) -> None:
         return
     st.markdown(", ".join(f"**{t}**" for t in new[:15]) + (f" and {len(new) - 15} more" if len(new) > 15 else ""))
     if st.button(f"Show all {len(new)} in the Scanner", key="today_show_new"):
-        st.session_state["hsf_lens"] = "new"
+        st.session_state["hsf_lens_pending"] = ["new"]
         st.switch_page("app.py")
 
 
@@ -116,17 +116,20 @@ def render_today(username: str) -> None:
     """Render the Today page body. Never raises."""
     if st is None:
         return
+    from ui.design_system import render_page_header
     from ui.market_scans import safe_recent_runs, safe_run_df
     from ui.product_copy import TAGLINE
 
-    st.title("Today")
-    st.caption(TAGLINE)
+    render_page_header("Today", TAGLINE)
     try:
         from ui.trust_banner import render_trust_banner
 
         render_trust_banner()
     except Exception:
         pass
+    from ui.tour import render_tour
+
+    render_tour("today")
     runs = safe_recent_runs()
     run_id = int(runs[0]["id"]) if runs else None
     scan_df = safe_run_df(run_id)

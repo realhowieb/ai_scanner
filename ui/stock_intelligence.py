@@ -399,6 +399,15 @@ def _render_why_and_risks(intel: Dict[str, Any]) -> None:
 TIMELINE_RECENT = 8
 
 
+def share_url(ticker: str) -> str:
+    """Deep link to this ticker's Stock Intelligence page (P2-5)."""
+    try:
+        from config import APP_BASE_URL
+    except Exception:
+        APP_BASE_URL = "https://hsf-beta.streamlit.app"
+    return f"{str(APP_BASE_URL).rstrip('/')}/stock?ticker={str(ticker).strip().upper()}"
+
+
 def _fmt_event_time(t: Any) -> str:
     """'Sep 25, 12:35 PM ET' (history times are stored in UTC)."""
     try:
@@ -543,6 +552,9 @@ def _render_actions(intel: Dict[str, Any], render_chart_for_ticker) -> None:
             st.switch_page("pages/alerts.py")
         except Exception:
             st.caption("Open Alerts from the sidebar — it's pre-filled.")
+    with st.expander("Share this ticker", expanded=False):   # P2-5
+        st.code(share_url(t), language=None)
+        st.caption("Anyone with an HSF account can open this link; it asks them to sign in first.")
     if st.session_state.get(f"si_show_chart_{t}"):
         try:
             if render_chart_for_ticker:

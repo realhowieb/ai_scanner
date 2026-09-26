@@ -8,6 +8,9 @@ from __future__ import annotations
 import streamlit as st
 
 st.set_page_config(page_title="Journal", page_icon="📓", layout="wide")
+from ui.chrome import hide_developer_chrome  # noqa: E402
+
+hide_developer_chrome()  # Run 62/P2: before any sign-in gate
 
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:
@@ -15,9 +18,10 @@ if not _username:
     st.page_link("app.py", label="Go to login", icon="🔐")
     st.stop()
 
-st.markdown("## 📓 Trade Journal")
-st.caption("Positions logged from trade plans, marked to live quotes, with "
-           "closed-trade win-rate and return stats.")
+from ui.design_system import render_page_header  # noqa: E402
+
+render_page_header("Journal", "Positions logged from trade plans, marked to live quotes, "
+                              "with stats on your own closed trades.")
 
 try:
     from ui.header import render_page_logo

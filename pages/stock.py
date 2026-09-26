@@ -12,10 +12,25 @@ from ui.showcase import initial_sidebar_state
 
 st.set_page_config(page_title="Stock Intelligence", page_icon="🔬", layout="wide",
                    initial_sidebar_state=initial_sidebar_state())
+from ui.chrome import hide_developer_chrome  # noqa: E402
 
+hide_developer_chrome()  # Run 62/P2: before any sign-in gate
+
+# P1-2: deep links (?ticker=NVDA) pre-select a ticker.
+_qp_ticker = str(st.query_params.get("ticker") or "").strip().upper()
+if _qp_ticker:
+    if _qp_ticker.replace(".", "").replace("-", "").isalnum() and len(_qp_ticker) <= 10:
+        st.session_state["hsf_stock_ticker"] = _qp_ticker
+        st.session_state.pop("hsf_stock_ticker_input", None)
+    st.query_params.pop("ticker", None)   # consume once, so typing a new ticker isn't overridden
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:
-    st.info("Please log in on the main page to view HSF Stock Intelligence.")
+    # P2-5: a shared link survives sign-in — the main page returns here after login.
+    if st.session_state.get("hsf_stock_ticker"):
+        st.session_state["hsf_after_login_page"] = "pages/stock.py"
+    _shared = st.session_state.get("hsf_stock_ticker")
+    st.info(f"Sign in to view HSF Stock Intelligence for {_shared}." if _shared
+            else "Please log in on the main page to view HSF Stock Intelligence.")
     st.page_link("app.py", label="Go to login", icon="🔐")
     st.stop()
 
@@ -36,13 +51,6 @@ try:
 except Exception:
     pass
 
-# P1-2: deep links (?ticker=NVDA) pre-select a ticker.
-_qp_ticker = str(st.query_params.get("ticker") or "").strip().upper()
-if _qp_ticker:
-    if _qp_ticker.replace(".", "").replace("-", "").isalnum() and len(_qp_ticker) <= 10:
-        st.session_state["hsf_stock_ticker"] = _qp_ticker
-        st.session_state.pop("hsf_stock_ticker_input", None)
-    st.query_params.pop("ticker", None)   # consume once, so typing a new ticker isn't overridden
 _default = (st.session_state.get("hsf_stock_ticker") or "").strip().upper()
 _ticker = st.text_input("Ticker", value=_default, placeholder="e.g. NVDA",
                         key="hsf_stock_ticker_input").strip().upper()

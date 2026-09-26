@@ -4,6 +4,9 @@ from __future__ import annotations
 import streamlit as st
 
 st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
+from ui.chrome import hide_developer_chrome  # noqa: E402
+
+hide_developer_chrome()  # Run 62/P2: before any sign-in gate
 
 _username = (st.session_state.get("username") or "").strip().lower()
 if not _username:
@@ -37,7 +40,9 @@ try:
 except Exception:
     can_paper = False
 
-st.markdown("## ⚙️ Settings")
+from ui.design_system import render_page_header  # noqa: E402
+
+render_page_header("Settings", "Your account, connections and preferences.")
 
 # --- Account ---
 st.markdown("#### 👤 Account")
@@ -98,6 +103,21 @@ try:
     c.page_link("pages/watchlists.py", label="My Stocks", icon="📋")
 except Exception:
     pass
+
+st.divider()
+
+# --- Home screen (P2-6) ---
+# Streamlit Cloud serves the page inside its own frame, so HSF can't ship a web-app
+# manifest (installable PWA, offline, push). A home-screen shortcut still gives
+# one-tap access; these are the platform's own steps.
+st.markdown("#### Add HSF to your home screen")
+st.markdown(
+    "- **iPhone / iPad (Safari):** tap **Share**, then **Add to Home Screen**.\n"
+    "- **Android (Chrome):** open the **⋮** menu, then **Add to Home screen**.\n"
+    "- **Desktop (Chrome / Edge):** bookmark the page, or use **Install** / **Create shortcut** "
+    "in the browser menu when offered."
+)
+st.caption("This adds a shortcut to HSF. It is not an offline app and does not send push notifications.")
 
 st.divider()
 st.page_link("app.py", label="← Back to scanner", icon="🏠")

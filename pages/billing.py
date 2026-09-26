@@ -278,8 +278,9 @@ def render_billing_page() -> None:
         render_page_logo()
     except Exception:
         pass
-    st.title("💳 Plans & Billing")
-    st.caption("Upgrade anytime. Downgrade anytime. No lock-in.")
+    from ui.design_system import render_page_header
+
+    render_page_header("Plans & Billing", "Upgrade anytime. Downgrade anytime. No lock-in.")
 
     tier_key = (st.session_state.get("tier_key") or st.session_state.get("tier") or "basic").strip().lower()
     current_label = _current_plan_label(tier_key)

@@ -1,6 +1,7 @@
 """P1-3 / P1-4 / P1-9 — Discover controls above the scanner results.
 
-- Lens pills (P1-3): views on the SAME ranked list — Top setups, Breakouts,
+- Lens pills (P1-3, multi-select since P2-4 — combined with AND): views on the
+  SAME ranked list — Breakouts,
   Unusual volume, Gaps, Momentum, Early breakout, New since last visit — plus a
   link to the live Day Trader movers. A lens only filters rows; it never
   re-ranks. Thresholds reuse definitions the product already shows users
@@ -33,6 +34,7 @@ TREND10_MIN = 5.0         # same as the "Why" text's "+N% over 10d" rule
 AT_HIGH_MIN = 0.97        # same as the "Why" text's "at 20d high" rule
 NEW_MARK = "🆕 new"
 LENS_KEY = "hsf_lens"
+PENDING_LENS_KEY = "hsf_lens_pending"
 VIEW_KEY = "hsf_results_view"
 NEW_SET_KEY = "hsf_new_since_visit"
 
@@ -113,6 +115,17 @@ def apply_lens(df: Any, lens: str, new_set: Optional[Set[str]] = None) -> Any:
     return df[lens_mask(df, lens, new_set)]
 
 
+def apply_lenses(df: Any, lenses: List[str], new_set: Optional[Set[str]] = None) -> Any:
+    """Rows matching ALL selected lenses (P2-4 screens), original order kept."""
+    keys = [k for k in (lenses or []) if k in LENSES and k != "all"]
+    if df is None or getattr(df, "empty", True) or not keys:
+        return df
+    mask = [True] * len(df)
+    for k in keys:
+        mask = [a and b for a, b in zip(mask, lens_mask(df, k, new_set))]
+    return df[mask]
+
+
 def lens_counts(df: Any, new_set: Optional[Set[str]] = None) -> Dict[str, int]:
     if df is None or getattr(df, "empty", True):
         return {}
@@ -135,6 +148,63 @@ def mark_new(df: Any, new_set: Set[str]) -> Any:
     return out
 
 
+# ---- Saved screens (P2-4) ------------------------------------------------------------------------
+SCREENS_PREF = "hsf_screens"
+MAX_SCREENS = 10
+
+
+def normalize_screens(raw: Any) -> Dict[str, List[str]]:
+    """{name: [lens keys]} with unknown lenses dropped, names trimmed, ≤ MAX_SCREENS."""
+    out: Dict[str, List[str]] = {}
+    if not isinstance(raw, dict):
+        return out
+    for name, lenses in list(raw.items())[:MAX_SCREENS]:
+        n = str(name or "").strip()[:30]
+        keys = [k for k in (lenses or []) if k in LENSES and k != "all"] if isinstance(lenses, list) else []
+        if n and keys:
+            out[n] = keys
+    return out
+
+
+def save_screen(screens: Dict[str, List[str]], name: str, lenses: List[str]) -> Dict[str, List[str]]:
+    """Return screens with `name` saved (replacing a same-named one)."""
+    n = str(name or "").strip()[:30]
+    keys = [k for k in lenses if k in LENSES and k != "all"]
+    if not n or not keys:
+        return dict(screens)
+    out = {k: v for k, v in screens.items() if k != n}
+    out[n] = keys
+    return dict(list(out.items())[-MAX_SCREENS:])
+
+
+def _render_screens(selected: List[str]) -> None:
+    """Compact saved-screens row: apply / save / delete. Never raises."""
+    from ui.browser_prefs import get_json, put_json
+
+    screens = normalize_screens(get_json(SCREENS_PREF, {}))
+    with st.expander("Saved screens", expanded=False):
+        if screens:
+            pick = st.selectbox("Apply a saved screen", ["—"] + list(screens), key="hsf_screen_pick")
+            c1, c2 = st.columns(2)
+            if c1.button("Apply", key="hsf_screen_apply", disabled=pick == "—"):
+                # The pills already rendered this run; apply on the next run.
+                st.session_state[PENDING_LENS_KEY] = list(screens[pick])
+                st.rerun()
+            if c2.button("Delete", key="hsf_screen_delete", disabled=pick == "—"):
+                put_json(SCREENS_PREF, {k: v for k, v in screens.items() if k != pick})
+                st.rerun()
+        keys = [k for k in selected if k != "all"]
+        name = st.text_input("Save the current lenses as", key="hsf_screen_name",
+                             placeholder="e.g. Breakouts on volume", max_chars=30)
+        if st.button("Save screen", key="hsf_screen_save", disabled=not (keys and name.strip())):
+            if put_json(SCREENS_PREF, save_screen(screens, name, keys)):
+                st.toast(f"Saved “{name.strip()}”")
+            else:
+                st.warning("HSF couldn't save that screen in this browser.")
+        if not keys:
+            st.caption("Pick one or more lenses above, then save them as a screen.")
+
+
 # ---- Streamlit ----------------------------------------------------------------------------------
 def render_discover_bar(df: Any) -> Any:
     """Lens pills + view switch above the results; returns the filtered frame.
@@ -152,21 +222,29 @@ def render_discover_bar(df: Any) -> Any:
         st.session_state[NEW_SET_KEY] = sorted(new_set)
         df = mark_new(df, new_set)
         counts = lens_counts(df, new_set)
-        options = available_lenses(counts)
-        if st.session_state.get(LENS_KEY) not in options:
-            st.session_state[LENS_KEY] = "all"
+        options = [k for k in available_lenses(counts) if k != "all"]
+        pending = st.session_state.pop(PENDING_LENS_KEY, None)
+        current = pending if pending is not None else st.session_state.get(LENS_KEY)
+        if isinstance(current, str):            # older single-lens state (e.g. Today's link)
+            current = [] if current == "all" else [current]
+        st.session_state[LENS_KEY] = [k for k in (current or []) if k in options]
         c1, c2 = st.columns([4, 1])
         with c1:
-            lens = st.pills(
-                "Show", options, key=LENS_KEY, selection_mode="single",
-                format_func=lambda k: LENSES[k][0] if k == "all" else f"{LENSES[k][0]} ({counts.get(k, 0)})",
+            chosen = st.pills(
+                "Lenses", options, key=LENS_KEY, selection_mode="multi",
+                format_func=lambda k: f"{LENSES[k][0]} ({counts.get(k, 0)})",
                 label_visibility="collapsed",
-            ) or "all"
+            ) or []
         with c2:
             st.segmented_control("View", ["Table", "Cards"], key=VIEW_KEY, default="Table",
                                  label_visibility="collapsed")
         st.page_link("pages/day_trader.py", label="Live movers (Day Trader)", icon="⚡")
-        return apply_lens(df, lens, new_set)
+        _render_screens(list(chosen))
+        filtered = apply_lenses(df, list(chosen), new_set)
+        if chosen and (filtered is None or filtered.empty):
+            st.info("No setups match all the selected lenses right now. Showing all setups.")
+            return df
+        return filtered
     except Exception as exc:
         from ui.safe_errors import report_error
 

@@ -11,6 +11,9 @@ from ui.showcase import apply_showcase_styles, initial_sidebar_state
 
 st.set_page_config(page_title="Day Trader — live", page_icon="⚡", layout="wide",
                    initial_sidebar_state=initial_sidebar_state())
+from ui.chrome import hide_developer_chrome  # noqa: E402
+
+hide_developer_chrome()  # Run 62/P2: before any sign-in gate
 apply_showcase_styles()
 
 _username = (st.session_state.get("username") or "").strip().lower()

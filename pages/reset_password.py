@@ -105,13 +105,17 @@ def _set_new_password_form(token: str) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Reset Password | HSFinest.AI", page_icon="🔑")
+    from ui.chrome import hide_developer_chrome  # noqa: E402
+    hide_developer_chrome()  # Run 62/P2: before any sign-in gate
     try:
         from ui.header import render_page_logo
 
         render_page_logo()
     except Exception:
         pass
-    st.title("🔑 Password Reset")
+    from ui.design_system import render_page_header
+
+    render_page_header("Password reset", "Set a new password for your account.")
 
     raw_token = st.query_params.get("token", "")
     # Guard against oversized or malformed tokens before hitting the DB.

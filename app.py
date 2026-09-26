@@ -423,6 +423,8 @@ def main():
     if not authed:
         # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
+    if st.session_state.get("hsf_after_login_page"):  # P2-5: return to a shared link
+        st.switch_page(st.session_state.pop("hsf_after_login_page"))
 
     # If non-auth modules failed to import, surface the error after login.
     # This ensures users can still log in and we get a visible failure reason.
@@ -560,6 +562,11 @@ def main():
     try:  # Run 62: operational freshness only; optional like the banner above
         from ui.trust_banner import render_trust_banner
         render_trust_banner()
+    except Exception:
+        pass
+    try:  # P2-3: first-run tour (once per browser)
+        from ui.tour import render_tour
+        render_tour("scanner")
     except Exception:
         pass
     try:  # fired-alerts bell stays near the top (P0-6)

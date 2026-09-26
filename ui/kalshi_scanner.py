@@ -114,7 +114,9 @@ def render_kalshi_scanner() -> None:
     if st is None:
         return
     try:
-        st.markdown("## 🪙 Kalshi BTC Monitor")
+        from ui.design_system import render_page_header
+
+        render_page_header("Kalshi BTC monitor", "Labs: public Kalshi bitcoin market data.")
         st.caption(
             "Live Bitcoin price + chart and Kalshi's open BTC event markets with "
             "their implied odds. A monitor, not a trading signal — testing showed "

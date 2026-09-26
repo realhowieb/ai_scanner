@@ -32,13 +32,17 @@ def _render_resend_box() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Verify Email | HSFinest.AI", page_icon="✉️")
+    from ui.chrome import hide_developer_chrome  # noqa: E402
+    hide_developer_chrome()  # Run 62/P2: before any sign-in gate
     try:
         from ui.header import render_page_logo
 
         render_page_logo()
     except Exception:
         pass
-    st.title("✉️ Email Verification")
+    from ui.design_system import render_page_header
+
+    render_page_header("Email verification", "Confirm your email address.")
 
     raw_token = (st.query_params.get("token", "") or "").strip()
     token = raw_token if raw_token and len(raw_token) <= 128 else ""

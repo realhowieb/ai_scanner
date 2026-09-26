@@ -615,7 +615,9 @@ def render_day_trader_panel(
     from ui.showcase import screenshot_mode
 
     showcase = screenshot_mode()
-    st.markdown("## ⚡ Day Trader — live")
+    from ui.design_system import render_page_header
+
+    render_page_header("Day Trader", "Live movers: gappers, VWAP and relative volume, in real time.")
     try:
         from ui.ticker_strip import render_ticker_strip
 

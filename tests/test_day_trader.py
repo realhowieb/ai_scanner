@@ -66,7 +66,7 @@ class ParseSymbolsTests(unittest.TestCase):
         # movers screen) may lazily import market_data earlier in the file, but
         # those only execute when called, after the header renders.
         render = source[source.index("def render_day_trader_panel"):]
-        header_idx = render.index('st.markdown("## ⚡ Day Trader — live")')
+        header_idx = render.index('render_page_header("Day Trader"')
         table_import_idx = render.index("from market_data import build_day_trader_metrics")
         self.assertLess(header_idx, table_import_idx)
 
