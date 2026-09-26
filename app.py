@@ -216,7 +216,6 @@ try:
     from ui.footer import render_footer
     from ui.header import render_header, render_market_snapshot, render_price_ticker
     from ui.history import render_history_expander
-    from ui.journal import render_journal_panel
     from ui.market_default import default_results
     from ui.onboarding import render_hsf_onboarding_entry, render_scanner_orientation
     from ui.prebreakout_tab import render_prebreakout_tab
@@ -264,7 +263,6 @@ except Exception as _e:
     render_watchlists_panel = _missing  # type: ignore
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
-    render_journal_panel = lambda *a, **k: None  # type: ignore
     render_hsf_onboarding_entry = lambda *a, **k: None  # type: ignore
     render_scanner_orientation = lambda *a, **k: None  # type: ignore
     add_why_column = lambda df: df  # type: ignore
@@ -561,6 +559,11 @@ def main():
         render_trust_banner()
     except Exception:
         pass
+    try:  # fired-alerts bell stays near the top (P0-6)
+        from ui.notifications import render_alert_bell
+        render_alert_bell(username)
+    except Exception:
+        pass
 
     render_hsf_onboarding_entry(username, tier_name=tier_name)
     st.markdown("---")
@@ -672,6 +675,11 @@ def main():
 
     render_market_snapshot(results_df=_snapshot_df)
 
+    # P0-6: results are the hero. The slot sits here but is filled further
+    # down, after the scan controls run, so a scan started below still shows
+    # its results in the same run.
+    st.markdown("## Scanner")
+    results_slot = st.container()
     st.markdown("---")
 
     # -------- Watchlists --------
@@ -681,28 +689,15 @@ def main():
     # One compact block right under the watchlist card wall (the heat strip was
     # retired — the card wall shows the same per-name day read).
     try:
-        from ui.notifications import render_alert_bell
-
-        render_alert_bell(username)
-    except Exception:
-        pass
-    try:
         from ui.whats_new import render_whats_new_strip
 
         render_whats_new_strip()
     except Exception:
         pass
-    try:
-        st.page_link(
-            "pages/day_trader.py",
-            label="⚡ Day Trader — live (gappers · VWAP · RVOL, real-time)",
-            icon="📈",
-        )
-    except Exception:
-        pass
     st.session_state["active_watchlist_id"] = watch_id
     st.session_state["active_watchlist_tickers"] = watch_tickers
     st.markdown("---")
+    st.markdown("## Run your own scan")
 
     render_earnings_controls(
         flags=flags,
@@ -741,75 +736,44 @@ def main():
         st.rerun()
 
     if st.session_state.get("hsf_first_run"): render_scanner_orientation(username)
-    st.markdown("## Scanner")
     render_three_step_scanner()
-    st.markdown("---")
 
-    df = default_results(get_results_df())  # Run 63: latest full-market scan until you run your own
-    df, scan_ran_at = prepare_results_with_earnings(
-        df,
-        flags=flags,
-        earn_col_days=EARN_COL_DAYS,
-        add_earnings_days_column=add_earnings_days_column,
-        quiet_external_calls=_quiet_external_calls,
-    )
-    df = add_why_column(df)  # plain-English "why this passed" per row
-
-    render_results_tabs(
-        df=df,
-        flags=flags,
-        scan_ran_at=scan_ran_at,
-        username=username,
-        db_status=db_status,
-        admin_users=ADMIN_USERS,
-        list_runs=list_runs,
-        load_run_results=load_run_results,
-        render_results=render_results,
-        render_prebreakout_tab=render_prebreakout_tab,
-        render_admin_users_panel=render_admin_users_panel,
-        render_chart_for_ticker=render_chart_for_ticker,
-        generate_ai_note=generate_ai_note,
-        get_db_conn=_get_db_conn_for_app,
-        normalize_results_to_df=_normalize_results_to_df,
-    )
-
-    # -------- Alerts: moved to their own page --------
-    # The bell at the top of the page surfaces fired alerts; management
-    # (create/scorecards/feed) lives on pages/alerts.py. In-context creation
-    # survives via 'Alert me on this' in the ticker details.
-    st.markdown("---")
-    try:
-        st.page_link(
-            "pages/alerts.py",
-            label="🔔 Alerts — create & manage (breakout · watchlist · price · live % move · RVOL)",
-            icon="⚙️",
+    with results_slot:  # rendered up top (see results_slot above)
+        df = default_results(get_results_df())  # Run 63: latest full-market scan until you run your own
+        df, scan_ran_at = prepare_results_with_earnings(
+            df,
+            flags=flags,
+            earn_col_days=EARN_COL_DAYS,
+            add_earnings_days_column=add_earnings_days_column,
+            quiet_external_calls=_quiet_external_calls,
         )
-    except Exception:
-        pass
+        df = add_why_column(df)  # plain-English "why this passed" per row
+        render_results_tabs(
+            df=df,
+            flags=flags,
+            scan_ran_at=scan_ran_at,
+            username=username,
+            db_status=db_status,
+            admin_users=ADMIN_USERS,
+            list_runs=list_runs,
+            load_run_results=load_run_results,
+            render_results=render_results,
+            render_prebreakout_tab=render_prebreakout_tab,
+            render_admin_users_panel=render_admin_users_panel,
+            render_chart_for_ticker=render_chart_for_ticker,
+            generate_ai_note=generate_ai_note,
+            get_db_conn=_get_db_conn_for_app,
+            normalize_results_to_df=_normalize_results_to_df,
+        )
 
-    # Alpaca paper-trading account connection (Premium; hidden otherwise).
+    # P0-6: other tools live on their own pages (paper trading on Settings,
+    # the journal and paper activity on Journal); one compact row links them.
+    st.markdown("---")
     try:
-        from ui.paper_trade import render_connect_panel
-
-        render_connect_panel(username)
-    except Exception as e:
-        # Don't vanish silently — a swallowed error here previously left the
-        # connect panel showing its intro caption but no input fields.
-        from ui.safe_errors import show_error
-
-        show_error("the paper-trading panel", e)
-
-    # Live paper-account activity feed (positions + orders; poll-on-refresh).
-    try:
-        from ui.paper_events import render_activity_feed
-
-        render_activity_feed(username)
-    except Exception:
-        pass
-
-    # Trade journal (positions logged from trade plans; hidden until first log).
-    try:
-        render_journal_panel(username)
+        c1, c2, c3 = st.columns(3)
+        c1.page_link("pages/day_trader.py", label="Day Trader (live)", icon="⚡")
+        c2.page_link("pages/alerts.py", label="Alerts", icon="🔔")
+        c3.page_link("pages/journal.py", label="Journal & paper activity", icon="📓")
     except Exception:
         pass
 

@@ -46,4 +46,16 @@ except Exception as e:
 
     show_error("your journal", e)
 
+# Paper-account activity (positions + orders) moved here from the Scanner page
+# (P0-6). Renders nothing until a paper account is connected in Settings.
+try:
+    from ui.paper_events import render_activity_feed
+
+    render_activity_feed(_username)
+except Exception as e:
+    from ui.safe_errors import show_error
+
+    show_error("paper-trading activity", e)
+st.page_link("pages/settings.py", label="Connect or manage a paper-trading account", icon="⚙️")
+
 st.page_link("app.py", label="← Back to scanner", icon="🏠")
