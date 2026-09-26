@@ -797,6 +797,9 @@ def gate_r_escalation() -> Dict[str, Any]:
     return _gate(_check(conds), {"checks": conds, "markdown_excerpt": md[:600]}, "recovery_controller.escalation")
 
 
+RUN56_DISCLAIMER = "Evidence quantity/quality only."
+
+
 def gate_s_anti_peeking(extra_artifacts: Optional[List[Path]] = None) -> Dict[str, Any]:
     t0 = _dt.datetime(2026, 11, 25, 17, 25, tzinfo=UTC)
     w = _stale_world(t0)
@@ -815,15 +818,27 @@ def gate_s_anti_peeking(extra_artifacts: Optional[List[Path]] = None) -> Dict[st
         if p.exists():
             txt = p.read_text()
             obj = json.loads(txt) if p.suffix == ".json" else None
-            bad[p.name] = (sh.forbidden_keys(obj) if obj is not None else []) + sh.forbidden_text(txt)
+            if p.name.startswith("forward_evidence_readiness"):
+                # Run 56 artifacts are audited under Run 56's own contract: coverage fields such as
+                # mfe_coverage_pct are allowed, and its negative disclaimer line is not a leak.
+                if obj is not None:
+                    scan = {k: v for k, v in obj.items()
+                            if not (k == "anti_peeking" and str(v).startswith(RUN56_DISCLAIMER))}
+                    bad[p.name] = fr.forbidden_keys(obj) + sh.forbidden_text(json.dumps(scan, default=str))
+                else:
+                    txt = "\n".join(ln for ln in txt.splitlines() if not ln.lstrip("_").startswith(RUN56_DISCLAIMER))
+                    bad[p.name] = sh.forbidden_text(txt)
+            else:
+                bad[p.name] = (sh.forbidden_keys(obj) if obj is not None else []) + sh.forbidden_text(txt)
     injected = copy.deepcopy(health_inputs(t0))
     injected["readiness"]["win_rate"] = 0.9
     injected["readiness"]["candidate_mean_return"] = 0.01
     leak = sh.evaluate(injected)
-    bad["injected effectiveness passthrough"] = [k for k in ("win_rate", "candidate_mean_return")
-                                                 if k in json.dumps(leak)]
+    bad["injected metric passthrough"] = [k for k in ("win_rate", "candidate_mean_return")
+                                          if k in json.dumps(leak)]
     conds = {k: not v for k, v in bad.items()}
-    return _gate(_check(conds), {"checks": conds, "violations": {k: v for k, v in bad.items() if v}},
+    # Counts only: echoing the offending strings would make the certificate itself a leak.
+    return _gate(_check(conds), {"checks": conds, "violation_counts": {k: len(v) for k, v in bad.items() if v}},
                  "system_health.assert_clean / forbidden_keys / forbidden_text")
 
 

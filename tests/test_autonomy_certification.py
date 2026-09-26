@@ -105,5 +105,27 @@ class FrozenScannerComparisonTests(unittest.TestCase):
         self.assertFalse(ac._same(7, 8))                                # ints exact
 
 
+class CertificateSelfCleanTests(unittest.TestCase):
+    """The script path audits the Run 56 artifacts too; the certificate must pass its own guard."""
+
+    def test_script_artifact_set_passes_and_certificate_is_clean(self):
+        from analytics import system_health as sh
+        health = json.loads((ROOT / "artifacts" / "health" / "system_health.json").read_text())
+        plan = json.loads((ROOT / "artifacts" / "health" / "recovery_plan.json").read_text())
+        arts = sorted((ROOT / "artifacts" / "health").glob("*.json")) + sorted((ROOT / "artifacts" / "health").glob("*.md")) \
+            + sorted((ROOT / "artifacts" / "research").glob("forward_evidence_readiness.*"))
+        arts = [a for a in arts if not a.name.startswith("autonomy_certification")]
+        r = ac.run_all(current_health=health, current_plan=plan, extra_artifacts=arts)
+        self.assertEqual(r["gates"]["S"]["status"], "PASS", r["gates"]["S"]["evidence"])
+        sh.assert_clean(r)
+
+    def test_run56_leak_is_still_caught(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "forward_evidence_readiness.json"
+            p.write_text(json.dumps({"horizons": {"+5m": {"CANDIDATE": {"win_rate": 0.6}}}}))
+            self.assertEqual(ac.gate_s_anti_peeking([p])["status"], "FAIL")
+
+
 if __name__ == "__main__":
     unittest.main()
