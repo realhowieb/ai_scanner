@@ -1,0 +1,851 @@
+{
+  "schema": "hsf-autonomy-certification-1.0",
+  "release": "HSF Autonomous Research Mode v1",
+  "gates": {
+    "A": {
+      "title": "Scheduled operation",
+      "status": "PASS",
+      "evidence": {
+        "workflows": {
+          "autonomous-recovery.yml": {
+            "parser": "yaml",
+            "schedules": [
+              "25 17 * * 1-5",
+              "5 0 * * 2-6"
+            ],
+            "workflow_dispatch": true,
+            "workflow_run": false,
+            "jobs": 1
+          },
+          "autonomy-certification.yml": {
+            "parser": "yaml",
+            "schedules": [],
+            "workflow_dispatch": true,
+            "workflow_run": false,
+            "jobs": 1
+          },
+          "forward-evidence-readiness.yml": {
+            "parser": "yaml",
+            "schedules": [
+              "15 23 * * 1-5"
+            ],
+            "workflow_dispatch": true,
+            "workflow_run": false,
+            "jobs": 1
+          },
+          "mature-observations.yml": {
+            "parser": "yaml",
+            "schedules": [
+              "*/30 13-22 * * 1-5"
+            ],
+            "workflow_dispatch": true,
+            "workflow_run": false,
+            "jobs": 1
+          },
+          "refresh-universe.yml": {
+            "parser": "yaml",
+            "schedules": [
+              "30 10 * * 0"
+            ],
+            "workflow_dispatch": true,
+            "workflow_run": false,
+            "jobs": 1
+          },
+          "scheduled-scans.yml": {
+            "parser": "yaml",
+            "schedules": [
+              "35 14 * * 1-5",
+              "0 17 * * 1-5",
+              "30 20 * * 1-5",
+              "10 21 * * 1-5"
+            ],
+            "workflow_dispatch": true,
+            "workflow_run": false,
+            "jobs": 1
+          },
+          "system-health.yml": {
+            "parser": "yaml",
+            "schedules": [
+              "5 17 * * 1-5",
+              "45 23 * * 1-5"
+            ],
+            "workflow_dispatch": true,
+            "workflow_run": false,
+            "jobs": 1
+          }
+        },
+        "health_recovery_runs_per_week": 20,
+        "checks": {
+          "autonomous-recovery.yml parses with jobs": true,
+          "autonomous-recovery.yml has no workflow_run chain": true,
+          "autonomy-certification.yml parses with jobs": true,
+          "autonomy-certification.yml has no workflow_run chain": true,
+          "certification is dispatch-only": true,
+          "certification never enables recovery": true,
+          "forward-evidence-readiness.yml parses with jobs": true,
+          "forward-evidence-readiness.yml has no workflow_run chain": true,
+          "mature-observations.yml parses with jobs": true,
+          "mature-observations.yml has no workflow_run chain": true,
+          "refresh-universe.yml parses with jobs": true,
+          "refresh-universe.yml has no workflow_run chain": true,
+          "scheduled-scans.yml parses with jobs": true,
+          "scheduled-scans.yml has no workflow_run chain": true,
+          "system-health.yml parses with jobs": true,
+          "system-health.yml has no workflow_run chain": true,
+          "recovery never dispatches itself": true,
+          "no other workflow triggers recovery": true,
+          "health+recovery \u2264 30 scheduled runs/week": true
+        }
+      },
+      "reference": ".github/workflows/*.yml; recovery_policy.KNOWN_WORKFLOWS",
+      "mandatory": true,
+      "notes": ""
+    },
+    "B": {
+      "title": "Market calendar safety",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "weekday is trading day": true,
+          "Saturday not trading": true,
+          "Christmas not trading": true,
+          "Thanksgiving not trading": true,
+          "early close 13:00 ET": true,
+          "saturday: no incidents": true,
+          "saturday: no recovery": true,
+          "christmas: no incidents": true,
+          "christmas: no recovery": true,
+          "early_close_evening: no incidents": true,
+          "early_close_evening: no recovery": true,
+          "early close: 14:35 ET not a regular session": true
+        },
+        "cases": {
+          "saturday": {
+            "incidents": [],
+            "would_execute": []
+          },
+          "christmas": {
+            "incidents": [],
+            "would_execute": []
+          },
+          "early_close_evening": {
+            "incidents": [],
+            "would_execute": []
+          }
+        }
+      },
+      "reference": "analytics/market_calendar.py",
+      "mandatory": true,
+      "notes": ""
+    },
+    "C": {
+      "title": "Scanner point-in-time integrity",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "missed scan detected": true,
+          "policy ESCALATE": true,
+          "no scanner rerun executed": true,
+          "window condition false (15:00 vs 09:35)": true,
+          "idempotency not claimed": true
+        },
+        "decision": {
+          "policy": "ESCALATE",
+          "reason": "scanner rerun not provably safe: idempotency_proven, duplicate_ids_prevented_for_rerun, within_market_time_window, no_successful_equivalent"
+        }
+      },
+      "reference": "recovery_policy.scanner_guard; ALLOWLIST.RETRY_SAFE_SCANNER_RUN",
+      "mandatory": true,
+      "notes": ""
+    },
+    "D": {
+      "title": "Research capture idempotency",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "stable ids across executions": true,
+          "first save wrote all": true,
+          "second save wrote none": true,
+          "retry wrote none": true,
+          "row count unchanged": true,
+          "recovery never reruns the scanner": true
+        },
+        "saves": [
+          {
+            "attempted": 12,
+            "written": 12,
+            "duplicates": 0,
+            "failed": 0
+          },
+          {
+            "attempted": 12,
+            "written": 0,
+            "duplicates": 12,
+            "failed": 0
+          },
+          {
+            "attempted": 12,
+            "written": 0,
+            "duplicates": 12,
+            "failed": 0
+          }
+        ],
+        "rows": 12
+      },
+      "reference": "hsf_observation.make_observation_id (hour bucket); save_observations_batch ON CONFLICT DO NOTHING",
+      "mandatory": true,
+      "notes": ""
+    },
+    "E": {
+      "title": "Maturation idempotency",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "first run matured": true,
+          "reruns write nothing": true,
+          "values unchanged across reruns": true,
+          "no duplicate keys": true,
+          "retirement deterministic": true
+        },
+        "matured_per_run": [
+          16,
+          0,
+          0
+        ]
+      },
+      "reference": "scripts/mature_observations.py; db.hsf_observations.save_outcome (first-write-wins)",
+      "mandatory": true,
+      "notes": ""
+    },
+    "F": {
+      "title": "Provider failure handling",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "429 retried then ok": true,
+          "5xx retried then ok": true,
+          "timeout retried then ok": true,
+          "empty response is missing data (not an error)": true,
+          "persistent 429 raises bounded RateLimit error": true,
+          "recovery retries at most 2x": true,
+          "then escalates": true,
+          "one execution per action per cycle": true,
+          "secrets scrubbed": true
+        },
+        "recovery_calls": [
+          "RETRY_TRANSIENT_PROVIDER_OPERATION",
+          "RETRY_TRANSIENT_PROVIDER_OPERATION"
+        ]
+      },
+      "reference": "data/price_alpaca._alpaca_get; recovery_policy",
+      "mandatory": true,
+      "notes": ""
+    },
+    "G": {
+      "title": "Maturation backlog recovery",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "health detected stale maturation": true,
+          "policy selected RETRY_MATURATION": true,
+          "retry verified CLEARED": true,
+          "exit 0 but unhealthy \u2192 VERIFICATION_FAILED": true,
+          "escalated after limit (or circuit)": true,
+          "never more than 2 executions": true
+        },
+        "case2_results": [
+          "VERIFICATION_FAILED",
+          "VERIFICATION_FAILED",
+          "VERIFICATION_FAILED",
+          "ESCALATED",
+          "ESCALATED",
+          "ESCALATED"
+        ]
+      },
+      "reference": "recovery_controller.verify (maturation)",
+      "mandatory": true,
+      "notes": ""
+    },
+    "H": {
+      "title": "Universe recovery",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "stale refresh \u2192 bounded RETRY_UNIVERSE_REFRESH": true,
+          "tiny universe after retry NOT accepted": true,
+          "tiny universe flagged BROKEN": true,
+          "implausible fetch falls back to last-known-good": true,
+          "last-known-good cache not overwritten": true,
+          "UNIVERSE_SIZE_JUMP escalates": true
+        }
+      },
+      "reference": "data/us_market_universe.build_us_market_universe; verify()",
+      "mandatory": true,
+      "notes": ""
+    },
+    "I": {
+      "title": "Database failure safety",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "unavailable not HEALTHY": true,
+          "query failure not HEALTHY": true,
+          "no probe \u2192 UNKNOWN": true,
+          "other subsystems still render": true,
+          "integrity uncertain opens circuit": true,
+          "no execution (no repair)": true,
+          "no repair actions exist": true
+        },
+        "cases": {
+          "unavailable": {
+            "db_status": "ACTION_REQUIRED",
+            "scanner_status": "HEALTHY",
+            "circuit_open": true,
+            "executed": []
+          },
+          "query_failure": {
+            "db_status": "ACTION_REQUIRED",
+            "scanner_status": "HEALTHY",
+            "circuit_open": true,
+            "executed": []
+          },
+          "no_probe": {
+            "db_status": "UNKNOWN",
+            "scanner_status": "HEALTHY",
+            "circuit_open": true,
+            "executed": []
+          }
+        }
+      },
+      "reference": "system_health.eval_database; recovery circuit",
+      "mandatory": true,
+      "notes": ""
+    },
+    "INFO_1": {
+      "title": "Scan schedule timezone assumption (informational)",
+      "status": "WARN",
+      "evidence": {
+        "scan_slots_utc": [
+          "12:35",
+          "13:35",
+          "16:35",
+          "19:35",
+          "20:35",
+          "21:35"
+        ],
+        "dst_end": "2026-11-01",
+        "risk": "if the cron-job.org job uses America/New_York, winter runs shift +1h UTC and slot matching would raise false MISSED_SCAN incidents"
+      },
+      "reference": "analytics/market_calendar.SCAN_SLOTS_UTC",
+      "mandatory": false,
+      "notes": "Confirm the cron-job.org job timezone is UTC before 2026-11-01 (runbook)."
+    },
+    "J": {
+      "title": "Health plane failure isolation",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "github_metadata: affected subsystems UNKNOWN": true,
+          "github_metadata: database still reported": true,
+          "github_metadata: no fabricated HEALTHY system": true,
+          "alpaca_universe: affected subsystems UNKNOWN": true,
+          "alpaca_universe: database still reported": true,
+          "alpaca_universe: no fabricated HEALTHY system": true,
+          "run58_artifact: affected subsystems UNKNOWN": true,
+          "run58_artifact: database still reported": true,
+          "run58_artifact: no fabricated HEALTHY system": true,
+          "run56_readiness: affected subsystems UNKNOWN": true,
+          "run56_readiness: database still reported": true,
+          "run56_readiness: no fabricated HEALTHY system": true,
+          "maturation_report: affected subsystems UNKNOWN": true,
+          "maturation_report: database still reported": true,
+          "maturation_report: no fabricated HEALTHY system": true,
+          "missing Run 58 artifact \u2192 artifact freshness UNKNOWN": true,
+          "missing maturation report surfaces an incident": true
+        },
+        "statuses": {
+          "github_metadata": {
+            "universe": "HEALTHY",
+            "scanner": "UNKNOWN",
+            "research_capture": "HEALTHY",
+            "maturation": "HEALTHY",
+            "market_data": "HEALTHY",
+            "cohort_parity": "WAITING",
+            "forward_evidence": "WAITING",
+            "workflows": "UNKNOWN",
+            "database": "HEALTHY",
+            "artifact_freshness": "HEALTHY"
+          },
+          "alpaca_universe": {
+            "universe": "UNKNOWN",
+            "scanner": "HEALTHY",
+            "research_capture": "HEALTHY",
+            "maturation": "HEALTHY",
+            "market_data": "HEALTHY",
+            "cohort_parity": "WAITING",
+            "forward_evidence": "WAITING",
+            "workflows": "HEALTHY",
+            "database": "HEALTHY",
+            "artifact_freshness": "HEALTHY"
+          },
+          "run58_artifact": {
+            "universe": "HEALTHY",
+            "scanner": "HEALTHY",
+            "research_capture": "HEALTHY",
+            "maturation": "HEALTHY",
+            "market_data": "HEALTHY",
+            "cohort_parity": "WAITING",
+            "forward_evidence": "WAITING",
+            "workflows": "HEALTHY",
+            "database": "HEALTHY",
+            "artifact_freshness": "UNKNOWN"
+          },
+          "run56_readiness": {
+            "universe": "HEALTHY",
+            "scanner": "HEALTHY",
+            "research_capture": "HEALTHY",
+            "maturation": "HEALTHY",
+            "market_data": "HEALTHY",
+            "cohort_parity": "WAITING",
+            "forward_evidence": "UNKNOWN",
+            "workflows": "HEALTHY",
+            "database": "HEALTHY",
+            "artifact_freshness": "HEALTHY"
+          },
+          "maturation_report": {
+            "universe": "HEALTHY",
+            "scanner": "HEALTHY",
+            "research_capture": "HEALTHY",
+            "maturation": "DEGRADED",
+            "market_data": "HEALTHY",
+            "cohort_parity": "WAITING",
+            "forward_evidence": "WAITING",
+            "workflows": "HEALTHY",
+            "database": "HEALTHY",
+            "artifact_freshness": "HEALTHY"
+          }
+        }
+      },
+      "reference": "system_health.evaluate isolation",
+      "mandatory": true,
+      "notes": ""
+    },
+    "K": {
+      "title": "Recovery allowlist",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "every allowlisted action executes": true,
+          "dispatch URL is the fixed workflow": true,
+          "inputs are the fixed constants": true,
+          "rejects unknown action": true,
+          "rejects arbitrary workflow": true,
+          "rejects command text": true,
+          "unknown action gate rejects": true,
+          "incident command text escalates": true,
+          "exactly 8 allowlisted actions": true
+        },
+        "dispatches": 6
+      },
+      "reference": "scripts/autonomous_recovery.execute_action",
+      "mandatory": true,
+      "notes": ""
+    },
+    "L": {
+      "title": "Prohibited model actions",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "CHANGE_SCORE_WEIGHT": true,
+          "CHANGE_THRESHOLD": true,
+          "CHANGE_TIER": true,
+          "CHANGE_CONFLICT_PENALTY": true,
+          "CHANGE_CANDIDATE_RULE": true,
+          "CHANGE_CONTROL_RULE": true,
+          "CHANGE_OUTCOME_FORMULA": true,
+          "RESET_FORWARD_EPOCH": true,
+          "DELETE_RESEARCH_DATA": true,
+          "REWRITE_OUTCOME": true,
+          "CHANGE_SECRET": true,
+          "no allowlisted action touches model/research": true
+        }
+      },
+      "reference": "recovery_policy.decide_requested_action / PROHIBITED_ACTIONS",
+      "mandatory": true,
+      "notes": ""
+    },
+    "M": {
+      "title": "Attempt limit",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "exactly 2 attempts": true,
+          "then ESCALATE": true,
+          "ESCALATED event": true
+        },
+        "policies": [
+          "AUTO_RECOVER",
+          "AUTO_RECOVER",
+          "ESCALATE",
+          "ESCALATE",
+          "ESCALATE"
+        ]
+      },
+      "reference": "recovery_policy.attempt_state",
+      "mandatory": true,
+      "notes": ""
+    },
+    "N": {
+      "title": "Cooldown",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "one execution within the cooldown": true,
+          "cooldown recorded": true
+        },
+        "executions": 1
+      },
+      "reference": "ALLOWLIST cooldown_min",
+      "mandatory": true,
+      "notes": ""
+    },
+    "O": {
+      "title": "Kill switch",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "disabled: no execution": true,
+          "observe: no execution": true,
+          "typo: no execution": true,
+          "unset: no execution": true,
+          "disabled: monitoring + planning continue": true,
+          "observe: monitoring + planning continue": true,
+          "typo: monitoring + planning continue": true,
+          "unset: monitoring + planning continue": true,
+          "recover: monitoring + planning continue": true,
+          "recover mode executes under fixture": true,
+          "no model mode exists": true
+        },
+        "modes": {
+          "disabled": {
+            "health_rendered": true,
+            "plan": [
+              "maturation:MATURATION_FAILING"
+            ],
+            "executed": [],
+            "state": "OBSERVE_ONLY"
+          },
+          "observe": {
+            "health_rendered": true,
+            "plan": [
+              "maturation:MATURATION_FAILING"
+            ],
+            "executed": [],
+            "state": "OBSERVE_ONLY"
+          },
+          "typo": {
+            "health_rendered": true,
+            "plan": [
+              "maturation:MATURATION_FAILING"
+            ],
+            "executed": [],
+            "state": "OBSERVE_ONLY"
+          },
+          "unset": {
+            "health_rendered": true,
+            "plan": [
+              "maturation:MATURATION_FAILING"
+            ],
+            "executed": [],
+            "state": "OBSERVE_ONLY"
+          },
+          "recover": {
+            "health_rendered": true,
+            "plan": [
+              "maturation:MATURATION_FAILING"
+            ],
+            "executed": [
+              "RETRY_MATURATION"
+            ],
+            "state": "RECOVERY_ENABLED"
+          }
+        }
+      },
+      "reference": "recovery_policy.autonomy_config",
+      "mandatory": true,
+      "notes": ""
+    },
+    "P": {
+      "title": "Circuit breaker",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "repeated failures open circuit": true,
+          "CIRCUIT_OPENED recorded": true,
+          "no execution while open": true,
+          "escalation produced": true,
+          "does not silently reset": true,
+          "multiple critical incidents open circuit": true,
+          "new critical after recovery opens circuit": true,
+          "human reset closes circuit": true,
+          "monitoring continues while open": true
+        }
+      },
+      "reference": "recovery_policy.circuit_state",
+      "mandatory": true,
+      "notes": ""
+    },
+    "Q": {
+      "title": "Recovery ledger",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "attempt event has audit fields": true,
+          "health before/after captured": true,
+          "history preserved (append-only)": true,
+          "no delete/update API": true
+        },
+        "events": 3
+      },
+      "reference": "db/recovery_ledger.py",
+      "mandatory": true,
+      "notes": ""
+    },
+    "R": {
+      "title": "Human escalation",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "escalation required": true,
+          "what happened": true,
+          "when": true,
+          "severity": true,
+          "what HSF tried": true,
+          "attempts used": true,
+          "system state": true,
+          "recommended human action": true,
+          "markdown headline": true
+        },
+        "markdown_excerpt": "# HSF HUMAN ACTION REQUIRED\n\nSystem state: **ACTION_REQUIRED** \u00b7 generated 2026-11-25T16:40:00+00:00\n\n## AUTONOMY_CIRCUIT_OPEN\n\n- Incident: `system:AUTONOMY_CIRCUIT_OPEN` (CRITICAL)\n- Detected: None\n- Automatic attempts: stopped\n- Recovery: **HALTED**\n- Why escalated: 2 subsystems ACTION_REQUIRED: ['maturation', 'workflows']\n- **Recommended human action:** review the recovery ledger, fix the cause, then reset the circuit (python -m scripts.autonomous_recovery --reset-circuit --by <name>)\n\n## MATURATION_FAILING\n\n- Incident: `maturation:MATURATION_FAILING` (CRITICAL)\n- Detected: 2026-11-24T22:30"
+      },
+      "reference": "recovery_controller.escalation",
+      "mandatory": true,
+      "notes": ""
+    },
+    "S": {
+      "title": "Anti-peeking",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "health.json": true,
+          "plan": true,
+          "escalation": true,
+          "ledger": true,
+          "markdown": true,
+          "streamlit view source": true,
+          "human_escalation.json": true,
+          "recovery_plan.json": true,
+          "system_health.json": true,
+          "human_escalation.md": true,
+          "recovery_plan.md": true,
+          "system_health.md": true,
+          "forward_evidence_readiness.json": true,
+          "forward_evidence_readiness.md": true,
+          "injected metric passthrough": true
+        },
+        "violation_counts": {}
+      },
+      "reference": "system_health.assert_clean / forbidden_keys / forbidden_text",
+      "mandatory": true,
+      "notes": ""
+    },
+    "T": {
+      "title": "Forward epoch preservation",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "unchanged during certification": true,
+          "equals Run 56 epoch": true,
+          "gates unchanged": true
+        },
+        "epoch": {
+          "forward_epoch_start_timestamp": "2026-09-26T07:23:11+00:00",
+          "run55_evaluation_commit": "284e2ac8ec8640d73679c55555772eeda2505485",
+          "run55_criteria_commit": "c5d34a751d00b9245a43d34e98694ce1e94de1dc"
+        }
+      },
+      "reference": "analytics/forward_readiness.FORWARD_EPOCH",
+      "mandatory": true,
+      "notes": ""
+    },
+    "U": {
+      "title": "Frozen scanner regression",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "tickers": true,
+          "scores": true,
+          "near_miss": true,
+          "controls": true,
+          "observations (signal fields) identical": true
+        },
+        "n_observations": 23,
+        "first_diffs": [],
+        "python": "3.13.15",
+        "float_rel_tol": 1e-12
+      },
+      "reference": "tests/fixtures/frozen_scanner_golden.json (generated at 8e613e5; identical at ebd00a6)",
+      "mandatory": true,
+      "notes": ""
+    },
+    "V": {
+      "title": "Weekend current-state",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "no false missed-scan": true,
+          "no forward-data failure for a closed market": true,
+          "no weekend maturation recovery": true,
+          "known backlog is WATCH": true,
+          "circuit closed": true
+        },
+        "generated_at": "2026-09-26T09:44:19.243444+00:00",
+        "trading_day": false,
+        "system_status": "DEGRADED",
+        "incidents": [
+          "MATURATION_CAP_BINDING"
+        ],
+        "decisions": {
+          "MATURATION_CAP_BINDING": "WATCH"
+        }
+      },
+      "reference": "live production health + observe-mode recovery plan",
+      "mandatory": true,
+      "notes": ""
+    },
+    "W": {
+      "title": "Monday startup simulation",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "Saturday: backlog WATCH only": true,
+          "Monday pre-open: no missed-scan, no recovery": true,
+          "Monday: scans ran": true,
+          "Monday: observations captured": true,
+          "backlog cleared under 2,000 cap": true,
+          "health HEALTHY": true,
+          "forward readiness updates": true,
+          "recovery idle when healthy": true
+        }
+      },
+      "reference": "World simulation Sat \u2192 Mon",
+      "mandatory": true,
+      "notes": ""
+    },
+    "X": {
+      "title": "30-day unattended simulation",
+      "status": "PASS",
+      "evidence": {
+        "checks": {
+          "no unbounded executions (\u2264 4/day)": true,
+          "total executions bounded (\u2264 20 in 30 days)": true,
+          "no execution while circuit open": true,
+          "no scanner reruns": true,
+          "only allowlisted actions": true,
+          "no duplicate evidence": true,
+          "epoch unchanged": true,
+          "rate-limit pressure recovered": true,
+          "failed maturation recovered": true,
+          "stale artifact regenerated": true,
+          "DB outage escalated + circuit opened": true,
+          "persistent failure: \u2264 2 attempts then escalation": true,
+          "cooldowns observed": true,
+          "expected waiting: no false scan/capture incidents": true,
+          "expected waiting: no trading-day-only (BOUNDED) actions": true,
+          "transient 429 needed no action": true,
+          "system healthy at the end": true
+        },
+        "executions": [
+          [
+            "RERUN_PARITY_AUDIT",
+            "2026-11-09T17:25:00+00:00"
+          ],
+          [
+            "RETRY_TRANSIENT_PROVIDER_OPERATION",
+            "2026-11-13T23:59:00+00:00"
+          ],
+          [
+            "RERUN_PARITY_AUDIT",
+            "2026-11-16T23:59:00+00:00"
+          ],
+          [
+            "RETRY_MATURATION",
+            "2026-11-18T17:25:00+00:00"
+          ],
+          [
+            "REGENERATE_FORWARD_READINESS",
+            "2026-11-21T17:25:00+00:00"
+          ],
+          [
+            "RERUN_PARITY_AUDIT",
+            "2026-11-25T17:25:00+00:00"
+          ],
+          [
+            "RETRY_MATURATION",
+            "2026-12-02T17:25:00+00:00"
+          ],
+          [
+            "RERUN_PARITY_AUDIT",
+            "2026-12-02T17:35:00+00:00"
+          ]
+        ],
+        "ledger_results": {
+          "CIRCUIT_OPENED": 3,
+          "CIRCUIT_RESET": 2,
+          "COOLDOWN": 3,
+          "ESCALATED": 5,
+          "FAILED": 1,
+          "SUCCESS": 9
+        },
+        "trading_days": 21,
+        "non_trading_days": 9
+      },
+      "reference": "World simulation 2026-11-09 \u2192 2026-12-08 (Thanksgiving + early close)",
+      "mandatory": true,
+      "notes": ""
+    }
+  },
+  "mandatory_gates": 24,
+  "mandatory_passed": 24,
+  "mandatory_failed": 0,
+  "verdict": "AUTONOMOUS_RESEARCH_MODE_V1_CERTIFIED",
+  "engineering_certification": "AUTONOMOUS_RESEARCH_MODE_V1_CERTIFIED",
+  "autonomy_level": "AUTONOMOUS",
+  "generated_at": "2026-09-26T09:44:27.418513+00:00",
+  "certified_commit": "e3a2d5d399e437c0cf6a9f3e37dcfc3dd5fcd177",
+  "production": {
+    "source": "live",
+    "system_status": "DEGRADED",
+    "health_score": 90,
+    "human_action": "WATCH",
+    "autonomy_readiness": "RECOVERY_READY",
+    "production_autonomy_mode": "RECOVERY_ENABLED",
+    "production_mode_reason": "HSF_AUTONOMY_ENABLED=true and HSF_AUTONOMY_MODE=recover",
+    "active_incidents": [
+      "maturation:MATURATION_CAP_BINDING"
+    ],
+    "circuit_breaker": "CLOSED",
+    "ledger": {
+      "available": true,
+      "events_7d": 0
+    },
+    "forward_evidence": "NO_FORWARD_DATA"
+  },
+  "activation_required": {
+    "HSF_AUTONOMY_ENABLED": "true",
+    "HSF_AUTONOMY_MODE": "recover"
+  },
+  "defects_fixed": [
+    "Sibling incidents mapped to the same recovery action (MATURATION_STALE / MATURATION_FAILING / CONSECUTIVE_FAILURES \u2192 RETRY_MATURATION) could re-launch it inside its cooldown and bypass per-incident attempt limits. Fixed: per-action cooldown (recovery_policy.action_cooldown), shared executions recorded against every sibling incident, and sibling bookkeeping rows flagged `shared_execution` (set before persisting) and excluded from circuit-breaker failure counts. Regression tests: tests/test_autonomous_recovery.py::SiblingIncidentRegressionTests."
+  ]
+}
