@@ -82,25 +82,40 @@ def build_near_miss_observations(
     near_miss_rows: Sequence[Dict[str, Any]], *, universe: str, scan_timestamp: Any,
     session: Optional[str] = None, scan_id: Optional[str] = None,
     coverage_health: Optional[str] = None, n: Optional[int] = None,
+    research_run_context: Optional[Dict[str, Any]] = None, top_n: Optional[int] = None,
+    price_meta: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """Full-feature NEAR_MISS observations from ranked rows just below the cut.
-    Same builder/features as candidates → fair comparison (Task 3/7)."""
+    Same builder/features as candidates → fair comparison (Task 3/7).
+
+    Run 57: optional point-in-time `research_metadata` (rank = top_n + position
+    below the cut), same block as candidates. Additive, non-fatal."""
     limit = _bounded(n, DEFAULT_NEAR_MISS_N) if n is not None else near_miss_n()
     rows = list(near_miss_rows or [])[:limit]
     obs = build_scan_observations(
         rows, universe=universe, scan_timestamp=scan_timestamp, session=session,
         scan_id=scan_id, coverage_health=coverage_health)
-    return [_tag(o, NEAR_MISS, "rank_below_cutoff") for o in obs]
+    obs = [_tag(o, NEAR_MISS, "rank_below_cutoff") for o in obs]
+    if research_run_context:
+        from analytics.research_metadata import attach
+        attach(obs, research_run_context, rows=rows,
+               rank_offset=int(top_n) if top_n is not None else None, price_meta=price_meta)
+    return obs
 
 
 def build_control_observations(
     control_symbols: Sequence[str], price_snapshot: Dict[str, Dict[str, Any]], *,
     universe: str, scan_timestamp: Any, session: Optional[str] = None,
     scan_id: Optional[str] = None, coverage_health: Optional[str] = None,
+    research_run_context: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Compact CONTROL observations (identity + price/volume) for a deterministic
     sample of the broad evaluated universe (Task 4). These securities were
-    filtered before scoring, so richer technicals are honestly absent."""
+    filtered before scoring, so richer technicals are honestly absent.
+
+    Run 57: optional point-in-time `research_metadata`: the same run-level
+    provenance/regime/tier block as the scored cohorts plus the symbol's provider
+    tag. Controls are unranked, so rank and row features stay None/empty."""
     from analytics.hsf_observation import build_observation
     price_snapshot = price_snapshot or {}
     out: List[Dict[str, Any]] = []
@@ -115,6 +130,9 @@ def build_control_observations(
                             "coverage_health": coverage_health},
             scan_timestamp=scan_timestamp, data_source="scheduled_control_sample")
         out.append(_tag(o, CONTROL, "deterministic_sample"))
+    if research_run_context:
+        from analytics.research_metadata import attach
+        attach(out, research_run_context, rows=None, rank_offset=None, price_meta=price_snapshot)
     return out
 
 

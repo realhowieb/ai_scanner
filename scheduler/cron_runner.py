@@ -44,8 +44,27 @@ def _release_scan_lock() -> None:
         pass
 
 
+def _research_run_context(*, universe, scan_id, scan_params, research_sink):
+    """Run 57 point-in-time research metadata context. Non-fatal: None on error,
+    in which case observations are captured exactly as before."""
+    try:
+        from analytics.research_metadata import build_run_context
+
+        cfg = dict(scan_params)
+        if research_sink:
+            cfg["near_miss_n"] = research_sink.get("near_miss_n")
+        return build_run_context(
+            universe=universe, session=_resolve_session(), scan_id=scan_id,
+            scan_config=cfg, price_meta=(research_sink or {}).get("price_snapshot"),
+            scan_mode="scheduled")
+    except Exception as e:
+        print(f"[research_metadata] context unavailable for {universe}: {e}")
+        return None
+
+
 def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_id,
-                              candidate_symbols, coverage_report_obj) -> None:
+                              candidate_symbols, coverage_report_obj,
+                              research_ctx=None, top_n=None) -> None:
     """Persist bounded NEAR_MISS + CONTROL research observations (Run 47).
     Best-effort, non-fatal; side-effect only — never touches results/snapshots."""
     try:
@@ -62,14 +81,15 @@ def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_
         near_miss = build_near_miss_observations(
             research_sink.get("near_miss_rows") or [], universe=universe,
             scan_timestamp=scan_started_at, session=session, scan_id=scan_id,
-            coverage_health=health)
+            coverage_health=health, research_run_context=research_ctx, top_n=top_n,
+            price_meta=research_sink.get("price_snapshot"))
         controls = select_control_symbols(
             research_sink.get("evaluated_symbols") or [], scan_run_id=scan_id,
             exclude=candidate_symbols)
         control_obs = build_control_observations(
             controls, research_sink.get("price_snapshot") or {}, universe=universe,
             scan_timestamp=scan_started_at, session=session, scan_id=scan_id,
-            coverage_health=health)
+            coverage_health=health, research_run_context=research_ctx)
         res = save_observations_batch(near_miss + control_obs)
         bal = cohort_balance(
             [{"research_cohort": "CANDIDATE"}] * len(candidate_symbols)
@@ -378,21 +398,26 @@ def run_and_save(
                 research_sink = {"near_miss_n": near_miss_n()}
             except Exception:
                 research_sink = None
+        # Effective scan parameters, resolved once (same expressions as before) so
+        # Run 57 research metadata records exactly what this scan used.
+        scan_params = {
+            "premarket": premarket,
+            "afterhours": afterhours,
+            "unusual_volume": unusual_volume,
+            "min_gap": min_gap if min_gap is not None else float(os.getenv("CRON_MIN_GAP", "0")),
+            "min_price": min_price if min_price is not None else float(os.getenv("CRON_MIN_PRICE", "1")),
+            "max_price": max_price if max_price is not None else float(os.getenv("CRON_MAX_PRICE", "1000")),
+            "top_n": top_n if top_n is not None else int(os.getenv("CRON_TOP_N", "100")),
+            # Liquidity floor (20-day-avg dollar volume) to keep illiquid
+            # micro-cap/pump names out of scheduled scans + alerts. Default $5M.
+            "min_dollar_vol": float(os.getenv("CRON_MIN_DOLLAR_VOL", "5000000")),
+            "profile": profile or os.getenv("CRON_PROFILE", "regular"),
+        }
         results = run_breakout_scan(
             tickers,
             coverage_sink=coverage_sink,
             research_sink=research_sink,
-            premarket=premarket,
-            afterhours=afterhours,
-            unusual_volume=unusual_volume,
-            min_gap=min_gap if min_gap is not None else float(os.getenv("CRON_MIN_GAP", "0")),
-            min_price=min_price if min_price is not None else float(os.getenv("CRON_MIN_PRICE", "1")),
-            max_price=max_price if max_price is not None else float(os.getenv("CRON_MAX_PRICE", "1000")),
-            top_n=top_n if top_n is not None else int(os.getenv("CRON_TOP_N", "100")),
-            # Liquidity floor (20-day-avg dollar volume) to keep illiquid
-            # micro-cap/pump names out of scheduled scans + alerts. Default $5M.
-            min_dollar_vol=float(os.getenv("CRON_MIN_DOLLAR_VOL", "5000000")),
-            profile=profile or os.getenv("CRON_PROFILE", "regular"),
+            **scan_params,
             diagnostics=False,
             use_cache=True,
         )
@@ -496,6 +521,10 @@ def run_and_save(
                 )
 
                 rows = results.to_dict("records") if hasattr(results, "to_dict") else list(results)
+                research_ctx = _research_run_context(
+                    universe=universe, scan_id=scan_started_at.isoformat(),
+                    scan_params=scan_params, research_sink=research_sink)
+                price_meta = (research_sink or {}).get("price_snapshot") or None
                 cap = capture_scan_observations(
                     rows,
                     universe=universe,
@@ -506,6 +535,7 @@ def run_and_save(
                     coverage=coverage_report_obj,
                     dry_run=os.getenv("HSF_OBSERVATION_CAPTURE_DRYRUN", "0").strip() == "1",
                     research_cohort="CANDIDATE", selection_reason="top_n_candidate",
+                    research_run_context=research_ctx, price_meta=price_meta,
                 )
                 print(render_capture_text(cap))
                 _write_coverage_artifact(f"{universe}_capture", cap)
@@ -518,7 +548,8 @@ def run_and_save(
                         scan_id=scan_started_at.isoformat(),
                         candidate_symbols=[str(r.get("Ticker") or r.get("Symbol") or "").upper()
                                            for r in rows],
-                        coverage_report_obj=coverage_report_obj)
+                        coverage_report_obj=coverage_report_obj,
+                        research_ctx=research_ctx, top_n=scan_params["top_n"])
             except Exception as e:
                 print(f"[observation_capture] failed for {universe}: {e}")
                 _capture(e)

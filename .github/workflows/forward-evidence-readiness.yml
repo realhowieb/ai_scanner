@@ -54,6 +54,14 @@ jobs:
           python -m scripts.forward_evidence_readiness --out artifacts/research \
             --maturation-report artifacts/maturation/maturation_report.json
           cat artifacts/research/forward_evidence_readiness.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Research metadata completeness audit (Run 57, read-only)
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python -m scripts.audit_research_metadata --out artifacts/research
+          cat artifacts/research/research_metadata_audit.md >> "$GITHUB_STEP_SUMMARY"
       - name: Surface rerun recommendation (no automatic action)
         if: steps.monitor.outputs.RUN55_RERUN_RECOMMENDED == 'true'
         run: |
@@ -67,4 +75,6 @@ jobs:
           path: |
             artifacts/research/forward_evidence_readiness.json
             artifacts/research/forward_evidence_readiness.md
+            artifacts/research/research_metadata_audit.json
+            artifacts/research/research_metadata_audit.md
           if-no-files-found: warn

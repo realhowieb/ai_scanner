@@ -104,6 +104,13 @@ def render_markdown(r: Dict[str, Any]) -> str:
               "invalid_market_values", "cohort_overlap", "scoring_version_drift"):
         L.append(f"- {k}: {dq[k]}")
     L.append(f"- latest maturation run: {dq['maturation_run_report']}")
+    L += ["", "## Research metadata completeness (Run 57, informational)", "",
+          "| Cohort | Block % | Tier % | Regime % | Scoring version % | Commit SHA % | Provider % |",
+          "|---|---|---|---|---|---|---|"]
+    for c, m in (r.get("metadata_completeness") or {}).items():
+        L.append(f"| {c} | {_v(m['metadata_block_coverage_pct'])} | {_v(m['tier_metadata_coverage_pct'])} | "
+                 f"{_v(m['regime_metadata_coverage_pct'])} | {_v(m['scoring_version_coverage_pct'])} | "
+                 f"{_v(m['commit_sha_coverage_pct'])} | {_v(m['provider_coverage_pct'])} |")
     L += ["", "## Progress", ""]
     L += [f"- {k}: {v}" for k, v in r["progress"].items()]
     L += ["", f"_{r['anti_peeking']}_", ""]

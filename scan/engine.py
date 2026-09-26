@@ -771,6 +771,11 @@ def run_breakout_scan(
                                "volume": float(v["Volume"].iloc[-1])}
                 except (KeyError, IndexError, ValueError, TypeError):
                     continue
+                # Run 57: the frame's own provider tag (already set at fetch time)
+                # for research provenance. Read-only; no extra provider calls.
+                attrs = getattr(v, "attrs", None) or {}
+                snap[k]["source"] = attrs.get("source")
+                snap[k]["feed"] = attrs.get("feed")
             research_sink["price_snapshot"] = snap
             df = df.head(top_n)  # production output unchanged
         except _ENGINE_BOUNDARY_ERRORS as e:

@@ -437,6 +437,7 @@ def monitor(observations: Sequence[Dict[str, Any]],
         "estimated_trading_days_until_ready": estimate["value"],
         "estimate_basis": estimate["basis"],
         "estimated_trading_days_until_sample_gates": estimate["sample_gates_value"],
+        "metadata_completeness": metadata_completeness(regular),
         "run55_comparison": run55_comparison(time_cov, scan_cov, horizons_out, parity, clusters,
                                              dirs, directional_cov),
         "pre_registered_gates": GATES,
@@ -445,6 +446,27 @@ def monitor(observations: Sequence[Dict[str, Any]],
     }
     assert_no_effectiveness_metrics(report)
     return report
+
+
+def metadata_completeness(regular: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Run 57 point-in-time metadata COMPLETENESS per cohort (informational, not a
+    gate). Presence counts only; metadata values are never related to outcomes."""
+    out: Dict[str, Any] = {}
+    for c in COHORTS:
+        rows = [o for o in regular if cohort(o) == c]
+        n = len(rows)
+
+        def cov(field: str) -> Optional[float]:
+            k = sum(1 for o in rows if (o.get("research_metadata") or {}).get(field) not in (None, ""))
+            return _pct(k, n)
+        out[c] = {"observations": n,
+                  "metadata_block_coverage_pct": _pct(sum(1 for o in rows if o.get("research_metadata")), n),
+                  "tier_metadata_coverage_pct": cov("tier_at_observation"),
+                  "regime_metadata_coverage_pct": cov("market_regime_at_observation"),
+                  "scoring_version_coverage_pct": cov("scoring_version"),
+                  "commit_sha_coverage_pct": cov("scanner_commit_sha"),
+                  "provider_coverage_pct": cov("price_provider")}
+    return out
 
 
 def _invalid_market(o: Dict[str, Any]) -> bool:

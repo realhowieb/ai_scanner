@@ -210,8 +210,15 @@ def capture_scan_observations(
     conn=None,
     research_cohort: Optional[str] = None,
     selection_reason: Optional[str] = None,
+    research_run_context: Optional[Dict[str, Any]] = None,
+    price_meta: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Build and (unless dry_run) persist canonical observations for a scan.
+
+    Run 57: when `research_run_context` is given, each observation also gets a
+    point-in-time `research_metadata` block (rank = position in the ranked
+    result rows, the row's own feature columns, provider tag, provenance). It is
+    additive and non-fatal and never alters ids, features, or the rows.
 
     Best-effort and non-fatal: any failure is captured in the returned stats and
     never raised. Returns a capture-statistics dict (Task 14/17)."""
@@ -224,6 +231,10 @@ def capture_scan_observations(
         coverage_health=coverage_health, research_cohort=research_cohort,
         selection_reason=selection_reason,
     )
+    if research_run_context:
+        from analytics.research_metadata import attach
+        attach(observations, research_run_context, rows=list(result_rows or []),
+               rank_offset=0, price_meta=price_meta)
     cov_funnel = (coverage or {}).get("funnel") if coverage else None
     summary = summarize_capture(observations, coverage=cov_funnel)
 
