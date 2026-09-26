@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from ui.admin_results_tab import render_admin_tab
+from ui.market_default import MARKET_VIEW_KEY, market_view_caption
 from ui.results_empty import results_empty_message, results_tab_label
 
 RESULTS_TAB_ERRORS = (
@@ -44,7 +45,7 @@ def render_results_tabs(
         or flags.get("can_early_breakout")
         or flags.get("can_admin_panel")
     ):
-        tab_names = [results_tab_label(df)]
+        tab_names = [results_tab_label(df, st.session_state.get(MARKET_VIEW_KEY))]
 
         if flags.get("can_track_record"):
             tab_names.append("📚 Historical research")
@@ -79,7 +80,7 @@ def render_results_tabs(
         if flags.get("can_admin_panel"):
             tab_admin = tabs[idx]
     else:
-        (tab_latest,) = st.tabs([results_tab_label(df)])
+        (tab_latest,) = st.tabs([results_tab_label(df, st.session_state.get(MARKET_VIEW_KEY))])
         tab_track = None
         tab_early = None
         tab_history = None
@@ -161,8 +162,11 @@ def _render_latest_results_tab(
     load_run_results: Callable[..., Any] | None = None,
     normalize_results_to_df: Callable[..., Any] | None = None,
 ) -> None:
+    market_view = st.session_state.get(MARKET_VIEW_KEY) if rows else None
     with tab_latest:
-        if scan_ran_at:
+        if market_view:  # Run 63: default full-market view, with the scan's own time
+            st.caption(market_view_caption(market_view))
+        elif scan_ran_at:
             try:
                 st.caption(f"🕒 Scan run at {scan_ran_at.strftime('%Y-%m-%d %H:%M UTC')}")
             except RESULTS_TAB_ERRORS:
@@ -190,14 +194,16 @@ def _render_latest_results_tab(
                 render_ai_summary(df, context="latest_results")
             except RESULTS_TAB_ERRORS:
                 pass
-            try:
-                st.divider()
-                from ui.ai_insights import render_scan_diff
-                render_scan_diff(
-                    df, load_run_results, list_runs, normalize_results_to_df, username
-                )
-            except RESULTS_TAB_ERRORS:
-                pass
+            # "What changed vs your last scan" needs a scan of your own (Run 63).
+            if not market_view:
+                try:
+                    st.divider()
+                    from ui.ai_insights import render_scan_diff
+                    render_scan_diff(
+                        df, load_run_results, list_runs, normalize_results_to_df, username
+                    )
+                except RESULTS_TAB_ERRORS:
+                    pass
             try:
                 st.divider()
                 from ui.ai_chat import render_results_chat

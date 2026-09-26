@@ -21,10 +21,13 @@ def results_empty_message(df: Optional[Any]) -> str:
     return NO_SESSION_SCAN_MESSAGE if df is None else NO_MATCHES_MESSAGE
 
 
-def results_tab_label(df: Optional[Any]) -> str:
-    """Tab label: row count once a scan has results, plain wording before."""
+def results_tab_label(df: Optional[Any], market_view: Optional[Any] = None) -> str:
+    """Tab label: row count once a scan has results, plain wording before.
+    Run 63: the default full-market view is labelled as the market scan."""
     rows = 0 if df is None else len(df)
     if df is None:
         return "📊 Your scan results"
+    if market_view and rows:
+        return f"📊 Latest market scan ({rows} setups)"
     return f"📊 Latest scan results ({rows} rows)" if rows else "📊 Your scan results (no matches)"
 
