@@ -55,6 +55,14 @@ _ALERT_TYPE_LABELS = {
     "ewo_cross": "📉 EWO cross",
 }
 
+BREAKOUT_ALERT_DEFAULT = 8.0
+BREAKOUT_ALERT_SCALE_COPY = (
+    "**Breakout Score threshold** uses the scanner's supporting technical score, "
+    "not the 0-100 HSF Score. Lower thresholds fire more often; higher thresholds "
+    "are more selective. The alert fires when Breakout Score is at or above your value."
+)
+BREAKOUT_ALERT_SCALE_LEGEND = "Lower / more frequent  ←  8.0 default  →  Higher / more selective"
+
 
 def _default_value_kwargs(key: str, value):
     return {} if key in st.session_state else {"value": value}
@@ -141,7 +149,7 @@ def _fmt_alert(a: dict) -> str:
     t = a.get("alert_type")
     if t == "breakout":
         scope = "watchlist only" if a.get("watchlist_only") else "all tickers"
-        return f"🚀 Breakout ≥ {float(a.get('threshold') or 0):g} ({scope})"
+        return f"🚀 Breakout Score ≥ {float(a.get('threshold') or 0):g} ({scope})"
     if t == "watchlist":
         return "📋 Watchlist — any holding appears in scan results"
     if t == "price":
@@ -256,19 +264,28 @@ def render_alerts_panel(
         # expander → tabs nesting on the deployed Streamlit, so the inputs and
         # submit button never appeared. Keyed widgets + st.button work reliably.
         with tab_break:
-            st.caption("Fire when a ticker's breakout score crosses your threshold.")
+            st.markdown(BREAKOUT_ALERT_SCALE_COPY)
+            st.caption(BREAKOUT_ALERT_SCALE_LEGEND)
             thr = st.number_input(
-                "Breakout score ≥",
+                "Breakout Score threshold",
                 min_value=0.0,
                 step=0.5,
                 key="alert_break_thr",
-                **_default_value_kwargs("alert_break_thr", 8.0),
+                help=(
+                    "The scheduled alert runner compares each ticker's Breakout Score "
+                    "with this value using Breakout Score ≥ threshold. This does not "
+                    "use HSF Score."
+                ),
+                **_default_value_kwargs("alert_break_thr", BREAKOUT_ALERT_DEFAULT),
             )
             if st.checkbox(
-                "Show threshold history",
+                "Show threshold history and observed scale",
                 value=False,
                 key="alert_break_show_history",
-                help="Loads recent saved scans to estimate whether this threshold is too quiet or too noisy.",
+                help=(
+                    "Loads recent saved scans to show where your threshold sits relative "
+                    "to observed Breakout Scores and estimate firing frequency."
+                ),
             ):
                 # Smart create: show the observed score distribution and how
                 # often this threshold would have fired. This is intentionally
