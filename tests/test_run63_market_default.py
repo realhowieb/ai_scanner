@@ -123,6 +123,13 @@ class PresentationTests(unittest.TestCase):
         self.assertIn("market_view_caption(market_view)", tabs)
         self.assertIn("if not market_view:", tabs)          # no "vs your last scan" diff on the market view
 
+    def test_session_is_not_preseeded_with_an_empty_table(self):
+        # Regression: scans.py used to set results_df = pd.DataFrame() on every
+        # session start, so "no scan yet" looked like "no matches" and the
+        # market default never showed.
+        src = (ROOT / "ui" / "scans.py").read_text()
+        self.assertNotIn('if "results_df" not in st.session_state:', src)
+
     def test_module_is_read_only(self):
         src = (ROOT / "ui" / "market_default.py").read_text()
         for write in ("save_run", "save_daily_snapshot", "INSERT", "UPDATE", "DELETE", "results_df\"] ="):

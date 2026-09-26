@@ -161,9 +161,9 @@ def render_scan_controls(
 
     single_ticker, show_chart_btn, run_single_scan_btn = render_single_ticker_panel()
 
-    # Ensure results DataFrame exists in session state
-    if "results_df" not in st.session_state:
-        st.session_state.results_df = pd.DataFrame()
+    # Run 63: results_df stays unset until a scan actually runs. An empty
+    # DataFrame means "your scan matched nothing"; absent means "no scan yet",
+    # which lets the Scanner show the latest full-market scan instead.
 
     # --- Admin role check and universe cap overrides ---
     # Admin is a ROLE, not a tier. Admins bypass plan caps in UI + scan limits.
