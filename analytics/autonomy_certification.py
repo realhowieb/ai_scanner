@@ -413,22 +413,33 @@ def gate_f_provider_failures() -> Dict[str, Any]:
         r.raise_for_status.side_effect = RuntimeError(f"HTTP {status}") if status >= 400 else None
         return r
 
+    # The retry loop is exercised with the real `requests` exception types when installed, and
+    # with stand-ins otherwise (the smoke job's requirements-dev set has no `requests`).
+    exc = pa.requests_exc
+    if exc is None:
+        class _Timeout(Exception):
+            pass
+
+        class _ConnectionError(Exception):
+            pass
+        exc = type("requests_exc", (), {"Timeout": _Timeout, "ConnectionError": _ConnectionError,
+                                         "RequestException": Exception})
+
     def run(responses, **kw):
         fake = mock.MagicMock()
         fake.get.side_effect = list(responses)
         stats = pa.AlpacaRequestStats()
-        with mock.patch.object(pa, "requests", fake), \
+        with mock.patch.object(pa, "requests", fake), mock.patch.object(pa, "requests_exc", exc), \
                 mock.patch.object(pa, "get_alpaca_config", return_value={"data_url": "x", "api_key": "k", "api_secret": "s"}), \
                 mock.patch.object(pa, "get_alpaca_data_feed", return_value="iex"):
             try:
                 return pa.fetch_minute_bars_multi(["AAA"], "S", "E", stats=stats, sleep=lambda s: None, **kw), stats
             except Exception as e:
                 return e, stats
-    import requests as _rq
     ok_page = {"bars": {"AAA": [{"t": "T", "c": 1}]}, "next_page_token": None}
     r429, s429 = run([resp(429, headers={"Retry-After": "1"}), resp(200, ok_page)])
     r5xx, s5xx = run([resp(500), resp(503), resp(200, ok_page)])
-    rto, sto = run([_rq.exceptions.Timeout("t"), resp(200, ok_page)])
+    rto, sto = run([exc.Timeout("t"), resp(200, ok_page)])
     rempty, _ = run([resp(200, {"bars": {}, "next_page_token": None})])
     rpers, spers = run([resp(429)] * 6)
     # recovery layer: persistent provider failure is bounded then escalated
