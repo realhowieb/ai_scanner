@@ -21,7 +21,10 @@ except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
 MARKET_VIEW_KEY = "hsf_market_view"
-REPLACE_HINT = "Run your own scan above to replace this view."
+MARKET_UNAVAILABLE_KEY = "hsf_market_unavailable"
+# Session keys cleared by "Back to the latest market scan" (Run 70, P1-10).
+SESSION_SCAN_KEYS = ("results_df", "results_signature", "scan_ran_at_utc")
+REPLACE_HINT = "Run your own scan below to replace this view."
 
 
 def pick_market_run(runs: Optional[Sequence[Mapping[str, Any]]]) -> Optional[Dict[str, Any]]:
@@ -78,6 +81,7 @@ def default_results(session_df: Any) -> Any:
         return session_df
     if session_df is not None:
         st.session_state.pop(MARKET_VIEW_KEY, None)
+        st.session_state.pop(MARKET_UNAVAILABLE_KEY, None)
         return session_df
     try:
         loaded = _load_cached()
@@ -88,7 +92,27 @@ def default_results(session_df: Any) -> Any:
         loaded = None
     if not loaded:
         st.session_state.pop(MARKET_VIEW_KEY, None)
+        st.session_state[MARKET_UNAVAILABLE_KEY] = True   # P2-10: say so, not "no scan yet"
         return None
     df, meta = loaded
+    st.session_state.pop(MARKET_UNAVAILABLE_KEY, None)
     st.session_state[MARKET_VIEW_KEY] = dict(meta)
     return df.copy()   # downstream enrichment mutates in place; keep the cache clean
+
+
+def render_back_to_market() -> None:
+    """P1-10: after your own scan, one click returns to the latest full-market
+    scan (clears only the session scan). Shown only when a market scan exists."""
+    if st is None or st.session_state.get("results_df") is None:
+        return
+    try:
+        if not _load_cached():
+            return
+        if st.button("↩ Back to the latest market scan", key="hsf_back_to_market"):
+            for k in SESSION_SCAN_KEYS:
+                st.session_state.pop(k, None)
+            st.rerun()
+    except Exception as exc:
+        from ui.safe_errors import report_error
+
+        report_error("back to market scan", exc)

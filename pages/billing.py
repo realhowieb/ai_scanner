@@ -184,20 +184,20 @@ def _pricing_table() -> None:
 | Feature | Basic | Pro | Premium |
 |---|---:|---:|---:|
 | **Price** | **Free** | **$19/mo** | **$39/mo** |
-| Curated Breakout Scans | ✅ | ✅ | ✅ |
-| HSF Score (opportunity ranking) | ✅ | ✅ | ✅ |
-| Charts | ✅ | ✅ | ✅ |
-| Watchlists | ✅ | ✅ | ✅ |
+| Latest full-market ranking (HSF Score), Today, Stock Intelligence | ✅ | ✅ | ✅ |
+| Lenses, card view & saved screens | ✅ | ✅ | ✅ |
+| My Stocks (watchlists) & charts | ✅ | ✅ | ✅ |
+| Your own S&P 500 scans | ✅ | ✅ | ✅ |
 | Alerts (Breakout / Watchlist / Price) | 1 | 5 | 25 |
-| Email Alert Delivery | ❌ | ✅ | ✅ |
-| CSV Export | ❌ | ✅ | ✅ |
-| Advanced Filters | ❌ | ✅ | ✅ |
-| Earnings Calendar | ❌ | ✅ | ✅ |
-| Scan History | ❌ | ✅ | ✅ |
-| AI Insights (notes / summary / chat) | ❌ | ❌ | ✅ |
-| Early Breakout (ML) | ❌ | ❌ | ✅ |
-| Full Universe Mode | ❌ | ❌ | ✅ |
-| Diagnostics / Retrain | ❌ | ❌ | ✅ |
+| Email alert delivery | ❌ | ✅ | ✅ |
+| CSV export & interactive results table | ❌ | ✅ | ✅ |
+| Your own Nasdaq scans & advanced scan filters | ❌ | ✅ | ✅ |
+| Earnings calendar & filters | ❌ | ✅ | ✅ |
+| Scan history & historical research | ❌ | ✅ | ✅ |
+| AI notes, summaries & chat | ❌ | ❌ | ✅ |
+| Early Breakout candidates (model) | ❌ | ❌ | ✅ |
+| Your own full-universe scans (3-step scanner) | ❌ | ❌ | ✅ |
+| Paper trading (Alpaca) | ❌ | ❌ | ✅ |
 """
     )
 
@@ -207,8 +207,8 @@ def _benefits_block() -> None:
     st.markdown(
         """
 - **Everyone** gets **1 alert** (Breakout / Watchlist / Price), checked automatically a few times a day — delivered in-app.
-- **🔒 Pro features** help you *move faster*: **5 alerts with email delivery**, CSV export, advanced filters, earnings calendar, and scan history.
-- **🔒 Premium features** help you *get earlier signals*: **25 alerts**, AI insights (notes / summary / chat), ML early breakout candidates, full-universe mode, and deeper diagnostics.
+- **🔒 Pro** adds reach and export: **5 alerts with email delivery**, CSV export and the interactive results table, Nasdaq scans and advanced filters, the earnings calendar, scan history and historical research.
+- **🔒 Premium** adds AI and deeper tools: **25 alerts**, AI notes / summaries / chat, Early Breakout candidates, your own full-universe scans, and Alpaca paper trading.
 """
     )
 
@@ -260,7 +260,7 @@ def _upgrade_buttons(current_tier_key: str) -> None:
 
     with col_premium:
         st.markdown("### ⭐ Premium · $39/mo")
-        st.caption("Unlock AI insights + ML signals + full universe + diagnostics")
+        st.caption("Adds AI notes, Early Breakout candidates, your own full-universe scans and paper trading")
         if current_tier_key in ("premium", "admin"):
             st.success("You already have Premium (or Admin).")
         else:

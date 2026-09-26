@@ -80,9 +80,10 @@ def render_result_cards(df: Any, *, limit: int = CARD_LIMIT) -> None:
                 if m["facts"]:
                     st.caption(" · ".join(m["facts"]))
                 if st.button("Open in Stock Intelligence", key=f"hsf_card_open_{i}_{m['ticker']}"):
-                    st.session_state["hsf_stock_ticker"] = m["ticker"]
-                    st.session_state.pop("hsf_stock_opp", None)
-                    st.switch_page("pages/stock.py")
+                    # Run 70: carry the scan these cards show (P0-9).
+                    from ui.stock_handoff import open_in_stock_intelligence
+
+                    open_in_stock_intelligence(m["ticker"], scan_df=df)
         if len(rows) > limit:
             st.caption(f"Showing the first {limit} of {len(rows)}. Switch to Table to see them all.")
     except Exception as exc:

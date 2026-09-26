@@ -148,18 +148,13 @@ def _load_saved_snapshot_df() -> pd.DataFrame | None:
     even before the user runs their own scan. Cached for 5 min to avoid querying
     on every rerun.
     """
+    # Run 70: the latest scheduled full-market run (cron · US_MARKET) — the same
+    # scan Today and the Scanner show — not the newest run of any user.
     try:
-        from db.runs import list_runs, load_run_results
-        from ui.app_runtime import normalize_results_to_df
+        from ui.market_scans import safe_recent_runs, safe_run_df
 
-        runs = list_runs(limit=10) or []
-        snap = next((r for r in runs if r.get("is_snapshot")), None) or (
-            runs[0] if runs else None
-        )
-        if not snap:
-            return None
-        raw = load_run_results(snap["id"])
-        df = normalize_results_to_df(raw) if raw else None
+        runs = safe_recent_runs()
+        df = safe_run_df(runs[0]["id"]) if runs else None
         if df is not None and getattr(df, "empty", False):
             return None
         return df

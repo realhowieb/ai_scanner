@@ -31,11 +31,12 @@ def watchlist_in_scan(watch: List[str], scan_df: Any) -> Dict[str, Any]:
     return {"found": found, "missing": missing}
 
 
-def _open_button(ticker: str, key: str) -> None:
+def _open_button(ticker: str, key: str, *, scan_df: Any = None, opp: Optional[Dict[str, Any]] = None) -> None:
+    # Run 70: hand over the same scan/opportunity this page shows (P0-9).
     if st.button("Open", key=key):
-        st.session_state["hsf_stock_ticker"] = ticker
-        st.session_state.pop("hsf_stock_opp", None)
-        st.switch_page("pages/stock.py")
+        from ui.stock_handoff import open_in_stock_intelligence
+
+        open_in_stock_intelligence(ticker, scan_df=scan_df, opp=opp)
 
 
 def _user_watchlist(username: str) -> List[str]:
@@ -75,7 +76,7 @@ def _section_top(scan_df: Any) -> None:
                 facts.append(f"RVOL {o['rvol']:.2f}×")
             if facts:
                 st.caption(" · ".join(facts))
-            _open_button(o["ticker"], f"today_top_{i}_{o['ticker']}")
+            _open_button(o["ticker"], f"today_top_{i}_{o['ticker']}", scan_df=scan_df, opp=o)
     st.caption("Ranked by HSF Score, an opportunity ranking — not a probability of profit.")
 
 
@@ -105,7 +106,7 @@ def _section_watchlist(username: str, scan_df: Any) -> None:
             with st.container(border=True):
                 score = f" · HSF Score **{r['score']}**" if r["score"] is not None else ""
                 st.markdown(f"**{r['ticker']}** is in the latest scan{score}")
-                _open_button(r["ticker"], f"today_wl_{i}_{r['ticker']}")
+                _open_button(r["ticker"], f"today_wl_{i}_{r['ticker']}", scan_df=scan_df)
     else:
         st.caption("None of your watched names are in the latest scan's ranked list.")
     if w["missing"]:

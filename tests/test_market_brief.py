@@ -10,7 +10,7 @@ class MarketBriefTests(unittest.TestCase):
         import scheduler.morning_digest as md
         import ui.market_brief as mb
 
-        with mock.patch.object(md, "_latest_snapshot_df", return_value=object()), \
+        with mock.patch.object(mb, "_brief_scan_df", return_value=object()), \
              mock.patch.object(md, "_market_gappers",
                                return_value=[{"ticker": "QCOM", "last": 174.08,
                                               "chg_pct": 3.15, "gap_pct": 6.93}]), \
@@ -31,7 +31,7 @@ class MarketBriefTests(unittest.TestCase):
         import scheduler.morning_digest as md
         import ui.market_brief as mb
 
-        with mock.patch.object(md, "_latest_snapshot_df", return_value=object()), \
+        with mock.patch.object(mb, "_brief_scan_df", return_value=object()), \
              mock.patch.object(md, "_market_gappers", return_value=[]), \
              mock.patch.object(md, "_todays_setups", return_value=([], [])), \
              mock.patch.object(md, "_prebreakout_picks",
@@ -45,7 +45,7 @@ class MarketBriefTests(unittest.TestCase):
         import scheduler.morning_digest as md
         import ui.market_brief as mb
 
-        with mock.patch.object(md, "_latest_snapshot_df", return_value=None):
+        with mock.patch.object(mb, "_brief_scan_df", return_value=None):
             self.assertIsNone(mb._compute_brief())
 
     def test_brief_page_is_login_gated(self):
@@ -107,7 +107,7 @@ class EveningContentTests(unittest.TestCase):
         import scheduler.morning_digest as md
         import ui.market_brief as mb
 
-        with mock.patch.object(md, "_latest_snapshot_df", return_value=object()), \
+        with mock.patch.object(mb, "_brief_scan_df", return_value=object()), \
              mock.patch.object(md, "_market_gappers", return_value=[]), \
              mock.patch.object(md, "_todays_setups", return_value=([], [])), \
              mock.patch.object(md, "_prebreakout_picks", return_value=[]), \

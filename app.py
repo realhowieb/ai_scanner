@@ -219,7 +219,7 @@ try:
     from ui.header import render_header, render_market_snapshot, render_price_ticker
     from ui.headline_score import add_hsf_score_column
     from ui.history import render_history_expander
-    from ui.market_default import default_results
+    from ui.market_default import default_results, render_back_to_market
     from ui.onboarding import render_hsf_onboarding_entry, render_scanner_orientation
     from ui.prebreakout_tab import render_prebreakout_tab
     from ui.result_explain import add_why_column
@@ -754,6 +754,7 @@ def main():
     render_three_step_scanner()
 
     with results_slot:  # rendered up top (see results_slot above)
+        render_back_to_market()  # Run 70 (P1-10)
         df = default_results(get_results_df())  # Run 63: latest full-market scan until you run your own
         df, scan_ran_at = prepare_results_with_earnings(
             df,

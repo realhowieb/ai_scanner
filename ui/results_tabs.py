@@ -179,7 +179,7 @@ def _render_latest_results_tab(
             # Run 62: say which empty state this is. "No personal scan yet"
             # and "your scan matched nothing" are different from "no market
             # scan available" (the trust banner above reports that one).
-            st.info(results_empty_message(df))
+            st.info(results_empty_message(df, bool(st.session_state.get("hsf_market_unavailable"))))
         else:
             render_results(
                 df,

@@ -91,6 +91,8 @@ class ScanAllPassthroughTest(unittest.TestCase):
     def _run(self, scan_all):
         import ui.watchlists as wl
 
+        # wl.st is the global streamlit module: restore the real session_state.
+        self.addCleanup(setattr, wl.st, "session_state", wl.st.session_state)
         wl.st.session_state = _FakeState({"active_watchlist_tickers": ["AAPL", "MSFT"]})
         calls = []
 

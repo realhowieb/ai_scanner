@@ -77,6 +77,17 @@ def _yesterday_performance() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _brief_scan_df():
+    """Run 70: the Brief reads the same scan as Today and the Scanner — the latest
+    scheduled full-market run (cron · US_MARKET) — never "the newest run of any
+    user", which could disagree with Today or surface someone's personal scan.
+    The email digest keeps its own loader (scheduler untouched)."""
+    from ui.market_scans import safe_recent_runs, safe_run_df
+
+    runs = safe_recent_runs()
+    return safe_run_df(runs[0]["id"]) if runs else None
+
+
 def _compute_brief() -> Optional[Dict[str, Any]]:
     """Assemble the user-independent brief from the latest snapshot, or None."""
     try:
@@ -84,7 +95,6 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
             _earnings_days_map,
             _earnings_today,
             _flag_earnings_rows,
-            _latest_snapshot_df,
             _market_gappers,
             _prebreakout_picks,
             _todays_setups,
@@ -92,7 +102,7 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
     except Exception:
         return None
     try:
-        df = _latest_snapshot_df()
+        df = _brief_scan_df()
     except Exception:
         df = None
     if df is None:

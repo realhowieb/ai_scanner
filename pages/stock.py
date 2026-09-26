@@ -61,17 +61,21 @@ if _ticker:
 if not _ticker:
     st.caption("Enter a ticker, or open one from Market Brief, Scanner, or your Watchlist.")
 else:
-    # Use the live opportunity carried from Scanner/Brief ONLY when it matches
-    # the selected ticker — hard guard against a stale row from another ticker.
-    _opp = st.session_state.get("hsf_stock_opp")
-    if not (_opp and str(_opp.get("ticker") or "").strip().upper() == _ticker):
-        _opp = None
+    # Use the opportunity/row carried from the screen the user came from ONLY when
+    # it matches this ticker. With no carried context (typed ticker, shared link),
+    # Run 70 looks the ticker up in the latest scheduled full-market scan, so
+    # Stock Intelligence agrees with Today and the Scanner (P0-9).
+    from ui.stock_handoff import latest_market_context, session_context
+
+    _opp, _row = session_context(_ticker)
+    if _opp is None and _row is None:
+        _opp, _row = latest_market_context(_ticker)
     try:
         from ui.charts import render_chart_for_ticker
         from ui.stock_intelligence import render_stock_intelligence
 
         render_stock_intelligence(
-            _ticker, current_opp=_opp, source="page",
+            _ticker, current_opp=_opp, current_row=_row, source="page",
             render_chart_for_ticker=lambda t: render_chart_for_ticker(t, key=f"si_page_chart_{t}"),
         )
     except Exception as e:

@@ -345,12 +345,12 @@ def auth_ui():
                     signup_clicked = st.form_submit_button("🟢 Create Free Account")
 
             with st.expander("✅ What you get with a free Basic account", expanded=True):
-                st.write("- ✔️ Access to curated breakout scans")
+                st.write("- ✔️ The latest full-market ranking, updated through the trading day")
                 st.write("- ✔️ HSF Score (0–100 opportunity ranking) with the evidence behind it")
                 st.write("- ✔️ Interactive charts")
                 st.write("- ✔️ Works on desktop and phone")
                 st.write("- ✔️ No credit card required")
-                st.caption("Upgrade anytime to unlock advanced filters, AI-powered rankings, and export features.")
+                st.caption("Upgrade anytime for email alerts, CSV export, AI notes and more.")
 
             st.caption("🔐 Passwords are securely encrypted. We never store plain-text passwords.")
 

@@ -46,12 +46,26 @@ def get_market_session(now: datetime | None = None) -> str:
     if now.weekday() >= 5:
         return "closed"
 
+    # Run 70 (P2-9): use the NYSE calendar (read-only) so holidays read "closed"
+    # and early-close days end the regular session early — matching the trust
+    # banner. Outside the calendar's years, fall back to the fixed hours.
+    close = time(16, 0)
+    try:
+        from analytics import market_calendar as mc
+
+        if mc.calendar_covered(now.date()):
+            if not mc.is_trading_day(now.date()):
+                return "closed"
+            close = mc.close_time_et(now.date())
+    except Exception:
+        pass
+
     current_time = now.time()
     if time(4, 0) <= current_time < time(9, 30):
         return "premarket"
-    if time(9, 30) <= current_time < time(16, 0):
+    if time(9, 30) <= current_time < close:
         return "regular"
-    if time(16, 0) <= current_time < time(20, 0):
+    if close <= current_time < time(20, 0):
         return "afterhours"
     return "closed"
 

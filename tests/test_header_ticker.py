@@ -13,6 +13,10 @@ class TickerTapeTests(unittest.TestCase):
         import ui.header as h
 
         self.h = h
+        # h.st is the global streamlit module: restore its real session_state
+        # afterwards so later tests (e.g. AppTest runs) aren't polluted.
+        _orig = h.st.session_state
+        self.addCleanup(setattr, h.st, "session_state", _orig)
         h.st.session_state = _FakeState()
 
     def _set_results(self, df):
