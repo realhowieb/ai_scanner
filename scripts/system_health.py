@@ -234,6 +234,24 @@ def universe_probe() -> Dict[str, Any]:
             "malformed": sum(1 for s in syms if _is_malformed(s))}
 
 
+def _recovery_status() -> Dict[str, Any]:
+    """Run 60 capability for autonomy readiness: kill-switch state + ledger reachability
+    + whether a human-unreset circuit breaker is open (ledger only; no health recursion)."""
+    from analytics import recovery_policy as rp
+    cfg = rp.autonomy_config(os.environ)
+    try:
+        from db.recovery_ledger import list_recent
+        ledger = list_recent(days=7)
+        ok = True
+    except Exception:
+        ledger, ok = [], False
+    opened = [e for e in ledger if e.get("result") == "CIRCUIT_OPENED"]
+    reset = [e for e in ledger if e.get("result") == "CIRCUIT_RESET"]
+    circuit_open = bool(opened) and (not reset or str(reset[-1].get("started_at")) < str(opened[-1].get("started_at")))
+    return {"implemented": True, "ledger_available": ok, "circuit_open": circuit_open,
+            "production_state": cfg["production_state"], "reason": cfg["reason"]}
+
+
 def parity_report() -> Optional[Dict[str, Any]]:
     p = ROOT / "artifacts" / "research" / "maturation_parity_audit.json"
     return json.loads(p.read_text()) if p.exists() else None
@@ -269,8 +287,10 @@ def collect(now: _dt.datetime) -> Dict[str, Any]:
         "latest_scanner_observation": {"generated_at": (probe or {}).get("latest_observation_created_at")},
         "previous_system_health": {"generated_at": (previous or {}).get("generated_at")},
     }
+    recovery = T("recovery", _recovery_status)
     return {
         "now": now.isoformat(),
+        "recovery": recovery,
         "universe": universe,
         "previous": previous,
         "scan_runs": wf.get("scheduled-scans.yml") if workflows is not None else None,

@@ -62,7 +62,7 @@ ARTIFACT_SPECS = {
     "previous_system_health": {"label": "Previous health snapshot", "cadence": "trading_day",
                                "optional": True},
 }
-RECOVERY_IMPLEMENTED = False  # Run 60
+RECOVERY_IMPLEMENTED = True   # Run 60 (analytics/recovery_policy + recovery_controller)
 
 
 # ---- helpers -----------------------------------------------------------------------
@@ -769,7 +769,7 @@ def evaluate(inputs: Mapping[str, Any]) -> Dict[str, Any]:
                    "market_open": mc.is_market_open(now),
                    "calendar_covered": mc.calendar_covered(now.astimezone(mc.ET).date()),
                    "next_expected_scan": _iso(mc.next_expected_scan(now))},
-        "autonomy_readiness": autonomy(subs),
+        "autonomy_readiness": autonomy(subs, inputs.get("recovery")),
         "collection_errors": inputs.get("collection_errors") or {},
     }
     assert_clean(report)
@@ -790,25 +790,35 @@ def build_incidents(subs: Mapping[str, Mapping[str, Any]], now: _dt.datetime) ->
     return out
 
 
-def autonomy(subs: Mapping[str, Mapping[str, Any]]) -> Dict[str, Any]:
+def autonomy(subs: Mapping[str, Mapping[str, Any]], recovery: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+    """NOT_READY (blind) → OBSERVABLE → RECOVERY_READY (Run 60 safeguards present and
+    usable) → AUTONOMOUS (reserved for Run 61 certification; never set here)."""
     blind = [n for n in ("database", "scanner", "workflows", "maturation") if subs[n]["status"] == "UNKNOWN"]
-    to_recovery = [
-        "no automatic re-dispatch of stale/missed workflows (scan, maturation, readiness, parity audit)",
-        "no automatic maturation retry escalation",
-        "no incident notification layer (email/Slack) for HUMAN_ACTION_REQUIRED",
-        "no recovery audit trail / guardrails (rate limits, max retries, kill switch)",
-    ] + [f"telemetry blind spot: {n} UNKNOWN" for n in blind]
-    to_autonomous = to_recovery + [
+    rec = dict(recovery or {})
+    to_recovery = [f"telemetry blind spot: {n} UNKNOWN" for n in blind]
+    if not (RECOVERY_IMPLEMENTED and rec.get("implemented")):
+        to_recovery.append("recovery layer not wired into this health run")
+    if rec and not rec.get("ledger_available"):
+        to_recovery.append("recovery ledger unavailable (attempt limits/cooldowns cannot be enforced)")
+    if rec.get("circuit_open"):
+        to_recovery.append("AUTONOMY_CIRCUIT_OPEN (human reset required)")
+    to_autonomous = list(to_recovery) + [
+        "Run 61 certification not performed (AUTONOMOUS is never self-declared)",
+        "scanner rerun idempotency not proven: missed/failed scans always escalate",
+        "no notification delivery for HUMAN_ACTION_REQUIRED (escalation artifact only)",
         "scanner coverage telemetry (symbols attempted/processed) not persisted",
         "yfinance fallback usage not instrumented",
         "calendar covers 2025-2027 only (needs yearly update or Alpaca calendar cross-check)",
         "formal evaluation requires explicit human approval by design (never automatic)",
     ]
+    if rec.get("production_state") and rec.get("production_state") != "RECOVERY_ENABLED":
+        to_autonomous.append(f"production recovery is {rec.get('production_state')} ({rec.get('reason')})")
     if subs["cohort_parity"]["detail_state"] in ("CRITICAL", "WARNING") or \
             subs["forward_evidence"]["detail_state"] == "DATA_QUALITY_BLOCKED":
         to_autonomous.append("forward-experiment design decision pending (Run 58 control parity)")
-    state = "NOT_READY" if blind else ("RECOVERY_READY" if RECOVERY_IMPLEMENTED else "OBSERVABLE")
-    return {"state": state, "blockers_to_recovery_ready": to_recovery, "blockers_to_autonomous": to_autonomous}
+    state = "NOT_READY" if blind else ("RECOVERY_READY" if not to_recovery else "OBSERVABLE")
+    return {"state": state, "blockers_to_recovery_ready": to_recovery, "blockers_to_autonomous": to_autonomous,
+            "production_recovery_state": rec.get("production_state")}
 
 
 # ---- anti-peeking --------------------------------------------------------------------------

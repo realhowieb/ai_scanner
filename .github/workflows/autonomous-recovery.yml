@@ -1,0 +1,79 @@
+name: Autonomous Recovery
+
+# Run 60 — SAFE SELF-HEALING (operational recovery only).
+# health → recovery plan → kill-switch check → allowlisted recovery → verification →
+# append-only ledger → human escalation artifact. It can only dispatch the fixed,
+# allowlisted workflows (never itself) and can never touch scoring, cohorts,
+# outcomes, research data, thresholds, schedules or secrets.
+#
+# KILL SWITCH (repository variables, Settings → Secrets and variables → Actions → Variables):
+#   HSF_AUTONOMY_ENABLED = true   AND   HSF_AUTONOMY_MODE = recover   → recovery executes
+#   anything else (default: unset)                                    → OBSERVE_ONLY (plan only)
+# A manual dispatch can request mode=observe or mode=recover, but recover still
+# requires HSF_AUTONOMY_ENABLED=true. There is no mode that allows model changes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "observe = plan only; recover = execute if HSF_AUTONOMY_ENABLED=true"
+        type: choice
+        options: [observe, recover]
+        default: observe
+  schedule:
+    - cron: "25 17 * * 1-5"   # after the 17:05 UTC health run
+    - cron: "5 0 * * 2-6"     # after the 23:45 UTC health run (next UTC day)
+
+permissions:
+  contents: read
+  actions: write      # workflow_dispatch of the fixed allowlisted workflows only
+
+concurrency:
+  group: autonomous-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Plan / recover / verify
+        id: recovery
+        env:
+          HSF_AUTONOMY_ENABLED: ${{ vars.HSF_AUTONOMY_ENABLED || 'false' }}
+          HSF_AUTONOMY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || vars.HSF_AUTONOMY_MODE || 'observe' }}
+          GH_TOKEN: ${{ github.token }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          ALPACA_FEED: ${{ secrets.ALPACA_FEED }}
+        run: |
+          python -m scripts.autonomous_recovery --execute --verify
+          cat artifacts/health/recovery_plan.md >> "$GITHUB_STEP_SUMMARY"
+          cat artifacts/health/human_escalation.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Surface escalation
+        if: steps.recovery.outputs.human_action_required == 'true'
+        run: echo "::warning title=HSF human action required::See human_escalation.md in the run summary/artifacts."
+      - name: Upload recovery artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: autonomous-recovery
+          path: |
+            artifacts/health/recovery_plan.json
+            artifacts/health/recovery_plan.md
+            artifacts/health/recovery_results.json
+            artifacts/health/recovery_verification.json
+            artifacts/health/human_escalation.json
+            artifacts/health/human_escalation.md
+          if-no-files-found: warn
