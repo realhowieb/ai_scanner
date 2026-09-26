@@ -294,6 +294,28 @@ def _regime_from_session() -> Optional[str]:
         return None
 
 
+# ---- Run 71: per-ticker caches for the page's read-only inputs -------------------------------------
+def _history_uncached(ticker: str) -> List[Dict[str, Any]]:
+    from db.signal_outcomes import fetch_ticker_opportunity_history
+
+    return list(fetch_ticker_opportunity_history(ticker) or [])
+
+
+def _earnings_days_uncached(ticker: str) -> Optional[int]:
+    from ui.ai_confidence_explain import _earnings_days_for
+
+    return _earnings_days_for(ticker)
+
+
+if st is not None:
+    # History is written by scheduled jobs a few times a day; earnings dates rarely move.
+    _history_cached = st.cache_data(ttl=120, show_spinner=False, max_entries=500)(_history_uncached)
+    _earnings_days_cached = st.cache_data(ttl=600, show_spinner=False, max_entries=500)(_earnings_days_uncached)
+else:  # pragma: no cover
+    _history_cached = _history_uncached
+    _earnings_days_cached = _earnings_days_uncached
+
+
 def render_stock_intelligence(
     ticker: str,
     *,
@@ -313,8 +335,7 @@ def render_stock_intelligence(
     # Read-only fetches (small history query + cached calibration + session regime).
     history = []
     try:
-        from db.signal_outcomes import fetch_ticker_opportunity_history
-        history = fetch_ticker_opportunity_history(ticker)
+        history = _history_cached(ticker)  # Run 71: cached per ticker
     except Exception:
         history = []
     calibration_records = None
@@ -325,8 +346,7 @@ def render_stock_intelligence(
         calibration_records = None
     earnings_days = None
     try:
-        from ui.ai_confidence_explain import _earnings_days_for
-        earnings_days = _earnings_days_for(ticker)
+        earnings_days = _earnings_days_cached(ticker)  # Run 71: cached per ticker
     except Exception:
         earnings_days = None
 

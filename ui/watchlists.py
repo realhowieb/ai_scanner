@@ -78,13 +78,15 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
     Returns:
         (active_watchlist_id, active_watchlist_tickers)
     """
+    from ui import user_cache  # Run 71: cached per (user, watchlist data version)
+
     try:
-        watchlists = list_watchlists(user_id)
+        watchlists = user_cache.list_watchlists(user_id)
     except Exception as e:
         st.markdown("### 📋 My Watchlists")
-        st.caption("Watchlists require Neon DB (cloud) and may be unavailable.")
-        with st.expander("Watchlist error details", expanded=False):
-            st.code(f"{type(e)}\n{str(e)}\n{repr(e)}")
+        from ui.safe_errors import show_error
+
+        show_error("your watchlists", e, level="info")
         return None, []
 
     # Header row: title · list selector · new-list popover
@@ -115,7 +117,7 @@ def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
         active = id_to_wl[int(selected_id)]
         active_id = int(active["id"])
         active_tickers = _normalize_stored_tickers(
-            get_watchlist_tickers(active_id, user_id), active_id, user_id
+            user_cache.get_watchlist_tickers(active_id, user_id), active_id, user_id
         )
     with h3:
         try:
@@ -387,15 +389,17 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
     with st.expander("Manage Watchlist", expanded=False):
         username = st.session_state.get("username", "")
         all_watchlists = []
+        from ui import user_cache  # Run 71: this expander renders on every rerun
+
         try:
-            all_watchlists = list_watchlists(username)
+            all_watchlists = user_cache.list_watchlists(username)
         except Exception:
             all_watchlists = []
         id_to_name = {int(wl["id"]): str(wl["name"]) for wl in all_watchlists}
         active_name = id_to_name.get(int(active_id), "this watchlist") if active_id is not None else "this watchlist"
         default_id = None
         try:
-            default_id = get_default_watchlist_id(username)
+            default_id = user_cache.get_default_watchlist_id(username)
         except Exception:
             default_id = None
         if active_id is not None:

@@ -589,3 +589,58 @@ def set_watchlist_tickers(watchlist_id: int, user_id: str, tickers: List[str]) -
         )
     conn.commit()
     cur.close()
+
+
+# ---- Run 71: per-user data version for read caching ----------------------------------------------
+# Every write below bumps the user's version, so UI caches keyed by
+# (user_id, data_version(user_id)) are invalidated immediately, in every session
+# in this process. Pure Python; no behaviour change to the functions themselves.
+import functools as _functools  # noqa: E402
+import inspect as _inspect  # noqa: E402
+import threading as _threading  # noqa: E402
+
+_VERSION_LOCK = _threading.Lock()
+_DATA_VERSION: Dict[str, int] = {}
+
+_WRITE_FUNCTIONS = (
+    "set_default_watchlist", "create_watchlist", "rename_watchlist", "duplicate_watchlist",
+    "delete_watchlist", "add_tickers_to_watchlist", "add_to_watchlist", "remove_tickers_from_watchlist",
+    "remove_from_watchlist", "copy_tickers_between_watchlists", "move_tickers_between_watchlists",
+    "update_watchlist_item_note", "set_watchlist_tickers", "_repair_default_watchlist",
+)
+
+
+def _user_key(user_id: object) -> str:
+    return str(user_id or "").strip().lower()
+
+
+def data_version(user_id: object) -> int:
+    """Monotonic per-user counter of watchlist writes in this process."""
+    return _DATA_VERSION.get(_user_key(user_id), 0)
+
+
+def bump_data_version(user_id: object) -> None:
+    with _VERSION_LOCK:
+        k = _user_key(user_id)
+        _DATA_VERSION[k] = _DATA_VERSION.get(k, 0) + 1
+
+
+def _bumps_version(fn):
+    sig = _inspect.signature(fn)
+
+    @_functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            try:
+                user = sig.bind_partial(*args, **kwargs).arguments.get("user_id")
+                if user is not None:
+                    bump_data_version(user)
+            except TypeError:
+                pass
+    return wrapper
+
+
+for _name in _WRITE_FUNCTIONS:
+    globals()[_name] = _bumps_version(globals()[_name])

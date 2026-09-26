@@ -44,7 +44,7 @@ def _user_watchlist(username: str) -> List[str]:
     if tick:
         return [str(t).strip().upper() for t in tick if str(t).strip()]
     try:
-        from db.watchlists import get_default_watchlist_id, get_watchlist_tickers
+        from ui.user_cache import get_default_watchlist_id, get_watchlist_tickers  # Run 71
 
         wid = get_default_watchlist_id(username)
         return [str(t).strip().upper() for t in (get_watchlist_tickers(wid, username) if wid else [])]
@@ -100,6 +100,16 @@ def _section_watchlist(username: str, scan_df: Any) -> None:
     if not watch:
         st.caption("Your watchlist is empty. Add names from the Scanner or Stock Intelligence.")
         return
+    try:  # Run 71: the watchlist summary moved here from the Scanner (cached)
+        from ui.user_cache import summary_line, watchlist_summary
+
+        line = summary_line(watchlist_summary(username))
+        if line:
+            st.caption(line)
+    except Exception as exc:
+        from ui.safe_errors import report_error
+
+        report_error("watchlist summary", exc)
     w = watchlist_in_scan(watch, scan_df)
     if w["found"]:
         for i, r in enumerate(w["found"]):

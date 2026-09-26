@@ -39,3 +39,47 @@ if st is not None:
     load_user_map = st.cache_data(ttl=30, show_spinner=False)(_lookup)
 else:  # pragma: no cover
     load_user_map = _lookup
+
+
+# ---- Run 71: session-level reuse of the resolved tier ---------------------------------------------
+TIER_STATE_KEY = "_hsf_tier_state"
+TIER_STATE_TTL_S = 30.0
+
+
+def tier_state_is_fresh(cached: Any, username: str, *, now: float, session_tier: Any,
+                        billing_return: bool) -> bool:
+    """Reuse a cached tier state only for the same user, within the TTL, when no
+    Stripe return is in progress and no other page changed the session's tier."""
+    if not isinstance(cached, dict) or billing_return:
+        return False
+    if cached.get("user") != username or now - float(cached.get("at") or 0) >= TIER_STATE_TTL_S:
+        return False
+    state = cached.get("state") or {}
+    if session_tier and str(session_tier).strip().lower() != str(state.get("tier_key") or "").strip().lower():
+        return False
+    return True
+
+
+def session_tier_state(username: str, compute) -> Any:
+    """Resolve the tier at most every TIER_STATE_TTL_S seconds per session
+    (Tier Sync queries the DB); recompute immediately after checkout/portal
+    returns or when another page updated the session tier. Never raises."""
+    import time
+
+    if st is None:
+        return compute()
+    try:
+        billing_return = bool((st.query_params.get("checkout") or st.query_params.get("portal") or "").strip())
+    except Exception:
+        billing_return = True
+    cached = st.session_state.get(TIER_STATE_KEY)
+    now = time.time()
+    if tier_state_is_fresh(cached, username, now=now, session_tier=st.session_state.get("tier_key"),
+                           billing_return=billing_return):
+        return cached["state"]
+    state = compute()
+    try:
+        st.session_state[TIER_STATE_KEY] = {"user": username, "at": now, "state": state}
+    except Exception:
+        pass
+    return state

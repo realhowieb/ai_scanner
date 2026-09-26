@@ -199,7 +199,7 @@ _IMPORT_ERROR: str | None = None
 try:
     from db.runs import list_runs, load_run_results, save_daily_snapshot, save_run
     from db.users import seed_neon_users_from_local
-    from ui.user_lookup import load_user_map
+    from ui.user_lookup import load_user_map, session_tier_state
 
     # User settings (per-user defaults) – optional Neon-backed feature
     try:
@@ -236,6 +236,7 @@ except Exception as _e:
 
     seed_neon_users_from_local = None  # type: ignore
     load_user_map = lambda _u: {}  # type: ignore
+    session_tier_state = lambda _u, compute: compute()  # type: ignore
     save_run = save_daily_snapshot = list_runs = load_run_results = None  # type: ignore
 
     get_user_settings = None
@@ -460,7 +461,7 @@ def main():
     users_map = load_user_map(username)  # P0-8: this user only, not the whole table
 
     # Resolve tier using Tier Sync (DB-first), with legacy fallback
-    tier_state = _resolve_tier_state(username, users_map)
+    tier_state = session_tier_state(username, lambda: _resolve_tier_state(username, users_map))  # Run 71
     tier = tier_state["tier_obj"]
     forced_tier_key = tier_state.get("forced_tier_key")
     db_tier_err = tier_state.get("db_tier_err")
@@ -575,7 +576,7 @@ def main():
     except Exception:
         pass
 
-    render_hsf_onboarding_entry(username, tier_name=tier_name)
+    render_hsf_onboarding_entry(username, tier_name=tier_name, show_returning=False)  # Run 71: summary moved to Today
     st.markdown("---")
 
     # -------- Provider Health (admin diagnostics) --------

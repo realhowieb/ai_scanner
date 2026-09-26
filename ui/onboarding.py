@@ -103,8 +103,12 @@ def add_first_watch_ticker(
     )
 
 
-def render_hsf_onboarding_entry(username: str, *, tier_name: str = "") -> None:
-    """Render first-run or returning-user landing value."""
+def render_hsf_onboarding_entry(username: str, *, tier_name: str = "", show_returning: bool = True) -> None:
+    """Render first-run or returning-user landing value.
+
+    Run 71: the Scanner passes show_returning=False — the returning-user summary
+    rebuilt watchlist intelligence (several DB reads) on every Scanner click; it
+    now lives on Today (ui.today, cached)."""
     if st is None:
         return
     user = str(username or "").strip().lower()
@@ -113,7 +117,7 @@ def render_hsf_onboarding_entry(username: str, *, tier_name: str = "") -> None:
     st.session_state["hsf_first_run"] = first_run
     if first_run:
         _render_first_run(user)
-    else:
+    elif show_returning:
         _render_returning_user(user, watchlist, tier_name=tier_name)
 
 
@@ -313,7 +317,7 @@ def _normalize_tickers(values: List[object] | None) -> List[str]:
 
 def _load_user_watchlist(user: str) -> List[str]:
     try:
-        from db.watchlists import get_user_watchlist
+        from ui.user_cache import get_user_watchlist  # Run 71: cached per data version
 
         return get_user_watchlist(user)
     except Exception:
