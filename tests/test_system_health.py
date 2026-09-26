@@ -1,6 +1,7 @@
 """Run 59 — system health control plane: failure-injection scenarios."""
 import copy
 import datetime as dt
+import importlib.util
 import json
 import unittest
 from unittest import mock
@@ -8,6 +9,7 @@ from unittest import mock
 from analytics import market_calendar as mc
 from analytics import system_health as sh
 
+_STREAMLIT = importlib.util.find_spec("streamlit") is not None
 UTC = dt.timezone.utc
 WED = dt.datetime(2026, 9, 30, 23, 50, tzinfo=UTC)      # trading day, after all cycles
 
@@ -455,6 +457,7 @@ class StoreAndScriptTests(unittest.TestCase):
         self.assertTrue(inputs["collection_errors"])
         self.assertEqual(r["subsystems"]["workflows"]["status"], "UNKNOWN")
 
+    @unittest.skipUnless(_STREAMLIT, "ui.system_health_view imports streamlit")
     def test_streamlit_view_renders_same_model(self):
         from ui import system_health_view as view
         r = run(baseline())

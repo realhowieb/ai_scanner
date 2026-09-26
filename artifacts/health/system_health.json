@@ -1,0 +1,553 @@
+{
+  "schema": "hsf-system-health-1.0",
+  "generated_at": "2026-09-26T08:38:17.940346+00:00",
+  "system_status": "DEGRADED",
+  "human_action": "WATCH",
+  "health_score": 90,
+  "health_score_note": "secondary to categorical status; never overrides it",
+  "subsystems": {
+    "universe": {
+      "status": "HEALTHY",
+      "detail_state": "HEALTHY",
+      "reason": "11533 tradable US-listed symbols (live)",
+      "observed_value": 11533,
+      "expected_value": "> 1000 symbols, change < 10% per refresh",
+      "last_updated": "2026-09-26T08:38:27.366868+00:00",
+      "recommended_action": "none",
+      "human_action": "NO_ACTION",
+      "findings": [],
+      "metrics": {
+        "symbol_count": 11533,
+        "previous_count": 11533,
+        "change_pct": 0.0,
+        "source": "live",
+        "duplicates": 0,
+        "malformed": 0,
+        "preferred_excluded": 360,
+        "inactive_excluded": 0,
+        "non_tradable_excluded": 878,
+        "provider_assets": 14379
+      }
+    },
+    "scanner": {
+      "status": "HEALTHY",
+      "detail_state": "MARKET_CLOSED_EXPECTED_IDLE",
+      "reason": "18/18 expected slots in the last 3 days ran successfully",
+      "observed_value": 18,
+      "expected_value": 18,
+      "last_updated": "2026-09-25T23:55:11+00:00",
+      "recommended_action": "none",
+      "human_action": "NO_ACTION",
+      "findings": [],
+      "metrics": {
+        "expected_scans": 18,
+        "completed_scans": 18,
+        "failed_scans": 0,
+        "missing_scans": 0,
+        "most_recent_success": "2026-09-25T23:55:11+00:00",
+        "last_duration_min": 1.8,
+        "recent_saved_runs": [
+          {
+            "label": "US_MARKET",
+            "rows": 100,
+            "duration_sec": 236.64256
+          },
+          {
+            "label": "postmarket",
+            "rows": 100,
+            "duration_sec": 27.222511
+          },
+          {
+            "label": "postmarket",
+            "rows": 100,
+            "duration_sec": 36.241543
+          },
+          {
+            "label": "postmarket",
+            "rows": 100,
+            "duration_sec": 30.953302
+          },
+          {
+            "label": "postmarket",
+            "rows": 100,
+            "duration_sec": 36.428867
+          },
+          {
+            "label": "postmarket",
+            "rows": 100,
+            "duration_sec": 26.037912
+          }
+        ],
+        "symbols_attempted": null,
+        "symbols_processed": null,
+        "coverage_note": "per-scan attempted/processed counts are not persisted"
+      }
+    },
+    "research_capture": {
+      "status": "HEALTHY",
+      "detail_state": "HEALTHY",
+      "reason": "3363 research observations in the last 3 days",
+      "observed_value": 3363,
+      "expected_value": "every regular-session scan captures all three cohorts",
+      "last_updated": "2026-09-25T19:40:02.460183+00:00",
+      "recommended_action": "none",
+      "human_action": "NO_ACTION",
+      "findings": [],
+      "metrics": {
+        "observations": 3363,
+        "by_cohort": {
+          "CONTROL": 1400,
+          "CANDIDATE": 1300,
+          "NEAR_MISS": 663
+        },
+        "untagged": 0,
+        "duplicate_ids": 0,
+        "malformed": 0,
+        "metadata_block_pct": null,
+        "metadata_scope_n": 0,
+        "scans_in_window": 14
+      }
+    },
+    "maturation": {
+      "status": "DEGRADED",
+      "detail_state": "MATURATION_CAP_BINDING",
+      "reason": "last successful maturation 2026-09-25T23:41:57+00:00",
+      "observed_value": {
+        "ready_symbols": 1613,
+        "deferred": 1213
+      },
+      "expected_value": "\u2265 1 successful run per trading day; cap not binding; no persistent 429",
+      "last_updated": "2026-09-25T23:41:57+00:00",
+      "recommended_action": "cohort-neutral only while the cap does not bind (Run 58); review MAX_SYMBOLS",
+      "human_action": "WATCH",
+      "findings": [
+        {
+          "code": "MATURATION_CAP_BINDING",
+          "severity": "WARNING",
+          "summary": "1213 ready symbols deferred by the per-run cap",
+          "evidence": {
+            "ready_symbols": 1613,
+            "deferred": 1213,
+            "report_generated_at": "2026-09-25T23:42:47.808993+00:00",
+            "report_schema": "hsf-maturation-1.1",
+            "max_symbols": 400
+          },
+          "detected_at": "2026-09-25T23:42:47.808993+00:00",
+          "recommended_action": "cohort-neutral only while the cap does not bind (Run 58); review MAX_SYMBOLS",
+          "human_action": "WATCH",
+          "automation_candidate": false
+        }
+      ],
+      "metrics": {
+        "eligible_observations": 451,
+        "matured_this_run": 18,
+        "ready_symbols": 1613,
+        "ready_observations": 2460,
+        "deferred_symbols": 1213,
+        "retired_observations": 0,
+        "oldest_pending_age_min": 3126.7,
+        "last_success": "2026-09-25T23:41:57+00:00",
+        "runtime_min": 1.2,
+        "alpaca_requests": null,
+        "alpaca_429_count": 0,
+        "alpaca_retry_count": null,
+        "cache_hits": null,
+        "cache_misses": null,
+        "report_schema": "hsf-maturation-1.1"
+      }
+    },
+    "market_data": {
+      "status": "HEALTHY",
+      "detail_state": "HEALTHY",
+      "reason": "Alpaca assets endpoint OK; no request telemetry in the latest maturation report (schema hsf-maturation-1.1, pre-hardening)",
+      "observed_value": {
+        "alpaca_requests": null,
+        "http_429": null
+      },
+      "expected_value": "no persistent provider failures",
+      "last_updated": "2026-09-25T23:42:47.808993+00:00",
+      "recommended_action": "none",
+      "human_action": "NO_ACTION",
+      "findings": [],
+      "metrics": {
+        "providers": [
+          {
+            "provider": "alpaca",
+            "instrumented": true,
+            "requests": null,
+            "successes": null,
+            "failures": 0,
+            "http_429": null,
+            "retries": null,
+            "timeouts": null,
+            "empty_responses": null,
+            "rate_limited_symbols": 0,
+            "assets_endpoint": "live",
+            "last_successful_request": null
+          },
+          {
+            "provider": "yfinance",
+            "instrumented": false,
+            "note": "possible price-fetch fallback in the scan path; per-provider counts are not persisted"
+          }
+        ]
+      }
+    },
+    "cohort_parity": {
+      "status": "WAITING",
+      "detail_state": "COLLECTING",
+      "reason": "forward parity not yet measurable; historical parity CRITICAL (explained: MARKET_DATA_AVAILABILITY_EFFECT)",
+      "observed_value": {
+        "+5m": null,
+        "+15m": null,
+        "+30m": null,
+        "+60m": null
+      },
+      "expected_value": "\u2264 10 pp per horizon once measurable (Run 56 Gate E)",
+      "last_updated": "2026-09-26T08:13:57.542686+00:00",
+      "recommended_action": "none",
+      "human_action": "NO_ACTION",
+      "findings": [],
+      "metrics": {
+        "historical_parity": {
+          "+5m": {
+            "candidate_coverage": 61.21,
+            "near_miss_coverage": 51.19,
+            "control_coverage": 18.81,
+            "parity_gap": 42.4,
+            "classification": "CRITICAL"
+          },
+          "+15m": {
+            "candidate_coverage": 60.64,
+            "near_miss_coverage": 49.93,
+            "control_coverage": 15.12,
+            "parity_gap": 45.52,
+            "classification": "CRITICAL"
+          },
+          "+30m": {
+            "candidate_coverage": 57.0,
+            "near_miss_coverage": 46.98,
+            "control_coverage": 12.81,
+            "parity_gap": 44.19,
+            "classification": "CRITICAL"
+          },
+          "+60m": {
+            "candidate_coverage": 54.86,
+            "near_miss_coverage": 44.18,
+            "control_coverage": 11.12,
+            "parity_gap": 43.74,
+            "classification": "CRITICAL"
+          }
+        },
+        "historical_root_cause": "MARKET_DATA_AVAILABILITY_EFFECT",
+        "historical_root_cause_confidence": "HIGH",
+        "historical_parity_explained": true,
+        "forward_epoch_parity": {
+          "+5m": {
+            "candidate_coverage": null,
+            "near_miss_coverage": null,
+            "control_coverage": null,
+            "parity_gap": null,
+            "classification": "NOT_MEASURABLE",
+            "measurable": false
+          },
+          "+15m": {
+            "candidate_coverage": null,
+            "near_miss_coverage": null,
+            "control_coverage": null,
+            "parity_gap": null,
+            "classification": "NOT_MEASURABLE",
+            "measurable": false
+          },
+          "+30m": {
+            "candidate_coverage": null,
+            "near_miss_coverage": null,
+            "control_coverage": null,
+            "parity_gap": null,
+            "classification": "NOT_MEASURABLE",
+            "measurable": false
+          },
+          "+60m": {
+            "candidate_coverage": null,
+            "near_miss_coverage": null,
+            "control_coverage": null,
+            "parity_gap": null,
+            "classification": "NOT_MEASURABLE",
+            "measurable": false
+          }
+        }
+      }
+    },
+    "forward_evidence": {
+      "status": "WAITING",
+      "detail_state": "NO_FORWARD_DATA",
+      "reason": "NO_FORWARD_DATA: day 0/20, runs 0/100",
+      "observed_value": {
+        "trading_days": 0,
+        "scan_runs": 0
+      },
+      "expected_value": "Run 56 gates (min 10 days / 50 runs; preferred 20 / 100)",
+      "last_updated": "2026-09-26T08:38:17.940346+00:00",
+      "recommended_action": "none",
+      "human_action": "NO_ACTION",
+      "findings": [],
+      "metrics": {
+        "forward_evidence_status": "NO_FORWARD_DATA",
+        "forward_epoch_start": "2026-09-26T07:23:11+00:00",
+        "trading_days_collected": 0,
+        "trading_days_min": 10,
+        "trading_days_preferred": 20,
+        "scan_runs_collected": 0,
+        "scan_runs_min": 50,
+        "scan_runs_preferred": 100,
+        "observations_collected": 0,
+        "min_cohort_maturation_pct_by_horizon": {
+          "+5m": null,
+          "+15m": null,
+          "+30m": null,
+          "+60m": null
+        },
+        "min_cohort_maturation_pct": null,
+        "gates": {
+          "A_trading_days": "FAIL",
+          "B_scan_runs": "FAIL",
+          "C_cohort_clusters": "FAIL",
+          "D_horizon_maturation": "FAIL",
+          "E_maturation_parity": "FAIL",
+          "F_directional_integrity": "FAIL",
+          "G_effective_clusters": "FAIL",
+          "H_research_integrity": "PASS"
+        },
+        "estimated_trading_days_until_ready": "UNKNOWN",
+        "long_readiness": "COLLECTING",
+        "short_readiness": "INSUFFICIENT",
+        "formal_evaluation": "NOT READY"
+      }
+    },
+    "workflows": {
+      "status": "HEALTHY",
+      "detail_state": "HEALTHY",
+      "reason": "6/6 workflows healthy",
+      "observed_value": 6,
+      "expected_value": "each workflow fresh for its cadence",
+      "last_updated": null,
+      "recommended_action": "none",
+      "human_action": "NO_ACTION",
+      "findings": [],
+      "metrics": {
+        "workflows": [
+          {
+            "workflow": "scheduled-scans.yml",
+            "label": "Scheduled market scan",
+            "cadence": "trading_day",
+            "known": true,
+            "last_run": "2026-09-25T23:55:11+00:00",
+            "last_success": "2026-09-25T23:55:11+00:00",
+            "last_failure": null,
+            "freshness": 0,
+            "consecutive_failures": 0,
+            "status": "HEALTHY"
+          },
+          {
+            "workflow": "mature-observations.yml",
+            "label": "Mature observations",
+            "cadence": "trading_day",
+            "known": true,
+            "last_run": "2026-09-26T06:47:07+00:00",
+            "last_success": "2026-09-26T06:47:07+00:00",
+            "last_failure": null,
+            "freshness": 0,
+            "consecutive_failures": 0,
+            "status": "HEALTHY"
+          },
+          {
+            "workflow": "refresh-universe.yml",
+            "label": "Universe refresh",
+            "cadence": "weekly",
+            "known": true,
+            "last_run": "2026-09-20T14:16:52+00:00",
+            "last_success": "2026-09-20T14:16:52+00:00",
+            "last_failure": null,
+            "freshness": 5,
+            "consecutive_failures": 0,
+            "status": "HEALTHY"
+          },
+          {
+            "workflow": "forward-evidence-readiness.yml",
+            "label": "Research readiness (Run 56)",
+            "cadence": "trading_day",
+            "known": true,
+            "last_run": "2026-09-26T07:57:34+00:00",
+            "last_success": "2026-09-26T07:57:34+00:00",
+            "last_failure": null,
+            "freshness": 0,
+            "consecutive_failures": 0,
+            "status": "HEALTHY"
+          },
+          {
+            "workflow": "maturation-parity-audit.yml",
+            "label": "Maturation parity audit (Run 58)",
+            "cadence": "manual",
+            "known": true,
+            "last_run": "2026-09-26T08:13:12+00:00",
+            "last_success": "2026-09-26T08:13:12+00:00",
+            "last_failure": null,
+            "freshness": null,
+            "consecutive_failures": 0,
+            "status": "HEALTHY"
+          },
+          {
+            "workflow": "system-health.yml",
+            "label": "System health (Run 59)",
+            "cadence": "trading_day",
+            "known": true,
+            "last_run": "2026-09-26T08:37:46+00:00",
+            "last_success": "2026-09-26T08:34:53+00:00",
+            "last_failure": null,
+            "freshness": 0,
+            "consecutive_failures": 0,
+            "status": "HEALTHY"
+          }
+        ]
+      }
+    },
+    "database": {
+      "status": "HEALTHY",
+      "detail_state": "HEALTHY",
+      "reason": "connected, 161.0 ms",
+      "observed_value": 161.0,
+      "expected_value": "< 2000 ms",
+      "last_updated": "2026-09-25T19:40:02.460183+00:00",
+      "recommended_action": "none",
+      "human_action": "NO_ACTION",
+      "findings": [],
+      "metrics": {
+        "connected": true,
+        "latency_ms": 161.0,
+        "observations_accessible": true,
+        "observations_rows": 4233,
+        "latest_observation_created_at": "2026-09-25T19:40:02.460183+00:00",
+        "outcomes_accessible": true,
+        "outcomes_rows": 7644,
+        "latest_outcome_created_at": "2026-09-25T23:43:06.729780+00:00",
+        "duplicate_outcome_keys": 0,
+        "null_rates_pct": {
+          "symbol": 0.0,
+          "timestamp": 0.0,
+          "scan_id": 0.0,
+          "market.price": 0.0
+        },
+        "null_rate_sample": 4233
+      }
+    },
+    "artifact_freshness": {
+      "status": "HEALTHY",
+      "detail_state": "HEALTHY",
+      "reason": "4/4 artifacts fresh",
+      "observed_value": null,
+      "expected_value": null,
+      "last_updated": null,
+      "recommended_action": "none",
+      "human_action": "NO_ACTION",
+      "findings": [],
+      "metrics": {
+        "artifacts": [
+          {
+            "artifact": "forward_evidence_readiness",
+            "label": "Run 56 readiness",
+            "generated_at": "2026-09-26T07:57:34+00:00",
+            "age_hours": 0.7,
+            "expected_max_age": "\u2264 1 completed trading day",
+            "status": "FRESH"
+          },
+          {
+            "artifact": "maturation_parity_audit",
+            "label": "Run 58 maturation parity",
+            "generated_at": "2026-09-26T08:13:57.542686+00:00",
+            "age_hours": 0.4,
+            "expected_max_age": "\u2264 7 days",
+            "status": "FRESH"
+          },
+          {
+            "artifact": "latest_scanner_observation",
+            "label": "Latest scanner research capture",
+            "generated_at": "2026-09-25T19:40:02.460183+00:00",
+            "age_hours": 13.0,
+            "expected_max_age": "\u2264 1 completed trading day",
+            "status": "FRESH"
+          },
+          {
+            "artifact": "previous_system_health",
+            "label": "Previous health snapshot",
+            "generated_at": "2026-09-26T08:35:36.744422+00:00",
+            "age_hours": 0.0,
+            "expected_max_age": "\u2264 1 completed trading day",
+            "status": "FRESH"
+          }
+        ]
+      }
+    }
+  },
+  "incidents": [
+    {
+      "incident_id": "maturation:MATURATION_CAP_BINDING",
+      "severity": "WARNING",
+      "subsystem": "maturation",
+      "detected_at": "2026-09-25T23:42:47.808993+00:00",
+      "age_hours": 8.9,
+      "summary": "1213 ready symbols deferred by the per-run cap",
+      "evidence": {
+        "ready_symbols": 1613,
+        "deferred": 1213,
+        "report_generated_at": "2026-09-25T23:42:47.808993+00:00",
+        "report_schema": "hsf-maturation-1.1",
+        "max_symbols": 400
+      },
+      "recommended_action": "cohort-neutral only while the cap does not bind (Run 58); review MAX_SYMBOLS",
+      "human_action": "WATCH",
+      "automation_candidate": false
+    }
+  ],
+  "automation_candidates": [],
+  "forward_evidence_status": "NO_FORWARD_DATA",
+  "market": {
+    "is_trading_day": false,
+    "market_open": false,
+    "calendar_covered": true,
+    "next_expected_scan": "2026-09-28T12:35:00+00:00"
+  },
+  "autonomy_readiness": {
+    "state": "OBSERVABLE",
+    "blockers_to_recovery_ready": [
+      "no automatic re-dispatch of stale/missed workflows (scan, maturation, readiness, parity audit)",
+      "no automatic maturation retry escalation",
+      "no incident notification layer (email/Slack) for HUMAN_ACTION_REQUIRED",
+      "no recovery audit trail / guardrails (rate limits, max retries, kill switch)"
+    ],
+    "blockers_to_autonomous": [
+      "no automatic re-dispatch of stale/missed workflows (scan, maturation, readiness, parity audit)",
+      "no automatic maturation retry escalation",
+      "no incident notification layer (email/Slack) for HUMAN_ACTION_REQUIRED",
+      "no recovery audit trail / guardrails (rate limits, max retries, kill switch)",
+      "scanner coverage telemetry (symbols attempted/processed) not persisted",
+      "yfinance fallback usage not instrumented",
+      "calendar covers 2025-2027 only (needs yearly update or Alpaca calendar cross-check)",
+      "formal evaluation requires explicit human approval by design (never automatic)"
+    ]
+  },
+  "collection_errors": {},
+  "collection_timings_sec": {
+    "workflows": 4.12,
+    "maturation_report": 1.04,
+    "observations": 2.59,
+    "db_probe": 0.33,
+    "forward_outcomes": 0.16,
+    "readiness": 0.01,
+    "db_runs": 0.16,
+    "universe": 1.81,
+    "parity": 0.0,
+    "previous_health": 0.32
+  },
+  "generation_seconds": 10.56,
+  "persisted": true
+}
