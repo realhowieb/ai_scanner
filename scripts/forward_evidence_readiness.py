@@ -84,11 +84,13 @@ def render_markdown(r: Dict[str, Any]) -> str:
                      + " | ".join(str(x["unmatured_reasons"][k]) for k in UNMATURED_REASONS) + " |")
     L += ["", f"_{r['data_quality']['unmatured_reason_note']}._", "",
           "## Maturation parity", "",
-          "| Horizon | CANDIDATE % | NEAR_MISS % | CONTROL % | Parity gap (pp) | Measurable |", "|---|---|---|---|---|---|"]
+          "| Horizon | CANDIDATE % | NEAR_MISS % | CONTROL % | Parity gap (pp) | Class | Measurable |",
+          "|---|---|---|---|---|---|---|"]
     for h in HORIZONS:
         p = r["maturation_parity"][h]
         L.append(f"| {h} | {_v(p['candidate_maturation_pct'])} | {_v(p['near_miss_maturation_pct'])} | "
-                 f"{_v(p['control_maturation_pct'])} | {_v(p['maturation_parity_gap'])} | {'yes' if p['measurable'] else 'no'} |")
+                 f"{_v(p['control_maturation_pct'])} | {_v(p['maturation_parity_gap'])} | "
+                 f"{p.get('parity_classification', '—')} | {'yes' if p['measurable'] else 'no'} |")
 
     L += ["", "## Directions", "", "| Direction | Observations | Matured (+60m) | Scan runs | Matured clusters (+60m) |",
           "|---|---|---|---|---|"]
@@ -101,7 +103,8 @@ def render_markdown(r: Dict[str, Any]) -> str:
     for k in ("pre_epoch_observations_excluded", "legacy_untagged_excluded", "duplicate_observation_ids",
               "conflicting_observation_ids", "duplicate_outcomes", "conflicting_outcomes",
               "orphan_forward_outcomes", "point_in_time_violations", "direction_transform_mismatches",
-              "invalid_market_values", "cohort_overlap", "scoring_version_drift"):
+              "invalid_market_values", "cohort_overlap", "scoring_version_drift",
+              "maturation_capacity_binding"):
         L.append(f"- {k}: {dq[k]}")
     L.append(f"- latest maturation run: {dq['maturation_run_report']}")
     L += ["", "## Research metadata completeness (Run 57, informational)", "",

@@ -127,6 +127,14 @@ def _fail(report: Dict[str, Any], horizon: str | None, reason: str) -> None:
         report["horizons"][horizon]["failed"] += 1
 
 
+def _t(trace, o, horizon, status) -> None:
+    """Record one scheduling decision (status only, never outcome values)."""
+    if trace is not None:
+        trace.append({"observation_id": str(o.get("observation_id") or ""),
+                      "symbol": str(o.get("symbol") or "").upper(),
+                      "horizon": horizon, "status": status})
+
+
 def _default_exclusion_reason(symbol: str):
     from data.us_market_universe import symbol_exclusion_reason
     return symbol_exclusion_reason(symbol)
@@ -191,7 +199,7 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
                         max_symbols: int = MAX_SYMBOLS, fetch_bars_batch=None,
                         request_stats=None, batch_size: int = BATCH_SIZE,
                         exclusion_reason=None,
-                        retire_after=RETIRE_AFTER) -> Dict[str, Any]:
+                        retire_after=RETIRE_AFTER, trace=None) -> Dict[str, Any]:
     """Pure-ish orchestration (injectable `fetch_bars`/`save_fn` for tests).
 
     Bounded per run: at most `max_symbols` distinct symbols are fetched, in
@@ -204,7 +212,13 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
     given, else `fetch_bars_batch(symbols, start_iso, end_iso) -> {symbol: bars}`
     (default: batched Alpaca). `request_stats` (AlpacaRequestStats-like) feeds the
     request/429/retry counters. `exclusion_reason(symbol) -> str|None` drops
-    US_MARKET-ineligible symbols before they consume the per-run budget."""
+    US_MARKET-ineligible symbols before they consume the per-run budget.
+
+    `trace` (Run 58, observability only): if a list is given, one
+    {observation_id, symbol, horizon, status} entry is appended per decision
+    (ALREADY, NOT_READY, RETIRED, INELIGIBLE, DEFERRED, MATURED, ALREADY_WRITTEN,
+    or the failure reason). It never contains outcome values and never changes
+    the report or any write."""
     now = now or _now()
     if not isinstance(now, _dt.datetime):
         now = _parse(now) or _now()
@@ -228,6 +242,8 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
             inel["symbols"] += 1
             inel["observations"] += len(by_symbol[symbol])
             inel["reasons"][reason] = inel["reasons"].get(reason, 0) + 1
+            for o in by_symbol[symbol]:
+                _t(trace, o, "*", "INELIGIBLE")
             del by_symbol[symbol]
 
     retired = report["retired"]
@@ -246,11 +262,14 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
             for h, status in elig.items():
                 if status in ("already", "not_ready"):
                     report["horizons"][h][status] += 1
+                    _t(trace, o, h, status.upper())
             ready = [h for h, s in elig.items() if s == "ready"]
             a = _parse(anchor)
             if ready and retire_after is not None and a is not None and now >= a + retire_after:
                 retired["observations"] += 1
                 retired["horizons"] += len(ready)
+                for h in ready:
+                    _t(trace, o, h, "RETIRED")
                 symbol_retired = True
                 continue
             if ready:
@@ -278,6 +297,10 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
         report["backlog"]["oldest_pending_age_min"] = (
             round((now - oldest_deferred).total_seconds() / 60.0, 1)
             if oldest_deferred is not None else None)
+        for _s, (plans, _e) in deferred:
+            for o, _a, ready in plans:
+                for h in ready:
+                    _t(trace, o, h, "DEFERRED")
         ordered = ordered[:max_symbols]
 
     report["backlog"].update({
@@ -304,10 +327,16 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
         if earliest is None:
             _fail(report, None, "INVALID_TIMESTAMP")
             report["backlog"]["failed_symbols"] += 1
+            for o, _a, ready in plans:
+                for h in ready:
+                    _t(trace, o, h, "INVALID_TIMESTAMP")
             continue
         if symbol in fetch_errors:
             reason = fetch_errors[symbol]
             _fail(report, None, reason)
+            for o, _a, ready in plans:
+                for h in ready:
+                    _t(trace, o, h, reason)
             report["backlog"]["failed_symbols"] += 1
             report["rate_limited_symbols" if reason == "RATE_LIMITED"
                    else "provider_error_symbols"] += 1
@@ -318,6 +347,7 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
             for _o, _a, ready in plans:
                 for h in ready:
                     _fail(report, h, "PRICE_DATA_UNAVAILABLE")
+                    _t(trace, _o, h, "PRICE_DATA_UNAVAILABLE")
             report["backlog"]["failed_symbols"] += 1
             report["price_data_unavailable_symbols"] += 1
             continue
@@ -330,6 +360,7 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
             if len(closes) < 2:
                 for h in ready:
                     _fail(report, h, "INSUFFICIENT_FUTURE_BARS")
+                    _t(trace, o, h, "INSUFFICIENT_FUTURE_BARS")
                 continue
             eval_times = {h: (a + _dt.timedelta(minutes=HORIZON_BARS[h])).isoformat()
                           for h in ready}
@@ -342,22 +373,27 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
             for h in ready:
                 if h not in produced:
                     _fail(report, h, "INSUFFICIENT_FUTURE_BARS")
+                    _t(trace, o, h, "INSUFFICIENT_FUTURE_BARS")
             if dry_run:
                 for oc in outcomes:
                     report["horizons"][oc["horizon"]]["new"] += 1
                     report["attached"] += 1
+                    _t(trace, o, oc["horizon"], "MATURED")
                 continue
             for oc in outcomes:
                 try:
                     wrote = (save_fn or _default_save)(oc)
                 except Exception:
                     _fail(report, oc["horizon"], "DATABASE_ERROR")
+                    _t(trace, o, oc["horizon"], "DATABASE_ERROR")
                     continue
                 if wrote:
                     report["horizons"][oc["horizon"]]["new"] += 1
                     report["attached"] += 1
+                    _t(trace, o, oc["horizon"], "MATURED")
                 else:
                     report["horizons"][oc["horizon"]]["already"] += 1
+                    _t(trace, o, oc["horizon"], "ALREADY_WRITTEN")
     # matured_observations counts NEW outcome rows written (real drain this run);
     # in dry-run it mirrors would-be writes so clearance estimates stay comparable.
     report["backlog"]["matured_observations"] = report["attached"]

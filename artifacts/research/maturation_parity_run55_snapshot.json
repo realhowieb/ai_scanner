@@ -1,0 +1,1512 @@
+{
+  "schema": "hsf-maturation-parity-1.0",
+  "section": "RUN55_SNAPSHOT",
+  "generated_at": "2026-09-26T07:23:11+00:00",
+  "as_of": "2026-09-26T07:23:11+00:00",
+  "status": "OK",
+  "scope": "historical",
+  "observations": 3713,
+  "run55_primary_population_coverage": {
+    "+5m": {
+      "CANDIDATE": {
+        "eligible": 1200,
+        "matured": 657,
+        "unmatured": 543,
+        "maturation_pct": 54.75
+      },
+      "NEAR_MISS": {
+        "eligible": 613,
+        "matured": 280,
+        "unmatured": 333,
+        "maturation_pct": 45.68
+      },
+      "CONTROL": {
+        "eligible": 1300,
+        "matured": 190,
+        "unmatured": 1110,
+        "maturation_pct": 14.62
+      }
+    },
+    "+15m": {
+      "CANDIDATE": {
+        "eligible": 1200,
+        "matured": 649,
+        "unmatured": 551,
+        "maturation_pct": 54.08
+      },
+      "NEAR_MISS": {
+        "eligible": 613,
+        "matured": 271,
+        "unmatured": 342,
+        "maturation_pct": 44.21
+      },
+      "CONTROL": {
+        "eligible": 1300,
+        "matured": 154,
+        "unmatured": 1146,
+        "maturation_pct": 11.85
+      }
+    },
+    "+30m": {
+      "CANDIDATE": {
+        "eligible": 1200,
+        "matured": 598,
+        "unmatured": 602,
+        "maturation_pct": 49.83
+      },
+      "NEAR_MISS": {
+        "eligible": 613,
+        "matured": 250,
+        "unmatured": 363,
+        "maturation_pct": 40.78
+      },
+      "CONTROL": {
+        "eligible": 1300,
+        "matured": 129,
+        "unmatured": 1171,
+        "maturation_pct": 9.92
+      }
+    },
+    "+60m": {
+      "CANDIDATE": {
+        "eligible": 1200,
+        "matured": 571,
+        "unmatured": 629,
+        "maturation_pct": 47.58
+      },
+      "NEAR_MISS": {
+        "eligible": 613,
+        "matured": 232,
+        "unmatured": 381,
+        "maturation_pct": 37.85
+      },
+      "CONTROL": {
+        "eligible": 1300,
+        "matured": 112,
+        "unmatured": 1188,
+        "maturation_pct": 8.62
+      }
+    }
+  },
+  "run55_primary_population_parity": {
+    "+5m": {
+      "candidate_coverage": 54.75,
+      "near_miss_coverage": 45.68,
+      "control_coverage": 14.62,
+      "parity_gap": 40.13,
+      "classification": "CRITICAL"
+    },
+    "+15m": {
+      "candidate_coverage": 54.08,
+      "near_miss_coverage": 44.21,
+      "control_coverage": 11.85,
+      "parity_gap": 42.23,
+      "classification": "CRITICAL"
+    },
+    "+30m": {
+      "candidate_coverage": 49.83,
+      "near_miss_coverage": 40.78,
+      "control_coverage": 9.92,
+      "parity_gap": 39.91,
+      "classification": "CRITICAL"
+    },
+    "+60m": {
+      "candidate_coverage": 47.58,
+      "near_miss_coverage": 37.85,
+      "control_coverage": 8.62,
+      "parity_gap": 38.96,
+      "classification": "CRITICAL"
+    }
+  },
+  "cohort_counts": {
+    "CANDIDATE": 1400,
+    "NEAR_MISS": 713,
+    "CONTROL": 1600
+  },
+  "coverage": {
+    "+5m": {
+      "CANDIDATE": {
+        "observations": 1400,
+        "eligible": 1400,
+        "matured": 857,
+        "unmatured": 543,
+        "maturation_pct": 61.21,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 543,
+            "pct_of_cohort_eligible": 38.79,
+            "pct_of_missing": 100.0
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 543
+        }
+      },
+      "NEAR_MISS": {
+        "observations": 713,
+        "eligible": 713,
+        "matured": 365,
+        "unmatured": 348,
+        "maturation_pct": 51.19,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 348,
+            "pct_of_cohort_eligible": 48.81,
+            "pct_of_missing": 100.0
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 348
+        }
+      },
+      "CONTROL": {
+        "observations": 1600,
+        "eligible": 1600,
+        "matured": 301,
+        "unmatured": 1299,
+        "maturation_pct": 18.81,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 15,
+            "pct_of_cohort_eligible": 0.94,
+            "pct_of_missing": 1.15
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 1284,
+            "pct_of_cohort_eligible": 80.25,
+            "pct_of_missing": 98.85
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 1284,
+          "structural": 15
+        }
+      }
+    },
+    "+15m": {
+      "CANDIDATE": {
+        "observations": 1400,
+        "eligible": 1400,
+        "matured": 849,
+        "unmatured": 551,
+        "maturation_pct": 60.64,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 8,
+            "pct_of_cohort_eligible": 0.57,
+            "pct_of_missing": 1.45
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 543,
+            "pct_of_cohort_eligible": 38.79,
+            "pct_of_missing": 98.55
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 551
+        }
+      },
+      "NEAR_MISS": {
+        "observations": 713,
+        "eligible": 713,
+        "matured": 356,
+        "unmatured": 357,
+        "maturation_pct": 49.93,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 9,
+            "pct_of_cohort_eligible": 1.26,
+            "pct_of_missing": 2.52
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 348,
+            "pct_of_cohort_eligible": 48.81,
+            "pct_of_missing": 97.48
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 357
+        }
+      },
+      "CONTROL": {
+        "observations": 1600,
+        "eligible": 1600,
+        "matured": 242,
+        "unmatured": 1358,
+        "maturation_pct": 15.12,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 59,
+            "pct_of_cohort_eligible": 3.69,
+            "pct_of_missing": 4.34
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 15,
+            "pct_of_cohort_eligible": 0.94,
+            "pct_of_missing": 1.1
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 1284,
+            "pct_of_cohort_eligible": 80.25,
+            "pct_of_missing": 94.55
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 1343,
+          "structural": 15
+        }
+      }
+    },
+    "+30m": {
+      "CANDIDATE": {
+        "observations": 1400,
+        "eligible": 1400,
+        "matured": 798,
+        "unmatured": 602,
+        "maturation_pct": 57.0,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 59,
+            "pct_of_cohort_eligible": 4.21,
+            "pct_of_missing": 9.8
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 543,
+            "pct_of_cohort_eligible": 38.79,
+            "pct_of_missing": 90.2
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 602
+        }
+      },
+      "NEAR_MISS": {
+        "observations": 713,
+        "eligible": 713,
+        "matured": 335,
+        "unmatured": 378,
+        "maturation_pct": 46.98,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 30,
+            "pct_of_cohort_eligible": 4.21,
+            "pct_of_missing": 7.94
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 348,
+            "pct_of_cohort_eligible": 48.81,
+            "pct_of_missing": 92.06
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 378
+        }
+      },
+      "CONTROL": {
+        "observations": 1600,
+        "eligible": 1600,
+        "matured": 205,
+        "unmatured": 1395,
+        "maturation_pct": 12.81,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 95,
+            "pct_of_cohort_eligible": 5.94,
+            "pct_of_missing": 6.81
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 16,
+            "pct_of_cohort_eligible": 1.0,
+            "pct_of_missing": 1.15
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 1284,
+            "pct_of_cohort_eligible": 80.25,
+            "pct_of_missing": 92.04
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 1379,
+          "structural": 16
+        }
+      }
+    },
+    "+60m": {
+      "CANDIDATE": {
+        "observations": 1400,
+        "eligible": 1400,
+        "matured": 768,
+        "unmatured": 632,
+        "maturation_pct": 54.86,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 89,
+            "pct_of_cohort_eligible": 6.36,
+            "pct_of_missing": 14.08
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 543,
+            "pct_of_cohort_eligible": 38.79,
+            "pct_of_missing": 85.92
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 632
+        }
+      },
+      "NEAR_MISS": {
+        "observations": 713,
+        "eligible": 713,
+        "matured": 315,
+        "unmatured": 398,
+        "maturation_pct": 44.18,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 50,
+            "pct_of_cohort_eligible": 7.01,
+            "pct_of_missing": 12.56
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 348,
+            "pct_of_cohort_eligible": 48.81,
+            "pct_of_missing": 87.44
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 398
+        }
+      },
+      "CONTROL": {
+        "observations": 1600,
+        "eligible": 1600,
+        "matured": 178,
+        "unmatured": 1422,
+        "maturation_pct": 11.12,
+        "projected_maturation_pct_after_backlog": null,
+        "missing_reasons": {
+          "PENDING_BACKLOG": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "SCHEDULER_DEFERRED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "RATE_LIMITED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PRICE_DATA_UNAVAILABLE": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INSUFFICIENT_FUTURE_BARS": {
+            "count": 121,
+            "pct_of_cohort_eligible": 7.56,
+            "pct_of_missing": 8.51
+          },
+          "RETIRED_WINDOW_CLOSED": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "INELIGIBLE_SYMBOL": {
+            "count": 17,
+            "pct_of_cohort_eligible": 1.06,
+            "pct_of_missing": 1.2
+          },
+          "INVALID_ANCHOR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "PIPELINE_ERROR": {
+            "count": 0,
+            "pct_of_cohort_eligible": 0.0,
+            "pct_of_missing": 0.0
+          },
+          "UNKNOWN": {
+            "count": 1284,
+            "pct_of_cohort_eligible": 80.25,
+            "pct_of_missing": 90.3
+          }
+        },
+        "not_yet_eligible": 0,
+        "reason_basis": {
+          "inferred": 1405,
+          "structural": 17
+        }
+      }
+    }
+  },
+  "parity": {
+    "+5m": {
+      "candidate_coverage": 61.21,
+      "near_miss_coverage": 51.19,
+      "control_coverage": 18.81,
+      "parity_gap": 42.4,
+      "classification": "CRITICAL"
+    },
+    "+15m": {
+      "candidate_coverage": 60.64,
+      "near_miss_coverage": 49.93,
+      "control_coverage": 15.12,
+      "parity_gap": 45.52,
+      "classification": "CRITICAL"
+    },
+    "+30m": {
+      "candidate_coverage": 57.0,
+      "near_miss_coverage": 46.98,
+      "control_coverage": 12.81,
+      "parity_gap": 44.19,
+      "classification": "CRITICAL"
+    },
+    "+60m": {
+      "candidate_coverage": 54.86,
+      "near_miss_coverage": 44.18,
+      "control_coverage": 11.12,
+      "parity_gap": 43.74,
+      "classification": "CRITICAL"
+    }
+  },
+  "projected_parity_after_backlog": null,
+  "timing": {
+    "by_cohort": {
+      "CANDIDATE": {
+        "observations": 1400,
+        "bucket_counts": {
+          "PRE (<09:30)": 100,
+          "09:30-10:30": 300,
+          "10:30-12:00": 0,
+          "12:00-14:00": 300,
+          "14:00-15:00": 300,
+          "15:00-16:00": 300,
+          "POST (>=16:00)": 100
+        },
+        "bucket_pct": {
+          "PRE (<09:30)": 7.14,
+          "09:30-10:30": 21.43,
+          "10:30-12:00": 0.0,
+          "12:00-14:00": 21.43,
+          "14:00-15:00": 21.43,
+          "15:00-16:00": 21.43,
+          "POST (>=16:00)": 7.14
+        },
+        "p25_time_et": "09:36",
+        "median_time_et": "14:34",
+        "p75_time_et": "15:36",
+        "plus60_crosses_close_pct": 21.43,
+        "plus30_crosses_close_pct": 21.43
+      },
+      "NEAR_MISS": {
+        "observations": 713,
+        "bucket_counts": {
+          "PRE (<09:30)": 50,
+          "09:30-10:30": 150,
+          "10:30-12:00": 0,
+          "12:00-14:00": 150,
+          "14:00-15:00": 150,
+          "15:00-16:00": 163,
+          "POST (>=16:00)": 50
+        },
+        "bucket_pct": {
+          "PRE (<09:30)": 7.01,
+          "09:30-10:30": 21.04,
+          "10:30-12:00": 0.0,
+          "12:00-14:00": 21.04,
+          "14:00-15:00": 21.04,
+          "15:00-16:00": 22.86,
+          "POST (>=16:00)": 7.01
+        },
+        "p25_time_et": "09:36",
+        "median_time_et": "14:34",
+        "p75_time_et": "15:36",
+        "plus60_crosses_close_pct": 22.86,
+        "plus30_crosses_close_pct": 22.86
+      },
+      "CONTROL": {
+        "observations": 1600,
+        "bucket_counts": {
+          "PRE (<09:30)": 200,
+          "09:30-10:30": 300,
+          "10:30-12:00": 0,
+          "12:00-14:00": 300,
+          "14:00-15:00": 300,
+          "15:00-16:00": 400,
+          "POST (>=16:00)": 100
+        },
+        "bucket_pct": {
+          "PRE (<09:30)": 12.5,
+          "09:30-10:30": 18.75,
+          "10:30-12:00": 0.0,
+          "12:00-14:00": 18.75,
+          "14:00-15:00": 18.75,
+          "15:00-16:00": 25.0,
+          "POST (>=16:00)": 6.25
+        },
+        "p25_time_et": "09:36",
+        "median_time_et": "14:34",
+        "p75_time_et": "15:36",
+        "plus60_crosses_close_pct": 25.0,
+        "plus30_crosses_close_pct": 25.0
+      }
+    },
+    "plus60_by_scan_slot": {
+      "00:21": {
+        "CANDIDATE": {
+          "eligible": 100,
+          "matured": 99,
+          "maturation_pct": 99.0
+        },
+        "NEAR_MISS": {
+          "eligible": 50,
+          "matured": 50,
+          "maturation_pct": 100.0
+        },
+        "CONTROL": {
+          "eligible": 100,
+          "matured": 28,
+          "maturation_pct": 28.0
+        }
+      },
+      "00:50": {
+        "CANDIDATE": {
+          "eligible": 0,
+          "matured": 0,
+          "maturation_pct": null
+        },
+        "NEAR_MISS": {
+          "eligible": 0,
+          "matured": 0,
+          "maturation_pct": null
+        },
+        "CONTROL": {
+          "eligible": 100,
+          "matured": 37,
+          "maturation_pct": 37.0
+        }
+      },
+      "09:36": {
+        "CANDIDATE": {
+          "eligible": 300,
+          "matured": 184,
+          "maturation_pct": 61.33
+        },
+        "NEAR_MISS": {
+          "eligible": 150,
+          "matured": 69,
+          "maturation_pct": 46.0
+        },
+        "CONTROL": {
+          "eligible": 300,
+          "matured": 40,
+          "maturation_pct": 13.33
+        }
+      },
+      "12:36": {
+        "CANDIDATE": {
+          "eligible": 300,
+          "matured": 149,
+          "maturation_pct": 49.67
+        },
+        "NEAR_MISS": {
+          "eligible": 150,
+          "matured": 58,
+          "maturation_pct": 38.67
+        },
+        "CONTROL": {
+          "eligible": 300,
+          "matured": 27,
+          "maturation_pct": 9.0
+        }
+      },
+      "14:34": {
+        "CANDIDATE": {
+          "eligible": 100,
+          "matured": 100,
+          "maturation_pct": 100.0
+        },
+        "NEAR_MISS": {
+          "eligible": 50,
+          "matured": 50,
+          "maturation_pct": 100.0
+        },
+        "CONTROL": {
+          "eligible": 100,
+          "matured": 32,
+          "maturation_pct": 32.0
+        }
+      },
+      "14:37": {
+        "CANDIDATE": {
+          "eligible": 100,
+          "matured": 38,
+          "maturation_pct": 38.0
+        },
+        "NEAR_MISS": {
+          "eligible": 50,
+          "matured": 7,
+          "maturation_pct": 14.0
+        },
+        "CONTROL": {
+          "eligible": 100,
+          "matured": 0,
+          "maturation_pct": 0.0
+        }
+      },
+      "14:50": {
+        "CANDIDATE": {
+          "eligible": 100,
+          "matured": 0,
+          "maturation_pct": 0.0
+        },
+        "NEAR_MISS": {
+          "eligible": 50,
+          "matured": 0,
+          "maturation_pct": 0.0
+        },
+        "CONTROL": {
+          "eligible": 100,
+          "matured": 0,
+          "maturation_pct": 0.0
+        }
+      },
+      "15:36": {
+        "CANDIDATE": {
+          "eligible": 300,
+          "matured": 100,
+          "maturation_pct": 33.33
+        },
+        "NEAR_MISS": {
+          "eligible": 150,
+          "matured": 48,
+          "maturation_pct": 32.0
+        },
+        "CONTROL": {
+          "eligible": 300,
+          "matured": 12,
+          "maturation_pct": 4.0
+        }
+      },
+      "15:55": {
+        "CANDIDATE": {
+          "eligible": 0,
+          "matured": 0,
+          "maturation_pct": null
+        },
+        "NEAR_MISS": {
+          "eligible": 13,
+          "matured": 0,
+          "maturation_pct": 0.0
+        },
+        "CONTROL": {
+          "eligible": 100,
+          "matured": 1,
+          "maturation_pct": 1.0
+        }
+      },
+      "16:19": {
+        "CANDIDATE": {
+          "eligible": 100,
+          "matured": 98,
+          "maturation_pct": 98.0
+        },
+        "NEAR_MISS": {
+          "eligible": 50,
+          "matured": 33,
+          "maturation_pct": 66.0
+        },
+        "CONTROL": {
+          "eligible": 100,
+          "matured": 1,
+          "maturation_pct": 1.0
+        }
+      }
+    },
+    "plus60_crosses_close_spread_pp": 3.57
+  },
+  "symbol_composition": {
+    "by_cohort": {
+      "CANDIDATE": {
+        "observations": 1400,
+        "unique_symbols": 261,
+        "observations_per_symbol": 5.36,
+        "recurring_symbols": 205,
+        "symbol_format": {
+          "PLAIN": 1400
+        },
+        "exclusion_status": {
+          "eligible": 1400
+        },
+        "duplicate_symbol_within_scan": 0,
+        "capture_dollar_volume_quantiles_musd": [
+          0.511,
+          12.776,
+          68.495
+        ],
+        "capture_price_median": 103.35,
+        "price_provider": {
+          "not_recorded": 1400
+        },
+        "symbols_never_matured_pct": 27.97,
+        "exchange": "not persisted on observations",
+        "etf_status": "not persisted on observations"
+      },
+      "NEAR_MISS": {
+        "observations": 713,
+        "unique_symbols": 277,
+        "observations_per_symbol": 2.57,
+        "recurring_symbols": 172,
+        "symbol_format": {
+          "PLAIN": 713
+        },
+        "exclusion_status": {
+          "eligible": 713
+        },
+        "duplicate_symbol_within_scan": 0,
+        "capture_dollar_volume_quantiles_musd": [
+          0.402,
+          11.311,
+          58.782
+        ],
+        "capture_price_median": 99.21,
+        "price_provider": {
+          "not_recorded": 713
+        },
+        "symbols_never_matured_pct": 38.27,
+        "exchange": "not persisted on observations",
+        "etf_status": "not persisted on observations"
+      },
+      "CONTROL": {
+        "observations": 1600,
+        "unique_symbols": 1496,
+        "observations_per_symbol": 1.07,
+        "recurring_symbols": 99,
+        "symbol_format": {
+          "PLAIN": 1572,
+          "FIVE_LETTER_SPECIAL_SUFFIX": 11,
+          "CLASS_OR_SUFFIX": 17
+        },
+        "exclusion_status": {
+          "eligible": 1583,
+          "preferred_share": 17
+        },
+        "duplicate_symbol_within_scan": 0,
+        "capture_dollar_volume_quantiles_musd": [
+          0.0,
+          0.014,
+          2.583
+        ],
+        "capture_price_median": 25.44,
+        "price_provider": {
+          "not_recorded": 1600
+        },
+        "symbols_never_matured_pct": 81.08,
+        "exchange": "not persisted on observations",
+        "etf_status": "not persisted on observations"
+      }
+    },
+    "overlap": {
+      "candidate_control": 24,
+      "candidate_near_miss": 170,
+      "near_miss_control": 35
+    },
+    "control_to_candidate_median_dollar_volume_ratio": 0.0011
+  },
+  "symbol_sharing": {
+    "mismatch_cases": {
+      "DIFFERENT_SCAN_RUN": 4478
+    },
+    "same_anchor_examples": [],
+    "interpretation": "SAME_ANCHOR_MISMATCH would mean identical bars served one cohort and not the other (a pipeline defect). Mismatches across different scan runs have different anchors and therefore different future bars."
+  },
+  "retirement": {
+    "CANDIDATE": {
+      "observations": 1400,
+      "retired_observations": 0,
+      "retired_horizons": 0,
+      "retirement_rate_pct": 0.0,
+      "age_days_at_audit_median": null,
+      "reason": "window closed (anchor + 6 days) with the horizon unmatured"
+    },
+    "NEAR_MISS": {
+      "observations": 713,
+      "retired_observations": 0,
+      "retired_horizons": 0,
+      "retirement_rate_pct": 0.0,
+      "age_days_at_audit_median": null,
+      "reason": "window closed (anchor + 6 days) with the horizon unmatured"
+    },
+    "CONTROL": {
+      "observations": 1600,
+      "retired_observations": 0,
+      "retired_horizons": 0,
+      "retirement_rate_pct": 0.0,
+      "age_days_at_audit_median": null,
+      "reason": "window closed (anchor + 6 days) with the horizon unmatured"
+    },
+    "retirement_rate_spread_pp": 0.0,
+    "active": false
+  },
+  "scheduler_cap_allocation": {
+    "400": {
+      "ready_symbols": 1610,
+      "deferred_symbols": 1210,
+      "by_cohort": {
+        "CANDIDATE": {
+          "ready_horizons": 2328,
+          "reached": 1,
+          "deferred": 2327,
+          "reached_pct": 0.04
+        },
+        "NEAR_MISS": {
+          "ready_horizons": 1481,
+          "reached": 0,
+          "deferred": 1481,
+          "reached_pct": 0.0
+        },
+        "CONTROL": {
+          "ready_horizons": 5474,
+          "reached": 1574,
+          "deferred": 3900,
+          "reached_pct": 28.75
+        }
+      },
+      "reach_gap_pp": 28.75
+    },
+    "2000": {
+      "ready_symbols": 1610,
+      "deferred_symbols": 0,
+      "by_cohort": {
+        "CANDIDATE": {
+          "ready_horizons": 2328,
+          "reached": 2328,
+          "deferred": 0,
+          "reached_pct": 100.0
+        },
+        "NEAR_MISS": {
+          "ready_horizons": 1481,
+          "reached": 1481,
+          "deferred": 0,
+          "reached_pct": 100.0
+        },
+        "CONTROL": {
+          "ready_horizons": 5474,
+          "reached": 5474,
+          "deferred": 0,
+          "reached_pct": 100.0
+        }
+      },
+      "reach_gap_pp": 0.0
+    }
+  },
+  "scheduler_static_audit": [
+    {
+      "item": "loader query",
+      "finding": "ORDER BY timestamp DESC LIMIT 5000 (hour-bucketed timestamp; all cohorts of a scan share it)",
+      "cohort_neutral": "yes, except arbitrary tie order in the one boundary scan",
+      "risk": "~1238 research observations/day -> the 5,000 window covers ~4.0 days, shorter than the 6-day retirement window; older unmatured rows stop being retried"
+    },
+    {
+      "item": "grouping",
+      "finding": "observations grouped by symbol regardless of cohort; one bar series per symbol serves every cohort's observations",
+      "cohort_neutral": "yes (shared bars)",
+      "risk": "none when every ready symbol is processed"
+    },
+    {
+      "item": "ordering + cap",
+      "finding": "symbols ordered by earliest PENDING anchor, then the first max_symbols processed",
+      "cohort_neutral": "only when the cap does not bind",
+      "risk": "when the cap binds, persistently failing old symbols stay at the head and a recurring symbol's newer observations ride along with its oldest pending one; CANDIDATE symbols recur far more than CONTROL symbols"
+    },
+    {
+      "item": "per-run cap",
+      "finding": "400 symbols until b81daaf (2026-09-26), 2,000 after",
+      "cohort_neutral": "capacity is counted in symbols, and CONTROL contributes ~1 symbol per observation",
+      "risk": "CONTROL-heavy symbol counts make the cap bind on CONTROL first"
+    },
+    {
+      "item": "horizons",
+      "finding": "all ready horizons of an observation are processed together",
+      "cohort_neutral": "yes",
+      "risk": "none"
+    },
+    {
+      "item": "retirement",
+      "finding": "time-based (anchor + 6 days), cohort-agnostic code path",
+      "cohort_neutral": "yes by construction",
+      "risk": "inherits any earlier starvation"
+    },
+    {
+      "item": "batching / caching / 429",
+      "finding": "100-symbol batches in the same oldest-first order; persistent 429 trips a circuit breaker for the remaining batches",
+      "cohort_neutral": "yes, but the batches cut off by a breaker are the later ones in the ordering",
+      "risk": "same as cap"
+    },
+    {
+      "item": "failure retry",
+      "finding": "failed symbols are retried every run until retirement",
+      "cohort_neutral": "yes",
+      "risk": "no-data symbols consume capacity each run"
+    }
+  ],
+  "scheduler_replay_400": {
+    "cap": 400,
+    "runs": 10,
+    "by_horizon": {
+      "+5m": {
+        "CANDIDATE": {
+          "unmatured_eligible": 543,
+          "never_attempted": 543,
+          "never_attempted_pct": 100.0
+        },
+        "NEAR_MISS": {
+          "unmatured_eligible": 348,
+          "never_attempted": 340,
+          "never_attempted_pct": 97.7
+        },
+        "CONTROL": {
+          "unmatured_eligible": 1299,
+          "never_attempted": 969,
+          "never_attempted_pct": 74.6
+        }
+      },
+      "+15m": {
+        "CANDIDATE": {
+          "unmatured_eligible": 551,
+          "never_attempted": 550,
+          "never_attempted_pct": 99.82
+        },
+        "NEAR_MISS": {
+          "unmatured_eligible": 357,
+          "never_attempted": 349,
+          "never_attempted_pct": 97.76
+        },
+        "CONTROL": {
+          "unmatured_eligible": 1358,
+          "never_attempted": 970,
+          "never_attempted_pct": 71.43
+        }
+      },
+      "+30m": {
+        "CANDIDATE": {
+          "unmatured_eligible": 602,
+          "never_attempted": 600,
+          "never_attempted_pct": 99.67
+        },
+        "NEAR_MISS": {
+          "unmatured_eligible": 378,
+          "never_attempted": 369,
+          "never_attempted_pct": 97.62
+        },
+        "CONTROL": {
+          "unmatured_eligible": 1395,
+          "never_attempted": 974,
+          "never_attempted_pct": 69.82
+        }
+      },
+      "+60m": {
+        "CANDIDATE": {
+          "unmatured_eligible": 632,
+          "never_attempted": 628,
+          "never_attempted_pct": 99.37
+        },
+        "NEAR_MISS": {
+          "unmatured_eligible": 398,
+          "never_attempted": 389,
+          "never_attempted_pct": 97.74
+        },
+        "CONTROL": {
+          "unmatured_eligible": 1422,
+          "never_attempted": 979,
+          "never_attempted_pct": 68.85
+        }
+      }
+    }
+  },
+  "root_cause": {
+    "classification": "INSUFFICIENT_DATA",
+    "confidence": "LOW",
+    "horizon": "+60m",
+    "parity_gap_pp": 43.74,
+    "material_mechanisms": [],
+    "components_pp": {
+      "HISTORICAL_SCHEDULER_STARVATION": 0.0,
+      "MARKET_DATA_AVAILABILITY_EFFECT": 1.21,
+      "COHORT_COMPOSITION_EFFECT": 1.06,
+      "RETIREMENT_POLICY_EFFECT": 0.0,
+      "PIPELINE_BUG": 0.0,
+      "UNATTRIBUTED": 41.46,
+      "EXPECTED_TEMPORAL_MISSINGNESS": 3.57
+    },
+    "availability_driven_by_composition": true,
+    "control_to_candidate_median_dollar_volume_ratio": 0.0011,
+    "reason_basis": "inferred (no scheduler trace)"
+  }
+}

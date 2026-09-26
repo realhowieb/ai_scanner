@@ -1,0 +1,67 @@
+name: Maturation Parity Audit
+
+# Run 58 — READ-ONLY cohort maturation parity & missingness audit. Runs a
+# production-faithful DRY RUN of the maturation worker (same loader, cap, retries,
+# retirement) with a per-(observation, horizon) status trace, so missingness can be
+# attributed to scheduler backlog/deferral vs genuinely unavailable market data.
+# Nothing is written to the store; no outcome values are reported (anti-peeking).
+# Manual only.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: maturation-parity-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+          python -m pip install --prefer-binary -r requirements-ml.txt -c requirements.lock
+      - name: Historical scheduled maturation run times (for the replay model)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts/research
+          gh run list --workflow mature-observations.yml --event schedule -L 300 \
+            --json createdAt,conclusion -q '[.[] | select(.conclusion=="success" or .conclusion=="failure") | .createdAt]' \
+            > artifacts/research/maturation_run_times.json || echo "[]" > artifacts/research/maturation_run_times.json
+      - name: Maturation parity audit (read-only, dry-run trace)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          ALPACA_FEED: ${{ secrets.ALPACA_FEED }}
+        run: |
+          python -m scripts.audit_maturation_parity --simulate \
+            --run-times artifacts/research/maturation_run_times.json \
+            --run55-section artifacts/research/maturation_parity_run55_snapshot.json \
+            --out artifacts/research
+          cat artifacts/research/maturation_parity_audit.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload audit
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maturation-parity-audit
+          path: |
+            artifacts/research/maturation_parity_audit.json
+            artifacts/research/maturation_parity_audit.md
+            artifacts/research/maturation_run_times.json
+          if-no-files-found: warn

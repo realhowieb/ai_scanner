@@ -90,6 +90,19 @@ _FORBIDDEN_KEY = re.compile(
     r"raw_return|directional_return$|mfe$|mae$|drawdown)", re.I)
 
 
+def parity_class(gap_pp: Optional[float]) -> str:
+    """Run 58 completeness classes for a maturation parity gap (no performance info)."""
+    if gap_pp is None:
+        return "NOT_MEASURABLE"
+    if gap_pp <= 5:
+        return "HEALTHY"
+    if gap_pp <= 10:
+        return "ACCEPTABLE"
+    if gap_pp <= 20:
+        return "WARNING"
+    return "CRITICAL"
+
+
 # ---- Helpers -----------------------------------------------------------------
 def _parse_dt(v: Any) -> Optional[_dt.datetime]:
     try:
@@ -343,7 +356,8 @@ def monitor(observations: Sequence[Dict[str, Any]],
                          and len(settled_runs[h][c]) >= PARITY_MEASURABLE["min_runs_per_cohort"]
                          for c in COHORTS)
         parity[h] = {**{f"{c.lower()}_maturation_pct": pcts[c] for c in COHORTS},
-                     "maturation_parity_gap": gap, "measurable": measurable}
+                     "maturation_parity_gap": gap, "measurable": measurable,
+                     "parity_classification": parity_class(gap)}
 
     # ---- Directions (Part 5) ------------------------------------------------------
     dirs: Dict[str, Any] = {}
@@ -396,6 +410,11 @@ def monitor(observations: Sequence[Dict[str, Any]],
                               "observations": n} for k, n in sorted(versions.items(), key=lambda kv: repr(kv[0]))],
         "scoring_version_drift": len(versions) > 1,
         "maturation_run_report": _maturation_run_summary(maturation_report),
+        # Run 58: the scheduler is cohort-neutral only while its symbol cap does not
+        # bind (every ready symbol processed). Surfaced from the latest scheduled run.
+        "maturation_capacity_binding": (
+            None if not isinstance(maturation_report, dict) or "symbols_deferred" not in maturation_report
+            else bool(maturation_report.get("symbols_deferred"))),
         "unmatured_reason_note": ("per-observation failure reasons are not persisted; PRICE_DATA_UNAVAILABLE "
                                   "and INSUFFICIENT_FUTURE_BARS are inferred, RATE_LIMITED is only visible "
                                   "run-level in maturation_run_report"),
