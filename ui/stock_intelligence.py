@@ -527,6 +527,13 @@ def _render_historical(intel: Dict[str, Any]) -> None:
         return
     from ui.product_copy import HISTORICAL_RESEARCH_LABEL, HISTORICAL_RESEARCH_NOTE
 
+    # Run 85E: historical research is a Pro feature (can_track_record), as on Market Brief.
+    if not (st.session_state.get("entitlements") or {}).get("can_track_record"):
+        from ui.pricing import upgrade_message
+
+        st.caption(f"📚 {HISTORICAL_RESEARCH_LABEL} · {upgrade_message('can_track_record')}")
+        return
+
     # Run 62: historical rates are research context, collapsed and labelled,
     # not part of the headline read on the ticker.
     with st.expander(f"{HISTORICAL_RESEARCH_LABEL} (descriptive)", expanded=False):

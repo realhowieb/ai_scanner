@@ -96,11 +96,26 @@ Gate U or the schedule. The only `scheduler/` edit is recipient-specific email c
 The certification test suite passes, and there's no lock or scanner change, so
 re-certification isn't required.
 
-## Follow-up (not in this run)
+## Follow-up done — Run 85E: Scanner and Stock Intelligence
 
-**Historical context also appears outside Market Brief without a Pro gate:**
-- Scanner's results intelligence panel: `ui/results_intelligence.py:478`;
-- Stock Intelligence: `ui/stock_intelligence.py:536`.
+The same historical-research statistics now need Pro (`can_track_record`) everywhere
+customers see them:
 
-These are the same "70–79 range: X% positive outcome · n" lines. To be fully consistent
-with this run they should also require `can_track_record`. Tracked as P1-32.
+| Surface | Before | After |
+|---|---|---|
+| Scanner: per-opportunity "📊 Historical context · 70-79: X% positive outcome · n" (`ui/results_intelligence.py`) | Everyone | Pro and up; hidden otherwise (as on Market Brief) |
+| Stock Intelligence: "Historical research (descriptive)" panel (score-band positive-outcome rate, this ticker's prior HSF observations, similar-state persistence cohort; `ui/stock_intelligence.py`) | Everyone | Pro and up; others see one line: "📚 Historical research · Pro adds historical research so you can inspect how prior HSF observations evolved." |
+| Alerts page "HSF Intelligence performance" | Admin only | Unchanged (already `can_diagnostics`) |
+
+**Tests** (`tests/test_run85e_historical_gating.py`, 4 tests):
+- **Scanner:** the real `app.py` shows the Scanner cards' history for Pro and Premium but
+  not Free.
+- **Stock Intelligence:** Free sees only the Pro note; Pro and Premium see the full
+  research.
+- **Source:** every historical-context display checks `can_track_record`.
+- **On the old code, 3 of the 4 fail.**
+
+**Full suite:** 1975 collected, 1937 passed, 0 failed, 38 skipped (FastAPI; covered by the
+billing job). Lightweight CI env 1830 passed. `unittest discover` 1932 OK. Billing 110
+passed. Stock/results intelligence, Run 70 and Run 79 suites: 66 passed. Boot smoke rc 0;
+lint clean.

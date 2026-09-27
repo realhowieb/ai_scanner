@@ -469,7 +469,10 @@ def _render_result_detail(
         )
 
     # Historical context (reuses Run 18B calibration; 'still building' until n>=10).
+    # Run 85E: historical research is a Pro feature (can_track_record), as on Market Brief.
     try:
+        if not (st.session_state.get("entitlements") or {}).get("can_track_record"):
+            raise LookupError("historical research is a Pro feature")
         from analytics.hsf_calibration import historical_context
         from ui.market_brief import _calibration_records_cached
         ctx = historical_context(_calibration_records_cached(), c.get("score"))
