@@ -16,14 +16,14 @@ cffi==2.1.0
 charset-normalizer==3.4.9
 circlify==0.15.1
 click==8.4.2
-cryptography==49.0.0
+cryptography==50.0.0
 curl_cffi==0.15.0
 distro==1.9.0
 docstring_parser==0.18.0
 extra-streamlit-components==0.1.81
 frozendict==2.4.7
 gitdb==4.0.12
-GitPython==3.1.51
+GitPython==3.1.60
 greenlet==3.5.3
 h11==0.16.0
 html5lib==1.1
@@ -73,7 +73,7 @@ sentry-sdk==2.65.0
 six==1.17.0
 smmap==5.0.3
 sniffio==1.3.1
-soupsieve==2.8.4
+soupsieve==2.9
 SQLAlchemy==2.0.51
 sseclient-py==1.9.0
 streamlit==1.54.0
