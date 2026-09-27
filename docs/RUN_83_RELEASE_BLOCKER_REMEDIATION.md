@@ -392,7 +392,17 @@ lint (same rules), import smoke, the lightweight `pytest tests/`, `unittest disc
     runs all isolation, restore-token and startup tests.
 - CI was only extended; nothing was made optional or skipped.
 
-The GitHub Actions result for this commit is recorded in the final message of this run.
+**GitHub Actions on dev @ `4b5f0f2` (Smoke Checks run 36283588719):**
+
+| Job | Result | Run 83 tests executed |
+|---|---|---:|
+| `billing-contract` | success: 110 passed, 1 skipped | 25 (12 billing-auth + 13 restore-token) |
+| `smoke` | success: 1784 passed, 117 skipped | 19 (13 restore-token + 6 isolation) |
+| `core-dependency-import-smoke` | success: Ran 1858, OK (42 skipped: FastAPI tests covered by `billing-contract`, 4 scikit-learn) | 23 (10 isolation + 13 restore-token) |
+| `full-dependency-import-smoke` | success | — |
+| `dependency-audit` (non-blocking) | failure, down from 34 vulnerabilities in 4 packages to **31 in 3**; tornado no longer reported (cryptography, soupsieve and GitPython remain for Run 74) | — |
+
+ResourceWarnings in the CI log: 0.
 
 ## Frozen-Core Verification
 
