@@ -256,7 +256,7 @@ def render_three_step_scanner(container: Any = None) -> None:
         with container:
             return render_three_step_scanner()
     tier = st.session_state.get("tier")
-    if not require_min_tier(tier, "premium", "EZ 3-Step AI Scanner"):
+    if not require_min_tier(tier, "premium", "3-step custom scanner"):
         return
 
     _init_scan_session_state()

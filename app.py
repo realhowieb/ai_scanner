@@ -137,7 +137,7 @@ except Exception:
     except Exception:
 
         def generate_ai_note(row: pd.Series) -> str:
-            return "AI notes module missing."
+            return "Setup notes unavailable."
 
 
 # --------------- Page config ----------------

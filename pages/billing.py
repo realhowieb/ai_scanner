@@ -254,7 +254,7 @@ def _upgrade_buttons(current_tier_key: str) -> None:
     with col_premium:
         st.markdown("### Premium · $39/mo")
         st.caption(TAGLINES["premium"])
-        st.caption("25 alerts, AI research, Early Breakout research, custom full-market scans and paper trading.")
+        st.caption("25 alerts, AI scan summaries and chat, setup notes, Early Breakout research, custom full-market scans and paper trading.")
         if current_tier_key in ("premium", "admin"):
             st.success("You already have Premium (or Admin).")
         else:

@@ -1,5 +1,8 @@
-"""AI Notes generation module.
-This module provides the `generate_ai_note` function used by the app.
+"""Setup notes (Run 85: shown as "Setup notes", not "AI Notes").
+
+`generate_ai_note` (name kept for callers) builds a deterministic note from the
+row's scan metrics with fixed templates. No AI model is involved, so the UI
+must not present it as AI-generated.
 
 The note adapts to the row schema: breakout-scan rows (BreakoutScore, GapPct,
 Trend20D%, …) get a setup analysis; watchlist quote rows (Last, Change,
@@ -85,13 +88,13 @@ def generate_ai_note(row: pd.Series) -> str:
     """Generate a short, human-readable note that adapts to the row schema."""
     try:
         if row is None:
-            return "AI Note unavailable for this row."
+            return "Setup note unavailable for this row."
         # Breakout-scan row?
         if row.get("BreakoutScore") is not None:
             return _breakout_note(row)
         # Watchlist / quote row?
         if row.get("Last") is not None:
             return _quote_note(row)
-        return f"{_ticker(row)}: no scan metrics available for an AI note."
+        return f"{_ticker(row)}: no scan metrics available for setup notes."
     except Exception:
-        return "AI Note unavailable for this row."
+        return "Setup note unavailable for this row."

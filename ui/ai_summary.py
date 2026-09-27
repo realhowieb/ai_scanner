@@ -10,29 +10,27 @@ import hashlib
 import pandas as pd
 
 _SUMMARY_COLUMNS = [
-    "Ticker", "Symbol", "BreakoutScore", "GapPct", "Gap%",
+    "Ticker", "Symbol", "HSF Score", "BreakoutScore", "GapPct", "Gap%",
     "Trend20D%", "VolRel20", "DollarVol20", "Volatility20D%",
 ]
 _MAX_ROWS = 15
 
 _SYSTEM_PROMPT = (
-    "You are a concise equity-scan analyst for a breakout stock scanner. "
-    "You are given the top rows of a technical scan. Identify the 3-5 strongest "
-    "setups and explain in plain language why each stands out (breakout score, "
-    "gap, trend, relative volume, liquidity). Be specific and reference the "
-    "numbers. Keep it under 250 words, use markdown bullet points, and end with "
-    "one short risk caveat. Do NOT give financial advice or price targets; this "
-    "is educational technical commentary only."
+    "You explain a stock scan for a market-research product. You are given the top "
+    "rows of HSF's latest scan, already ordered by HSF Score (HSF's own opportunity "
+    "score). Take the first 3-5 rows in that order and, for each, describe in plain "
+    "language what the data shows (HSF Score, breakout score, gap, 20-day trend, "
+    "relative volume, liquidity, volatility), including any conflicting or weak "
+    "readings. Reference the numbers. Keep it under 250 words, use markdown bullet "
+    "points, and end with one short sentence on the main risks or uncertainties."
 )
 
 _TICKER_SYSTEM_PROMPT = (
-    "You are a concise equity-scan analyst. You are given the technical scan "
-    "metrics for a single stock. Explain this one setup in plain language: what "
-    "the breakout score, gap, 20-day trend, relative volume, dollar volume, and "
-    "volatility together suggest about the setup's quality and risk. Be specific "
-    "and reference the numbers. Keep it under 150 words, use markdown bullets, "
-    "and end with one short risk caveat. Do NOT give financial advice or price "
-    "targets; this is educational technical commentary only."
+    "You explain one stock's scan metrics for a market-research product. In plain "
+    "language, describe what the HSF Score, breakout score, gap, 20-day trend, "
+    "relative volume, dollar volume and volatility show together, including any "
+    "conflicting or weak readings. Reference the numbers. Keep it under 150 words, "
+    "use markdown bullets, and end with one short sentence on the main risks."
 )
 
 
@@ -55,7 +53,20 @@ def _results_fingerprint(df: pd.DataFrame) -> str:
         return hashlib.sha256(str(len(df)).encode()).hexdigest()[:16]
 
 
+def _hsf_ordered(df: pd.DataFrame) -> pd.DataFrame:
+    """The rows in HSF Score order (the product's canonical order, Runs 76/79).
+    Display pipeline only: the HSF Score itself is computed by headline_score."""
+    try:
+        from ui.headline_score import HSF_SCORE_COL, add_hsf_score_column, rank_hsf_opportunities
+
+        out = df if HSF_SCORE_COL in df.columns else add_hsf_score_column(df)
+        return rank_hsf_opportunities(out)
+    except Exception:
+        return df
+
+
 def _build_table_text(df: pd.DataFrame) -> str:
+    df = _hsf_ordered(df)
     cols = [c for c in _SUMMARY_COLUMNS if c in df.columns]
     if not cols:
         return df.head(_MAX_ROWS).to_csv(index=False)
@@ -72,8 +83,8 @@ def generate_scan_summary(df: pd.DataFrame) -> tuple[str | None, str | None]:
     return ask_claude(
         system=_SYSTEM_PROMPT,
         user=(
-            f"Here are the top {min(len(df), _MAX_ROWS)} scan results "
-            f"(CSV):\n\n{table_text}\n\nSummarize the strongest setups."
+            f"Here are the top {min(len(df), _MAX_ROWS)} scan results in HSF Score "
+            f"order (CSV):\n\n{table_text}\n\nExplain the leading setups in this order."
         ),
         max_tokens=1024,
         username=_current_user(),
@@ -91,7 +102,10 @@ def render_ai_summary(df: pd.DataFrame, *, context: str = "") -> None:
     import streamlit as st
 
     st.markdown("#### 🧠 AI Scan Summary")
-    st.caption("Claude reviews your top results and highlights the strongest setups.")
+    st.caption(
+        "Claude (AI) explains the top results in HSF Score order. HSF's scoring system "
+        "does the ranking; this summary describes it. Research commentary, not investment advice."
+    )
 
     fp = _results_fingerprint(df) if df is not None and len(df) else None
     ns = f"{context}_{fp or 'none'}"

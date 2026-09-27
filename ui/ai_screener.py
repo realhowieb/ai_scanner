@@ -130,8 +130,8 @@ def render_nl_screener() -> None:
         ("🚀 Breakouts", "breakout stocks"),
         ("💰 Under $20", "stocks under $20"),
         ("📈 High Volume", "high volume stocks"),
-        ("🧠 AI Stocks", "AI stocks"),
-        ("💎 Swing Trades", "swing trade setups"),
+        ("🏛 S&P 500 only", "S&P 500 stocks"),
+        ("🔊 Unusual Volume", "stocks on unusual volume"),
         ("⚡ Gap Ups", "stocks gapping up"),
     ]
     _chip_cols = st.columns(2)

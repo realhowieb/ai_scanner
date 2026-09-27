@@ -37,7 +37,7 @@ ROWS: List[Tuple[str, Optional[str]]] = [
     ("Premarket, after-hours and unusual-volume filters", "can_premarket"),
     ("Earnings calendar & filters", "can_earnings"),
     ("Scan history & historical research", "can_scan_history"),
-    ("AI setup notes, scan summaries and results chat", "can_ai_notes"),
+    ("AI scan summaries and results chat, plus setup notes on each result", "can_ai_notes"),
     ("Early Breakout candidate research", "can_early_breakout"),
     ("Full-market custom scanning workflow", "can_full_universe"),
     ("Alpaca paper-trading workflow", "can_paper_trade"),
@@ -67,7 +67,7 @@ UPGRADE_MESSAGES = {
         "Pro adds historical research so you can inspect how prior HSF observations evolved."
     ),
     "can_ai_notes": (
-        "Premium adds AI setup notes, scan summaries and results chat for a deeper research workflow."
+        "Premium adds AI scan summaries and results chat, plus setup notes on each result, for a deeper research workflow."
     ),
     "can_early_breakout": (
         "Premium adds Early Breakout candidate research for investigating setups before they fully form."

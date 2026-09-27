@@ -1,4 +1,4 @@
-"""Results, charts, and AI notes UI module."""
+"""Results, charts, and setup notes UI module."""
 from __future__ import annotations
 
 from typing import Callable, Optional
@@ -273,7 +273,7 @@ def render_results(
         else:
             st.info(upgrade_message("can_export_csv"))
 
-        # Continue with charts / details / AI notes
+        # Continue with charts / details / setup notes
         if is_basic:
             # Basic: no interactive selection; show one auto-selected ticker details.
             auto_t = auto_details_ticker(df)
@@ -306,11 +306,11 @@ def render_results(
             else:
                 st.caption("No ticker details available.")
 
-            # Basic: keep AI notes locked as before
+            # Basic: keep setup notes locked as before
             if can_ai_notes:
-                st.subheader("AI Notes")
-                st.caption("⭐ Premium feature")
-                st.caption("AI notes require a selectable ticker; upgrade to Pro/Premium.")
+                st.subheader("📝 Setup notes")
+                st.caption("⭐ Premium · built from this row's scan metrics (not AI-generated)")
+                st.caption("Setup notes need a selectable ticker.")
             else:
                 st.info(upgrade_message("can_ai_notes"))
 
@@ -398,8 +398,8 @@ def render_results(
                     st.caption("No row details available for this ticker.")
 
         if can_ai_notes:
-            st.subheader("AI Notes")
-            st.caption("⭐ Premium feature")
+            st.subheader("📝 Setup notes")
+            st.caption("⭐ Premium · built from this row's scan metrics (not AI-generated)")
             try:
                 note_ticker = selected_ticker or pick
                 row = find_row_for_ticker(df, note_ticker)
@@ -414,7 +414,7 @@ def render_results(
                     key=f"{key_prefix}_ai_notes_fast_{note_ticker}",
                 )
             except (RuntimeError, TypeError, ValueError):
-                st.caption("AI notes are unavailable for the selected row.")
+                st.caption("Setup notes are unavailable for the selected row.")
         else:
             st.info(upgrade_message("can_ai_notes"))
 
@@ -623,7 +623,7 @@ def render_results(
     else:
         st.info(upgrade_message("can_export_csv"))
 
-    # Chart picker/details/AI notes: Option A logic for non-fast (styled) branch
+    # Chart picker/details/setup notes: Option A logic for non-fast (styled) branch
     if is_basic:
         auto_t = auto_details_ticker(df)
         if auto_t:
@@ -655,11 +655,11 @@ def render_results(
                     st.caption("No row details available for this ticker.")
         else:
             st.caption("No ticker details available.")
-        # Basic: keep AI notes locked as before (and avoid any selection/charts paths)
+        # Basic: keep setup notes locked as before (and avoid any selection/charts paths)
         if can_ai_notes:
-            st.subheader("AI Notes")
-            st.caption("⭐ Premium feature")
-            st.caption("AI notes require a selectable ticker; upgrade to Pro/Premium.")
+            st.subheader("📝 Setup notes")
+            st.caption("⭐ Premium · built from this row's scan metrics (not AI-generated)")
+            st.caption("Setup notes need a selectable ticker.")
         else:
             st.info(upgrade_message("can_ai_notes"))
 
@@ -733,10 +733,10 @@ def render_results(
                 else:
                     st.caption("No row details available for this ticker.")
 
-    # AI notes (tier-gated)
+    # Setup notes (tier-gated; template-built, not AI)
     if can_ai_notes:
-        st.subheader("AI Notes")
-        st.caption("⭐ Premium feature")
+        st.subheader("📝 Setup notes")
+        st.caption("⭐ Premium · built from this row's scan metrics (not AI-generated)")
         try:
             # Use the same ticker the user selected (row-click), matching the
             # details panel — not just the chart picker.
@@ -753,7 +753,7 @@ def render_results(
                 key=f"{key_prefix}_ai_notes_styled_{note_ticker}",
             )
         except (RuntimeError, TypeError, ValueError):
-            st.caption("AI notes are unavailable for the selected row.")
+            st.caption("Setup notes are unavailable for the selected row.")
     else:
         st.info(upgrade_message("can_ai_notes"))
 

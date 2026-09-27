@@ -35,7 +35,8 @@ def render_results_chat(df: pd.DataFrame) -> None:
     import streamlit as st
 
     st.markdown("#### 💬 Ask about these results")
-    st.caption('e.g. "Which is least risky?" or "Why isn\'t TSLA in here?"')
+    st.caption("Claude (AI) answers questions about the results shown — research commentary, not investment advice.")
+    st.caption('e.g. "What stands out about the top result?" or "Why isn\'t TSLA in here?"')
 
     if df is None or len(df) == 0:
         st.info("Run a scan first, then ask questions about the results.")

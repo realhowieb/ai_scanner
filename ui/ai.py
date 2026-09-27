@@ -32,6 +32,24 @@ def _over_daily_limit(username: str | None) -> bool:
         return False  # fail-open: never block a user on a counting error
 
 
+def _guard_system(system: str, feature: str | None) -> str:
+    """Run 85: append the shared HSF responsibility boundary (ui.ai_guardrails)."""
+    try:
+        from ui import ai_guardrails as g
+        return g.with_rules(system) if g.applies(feature) else system
+    except ImportError:
+        return system
+
+
+def _guard_text(text: str, feature: str | None) -> str:
+    """Run 85: drop lines that still give trade instructions (defense in depth)."""
+    try:
+        from ui import ai_guardrails as g
+        return (g.scrub(text)[0] or "") if (text and g.applies(feature)) else text
+    except ImportError:
+        return text
+
+
 def ask_claude(
     *,
     system: str,
@@ -76,10 +94,10 @@ def ask_claude(
         resp = client.messages.create(
             model=model or ANTHROPIC_MODEL,
             max_tokens=max_tokens,
-            system=system,
+            system=_guard_system(system, feature),
             messages=[{"role": "user", "content": user}],
         )
-        text = "".join(b.text for b in resp.content if b.type == "text").strip()
+        text = _guard_text("".join(b.text for b in resp.content if b.type == "text").strip(), feature)
         if text and username:
             try:
                 from db.ai_usage import record_ai_call
@@ -144,10 +162,10 @@ def ask_claude_chat(
         resp = client.messages.create(
             model=model or ANTHROPIC_MODEL,
             max_tokens=max_tokens,
-            system=system,
+            system=_guard_system(system, feature),
             messages=messages,
         )
-        text = "".join(b.text for b in resp.content if b.type == "text").strip()
+        text = _guard_text("".join(b.text for b in resp.content if b.type == "text").strip(), feature)
         if text and username:
             try:
                 from db.ai_usage import record_ai_call
