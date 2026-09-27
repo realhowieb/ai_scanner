@@ -165,9 +165,18 @@ The named set:
 
 ## CI Verification
 
-The GitHub Actions result for this commit is recorded in the final message of this run.
-No CI change was needed or made; the `dependency-audit` job is expected to pass for the
-first time since it was added.
+**GitHub Actions on dev @ `82ca525` (Smoke Checks run 36293602459, Python 3.13): all five
+jobs passed.**
+
+| Job | Result |
+|---|---|
+| `dependency-audit` | **success**: "No known vulnerabilities found". First green run of this job; it had failed on every run since it was added. |
+| `smoke` | success: 1788 passed, 128 skipped |
+| `core-dependency-import-smoke` | success: Ran 1873, OK (42 skipped: 38 FastAPI tests covered by the billing job + 4 scikit-learn) |
+| `full-dependency-import-smoke` | success (installs the full production requirements with the new lock on Python 3.13) |
+| `billing-contract` | success: 110 passed, 1 skipped |
+
+No CI change was needed or made.
 
 ## Run 83 Security Regression
 
