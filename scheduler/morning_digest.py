@@ -502,8 +502,13 @@ def run_morning_digest(force: bool = False) -> None:
             earnings_hits = [t for t in tickers if t in earnings_today]
             notes = _watchlist_notes(watch_rows, week_earnings)
 
+            # Run 85D: PreBreakout candidates are a Premium feature (Pro gets the rest).
+            try:
+                user_picks = picks if has_min_tier(get_user_tier(email, users), "premium") else []
+            except Exception:
+                user_picks = []
             html_inner, text_inner = _compose(
-                email, watch_rows, gappers, earnings_hits, picks, notes=notes,
+                email, watch_rows, gappers, earnings_hits, user_picks, notes=notes,
                 golden=golden, top_setups=top_setups,
             )
             send_digest_email(

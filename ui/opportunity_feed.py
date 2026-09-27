@@ -63,7 +63,7 @@ def _render_card(st, v: Dict[str, Any]) -> None:
         line = f"{v['scanner_count']} scanners agree"
         if secondary:
             line += f" — also: {secondary}"
-        st.caption(line + "  ·  confirmation/context, not a predictive edge")
+        st.caption(line)
     reasons = (v.get("positive_reasons") or [])[:4]
     if reasons:
         st.markdown("  ".join(f"✅ {r}" for r in reasons))
@@ -94,7 +94,8 @@ def render_opportunity_feed(
                              watchlist=watchlist)
     st.markdown("### 🔔 Intelligent Alerts")
     st.caption("The most interesting things HSF sees right now — and why. "
-               "Alert Priority is an attention signal, **not** a prediction of return.")
+               "Alert Priority is an attention signal, **not** a prediction of return. "
+               "When several scanners agree, that is confirmation and context, not a predictive edge.")
     flt = st.selectbox("Filter", FEED_FILTERS,
                        index=FEED_FILTERS.index(default_filter)
                        if default_filter in FEED_FILTERS else 0)

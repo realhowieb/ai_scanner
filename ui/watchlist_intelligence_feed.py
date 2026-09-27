@@ -100,7 +100,8 @@ def render_watchlist_intelligence(user: str, *, session: Optional[str] = None) -
 
         st.markdown("### 🔎 Watchlist Intelligence")
         st.caption("Your personal market monitor. **Alert Priority is an attention "
-                   "signal, not a prediction of return.**")
+                   "signal, not a prediction of return.** When several scanners agree, "
+                   "that is confirmation and context, not a predictive edge.")
         cols = st.columns(5)
         cols[0].metric("Symbols", summary["total"])
         cols[1].metric("Needs Attention", summary["needs_attention"])

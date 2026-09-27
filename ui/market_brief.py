@@ -2,9 +2,14 @@
 
 Renders the same Top gappers / Today's setups / PreBreakout picks the morning
 email sends — reusing scheduler.morning_digest so email and UI never drift — plus
-UI-only value: your watchlist today, earnings-today flags, how yesterday's brief
-actually did, a freshness stamp, and per-ticker Chart / Alert / Watch actions.
-Never raises into the app.
+UI-only value: your watchlist today, earnings-today flags, a freshness stamp, and
+per-ticker Chart / Alert / Watch actions. Never raises into the app.
+
+Run 85D: sections follow the same entitlements as the Scanner — PreBreakout
+candidate lists need `can_early_breakout`, AI text needs `can_ai_notes`, and
+historical outcomes need `can_track_record`. Scores are computed identically for
+everyone; only what is displayed is gated. The "how yesterday's brief did"
+scoreboard was removed (a performance claim ahead of the evidence page).
 """
 from __future__ import annotations
 
@@ -24,55 +29,6 @@ def _snapshot_time():
 
         runs = list_snapshot_runs(days=3, limit=5) or []
         return runs[0].get("created_at") if runs else None
-    except Exception:
-        return None
-
-
-def _yesterday_performance() -> Optional[Dict[str, Any]]:
-    """The prior day's top breakout picks and how they've moved since. Or None."""
-    try:
-        from db.runs import list_snapshot_runs, load_many_run_results
-        from market_data import get_latest_quotes
-        from scheduler.morning_digest import _symbol_column, _todays_setups
-        from ui.app_runtime import normalize_results_to_df
-
-        runs = list_snapshot_runs(days=7, limit=25) or []
-        seen, day_runs = set(), []
-        for r in runs:                       # newest-first, one per calendar day
-            ca = r.get("created_at")
-            if not ca or ca.date() in seen:
-                continue
-            seen.add(ca.date())
-            day_runs.append(r)
-        if len(day_runs) < 2:
-            return None
-        prior = day_runs[1]
-        raw = load_many_run_results([prior["id"]]).get(int(prior["id"]))
-        df = normalize_results_to_df(raw) if raw else None
-        if df is None or len(df) == 0:
-            return None
-        _golden, top = _todays_setups(df)    # top = [(ticker, score)]
-        picks = (top or [])[:5]
-        if not picks:
-            return None
-        col = _symbol_column(df)
-        entry: Dict[str, float] = {}
-        for _i, row in df.iterrows():
-            t = str(row.get(col) or "").upper()
-            try:
-                entry[t] = float(row.get("Last"))
-            except (TypeError, ValueError):
-                pass
-        quotes = get_latest_quotes([t for t, _ in picks]) or {}
-        rows = []
-        for t, _score in picks:
-            e = entry.get(t)
-            cur = (quotes.get(t) or {}).get("last")
-            if e and cur:
-                rows.append((t, (float(cur) - e) / e * 100.0))
-        if not rows:
-            return None
-        return {"date": prior["created_at"].date(), "rows": rows}
     except Exception:
         return None
 
@@ -162,7 +118,6 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
         "breadth": breadth,
         "sectors": _sector_leaders(),
         "snapshot_time": _snapshot_time(),
-        "yesterday": _yesterday_performance(),
     }
 
 
@@ -364,10 +319,13 @@ def render_intelligent_alerts(data: Dict[str, Any], user: str) -> None:
         prior_opps = st.session_state.get("_brief_prior_opps") or {}
         views = mb.build_top_opportunity_views(
             opps, watchlist=watchlist, prior_by_ticker=prior_opps, top_n=6)
+        if not _can("can_early_breakout"):     # PreBreakout candidates are Premium
+            views = [v for v in views if "prebreakout" not in str(v.get("primary_setup") or "").lower()]
 
         st.markdown("### 🔔 Intelligent Alerts")
         st.caption("What HSF sees right now and why. **Alert Priority is an "
-                   "attention signal, not a prediction of return.**")
+                   "attention signal, not a prediction of return.** When several "
+                   "scanners agree, that is confirmation and context, not a predictive edge.")
 
         # What Changed (state transitions vs the previous brief view).
         regime = st.session_state.get("_last_market_regime")
@@ -439,7 +397,8 @@ def render_market_brief() -> None:
     compared, previous = compute_compared_opportunities(data)
     # A. Market state — regime + compact metrics + freshness.
     render_market_header(data, phase)
-    _render_claude_narrative(data)
+    if _can("can_ai_notes"):                    # Claude-written: Premium AI feature
+        _render_claude_narrative(data)
     # A2. Intelligent Alerts — Run 40 opportunity feed (why/changed/risk/priority).
     render_intelligent_alerts(data, user)
     # B. Since last scan — only meaningful changes, only when history exists.
@@ -449,13 +408,14 @@ def render_market_brief() -> None:
     _render_watchlist_opportunity_matches(compared, user)
     # E. What to watch next (~3 deterministic items).
     render_watch_next(compared)
-    # F. HSF signal performance (outcome scorecard).
-    render_signal_scorecard()
+    # F. HSF signal performance (outcome scorecard) — Pro historical research.
+    if _can("can_track_record"):
+        render_signal_scorecard()
     # G. Sector leadership (compact leaders / laggards).
     render_sector_leadership(data)
     st.markdown("---")
     # H. Secondary market detail (existing sections, demoted below the fold).
-    _render_standouts(data)
+    _render_standouts(_without_picks(data))
     _render_market_pulse(data.get("market_close") or [])
     # Admin-only: HSF score calibration evidence (read-only; changes nothing).
     try:
@@ -479,10 +439,10 @@ def render_market_brief() -> None:
 
     if phase in ("afterhours", "closed"):
         order = ["movers", "alerts", "gappers", "setups", "picks", "positions",
-                 "watchlist", "catalysts", "yesterday"]
+                 "watchlist", "catalysts"]
     else:
         order = ["gappers", "movers", "setups", "picks", "positions",
-                 "watchlist", "alerts", "catalysts", "yesterday"]
+                 "watchlist", "alerts", "catalysts"]
     render_map = {
         "gappers": lambda: _render_gappers(data.get("gappers") or []),
         "movers": lambda: _render_day_movers(data.get("gainers") or [], data.get("losers") or []),
@@ -492,7 +452,6 @@ def render_market_brief() -> None:
         "watchlist": lambda: _render_watchlist(data.get("earnings_today") or []),
         "alerts": lambda: _render_fired_alerts(user),
         "catalysts": lambda: _render_catalysts(data),
-        "yesterday": lambda: _render_yesterday(data.get("yesterday")),
     }
     for name in order:
         if name in chosen:
@@ -503,11 +462,24 @@ def render_market_brief() -> None:
     _render_actions(data)
 
 
+def _can(flag: str) -> bool:
+    """The signed-in account's entitlement (resolved once after sign-in — B4)."""
+    try:
+        return bool((st.session_state.get("entitlements") or {}).get(flag))
+    except Exception:
+        return False
+
+
+def _without_picks(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Display copy without the PreBreakout candidate list (scoring input unchanged)."""
+    return data if _can("can_early_breakout") else {**data, "picks": []}
+
+
 _TOGGLEABLE = [
     ("gappers", "🚀 Gappers"), ("movers", "📊 Movers"), ("setups", "🎯 Setups"),
     ("picks", "🧠 PreBreakout"), ("positions", "💼 Open positions"),
     ("watchlist", "📋 Watchlist"), ("alerts", "🔔 Fired alerts"),
-    ("catalysts", "📅 Catalysts"), ("yesterday", "📊 Yesterday"),
+    ("catalysts", "📅 Catalysts"),
 ]
 
 
@@ -1046,6 +1018,8 @@ def _render_opportunity_detail(o: Dict[str, Any], data: Dict[str, Any]) -> None:
     # Historical context (real forward outcomes only; shows 'still building'
     # until a bucket has enough matured samples). Never fabricated.
     try:
+        if not _can("can_track_record"):
+            raise LookupError("historical research is a Pro feature")
         from analytics.hsf_calibration import historical_context
 
         ctx = historical_context(_calibration_records_cached(), o.get("score"))
@@ -1094,6 +1068,8 @@ def _render_opp_ai_take(o: Dict[str, Any], ex: Dict[str, List[str]], data: Dict[
     Secondary to the deterministic explanation above; the section works fine if
     AI is off or the call fails.
     """
+    if not _can("can_ai_notes"):                 # Claude-written: Premium AI feature
+        return
     if st is None or not ex.get("reasons"):
         return
     try:
@@ -1169,7 +1145,7 @@ def _render_email_button(user: str, data: Dict[str, Any]) -> None:
         ]
         html_inner, text_inner = _compose(
             user, watch_rows, data.get("gappers") or [], earnings_hits,
-            data.get("picks") or [], golden=data.get("golden") or [],
+            _without_picks(data).get("picks") or [], golden=data.get("golden") or [],
             top_setups=data.get("top_setups") or [],
         )
         ok = send_digest_email(user, "Your market brief", html_inner, text_inner)
@@ -1259,6 +1235,11 @@ def _render_setups(golden: List[str], top_setups: List[tuple]) -> None:
 def _render_picks(picks: List[Dict[str, Any]]) -> None:
     if not picks:
         return
+    if not _can("can_early_breakout"):
+        from ui.pricing import upgrade_message
+
+        st.caption("🧠 PreBreakout candidates · " + upgrade_message("can_early_breakout"))
+        return
     st.markdown("### 🧠 PreBreakout picks")
     st.caption("Ranked by the PreBreakout model's calibrated likelihood — an "
                "estimate of setup follow-through, not a price forecast. Confirm "
@@ -1326,22 +1307,6 @@ def _render_watchlist(earnings_today: List[str]) -> None:
     hits = [t for t in earnings_today if t in {m[0] for m in movers}]
     if hits:
         st.caption(f"📅 Reporting earnings today: {', '.join(hits)}")
-
-
-def _render_yesterday(y: Optional[Dict[str, Any]]) -> None:
-    if not y or not y.get("rows"):
-        return
-    st.markdown("### 📊 Yesterday's brief — how it did")
-    parts = []
-    for t, ret in y["rows"]:
-        icon = "🟢" if ret >= 0 else "🔴"
-        parts.append(f"{icon} {t} {ret:+.1f}%")
-    avg = sum(r for _t, r in y["rows"]) / len(y["rows"])
-    st.markdown("  ·  ".join(parts))
-    st.caption(
-        f"Top breakout picks from {y['date']:%b %d}, marked to now — avg "
-        f"{avg:+.1f}%. Honest scoreboard; past performance isn't predictive."
-    )
 
 
 def _render_actions(data: Dict[str, Any]) -> None:
