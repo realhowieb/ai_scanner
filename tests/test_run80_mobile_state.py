@@ -73,7 +73,8 @@ def test_mobile_has_one_primary_navigation_and_practical_touch_targets():
     assert 'data-testid="stSidebarCollapsedControl"' in css
     assert "min-height:44px" in css
     assert '_render_identity(key_suffix="mobile")' in nav[nav.index("def render_top_menu"):]
-    assert 'key=f"nav_logout_{key_suffix}"' in nav
+    card = (ROOT / "ui" / "account_card.py").read_text()          # Run 85C: the shared card owns Log out
+    assert 'key=f"nav_logout_{key_suffix}"' in card
 
 
 def test_custom_scan_remains_one_entry_without_nested_popover():

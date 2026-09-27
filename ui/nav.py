@@ -45,32 +45,12 @@ _NAV = [item for _section, items in _NAV_SECTIONS for item in items]
 
 
 def _render_identity(*, key_suffix: str = "sidebar") -> None:
-    """Compact account header (name · plan · log out) from session state.
-
-    Gives sub-pages the same identity block the main app renders, so the sidebar
-    is consistent everywhere. Never raises.
-    """
+    """The shared account / plan card (ui.account_card) — the same component on
+    every page; the phone menu gets its compact form. Never raises."""
     try:
-        name = (st.session_state.get("display_name")
-                or st.session_state.get("username") or "").strip()
-        if "@" in name:
-            name = name.split("@")[0]
-        if not name:
-            return
-        is_admin = bool(st.session_state.get("is_admin"))
-        from ui.plan_labels import plan_label  # Run 85B: one customer-facing plan name
+        from ui.account_card import render_account_card
 
-        plan = plan_label(st.session_state.get("tier_key") or st.session_state.get("tier"), is_admin=is_admin)
-        st.markdown(f"### 👤 {name}")
-        st.markdown(f"**Plan:** `{plan}`")
-        if st.button("Log out", key=f"nav_logout_{key_suffix}"):
-            try:
-                from ui.auth import logout_and_reset_session
-
-                logout_and_reset_session()
-            except Exception:
-                pass
-        st.divider()
+        render_account_card(key_suffix=key_suffix, compact=key_suffix == "mobile")
     except Exception:
         pass
 
@@ -101,8 +81,8 @@ def render_top_menu() -> None:
 def render_sidebar_nav(*, with_header: bool = True) -> None:
     """Render the curated sidebar navigation. Safe to call on every page.
 
-    with_header adds the identity block; the main app passes False because it
-    renders its own (richer) account sidebar.
+    with_header adds the shared account card; the main app passes False because
+    its account sidebar renders the same card (ui.account_card) itself.
     """
     if st is None:
         return
@@ -123,10 +103,6 @@ def render_sidebar_nav(*, with_header: bool = True) -> None:
         with st.sidebar:
             if with_header:
                 _render_identity()
-            else:
-                # Main app renders its own identity block above us; add the
-                # divider here so the nav is visually separated everywhere.
-                st.divider()
             for section, items in _NAV_SECTIONS:
                 st.caption(section.upper())
                 for path, label, icon in items:

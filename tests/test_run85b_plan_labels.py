@@ -55,8 +55,11 @@ class SourceTests(unittest.TestCase):
     """No page formats a tier key into customer text on its own."""
 
     def test_plan_displays_use_the_helper(self):
-        for rel in ("ui/nav.py", "ui/app_user_profile.py", "pages/billing.py", "pages/settings.py"):
+        # Sidebars (nav + Scanner) render the shared card (Run 85C), which uses the helper.
+        for rel in ("ui/account_card.py", "pages/billing.py", "pages/settings.py"):
             self.assertIn("plan_label(", (ROOT / rel).read_text(), rel)
+        for rel in ("ui/nav.py", "ui/app_user_profile.py"):
+            self.assertIn("render_account_card(", (ROOT / rel).read_text(), rel)
 
     def test_no_raw_tier_formatting_in_customer_copy(self):
         bad = re.compile(r"tier_key[\"')\s]*(or \"basic\"\)?)?\s*\)?\.(title|upper|capitalize)\(\)"

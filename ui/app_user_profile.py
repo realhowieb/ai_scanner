@@ -7,8 +7,6 @@ from typing import Any, Callable
 import pandas as pd
 import streamlit as st
 
-from ui.plan_labels import plan_label
-
 APP_PROFILE_ERRORS = (
     RuntimeError,
     TypeError,
@@ -96,12 +94,13 @@ def render_account_sidebar(
     has_min_tier: Callable[..., bool],
     logout_and_reset_session: Callable[[], Any],
 ) -> None:
-    """Render account identity, plan, tier debug, upgrade CTA, and logout."""
-    name_label = _account_label(display_name, username)
-    st.sidebar.markdown(f"### 👤 {name_label}")
-    st.sidebar.markdown(
-        f"**Plan:** `{plan_label(st.session_state.get('tier_key') or tier, is_admin=is_admin)}`"
-    )
+    """Render the shared account / plan card (ui.account_card) plus admin-only
+    tier debug. The upgrade-card/tier/logout parameters are kept for callers but
+    the card owns name, plan, upgrade CTA, "Compare all plans" and "Log out"."""
+    from ui.account_card import render_account_card
+
+    with st.sidebar:
+        render_account_card(key_suffix="sidebar")
     # Admin tier-debug lines are noisy; only show when diagnostics are enabled.
     # A real DB tier error always surfaces so it isn't silently hidden.
     if is_admin and db_tier_err:
@@ -112,11 +111,6 @@ def render_account_sidebar(
         )
         if db_user_debug is not None:
             st.sidebar.caption(f"DB user: {db_user_debug}")
-
-    render_sidebar_upgrade_card(tier, has_min_tier=has_min_tier)
-
-    if st.sidebar.button("Log out", key="logout_button"):
-        logout_and_reset_session()
 
 
 def _account_label(display_name: str | None, username: str) -> str:
