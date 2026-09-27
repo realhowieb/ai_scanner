@@ -70,6 +70,24 @@ BannerFn = Callable[[str, str], None]
 ScanFn = Callable[[List[str], str], None]
 
 
+def ensure_active_watchlist_state(user_id: str) -> None:
+    """Run 83B: the Scanner renders its canonical results before this panel, so
+    seed the active watchlist (★ Watching badges, the opt-in "Watchlist only"
+    filter) from the user's cached default list when the session has none yet.
+    It never replaces or filters the Scanner dataset. Never raises."""
+    if st.session_state.get("active_watchlist_tickers") is not None:
+        return
+    try:
+        from ui import user_cache
+
+        wid = user_cache.get_default_watchlist_id(user_id)
+        tickers = user_cache.get_watchlist_tickers(wid, user_id) if wid else []
+        st.session_state["active_watchlist_id"] = wid
+        st.session_state["active_watchlist_tickers"] = [str(t).strip().upper() for t in tickers or []]
+    except Exception:
+        return
+
+
 def render_watchlists_panel(user_id: str) -> Tuple[Optional[int], List[str]]:
     """Render the 'My Watchlists' block: live card wall + tucked-away management.
 

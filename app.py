@@ -233,7 +233,7 @@ try:
     from ui.scans import render_scan_controls, render_three_step_scanner
     from ui.universe_panel import init_universe_state, render_universe_panel
     from ui.user_settings import render_user_settings_footer
-    from ui.watchlists import render_watchlists_panel
+    from ui.watchlists import ensure_active_watchlist_state, render_watchlists_panel
 
 except Exception as _e:
     # Capture the error and provide minimal placeholders so the module loads.
@@ -269,6 +269,7 @@ except Exception as _e:
     render_earnings_controls = _missing  # type: ignore
     render_footer = lambda *a, **k: None  # type: ignore
     render_watchlists_panel = _missing  # type: ignore
+    ensure_active_watchlist_state = _missing  # type: ignore
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
     add_why_column = lambda df: df  # type: ignore
@@ -608,15 +609,52 @@ def main():
 
     render_market_snapshot(results_df=_snapshot_df)
 
-    # P0-6: results are the hero. The slot sits here but is filled further
-    # down, after the scan controls run, so a scan started below still shows
-    # its results in the same run.
+    # P0-6: results are the hero. Run 83B: the canonical results render FIRST,
+    # before the watchlist panel (live quotes) and Custom scan, so nothing below
+    # can delay or blank them; scans started below rerun to show here.
     st.markdown("## Scanner")
     results_slot = st.container()
     st.markdown("---")
+    ensure_active_watchlist_state(username)  # ★ badges on first render (cached; never the dataset)
+    with results_slot:  # rendered up top (see results_slot above)
+        render_back_to_market()  # Run 70 (P1-10)
+        df = default_results(get_results_df())  # Run 63: latest full-market scan until you run your own
+        df, scan_ran_at = prepare_results_with_earnings(
+            df,
+            flags=flags,
+            earn_col_days=EARN_COL_DAYS,
+            add_earnings_days_column=add_earnings_days_column,
+            quiet_external_calls=_quiet_external_calls,
+        )
+        df = add_why_column(df)  # plain-English "why this passed" per row
+        df = add_hsf_score_column(df)  # P0-7: HSF Score is the headline number
+        df = rank_hsf_opportunities(df)  # Run 76: product presentation follows its headline score
+        df = render_discover_bar(df)  # P1-3/4/9: lens pills, table/cards view, 🆕 markers
+        render_results_tabs(
+            df=df,
+            flags=flags,
+            scan_ran_at=scan_ran_at,
+            username=username,
+            db_status=db_status,
+            admin_users=ADMIN_USERS,
+            list_runs=list_runs,
+            load_run_results=load_run_results,
+            render_results=with_card_view(render_results),
+            render_prebreakout_tab=render_prebreakout_tab,
+            render_admin_users_panel=render_admin_users_panel,
+            render_chart_for_ticker=render_chart_for_ticker,
+            generate_ai_note=generate_ai_note,
+            get_db_conn=_get_db_conn_for_app,
+            normalize_results_to_df=_normalize_results_to_df,
+        )
 
     # -------- Watchlists --------
-    watch_id, watch_tickers = render_watchlists_panel(username)
+    try:
+        watch_id, watch_tickers = render_watchlists_panel(username)
+    except Exception as exc:  # Run 83B: a watchlist problem must not break the Scanner
+        from ui.safe_errors import show_error
+        show_error("your watchlists", exc, level="info")
+        watch_id, watch_tickers = None, list(st.session_state.get("active_watchlist_tickers") or [])
 
     # -------- Morning pulse: alerts fired · since-yesterday · Day Trader ----
     # One compact block right under the watchlist card wall (the heat strip was
@@ -761,38 +799,6 @@ def main():
         st.rerun()
 
     render_three_step_scanner(container=custom_scan_box)
-
-    with results_slot:  # rendered up top (see results_slot above)
-        render_back_to_market()  # Run 70 (P1-10)
-        df = default_results(get_results_df())  # Run 63: latest full-market scan until you run your own
-        df, scan_ran_at = prepare_results_with_earnings(
-            df,
-            flags=flags,
-            earn_col_days=EARN_COL_DAYS,
-            add_earnings_days_column=add_earnings_days_column,
-            quiet_external_calls=_quiet_external_calls,
-        )
-        df = add_why_column(df)  # plain-English "why this passed" per row
-        df = add_hsf_score_column(df)  # P0-7: HSF Score is the headline number
-        df = rank_hsf_opportunities(df)  # Run 76: product presentation follows its headline score
-        df = render_discover_bar(df)  # P1-3/4/9: lens pills, table/cards view, 🆕 markers
-        render_results_tabs(
-            df=df,
-            flags=flags,
-            scan_ran_at=scan_ran_at,
-            username=username,
-            db_status=db_status,
-            admin_users=ADMIN_USERS,
-            list_runs=list_runs,
-            load_run_results=load_run_results,
-            render_results=with_card_view(render_results),
-            render_prebreakout_tab=render_prebreakout_tab,
-            render_admin_users_panel=render_admin_users_panel,
-            render_chart_for_ticker=render_chart_for_ticker,
-            generate_ai_note=generate_ai_note,
-            get_db_conn=_get_db_conn_for_app,
-            normalize_results_to_df=_normalize_results_to_df,
-        )
 
     # P0-6: other tools live on their own pages (paper trading on Settings,
     # the journal and paper activity on Journal); one compact row links them.

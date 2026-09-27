@@ -260,6 +260,9 @@ def render_three_step_scanner(container: Any = None) -> None:
         return
 
     _init_scan_session_state()
+    _flash = st.session_state.pop("_three_step_flash", None)  # Run 83B: message from before the rerun
+    if _flash:
+        st.success(_flash)
 
     # Apply AI-chosen settings BEFORE the widgets render: widget-keyed session
     # state cannot be modified after the widget is instantiated, so the ✨
@@ -380,6 +383,13 @@ def render_three_step_scanner(container: Any = None) -> None:
 
         _persist_three_step_run(df, duration_sec=duration_sec)
         st.session_state.scan_active_step = 3
+        # Run 83B: the Scanner's results render at the top, before this panel,
+        # so rerun once to show this scan there; keep the status as a flash.
+        st.session_state["_three_step_flash"] = (
+            f"Scan complete in {duration_sec:.1f}s — {num_rows} rows. "
+            "They're shown in the results at the top of the Scanner."
+        )
+        st.rerun()
     else:
         status_placeholder.info(
             "Choose a **Market**, **Strategy**, and **Profile**, then click **Run Scan**."

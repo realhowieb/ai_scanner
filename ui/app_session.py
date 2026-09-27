@@ -58,7 +58,7 @@ ACCOUNT_SESSION_KEYS = (
     "hsf_my_watchlist_viewed", "hsf_stock_intelligence_viewed",
     "alert_price_tk", "alert_price_val", "alert_break_thr", "alert_break_wl",
     "alert_ema_tk", "alert_ema_dir", "alert_rvol_tk", "alert_rvol_thr",
-    "pt_key", "pt_secret",
+    "pt_key", "pt_secret", "_three_step_flash",
 )
 
 # Identity keys every sign-in path sets for the NEW account in the same run, so
