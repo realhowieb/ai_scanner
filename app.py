@@ -430,9 +430,6 @@ def main():
         # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
     enforce_account_boundary(st.session_state, username)  # Run 83 (B2): accounts isolated by identity
-    if st.session_state.get("hsf_after_login_page"):  # P2-5: return to a shared link
-        st.session_state["hsf_today_landed_for"] = str(username or "").strip().lower()
-        st.switch_page(st.session_state.pop("hsf_after_login_page"))
 
     # If non-auth modules failed to import, surface the error after login.
     # This ensures users can still log in and we get a visible failure reason.
@@ -448,28 +445,7 @@ def main():
     username = (username or "").strip().lower()
     if username:
         st.session_state["username"] = username
-    if should_land_on_today(st.session_state, username):
-        st.switch_page("pages/today.py")
 
-    # At this point, auth_ui has decided we're logged in.
-    # The login form might still be in the DOM for this rerun, so hide it with CSS.
-    st.markdown(
-        """
-        <style>
-        /* Hide the streamlit-authenticator login form once authenticated */
-        div[data-testid="stForm"] {display: none !important;}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Also check the raw authenticator state
-    _ = st.session_state.get("authentication_status") is True
-
-    # -------- ONLY NOW RENDER HEADER + TICKER --------
-    # Show ticker above the header (layout option B)
-    render_price_ticker()
-    render_header()
     # -------- Load Users + Tier (DB-first via Tier Sync) --------
     users_map = load_user_map(username)  # P0-8: this user only, not the whole table
 
@@ -518,6 +494,30 @@ def main():
     st.session_state["tier_key"] = tier_key
     st.session_state["is_admin"] = bool(is_admin)
     st.session_state["entitlements"] = dict(flags)
+    if st.session_state.get("hsf_after_login_page"):  # P2-5 shared link; B4: context resolved first
+        st.session_state["hsf_today_landed_for"] = str(username or "").strip().lower()
+        st.switch_page(st.session_state.pop("hsf_after_login_page"))
+    if should_land_on_today(st.session_state, username):
+        st.switch_page("pages/today.py")
+    # At this point, auth_ui has decided we're logged in.
+    # The login form might still be in the DOM for this rerun, so hide it with CSS.
+    st.markdown(
+        """
+        <style>
+        /* Hide the streamlit-authenticator login form once authenticated */
+        div[data-testid="stForm"] {display: none !important;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Also check the raw authenticator state
+    _ = st.session_state.get("authentication_status") is True
+
+    # -------- ONLY NOW RENDER HEADER + TICKER --------
+    # Show ticker above the header (layout option B)
+    render_price_ticker()
+    render_header()
 
     # Safety: if AI Notes are not allowed for this user, purge any cached notes
     # so Basic/Pro accounts never see previously-generated Premium content.
