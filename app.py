@@ -202,6 +202,7 @@ except Exception as _e:
 # --------------- DB modules & UI modules ----------------
 # IMPORTANT: Keep auth import reliable so the login UI can render even if other modules break.
 _IMPORT_ERROR: str | None = None
+_IMPORT_ERROR_MODULE: str | None = None
 
 try:
     from db.runs import list_runs, load_run_results, save_daily_snapshot, save_run
@@ -233,11 +234,12 @@ try:
     from ui.scans import render_scan_controls, render_three_step_scanner
     from ui.universe_panel import init_universe_state, render_universe_panel
     from ui.user_settings import render_user_settings_footer
-    from ui.watchlists import ensure_active_watchlist_state, render_watchlists_panel
+    from ui.watchlists import render_watchlists_panel
 
 except Exception as _e:
     # Capture the error and provide minimal placeholders so the module loads.
     _IMPORT_ERROR = f"{type(_e).__name__}: {_e}"
+    _IMPORT_ERROR_MODULE = getattr(_e, "name", None)  # a stale first-party module self-heals in main()
 
     seed_neon_users_from_local = None  # type: ignore
     load_user_map = lambda _u: {}  # type: ignore
@@ -269,7 +271,6 @@ except Exception as _e:
     render_earnings_controls = _missing  # type: ignore
     render_footer = lambda *a, **k: None  # type: ignore
     render_watchlists_panel = _missing  # type: ignore
-    ensure_active_watchlist_state = _missing  # type: ignore
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
     add_why_column = lambda df: df  # type: ignore
@@ -435,9 +436,13 @@ def main():
 
     # If non-auth modules failed to import, surface the error after login.
     # This ensures users can still log in and we get a visible failure reason.
+    from ui.boot_recovery import clear_retries, retry_stale_import
+    if _IMPORT_ERROR and retry_stale_import(_IMPORT_ERROR_MODULE, st.session_state):
+        st.rerun()  # stale module after a redeploy: rerun imports the file on disk (bounded)
     if _IMPORT_ERROR:
         _startup_problem(f"Import error: {_IMPORT_ERROR}")
         st.stop()
+    clear_retries(st.session_state)
 
     # Normalize and persist username for downstream modules (billing/settings rely on this)
     username = (username or "").strip().lower()
@@ -609,13 +614,10 @@ def main():
 
     render_market_snapshot(results_df=_snapshot_df)
 
-    # P0-6: results are the hero. Run 83B: the canonical results render FIRST,
-    # before the watchlist panel (live quotes) and Custom scan, so nothing below
-    # can delay or blank them; scans started below rerun to show here.
-    st.markdown("## Scanner")
+    st.markdown("## Scanner")  # P0-6/Run 83B: results render FIRST, before watchlists/Custom scan
     results_slot = st.container()
     st.markdown("---")
-    ensure_active_watchlist_state(username)  # ★ badges on first render (cached; never the dataset)
+    getattr(sys.modules.get("ui.watchlists"), "ensure_active_watchlist_state", lambda _u: None)(username)  # ★ badges
     with results_slot:  # rendered up top (see results_slot above)
         render_back_to_market()  # Run 70 (P1-10)
         df = default_results(get_results_df())  # Run 63: latest full-market scan until you run your own
