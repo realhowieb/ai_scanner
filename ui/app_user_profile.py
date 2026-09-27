@@ -7,6 +7,8 @@ from typing import Any, Callable
 import pandas as pd
 import streamlit as st
 
+from ui.plan_labels import plan_label
+
 APP_PROFILE_ERRORS = (
     RuntimeError,
     TypeError,
@@ -98,7 +100,7 @@ def render_account_sidebar(
     name_label = _account_label(display_name, username)
     st.sidebar.markdown(f"### 👤 {name_label}")
     st.sidebar.markdown(
-        f"**Plan:** `{ 'Admin' if is_admin else getattr(tier, 'name', st.session_state.get('tier_key', 'basic')) }`"
+        f"**Plan:** `{plan_label(st.session_state.get('tier_key') or tier, is_admin=is_admin)}`"
     )
     # Admin tier-debug lines are noisy; only show when diagnostics are enabled.
     # A real DB tier error always surfaces so it isn't silently hidden.

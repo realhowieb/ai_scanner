@@ -14,7 +14,9 @@ from typing import Dict, List, Optional, Tuple
 from ui.app_session import ALERT_LIMIT_BY_TIER, FEATURE_MIN_TIER, TIER_ORDER
 
 TIERS = ("basic", "pro", "premium")
-TIER_NAMES = {"basic": "Free", "pro": "Pro", "premium": "Premium"}
+from ui.plan_labels import PLAN_LABELS  # noqa: E402  (Run 85B: one source of plan names)
+
+TIER_NAMES = {k: PLAN_LABELS[k] for k in ("basic", "pro", "premium")}
 PRICES = {"basic": "Free", "pro": "$19/mo", "premium": "$39/mo"}
 TAGLINES = {
     "basic": "Discover what matters in the market.",

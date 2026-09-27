@@ -85,7 +85,7 @@ def test_pro_is_the_only_featured_plan_and_free_copy_is_truthful():
     assert html.count('class="hsf-plan featured"') == 1
     assert "Discover what matters in the market" in html
     auth = (ROOT / "ui" / "auth.py").read_text()
-    assert "Basic Stock Intelligence" in auth
+    assert "basic Stock Intelligence" in auth          # Run 85B: lowercase so it never reads as a plan name
     assert "Interactive charts" not in auth
     sidebar = (ROOT / "ui" / "app_runtime.py").read_text()
     assert "You're seeing a limited scan" not in sidebar

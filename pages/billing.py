@@ -137,14 +137,9 @@ def _logged_in_email() -> str:
 
 
 def _current_plan_label(tier_key: str) -> str:
-    t = (tier_key or "basic").strip().lower()
-    if t == "admin":
-        return "Admin"
-    if t == "premium":
-        return "Premium"
-    if t == "pro":
-        return "Pro"
-    return "Free"
+    from ui.plan_labels import plan_label  # Run 85B: one customer-facing plan name
+
+    return plan_label(tier_key)
 
 
 def _refresh_tier_from_db(email: str) -> str | None:

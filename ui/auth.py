@@ -162,7 +162,8 @@ def _poll_for_tier_upgrade(username: str, max_attempts: int = 10) -> None:
         st.session_state.pop("_tier_poll_attempt", None)
         _clear_stripe_params()
         if current_key != "basic":
-            st.success(f"🎉 Plan upgraded to **{current_key.title()}**! Enjoy your new features.")
+            from ui.plan_labels import plan_label
+            st.success(f"🎉 Plan upgraded to **{plan_label(current_key)}**! Enjoy your new features.")
         else:
             st.info("Upgrade is still processing. If you completed payment, refresh in a moment.")
         return
@@ -347,7 +348,7 @@ def auth_ui():
             with st.expander("What you get with a Free account", expanded=True):
                 st.write("- ✔️ The latest full-market ranking, updated through the trading day")
                 st.write("- ✔️ HSF Score (0–100 opportunity ranking) with the evidence behind it")
-                st.write("- ✔️ Basic Stock Intelligence for current opportunities")
+                st.write("- ✔️ HSF Score and basic Stock Intelligence for current opportunities")
                 st.write("- ✔️ Market discovery, watchlists and one in-app alert on desktop or phone")
                 st.write("- ✔️ No credit card required")
                 st.caption("Pro adds monitoring, email alerts, interactive results, exports and history.")

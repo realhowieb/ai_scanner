@@ -459,6 +459,7 @@ def main():
     # Admin + tier key
     is_admin = _is_admin_user(username, tier)
     tier_key = (tier_state.get("tier_key") or "basic").strip().lower()
+    from ui.plan_labels import plan_label  # Run 85B: customer-facing plan names
 
     # Detect tier changes since last render.
     prev_key = (st.session_state.get("tier_key") or "").strip().lower()
@@ -475,7 +476,7 @@ def main():
             ):
                 st.session_state.pop(_k, None)
             st.warning(
-                f"Your plan has changed from **{prev_key.upper()}** to **{tier_key.upper()}**. "
+                f"Your plan has changed from **{plan_label(prev_key)}** to **{plan_label(tier_key)}**. "
                 "Some features have been locked. Visit the Billing page to upgrade."
             )
 
@@ -511,8 +512,6 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # Also check the raw authenticator state
-    _ = st.session_state.get("authentication_status") is True
 
     # -------- ONLY NOW RENDER HEADER + TICKER --------
     # Show ticker above the header (layout option B)

@@ -23,13 +23,12 @@ except Exception:
     pass
 
 try:
-    from ui.app_session import tier_key
+    from ui.plan_labels import plan_label  # Run 85B: one customer-facing plan name
 
-    tier = (tier_key(st.session_state.get("tier")) or "basic").upper()
-    if tier == "BASIC":
-        tier = "FREE"
+    tier = plan_label(st.session_state.get("tier_key") or st.session_state.get("tier"),
+                      is_admin=bool(st.session_state.get("is_admin")))
 except Exception:
-    tier = "FREE"
+    tier = "Free"
 verified = None
 try:
     from db.email_verification import is_email_verified

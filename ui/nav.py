@@ -58,7 +58,9 @@ def _render_identity(*, key_suffix: str = "sidebar") -> None:
         if not name:
             return
         is_admin = bool(st.session_state.get("is_admin"))
-        plan = "Admin" if is_admin else str(st.session_state.get("tier_key") or "basic").title()
+        from ui.plan_labels import plan_label  # Run 85B: one customer-facing plan name
+
+        plan = plan_label(st.session_state.get("tier_key") or st.session_state.get("tier"), is_admin=is_admin)
         st.markdown(f"### 👤 {name}")
         st.markdown(f"**Plan:** `{plan}`")
         if st.button("Log out", key=f"nav_logout_{key_suffix}"):
