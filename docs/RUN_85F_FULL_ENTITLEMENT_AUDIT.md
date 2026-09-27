@@ -262,9 +262,8 @@ the existing shared plan component. Admin-only diagnostics remain separate.
 The exact strict audit could not complete on macOS because `requirements.lock`
 contains Linux-only `nvidia-nccl-cu12==2.30.7`; pip-audit attempted platform
 resolution even with the pinned/no-dependency option. No dependency files were
-changed. The same strict command remains configured in the Ubuntu Smoke workflow,
-where the Linux package is resolvable. Its result must be confirmed after push;
-this document does not claim a local zero-vulnerability result.
+changed. The strict Ubuntu CI audit completed successfully in Smoke Checks run
+`36302605193`, confirming zero reported known vulnerabilities in the locked set.
 
 ## Frozen-Core Verification
 
@@ -283,10 +282,9 @@ only; canonical observations and scores remain identical across tiers.
 
 ## Final Decision
 
-**ENTITLEMENT MODEL VERIFIED**, subject to the existing CI dependency audit and
-final live-account verification. The code-level entitlement matrix and regression
-suite are internally consistent, and all verified leaks found in this audit are
-closed.
+**ENTITLEMENT MODEL VERIFIED**, subject to final live-account verification. The
+code-level entitlement matrix, dependency audit, and regression suite are
+internally consistent, and all verified leaks found in this audit are closed.
 
 Next: **Run 86 — Final Live Launch Check**. Do not add another engineering or
 feature audit before the live Free/Pro/Premium/Admin launch verification.
