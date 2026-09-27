@@ -212,7 +212,7 @@ AppTest, with stubbed market and watchlist data.
 
 | Account | Starting page/state | Action | Expected | Headless (real app.py) | Live browser |
 |---|---|---|---|---|---|
-| Basic | Today | Scanner | Canonical Scanner | PASS | UNVERIFIED |
+| Basic (owner account, admin tools, populated watchlist) | Today | Scanner | Canonical Scanner | PASS | **PASS** (live, after `fcef13c`) |
 | Pro | Today | Scanner | Canonical Scanner | PASS | UNVERIFIED |
 | Premium | Today | Scanner | Canonical Scanner | PASS | UNVERIFIED |
 | Premium | My Stocks (non-default list selected) | Scanner | Canonical Scanner | PASS | UNVERIFIED |
@@ -237,6 +237,59 @@ No change to:
 
 The canonical dataset selection (`default_results`/latest `cron`/`US_MARKET`) and the HSF
 ranking pipeline run the same code as before, only earlier in the page.
+
+## Deploy Incident and Follow-up Fix (`fcef13c`)
+
+**What happened:** after `6a83e87` reached Streamlit Cloud, signed-in users saw:
+
+```
+Startup problem: Import error: ImportError: cannot import name 'ensure_active_watchlist_state' from 'ui.watchlists'
+```
+
+**Cause:**
+- This is the known Streamlit Cloud stale-module behaviour: the running process kept the
+  pre-deploy `ui.watchlists`.
+- `app.py` imported the new helper inside its large feature-import block. That block turns
+  any `ImportError` into a permanent startup error.
+- The Run 81 self-heal only protects the first import block.
+
+**Fix:**
+- `app.py` no longer imports the new helper in that block. It looks it up on the
+  already-imported module, and a stale copy just skips it (no ★ badges until the watchlist
+  panel runs).
+- The feature-import block now self-heals like the first one. A stale first-party module
+  is dropped and the app reruns, at most 3 times; after that the original error shows.
+- The helper for this lives in the new `ui/boot_recovery.py`. A module that didn't exist
+  before the deploy can't be cached stale.
+- `app.py` is 839 lines (budget 840).
+
+**Tests (`tests/test_run83b_boot_recovery.py`, 4):**
+- bounded retry;
+- third-party and unknown errors are not retried;
+- a planted stale `ui.watchlists` without the helper, **reproducing the exact production
+  error**: the app starts and shows HSF Opportunities;
+- a stale module missing a name the feature block needs self-heals.
+- Against the `6a83e87` `app.py`, both app tests fail.
+
+**Final results at `fcef13c`** (production-parity venv, network blocked):
+- Full suite: 1916 collected, **1878 passed, 0 failed, 38 skipped** (all FastAPI, covered
+  by the billing job), 172 subtests, 155 s.
+- `unittest discover`: 1873 run, OK (38 skipped), 111 s.
+- Billing contract: 110 passed, 1 skipped.
+- Lightweight CI env: 1788 passed, 128 skipped.
+- GitHub Actions run 36285746703: every job passed except the non-blocking
+  `dependency-audit`. The dependency job ran 1873 tests with 42 skips (38 FastAPI + 4
+  scikit-learn), so every Run 83B app test ran in CI.
+
+**Live check after the fix deployed:**
+- Account: the owner's own already-signed-in account in the browser pane (Basic plan with
+  admin tools and a populated watchlist).
+- Path: Today → Scanner, read only.
+- Headings in order: `Scanner` → `Results` → `HSF Opportunities` … → `My Watchlists`
+  (heading 12, after the results at 5).
+- No startup error.
+- **PASS** for that row. The Premium account was not available, so Premium live is still
+  UNVERIFIED.
 
 ## Release Gate
 
