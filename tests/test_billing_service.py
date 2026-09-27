@@ -221,11 +221,14 @@ class BillingServiceCheckoutTest(unittest.TestCase):
         self.bm.stripe.checkout.Session.create.return_value = types.SimpleNamespace(
             url="https://checkout.test/session"
         )
+        # Run 83: callers must prove the signed-in account (single-use token).
+        self.bm._consume_billing_token = MagicMock(return_value="member@example.com")
 
     def _checkout(self, plan: str):
         return _client(self.bm).post(
             "/create-checkout-session",
             json={"email": " Member@Example.com ", "plan": plan},
+            headers={"X-HSF-Auth": "test-token"},
         )
 
     def test_pro_checkout_uses_only_configured_pro_price_and_metadata(self):

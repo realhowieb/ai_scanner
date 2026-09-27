@@ -201,16 +201,16 @@ def auth_ui():
     # Reset the once-per-run cookie-save guard at the start of each run.
     _reset_cookie_save_guard()
 
-    # --- URL token restore (Stripe redirect carries ?rt=<session_id>) ---
-    # Browser cookies are unreliable across the Stripe round-trip on Streamlit
-    # Cloud, so we also accept a session id passed back in the success_url.
+    # --- Stripe return: ?rt= is a single-use, 2-hour restore token (Run 83), since
+    # cookies are unreliable across the Stripe round-trip on Streamlit Cloud.
     if "username" not in st.session_state:
         try:
             rt = (st.query_params.get("rt") or "").strip()
         except _AUTH_BACKEND_ERRORS:
             rt = ""
         if rt:
-            u = _get_username_for_session(rt)
+            from ui.auth_tokens import consume_token
+            u = consume_token(rt, "restore")  # replay / expired / unknown → None
             if u:
                 st.session_state["username"] = (u or "").strip().lower()
                 t = _resolve_tier_key(st.session_state["username"])

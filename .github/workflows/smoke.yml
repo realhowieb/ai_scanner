@@ -40,6 +40,8 @@ jobs:
           python -c "import fastapi, httpx"
           python -m pytest \
             tests/test_billing_service.py \
+            tests/test_run83_billing_auth.py \
+            tests/test_run83_restore_token.py \
             tests/test_run72_pricing.py \
             tests/test_run73_tier_differentiation.py \
             tests/test_tier_enforcement.py \

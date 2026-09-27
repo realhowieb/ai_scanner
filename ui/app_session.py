@@ -46,7 +46,28 @@ ACCOUNT_SESSION_KEYS = (
     "hsf_stock_opp", "hsf_stock_row", "hsf_stock_ticker",
     "hsf_stock_ticker_input", "hsf_stock_view_selected",
     "hsf_alert_prefill_ticker", "hsf_alert_prefill_event",
+    # Run 83 (B2): account-derived state that used to survive logout.
+    "active_watchlist_quote_rows", "_watchlist_prior_rows", "_loaded_user_settings",
+    "_portal_url", "post_checkout_refreshed", "_tier_poll_attempt",
+    "_wl_pending_scan", "_wl_pending_scan_all", "_wl_tools_state",
+    "dt_rows", "dt_watch_symbols", "dt_watch_baseline",
+    "latest_results_df", "results_signature", "scan_ran_at_utc", "force_results_refresh",
+    "earnings_enriched_df", "earnings_enriched_signature",
+    "_brief_prior_state", "_brief_prior_opps", "_opp_compare_cache",
+    "_nl_pending_explanation", "_nl_pending_filters", "_ai_pending_settings", "_ai_run_pending",
+    "hsf_my_watchlist_viewed", "hsf_stock_intelligence_viewed",
+    "alert_price_tk", "alert_price_val", "alert_break_thr", "alert_break_wl",
+    "alert_ema_tk", "alert_ema_dir", "alert_rvol_tk", "alert_rvol_thr",
+    "pt_key", "pt_secret",
 )
+
+# Identity keys every sign-in path sets for the NEW account in the same run, so
+# the identity boundary below keeps them and clears everything else.
+IDENTITY_KEYS = ("user_id", "username", "display_name", "tier", "plan", "is_admin",
+                 "authentication_status")
+# Who the account-scoped session state belongs to. Deliberately NOT cleared on
+# logout: it is how a later sign-in as someone else is detected. Stores a hash.
+ACCOUNT_OWNER_KEY = "_hsf_account_owner"
 
 
 def clear_account_session_state(session_state: Any, extra_keys: tuple[str, ...] = ()) -> None:
@@ -56,6 +77,40 @@ def clear_account_session_state(session_state: Any, extra_keys: tuple[str, ...] 
             session_state.pop(key, None)
         except Exception:
             continue
+
+
+def _owner_tag(username: object) -> str:
+    import hashlib
+
+    return hashlib.sha256(str(username or "").strip().lower().encode("utf-8")).hexdigest()[:24]
+
+
+def enforce_account_boundary(session_state: Any, username: object) -> bool:
+    """Run 83 (B2): account isolation by identity, not only by the logout button.
+
+    Call after authentication on every run. When the signed-in account differs
+    from the one the session's account state belongs to (logout → another
+    sign-in, session restore, any future auth path), clear all account-scoped
+    state except the identity the sign-in just established. Returns True when
+    state was cleared.
+    """
+    user = str(username or "").strip().lower()
+    if not user:
+        return False
+    tag = _owner_tag(user)
+    owner = session_state.get(ACCOUNT_OWNER_KEY)
+    cleared = owner is not None and owner != tag
+    if cleared:
+        # The shared-link destination was chosen by whoever is signing in now.
+        drop = tuple(k for k in ACCOUNT_SESSION_KEYS
+                     if k not in IDENTITY_KEYS and k != "hsf_after_login_page")
+        for key in drop:
+            try:
+                session_state.pop(key, None)
+            except Exception:
+                continue
+    session_state[ACCOUNT_OWNER_KEY] = tag
+    return cleared
 
 
 def should_land_on_today(session_state: Any, username: object) -> bool:

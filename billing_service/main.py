@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import re
@@ -238,6 +239,60 @@ def _price_to_plan(price_id: str) -> str:
     return "basic"
 
 
+# ---------- Caller authentication (Run 83) ----------
+# The Streamlit app mints a single-use, 10-minute "billing" token for the
+# signed-in account (ui/auth_tokens.py) and sends it in this header. We consume
+# it against the shared database to learn WHICH account is asking, then resolve
+# that account's Stripe customer server-side. A client-supplied email or
+# customer id is never trusted. Keep the SQL identical to ui/auth_tokens.py.
+AUTH_HEADER = "X-HSF-Auth"
+_TOKENS_SCHEMA_SQL = (
+    "CREATE TABLE IF NOT EXISTS hsf_auth_tokens ("
+    " token_hash text PRIMARY KEY,"
+    " username text NOT NULL,"
+    " purpose text NOT NULL,"
+    " expires_at timestamptz NOT NULL,"
+    " created_at timestamptz NOT NULL DEFAULT now())"
+)
+_TOKENS_CONSUME_SQL = (
+    "DELETE FROM hsf_auth_tokens WHERE token_hash = %s AND purpose = %s AND expires_at > %s "
+    "RETURNING username"
+)
+
+
+def _consume_billing_token(token: str) -> Optional[str]:
+    """Username for a valid, unused billing token (and invalidate it), else None."""
+    raw = (token or "").strip()
+    if not raw or len(raw) > 256:
+        return None
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    with _db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_TOKENS_SCHEMA_SQL)
+            cur.execute(_TOKENS_CONSUME_SQL, (digest, "billing", datetime.now(timezone.utc)))
+            row = cur.fetchone()
+    user = (row[0] if row else "") or ""
+    return user.strip().lower() or None
+
+
+def _authenticated_user(request: Request, payload: dict) -> str:
+    """The HSF account making this request. Fails closed before any Stripe call."""
+    token = request.headers.get(AUTH_HEADER) or ""
+    if not token.strip():
+        raise HTTPException(401, "Please sign in again to manage billing.")
+    try:
+        user = _consume_billing_token(token)
+    except Exception as exc:
+        _log.warning("billing token check failed: %s", type(exc).__name__)
+        raise HTTPException(503, "Account verification is temporarily unavailable. Please try again.")
+    if not user:
+        raise HTTPException(401, "Your sign-in could not be verified. Please sign in again.")
+    claimed = (payload.get("email") or "").strip().lower()
+    if claimed and claimed != user:
+        raise HTTPException(403, "This billing request does not match your account.")
+    return user
+
+
 # ---------- API ----------
 @app.get("/health")
 def health():
@@ -261,6 +316,9 @@ def health():
 
 @app.get("/debug/status")
 def debug_status():
+    # Run 83: operator-only. Hidden unless BILLING_DEBUG_STATUS=1 on the service.
+    if os.getenv("BILLING_DEBUG_STATUS", "").strip() != "1":
+        raise HTTPException(404, "Not Found")
     # Do not return secrets; only whether they are set.
     status = {
         "ok": False,
@@ -299,7 +357,7 @@ def debug_status():
 
 
 @app.post("/create-checkout-session")
-async def create_checkout_session(payload: dict):
+async def create_checkout_session(payload: dict, request: Request):
     """
     Payload example:
     {
@@ -315,7 +373,7 @@ async def create_checkout_session(payload: dict):
         "DATABASE_URL",
     )
 
-    email = (payload.get("email") or "").strip().lower()
+    email = _authenticated_user(request, payload)
     plan = (payload.get("plan") or "").strip().lower()
 
     if not email or "@" not in email:
@@ -351,7 +409,8 @@ async def create_checkout_session(payload: dict):
     try:
         user = _get_user_by_email(email)
     except Exception as e:
-        raise HTTPException(503, f"User database lookup failed: {e}")
+        _log.warning("checkout user lookup failed: %s", type(e).__name__)
+        raise HTTPException(503, "Account lookup is temporarily unavailable. Please try again.")
     if not user:
         raise HTTPException(404, "No app user exists for this email. Please sign up before upgrading.")
     customer_id = user.get("stripe_customer_id") if user else None
@@ -388,28 +447,28 @@ async def create_checkout_session(payload: dict):
         return {"checkout_url": session.url, "mode": "checkout"}
     except Exception as e:
         # Surface the message so curl shows something useful.
-        print(f"[billing_service] create-checkout-session failed: {e}")
-        raise HTTPException(500, f"Create checkout session failed: {e}")
+        _log.warning("create-checkout-session failed: %s", type(e).__name__)
+        raise HTTPException(500, "Checkout is temporarily unavailable. Please try again.")
 
 
 @app.post("/create-portal-session")
-async def create_portal_session(payload: dict):
+async def create_portal_session(payload: dict, request: Request):
     """
-    Payload example:
-    { "email": "user@email.com" }
+    Requires the X-HSF-Auth billing token of the signed-in account (Run 83).
+    Optional payload: { "return_url": "<same-host URL>" }. Any "email" must match
+    the authenticated account; the Stripe customer always comes from that
+    account's own users row, never from the request.
     """
-    email = (payload.get("email") or "").strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(400, "Valid email is required")
-
     _require_env("APP_SUCCESS_URL", "DATABASE_URL")
+    email = _authenticated_user(request, payload)
     try:
         user = _get_user_by_email(email)
     except Exception as e:
-        raise HTTPException(503, f"User database lookup failed: {e}")
-    customer_id = user.get("stripe_customer_id")
+        _log.warning("portal user lookup failed: %s", type(e).__name__)
+        raise HTTPException(503, "Account lookup is temporarily unavailable. Please try again.")
+    customer_id = (user or {}).get("stripe_customer_id")
     if not customer_id:
-        raise HTTPException(400, "No Stripe customer found for this user yet")
+        raise HTTPException(400, "No subscription found for this account yet.")
 
     return_url = _append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL, "portal", "return")
     override = (payload.get("return_url") or "").strip()
@@ -429,7 +488,8 @@ async def create_portal_session(payload: dict):
         )
         return {"portal_url": portal.url}
     except Exception as e:
-        raise HTTPException(500, f"Stripe error: {e}")
+        _log.warning("portal session create failed: %s", type(e).__name__)
+        raise HTTPException(502, "The billing portal is temporarily unavailable. Please try again.")
 
 
 @app.post("/webhook")

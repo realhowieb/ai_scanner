@@ -63,6 +63,7 @@ try:
     )
     from ui.app_session import (
         compute_entitlements,
+        enforce_account_boundary,
         is_admin_user,
         normalize_admin_users,
         should_land_on_today,
@@ -426,6 +427,7 @@ def main():
     if not authed:
         # Not logged in: show only the login card (auth_ui handles it)
         st.stop()
+    enforce_account_boundary(st.session_state, username)  # Run 83 (B2): accounts isolated by identity
     if st.session_state.get("hsf_after_login_page"):  # P2-5: return to a shared link
         st.session_state["hsf_today_landed_for"] = str(username or "").strip().lower()
         st.switch_page(st.session_state.pop("hsf_after_login_page"))

@@ -47,8 +47,14 @@ def _billing_healthcheck() -> tuple[bool, str | None]:
         return False, None
 
 
-def _billing_post_json(path: str, payload: dict) -> dict:
-    """POST JSON to billing service with cold-start-friendly behavior."""
+def _billing_post_json(path: str, payload: dict, *, username: str) -> dict:
+    """POST JSON to billing service with cold-start-friendly behavior.
+
+    Run 83: every attempt carries a fresh single-use billing token for the
+    signed-in account (a timed-out attempt may already have consumed its token).
+    """
+    from ui.checkout import billing_auth_headers
+
     # Fast preflight: avoids waiting on a long POST when the service is asleep.
     ready, reason = _billing_healthcheck()
     if not ready:
@@ -59,9 +65,13 @@ def _billing_post_json(path: str, payload: dict) -> dict:
     last_err = None
     for attempt in range(POST_RETRIES + 1):
         try:
+            auth = billing_auth_headers(username)
+            if not auth:
+                raise RuntimeError("Couldn't verify your account right now. Please try again in a moment.")
             r = requests.post(
                 f"{BILLING_API_BASE}{path}",
                 json=payload,
+                headers=auth,
                 timeout=POST_TIMEOUT_S,
             )
             r.raise_for_status()
@@ -89,16 +99,16 @@ def _billing_post_json(path: str, payload: dict) -> dict:
 
 
 def _portal_return_url(email: str) -> str | None:
-    """Mint a session and build a portal return URL carrying the rt token so the
+    """Portal return URL carrying a single-use restore token (Run 83) so the
     Customer Portal returns the user logged in (cookie-independent)."""
     try:
         from config import APP_BASE_URL
-        from ui.auth_sessions import create_session
-        sid = create_session(email)
-        if not sid:
+        from ui.auth_tokens import issue_token
+        rt = issue_token(email, "restore")
+        if not rt:
             return None
         base = (APP_BASE_URL or "").rstrip("/")
-        return f"{base}/?portal=return&rt={sid}"
+        return f"{base}/?portal=return&rt={rt}"
     except Exception:
         return None
 
@@ -108,7 +118,7 @@ def _create_portal_url(*, email: str) -> str:
     ret = _portal_return_url(email)
     if ret:
         body["return_url"] = ret
-    data = _billing_post_json("/create-portal-session", body)
+    data = _billing_post_json("/create-portal-session", body, username=email)
     url = (data.get("portal_url") or "").strip()
     if not url:
         raise RuntimeError("Billing service did not return portal_url")
