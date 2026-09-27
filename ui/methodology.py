@@ -33,7 +33,8 @@ METHODOLOGY_SECTIONS: List[Tuple[str, str]] = [
      "setup will form in the next few trading days and subsequently meet its defined outcome. "
      "**5D outcome probability** is the calibrated model probability of reaching +4% before "
      "-2% within five trading days. These are research estimates for defined events, not "
-     "probabilities of profit, and they do not replace the HSF Score ranking."),
+     "probabilities of profit, and they do not replace the HSF Score ranking. Breakout score "
+     "supports the core ranking; PreBreakout and AI-assisted research are Premium capabilities."),
     ("Why a stock appears",
      "Each result lists the technical and contextual evidence that put it there, such as relative "
      "volume, a price gap, trend over recent days, position against its recent high, strength "
@@ -50,7 +51,7 @@ METHODOLOGY_SECTIONS: List[Tuple[str, str]] = [
      "data collected after the method was fixed. HSF will not publish performance claims until "
      "that forward research supports them. Any historical figures shown in the app are labelled "
      "as historical research: they are descriptive and do not represent validated forward "
-     "performance."),
+     "performance. Historical Research is available on Pro and Premium."),
 ]
 
 

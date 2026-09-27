@@ -354,6 +354,12 @@ def render_stock_intelligence(
         ticker, current_opp=current_opp, current_row=current_row, history=history,
         regime=_regime_from_session(), calibration_records=calibration_records,
         earnings_days=earnings_days)
+    from ui.entitlement_view import redact_prebreakout_opportunity
+
+    intel = redact_prebreakout_opportunity(
+        intel,
+        allowed=bool((st.session_state.get("entitlements") or {}).get("can_early_breakout")),
+    )
 
     _render_header(intel)
     _render_why_and_risks(intel)

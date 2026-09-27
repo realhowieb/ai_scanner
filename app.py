@@ -62,6 +62,7 @@ try:
         normalize_results_to_df as _normalize_results_to_df,
     )
     from ui.app_session import (
+        clear_entitlement_sensitive_state,
         compute_entitlements,
         enforce_account_boundary,
         is_admin_user,
@@ -469,12 +470,9 @@ def main():
         # Downgrade: DB resolved a lower tier than what was in session.
         if _tier_rank.get(tier_key, 0) < _tier_rank.get(prev_key, 0):
             # Clear Premium/Pro-only state that would now be inaccessible.
-            for _k in (
-                "price_snapshot_id", "snapshot_id",
-                "ai_notes", "ai_notes_text", "ai_notes_cache",
-                "ai_notes_last", "ai_notes_last_text", "last_ai_notes",
-            ):
+            for _k in ("price_snapshot_id", "snapshot_id"):
                 st.session_state.pop(_k, None)
+            clear_entitlement_sensitive_state(st.session_state)
             st.warning(
                 f"Your plan has changed from **{plan_label(prev_key)}** to **{plan_label(tier_key)}**. "
                 "Some features have been locked. Visit the Billing page to upgrade."
@@ -521,15 +519,7 @@ def main():
     # Safety: if AI Notes are not allowed for this user, purge any cached notes
     # so Basic/Pro accounts never see previously-generated Premium content.
     if not bool(flags.get("can_ai_notes")):
-        for k in (
-            "ai_notes",
-            "ai_notes_text",
-            "ai_notes_cache",
-            "ai_notes_last",
-            "ai_notes_last_text",
-            "last_ai_notes",
-        ):
-            st.session_state.pop(k, None)
+        clear_entitlement_sensitive_state(st.session_state)
 
     render_admin_build_stamp(app_file=__file__, username=username, tier_key=tier_key)
 

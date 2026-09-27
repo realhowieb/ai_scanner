@@ -522,18 +522,25 @@ def render_alerts_panel(
         # Outcome scorecards: how each alert's recent fires actually played out.
         # Shown only with >=3 scored fires so one lucky/unlucky fire can't
         # masquerade as a track record.
-        try:
-            from db.alert_outcomes import HIT_TARGET_PCT, HORIZON_DAYS
+        can_research = bool(
+            (st.session_state.get("entitlements") or {}).get("can_track_record")
+        )
+        if can_research:
+            try:
+                from db.alert_outcomes import HIT_TARGET_PCT, HORIZON_DAYS
 
-            scorecards = _cached_scorecards(user_id)
-            sequences = _cached_sequences(user_id)
-            fire_counts = _cached_fire_counts(user_id)
-        except Exception:
+                scorecards = _cached_scorecards(user_id)
+                sequences = _cached_sequences(user_id)
+                fire_counts = _cached_fire_counts(user_id)
+            except Exception:
+                scorecards, sequences, HIT_TARGET_PCT, HORIZON_DAYS = {}, {}, 5.0, 3
+                fire_counts = {}
+
+            # Edge scorecard: which alert TYPES actually pay off (aggregate view).
+            render_alert_edge(user_id)
+        else:
             scorecards, sequences, HIT_TARGET_PCT, HORIZON_DAYS = {}, {}, 5.0, 3
             fire_counts = {}
-
-        # Edge scorecard: which alert TYPES actually pay off (aggregate view).
-        render_alert_edge(user_id)
 
         st.markdown("**Your alerts**")
         for index, a in enumerate(existing):

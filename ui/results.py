@@ -261,7 +261,12 @@ def render_results(
 
         # Export (tier-gated) still available even in fast mode
         if can_export_csv:
-            csv = df.drop(columns=["Spark10D"], errors="ignore").to_csv(index=False).encode("utf-8")
+            from ui.entitlement_view import redact_prebreakout_frame
+
+            export_df = redact_prebreakout_frame(
+                df, allowed=bool(ent.get("can_early_breakout"))
+            )
+            csv = export_df.drop(columns=["Spark10D"], errors="ignore").to_csv(index=False).encode("utf-8")
             st.download_button(
                 "⬇️ Download CSV",
                 data=csv,
@@ -611,7 +616,12 @@ def render_results(
 
     # Export (tier-gated)
     if can_export_csv:
-        csv = df.to_csv(index=False).encode("utf-8")
+        from ui.entitlement_view import redact_prebreakout_frame
+
+        export_df = redact_prebreakout_frame(
+            df, allowed=bool(ent.get("can_early_breakout"))
+        )
+        csv = export_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             "⬇️ Download CSV",
             data=csv,

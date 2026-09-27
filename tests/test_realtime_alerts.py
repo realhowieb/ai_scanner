@@ -38,6 +38,22 @@ class MarketSessionTests(unittest.TestCase):
         self.assertFalse(market_session_open(_utc("2026-07-11T14:00:00")))  # Saturday
 
 
+class EntitlementLimitTests(unittest.TestCase):
+    def test_realtime_worker_enforces_plan_limits_after_downgrade(self):
+        from billing_service.realtime_alerts import _apply_plan_limits
+
+        alerts = [
+            {"id": i, "user_id": "free@example.com", "tier": "basic"}
+            for i in range(3)
+        ] + [
+            {"id": i, "user_id": "pro@example.com", "tier": "pro"}
+            for i in range(10)
+        ]
+        kept = _apply_plan_limits(alerts)
+        self.assertEqual([a["id"] for a in kept if a["user_id"].startswith("free")], [0])
+        self.assertEqual(len([a for a in kept if a["user_id"].startswith("pro")]), 5)
+
+
 if __name__ == "__main__":
     unittest.main()
 

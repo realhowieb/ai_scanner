@@ -73,7 +73,12 @@ def _user_watchlist(username: str) -> List[str]:
 def _section_top(scan_df: Any) -> None:
     st.markdown("### Top setups right now")
     result = today_top_setups(scan_df, n=5)
-    tops = result["setups"]
+    from ui.entitlement_view import redact_prebreakout_rows
+
+    tops = redact_prebreakout_rows(
+        result["setups"],
+        allowed=bool((st.session_state.get("entitlements") or {}).get("can_early_breakout")),
+    )
     if not tops:
         st.info(
             "No high-quality setups meet the current HSF threshold. The market scan "

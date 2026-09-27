@@ -179,6 +179,14 @@ def available_lenses(counts: Dict[str, int]) -> List[str]:
     return ["all"] + [k for k in LENSES if k != "all" and counts.get(k, 0) > 0]
 
 
+def entitled_lenses(counts: Dict[str, int], *, can_early_breakout: bool) -> List[str]:
+    """Return lenses visible to this plan without changing scanner results."""
+    return [
+        key for key in available_lenses(counts)
+        if key != "early" or can_early_breakout
+    ]
+
+
 def mark_new(df: Any, new_set: Set[str]) -> Any:
     """Prefix the Why text of new names with 🆕 (copy; order unchanged)."""
     if not new_set or df is None or getattr(df, "empty", True) or "Why" not in df.columns:
@@ -270,7 +278,13 @@ def render_discover_bar(df: Any) -> Any:
         st.session_state[NEW_SET_KEY] = sorted(new_set)
         df = mark_new(df, new_set)
         counts = lens_counts(df, new_set)
-        options = [k for k in available_lenses(counts) if k != "all"]
+        ent = st.session_state.get("entitlements") or {}
+        options = [
+            k for k in entitled_lenses(
+                counts, can_early_breakout=bool(ent.get("can_early_breakout"))
+            )
+            if k != "all"
+        ]
         pending = st.session_state.pop(PENDING_LENS_KEY, None)
         current = pending if pending is not None else st.session_state.get(LENS_KEY)
         if isinstance(current, str):            # older single-lens state (e.g. Today's link)

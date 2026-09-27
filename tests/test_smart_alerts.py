@@ -54,7 +54,7 @@ class SmartAlertSuggestionTests(unittest.TestCase):
             ]
         )
 
-        suggestions = build_smart_alert_suggestions(df)
+        suggestions = build_smart_alert_suggestions(df, can_early_breakout=True)
 
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].ticker, "NVDA")

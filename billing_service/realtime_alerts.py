@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 POLL_SECONDS = int(os.getenv("REALTIME_POLL_SECONDS", "60") or "60")
 THROTTLE_HOURS = float(os.getenv("ALERT_THROTTLE_HOURS", "12") or "12")
 EMAIL_TIERS = ("pro", "premium", "admin")
+ALERT_LIMITS = {"basic": 1, "pro": 5, "premium": 25, "admin": 25}
 
 
 def _log(msg: str) -> None:
@@ -76,12 +77,13 @@ def _due_price_alerts(conn) -> List[Dict[str, Any]]:
           AND a.threshold IS NOT NULL
           AND (a.last_fired_at IS NULL
                OR a.last_fired_at < NOW() - make_interval(hours => %s))
+        ORDER BY a.user_id ASC, a.created_at DESC, a.id DESC
         """,
         (THROTTLE_HOURS,),
     )
     rows = cur.fetchall()
     cur.close()
-    return [
+    alerts = [
         {
             "id": r[0],
             "user_id": r[1],
@@ -94,6 +96,24 @@ def _due_price_alerts(conn) -> List[Dict[str, Any]]:
         }
         for r in rows
     ]
+    # Enforce the same newest-first plan cap as the scheduled runner. This is
+    # essential after a downgrade: saved over-limit alerts remain visible but
+    # cannot continue firing through the real-time worker.
+    return _apply_plan_limits(alerts)
+
+
+def _apply_plan_limits(alerts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Keep newest alerts up to each owner's canonical plan limit."""
+    kept: List[Dict[str, Any]] = []
+    per_user: Dict[str, int] = {}
+    for alert in alerts:
+        user_id = str(alert["user_id"])
+        limit = ALERT_LIMITS.get(str(alert.get("tier") or "basic"), 1)
+        if per_user.get(user_id, 0) >= limit:
+            continue
+        per_user[user_id] = per_user.get(user_id, 0) + 1
+        kept.append(alert)
+    return kept
 
 
 def _record_fire(conn, alert: Dict[str, Any], message: str) -> None:

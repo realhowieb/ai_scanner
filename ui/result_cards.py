@@ -69,8 +69,21 @@ def render_result_cards(df: Any, *, limit: int = CARD_LIMIT) -> None:
         return
     try:
         rows = df.to_dict(orient="records")
+        from ui.entitlement_view import redact_prebreakout_opportunity
+
+        allowed = bool((st.session_state.get("entitlements") or {}).get("can_early_breakout"))
         for i, row in enumerate(rows[:limit]):
+            safe = redact_prebreakout_opportunity(
+                {**row, "signals": list(_signals_for_card(row)), "primary_setup": card_model(row).get("setup")},
+                allowed=allowed,
+            )
+            row = dict(row)
+            if not allowed:
+                for key in ("PreBreakoutProb%", "PreBreakoutProb", "PreBreakoutProbRaw", "PreBreakoutScore"):
+                    row.pop(key, None)
+                row["Why"] = safe.get("Why", row.get("Why"))
             m = card_model(row)
+            m["setup"] = None if safe.get("primary_setup") == "Signal" else safe.get("primary_setup")
             if not m["ticker"]:
                 continue
             with st.container(border=True):
@@ -90,3 +103,9 @@ def render_result_cards(df: Any, *, limit: int = CARD_LIMIT) -> None:
         from ui.safe_errors import show_error
 
         show_error("the result cards", exc)
+
+
+def _signals_for_card(row: Dict[str, Any]) -> List[str]:
+    from ui.results_intelligence import _row_to_signal_fields
+
+    return list(_row_to_signal_fields(row).get("signals") or [])

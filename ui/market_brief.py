@@ -319,8 +319,11 @@ def render_intelligent_alerts(data: Dict[str, Any], user: str) -> None:
         prior_opps = st.session_state.get("_brief_prior_opps") or {}
         views = mb.build_top_opportunity_views(
             opps, watchlist=watchlist, prior_by_ticker=prior_opps, top_n=6)
-        if not _can("can_early_breakout"):     # PreBreakout candidates are Premium
-            views = [v for v in views if "prebreakout" not in str(v.get("primary_setup") or "").lower()]
+        from ui.entitlement_view import redact_prebreakout_rows
+
+        views = redact_prebreakout_rows(
+            views, allowed=_can("can_early_breakout")
+        )
 
         st.markdown("### 🔔 Intelligent Alerts")
         st.caption("What HSF sees right now and why. **Alert Priority is an "
@@ -395,6 +398,11 @@ def render_market_brief() -> None:
     # ---- glance layer (always on) ----
     # Compute opportunities + movement once (cached per snapshot).
     compared, previous = compute_compared_opportunities(data)
+    from ui.entitlement_view import redact_prebreakout_rows
+
+    display_compared = redact_prebreakout_rows(
+        compared, allowed=_can("can_early_breakout")
+    )
     # A. Market state — regime + compact metrics + freshness.
     render_market_header(data, phase)
     if _can("can_ai_notes"):                    # Claude-written: Premium AI feature
@@ -402,12 +410,12 @@ def render_market_brief() -> None:
     # A2. Intelligent Alerts — Run 40 opportunity feed (why/changed/risk/priority).
     render_intelligent_alerts(data, user)
     # B. Since last scan — only meaningful changes, only when history exists.
-    render_since_last_scan(compared, previous)
+    render_since_last_scan(display_compared, previous)
     # C / D. Top Opportunities (score movement + status transitions) + detail.
-    render_top_opportunities(compared, data)
-    _render_watchlist_opportunity_matches(compared, user)
+    render_top_opportunities(display_compared, data)
+    _render_watchlist_opportunity_matches(display_compared, user)
     # E. What to watch next (~3 deterministic items).
-    render_watch_next(compared)
+    render_watch_next(display_compared)
     # F. HSF signal performance (outcome scorecard) — Pro historical research.
     if _can("can_track_record"):
         render_signal_scorecard()

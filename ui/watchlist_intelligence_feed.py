@@ -93,6 +93,12 @@ def render_watchlist_intelligence(user: str, *, session: Optional[str] = None) -
         prior = st.session_state.get("_watchlist_prior_rows") or {}
         feed = build_watchlist_feed(user, session=session, prior_by_symbol=prior)
         views, summary = feed["views"], feed["summary"]
+        from ui.entitlement_view import redact_prebreakout_rows
+
+        ent = st.session_state.get("entitlements") or {}
+        views = redact_prebreakout_rows(
+            views, allowed=bool(ent.get("can_early_breakout"))
+        )
 
         if not views:
             st.info(wv.empty_watchlist_message())
@@ -127,14 +133,22 @@ def render_watchlist_intelligence(user: str, *, session: Optional[str] = None) -
                     st.markdown(f"- **{e['symbol']}** — {e['change']}")
 
         # Run 43: Historical Replay entry point (reachable from Watchlist).
-        with st.expander("📽️ Signal Timeline (historical replay)", expanded=False):
+        if ent.get("can_track_record"):
+            with st.expander("📽️ Signal Timeline (historical replay)", expanded=False):
+                try:
+                    from ui.historical_replay import render_historical_replay
+                    syms = [v.get("symbol") for v in views if v.get("symbol")]
+                    pick = st.selectbox("Replay symbol", syms, key="wl_replay_pick") \
+                        if syms else None
+                    if pick:
+                        render_historical_replay(pick)
+                except Exception:
+                    pass
+        else:
             try:
-                from ui.historical_replay import render_historical_replay
-                syms = [v.get("symbol") for v in views if v.get("symbol")]
-                pick = st.selectbox("Replay symbol", syms, key="wl_replay_pick") \
-                    if syms else None
-                if pick:
-                    render_historical_replay(pick)
+                from ui.pricing import upgrade_message
+
+                st.caption(upgrade_message("can_track_record"))
             except Exception:
                 pass
 

@@ -342,6 +342,15 @@ def render_scanner_intelligence(
     summary = summarize_results(compared, total_matches=total,
                                 has_previous=has_prev, regime=regime)
     views = classify_views(compared)
+    from ui.entitlement_view import redact_prebreakout_rows
+
+    allow_prebreakout = bool(
+        (st.session_state.get("entitlements") or {}).get("can_early_breakout")
+    )
+    views = {
+        name: redact_prebreakout_rows(items, allowed=allow_prebreakout)
+        for name, items in views.items()
+    }
 
     # --- Summary header (compact) ---
     st.markdown("### HSF Opportunities")

@@ -26,6 +26,7 @@ def build_smart_alert_suggestions(
     df: pd.DataFrame,
     *,
     max_suggestions: int = 5,
+    can_early_breakout: bool = False,
 ) -> list[SmartAlertSuggestion]:
     if df is None or df.empty:
         return []
@@ -36,7 +37,7 @@ def build_smart_alert_suggestions(
         ticker = _ticker(row)
         if not ticker:
             continue
-        for suggestion in _row_suggestions(row, ticker):
+        for suggestion in _row_suggestions(row, ticker, can_early_breakout=can_early_breakout):
             key = (suggestion.ticker, suggestion.alert_type, suggestion.direction)
             if key in seen:
                 continue
@@ -54,7 +55,8 @@ def render_smart_alert_suggestions(
 ) -> None:
     if st is None:
         return
-    suggestions = build_smart_alert_suggestions(df)
+    entitled = bool((st.session_state.get("entitlements") or {}).get("can_early_breakout"))
+    suggestions = build_smart_alert_suggestions(df, can_early_breakout=entitled)
     if not suggestions:
         return
 
@@ -83,7 +85,9 @@ def _top_rows(df: pd.DataFrame, *, limit: int) -> Iterable[dict[str, Any]]:
     return frame.head(limit).to_dict(orient="records")
 
 
-def _row_suggestions(row: dict[str, Any], ticker: str) -> list[SmartAlertSuggestion]:
+def _row_suggestions(
+    row: dict[str, Any], ticker: str, *, can_early_breakout: bool = False
+) -> list[SmartAlertSuggestion]:
     out: list[SmartAlertSuggestion] = []
     breakout_score = _num(row, "BreakoutScore", "Score")
     prebreakout_pct = _prob_pct(row, "PreBreakoutProb%", "PreBreakoutProb", "PreBreakout")
@@ -101,7 +105,7 @@ def _row_suggestions(row: dict[str, Any], ticker: str) -> list[SmartAlertSuggest
             )
         )
 
-    if prebreakout_pct is not None and prebreakout_pct >= 60:
+    if can_early_breakout and prebreakout_pct is not None and prebreakout_pct >= 60:
         out.append(
             SmartAlertSuggestion(
                 ticker=ticker,

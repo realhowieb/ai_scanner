@@ -40,10 +40,13 @@ try:
     if has_trades:
         render_journal_panel(_username)
     else:
+        can_paper = bool(
+            (st.session_state.get("entitlements") or {}).get("can_paper_trade")
+        )
+        suffix = " or **💹 Paper Trade This Setup**" if can_paper else ""
         st.info(
             "Your journal is empty. Use **📓 Log this trade** on a scan result's "
-            "trade plan (or **💹 Paper Trade This Setup**) to start tracking "
-            "positions here."
+            f"trade plan{suffix} to start tracking positions here."
         )
 except Exception as e:
     from ui.safe_errors import show_error
@@ -52,14 +55,15 @@ except Exception as e:
 
 # Paper-account activity (positions + orders) moved here from the Scanner page
 # (P0-6). Renders nothing until a paper account is connected in Settings.
-try:
-    from ui.paper_events import render_activity_feed
+if (st.session_state.get("entitlements") or {}).get("can_paper_trade"):
+    try:
+        from ui.paper_events import render_activity_feed
 
-    render_activity_feed(_username)
-except Exception as e:
-    from ui.safe_errors import show_error
+        render_activity_feed(_username)
+    except Exception as e:
+        from ui.safe_errors import show_error
 
-    show_error("paper-trading activity", e)
-st.page_link("pages/settings.py", label="Connect or manage a paper-trading account", icon="⚙️")
+        show_error("paper-trading activity", e)
+    st.page_link("pages/settings.py", label="Connect or manage a paper-trading account", icon="⚙️")
 
 st.page_link("app.py", label="← Back to scanner", icon="🏠")

@@ -61,6 +61,26 @@ ACCOUNT_SESSION_KEYS = (
     "pt_key", "pt_secret", "_three_step_flash",
 )
 
+# Premium AI output keys include ticker/snapshot identifiers, so enumerating
+# every possible key is neither complete nor durable. These prefixes are
+# account- and entitlement-sensitive; browser convenience preferences are not.
+ENTITLEMENT_SENSITIVE_SESSION_PREFIXES = (
+    "_ai_summary_",
+    "_ai_ticker_",
+    "_ai_chat_",
+    "brief_narrative_",
+    "opp_ai_",
+    "aic_explain_",
+)
+ENTITLEMENT_SENSITIVE_SESSION_KEYS = (
+    "ai_notes",
+    "ai_notes_text",
+    "ai_notes_cache",
+    "ai_notes_last",
+    "ai_notes_last_text",
+    "last_ai_notes",
+)
+
 # Identity keys every sign-in path sets for the NEW account in the same run, so
 # the identity boundary below keeps them and clears everything else.
 IDENTITY_KEYS = ("user_id", "username", "display_name", "tier", "plan", "is_admin",
@@ -70,6 +90,18 @@ IDENTITY_KEYS = ("user_id", "username", "display_name", "tier", "plan", "is_admi
 ACCOUNT_OWNER_KEY = "_hsf_account_owner"
 
 
+def clear_entitlement_sensitive_state(session_state: Any) -> None:
+    """Remove cached Premium output without clearing browser preferences."""
+    for key in list(session_state.keys()):
+        if key in ENTITLEMENT_SENSITIVE_SESSION_KEYS or str(key).startswith(
+            ENTITLEMENT_SENSITIVE_SESSION_PREFIXES
+        ):
+            try:
+                session_state.pop(key, None)
+            except Exception:
+                continue
+
+
 def clear_account_session_state(session_state: Any, extra_keys: tuple[str, ...] = ()) -> None:
     """Remove account-specific state while preserving browser UI preferences."""
     for key in (*ACCOUNT_SESSION_KEYS, *extra_keys):
@@ -77,6 +109,7 @@ def clear_account_session_state(session_state: Any, extra_keys: tuple[str, ...] 
             session_state.pop(key, None)
         except Exception:
             continue
+    clear_entitlement_sensitive_state(session_state)
 
 
 def _owner_tag(username: object) -> str:
@@ -109,6 +142,7 @@ def enforce_account_boundary(session_state: Any, username: object) -> bool:
                 session_state.pop(key, None)
             except Exception:
                 continue
+        clear_entitlement_sensitive_state(session_state)
     session_state[ACCOUNT_OWNER_KEY] = tag
     return cleared
 

@@ -373,7 +373,10 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
         )
     with a5:
         export_csv_data = ""
-        if has_watchlist:
+        can_export = bool(
+            (st.session_state.get("entitlements") or {}).get("can_export_csv")
+        )
+        if has_watchlist and can_export:
             frame_mod = pd
             if frame_mod is None:
                 import pandas as frame_mod  # type: ignore
@@ -392,11 +395,16 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
                     for item in items
                 ]
             ).to_csv(index=False)
-        st.download_button(
-            "CSV", data=export_csv_data,
-            file_name=f"watchlist_{len(watchlist_tickers) or 0}.csv", mime="text/csv",
-            key="btn_export_watchlist", disabled=not has_watchlist, width="stretch",
-        )
+        if can_export:
+            st.download_button(
+                "CSV", data=export_csv_data,
+                file_name=f"watchlist_{len(watchlist_tickers) or 0}.csv", mime="text/csv",
+                key="btn_export_watchlist", disabled=not has_watchlist, width="stretch",
+            )
+        else:
+            from ui.pricing import upgrade_message
+
+            st.caption(upgrade_message("can_export_csv"))
 
     # Rare/destructive operations live out of the way.
     remove_watchlist_btn = False
