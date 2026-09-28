@@ -158,7 +158,7 @@ class EmailAndSourceTests(unittest.TestCase):
 
     def test_scheduled_morning_email_gates_picks_to_premium(self):
         src = (ROOT / "scheduler" / "morning_digest.py").read_text()
-        self.assertIn('user_picks = picks if has_min_tier(get_user_tier(email, users), "premium") else []', src)
+        self.assertIn('user_picks = picks if has_min_tier(tier_key, "premium") else []', src)
         self.assertIn("email, watch_rows, gappers, earnings_hits, user_picks, notes=notes,", src)
 
     def test_scoreboard_code_removed(self):

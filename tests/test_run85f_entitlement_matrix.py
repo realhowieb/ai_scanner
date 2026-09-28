@@ -155,8 +155,9 @@ def test_background_email_and_alert_workers_enforce_tiers():
     digest = (ROOT / "scheduler" / "morning_digest.py").read_text()
     realtime = (ROOT / "billing_service" / "realtime_alerts.py").read_text()
     scheduled = (ROOT / "scheduler" / "alert_runner.py").read_text()
-    assert 'has_min_tier(get_user_tier(email, users), "pro")' in digest
-    assert 'has_min_tier(get_user_tier(email, users), "premium")' in digest
+    assert "tier_key = _email_tier_key(email, users.get(username), users, get_user_tier)" in digest
+    assert 'has_min_tier(tier_key, "pro")' in digest
+    assert 'has_min_tier(tier_key, "premium")' in digest
     assert "ALERT_LIMITS" in realtime and "_apply_plan_limits(alerts)" in realtime
     assert "_alert_limit_for_user" in scheduled and "_email_allowed_for_tier" in scheduled
 

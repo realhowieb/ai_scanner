@@ -407,6 +407,24 @@ def _compose(
     return "".join(html), "\n".join(text)
 
 
+def _email_tier_key(email: str, record: Optional[Dict[str, Any]], users: Dict[str, Any], get_user_tier) -> str:
+    """Plan used for email delivery. Admin accounts (stored tier 'admin' or the DB
+    is_admin flag) count as 'admin', whatever plan is stored, so they get the digest."""
+    if str((record or {}).get("tier") or "").strip().lower() == "admin":
+        return "admin"
+    key = str(getattr(get_user_tier(email, users), "key", "basic") or "basic").strip().lower()
+    if key in ("pro", "premium"):
+        return key
+    try:
+        from db.users import is_admin_from_db
+
+        if is_admin_from_db(email):
+            return "admin"
+    except Exception:
+        pass
+    return key
+
+
 def run_morning_digest(force: bool = False) -> None:
     """Assemble and email the pre-open digest to eligible Pro+ users."""
     try:
@@ -464,21 +482,31 @@ def run_morning_digest(force: bool = False) -> None:
         build_day_trader_metrics = None  # type: ignore
 
     sent = 0
+    skipped: Dict[str, int] = {}
+
+    def _skip(reason: str) -> None:
+        skipped[reason] = skipped.get(reason, 0) + 1
+
     for username in list(users.keys())[:MORNING_DIGEST_MAX_USERS]:
         email = (username or "").strip().lower()
         if not email or "@" not in email:
+            _skip("not_email")
             continue
-        # Email delivery is a Pro+ feature.
+        # Email delivery is a Pro+ feature (admin accounts included).
         try:
-            if not has_min_tier(get_user_tier(email, users), "pro"):
+            tier_key = _email_tier_key(email, users.get(username), users, get_user_tier)
+            if not has_min_tier(tier_key, "pro"):
+                _skip("plan_below_pro")
                 continue
         except Exception:
+            _skip("plan_lookup_failed")
             continue
         # Only email verified addresses to protect deliverability.
         try:
             from db.email_verification import is_email_verified
 
             if not is_email_verified(email):
+                _skip("unverified")
                 continue
         except Exception:
             pass
@@ -490,6 +518,7 @@ def run_morning_digest(force: bool = False) -> None:
                 tickers.extend(get_watchlist_tickers(wl.get("id"), email) or [])
             tickers = sorted({str(t).strip().upper() for t in tickers if t})
             if not tickers:
+                _skip("empty_watchlist")
                 continue
 
             watch_rows = (
@@ -504,23 +533,27 @@ def run_morning_digest(force: bool = False) -> None:
 
             # Run 85D: PreBreakout candidates are a Premium feature (Pro gets the rest).
             try:
-                user_picks = picks if has_min_tier(get_user_tier(email, users), "premium") else []
+                user_picks = picks if has_min_tier(tier_key, "premium") else []
             except Exception:
                 user_picks = []
             html_inner, text_inner = _compose(
                 email, watch_rows, gappers, earnings_hits, user_picks, notes=notes,
                 golden=golden, top_setups=top_setups,
             )
-            send_digest_email(
+            # Count only sends the mail service accepted.
+            if send_digest_email(
                 to_address=email,
                 subject="Your morning market digest",
                 html_inner=html_inner,
                 text_inner=text_inner,
-            )
-            sent += 1
+            ):
+                sent += 1
+            else:
+                _skip("send_failed")
         except Exception as e:
             print(f"[morning_digest] {email}: {e}")
             _capture(e)
+            _skip("error")
             continue
 
     if sent > 0:
@@ -530,4 +563,5 @@ def run_morning_digest(force: bool = False) -> None:
             mark_earnings_refreshed_today(_DIGEST_REFRESH_KEY)
         except Exception:
             pass
-    print(f"[morning_digest] sent {sent} digest(s)")
+    reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) or "none"
+    print(f"[morning_digest] sent {sent} digest(s); skipped: {reasons}")

@@ -96,13 +96,13 @@ def render_admin_users_panel(username, ADMIN_USERS, db_status):
         selected_user = st.selectbox("Select user to edit", usernames_list)
         row = users_df[users_df["username"] == selected_user].iloc[0]
 
-        new_tier = st.selectbox(
-            "Tier",
-            ["basic", "pro", "premium"],
-            index=["basic", "pro", "premium"].index(
-                row["tier"] if row["tier"] in ["basic", "pro", "premium"] else "basic"
-            ),
+        # Keep the stored tier (including "admin") selected so "Update User"
+        # never silently downgrades an account nobody meant to change.
+        current_tier = str(row["tier"] or "basic").strip().lower()
+        tier_options = ["basic", "pro", "premium"] + (
+            [current_tier] if current_tier not in ("basic", "pro", "premium") else []
         )
+        new_tier = st.selectbox("Tier", tier_options, index=tier_options.index(current_tier))
         new_active = st.checkbox("Active", value=bool(row["is_active"]))
 
         if st.button("Update User"):

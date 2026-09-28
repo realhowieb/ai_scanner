@@ -413,8 +413,16 @@ def _alert_limit_for_user(user_id: str) -> int:
 
 
 def _email_allowed_for_tier(user_id: str) -> bool:
-    """Email alerts are a Pro+ perk; Basic users get in-app alerts only."""
-    return _tier_key_for_user(user_id) in ("pro", "premium", "admin")
+    """Email alerts are a Pro+ perk; Basic users get in-app alerts only.
+    Admin accounts (DB is_admin flag) get email whatever plan is stored."""
+    if _tier_key_for_user(user_id) in ("pro", "premium", "admin"):
+        return True
+    try:
+        from db.users import is_admin_from_db
+
+        return bool(is_admin_from_db(user_id))
+    except Exception:
+        return False
 
 
 def run_alerts() -> None:
