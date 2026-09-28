@@ -167,3 +167,10 @@ jobs:
             echo "::warning::pip-audit found vulnerabilities in requirements.lock (non-blocking)"
             exit 1
           }
+      - name: pip-audit the billing service's pinned set (Render deploys it)
+        if: always()  # run even when the main lock audit reports findings
+        run: |
+          pip-audit -r billing_service/requirements.txt --strict || {
+            echo "::warning::pip-audit found vulnerabilities in billing_service/requirements.txt (non-blocking)"
+            exit 1
+          }

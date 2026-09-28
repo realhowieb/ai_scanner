@@ -2,5 +2,5 @@
 
 # Minimal HTTP stack needed to exercise billing_service through FastAPI's
 # in-process TestClient. Stripe and Postgres are mocked at their boundaries.
-fastapi==0.115.6
+fastapi==0.141.1  # keep in step with billing_service/requirements.txt
 httpx==0.28.1
