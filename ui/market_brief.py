@@ -1139,6 +1139,9 @@ def _render_email_button(user: str, data: Dict[str, Any]) -> None:
 
         st.caption(upgrade_message("can_email_alerts"))
         return
+    if "@" not in user:
+        st.caption("Email delivery needs an account that signs in with an email address.")
+        return
     if not st.button("📧 Email me this brief", key="brief_email"):
         return
     try:

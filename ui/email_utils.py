@@ -60,6 +60,10 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
 
 def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str) -> bool:
     """Internal shared SMTP sender. Logs the failure reason instead of failing silently."""
+    # Usernames double as email addresses; an account like "admin" has none.
+    if "@" not in str(to_address or ""):
+        print("[email] not sending — recipient is not an email address")
+        return False
     try:
         from config import SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER
     except Exception as e:

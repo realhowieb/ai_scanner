@@ -106,6 +106,28 @@ class AlertEmailEligibilityTests(unittest.TestCase):
             self.assertTrue(ar._email_allowed_for_tier("p@example.com"))
 
 
+class NonEmailRecipientTests(unittest.TestCase):
+    def test_sender_refuses_non_email_without_smtp_or_sentry(self):
+        import ui.email_utils as eu
+
+        with mock.patch("smtplib.SMTP") as smtp, mock.patch.object(eu, "_capture") as cap, \
+             redirect_stdout(io.StringIO()) as out:
+            self.assertFalse(eu.send_digest_email("howard", "s", "h", "t"))
+        smtp.assert_not_called()
+        cap.assert_not_called()
+        self.assertNotIn("howard", out.getvalue())
+
+    def test_brief_email_button_hidden_for_non_email_account(self):
+        import ui.market_brief as mb
+
+        fake_st = mock.MagicMock()
+        fake_st.session_state = {"entitlements": {"can_email_alerts": True}}
+        with mock.patch.object(mb, "st", fake_st):
+            mb._render_email_button("howard", {})
+        fake_st.button.assert_not_called()
+        self.assertIn("email address", fake_st.caption.call_args.args[0])
+
+
 class AdminUsersTierPickerTests(unittest.TestCase):
     def test_stored_tier_stays_selected(self):
         src = (ROOT / "ui" / "admin_users.py").read_text()
