@@ -283,19 +283,33 @@ def run_evening_wrap(force: bool = False) -> None:
     day_gainers, day_losers = _day_movers(snap_df)
     golden_crosses, top_setups = _tomorrow_setups(snap_df)
 
+    from scheduler.morning_digest import _email_tier_key, email_opted_in, unsubscribe_link
+
     sent = 0
+    skipped: Dict[str, int] = {}
+
+    def _skip(reason: str) -> None:
+        skipped[reason] = skipped.get(reason, 0) + 1
+
     for username in list(users.keys())[:MORNING_DIGEST_MAX_USERS]:
         email = (username or "").strip().lower()
         if not email or "@" not in email:
+            _skip("not_email")
             continue
-        try:
-            if not has_min_tier(get_user_tier(email, users), "pro"):
+        try:  # same eligibility as the morning digest (admin accounts included)
+            if not has_min_tier(_email_tier_key(email, users.get(username), users, get_user_tier), "pro"):
+                _skip("plan_below_pro")
                 continue
             from db.email_verification import is_email_verified
 
             if not is_email_verified(email):
+                _skip("unverified")
                 continue
         except Exception:
+            _skip("plan_lookup_failed")
+            continue
+        if not email_opted_in(email, "evening"):
+            _skip("unsubscribed")
             continue
 
         try:
@@ -305,6 +319,7 @@ def run_evening_wrap(force: bool = False) -> None:
                 tickers.extend(get_watchlist_tickers(wl.get("id"), email) or [])
             tickers = sorted({str(t).strip().upper() for t in tickers if t})
             if not tickers:
+                _skip("empty_watchlist")
                 continue
 
             watch_rows = build_day_trader_metrics(tickers, with_rvol=False)
@@ -314,16 +329,20 @@ def run_evening_wrap(force: bool = False) -> None:
                 day_gainers=day_gainers, day_losers=day_losers,
                 golden_crosses=golden_crosses, top_setups=top_setups,
             )
-            send_digest_email(
+            if send_digest_email(
                 to_address=email,
                 subject="Your evening market wrap",
                 html_inner=html_inner,
                 text_inner=text_inner,
-            )
-            sent += 1
+                unsubscribe_url=unsubscribe_link(email, "evening"),
+            ):
+                sent += 1
+            else:
+                _skip("send_failed")
         except Exception as e:
             print(f"[evening_wrap] {mask_email(email)}: {redact(e)}")
             _capture(e)
+            _skip("error")
             continue
 
     if sent > 0:
@@ -333,4 +352,5 @@ def run_evening_wrap(force: bool = False) -> None:
             mark_earnings_refreshed_today(_WRAP_KEY)
         except Exception:
             pass
-    print(f"[evening_wrap] sent {sent} wrap(s)")
+    reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) or "none"
+    print(f"[evening_wrap] sent {sent} wrap(s); skipped: {reasons}")

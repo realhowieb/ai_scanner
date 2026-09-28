@@ -192,11 +192,16 @@ def run_intelligence_alert_evaluation(
 
 def _deliver_email(user_id: str, copy: str) -> bool:
     """Best-effort email via the existing alert email path. False on any failure
-    (never a fabricated delivered state)."""
+    (never a fabricated delivered state). Respects the account's alert-email
+    preference (P1-41): switched off means not delivered, never a fake success."""
     try:
+        from scheduler.alert_runner import _alert_emails_on, _alert_unsubscribe_link
         from ui.email_utils import send_alert_email
 
+        if not _alert_emails_on(user_id):
+            return False
         subject = "HSF Intelligence Alert"
-        return bool(send_alert_email(user_id, subject, copy))
+        return bool(send_alert_email(user_id, subject, copy,
+                                     unsubscribe_url=_alert_unsubscribe_link(user_id)))
     except Exception:
         return False

@@ -93,6 +93,19 @@ st.divider()
 # --- Notifications & watchlist ---
 st.markdown("#### 🔔 Notifications & data")
 st.caption("Morning/evening briefs and email alerts go to Pro+ verified accounts.")
+try:  # P1-41: per-email-type preferences (same switches as the unsubscribe link)
+    from db.email_prefs import KINDS, LABELS, get_prefs, set_prefs
+
+    _prefs = get_prefs(_username)
+    _cols = st.columns(len(KINDS))
+    for _col, _kind in zip(_cols, KINDS):
+        _on = _col.toggle(LABELS[_kind], value=_prefs[_kind], key=f"email_pref_{_kind}")
+        if _on != _prefs[_kind] and not set_prefs(_username, **{_kind: _on}):
+            st.warning("Couldn't save your email setting. Please try again.")
+    st.caption("Switching alert emails off keeps in-app alerts. Account emails (verification, "
+               "password reset) always go out.")
+except Exception:
+    pass
 active = st.session_state.get("active_watchlist_tickers") or []
 st.caption(
     f"Active watchlist: {len(active)} tickers"

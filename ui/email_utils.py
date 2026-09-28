@@ -68,7 +68,8 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
         return False
 
 
-def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str) -> bool:
+def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str,
+               headers: dict | None = None) -> bool:
     """Internal shared SMTP sender. Logs the failure reason instead of failing silently."""
     # Usernames double as email addresses; an account like "admin" has none.
     if "@" not in str(to_address or ""):
@@ -91,6 +92,8 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str) ->
     msg["Subject"] = subject
     msg["From"] = SMTP_FROM
     msg["To"] = to_address
+    for name, value in (headers or {}).items():
+        msg[name] = value
     msg.attach(MIMEText(body_text, "plain"))
     msg.attach(MIMEText(body_html, "html"))
     try:
@@ -126,7 +129,21 @@ def send_verification_email(to_address: str, verify_url: str) -> bool:
     )
 
 
-def send_digest_email(to_address: str, subject: str, html_inner: str, text_inner: str) -> bool:
+def _unsubscribe_parts(unsubscribe_url: str | None) -> tuple[str, str, dict]:
+    """(text footer, html footer, headers) for an optional P1-41 unsubscribe link."""
+    if not unsubscribe_url:
+        return "", "", {}
+    return (
+        f"\n\nDon't want these emails? Unsubscribe: {unsubscribe_url}",
+        f"<p style='color:#aaa;font-size:11px'>Don't want these emails? "
+        f"<a href='{unsubscribe_url}' style='color:#888'>Unsubscribe</a> "
+        "or change your email settings in HSF Settings.</p>",
+        {"List-Unsubscribe": f"<{unsubscribe_url}>"},
+    )
+
+
+def send_digest_email(to_address: str, subject: str, html_inner: str, text_inner: str,
+                      unsubscribe_url: str | None = None) -> bool:
     """Send a branded rich-HTML digest (e.g. the pre-open morning digest).
 
     `html_inner` is an HTML fragment (tables/headings) placed inside the branded
@@ -136,10 +153,12 @@ def send_digest_email(to_address: str, subject: str, html_inner: str, text_inner
         "Informational and educational purposes only — not financial, investment, "
         "or trading advice. Trading involves risk of loss; do your own research."
     )
+    unsub_text, unsub_html, headers = _unsubscribe_parts(unsubscribe_url)
     return _send_smtp(
         to_address=to_address,
         subject=f"HSFinest.AI — {subject}",
-        body_text=(f"HSFinest.AI\n\n{text_inner}\n\n— Know what matters in the market right now.\n\n{disclaimer}"),
+        body_text=(f"HSFinest.AI\n\n{text_inner}\n\n— Know what matters in the market right now.\n\n{disclaimer}"
+                   f"{unsub_text}"),
         body_html=(
             "<div style='font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
             "max-width:640px;margin:0 auto;color:#111'>"
@@ -147,13 +166,17 @@ def send_digest_email(to_address: str, subject: str, html_inner: str, text_inner
             f"{html_inner}"
             "<p style='color:#888;margin-top:20px'>— Know what matters in the market right now.</p>"
             f"<p style='color:#aaa;font-size:11px'>{disclaimer}</p>"
+            f"{unsub_html}"
             "</div>"
         ),
+        headers=headers,
     )
 
 
-def send_alert_email(to_address: str, subject: str, body: str) -> bool:
+def send_alert_email(to_address: str, subject: str, body: str,
+                     unsubscribe_url: str | None = None) -> bool:
     """Send a branded alert email."""
+    unsub_text, unsub_html, headers = _unsubscribe_parts(unsubscribe_url)
     return _send_smtp(
         to_address=to_address,
         subject=f"HSFinest.AI — {subject}",
@@ -161,6 +184,7 @@ def send_alert_email(to_address: str, subject: str, body: str) -> bool:
             f"HSFinest.AI alert\n\n{body}\n\n— Know what matters in the market right now.\n\n"
             "Informational and educational purposes only — not financial, investment, "
             "or trading advice. Trading involves risk of loss; do your own research."
+            f"{unsub_text}"
         ),
         body_html=(
             f"<p><strong>HSFinest.AI</strong> alert</p>"
@@ -169,5 +193,7 @@ def send_alert_email(to_address: str, subject: str, body: str) -> bool:
             f"<p style='color:#aaa;font-size:11px'>Informational and educational "
             "purposes only — not financial, investment, or trading advice. Trading "
             "involves risk of loss; do your own research.</p>"
+            f"{unsub_html}"
         ),
+        headers=headers,
     )

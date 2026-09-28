@@ -422,6 +422,25 @@ def _alert_limit_for_user(user_id: str) -> int:
         return 1
 
 
+def _alert_emails_on(user_id: str) -> bool:
+    """P1-41: the account hasn't switched alert emails off. In-app alerts still fire."""
+    try:
+        from db.email_prefs import wants_email
+
+        return wants_email(user_id, "alerts")
+    except Exception:
+        return True
+
+
+def _alert_unsubscribe_link(user_id: str):
+    try:
+        from db.email_prefs import unsubscribe_url
+
+        return unsubscribe_url(user_id, "alerts")
+    except Exception:
+        return None
+
+
 def _email_allowed_for_tier(user_id: str) -> bool:
     """Email alerts are a Pro+ perk; Basic users get in-app alerts only.
     Admin accounts (DB is_admin flag) get email whatever plan is stored."""
@@ -545,6 +564,7 @@ def run_alerts() -> None:
                 "@" in user_id
                 and _is_verified(user_id)
                 and _email_allowed_for_tier(user_id)
+                and _alert_emails_on(user_id)
             ):
                 try:
                     from ui.email_utils import send_alert_email
@@ -553,6 +573,7 @@ def run_alerts() -> None:
                         to_address=user_id,
                         subject=f"📈 {label} triggered",
                         body=body,
+                        unsubscribe_url=_alert_unsubscribe_link(user_id),
                     ):
                         emailed += 1
                 except Exception as e:

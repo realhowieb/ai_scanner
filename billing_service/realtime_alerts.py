@@ -75,15 +75,34 @@ def _conn():
     return psycopg2.connect(url)
 
 
+def _email_prefs_ready(conn) -> bool:
+    """P1-41: the app creates hsf_email_prefs; until it exists, alerts behave as before."""
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT to_regclass('public.hsf_email_prefs') IS NOT NULL")
+        ready = bool(cur.fetchone()[0])
+        cur.close()
+        return ready
+    except Exception:
+        return False
+
+
 def _due_price_alerts(conn) -> List[Dict[str, Any]]:
     """Enabled price alerts past their throttle, with the owner's email gates."""
+    if _email_prefs_ready(conn):
+        prefs_cols = "COALESCE(p.alerts, TRUE), p.unsub_token"
+        prefs_join = "LEFT JOIN hsf_email_prefs p ON p.user_id = a.user_id"
+    else:
+        prefs_cols, prefs_join = "TRUE, NULL", ""
     cur = conn.cursor()
     cur.execute(
-        """
+        f"""
         SELECT a.id, a.user_id, a.ticker, a.threshold, a.direction, a.alert_type,
-               COALESCE(u.email_verified, FALSE), COALESCE(u.tier, 'basic')
+               COALESCE(u.email_verified, FALSE), COALESCE(u.tier, 'basic'),
+               {prefs_cols}
         FROM user_alerts a
         LEFT JOIN users u ON u.username = a.user_id
+        {prefs_join}
         WHERE a.enabled
           AND a.alert_type IN ('price', 'move', 'rvol')
           AND a.ticker IS NOT NULL
@@ -106,6 +125,8 @@ def _due_price_alerts(conn) -> List[Dict[str, Any]]:
             "alert_type": str(r[5] or "price").lower(),
             "email_verified": bool(r[6]),
             "tier": str(r[7]).lower(),
+            "alert_emails_on": bool(r[8]) if len(r) > 8 else True,
+            "unsub_token": (r[9] if len(r) > 9 else None),
         }
         for r in rows
     ]
@@ -194,7 +215,15 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
 # ------------------------------- email (smtp) ---------------------------------
 
 
-def _send_email(to_address: str, subject: str, body: str) -> bool:
+def _unsubscribe_url(token: Optional[str]) -> Optional[str]:
+    if not token:
+        return None
+    base = (os.getenv("APP_BASE_URL", "") or "https://hsf-beta.streamlit.app").rstrip("/")
+    return f"{base}/unsubscribe?t={token}&k=alerts"
+
+
+def _send_email(to_address: str, subject: str, body: str,
+                unsubscribe_url: Optional[str] = None) -> bool:
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -214,11 +243,17 @@ def _send_email(to_address: str, subject: str, body: str) -> bool:
     msg["Subject"] = f"HSFinest.AI — {subject}"
     msg["From"] = sender
     msg["To"] = to_address
-    msg.attach(MIMEText(f"HSFinest.AI alert\n\n{body}\n\n{disclaimer}", "plain"))
+    unsub_text = unsub_html = ""
+    if unsubscribe_url:  # P1-41
+        msg["List-Unsubscribe"] = f"<{unsubscribe_url}>"
+        unsub_text = f"\n\nDon't want these emails? Unsubscribe: {unsubscribe_url}"
+        unsub_html = (f"<p style='color:#aaa;font-size:11px'>Don't want these emails? "
+                      f"<a href='{unsubscribe_url}' style='color:#888'>Unsubscribe</a></p>")
+    msg.attach(MIMEText(f"HSFinest.AI alert\n\n{body}\n\n{disclaimer}{unsub_text}", "plain"))
     msg.attach(
         MIMEText(
             f"<p><strong>⚡ HSFinest.AI</strong></p><pre>{body}</pre>"
-            f"<p style='color:#aaa;font-size:11px'>{disclaimer}</p>",
+            f"<p style='color:#aaa;font-size:11px'>{disclaimer}</p>{unsub_html}",
             "html",
         )
     )
@@ -349,8 +384,10 @@ def check_once() -> int:
                 "@" in alert["user_id"]
                 and alert["email_verified"]
                 and alert["tier"] in EMAIL_TIERS
+                and alert.get("alert_emails_on", True)
             ):
-                _send_email(alert["user_id"], "⚡ Live alert triggered", message)
+                _send_email(alert["user_id"], "⚡ Live alert triggered", message,
+                            unsubscribe_url=_unsubscribe_url(alert.get("unsub_token")))
         if fired:
             _log(f"fired {fired} live alert(s)")
         return fired

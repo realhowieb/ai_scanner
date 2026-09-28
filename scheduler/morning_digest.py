@@ -417,6 +417,25 @@ def _compose(
     return "".join(html), "\n".join(text)
 
 
+def email_opted_in(email: str, kind: str) -> bool:
+    """P1-41: the account hasn't switched this email type off (defaults to on)."""
+    try:
+        from db.email_prefs import wants_email
+
+        return wants_email(email, kind)
+    except Exception:
+        return True
+
+
+def unsubscribe_link(email: str, kind: str) -> Optional[str]:
+    try:
+        from db.email_prefs import unsubscribe_url
+
+        return unsubscribe_url(email, kind)
+    except Exception:
+        return None
+
+
 def _email_tier_key(email: str, record: Optional[Dict[str, Any]], users: Dict[str, Any], get_user_tier) -> str:
     """Plan used for email delivery. Admin accounts (stored tier 'admin' or the DB
     is_admin flag) count as 'admin', whatever plan is stored, so they get the digest."""
@@ -520,6 +539,9 @@ def run_morning_digest(force: bool = False) -> None:
                 continue
         except Exception:
             pass
+        if not email_opted_in(email, "digest"):
+            _skip("unsubscribed")
+            continue
 
         try:
             wls = list_watchlists(email) or []
@@ -556,6 +578,7 @@ def run_morning_digest(force: bool = False) -> None:
                 subject="Your morning market digest",
                 html_inner=html_inner,
                 text_inner=text_inner,
+                unsubscribe_url=unsubscribe_link(email, "digest"),
             ):
                 sent += 1
             else:
