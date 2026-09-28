@@ -25,6 +25,7 @@ CLAIMS = {
     "history": "can_scan_history", "ai scan summaries and results chat": "can_ai_notes",
     "setup notes": "can_ai_notes", "early breakout research": "can_early_breakout",
     "full-market custom scans": "can_full_universe", "paper trading": "can_paper_trade",
+    "the live day trader": "can_day_trader",
 }
 
 
@@ -49,7 +50,7 @@ class PlanCardTests(unittest.TestCase):
         c = plan_card("basic")
         self.assertEqual(c["summary"], "Discover today's market opportunities with HSF Score and basic Stock Intelligence.")
         self.assertEqual(c["cta_note"], "Pro adds monitoring and investigation: 5 alerts, email delivery, "
-                                        "interactive results, exports and history.")
+                                        "interactive results, the live Day Trader, exports and history.")
 
     def test_every_claim_is_backed_by_the_entitlements_of_that_tier(self):
         from ui.app_session import ALERT_LIMIT_BY_TIER

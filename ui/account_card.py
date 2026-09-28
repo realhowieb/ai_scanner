@@ -46,7 +46,7 @@ def plan_card(tier: Any, *, is_admin: bool = False) -> Dict[str, Optional[str]]:
     if label == "Pro":
         return {"label": label, "headline": "You're on Pro",
                 "summary": (f"Monitor and investigate: {_alerts('pro')} alerts with email delivery, interactive "
-                            "results and CSV export, Nasdaq and combined scans, earnings and scan history."),
+                            "results and CSV export, the live Day Trader, Nasdaq and combined scans, earnings and scan history."),
                 "cta_label": "Upgrade to Premium", "cta_plan": "premium",
                 "cta_note": f"Premium adds research and workflow: {_premium_value()}.",
                 "compare": "Compare all plans"}
@@ -54,7 +54,7 @@ def plan_card(tier: Any, *, is_admin: bool = False) -> Dict[str, Optional[str]]:
             "summary": "Discover today's market opportunities with HSF Score and basic Stock Intelligence.",
             "cta_label": "Upgrade to Pro", "cta_plan": "pro",
             "cta_note": (f"Pro adds monitoring and investigation: {_alerts('pro')} alerts, email delivery, "
-                         "interactive results, exports and history."),
+                         "interactive results, the live Day Trader, exports and history."),
             "compare": "Compare all plans"}
 
 

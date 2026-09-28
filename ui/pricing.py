@@ -37,6 +37,7 @@ ROWS: List[Tuple[str, Optional[str]]] = [
     ("CSV export & interactive results table", "can_export_csv"),
     ("Your own Nasdaq and combined-market scans", "can_scan_nasdaq"),
     ("Premarket, after-hours and unusual-volume filters", "can_premarket"),
+    ("Live Day Trader monitor: intraday movers, VWAP, relative volume and stair-steppers", "can_day_trader"),
     ("Earnings calendar & filters", "can_earnings"),
     ("Scan history & historical research", "can_scan_history"),
     ("AI scan summaries and results chat, plus setup notes on each result", "can_ai_notes"),
@@ -58,6 +59,9 @@ UPGRADE_MESSAGES = {
     ),
     "can_premarket": (
         "Pro adds premarket, after-hours and unusual-volume filters for deeper investigation."
+    ),
+    "can_day_trader": (
+        "Pro adds the live Day Trader monitor: intraday movers, VWAP, relative volume and the stair-stepper check."
     ),
     "can_earnings": (
         "Pro adds earnings timing and filters so you can investigate event risk around a setup."

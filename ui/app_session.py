@@ -19,6 +19,7 @@ FEATURE_MIN_TIER: dict[str, str] = {
     "can_full_universe": "premium",
     "can_paper_trade": "premium",
     "can_email_alerts": "pro",  # in-app alerts are open to all; email is Pro+
+    "can_day_trader": "pro",  # live intraday monitor (pages/day_trader.py)
     "can_diagnostics": "admin",
     "can_admin_panel": "admin",
 }
