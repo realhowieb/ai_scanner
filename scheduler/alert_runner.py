@@ -513,6 +513,7 @@ def run_alerts() -> None:
 
     fired = 0
     emailed = 0
+    email_failed = 0
     for alert in alerts:
         try:
             if _throttled(alert.get("last_fired_at"), float(ALERT_THROTTLE_HOURS)):
@@ -576,7 +577,10 @@ def run_alerts() -> None:
                         unsubscribe_url=_alert_unsubscribe_link(user_id),
                     ):
                         emailed += 1
+                    else:
+                        email_failed += 1
                 except Exception as e:
+                    email_failed += 1
                     print(f"[alert_runner] email to {mask_email(user_id)} failed: {redact(e)}")
                     _capture(e)
         except Exception as e:  # never let one alert kill the run
@@ -584,4 +588,11 @@ def run_alerts() -> None:
             _capture(e)
             continue
 
-    print(f"[alert_runner] fired {fired} alert(s), emailed {emailed}")
+    print(f"[alert_runner] fired {fired} alert(s), emailed {emailed}"
+          + (f", {email_failed} email(s) failed" if email_failed else ""))
+    try:  # P1-36: counts for the Email delivery health card (+ Sentry on failures)
+        from scheduler.morning_digest import record_email_job
+
+        record_email_job("alerts", {"fired": fired, "emailed": emailed, "email_failed": email_failed})
+    except Exception:
+        pass

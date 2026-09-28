@@ -283,7 +283,7 @@ def run_evening_wrap(force: bool = False) -> None:
     day_gainers, day_losers = _day_movers(snap_df)
     golden_crosses, top_setups = _tomorrow_setups(snap_df)
 
-    from scheduler.morning_digest import _email_tier_key, email_opted_in, unsubscribe_link
+    from scheduler.morning_digest import _email_tier_key, email_opted_in, record_email_job, unsubscribe_link
 
     sent = 0
     skipped: Dict[str, int] = {}
@@ -354,3 +354,4 @@ def run_evening_wrap(force: bool = False) -> None:
             pass
     reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) or "none"
     print(f"[evening_wrap] sent {sent} wrap(s); skipped: {reasons}")
+    record_email_job("evening", {"sent": sent, "skipped": skipped})

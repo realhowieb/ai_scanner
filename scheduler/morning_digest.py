@@ -417,6 +417,20 @@ def _compose(
     return "".join(html), "\n".join(text)
 
 
+def record_email_job(job: str, stats: Dict[str, Any]) -> None:
+    """P1-36: store this run's counts for the Email delivery health card, and report
+    failed sends to Sentry (counts only, never addresses). Never raises."""
+    try:
+        from db.email_job_runs import record_email_run
+
+        record_email_run(job, stats)
+    except Exception:
+        pass
+    failed = int((stats.get("skipped") or {}).get("send_failed") or stats.get("email_failed") or 0)
+    if failed:
+        _capture(RuntimeError(f"{job} email: {failed} send(s) failed this run"))
+
+
 def email_opted_in(email: str, kind: str) -> bool:
     """P1-41: the account hasn't switched this email type off (defaults to on)."""
     try:
@@ -598,3 +612,4 @@ def run_morning_digest(force: bool = False) -> None:
             pass
     reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) or "none"
     print(f"[morning_digest] sent {sent} digest(s); skipped: {reasons}")
+    record_email_job("digest", {"sent": sent, "skipped": skipped})

@@ -60,6 +60,12 @@ def render_admin_tab(
                 render_system_health()
             except (*ADMIN_TAB_ERRORS, KeyError) as exc:
                 st.caption(f"System Health unavailable: {type(exc).__name__}")
+            try:  # P1-36: email delivery (separate signal; never changes Run 59 status)
+                from ui.email_health_view import render_email_health
+
+                render_email_health()
+            except ADMIN_TAB_ERRORS:
+                pass
             st.markdown("---")
             st.markdown("### 📊 Diagnostics")
             _render_billing_health_badge()
