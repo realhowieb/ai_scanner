@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import json
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List
@@ -44,7 +45,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Per-run distinct-symbol cap. Raised 400 -> 2000 after dry-run 36224599421
 # measured 4 requests / 400 symbols (0.01 req/symbol, 0 x 429, 55 s job) with
-# batched retrieval; 2000 covers the full ready set (~1.6k) in one run.
+# batched retrieval; 2000 covers the full ready set (~1.6k) in one run. That was
+# a DRY run (no writes): real runs at 2000 on 2026-09-28 hit the 20-min CI limit
+# because each saved outcome opened a new DB connection. Now one connection per
+# run (_RunSaver) plus TIME_BUDGET_MIN keep a run inside its timeout.
 MAX_SYMBOLS = 2000
 # Symbols per multi-symbol request series (URL length stays well under limits).
 BATCH_SIZE = 100
@@ -58,6 +62,93 @@ FORWARD_WINDOW = _dt.timedelta(days=4)
 # observation many attempts first. Non-destructive: nothing is written; pass
 # retire_after=None (CLI --retire-after-days 0) to re-attempt for a backfill.
 RETIRE_AFTER = FORWARD_WINDOW + _dt.timedelta(days=2)
+# Wall-clock budget per scheduled run (CLI default). When it runs out, symbols not
+# yet reached are deferred to the next run like cap overflow, so the job finishes
+# and reports inside its CI timeout (30 min) instead of being cancelled with no
+# report. Measured need: a real 2000-symbol run on a trading day exceeded 20 min
+# because every saved outcome opened its own database connection (fixed below).
+TIME_BUDGET_MIN = 12.0
+# Symbols already fetched when the budget runs out are still saved (their bars are
+# in hand), within this extra fraction of the budget: 12 + 6 min + loading stays
+# well inside the 30-min CI timeout.
+SAVE_GRACE_FRACTION = 0.5
+PROGRESS_EVERY_SAVES = 500
+
+
+def _log(msg: str) -> None:
+    print(f"[mature_observations] {msg}", flush=True)
+
+
+class _RunSaver:
+    """Default writer: ONE database connection for the whole run.
+
+    Previously every outcome opened (and closed) its own Neon connection, which
+    costs a few hundred ms from CI — ~5k outcomes took well over 20 min. Writes
+    are unchanged: the same `save_outcome` INSERT ... ON CONFLICT DO NOTHING with
+    its own commit per row (first write wins). `save_outcome` returns False both
+    for "already written" and for an error, so after a False the connection is
+    checked: if the transaction is aborted or the connection broken, it is rolled
+    back / reopened and the row retried once, and a second failure raises so the
+    caller records DATABASE_ERROR — an error is never counted as already written."""
+
+    def __init__(self, connect=None):
+        self._connect = connect
+        self.conn = None
+        self.reopened = 0
+
+    def _open(self):
+        if self.conn is None:
+            if self._connect is None:
+                from db.engine import get_neon_conn
+
+                self._connect = get_neon_conn
+            self.conn = self._connect()
+        return self.conn
+
+    @staticmethod
+    def _usable(conn) -> bool:
+        if getattr(conn, "closed", False) or getattr(conn, "broken", False):
+            return False
+        status = getattr(getattr(conn, "info", None), "transaction_status", None)
+        return getattr(status, "name", "") != "INERROR"
+
+    def _reset(self) -> None:
+        conn, self.conn = self.conn, None
+        try:
+            if conn is not None and not getattr(conn, "closed", False) and not getattr(conn, "broken", False):
+                conn.rollback()
+                self.conn = conn
+                return
+        except Exception:
+            pass
+        self.close_quietly(conn)
+        self.reopened += 1
+
+    @staticmethod
+    def close_quietly(conn) -> None:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+
+    def __call__(self, outcome) -> bool:
+        from db.hsf_observations import save_outcome
+
+        for _attempt in (1, 2):
+            conn = self._open()
+            if conn is None:  # no Neon configured: keep the old per-row path (SQLite fallback)
+                return save_outcome(outcome)
+            if save_outcome(outcome, conn=conn):
+                return True
+            if self._usable(conn):
+                return False  # genuinely already written
+            self._reset()
+        raise RuntimeError("outcome write failed after reconnect")
+
+    def close(self) -> None:
+        self.close_quietly(self.conn)
+        self.conn = None
 
 
 def _now() -> _dt.datetime:
@@ -158,7 +249,7 @@ def _batch_windows(ordered, now, batch_size: int):
 
 
 def _retrieve_bars(ordered, report, *, now, fetch_bars, fetch_bars_batch,
-                   batch_size: int):
+                   batch_size: int, out_of_time=None, budget_deferred=None):
     """Pass 2a — fetch each processed symbol's bars ONCE. Returns
     ({symbol: bars}, {symbol: failure_reason}) where failure_reason is one of
     PROVIDER_ERROR / RATE_LIMITED (wholesale, retried next run)."""
@@ -177,7 +268,18 @@ def _retrieve_bars(ordered, report, *, now, fetch_bars, fetch_bars_batch,
         return bars_by_symbol, errors
     report["fetch_mode"] = "batch"
     throttled = False
-    for symbols, start, end in _batch_windows(fetchable, now, batch_size):
+    batches = list(_batch_windows(fetchable, now, batch_size))
+    for i, (symbols, start, end) in enumerate(batches, 1):
+        if out_of_time is not None and out_of_time():
+            # Time budget spent: the rest wait for the next run (not failures).
+            for later_symbols, _start, _end in batches[i - 1:]:
+                budget_deferred.update(later_symbols)
+            report["unique_symbols_requested"] -= len(budget_deferred)
+            report["time_budget"]["hit_during"] = "fetch"
+            _log(f"time budget reached before fetch batch {i}/{len(batches)}; "
+                 f"deferring {len(budget_deferred)} symbols to the next run")
+            break
+        _log(f"fetch batch {i}/{len(batches)}: {len(symbols)} symbols")
         if throttled:  # circuit breaker: don't keep hammering a throttled provider
             errors.update({s: "RATE_LIMITED" for s in symbols})
             continue
@@ -199,7 +301,8 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
                         max_symbols: int = MAX_SYMBOLS, fetch_bars_batch=None,
                         request_stats=None, batch_size: int = BATCH_SIZE,
                         exclusion_reason=None,
-                        retire_after=RETIRE_AFTER, trace=None) -> Dict[str, Any]:
+                        retire_after=RETIRE_AFTER, trace=None,
+                        time_budget_s=None, clock=None) -> Dict[str, Any]:
     """Pure-ish orchestration (injectable `fetch_bars`/`save_fn` for tests).
 
     Bounded per run: at most `max_symbols` distinct symbols are fetched, in
@@ -218,11 +321,25 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
     {observation_id, symbol, horizon, status} entry is appended per decision
     (ALREADY, NOT_READY, RETIRED, INELIGIBLE, DEFERRED, MATURED, ALREADY_WRITTEN,
     or the failure reason). It never contains outcome values and never changes
-    the report or any write."""
+    the report or any write.
+
+    `time_budget_s` (optional): wall-clock seconds for retrieval + saving; when
+    spent, symbols not yet reached are DEFERRED to the next run (reported in
+    `time_budget` and the backlog), never failed. None = no budget (tests/tools).
+    `clock` is injectable for tests (default time.monotonic)."""
+    clock = clock or time.monotonic
+    started = clock()
+
+    def out_of_time(grace: float = 0.0) -> bool:
+        return (time_budget_s is not None
+                and clock() - started >= time_budget_s * (1.0 + grace))
+
     now = now or _now()
     if not isinstance(now, _dt.datetime):
         now = _parse(now) or _now()
     report = _new_report()
+    report["time_budget"] = {"seconds": time_budget_s, "hit_during": None,
+                             "deferred_symbols": 0}
 
     # Group by symbol so each symbol's future bars are fetched ONCE per run.
     by_symbol: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -317,12 +434,41 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
     # Pass 2a (I/O): retrieve each symbol's bars once (batched, retried, cached).
     if fetch_bars is None and fetch_bars_batch is None:
         fetch_bars_batch, request_stats = _default_fetch_batch_factory(request_stats)
+    budget_deferred: set = set()
     bars_by_symbol, fetch_errors = _retrieve_bars(
         ordered, report, now=now, fetch_bars=fetch_bars,
-        fetch_bars_batch=fetch_bars_batch, batch_size=batch_size)
+        fetch_bars_batch=fetch_bars_batch, batch_size=batch_size,
+        out_of_time=out_of_time, budget_deferred=budget_deferred)
 
-    # Pass 2b (no provider I/O): mature from the retrieved bars.
+    run_saver = None
+    if save_fn is None and not dry_run:
+        run_saver = save_fn = _RunSaver()
+    try:
+        _mature_from_bars(ordered, report, bars_by_symbol, fetch_errors, budget_deferred,
+                          save_fn=save_fn, dry_run=dry_run, trace=trace,
+                          out_of_time=out_of_time)
+    finally:
+        if run_saver is not None:
+            report["db_reconnects"] = run_saver.reopened
+            run_saver.close()
+    _apply_budget_deferral(report, ordered, budget_deferred, now, trace)
+    return _finish_report(report, request_stats)
+
+
+def _mature_from_bars(ordered, report, bars_by_symbol, fetch_errors, budget_deferred, *,
+                      save_fn, dry_run, trace, out_of_time):
+    """Pass 2b (no provider I/O): mature from the retrieved bars."""
+    saved = 0
     for symbol, (plans, earliest) in ordered:
+        if symbol in budget_deferred:
+            continue
+        if out_of_time(SAVE_GRACE_FRACTION):
+            report["time_budget"]["hit_during"] = report["time_budget"]["hit_during"] or "save"
+            remaining = [s for s, _v in ordered if s not in budget_deferred]
+            start = remaining.index(symbol)
+            budget_deferred.update(remaining[start:])
+            _log(f"time budget reached while saving; deferring {len(remaining) - start} symbols")
+            break
         report["eligible_observations"] += len(plans)
         if earliest is None:
             _fail(report, None, "INVALID_TIMESTAMP")
@@ -387,6 +533,9 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
                     _fail(report, oc["horizon"], "DATABASE_ERROR")
                     _t(trace, o, oc["horizon"], "DATABASE_ERROR")
                     continue
+                saved += 1
+                if saved % PROGRESS_EVERY_SAVES == 0:
+                    _log(f"saved {saved} outcomes")
                 if wrote:
                     report["horizons"][oc["horizon"]]["new"] += 1
                     report["attached"] += 1
@@ -394,6 +543,30 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
                 else:
                     report["horizons"][oc["horizon"]]["already"] += 1
                     _t(trace, o, oc["horizon"], "ALREADY_WRITTEN")
+
+
+def _apply_budget_deferral(report, ordered, budget_deferred, now, trace) -> None:
+    """Symbols the time budget didn't reach count as deferred (like cap overflow)."""
+    if not budget_deferred:
+        return
+    report["time_budget"]["deferred_symbols"] = len(budget_deferred)
+    b = report["backlog"]
+    b["processed_symbols"] -= len(budget_deferred)
+    b["deferred_symbols"] += len(budget_deferred)
+    report["symbols_deferred"] = b["deferred_symbols"]
+    anchors = [v[1] for s, v in ordered if s in budget_deferred and v[1] is not None]
+    if anchors:
+        age = round((now - min(anchors)).total_seconds() / 60.0, 1)
+        prev = b.get("oldest_pending_age_min")
+        b["oldest_pending_age_min"] = age if prev is None else max(prev, age)
+    for s, (plans, _e) in ordered:
+        if s in budget_deferred:
+            for o, _a, ready in plans:
+                for h in ready:
+                    _t(trace, o, h, "DEFERRED")
+
+
+def _finish_report(report, request_stats):
     # matured_observations counts NEW outcome rows written (real drain this run);
     # in dry-run it mirrors would-be writes so clearance estimates stay comparable.
     report["backlog"]["matured_observations"] = report["attached"]
@@ -481,15 +654,23 @@ def main() -> int:
                     default=RETIRE_AFTER.total_seconds() / 86400.0,
                     help="skip ready horizons whose anchor is older than this "
                          "(bounded window closed; retry cannot help). 0 = never retire.")
+    ap.add_argument("--time-budget-min", type=float, default=TIME_BUDGET_MIN,
+                    help="stop starting new work after this many minutes; the rest "
+                         "is deferred to the next run. <=0 = no budget.")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--out", default=str(ROOT / "artifacts" / "automation"))
     args = ap.parse_args()
+    t0 = time.monotonic()
 
     # attach_outcomes=True (Run 52): matured horizons come back on each record so
     # already-matured work is classified `already` and skipped, not re-fetched.
     observations = load_recent_observations(limit=args.limit,
                                             attach_outcomes=True) or []
-    report = mature_observations(observations, slack_min=args.slack_min,
+    _log(f"loaded {len(observations)} observations in {time.monotonic() - t0:.0f}s")
+    budget = None
+    if args.time_budget_min > 0:
+        budget = max(0.0, args.time_budget_min * 60.0 - (time.monotonic() - t0))
+    report = mature_observations(observations, slack_min=args.slack_min, time_budget_s=budget,
                                  dry_run=args.dry_run, max_symbols=args.max_symbols,
                                  batch_size=args.batch_size,
                                  retire_after=(_dt.timedelta(days=args.retire_after_days)
