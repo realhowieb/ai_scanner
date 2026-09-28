@@ -16,6 +16,16 @@ except Exception:  # pragma: no cover
     def _capture(exc: BaseException) -> None:
         pass
 
+# Customer addresses never reach logs unmasked (GitHub Actions logs are public).
+try:
+    from ui.log_privacy import mask_email, redact
+except Exception:  # pragma: no cover - never print an address if the helper is missing
+    def mask_email(value) -> str:  # type: ignore[no-redef]
+        return "***"
+
+    def redact(value) -> str:  # type: ignore[no-redef]
+        return "(details hidden)"
+
 _WRAP_KEY = "evening_wrap"
 
 
@@ -312,7 +322,7 @@ def run_evening_wrap(force: bool = False) -> None:
             )
             sent += 1
         except Exception as e:
-            print(f"[evening_wrap] {email}: {e}")
+            print(f"[evening_wrap] {mask_email(email)}: {redact(e)}")
             _capture(e)
             continue
 

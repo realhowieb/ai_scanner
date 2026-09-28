@@ -17,11 +17,24 @@ store from Streamlit Cloud and GitHub Actions).
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
+
+_EMAIL_RE = re.compile(r"([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
+
+
+def _redact(value: Any) -> str:
+    """Mask email addresses in log text (same rule as ui.log_privacy; this
+    service deploys on its own and can't import the app)."""
+    return _EMAIL_RE.sub(
+        lambda m: (m.group(1)[:2] if len(m.group(1)) > 2 else m.group(1)[:1]) + f"***@{m.group(2)}",
+        str(value),
+    )
+
 
 POLL_SECONDS = int(os.getenv("REALTIME_POLL_SECONDS", "60") or "60")
 THROTTLE_HOURS = float(os.getenv("ALERT_THROTTLE_HOURS", "12") or "12")
@@ -217,7 +230,7 @@ def _send_email(to_address: str, subject: str, body: str) -> bool:
             server.sendmail(sender, [to_address], msg.as_string())
         return True
     except Exception as e:
-        _log(f"email to {to_address} failed: {type(e).__name__}: {e}")
+        _log(f"email to {_redact(to_address)} failed: {type(e).__name__}: {_redact(e)}")
         return False
 
 

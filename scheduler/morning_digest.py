@@ -20,6 +20,16 @@ except Exception:  # pragma: no cover - fallback when monitoring is unavailable
     def _capture(exc: BaseException) -> None:
         pass
 
+# Customer addresses never reach logs unmasked (GitHub Actions logs are public).
+try:
+    from ui.log_privacy import mask_email, redact
+except Exception:  # pragma: no cover - never print an address if the helper is missing
+    def mask_email(value) -> str:  # type: ignore[no-redef]
+        return "***"
+
+    def redact(value) -> str:  # type: ignore[no-redef]
+        return "(details hidden)"
+
 _DIGEST_REFRESH_KEY = "morning_digest"
 
 
@@ -551,7 +561,7 @@ def run_morning_digest(force: bool = False) -> None:
             else:
                 _skip("send_failed")
         except Exception as e:
-            print(f"[morning_digest] {email}: {e}")
+            print(f"[morning_digest] {mask_email(email)}: {redact(e)}")
             _capture(e)
             _skip("error")
             continue

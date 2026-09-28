@@ -20,6 +20,16 @@ except Exception:  # pragma: no cover - fallback when monitoring is unavailable
     def _capture(exc: BaseException) -> None:
         pass
 
+# Customer addresses never reach logs unmasked (GitHub Actions logs are public).
+try:
+    from ui.log_privacy import mask_email, redact
+except Exception:  # pragma: no cover - never print an address if the helper is missing
+    def mask_email(value) -> str:  # type: ignore[no-redef]
+        return "***"
+
+    def redact(value) -> str:  # type: ignore[no-redef]
+        return "(details hidden)"
+
 
 EARNINGS_FLAG_DAYS = 5
 SIGNAL_INDICATOR_COLUMNS = (
@@ -546,10 +556,10 @@ def run_alerts() -> None:
                     ):
                         emailed += 1
                 except Exception as e:
-                    print(f"[alert_runner] email to {user_id} failed: {e}")
+                    print(f"[alert_runner] email to {mask_email(user_id)} failed: {redact(e)}")
                     _capture(e)
         except Exception as e:  # never let one alert kill the run
-            print(f"[alert_runner] alert {alert.get('id')} failed: {e}")
+            print(f"[alert_runner] alert {alert.get('id')} failed: {redact(e)}")
             _capture(e)
             continue
 
