@@ -757,6 +757,13 @@ def render_day_trader_panel(
         _body()
 
     _render_row_actions()
+    if not showcase:
+        try:  # P2-26: on-demand 1-minute trend-consistency check
+            from ui.stair_stepper import render_stair_steppers
+
+            render_stair_steppers(symbols)
+        except Exception:
+            pass
 
 
 def _render_state_banner() -> None:
