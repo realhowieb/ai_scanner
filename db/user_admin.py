@@ -41,6 +41,16 @@ def _conn():
     return conn
 
 
+def _audit(actor: Any, action: str, target: Any, detail: Dict[str, Any] | None = None) -> None:
+    """P1-42: record a successful admin action; never raises."""
+    try:
+        from .admin_audit import record_admin_event
+
+        record_admin_event(actor, action, target, detail)
+    except Exception:
+        pass
+
+
 def _clear_user_cache() -> None:
     try:
         from .users import load_users
@@ -51,7 +61,7 @@ def _clear_user_cache() -> None:
 
 
 def create_user(email: Any, full_name: Any, password: str, tier: str = "basic",
-                active: bool = True) -> Tuple[bool, str]:
+                active: bool = True, *, actor: Any = None) -> Tuple[bool, str]:
     """Create an account whose username is a valid lowercase email address."""
     username = normalize_email(email)
     name = str(full_name or "").strip()
@@ -89,6 +99,7 @@ def create_user(email: Any, full_name: Any, password: str, tier: str = "basic",
     except Exception as exc:
         return False, f"Failed to create the account ({type(exc).__name__})."
     _clear_user_cache()
+    _audit(actor, "create_user", username, {"tier": tier, "active": bool(active)})
     return True, f"Created {username}. Their email isn't verified yet: resend verification or mark it verified."
 
 
@@ -137,11 +148,12 @@ def _update(sql: str, params: tuple) -> bool:
     return ok
 
 
-def mark_email_verified(username: Any) -> Tuple[bool, str]:
+def mark_email_verified(username: Any, *, actor: Any = None) -> Tuple[bool, str]:
     u = normalize_email(username)
     if not is_valid_email(u):
         return False, "Only accounts with an email username can be verified."
     if _update("UPDATE users SET email_verified = TRUE WHERE lower(username) = %s", (u,)):
+        _audit(actor, "mark_email_verified", u)
         return True, f"{u} is now marked verified."
     return False, "Couldn't update the account."
 
@@ -157,6 +169,8 @@ def set_admin(username: Any, make_admin: bool, *, acting_user: Any) -> Tuple[boo
         return False, "You can't remove your own admin role."
     if make_admin:
         ok = _update("UPDATE users SET is_admin = TRUE WHERE lower(username) = %s", (u,))
+        if ok:
+            _audit(acting_user, "grant_admin", u)
         return (True, f"{u} is now an admin.") if ok else (False, "Couldn't update the account.")
     ok = _update(
         "UPDATE users SET is_admin = FALSE, "
@@ -164,4 +178,6 @@ def set_admin(username: Any, make_admin: bool, *, acting_user: Any) -> Tuple[boo
         "WHERE lower(username) = %s",
         (u,),
     )
+    if ok:
+        _audit(acting_user, "revoke_admin", u)
     return (True, f"{u} is no longer an admin.") if ok else (False, "Couldn't update the account.")

@@ -26,7 +26,7 @@ def render_admin_users_panel(username, ADMIN_USERS, db_status):
             st.caption("Toggle the switch above to load and manage Neon users.")
             return
 
-        _render_create_user()
+        _render_create_user(actor=username)
 
         # --- Manage Existing Users ---
         users_df = fetch_all_users()
@@ -83,15 +83,48 @@ def render_admin_users_panel(username, ADMIN_USERS, db_status):
                     except Exception:
                         pass
 
+                    changes = {}
+                    if new_tier != current_tier:
+                        changes["tier"] = [current_tier, new_tier]
+                    if bool(new_active) != bool(row["is_active"]):
+                        changes["active"] = [bool(row["is_active"]), bool(new_active)]
+                    if changes:  # P1-42 audit log
+                        try:
+                            from db.admin_audit import record_admin_event
+
+                            record_admin_event(username, "update_user", selected_user, changes)
+                        except Exception:
+                            pass
                     st.success(f"User '{selected_user}' updated successfully!")
                     st.rerun()
             except Exception as e:
                 st.error(f"Failed to update user: {e}")
 
         _render_account_actions(selected_user, status, acting_user=username)
+        _render_audit_log()
 
 
-def _render_create_user() -> None:
+def _render_audit_log() -> None:
+    """P1-42: recent admin actions, newest first."""
+    try:
+        import pandas as pd
+
+        from db.admin_audit import describe, recent_admin_events
+    except ImportError:
+        return
+    st.markdown("---")
+    st.subheader("🧾 Recent admin actions")
+    events = recent_admin_events(limit=50)
+    if not events:
+        st.caption("No admin actions recorded yet.")
+        return
+    st.dataframe(arrow_safe(pd.DataFrame([{
+        "When (UTC)": e["at"], "Admin": e["actor"], "Action": e["action"].replace("_", " "),
+        "Account": e["target"], "Details": describe(e["detail"]),
+    } for e in events])), width="stretch", height=240, hide_index=True)
+
+
+def _render_create_user(*, actor=None) -> None:
     """P1-37: the username must be a valid email (stored lowercase); the
     password is bcrypt-hashed; an existing account is reported, not overwritten."""
     st.subheader("➕ Create New User")
@@ -108,7 +141,7 @@ def _render_create_user() -> None:
             st.error("Account creation is updating; try again in a moment.")
             return
         ok, msg = create_user(new_username, new_full_name, new_password,
-                              tier=new_tier_create, active=new_active_create)
+                              tier=new_tier_create, active=new_active_create, actor=actor)
         if ok:
             st.success(msg)
             st.rerun()
@@ -149,7 +182,7 @@ def _render_account_actions(selected_user, status, *, acting_user) -> None:
     else:
         c1, c2 = st.columns(2)
         if not verified and c1.button("Mark email verified", key="admin_mark_verified"):
-            ok, msg = mark_email_verified(selected_user)
+            ok, msg = mark_email_verified(selected_user, actor=acting_user)
             (st.success if ok else st.error)(msg)
             if ok:
                 st.rerun()
