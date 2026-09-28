@@ -1,17 +1,22 @@
 """P1-9 — "new since your last visit", remembered in this browser.
 
-The first time a session shows the market view, HSF reads (from an encrypted
-browser cookie, the same cookie manager sign-in uses) which full-market scan
-this browser last saw, keeps that as the session's baseline, and records the
-current latest scan for next time. Names in the current market scan that were
-not in the baseline scan are "new since your last visit".
+The cookie (encrypted, the same cookie manager sign-in uses) remembers two
+full-market scans: the one this browser last saw and the baseline it was
+compared against. When a session starts:
+  - a newer scan exists → the baseline becomes the last-seen scan, and the
+    newest scan is recorded as seen;
+  - no newer scan → the baseline is kept, so a page refresh or a fresh sign-in
+    (each a new Streamlit session) still shows the same "new" names instead of
+    comparing the latest scan with itself.
+Names in the current market scan that were not in the baseline scan are "new
+since your last visit".
 
 No database schema or server-side storage: the marker follows the browser.
-First visit (no baseline), or no newer scan since, means nothing is marked.
+First visit (no baseline) means nothing is marked.
 """
 from __future__ import annotations
 
-from typing import Any, Optional, Set
+from typing import Any, Optional, Set, Tuple
 
 try:
     import streamlit as st
@@ -40,6 +45,28 @@ def _latest_run_id() -> Optional[int]:
     return int(runs[0]["id"]) if runs else None
 
 
+def _parse_marker(raw: Any) -> Tuple[Optional[int], Optional[int]]:
+    """Cookie value → (seen, baseline). Accepts "seen:baseline", "seen:" and the
+    older single-value "seen" format."""
+    seen_s, _, base_s = str(raw or "").partition(":")
+    seen = int(seen_s) if seen_s.isdigit() else None
+    base = int(base_s) if base_s.isdigit() else None
+    return seen, base
+
+
+def next_marker(raw: Any, latest: Optional[int]) -> Tuple[Optional[int], str]:
+    """(baseline for this session, cookie value to store) given the stored
+    marker and the newest full-market run id."""
+    seen, base = _parse_marker(raw)
+    if latest is None:                     # runs unavailable: change nothing
+        return base, str(raw or "")
+    if seen is None:                       # first visit on this browser
+        return None, f"{latest}:"
+    if latest != seen:                     # a newer scan since the last visit
+        return seen, f"{latest}:{seen}"
+    return base, f"{seen}:{base if base is not None else ''}"   # same scan: keep the baseline
+
+
 def baseline_run_id() -> Optional[int]:
     """The run this browser last saw before this session (read once per session)."""
     if st is None:
@@ -53,10 +80,9 @@ def baseline_run_id() -> Optional[int]:
         cookies = cookies_ready_or_stop()
         if cookies is not None:
             raw = cookies.get(COOKIE_KEY)
-            base = int(raw) if raw and str(raw).isdigit() else None
-            latest = _latest_run_id()
-            if latest is not None and str(latest) != str(raw or ""):
-                cookies[COOKIE_KEY] = str(latest)
+            base, value = next_marker(raw, _latest_run_id())
+            if value and value != str(raw or ""):
+                cookies[COOKIE_KEY] = value
                 save_cookies(cookies)
     except Exception as exc:
         from ui.safe_errors import report_error
