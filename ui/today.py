@@ -105,6 +105,15 @@ def _section_top(scan_df: Any) -> None:
     )
 
 
+def _section_after_close() -> None:
+    """P2-45: after-hours movers from the latest postmarket scan (Pro+)."""
+    try:
+        from ui.after_close import render_after_close
+    except ImportError:  # new module; a stale deploy must not break Today
+        return
+    render_after_close()
+
+
 def _section_new(scan_df: Any, run_id: Optional[int]) -> None:
     from ui.last_visit import new_since_last_visit
 
@@ -177,6 +186,7 @@ def render_today(username: str) -> None:
 
     for name, fn in (("market snapshot", lambda: render_market_snapshot(results_df=scan_df)),
                      ("top setups", lambda: _section_top(scan_df)),
+                     ("after the close", _section_after_close),
                      ("new since your last visit", lambda: _section_new(scan_df, run_id)),
                      ("your watchlist", lambda: _section_watchlist(username, scan_df))):
         try:
