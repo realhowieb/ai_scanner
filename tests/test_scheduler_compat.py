@@ -74,6 +74,33 @@ class SchedulerCompatTests(unittest.TestCase):
         self.assertIn("artifacts/automation/latest_scan.json", workflow_source)
         self.assertIn("artifacts/automation/status.json", workflow_source)
 
+    @unittest.skipUnless(importlib.util.find_spec("yaml"), "PyYAML not installed")
+    def test_scheduled_scans_persist_scanner_state_between_runs(self) -> None:
+        # Runners are ephemeral: the US_MARKET last-known-good universe and the
+        # perf history only survive between runs through the Actions cache.
+        import yaml
+
+        from data.us_market_universe import CACHE_PATH
+
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "scheduled-scans.yml").read_text(encoding="utf-8")
+        )
+        steps = workflow["jobs"]["run-scans"]["steps"]
+        names = [s.get("name") for s in steps]
+        restore = steps[names.index("Restore scanner state")]
+        save = steps[names.index("Save scanner state")]
+        run = names.index("Run scheduled scans")
+
+        self.assertLess(names.index("Restore scanner state"), run)
+        self.assertGreater(names.index("Save scanner state"), run)
+        self.assertEqual(save.get("if"), "always()")
+        self.assertEqual(restore["with"]["key"], save["with"]["key"])
+        self.assertTrue(restore["with"]["restore-keys"].strip())
+        for step in (restore, save):
+            paths = step["with"]["path"].split()
+            self.assertIn(str(CACHE_PATH.relative_to(ROOT)), paths)
+            self.assertIn("artifacts/automation/perf_history.jsonl", paths)
+
     def test_market_time_gate_uses_new_york_dst(self) -> None:
         # June is EDT (UTC-4). A fixed UTC-5 conversion would incorrectly
         # treat this as 5 AM ET and skip.
