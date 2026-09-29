@@ -128,6 +128,30 @@ def run_headless_breakout(
     return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
 
 
+def add_after_hours_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Annotate postmarket results with after-hours pricing (display only).
+
+    Adds `AHLast` (latest Alpaca snapshot trade, which includes extended hours)
+    and `AHPctChange` (% move vs the scan's regular-session `Last`). Candidates,
+    scores and ordering are unchanged. Fails open: no Alpaca creds, a provider
+    error or a missing quote leaves the row's AH columns empty.
+    """
+    if df is None or df.empty or "Ticker" not in df.columns or "Last" not in df.columns:
+        return df
+    try:
+        from ui.scan_providers import get_alpaca_extended_last_prices
+
+        quotes = get_alpaca_extended_last_prices(df["Ticker"].astype(str).str.upper().tolist())
+    except HEADLESS_BOUNDARY_ERRORS:
+        quotes = {}
+    out = df.copy()
+    ah_last = out["Ticker"].astype(str).str.upper().map(quotes)
+    close = pd.to_numeric(out["Last"], errors="coerce")
+    out["AHLast"] = pd.to_numeric(ah_last, errors="coerce")
+    out["AHPctChange"] = ((out["AHLast"] / close - 1.0) * 100.0).where(close > 0).round(2)
+    return out
+
+
 def run_headless_pipeline(
     run_type: str,
     universe: Iterable[str],
@@ -180,6 +204,8 @@ def run_headless_pipeline(
         max_price=max_price,
         top_n=top_n,
     )
+    if (session_label or run_type) == "postmarket":
+        breakout_df = add_after_hours_columns(breakout_df)
     meta = {
         "downloaded_count": len({ticker for ticker in price_data if ticker in set(symbols)}),
         "skipped_count": len(skipped),
