@@ -47,21 +47,29 @@ def _load_sp600_or_sp500() -> list[str]:
 
 
 def _load_session_universe() -> list[str]:
-    """Universe for premarket/postmarket scans: the same SP500 + full Nasdaq
-    (deduped) COMBO the regular scheduled run uses, honoring CRON_NASDAQ_LIMIT.
+    """Universe for premarket/postmarket scans: the same canonical US_MARKET
+    universe the regular scheduled run uses (Run 44), so every session covers the
+    whole market rather than the legacy SP500 + Nasdaq COMBO.
 
-    Reuses the canonical `cron_runner._load_universe("COMBO")` (which reads the
-    static universe files) via a late import — the shim `load_nasdaq_tickers` is
-    not implemented, and this keeps one source of truth for coverage. Falls back
-    to SP500 if that is unavailable, so a failure never empties the scan."""
+    Reuses `cron_runner._load_universe("US_MARKET")` via a late import to keep one
+    source of truth. If US_MARKET is unavailable (no live list and no cache), falls
+    back to the legacy COMBO and then SP500 — logged, so a degraded session scan is
+    visible — and never empties the scan."""
     try:
         from scheduler.cron_runner import _load_universe
-
-        combined = list(_load_universe("COMBO") or [])
-        if combined:
-            return combined
     except HEADLESS_BOUNDARY_ERRORS:
-        pass
+        return _load_sp600_or_sp500()
+
+    for name in ("US_MARKET", "COMBO"):
+        try:
+            symbols = list(_load_universe(name) or [])
+        except HEADLESS_BOUNDARY_ERRORS as e:
+            print(f"[session-universe] {name} unavailable: {e}")
+            continue
+        if symbols:
+            if name != "US_MARKET":
+                print(f"[session-universe] US_MARKET unavailable; falling back to {name}")
+            return symbols
     return _load_sp600_or_sp500()
 
 try:
