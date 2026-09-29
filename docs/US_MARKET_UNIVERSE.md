@@ -74,6 +74,10 @@ HSF never reports full coverage when only a partial/legacy universe was used.
   `CRON_SESSION=auto` before 09:30 / from 16:00 ET) also scan **US_MARKET**. If it
   is unavailable (no live list and no cache) they fall back to the legacy COMBO,
   then SP500, and log the fallback, so a session scan never runs empty.
+- Postmarket (after-hours) results add `AHLast` (latest Alpaca snapshot trade,
+  extended hours included) and `AHPctChange` (% vs the regular-session `Last`).
+  Display only: candidates, scores and ordering are unchanged. Blank when Alpaca
+  has no quote or is unavailable.
 
 ## Coverage metrics & telemetry
 
