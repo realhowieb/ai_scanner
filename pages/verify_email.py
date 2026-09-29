@@ -15,12 +15,20 @@ def _render_resend_box() -> None:
         if "@" not in addr:
             st.warning("Enter a valid email address.")
             return
+        why = None
         try:
             from ui.email_verification_gate import _resend_verification
 
             sent = _resend_verification(addr)
         except Exception:
             sent = False
+        if not sent:
+            try:  # P2-32: admins see why; guarded for a stale gate module
+                from ui import email_verification_gate as _gate
+
+                why = getattr(_gate, "last_failure_for_admin", lambda: None)()
+            except Exception:
+                why = None
         if sent:
             st.success("✅ Verification email sent. Check your inbox (and spam).")
         else:
@@ -28,6 +36,8 @@ def _render_resend_box() -> None:
                 "Could not send the verification email. Make sure the address has "
                 "an account, and that email is configured."
             )
+            if why:
+                st.caption(f"Admin: {why}")
 
 
 def main() -> None:

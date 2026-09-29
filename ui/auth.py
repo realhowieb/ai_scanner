@@ -56,6 +56,12 @@ from ui.auth_sessions import (
 from ui.auth_sessions import (
     save_cookies as _save_cookies,
 )
+from ui.auth_signin_extras import (
+    clear_session_cookie as _clear_session_cookie,
+)
+from ui.auth_signin_extras import (
+    deactivated_with_password as _deactivated_with_password,
+)
 
 # Direct Neon lookup fallback for username -> email mapping
 try:
@@ -244,7 +250,7 @@ def auth_ui():
                 # Session expired or invalid — clear the stale cookie so the user
                 # gets a clean login form rather than a silent broken state.
                 try:
-                    cookies.pop(COOKIE_NAME, None)
+                    _clear_session_cookie(cookies)
                     _save_cookies(cookies)
                 except _AUTH_BACKEND_ERRORS:
                     pass
@@ -576,6 +582,10 @@ def auth_ui():
             return False, None, None
 
         if user is None:
+            # P2-40: a deactivated account gets a clear message, but only after the
+            # correct password, so the message can't reveal which accounts exist.
+            if _deactivated_with_password(login_key, (password, raw_password)):
+                return _fail("This account is deactivated. Contact support.", reason="deactivated")
             return _fail("User not found. Please use the email you signed up with, or your username.", reason="user_not_found")
 
         # Expect user dict to contain a 'password' field.
@@ -685,7 +695,7 @@ def logout_and_reset_session() -> None:
             if sid:
                 _delete_session(str(sid))
             try:
-                cookies.pop(COOKIE_NAME, None)
+                _clear_session_cookie(cookies)
             except _AUTH_BACKEND_ERRORS:
                 pass
             _save_cookies(cookies)

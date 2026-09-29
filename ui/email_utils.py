@@ -24,6 +24,25 @@ except Exception:  # pragma: no cover - never print an address if the helper is 
         return "(details hidden)"
 
 
+# P2-32: remember why a send failed so admins can see it. Guarded: a missing
+# module must never break sending.
+try:
+    from ui import email_failure as _failure
+except Exception:  # pragma: no cover
+    _failure = None
+
+
+def _note_failure(reason: str, detail: str = "", exc: BaseException | None = None) -> None:
+    if _failure is None:
+        return
+    try:
+        if exc is not None:
+            reason, detail = _failure.classify(exc)
+        _failure.note(reason, detail)
+    except Exception:
+        pass
+
+
 def _sender(smtp_from: str) -> tuple[str, str]:
     """(From header, envelope address). The inbox shows a display name —
     "HSF Alerts" unless SMTP_FROM already carries one ("Name <addr>") or
@@ -92,11 +111,13 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str,
     # Usernames double as email addresses; an account like "admin" has none.
     if "@" not in str(to_address or ""):
         print("[email] not sending — recipient is not an email address")
+        _note_failure("not_an_email")
         return False
     try:
         from config import SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER
     except Exception as e:
         print(f"[email] config import failed: {e}")
+        _note_failure("not_configured", "email settings")
         return False
     missing = [
         name
@@ -105,6 +126,7 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str,
     ]
     if missing:
         print(f"[email] not sending — missing SMTP config: {', '.join(missing)}")
+        _note_failure("not_configured", ", ".join(missing))
         return False
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -125,6 +147,7 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str,
         return True
     except Exception as e:
         print(f"[email] SEND FAILED to {mask_email(to_address)} via {SMTP_HOST}:{SMTP_PORT} from {SMTP_FROM} — {type(e).__name__}: {redact(e)}")
+        _note_failure("", exc=e)
         _capture(e)
         return False
 

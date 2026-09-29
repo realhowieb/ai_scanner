@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -21,10 +22,6 @@ def _validate_email(email: str) -> str:
         raise ValueError(f"Invalid or missing email from webhook: {email!r}")
     return email
 
-app = FastAPI()
-
-
-@app.on_event("startup")
 def _start_realtime_alerts() -> None:
     """Start the real-time price-alert worker (no-op unless enabled via env)."""
     try:
@@ -38,6 +35,16 @@ def _start_realtime_alerts() -> None:
         start_background_worker()
     except Exception as e:
         _log.warning("realtime alerts worker failed to start: %s", e)
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # P2-23: lifespan replaces FastAPI's deprecated startup-event decorator.
+    _start_realtime_alerts()
+    yield
+
+
+app = FastAPI(lifespan=_lifespan)
 
 
 # ---------- ENV ----------
