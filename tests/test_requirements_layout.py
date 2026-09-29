@@ -77,6 +77,12 @@ class RequirementsLayoutTests(unittest.TestCase):
             self.assertNotIn(conflicting, core)
             self.assertNotIn(conflicting, optional)
 
+    def test_pyproject_streamlit_pin_matches_core_requirements(self):
+        # requirements-core.txt is the deploy pin; pyproject must not drift from it.
+        core_pin = next(line for line in _read_lines("requirements-core.txt") if line.startswith("streamlit=="))
+        text = (ROOT / "pyproject.toml").read_text()
+        self.assertIn(f'"{core_pin}"', text)
+
     def test_pyproject_keeps_heavy_deps_optional(self):
         text = (ROOT / "pyproject.toml").read_text()
         dependencies_block = text.split("[project.optional-dependencies]", 1)[0]
