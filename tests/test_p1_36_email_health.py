@@ -115,7 +115,7 @@ class RecordingTests(unittest.TestCase):
 
     def test_alert_runner_counts_failed_sends_and_records(self):
         src = (ROOT / "scheduler" / "alert_runner.py").read_text()
-        self.assertIn("                    else:\n                        email_failed += 1", src)
+        self.assertIn("            else:\n                email_failed += 1", src)
         self.assertIn('record_email_job("alerts", {"fired": fired, "emailed": emailed, "email_failed": email_failed})',
                       src)
 

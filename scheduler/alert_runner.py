@@ -456,6 +456,34 @@ def _email_allowed_for_tier(user_id: str) -> bool:
         return False
 
 
+def alert_signature(alert: Dict[str, Any]) -> tuple:
+    """What an alert watches. Two alerts with the same signature fire together
+    with the same lines, so only one of them is evaluated."""
+    thr = alert.get("threshold")
+    return (
+        str(alert.get("user_id") or ""),
+        alert.get("alert_type"),
+        (alert.get("ticker") or "").upper() or None,
+        None if thr is None else float(thr),
+        alert.get("direction"),
+        bool(alert.get("watchlist_only")),
+    )
+
+
+def compose_alert_email(sections: List[tuple]) -> tuple:
+    """(subject, body) for one email covering every alert that fired for a user
+    in this run. `sections` is [(label, body)]; identical sections appear once."""
+    unique: List[tuple] = []
+    for sec in sections:
+        if sec not in unique:
+            unique.append(sec)
+    if len(unique) == 1:
+        label, body = unique[0]
+        return f"📈 {label} triggered", body
+    subject = f"📈 {len(unique)} alerts triggered"
+    return subject, "\n\n".join(f"{label}\n{body}" for label, body in unique)
+
+
 def run_alerts() -> None:
     """Evaluate all enabled alerts against the latest snapshot and notify."""
     try:
@@ -516,8 +544,21 @@ def run_alerts() -> None:
     fired = 0
     emailed = 0
     email_failed = 0
+    duplicates = 0
+    seen_signatures: set = set()
+    # One email per user per run: every alert that fired, together.
+    pending: Dict[str, List[tuple]] = {}
     for alert in alerts:
         try:
+            # Identical alerts (same user, type, ticker, threshold...) would send
+            # the same email twice. The newest one (alerts arrive newest first)
+            # owns the signature; the rest are skipped, even when the owner is
+            # throttled, so a duplicate can't fire in its place.
+            sig = alert_signature(alert)
+            if sig in seen_signatures:
+                duplicates += 1
+                continue
+            seen_signatures.add(sig)
             if _throttled(alert.get("last_fired_at"), float(ALERT_THROTTLE_HOURS)):
                 continue
             user_id = str(alert.get("user_id") or "")
@@ -562,36 +603,41 @@ def run_alerts() -> None:
             _freeze_signal_outcomes(event_id, alert, df, lines)
             mark_alert_fired(alert.get("id"))
             fired += 1
-
-            if (
-                "@" in user_id
-                and _is_verified(user_id)
-                and _email_allowed_for_tier(user_id)
-                and _alert_emails_on(user_id)
-            ):
-                try:
-                    from ui.email_utils import send_alert_email
-
-                    if send_alert_email(
-                        to_address=user_id,
-                        subject=f"📈 {label} triggered",
-                        body=body,
-                        unsubscribe_url=_alert_unsubscribe_link(user_id),
-                    ):
-                        emailed += 1
-                    else:
-                        email_failed += 1
-                except Exception as e:
-                    email_failed += 1
-                    print(f"[alert_runner] email to {mask_email(user_id)} failed: {redact(e)}")
-                    _capture(e)
+            pending.setdefault(user_id, []).append((label, body))
         except Exception as e:  # never let one alert kill the run
             print(f"[alert_runner] alert {alert.get('id')} failed: {redact(e)}")
             _capture(e)
             continue
 
+    for user_id, sections in pending.items():
+        try:
+            if not (
+                "@" in user_id
+                and _is_verified(user_id)
+                and _email_allowed_for_tier(user_id)
+                and _alert_emails_on(user_id)
+            ):
+                continue
+            from ui.email_utils import send_alert_email
+
+            subject, body = compose_alert_email(sections)
+            if send_alert_email(
+                to_address=user_id,
+                subject=subject,
+                body=body,
+                unsubscribe_url=_alert_unsubscribe_link(user_id),
+            ):
+                emailed += 1
+            else:
+                email_failed += 1
+        except Exception as e:
+            email_failed += 1
+            print(f"[alert_runner] email to {mask_email(user_id)} failed: {redact(e)}")
+            _capture(e)
+
     print(f"[alert_runner] fired {fired} alert(s), emailed {emailed}"
-          + (f", {email_failed} email(s) failed" if email_failed else ""))
+          + (f", {email_failed} email(s) failed" if email_failed else "")
+          + (f", skipped {duplicates} duplicate alert(s)" if duplicates else ""))
     try:  # P1-36: counts for the Email delivery health card (+ Sentry on failures)
         from scheduler.morning_digest import record_email_job
 
