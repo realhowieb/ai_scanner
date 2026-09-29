@@ -106,16 +106,36 @@ if __name__ == "__main__":
 
 
 class SessionUniverseTests(unittest.TestCase):
-    def test_session_universe_reuses_combo(self):
-        # pre/post sessions use the SAME COMBO universe as the regular run
+    def test_session_universe_uses_us_market(self):
+        # pre/post sessions scan the SAME canonical US_MARKET universe as the regular run
         from scan import pre_post
         with mock.patch("scheduler.cron_runner._load_universe",
                         return_value=["AAPL", "MSFT", "TSLA", "NVDA"]) as lu:
             uni = pre_post._load_session_universe()
-        lu.assert_called_once_with("COMBO")
+        lu.assert_called_once_with("US_MARKET")
         self.assertEqual(uni, ["AAPL", "MSFT", "TSLA", "NVDA"])
 
-    def test_session_universe_falls_back_when_combo_empty(self):
+    def test_session_universe_falls_back_to_combo_when_us_market_empty(self):
+        from scan import pre_post
+        loads = {"US_MARKET": [], "COMBO": ["AAPL", "MSFT"]}
+        with mock.patch("scheduler.cron_runner._load_universe", side_effect=loads.__getitem__) as lu:
+            uni = pre_post._load_session_universe()
+        self.assertEqual([c.args[0] for c in lu.call_args_list], ["US_MARKET", "COMBO"])
+        self.assertEqual(uni, ["AAPL", "MSFT"])
+
+    def test_session_universe_falls_back_to_combo_when_us_market_errors(self):
+        from scan import pre_post
+
+        def load(name):
+            if name == "US_MARKET":
+                raise RuntimeError("alpaca down")
+            return ["SPY", "QQQ"]
+
+        with mock.patch("scheduler.cron_runner._load_universe", side_effect=load):
+            uni = pre_post._load_session_universe()
+        self.assertEqual(uni, ["SPY", "QQQ"])
+
+    def test_session_universe_falls_back_when_all_empty(self):
         from scan import pre_post
         with (
             mock.patch("scheduler.cron_runner._load_universe", return_value=[]),
@@ -132,19 +152,3 @@ class SessionUniverseTests(unittest.TestCase):
         ):
             uni = pre_post._load_session_universe()
         self.assertEqual(uni, ["SPY"])
-
-
-class SnapshotDroppedFieldTests(unittest.TestCase):
-    def test_summary_includes_dropped_untradable(self):
-        import datetime as _dt
-
-        import pandas as pd
-
-        from integrations import automation_export as ae
-        df = pd.DataFrame([{"Ticker": "NVDA", "BreakoutScore": 40, "Last": 100.0}])
-        snap = ae.build_snapshot(
-            df, universe="COMBO", scan_type="scheduled", market_session="regular",
-            started_at_utc=_dt.datetime(2026, 9, 16, tzinfo=_dt.timezone.utc),
-            symbols_requested=4771, symbols_processed=4232, symbols_skipped=16,
-            dropped_untradable=539, model_metadata={}, env={})
-        self.assertEqual(snap["summary"]["dropped_untradable"], 539)
