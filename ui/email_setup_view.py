@@ -47,7 +47,7 @@ def billing_setup(health: Dict[str, Any]) -> Dict[str, Any]:
 def _fetch_billing_health() -> Dict[str, Any]:
     import requests
 
-    base = (os.getenv("BILLING_API_BASE") or "https://ai-scanner-h2c8.onrender.com").strip()
+    base = (os.getenv("BILLING_API_BASE") or "https://ai-scanner-h2c8.onrender.com").strip().rstrip("/")
     r = requests.get(f"{base}/health", timeout=float(os.getenv("BILLING_HEALTH_TIMEOUT", "5")))
     return r.json() if r.content else {}
 

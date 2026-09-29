@@ -11,7 +11,7 @@ from requests import exceptions as req_exc
 # Config
 # =========================
 
-BILLING_API_BASE = (os.getenv("BILLING_API_BASE") or "https://ai-scanner-h2c8.onrender.com").strip()
+BILLING_API_BASE = (os.getenv("BILLING_API_BASE") or "https://ai-scanner-h2c8.onrender.com").strip().rstrip("/")
 
 # Render free/idle services can cold-start
 HEALTH_TIMEOUT_S = float(os.getenv("BILLING_HEALTH_TIMEOUT", "3"))
@@ -42,7 +42,7 @@ def _billing_healthcheck() -> tuple[bool, str | None]:
                 return False, f"Billing database is not ready: {db['error']}."
         except Exception:
             pass
-        return False, f"Billing service is not ready yet (HTTP {r.status_code})."
+        return False, f"Billing service is not ready yet (HTTP {r.status_code} from {BILLING_API_BASE}/health)."
     except Exception:
         return False, None
 
