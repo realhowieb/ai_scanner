@@ -55,6 +55,21 @@ jobs:
           # required for the track-record ranking A/B to be meaningful.
           python -m pip install --prefer-binary -r requirements-ml.txt -c requirements.lock
 
+      # Runners are ephemeral, so state the scanner keeps on disk between runs is
+      # restored from / saved to the Actions cache: the US_MARKET last-known-good
+      # universe (the fallback when Alpaca's asset list is down; without it a
+      # provider outage aborts the scan) and the rolling perf history (last 60
+      # runs). Keys are unique per run; restore-keys picks the newest saved state.
+      - name: Restore scanner state
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            artifacts/universe/us_market.json
+            artifacts/automation/perf_history.jsonl
+          key: scanner-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            scanner-state-
+
       - name: Run scheduled scans
         env:
           # 🔑 Add these in GitHub → Settings → Secrets and variables → Actions
@@ -105,6 +120,18 @@ jobs:
           ALERT_THROTTLE_HOURS: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '0' || '12' }}
         run: python -m scheduler.cron_runner
 
+      # Saved even when the scan fails, so the perf history keeps the failed run.
+      # The universe file is only rewritten on a successful live fetch, so a
+      # failing run re-saves the previous good list, never a bad one.
+      - name: Save scanner state
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            artifacts/universe/us_market.json
+            artifacts/automation/perf_history.jsonl
+          key: scanner-state-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Upload scheduled scan summary
         if: always()
         uses: actions/upload-artifact@v7
@@ -122,5 +149,6 @@ jobs:
             artifacts/automation/latest_scan.json
             artifacts/automation/status.json
             artifacts/automation/coverage_*.json
+            artifacts/automation/perf_history.jsonl
             artifacts/automation/history/**/*.json
           if-no-files-found: warn

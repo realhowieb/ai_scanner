@@ -61,6 +61,14 @@ warrant/unit/rights marker. Some preferreds may remain; documented, not hidden.
 
 HSF never reports full coverage when only a partial/legacy universe was used.
 
+**Persistence on GitHub Actions:** runners are ephemeral, so
+`scheduled-scans.yml` restores `artifacts/universe/us_market.json` (and
+`artifacts/automation/perf_history.jsonl`) from the Actions cache before the scan
+and saves them after it (`if: always()`, unique key per run, newest restored via
+`restore-keys`). Without this the cache never existed on a runner and every
+Alpaca asset-list outage aborted the scan. Actions caches unused for 7 days are
+evicted; the weekday schedule keeps it warm.
+
 ## Scheduled behavior
 
 - Default scheduled universe is now **US_MARKET** (`_configured_universes`,
