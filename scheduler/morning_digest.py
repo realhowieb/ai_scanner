@@ -32,6 +32,49 @@ except Exception:  # pragma: no cover - never print an address if the helper is 
 
 _DIGEST_REFRESH_KEY = "morning_digest"
 
+# "Once a day" means once per New York trading day. Keys are dated in ET, so a
+# scheduled run that GitHub delays past UTC midnight (e.g. the 21:10 UTC slot
+# firing at 00:27 UTC = 8:27 PM ET) can neither re-send nor claim the next day.
+# Each email also has its own ET time window (bypassed by forced manual runs).
+DIGEST_WINDOW_ET = (6, 12)   # morning digest: 06:00 <= ET < 12:00
+WRAP_START_ET = 16           # evening wrap: from 16:00 ET (same ET day)
+
+
+def et_now(now=None):
+    from zoneinfo import ZoneInfo
+
+    now = now or datetime.now(timezone.utc)
+    return now.astimezone(ZoneInfo("America/New_York"))
+
+
+def daily_send_key(base: str, now=None) -> str:
+    """e.g. 'morning_digest:2026-09-29' — one record per ET day."""
+    return f"{base}:{et_now(now).date().isoformat()}"
+
+
+def already_sent(key: str) -> bool:
+    """True when this ET-dated key was recorded (any time that ET day). On a
+    database error returns False, matching the old throttle (send rather than drop)."""
+    try:
+        from db.earnings import _get_conn, ensure_earnings_refresh_log_table
+
+        conn = _get_conn(None)
+        ensure_earnings_refresh_log_table(conn)
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM earnings_refresh_log WHERE refresh_key = %s;", (key,))
+            return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+def mark_sent(key: str) -> None:
+    try:
+        from db.earnings import mark_earnings_refreshed_today
+
+        mark_earnings_refreshed_today(key)
+    except Exception:
+        pass
+
 
 def _latest_snapshot_df():
     """Load the most recent meaningful scan as a DataFrame, or None.
@@ -477,16 +520,16 @@ def run_morning_digest(force: bool = False) -> None:
     if not MORNING_DIGEST_ENABLED:
         return
 
-    # Once-per-day throttle (reuses the earnings refresh-log table with our key).
+    # Once per ET day, and only in the morning (see DIGEST_WINDOW_ET).
+    send_key = daily_send_key(_DIGEST_REFRESH_KEY)
     if not force:
-        try:
-            from db.earnings import should_refresh_earnings_today
-
-            if not should_refresh_earnings_today(_DIGEST_REFRESH_KEY):
-                print("[morning_digest] already sent today; skipping")
-                return
-        except Exception:
-            pass
+        et = et_now()
+        if not DIGEST_WINDOW_ET[0] <= et.hour < DIGEST_WINDOW_ET[1]:
+            print(f"[morning_digest] outside the morning window ({et:%H:%M} ET); skipping")
+            return
+        if already_sent(send_key):
+            print("[morning_digest] already sent today; skipping")
+            return
 
     try:
         from auth.tiering import get_user_tier, has_min_tier
@@ -604,12 +647,7 @@ def run_morning_digest(force: bool = False) -> None:
             continue
 
     if sent > 0:
-        try:
-            from db.earnings import mark_earnings_refreshed_today
-
-            mark_earnings_refreshed_today(_DIGEST_REFRESH_KEY)
-        except Exception:
-            pass
+        mark_sent(send_key)
     reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) or "none"
     print(f"[morning_digest] sent {sent} digest(s); skipped: {reasons}")
     record_email_job("digest", {"sent": sent, "skipped": skipped})

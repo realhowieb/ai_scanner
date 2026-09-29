@@ -247,15 +247,18 @@ def run_evening_wrap(force: bool = False) -> None:
     if not MORNING_DIGEST_ENABLED:
         return
 
-    if not force:
-        try:
-            from db.earnings import should_refresh_earnings_today
+    # Once per ET day, and only from 16:00 ET (see scheduler.morning_digest).
+    from scheduler.morning_digest import WRAP_START_ET, already_sent, daily_send_key, et_now, mark_sent
 
-            if not should_refresh_earnings_today(_WRAP_KEY):
-                print("[evening_wrap] already sent today; skipping")
-                return
-        except Exception:
-            pass
+    send_key = daily_send_key(_WRAP_KEY)
+    if not force:
+        et = et_now()
+        if et.hour < WRAP_START_ET:
+            print(f"[evening_wrap] before the evening window ({et:%H:%M} ET); skipping")
+            return
+        if already_sent(send_key):
+            print("[evening_wrap] already sent today; skipping")
+            return
 
     try:
         from auth.tiering import get_user_tier, has_min_tier
@@ -346,12 +349,7 @@ def run_evening_wrap(force: bool = False) -> None:
             continue
 
     if sent > 0:
-        try:
-            from db.earnings import mark_earnings_refreshed_today
-
-            mark_earnings_refreshed_today(_WRAP_KEY)
-        except Exception:
-            pass
+        mark_sent(send_key)
     reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) or "none"
     print(f"[evening_wrap] sent {sent} wrap(s); skipped: {reasons}")
     record_email_job("evening", {"sent": sent, "skipped": skipped})
