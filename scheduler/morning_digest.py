@@ -480,6 +480,18 @@ def record_email_job(job: str, stats: Dict[str, Any]) -> None:
         _capture(RuntimeError(f"{job} email: {failed} send(s) failed this run"))
 
 
+def default_watchlist_tickers(email: str, list_watchlists, get_watchlist_tickers) -> List[str]:
+    """Tickers of the account's DEFAULT watchlist only — the same list Today shows
+    as "Your watchlist". Merging every list made a 40-ticker digest for an account
+    with 8 lists (2026-09-29). Falls back to the first list if none is marked."""
+    wls = list_watchlists(email) or []
+    if not wls:
+        return []
+    default = next((w for w in wls if w.get("is_default")), wls[0])
+    tickers = get_watchlist_tickers(default.get("id"), email) or []
+    return sorted({str(t).strip().upper() for t in tickers if t})
+
+
 def email_opted_in(email: str, kind: str) -> bool:
     """P1-41: the account hasn't switched this email type off (defaults to on)."""
     try:
@@ -607,11 +619,7 @@ def run_morning_digest(force: bool = False) -> None:
             continue
 
         try:
-            wls = list_watchlists(email) or []
-            tickers: List[str] = []
-            for wl in wls:
-                tickers.extend(get_watchlist_tickers(wl.get("id"), email) or [])
-            tickers = sorted({str(t).strip().upper() for t in tickers if t})
+            tickers = default_watchlist_tickers(email, list_watchlists, get_watchlist_tickers)
             if not tickers:
                 _skip("empty_watchlist")
                 continue

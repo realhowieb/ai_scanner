@@ -293,7 +293,13 @@ def run_evening_wrap(force: bool = False) -> None:
     day_gainers, day_losers = _day_movers(snap_df)
     golden_crosses, top_setups = _tomorrow_setups(snap_df)
 
-    from scheduler.morning_digest import _email_tier_key, email_opted_in, record_email_job, unsubscribe_link
+    from scheduler.morning_digest import (
+        _email_tier_key,
+        default_watchlist_tickers,
+        email_opted_in,
+        record_email_job,
+        unsubscribe_link,
+    )
 
     sent = 0
     skipped: Dict[str, int] = {}
@@ -323,11 +329,7 @@ def run_evening_wrap(force: bool = False) -> None:
             continue
 
         try:
-            wls = list_watchlists(email) or []
-            tickers: List[str] = []
-            for wl in wls:
-                tickers.extend(get_watchlist_tickers(wl.get("id"), email) or [])
-            tickers = sorted({str(t).strip().upper() for t in tickers if t})
+            tickers = default_watchlist_tickers(email, list_watchlists, get_watchlist_tickers)
             if not tickers:
                 _skip("empty_watchlist")
                 continue
