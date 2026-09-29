@@ -46,6 +46,7 @@ jobs:
             tests/test_run73_tier_differentiation.py \
             tests/test_tier_enforcement.py \
             tests/test_app_session.py \
+            tests/test_p1_39_billing_email_health.py \
             -v --tb=short
 
   smoke:

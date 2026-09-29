@@ -463,6 +463,12 @@ def _compose(
 def record_email_job(job: str, stats: Dict[str, Any]) -> None:
     """P1-36: store this run's counts for the Email delivery health card, and report
     failed sends to Sentry (counts only, never addresses). Never raises."""
+    try:  # P1-39: which email settings this environment (GitHub Actions) used
+        from ui.email_setup import describe_from_config
+
+        stats = {**stats, "smtp": describe_from_config()}
+    except Exception:
+        pass
     try:
         from db.email_job_runs import record_email_run
 

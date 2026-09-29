@@ -294,6 +294,19 @@ def _authenticated_user(request: Request, payload: dict) -> str:
 
 
 # ---------- API ----------
+def _email_setup() -> dict:
+    """P1-39: live-alert email settings on Render, for the Admin page. Only whether
+    each setting is present and the sender DOMAIN (visible on every email anyway) —
+    never the user, password or full address. Mirrors ui/email_setup.describe_smtp."""
+    from email.utils import parseaddr
+
+    names = ("SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM")
+    missing = [n for n in names if not os.getenv(n, "").strip()]
+    addr = parseaddr(os.getenv("SMTP_FROM", "").strip())[1]
+    domain = addr.rpartition("@")[2].lower() if "@" in addr else None
+    return {"configured": not missing, "missing": missing, "sender_domain": domain}
+
+
 @app.get("/health")
 def health():
     missing = _required_env_missing(
@@ -307,7 +320,7 @@ def health():
     )
     db = _db_status()
     ok = not missing and bool(db["reachable"])
-    body = {"ok": ok, "missing_env": missing, "db": db}
+    body = {"ok": ok, "missing_env": missing, "db": db, "email": _email_setup()}
     if not ok:
         return JSONResponse(body, status_code=503)
     body["features"] = ["url_override", "idempotent_qp", "billing_readiness"]

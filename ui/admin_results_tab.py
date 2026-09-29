@@ -66,6 +66,12 @@ def render_admin_tab(
                 render_email_health()
             except ADMIN_TAB_ERRORS:
                 pass
+            try:  # P1-39: email settings per environment (+ website test email)
+                from ui.email_setup_view import render_email_setup
+
+                render_email_setup()
+            except ADMIN_TAB_ERRORS:
+                pass
             st.markdown("---")
             st.markdown("### 📊 Diagnostics")
             _render_billing_health_badge()
