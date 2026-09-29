@@ -24,6 +24,7 @@ try:
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
+import ui.product_copy as _product_copy
 from ui.pricing import plans_html
 from ui.product_copy import (
     DISCLAIMER,
@@ -33,8 +34,6 @@ from ui.product_copy import (
     TAGLINE,
     TRUST_POINTS,
 )
-
-import ui.product_copy as _product_copy
 
 # getattr: a stale ui.product_copy on Streamlit Cloud must not break the landing page.
 HSF_SCORE_ONE_LINE = getattr(
