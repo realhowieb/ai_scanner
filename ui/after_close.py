@@ -16,6 +16,8 @@ except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
 POSTMARKET_LABEL = "postmarket"
+# Smaller moves are noise (late evening most names show 0.00%: no after-hours trade).
+MIN_ABS_MOVE_PCT = 0.5
 
 
 def last_close(now: _dt.datetime) -> _dt.datetime:
@@ -61,7 +63,7 @@ def after_hours_movers(df: Any, n: int = 5) -> List[Dict[str, Any]]:
         return []
     rows = df.copy()
     rows["AHPctChange"] = pd.to_numeric(rows["AHPctChange"], errors="coerce")
-    rows = rows[rows["AHPctChange"].notna()]
+    rows = rows[rows["AHPctChange"].notna() & (rows["AHPctChange"].abs() >= MIN_ABS_MOVE_PCT)]
     if rows.empty:
         return []
     try:
@@ -122,7 +124,7 @@ def render_after_close(now: Optional[_dt.datetime] = None) -> None:
     st.markdown("### After the close")
     as_of = run["created_at"].astimezone(mc.ET).strftime("%-I:%M %p ET")
     if not movers:
-        st.caption(f"No after-hours moves recorded in the {as_of} postmarket scan.")
+        st.caption(f"No after-hours moves of {MIN_ABS_MOVE_PCT:g}% or more in the {as_of} postmarket scan.")
     for m in movers:
         price = f" (${m['ah_last']:,.2f})" if m["ah_last"] is not None else ""
         score = f" · HSF Score **{m['score']}**" if m["score"] is not None else ""

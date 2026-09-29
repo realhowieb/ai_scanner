@@ -48,6 +48,8 @@ class MoversTests(unittest.TestCase):
         {"Ticker": "bbb", "Last": 20.0, "AHLast": 18.0, "AHPctChange": -10.0},
         {"Ticker": "CCC", "Last": 30.0, "AHLast": None, "AHPctChange": None},
         {"Ticker": "DDD", "Last": 40.0, "AHLast": 40.4, "AHPctChange": 1.0},
+        {"Ticker": "EEE", "Last": 50.0, "AHLast": 50.0, "AHPctChange": 0.0},     # no AH trade
+        {"Ticker": "FFF", "Last": 50.0, "AHLast": 50.2, "AHPctChange": -0.4},    # below 0.5%
     ])
 
     def test_biggest_absolute_moves_with_scores(self):
@@ -56,6 +58,10 @@ class MoversTests(unittest.TestCase):
         self.assertEqual([m["ticker"] for m in movers], ["BBB", "AAA"])
         self.assertEqual(movers[0], {"ticker": "BBB", "ah_pct": -10.0, "ah_last": 18.0, "score": 61})
         self.assertIsNone(movers[1]["score"])                                     # not a qualifying HSF row
+
+    def test_tiny_and_zero_moves_are_left_out(self):
+        tickers = [m["ticker"] for m in ac.after_hours_movers(self.DF, n=10)]
+        self.assertEqual(tickers, ["BBB", "AAA", "DDD"])
 
     def test_no_after_hours_columns(self):
         self.assertEqual(ac.after_hours_movers(pd.DataFrame([{"Ticker": "A", "Last": 1}])), [])
@@ -113,7 +119,7 @@ class CardTests(unittest.TestCase):
 
     def test_scan_without_after_hours_columns(self):
         at, _ = self.render("pro", df=pd.DataFrame([{"Ticker": "A", "Last": 1.0}]))
-        self.assertIn("No after-hours moves recorded in the 5:35 PM ET postmarket scan", self.text(at))
+        self.assertIn("No after-hours moves of 0.5% or more in the 5:35 PM ET postmarket scan", self.text(at))
 
 
 class WiringTests(unittest.TestCase):
