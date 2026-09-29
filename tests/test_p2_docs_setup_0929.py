@@ -44,6 +44,21 @@ class SetupScriptTests(unittest.TestCase):
         self.assertIn("Python 3.13", (ROOT / "requirements.lock").read_text().splitlines()[0])
 
 
+class DevBranchTests(unittest.TestCase):
+    """P2-37: the reset script can only reset dev-local, from live, after a prompt."""
+
+    def test_reset_script_is_pinned_to_dev_local(self):
+        src = (ROOT / "scripts" / "reset_dev_branch.sh").read_text()
+        self.assertIn('BRANCH="dev-local"', src)
+        self.assertIn('"$parent_name" != "live"', src)
+        self.assertIn("read -r -p", src)
+        self.assertIn('branches reset "$BRANCH" --parent', src)
+        self.assertNotIn("falling-snow", src)          # project id comes from the environment
+
+    def test_local_secrets_are_never_committed(self):
+        self.assertIn(".streamlit/secrets.toml", (ROOT / ".gitignore").read_text())
+
+
 class FailoverDocTests(unittest.TestCase):
     def test_covers_providers_and_safe_restore(self):
         doc = (ROOT / "docs" / "PROVIDER_FAILOVER_AND_RESTORE.md").read_text()

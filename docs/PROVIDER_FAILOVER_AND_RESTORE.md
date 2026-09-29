@@ -154,6 +154,13 @@ be undone.
    re-created. Check recent Stripe upgrades against user plans (Stripe dashboard →
    Events) and re-send any webhook for an upgrade made in the lost window.
 
+### Local development branch (P2-37)
+
+`dev-local` is a copy of `live` for local runs; the local `.streamlit/secrets.toml`
+points at it. Refresh it with `bash scripts/reset_dev_branch.sh` (only ever resets
+`dev-local`, from `live`). Never put its connection string in Streamlit Cloud,
+GitHub or Render. It holds a copy of customer data, so treat it like live.
+
 ### Recommended once (owner, Neon console)
 
 - Mark `live` as a **protected branch**, so it can't be deleted or reset by mistake.

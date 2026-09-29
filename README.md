@@ -17,7 +17,9 @@ bash scripts/setup_local_env.sh
 
 Add `--fresh` to delete and rebuild `.venv` (for example after a Homebrew Python
 upgrade). Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` and
-fill it in.
+fill it in. For a local database, point `[neon] database_url` at the Neon branch
+`dev-local` (a copy of live; refresh it with `bash scripts/reset_dev_branch.sh`),
+never at `live` itself.
 
 Outages and database restore: [docs/PROVIDER_FAILOVER_AND_RESTORE.md](docs/PROVIDER_FAILOVER_AND_RESTORE.md).
 
