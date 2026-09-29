@@ -24,6 +24,23 @@ except Exception:  # pragma: no cover - never print an address if the helper is 
         return "(details hidden)"
 
 
+def _sender(smtp_from: str) -> tuple[str, str]:
+    """(From header, envelope address). The inbox shows a display name —
+    "HSF Alerts" unless SMTP_FROM already carries one ("Name <addr>") or
+    SMTP_FROM_NAME overrides it. The envelope sender is always the bare address."""
+    from email.utils import formataddr, parseaddr
+
+    name, addr = parseaddr(str(smtp_from or ""))
+    addr = addr or str(smtp_from or "")
+    try:
+        import config as _config
+
+        default_name = getattr(_config, "SMTP_FROM_NAME", "") or "HSF Alerts"
+    except Exception:
+        default_name = "HSF Alerts"
+    return formataddr((name or default_name, addr)), addr
+
+
 def send_password_reset_email(to_address: str, reset_url: str) -> bool:
     """Send a password reset email. Returns True on success, False on any failure."""
     try:
@@ -49,7 +66,8 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
+    from_header, envelope_from = _sender(SMTP_FROM)
+    msg["From"] = from_header
     msg["To"] = to_address
     msg.attach(MIMEText(body_text, "plain"))
     msg.attach(MIMEText(body_html, "html"))
@@ -59,7 +77,7 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
             server.ehlo()
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_FROM, [to_address], msg.as_string())
+            server.sendmail(envelope_from, [to_address], msg.as_string())
         return True
     except Exception as e:
         # A silently-failing password reset locks the user out with no trace.
@@ -90,7 +108,8 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str,
         return False
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
+    from_header, envelope_from = _sender(SMTP_FROM)
+    msg["From"] = from_header
     msg["To"] = to_address
     for name, value in (headers or {}).items():
         msg[name] = value
@@ -101,7 +120,7 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str,
             server.ehlo()
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_FROM, [to_address], msg.as_string())
+            server.sendmail(envelope_from, [to_address], msg.as_string())
         print(f"[email] sent '{subject}' to {mask_email(to_address)} from {SMTP_FROM} via {SMTP_HOST}")
         return True
     except Exception as e:

@@ -30,16 +30,22 @@ _WRAP_KEY = "evening_wrap"
 
 
 def _todays_events(user_id: str) -> List[str]:
-    """Messages of alerts that fired for this user today (UTC)."""
+    """Messages of alerts that fired for this user today (New York date)."""
     try:
         from db.alerts import list_recent_events
+        from scheduler.morning_digest import et_now
 
-        today = datetime.now(timezone.utc).date()
+        now_et = et_now()
+        today = now_et.date()
         events = list_recent_events(user_id, limit=25) or []
         seen: List[str] = []
         for ev in events:
             fired = ev.get("fired_at")
-            if fired is None or not hasattr(fired, "date") or fired.date() != today:
+            if fired is None or not hasattr(fired, "date"):
+                continue
+            if getattr(fired, "tzinfo", None) is not None:
+                fired = fired.astimezone(now_et.tzinfo)
+            if fired.date() != today:
                 continue
             msg = str(ev.get("message") or "")
             if msg and msg not in seen:
@@ -52,8 +58,9 @@ def _todays_events(user_id: str) -> List[str]:
 def _tomorrows_earnings(tickers: List[str]) -> List[str]:
     try:
         from db.earnings import load_earnings_map
+        from scheduler.morning_digest import et_now
 
-        tomorrow = datetime.now(timezone.utc).date() + timedelta(days=1)
+        tomorrow = et_now().date() + timedelta(days=1)
         emap = load_earnings_map(tickers) or {}
         return sorted(
             {str(s).upper() for s, d in emap.items() if d == tomorrow and str(s).upper() in tickers}
@@ -163,9 +170,9 @@ def _compose_wrap(
     golden_crosses: List[str] | None = None,
     top_setups: List[tuple] | None = None,
 ) -> tuple:
-    from scheduler.morning_digest import _movers_table, _movers_text
+    from scheduler.morning_digest import _movers_table, _movers_text, et_now
 
-    date_s = datetime.now(timezone.utc).strftime("%A, %b %d")
+    date_s = et_now().strftime("%A, %b %d")
     html = [f"<p style='color:#666;margin:0 0 12px'>Evening wrap · {date_s}</p>"]
     text = [f"Evening wrap · {date_s}", ""]
 

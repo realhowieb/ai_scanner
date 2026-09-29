@@ -240,7 +240,7 @@ def _earnings_days_map(symbols: List[str], flag_days: int = 5) -> Dict[str, int]
         if not syms:
             return {}
         emap = load_earnings_map(syms)
-        today = datetime.now(timezone.utc).date()
+        today = et_now().date()
         out: Dict[str, int] = {}
         for sym, edate in emap.items():
             if edate is None:
@@ -266,7 +266,7 @@ def _earnings_today() -> set:
     try:
         from db.earnings import fetch_earnings_this_week
 
-        today = datetime.now(timezone.utc).date()
+        today = et_now().date()
         rows = fetch_earnings_this_week(days_ahead=1) or []
         return {
             str(r.get("symbol")).upper()
@@ -388,7 +388,7 @@ def _compose(
     top_setups: Optional[List[tuple]] = None,
 ) -> tuple[str, str]:
     """Return (html_inner, text_inner) for one user's digest."""
-    date_s = datetime.now(timezone.utc).strftime("%A, %b %d")
+    date_s = et_now().strftime("%A, %b %d")
     html = [f"<p style='color:#666;margin:0 0 12px'>Morning snapshot · {date_s}</p>"]
     text = [f"Morning snapshot · {date_s}", ""]
 

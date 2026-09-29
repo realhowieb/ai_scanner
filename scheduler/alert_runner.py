@@ -63,7 +63,9 @@ def _annotate_earnings(lines: List[str]) -> List[str]:
         if not tickers:
             return lines
         emap = load_earnings_map(tickers)
-        today = _dt.datetime.now(_dt.timezone.utc).date()
+        from scheduler.morning_digest import et_now
+
+        today = et_now().date()   # New York day, like the digest and wrap
         out: List[str] = []
         for ln in lines:
             sym = ln.split(":", 1)[0].strip().upper() if ":" in ln else None

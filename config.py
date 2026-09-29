@@ -148,6 +148,8 @@ SMTP_PORT: int = int(_get("SMTP_PORT", "587"))
 SMTP_USER: str | None = _get("SMTP_USER")
 SMTP_PASS: str | None = _get("SMTP_PASS")
 SMTP_FROM: str = _get("SMTP_FROM", "noreply@ai-scanner.app")
+# Inbox display name for HSF email (used unless SMTP_FROM already includes one).
+SMTP_FROM_NAME: str = _get("SMTP_FROM_NAME", "HSF Alerts")
 APP_BASE_URL: str = _get("APP_BASE_URL", "https://hsf-beta.streamlit.app")
 
 # ---------- Stripe Billing Configuration ----------
