@@ -238,7 +238,7 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             st.caption(f"⚠️ {err}")
 
     with col_pro:
-        st.markdown("### Pro · $19/mo · Most popular")
+        st.markdown("### Pro · $19/mo · Recommended")  # P2-21: no popularity claim yet
         st.caption(TAGLINES["pro"])
         st.caption("5 alerts, email delivery, interactive results, CSV export, advanced scans and history.")
         if current_tier_key in ("pro", "premium", "admin"):
