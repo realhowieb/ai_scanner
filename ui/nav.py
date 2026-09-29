@@ -43,6 +43,15 @@ _NAV_SECTIONS = [
 # Flat list kept for callers/tests that only need the set of nav pages.
 _NAV = [item for _section, items in _NAV_SECTIONS for item in items]
 
+# P2-25 (owner, 2026-09-29): Labs (Kalshi BTC) is admin-only. The page checks
+# the database itself; hiding the section here just keeps the menu clean.
+ADMIN_ONLY_SECTIONS = frozenset({"Labs"})
+
+
+def _visible_sections():
+    is_admin = bool(st is not None and st.session_state.get("is_admin"))
+    return [(s, items) for s, items in _NAV_SECTIONS if is_admin or s not in ADMIN_ONLY_SECTIONS]
+
 
 def _render_identity(*, key_suffix: str = "sidebar") -> None:
     """The shared account / plan card (ui.account_card) — the same component on
@@ -67,7 +76,7 @@ def render_top_menu() -> None:
         with st.container(key=TOP_MENU_KEY):
             with st.popover("☰ Menu"):
                 _render_identity(key_suffix="mobile")
-                for section, items in _NAV_SECTIONS:
+                for section, items in _visible_sections():
                     st.caption(section.upper())
                     for path, label, icon in items:
                         try:
@@ -103,7 +112,7 @@ def render_sidebar_nav(*, with_header: bool = True) -> None:
         with st.sidebar:
             if with_header:
                 _render_identity()
-            for section, items in _NAV_SECTIONS:
+            for section, items in _visible_sections():
                 st.caption(section.upper())
                 for path, label, icon in items:
                     try:
