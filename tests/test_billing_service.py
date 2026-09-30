@@ -289,6 +289,45 @@ class BillingServiceCheckoutTest(unittest.TestCase):
         self.assertEqual(response.json(), {"portal_url": "https://billing.test/portal", "mode": "portal"})
         self.bm.stripe.checkout.Session.create.assert_not_called()
 
+    def _existing(self, current_price):
+        self.bm._get_user_by_email.return_value = {
+            "username": "member@example.com", "tier": "pro", "stripe_customer_id": "cus_existing"
+        }
+        self.bm.stripe.Subscription.list.return_value = {"data": [{
+            "id": "sub_existing",
+            "items": {"data": [{"id": "si_1", "price": {"id": current_price}}]},
+        }]}
+        self.bm.stripe.billing_portal.Session.create.return_value = types.SimpleNamespace(
+            url="https://billing.test/portal"
+        )
+
+    def test_plan_change_opens_confirm_flow_that_returns_to_the_app(self):
+        # P2-48: Pro -> Premium lands on Stripe's confirm screen and redirects back.
+        self._existing("price_pro_fake")
+        self.assertEqual(self._checkout("premium").json()["portal_url"], "https://billing.test/portal")
+        kwargs = self.bm.stripe.billing_portal.Session.create.call_args.kwargs
+        flow = kwargs["flow_data"]
+        self.assertEqual(flow["type"], "subscription_update_confirm")
+        self.assertEqual(flow["subscription_update_confirm"], {
+            "subscription": "sub_existing",
+            "items": [{"id": "si_1", "price": "price_premium_fake", "quantity": 1}],
+        })
+        self.assertEqual(flow["after_completion"]["type"], "redirect")
+        self.assertEqual(flow["after_completion"]["redirect"]["return_url"], kwargs["return_url"])
+
+    def test_plan_change_flow_failure_falls_back_to_the_plain_portal(self):
+        self._existing("price_pro_fake")
+        plain = types.SimpleNamespace(url="https://billing.test/plain")
+        self.bm.stripe.billing_portal.Session.create.side_effect = [RuntimeError("flow rejected"), plain]
+        self.assertEqual(self._checkout("premium").json(), {"portal_url": "https://billing.test/plain", "mode": "portal"})
+        last = self.bm.stripe.billing_portal.Session.create.call_args.kwargs
+        self.assertNotIn("flow_data", last)
+
+    def test_same_plan_opens_the_plain_portal(self):
+        self._existing("price_premium_fake")
+        self._checkout("premium")
+        self.assertNotIn("flow_data", self.bm.stripe.billing_portal.Session.create.call_args.kwargs)
+
 
 @unittest.skipUnless(_FASTAPI_AVAILABLE, "fastapi not installed in this environment")
 class BillingServiceWebhookLifecycleTest(unittest.TestCase):
