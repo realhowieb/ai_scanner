@@ -515,7 +515,7 @@ def run_alerts() -> None:
     try:
         alerts = list_all_enabled_alerts() or []
     except Exception as e:
-        print(f"[alert_runner] could not load alerts: {e}")
+        print(f"[alert_runner] could not load alerts: {redact(e)}")
         _capture(e)
         return
 
