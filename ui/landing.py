@@ -80,6 +80,7 @@ _CSS = """
 .hsf-note{font-size:.8rem;opacity:.7;margin:6px 0 0}
 .hsf-score{font-size:.95rem;margin:10px 0 0;max-width:62ch}
 .hsf-disc{font-size:.85rem;opacity:.8;margin:18px 0 4px}
+@media (max-width:640px){.hsf-hero{margin-top:4px}}  /* phones: the page padding already clears the header */
 @media (max-width:520px){
   .hsf-hero{gap:12px;align-items:flex-start}
   .hsf-hero img{width:64px;margin-top:4px}

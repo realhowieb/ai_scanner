@@ -352,8 +352,10 @@ class ChromeTests(unittest.TestCase):
         desktop_css = chrome.CHROME_CSS.split("@media (max-width:640px)", 1)[0]
         for keep in ("stSidebar", "stHeader", "stToolbar\"]", "stMainMenu", "stExpandSidebarButton"):
             self.assertNotIn(keep, desktop_css)
-        for keep in ("stHeader", "stToolbar\"]", "stMainMenu", "stExpandSidebarButton"):
+        for keep in ("stHeader", "stToolbar\"]", "stMainMenu"):
             self.assertNotIn(keep, chrome.CHROME_CSS)
+        # Phones use the ☰ Menu only (Run 80), so the "»" expand button is hidden
+        # there — and only there (checked against desktop_css above).
 
     def test_applied_before_sign_in_and_on_sub_pages(self):
         self.assertIn("hide_developer_chrome()", (ROOT / "ui" / "app_boot.py").read_text())
