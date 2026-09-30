@@ -163,6 +163,6 @@ def unsubscribe_url(user: Any, kind: str) -> Optional[str]:
     try:
         from config import APP_BASE_URL
     except Exception:
-        APP_BASE_URL = "https://hsf-beta.streamlit.app"
+        APP_BASE_URL = "https://hsfinestai.streamlit.app"
     k = kind if kind in KINDS else "all"
     return f"{APP_BASE_URL.rstrip('/')}/unsubscribe?t={token}&k={k}"

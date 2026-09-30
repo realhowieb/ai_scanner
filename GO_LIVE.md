@@ -14,7 +14,7 @@ AI_SCANNER_SQLITE_FALLBACK = "false"        # never silently fall back to sqlite
 
 # --- Sessions / auth ---
 COOKIE_PASSWORD = "..."                      # required for session restore after Stripe redirect
-APP_BASE_URL = "https://hsf-beta.streamlit.app"
+APP_BASE_URL = "https://hsfinestai.streamlit.app"   # production app; the BETA app (hsf-beta) sets "https://hsf-beta.streamlit.app"
 
 # --- Email (password reset, verification, digests) ---
 SMTP_HOST = "smtp.gmail.com"
@@ -48,9 +48,9 @@ STRIPE_WEBHOOK_SECRET        # LIVE webhook signing secret
 STRIPE_PRICE_PRO            # LIVE price id
 STRIPE_PRICE_PREMIUM        # LIVE price id
 DATABASE_URL                # same Neon DB
-APP_SUCCESS_URL  = https://hsf-beta.streamlit.app
-APP_CANCEL_URL   = https://hsf-beta.streamlit.app
-APP_PORTAL_RETURN_URL = https://hsf-beta.streamlit.app
+APP_SUCCESS_URL  = https://hsfinestai.streamlit.app
+APP_CANCEL_URL   = https://hsfinestai.streamlit.app
+APP_PORTAL_RETURN_URL = https://hsfinestai.streamlit.app/billing
 ```
 
 ## 3. Stripe dashboard

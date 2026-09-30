@@ -57,7 +57,7 @@ STRIPE_PRICE_PREMIUM = os.getenv("STRIPE_PRICE_PREMIUM", "").strip()
 APP_SUCCESS_URL = os.getenv("APP_SUCCESS_URL", "").strip()  # e.g. https://yourapp.com
 APP_CANCEL_URL = os.getenv("APP_CANCEL_URL", "").strip()    # e.g. https://yourapp.com
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()        # Neon Postgres URL
-APP_PORTAL_RETURN_URL = os.getenv("APP_PORTAL_RETURN_URL", "").strip()  # e.g. https://hsf-beta.streamlit.app/billing
+APP_PORTAL_RETURN_URL = os.getenv("APP_PORTAL_RETURN_URL", "").strip()  # e.g. https://hsfinestai.streamlit.app/billing
 
 if not STRIPE_SECRET_KEY:
     raise RuntimeError("Missing STRIPE_SECRET_KEY env var")

@@ -430,7 +430,7 @@ def share_url(ticker: str) -> str:
     try:
         from config import APP_BASE_URL
     except Exception:
-        APP_BASE_URL = "https://hsf-beta.streamlit.app"
+        APP_BASE_URL = "https://hsfinestai.streamlit.app"
     return f"{str(APP_BASE_URL).rstrip('/')}/stock?ticker={str(ticker).strip().upper()}"
 
 
