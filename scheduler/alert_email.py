@@ -148,3 +148,80 @@ def compose(sections: List[Dict[str, Any]]) -> Optional[tuple]:
     if not sections:
         return None
     return subject_for(sections), text_body(sections), html_body(sections)
+
+
+# ---- "Alerts that fired today" (evening wrap + Market Brief) ----------------
+_RULE = re.compile(r"\(≥ ([0-9.]+)\)")
+_MORE = re.compile(r"^…and (\d+) more\.?$")
+SUMMARY_NAMES = 5
+
+
+def _parse_event(message: str) -> Optional[Dict[str, Any]]:
+    """A stored alert_events message ('Breakout alert: IOVA: BreakoutScore 118.9
+    (≥ 30)\\nKOD: …\\n…and 7 more.') -> {label, rule, tickers, extra}; None if it
+    isn't in that shape."""
+    label, sep, rest = str(message or "").partition(": ")
+    if not sep or not label.endswith("alert"):
+        return None
+    tickers, extra, rule = [], 0, None
+    for ln in rest.split("\n"):
+        ln = ln.strip()
+        more = _MORE.match(ln)
+        if more:
+            extra += int(more.group(1))
+            continue
+        tk, _detail = split_line(ln)
+        if not tk:
+            continue
+        m = _RULE.search(ln)
+        if m and rule is None:
+            rule = m.group(1)
+        if tk not in tickers:
+            tickers.append(tk)
+    if not tickers:
+        return None
+    return {"label": label, "rule": rule, "tickers": tickers, "extra": extra}
+
+
+def summarize_fired(messages: List[str], *, max_items: int = 8) -> List[str]:
+    """One short line per alert that fired: 'Breakout alert (≥ 30) · 32 names:
+    IOVA, KOD, VICR, GRAL, MXL…'. The same alert firing twice keeps the first
+    (newest); a breakout alert whose names all appear in another breakout alert
+    is dropped (as in the alert email). Unrecognised messages pass through."""
+    parsed: List[Dict[str, Any]] = []
+    passthrough: List[str] = []
+    for msg in messages or []:
+        ev = _parse_event(msg)
+        if ev is None:
+            if msg and msg not in passthrough:
+                passthrough.append(str(msg))
+            continue
+        if any(p["label"] == ev["label"] and p["rule"] == ev["rule"] for p in parsed):
+            continue
+        parsed.append(ev)
+
+    def covered(i: int) -> bool:
+        ev = parsed[i]
+        if not ev["label"].startswith("Breakout") or ev["extra"]:
+            return False
+        mine = set(ev["tickers"])
+        for j, other in enumerate(parsed):
+            if j == i or not other["label"].startswith("Breakout"):
+                continue
+            theirs = set(other["tickers"])
+            if mine <= theirs and (mine != theirs or j < i or other["extra"]):
+                return True
+        return False
+
+    out: List[str] = []
+    for i, ev in enumerate(parsed):
+        if covered(i):
+            continue
+        head = ev["label"] + (f" (≥ {ev['rule']})" if ev["rule"] else "")
+        total = len(ev["tickers"]) + ev["extra"]
+        names = ", ".join(ev["tickers"][:SUMMARY_NAMES])
+        if total > SUMMARY_NAMES:
+            out.append(f"{head} · {total} names: {names}…")
+        else:
+            out.append(f"{head} · {names}")
+    return (out + passthrough)[:max_items]

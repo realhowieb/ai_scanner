@@ -50,7 +50,10 @@ def _todays_events(user_id: str) -> List[str]:
             msg = str(ev.get("message") or "")
             if msg and msg not in seen:
                 seen.append(msg)
-        return seen[:8]
+        # One short line per alert, overlaps removed (same rules as the alert email).
+        from scheduler.alert_email import summarize_fired
+
+        return summarize_fired(seen, max_items=8)
     except Exception:
         return []
 
@@ -228,7 +231,9 @@ def _compose_wrap(
         text += [""]
 
     if fired_today:
-        items = "".join(f"<li>{m}</li>" for m in fired_today)
+        import html as _html
+
+        items = "".join(f"<li>{_html.escape(m)}</li>" for m in fired_today)
         html.append(
             f"<h3 style='margin:16px 0 6px'>🔔 Alerts that fired today</h3><ul>{items}</ul>"
         )
