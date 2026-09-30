@@ -69,9 +69,11 @@ def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_
     Best-effort, non-fatal; side-effect only — never touches results/snapshots."""
     try:
         from analytics.research_cohorts import (
+            CONTROL_DESIGN,
             build_control_observations,
             build_near_miss_observations,
             cohort_balance,
+            liquidity_eligible,
             select_control_symbols,
         )
         from db.hsf_observations import save_observations_batch
@@ -83,13 +85,19 @@ def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_
             scan_timestamp=scan_started_at, session=session, scan_id=scan_id,
             coverage_health=health, research_run_context=research_ctx, top_n=top_n,
             price_meta=research_sink.get("price_snapshot"))
-        controls = select_control_symbols(
-            research_sink.get("evaluated_symbols") or [], scan_run_id=scan_id,
-            exclude=candidate_symbols)
+        # Run 59: controls come only from evaluated names that pass the same
+        # point-in-time liquidity floor and price range as candidates.
+        floor = research_sink.get("control_floor") or {}
+        pool = liquidity_eligible(
+            research_sink.get("evaluated_symbols") or [], research_sink.get("price_snapshot") or {},
+            min_dollar_vol=floor.get("min_dollar_vol") or 0.0,
+            min_price=floor.get("min_price"), max_price=floor.get("max_price"))
+        controls = select_control_symbols(pool, scan_run_id=scan_id, exclude=candidate_symbols)
         control_obs = build_control_observations(
             controls, research_sink.get("price_snapshot") or {}, universe=universe,
             scan_timestamp=scan_started_at, session=session, scan_id=scan_id,
-            coverage_health=health, research_run_context=research_ctx)
+            coverage_health=health, research_run_context=research_ctx,
+            control_design=CONTROL_DESIGN)
         res = save_observations_batch(near_miss + control_obs)
         bal = cohort_balance(
             [{"research_cohort": "CANDIDATE"}] * len(candidate_symbols)
@@ -97,7 +105,8 @@ def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_
             evaluated=len((research_sink.get("evaluated_symbols") or [])))
         print(f"[research_cohorts] {universe}: candidates={bal['candidate']} "
               f"near_miss={bal['near_miss']} control={bal['control']} "
-              f"written={res.get('written')} (evaluated={bal['evaluated']})")
+              f"written={res.get('written')} (evaluated={bal['evaluated']}, "
+              f"control_pool={len(pool)} liquidity-matched)")
     except Exception as e:
         print(f"[research_cohorts] failed for {universe}: {e}")
         _capture(e)

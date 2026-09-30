@@ -85,7 +85,7 @@ class FrozenScannerTests(unittest.TestCase):
         snap = self.sink["price_snapshot"]
         self.assertEqual(snap["T01"]["source"], "alpaca_multi")
         self.assertEqual((snap["T00"]["source"], snap["T00"]["feed"]), ("rescue_single", None))
-        self.assertEqual(set(snap["T01"]), {"price", "volume", "source", "feed"})
+        self.assertEqual(set(snap["T01"]), {"price", "volume", "source", "feed", "dollar_vol20"})  # Run 59
 
     def test_cohort_membership_unchanged_by_metadata(self):
         rows = self.with_sink.to_dict("records")
@@ -250,7 +250,7 @@ class Run56CompatibilityTests(unittest.TestCase):
         self.assertEqual(mc["CONTROL"]["tier_metadata_coverage_pct"], 0.0)
         self.assertEqual(mc["CONTROL"]["scoring_version_coverage_pct"], 100.0)
         self.assertEqual(fr.forbidden_keys(r), [])
-        self.assertEqual(r["epoch"]["forward_epoch_start_timestamp"], "2026-09-26T07:23:11+00:00")
+        self.assertEqual(r["epoch"]["forward_epoch_start_timestamp"], "2026-10-01T12:00:00+00:00")
 
     def test_metadata_audit_is_observation_only(self):
         from scripts import audit_research_metadata as audit
@@ -266,7 +266,7 @@ class Run56CompatibilityTests(unittest.TestCase):
         self.assertIn("## Coverage by cohort", audit.render_markdown(r))
 
     def test_epoch_not_reset(self):
-        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-09-26T07:23:11+00:00")
+        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-10-01T12:00:00+00:00")
 
 
 class CronWiringTests(unittest.TestCase):

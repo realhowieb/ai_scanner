@@ -77,7 +77,7 @@ class VerdictTests(unittest.TestCase):
 
     def test_epoch_untouched_by_certification(self):
         gates()
-        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-09-26T07:23:11+00:00")
+        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-10-01T12:00:00+00:00")
 
     def test_certification_never_enables_recovery(self):
         wf = (ROOT / ".github" / "workflows" / "autonomy-certification.yml").read_text()

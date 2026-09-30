@@ -66,6 +66,61 @@ def select_control_symbols(
     return sorted(pool[:n])
 
 
+# ---- Run 59 (owner decision 2026-09-30, Option A): liquidity-comparable controls.
+# Run 58 found controls under-mature because they were drawn from the WHOLE
+# evaluated universe (median capture dollar volume 0.11% of candidates'), so many
+# have no IEX minute bars. From the Run 59 epoch on, controls are drawn only from
+# evaluated non-candidates that pass the SAME point-in-time liquidity and price
+# rules candidates must pass. Same seeded hash; same sample size.
+CONTROL_DESIGN = "run59_liquidity_matched_v1"
+LEGACY_CONTROL_DESIGN = "run47_universe_sample_v1"
+
+
+def dollar_vol20(frame: Any) -> Optional[float]:
+    """20-day dollar volume exactly as scan.breakout computes it for candidates:
+    last close x mean volume of the 20 PRIOR days (needs >= 21 bars), falling
+    back to last close x today's volume. None when it can't be computed."""
+    try:
+        close = float(frame["Close"].iloc[-1])
+        vols = frame["Volume"]
+        vol_today = float(vols.iloc[-1])
+        avg = float(vols.iloc[-21:-1].mean()) if len(frame) >= 21 else float("nan")
+    except (KeyError, IndexError, ValueError, TypeError, AttributeError):
+        return None
+    if avg == avg and avg > 0:
+        return close * avg
+    if vol_today == vol_today and vol_today > 0:
+        return close * vol_today
+    return None
+
+
+def liquidity_eligible(
+    evaluated_symbols: Sequence[str], price_snapshot: Dict[str, Dict[str, Any]], *,
+    min_dollar_vol: float, min_price: Optional[float] = None, max_price: Optional[float] = None,
+) -> List[str]:
+    """Evaluated symbols that pass the candidates' point-in-time liquidity floor
+    and price range (Run 59). Uses only values known at scan time; a symbol
+    without a computable dollar volume or price is not eligible."""
+    out: List[str] = []
+    for sym in evaluated_symbols or []:
+        snap = (price_snapshot or {}).get(str(sym).upper()) or (price_snapshot or {}).get(sym) or {}
+        dv, price = snap.get("dollar_vol20"), snap.get("price")
+        if dv is None or price is None:
+            continue
+        try:
+            dv, price = float(dv), float(price)
+        except (TypeError, ValueError):
+            continue
+        if min_dollar_vol and dv < float(min_dollar_vol):
+            continue
+        if min_price is not None and price < float(min_price):
+            continue
+        if max_price is not None and price > float(max_price):
+            continue
+        out.append(str(sym).upper())
+    return out
+
+
 def _tag(obs: Dict[str, Any], cohort: str, reason: str) -> Dict[str, Any]:
     obs["research_cohort"] = cohort
     obs["selection_reason"] = reason
@@ -108,6 +163,7 @@ def build_control_observations(
     universe: str, scan_timestamp: Any, session: Optional[str] = None,
     scan_id: Optional[str] = None, coverage_health: Optional[str] = None,
     research_run_context: Optional[Dict[str, Any]] = None,
+    control_design: str = LEGACY_CONTROL_DESIGN,
 ) -> List[Dict[str, Any]]:
     """Compact CONTROL observations (identity + price/volume) for a deterministic
     sample of the broad evaluated universe (Task 4). These securities were
@@ -127,9 +183,15 @@ def build_control_observations(
             market={k: snap.get(k) for k in ("price", "volume") if snap.get(k) is not None},
             indicators={}, scanners=[],
             market_context={"source": "scheduled", "scan_id": scan_id,
-                            "coverage_health": coverage_health},
+                            "coverage_health": coverage_health,
+                            # Only the Run 59 design is tagged, so legacy-design
+                            # controls stay byte-identical (Gate U golden).
+                            **({"control_design": control_design}
+                               if control_design == CONTROL_DESIGN else {})},
             scan_timestamp=scan_timestamp, data_source="scheduled_control_sample")
-        out.append(_tag(o, CONTROL, "deterministic_sample"))
+        reason = ("liquidity_matched_sample" if control_design == CONTROL_DESIGN
+                  else "deterministic_sample")
+        out.append(_tag(o, CONTROL, reason))
     if research_run_context:
         from analytics.research_metadata import attach
         attach(out, research_run_context, rows=None, rank_offset=None, price_meta=price_snapshot)

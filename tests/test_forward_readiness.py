@@ -15,7 +15,8 @@ EPOCH = fr.epoch_start()
 SLOTS = ((13, 35), (16, 35), (19, 35))  # 09:35 / 12:35 / 15:35 EDT
 
 
-def trading_days(n, start=dt.date(2026, 9, 28)):
+def trading_days(n, start=None):
+    start = start or EPOCH.date()  # Run 59 epoch (first scan slot is after 12:00 UTC)
     out, d = [], start
     while len(out) < n:
         if d.weekday() < 5:
@@ -30,6 +31,8 @@ def _obs(oid, sym, cohort, run, ts, direction="long", versions=True):
     rec = {"observation_id": oid, "symbol": sym, "timestamp": ts, "scan_timestamp": ts,
            "research_cohort": cohort, "market": {"price": 10.0, "volume": 1000},
            "scanners": scanners, "market_context": {"scan_id": run, "research_cohort": cohort}}
+    if cohort == CONTROL:  # Run 59: forward controls are liquidity-matched
+        rec["market_context"]["control_design"] = fr.FORWARD_EPOCH["control_design"]
     if versions:
         rec["versions"] = {"hsf_score": "1.0", "prebreakout_model": "prebreakout-xgb-v16"}
     return rec
@@ -83,7 +86,7 @@ class EpochTests(unittest.TestCase):
     def test_epoch_metadata(self):
         r = fr.monitor([], {}, now=now_after(1))
         e = r["epoch"]
-        self.assertEqual(e["forward_epoch_start_timestamp"], "2026-09-26T07:23:11+00:00")
+        self.assertEqual(e["forward_epoch_start_timestamp"], "2026-10-01T12:00:00+00:00")
         self.assertEqual(e["run55_evaluation_commit"], "284e2ac8ec8640d73679c55555772eeda2505485")
         self.assertEqual((e["research_schema_version"], e["outcome_schema_version"]),
                          ("hsf-obs-1.0", "hsf-outcome-1.0"))
@@ -92,12 +95,12 @@ class EpochTests(unittest.TestCase):
 
 class CountingTests(unittest.TestCase):
     def test_trading_day_counting(self):
-        obs, outs = dataset(6)  # Mon 9/28 .. Mon 10/5, weekend skipped
+        obs, outs = dataset(6)  # Thu 10/1 .. Thu 10/8, weekend skipped
         r = fr.monitor(obs, outs, now=now_after(6))
         t = r["time_coverage"]
         self.assertEqual((t["forward_trading_days"], t["completed_forward_trading_days"]), (6, 6))
         self.assertEqual(t["calendar_days"], 8)
-        mid = dt.datetime(2026, 10, 5, 18, 0, tzinfo=UTC)  # 14:00 ET on the last day
+        mid = dt.datetime(2026, 10, 8, 18, 0, tzinfo=UTC)  # 14:00 ET on the last day
         self.assertEqual(fr.monitor(obs, outs, now=mid)["time_coverage"]["completed_forward_trading_days"], 5)
 
     def test_cohort_and_run_counting(self):
@@ -111,11 +114,11 @@ class CountingTests(unittest.TestCase):
         self.assertEqual(c[CONTROL]["matured_observations"], 0)
 
     def test_horizon_coverage_respects_eligibility(self):
-        ts = "2026-09-28T13:35:00+00:00"
+        ts = "2026-10-01T13:35:00+00:00"
         obs = [_obs("a", "AAA", CANDIDATE, "r1", ts)]
         outs = {"a": [_oc("a", "+5m", ts, 0.01)]}
         # settled = anchor + h + 15m slack + 45m grace: +5m 14:40, +15m 14:50, +30m 15:05
-        now = dt.datetime(2026, 9, 28, 14, 55, tzinfo=UTC)
+        now = dt.datetime(2026, 10, 1, 14, 55, tzinfo=UTC)
         r = fr.monitor(obs, outs, now=now)
         h = r["horizons"]
         self.assertEqual((h["+5m"][CANDIDATE]["eligible_observations"], h["+5m"][CANDIDATE]["maturation_pct"]), (1, 100.0))
@@ -133,9 +136,9 @@ class CountingTests(unittest.TestCase):
         self.assertTrue(p["measurable"])
 
     def test_retired_and_policy_reasons(self):
-        ts = "2026-09-28T13:35:00+00:00"
+        ts = "2026-10-01T13:35:00+00:00"
         obs = [_obs("a", "AAA", CONTROL, "r1", ts), _obs("p", "PSA.PRF", CONTROL, "r1", ts)]
-        r = fr.monitor(obs, {}, now=dt.datetime(2026, 10, 6, 12, 0, tzinfo=UTC))
+        r = fr.monitor(obs, {}, now=dt.datetime(2026, 10, 9, 12, 0, tzinfo=UTC))
         reasons = r["horizons"]["+60m"][CONTROL]["unmatured_reasons"]
         self.assertEqual((reasons["RETIRED"], reasons["FILTERED_BY_POLICY"]), (1, 1))
         self.assertEqual(r["horizons"]["+60m"][CONTROL]["eligible_observations"], 2)

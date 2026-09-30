@@ -33,8 +33,11 @@ NOT_CERTIFIED = "NOT_CERTIFIED"
 ROOT = Path(__file__).resolve().parents[1]
 UTC = _dt.timezone.utc
 RECOVER = {"HSF_AUTONOMY_ENABLED": "true", "HSF_AUTONOMY_MODE": "recover"}
+# Run 59 (owner-approved 2026-09-30) restarted the forward epoch; certification
+# still proves automation never moves it.
 EXPECTED_EPOCH = {
-    "forward_epoch_start_timestamp": "2026-09-26T07:23:11+00:00",
+    "forward_epoch_start_timestamp": "2026-10-01T12:00:00+00:00",
+    "control_design": "run59_liquidity_matched_v1",
     "run55_evaluation_commit": "284e2ac8ec8640d73679c55555772eeda2505485",
     "run55_criteria_commit": "c5d34a751d00b9245a43d34e98694ce1e94de1dc",
 }
@@ -855,7 +858,7 @@ def gate_s_anti_peeking(extra_artifacts: Optional[List[Path]] = None) -> Dict[st
 
 def gate_t_epoch(before: Mapping[str, Any]) -> Dict[str, Any]:
     after = {k: fr.FORWARD_EPOCH[k] for k in EXPECTED_EPOCH}
-    conds = {"unchanged during certification": dict(before) == after, "equals Run 56 epoch": after == EXPECTED_EPOCH,
+    conds = {"unchanged during certification": dict(before) == after, "equals Run 59 epoch": after == EXPECTED_EPOCH,
              "gates unchanged": fr.GATES["A_trading_days"] == {"min": 10, "preferred": 20}
              and fr.GATES["E_maturation_parity"] == {"max_gap_pp": 10.0, "preferred_gap_pp": 5.0}}
     return _gate(_check(conds), {"checks": conds, "epoch": after}, "analytics/forward_readiness.FORWARD_EPOCH")
