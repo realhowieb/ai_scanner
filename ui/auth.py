@@ -349,7 +349,7 @@ def auth_ui():
                     )
 
                     su_email = st.text_input("✉️ Email", key="signup_email", placeholder="you@example.com")
-                    su_pw1 = st.text_input("🔒 Password", type="password", key="signup_password_1", placeholder="At least 8 characters")
+                    su_pw1 = st.text_input("🔒 Password", type="password", key="signup_password_1", placeholder="At least 10 characters")
                     su_pw2 = st.text_input("🔒 Confirm Password", type="password", key="signup_password_2", placeholder="Re-enter password")
                     su_agree = st.checkbox("I agree to use this tool for educational/informational purposes only.", key="signup_agree")
                     signup_clicked = st.form_submit_button("🟢 Create Free Account")
@@ -386,8 +386,9 @@ def auth_ui():
         p1 = (su_pw1 or "").strip()
         p2 = (su_pw2 or "").strip()
 
-        if not p1 or len(p1) < 8:
-            st.error("Password must be at least 8 characters.")
+        from ui.password_policy import password_problem  # P1-52: shared password rule
+        if problem := password_problem(p1, email=email_raw, username=username_raw):
+            st.error(problem)
             return False, None, None
 
         if p1 != p2:

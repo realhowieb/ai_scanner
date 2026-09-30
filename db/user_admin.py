@@ -71,6 +71,14 @@ def create_user(email: Any, full_name: Any, password: str, tier: str = "basic",
         return False, "The username must be a valid email address (it's where the account's emails go)."
     if tier not in PLAN_TIERS:
         return False, "Choose a plan: basic, pro or premium."
+    try:  # P1-52: same password rule as sign-up and reset
+        from ui.password_policy import password_problem
+
+        problem = password_problem(password, email=username)
+    except ImportError:
+        problem = None if len(password) >= 8 else "Password must be at least 8 characters."
+    if problem:
+        return False, problem
     try:
         conn = _conn()
         if conn is None:

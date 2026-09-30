@@ -71,12 +71,12 @@ class CreateUserTests(unittest.TestCase):
 
         db = FakeDB()
         with patched(db):
-            ok, msg = create_user("  Jane.Doe@Example.COM ", "Jane", "s3cret!", tier="pro")
+            ok, msg = create_user("  Jane.Doe@Example.COM ", "Jane", "Maple-river-42!", tier="pro")
         self.assertTrue(ok, msg)
         self.assertIn("jane.doe@example.com", db.users)
         stored = db.users["jane.doe@example.com"]["password"]
-        self.assertNotEqual(stored, "s3cret!")             # never plain text
-        self.assertTrue(bcrypt.checkpw(b"s3cret!", stored.encode()))
+        self.assertNotEqual(stored, "Maple-river-42!")             # never plain text
+        self.assertTrue(bcrypt.checkpw(b"Maple-river-42!", stored.encode()))
         self.assertIn("isn't verified yet", msg)
 
     def test_existing_account_is_reported_not_overwritten(self):
@@ -84,7 +84,7 @@ class CreateUserTests(unittest.TestCase):
 
         db = FakeDB({"jane@example.com": {"password": "old", "tier": "premium"}})
         with patched(db):
-            ok, msg = create_user("JANE@example.com", "Jane", "new")
+            ok, msg = create_user("JANE@example.com", "Jane", "Maple-river-42!")
         self.assertFalse(ok)
         self.assertIn("already exists", msg)
         self.assertEqual(db.users["jane@example.com"]["password"], "old")

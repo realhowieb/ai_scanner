@@ -8,7 +8,6 @@ import streamlit as st
 from ui.safe_errors import show_error as _show_error
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_PW_MIN_LEN = 8
 
 
 def _request_reset_form() -> None:
@@ -66,15 +65,25 @@ def _set_new_password_form(token: str) -> None:
     st.markdown("### Set a new password")
 
     with st.form("pw_reset_set"):
-        new_pw = st.text_input("New password", type="password")
+        from ui.password_policy import RULES_HINT
+
+        new_pw = st.text_input("New password", type="password", help=RULES_HINT)
         confirm = st.text_input("Confirm password", type="password")
         submitted = st.form_submit_button("Update password")
 
     if not submitted:
         return
 
-    if len(new_pw) < _PW_MIN_LEN:
-        st.error(f"Password must be at least {_PW_MIN_LEN} characters.")
+    from ui.password_policy import password_problem  # P1-52: shared password rule
+
+    try:  # who the link is for, without using it up, so the rule can check the email too
+        from db.password_reset import peek_reset_token
+        account = peek_reset_token(token)
+    except Exception:
+        account = None
+    problem = password_problem(new_pw, email=account)
+    if problem:
+        st.error(problem)
         return
 
     if new_pw != confirm:

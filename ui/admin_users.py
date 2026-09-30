@@ -131,7 +131,8 @@ def _render_create_user(*, actor=None) -> None:
     new_username = st.text_input("Email address (username)", key="create_user_email",
                                  help="Every HSF email (verification, reset, digest, alerts) goes here.")
     new_full_name = st.text_input("Full Name", key="create_user_name")
-    new_password = st.text_input("Password", type="password", key="create_user_password")
+    new_password = st.text_input("Password", type="password", key="create_user_password",
+                                 help="At least 10 characters; no common passwords, keyboard patterns or the email.")
     new_tier_create = st.selectbox("Tier", ["basic", "pro", "premium"], key="create_user_tier")
     new_active_create = st.checkbox("Active", value=True, key="create_user_active")
     if st.button("Create User"):

@@ -57,8 +57,9 @@ EXAMPLE_NOTE = "Example of how results look. Illustrative names and values, not 
 
 _CSS = """
 <style>
+/* .hsf-hero top margin clears Streamlit's 60px header bar, which clipped the title. */
 .hsf-land{--hsf-gold:#b8892b;--hsf-line:rgba(128,128,128,.25);--hsf-soft:rgba(128,128,128,.08)}
-.hsf-hero{display:flex;align-items:center;gap:18px;margin:4px 0 6px}
+.hsf-hero{display:flex;align-items:center;gap:18px;margin:2.75rem 0 6px}
 .hsf-hero img{width:104px;height:auto;flex:0 0 auto}
 .hsf-hero h1{font-size:clamp(1.55rem,4.2vw,2.3rem);line-height:1.1;margin:0 0 4px;padding:0}
 .hsf-hero .hsf-tag{font-size:clamp(1.02rem,2.6vw,1.25rem);font-weight:600;margin:0 0 6px;color:var(--hsf-gold)}

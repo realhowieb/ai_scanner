@@ -136,3 +136,29 @@ def consume_reset_token(token: str) -> Optional[str]:
     cur.close()
     conn.close()
     return username
+
+
+def peek_reset_token(token: str) -> Optional[str]:
+    """Username for a valid, unused, unexpired token WITHOUT using it up (P1-52:
+    lets the reset page check the password against the account first)."""
+    if get_neon_conn is None:
+        return None
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return None
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT username FROM password_reset_tokens "
+            "WHERE token_hash = %s AND used = FALSE AND expires_at > NOW() LIMIT 1",
+            (_hash(token),),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+    except Exception:
+        return None
+    if not row:
+        return None
+    return row[0] if isinstance(row, (tuple, list)) else row.get("username")
