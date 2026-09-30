@@ -97,8 +97,8 @@ def _set_new_password_form(token: str) -> None:
         from db.users import update_neon_user_password
         hashed = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
         update_neon_user_password(username, hashed)
+        # The page's own "← Back to login" link (below) covers this; no second link.
         st.success("Password updated! You can now log in with your new password.")
-        st.page_link("app.py", label="Go to login →")
     except Exception as exc:
         _show_error("your password update", exc, level="error", message="HSF couldn't update your password right now. Try again shortly.")
 
