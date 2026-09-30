@@ -35,14 +35,30 @@ COHORTS = (CANDIDATE, NEAR_MISS, CONTROL)
 
 # ---- Forward epoch (Part 1): everything anchored at/after this instant is new
 # evidence; everything before it was inspected by Run 55 and is excluded. ------
+# Run 59 (owner decision 2026-09-30, Option A: liquidity-comparable controls)
+# restarts the forward epoch: controls captured before this instant were drawn
+# from the whole universe (Run 58: CRITICAL parity gap), so they can't be pooled
+# with the new liquidity-matched controls. Gates below are unchanged.
+# See docs/RUN59_LIQUIDITY_CONTROLS.md.
 FORWARD_EPOCH = {
-    "forward_epoch_start_timestamp": "2026-09-26T07:23:11+00:00",  # Run 55 production analysis time
+    "forward_epoch_start_timestamp": "2026-10-01T12:00:00+00:00",  # Run 59: before Thu 8:35 AM ET scan
+    "run59_decision": "liquidity_comparable_controls",
+    "control_design": "run59_liquidity_matched_v1",
     "run55_evaluation_commit": "284e2ac8ec8640d73679c55555772eeda2505485",
     "run55_criteria_commit": "c5d34a751d00b9245a43d34e98694ce1e94de1dc",
     "run55_workflow_run": 36226568240,
     "research_schema_version": OBSERVATION_SCHEMA_VERSION,
     "outcome_schema_version": OUTCOME_SCHEMA_VERSION,
 }
+# Superseded epochs, kept for the record (never used for evidence again).
+PREVIOUS_EPOCHS = (
+    {"forward_epoch_start_timestamp": "2026-09-26T07:23:11+00:00", "run": "Run 56",
+     "ended_by": "Run 59 (control design changed)"},
+)
+
+
+def control_design(rec: Dict[str, Any]) -> Optional[str]:
+    return (rec.get("market_context") or {}).get("control_design")
 
 # ---- Pre-registered gates (Part 4) ------------------------------------------
 GATES = {
@@ -200,7 +216,7 @@ def select_forward(observations: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     start = epoch_start()
     seen: Dict[str, str] = {}
     fwd: List[Dict[str, Any]] = []
-    pre_epoch = legacy = dup_ids = conflicting_ids = missing_anchor = 0
+    pre_epoch = legacy = dup_ids = conflicting_ids = missing_anchor = old_controls = 0
     for rec in observations or []:
         if not rec:
             continue
@@ -215,6 +231,11 @@ def select_forward(observations: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         if a < start:
             pre_epoch += 1
             continue
+        # Run 59: a control from the old whole-universe design (e.g. captured in
+        # the epoch before the change was deployed) is never pooled.
+        if c == CONTROL and control_design(rec) != FORWARD_EPOCH["control_design"]:
+            old_controls += 1
+            continue
         oid = str(rec.get("observation_id") or "")
         body = repr(sorted((k, repr(v)) for k, v in rec.items()))
         if oid in seen:
@@ -225,7 +246,7 @@ def select_forward(observations: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         fwd.append(rec)
     return {"forward": fwd, "pre_epoch_excluded": pre_epoch, "legacy_excluded": legacy,
             "duplicate_observation_ids": dup_ids, "conflicting_observation_ids": conflicting_ids,
-            "missing_anchor": missing_anchor}
+            "missing_anchor": missing_anchor, "legacy_control_design_excluded": old_controls}
 
 
 def monitor(observations: Sequence[Dict[str, Any]],
@@ -396,6 +417,7 @@ def monitor(observations: Sequence[Dict[str, Any]],
     dq = {
         "pre_epoch_observations_excluded": sel["pre_epoch_excluded"],
         "legacy_untagged_excluded": sel["legacy_excluded"],
+        "legacy_control_design_excluded": sel["legacy_control_design_excluded"],
         "missing_anchor_excluded": sel["missing_anchor"],
         "duplicate_observation_ids": sel["duplicate_observation_ids"],
         "conflicting_observation_ids": sel["conflicting_observation_ids"],

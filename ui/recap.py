@@ -18,6 +18,23 @@ except Exception:  # pragma: no cover
 from analytics import market_calendar as mc
 
 MAX_NAMES = 8
+# P2-51: "entered"/"left" list only names at or above this HSF Score, strongest
+# first. Raw row order put no-movers (bond/cash ETFs) first; this is display only.
+RECAP_MIN_SCORE = 40
+
+
+def _by_score(tickers: List[str], df: Any) -> List[str]:
+    """Tickers scoring >= RECAP_MIN_SCORE in `df`, highest HSF Score first,
+    formatted 'WRBY (69)'."""
+    try:
+        from ui.headline_score import hsf_scores_by_ticker
+
+        scores = hsf_scores_by_ticker(df.to_dict(orient="records")) if df is not None else {}
+    except Exception:
+        scores = {}
+    ranked = sorted(((scores[t], t) for t in tickers if scores.get(t) is not None
+                     and scores[t] >= RECAP_MIN_SCORE), key=lambda x: (-x[0], x[1]))
+    return [f"{t} ({s})" for s, t in ranked]
 
 
 def recap_day(runs: Sequence[Dict[str, Any]], now: _dt.datetime) -> Optional[_dt.date]:
@@ -43,8 +60,8 @@ def build_recap(day_runs: Sequence[Dict[str, Any]], first_df: Any, last_df: Any,
         "title": ("End-of-day recap" if closed else "Today so far") if day == today
         else f"Last session recap · {day.strftime('%a %b')} {day.day}",
         "scans": len(day_runs),
-        "entered": d["entered"],
-        "left": d["left"],
+        "entered": _by_score(d["entered"], last_df),
+        "left": _by_score(d["left"], first_df),
         "standouts": [{"ticker": o["ticker"], "score": o["score"], "setup": o["primary_setup"]}
                       for o in top_setups(last_df, n=5)],
     }
@@ -58,10 +75,10 @@ def recap_lines(r: Dict[str, Any]) -> List[str]:
 
     lines = [f"- **{r['scans']}** full-market scan{'s' if r['scans'] != 1 else ''} ran."]
     if r["scans"] > 1:
-        lines.append(f"- Entered the ranked list: {names(r['entered'])}." if r["entered"]
-                     else "- No new names entered the ranked list.")
-        lines.append(f"- Left the ranked list: {names(r['left'])}." if r["left"]
-                     else "- No names left the ranked list.")
+        lines.append(f"- Entered the ranked list (HSF {RECAP_MIN_SCORE}+): {names(r['entered'])}." if r["entered"]
+                     else f"- No names scoring HSF {RECAP_MIN_SCORE}+ entered the ranked list.")
+        lines.append(f"- Left the ranked list (HSF {RECAP_MIN_SCORE}+): {names(r['left'])}." if r["left"]
+                     else f"- No names scoring HSF {RECAP_MIN_SCORE}+ left the ranked list.")
     if r["standouts"]:
         lines.append("- Standouts by HSF Score: " + ", ".join(
             f"{s['ticker']} ({s['score']}{', ' + s['setup'] if s.get('setup') not in (None, '', 'Signal') else ''})"

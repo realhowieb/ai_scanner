@@ -8,6 +8,13 @@ on:
       - main
   workflow_dispatch:
 
+# P2-34: one run per branch + commit. A duplicate push event for the same commit
+# cancels the older run. dev and main still each get their own run, and every
+# new commit is checked (different SHA = different group).
+concurrency:
+  group: smoke-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
   billing-contract:
     runs-on: ubuntu-latest
@@ -46,6 +53,8 @@ jobs:
             tests/test_run73_tier_differentiation.py \
             tests/test_tier_enforcement.py \
             tests/test_app_session.py \
+            tests/test_p1_39_billing_email_health.py \
+            tests/test_p2_backlog_fixes_0929.py \
             -v --tb=short
 
   smoke:

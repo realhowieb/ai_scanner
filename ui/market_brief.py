@@ -386,12 +386,9 @@ def render_market_brief() -> None:
         return
 
     user = (st.session_state.get("username") or "").strip().lower()
-    ts = data.get("snapshot_time")
-    if ts is not None:
-        try:
-            st.caption(f"📸 As of {ts:%b %d, %I:%M %p} UTC (latest scan snapshot).")
-        except Exception:
-            pass
+    stamp = _et_stamp(data.get("snapshot_time"))
+    if stamp:
+        st.caption(f"📸 As of {stamp} (latest scan snapshot).")
 
     phase = _market_phase()
 
@@ -732,6 +729,23 @@ def _ago(secs: int) -> str:
     if mins < 90:
         return f"{mins} min ago"
     return f"{mins // 60} hr ago"
+
+
+def _et_stamp(ts: Any) -> Optional[str]:
+    """'Sep 30, 12:38 PM ET' for a scan timestamp (naive values are UTC), else None.
+    Every other time in HSF (cards, emails) is New York time."""
+    if ts is None or not hasattr(ts, "astimezone"):
+        return None
+    import datetime as _dt
+
+    try:
+        from zoneinfo import ZoneInfo
+
+        utc = ts if getattr(ts, "tzinfo", None) else ts.replace(tzinfo=_dt.timezone.utc)
+        et = utc.astimezone(ZoneInfo("America/New_York"))
+        return f"{et:%b} {et.day}, {et:%-I:%M %p} ET"
+    except Exception:
+        return None
 
 
 def _freshness_label(ts: Any, phase: Optional[str]) -> Optional[str]:

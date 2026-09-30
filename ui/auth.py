@@ -56,6 +56,12 @@ from ui.auth_sessions import (
 from ui.auth_sessions import (
     save_cookies as _save_cookies,
 )
+from ui.auth_signin_extras import (
+    clear_session_cookie as _clear_session_cookie,
+)
+from ui.auth_signin_extras import (
+    deactivated_with_password as _deactivated_with_password,
+)
 
 # Direct Neon lookup fallback for username -> email mapping
 try:
@@ -244,7 +250,7 @@ def auth_ui():
                 # Session expired or invalid — clear the stale cookie so the user
                 # gets a clean login form rather than a silent broken state.
                 try:
-                    cookies.pop(COOKIE_NAME, None)
+                    _clear_session_cookie(cookies)
                     _save_cookies(cookies)
                 except _AUTH_BACKEND_ERRORS:
                     pass
@@ -260,8 +266,11 @@ def auth_ui():
 
     _stripe_return = checkout_flag == "success" or portal_flag == "return"
 
-    if _stripe_return and "username" in st.session_state:
+    if checkout_flag == "success" and "username" in st.session_state:
         _poll_for_tier_upgrade(st.session_state["username"])
+    elif portal_flag == "return" and "username" in st.session_state:
+        from ui.billing_return import handle_portal_return  # portal may downgrade: don't wait for an upgrade
+        handle_portal_return(st.session_state["username"], _resolve_tier_key)
 
     if "username" not in st.session_state and _stripe_return:
         st.success(
@@ -340,7 +349,7 @@ def auth_ui():
                     )
 
                     su_email = st.text_input("✉️ Email", key="signup_email", placeholder="you@example.com")
-                    su_pw1 = st.text_input("🔒 Password", type="password", key="signup_password_1", placeholder="At least 8 characters")
+                    su_pw1 = st.text_input("🔒 Password", type="password", key="signup_password_1", placeholder="At least 10 characters")
                     su_pw2 = st.text_input("🔒 Confirm Password", type="password", key="signup_password_2", placeholder="Re-enter password")
                     su_agree = st.checkbox("I agree to use this tool for educational/informational purposes only.", key="signup_agree")
                     signup_clicked = st.form_submit_button("🟢 Create Free Account")
@@ -377,8 +386,9 @@ def auth_ui():
         p1 = (su_pw1 or "").strip()
         p2 = (su_pw2 or "").strip()
 
-        if not p1 or len(p1) < 8:
-            st.error("Password must be at least 8 characters.")
+        from ui.password_policy import password_problem  # P1-52: shared password rule
+        if problem := password_problem(p1, email=email_raw, username=username_raw):
+            st.error(problem)
             return False, None, None
 
         if p1 != p2:
@@ -576,6 +586,10 @@ def auth_ui():
             return False, None, None
 
         if user is None:
+            # P2-40: a deactivated account gets a clear message, but only after the
+            # correct password, so the message can't reveal which accounts exist.
+            if _deactivated_with_password(login_key, (password, raw_password)):
+                return _fail("This account is deactivated. Contact support.", reason="deactivated")
             return _fail("User not found. Please use the email you signed up with, or your username.", reason="user_not_found")
 
         # Expect user dict to contain a 'password' field.
@@ -685,7 +699,7 @@ def logout_and_reset_session() -> None:
             if sid:
                 _delete_session(str(sid))
             try:
-                cookies.pop(COOKIE_NAME, None)
+                _clear_session_cookie(cookies)
             except _AUTH_BACKEND_ERRORS:
                 pass
             _save_cookies(cookies)

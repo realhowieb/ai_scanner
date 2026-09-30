@@ -126,6 +126,9 @@ def render_ai_summary(df: pd.DataFrame, *, context: str = "") -> None:
         if summary:
             if cache_key:
                 st.session_state[cache_key] = summary
+                # Rerun so the cached view renders: summary + "🔄 Regenerate",
+                # not the "Generate" button still sitting above the summary.
+                st.rerun()
             st.markdown(summary)
         else:
             st.warning(err or "Could not generate summary.")
@@ -175,6 +178,6 @@ def render_ticker_analysis(row, ticker: str) -> None:
             text, err = generate_ticker_analysis(row)
         if text:
             st.session_state[cache_key] = text
-            st.markdown(text)
+            st.rerun()  # show the cached view (text + "🔄 Regenerate") right away
         else:
             st.warning(err or "Could not analyze this ticker.")

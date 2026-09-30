@@ -63,7 +63,9 @@ def _annotate_earnings(lines: List[str]) -> List[str]:
         if not tickers:
             return lines
         emap = load_earnings_map(tickers)
-        today = _dt.datetime.now(_dt.timezone.utc).date()
+        from scheduler.morning_digest import et_now
+
+        today = et_now().date()   # New York day, like the digest and wrap
         out: List[str] = []
         for ln in lines:
             sym = ln.split(":", 1)[0].strip().upper() if ":" in ln else None
@@ -206,6 +208,12 @@ def _throttled(last_fired_at, throttle_hours: float) -> bool:
         return False
 
 
+# P2-51: 20-day daily volatility (%) below this = bond/cash/broad-index ETF
+# territory (VBIL 0.01, USFR 0.07, SJNK 0.2, IEI 0.25, broad ETFs 0.6-0.8;
+# the least volatile stocks in recent scans start ~1.2, median ~3.5).
+MIN_ALERT_VOLATILITY_PCT = 1.0
+
+
 def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
     """Return human-readable match lines for an alert, or [] when none."""
     ticker_col = _col(df, "Ticker", "Symbol")
@@ -226,11 +234,23 @@ def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
             if not watch_tickers:
                 return []
             sub = df[df[ticker_col].astype(str).str.upper().isin(watch_tickers)]
+        vol_col = _col(df, "Volatility20D%")
         for _, row in sub.iterrows():
             try:
                 score = float(row[score_col])
             except (TypeError, ValueError):
                 continue
+            # P2-51: bond / cash / broad-index ETFs drift steadily at 20-day highs
+            # and reach BreakoutScore 35-45 while barely moving. Market-wide
+            # breakout alerts skip names under MIN_ALERT_VOLATILITY_PCT; a
+            # watchlist-only alert keeps whatever the user chose to watch.
+            if vol_col is not None and not alert.get("watchlist_only"):
+                try:
+                    vol = float(row[vol_col])
+                except (TypeError, ValueError):
+                    vol = float("nan")
+                if vol == vol and vol < MIN_ALERT_VOLATILITY_PCT:
+                    continue
             if score >= threshold:
                 lines.append(f"{str(row[ticker_col]).upper()}: BreakoutScore {score:.1f} (≥ {threshold:g})")
 
@@ -454,6 +474,20 @@ def _email_allowed_for_tier(user_id: str) -> bool:
         return False
 
 
+def alert_signature(alert: Dict[str, Any]) -> tuple:
+    """What an alert watches. Two alerts with the same signature fire together
+    with the same lines, so only one of them is evaluated."""
+    thr = alert.get("threshold")
+    return (
+        str(alert.get("user_id") or ""),
+        alert.get("alert_type"),
+        (alert.get("ticker") or "").upper() or None,
+        None if thr is None else float(thr),
+        alert.get("direction"),
+        bool(alert.get("watchlist_only")),
+    )
+
+
 def run_alerts() -> None:
     """Evaluate all enabled alerts against the latest snapshot and notify."""
     try:
@@ -514,8 +548,21 @@ def run_alerts() -> None:
     fired = 0
     emailed = 0
     email_failed = 0
+    duplicates = 0
+    seen_signatures: set = set()
+    # One email per user per run: every alert that fired, together.
+    pending: Dict[str, List[tuple]] = {}
     for alert in alerts:
         try:
+            # Identical alerts (same user, type, ticker, threshold...) would send
+            # the same email twice. The newest one (alerts arrive newest first)
+            # owns the signature; the rest are skipped, even when the owner is
+            # throttled, so a duplicate can't fire in its place.
+            sig = alert_signature(alert)
+            if sig in seen_signatures:
+                duplicates += 1
+                continue
+            seen_signatures.add(sig)
             if _throttled(alert.get("last_fired_at"), float(ALERT_THROTTLE_HOURS)):
                 continue
             user_id = str(alert.get("user_id") or "")
@@ -560,36 +607,49 @@ def run_alerts() -> None:
             _freeze_signal_outcomes(event_id, alert, df, lines)
             mark_alert_fired(alert.get("id"))
             fired += 1
+            from scheduler.alert_email import make_section
 
-            if (
-                "@" in user_id
-                and _is_verified(user_id)
-                and _email_allowed_for_tier(user_id)
-                and _alert_emails_on(user_id)
-            ):
-                try:
-                    from ui.email_utils import send_alert_email
-
-                    if send_alert_email(
-                        to_address=user_id,
-                        subject=f"📈 {label} triggered",
-                        body=body,
-                        unsubscribe_url=_alert_unsubscribe_link(user_id),
-                    ):
-                        emailed += 1
-                    else:
-                        email_failed += 1
-                except Exception as e:
-                    email_failed += 1
-                    print(f"[alert_runner] email to {mask_email(user_id)} failed: {redact(e)}")
-                    _capture(e)
+            pending.setdefault(user_id, []).append(make_section(alert, lines))
         except Exception as e:  # never let one alert kill the run
             print(f"[alert_runner] alert {alert.get('id')} failed: {redact(e)}")
             _capture(e)
             continue
 
+    for user_id, sections in pending.items():
+        try:
+            if not (
+                "@" in user_id
+                and _is_verified(user_id)
+                and _email_allowed_for_tier(user_id)
+                and _alert_emails_on(user_id)
+            ):
+                continue
+            from scheduler.alert_email import compose
+            from ui.email_utils import send_digest_email
+
+            email = compose(sections)
+            if email is None:
+                continue
+            subject, text, html_inner = email
+            # Same branded shell as the morning digest: sections + ticker tables.
+            if send_digest_email(
+                to_address=user_id,
+                subject=subject,
+                html_inner=html_inner,
+                text_inner=text,
+                unsubscribe_url=_alert_unsubscribe_link(user_id),
+            ):
+                emailed += 1
+            else:
+                email_failed += 1
+        except Exception as e:
+            email_failed += 1
+            print(f"[alert_runner] email to {mask_email(user_id)} failed: {redact(e)}")
+            _capture(e)
+
     print(f"[alert_runner] fired {fired} alert(s), emailed {emailed}"
-          + (f", {email_failed} email(s) failed" if email_failed else ""))
+          + (f", {email_failed} email(s) failed" if email_failed else "")
+          + (f", skipped {duplicates} duplicate alert(s)" if duplicates else ""))
     try:  # P1-36: counts for the Email delivery health card (+ Sentry on failures)
         from scheduler.morning_digest import record_email_job
 

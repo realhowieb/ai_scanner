@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -21,10 +22,6 @@ def _validate_email(email: str) -> str:
         raise ValueError(f"Invalid or missing email from webhook: {email!r}")
     return email
 
-app = FastAPI()
-
-
-@app.on_event("startup")
 def _start_realtime_alerts() -> None:
     """Start the real-time price-alert worker (no-op unless enabled via env)."""
     try:
@@ -40,6 +37,16 @@ def _start_realtime_alerts() -> None:
         _log.warning("realtime alerts worker failed to start: %s", e)
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # P2-23: lifespan replaces FastAPI's deprecated startup-event decorator.
+    _start_realtime_alerts()
+    yield
+
+
+app = FastAPI(lifespan=_lifespan)
+
+
 # ---------- ENV ----------
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
@@ -50,7 +57,7 @@ STRIPE_PRICE_PREMIUM = os.getenv("STRIPE_PRICE_PREMIUM", "").strip()
 APP_SUCCESS_URL = os.getenv("APP_SUCCESS_URL", "").strip()  # e.g. https://yourapp.com
 APP_CANCEL_URL = os.getenv("APP_CANCEL_URL", "").strip()    # e.g. https://yourapp.com
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()        # Neon Postgres URL
-APP_PORTAL_RETURN_URL = os.getenv("APP_PORTAL_RETURN_URL", "").strip()  # e.g. https://hsf-beta.streamlit.app/billing
+APP_PORTAL_RETURN_URL = os.getenv("APP_PORTAL_RETURN_URL", "").strip()  # e.g. https://hsfinestai.streamlit.app/billing
 
 if not STRIPE_SECRET_KEY:
     raise RuntimeError("Missing STRIPE_SECRET_KEY env var")
@@ -294,6 +301,19 @@ def _authenticated_user(request: Request, payload: dict) -> str:
 
 
 # ---------- API ----------
+def _email_setup() -> dict:
+    """P1-39: live-alert email settings on Render, for the Admin page. Only whether
+    each setting is present and the sender DOMAIN (visible on every email anyway) —
+    never the user, password or full address. Mirrors ui/email_setup.describe_smtp."""
+    from email.utils import parseaddr
+
+    names = ("SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM")
+    missing = [n for n in names if not os.getenv(n, "").strip()]
+    addr = parseaddr(os.getenv("SMTP_FROM", "").strip())[1]
+    domain = addr.rpartition("@")[2].lower() if "@" in addr else None
+    return {"configured": not missing, "missing": missing, "sender_domain": domain}
+
+
 @app.get("/health")
 def health():
     missing = _required_env_missing(
@@ -307,7 +327,7 @@ def health():
     )
     db = _db_status()
     ok = not missing and bool(db["reachable"])
-    body = {"ok": ok, "missing_env": missing, "db": db}
+    body = {"ok": ok, "missing_env": missing, "db": db, "email": _email_setup()}
     if not ok:
         return JSONResponse(body, status_code=503)
     body["features"] = ["url_override", "idempotent_qp", "billing_readiness"]
@@ -354,6 +374,28 @@ def debug_status():
     status["missing_env"] = _required_env_missing(*required)
     status["ok"] = not status["missing_env"] and bool(status["db"]["reachable"])
     return status
+
+
+def _plan_change_flow(subscription, price_id: str, return_url: str) -> Optional[dict]:
+    """Stripe portal flow_data that confirms switching `subscription` to `price_id`
+    and redirects to `return_url` afterwards; None when there's nothing to switch
+    (no item, unknown ids, or already on that price)."""
+    try:
+        items = ((subscription.get("items") or {}).get("data") or [])
+        item = items[0] if items else {}
+        current = (item.get("price") or {}).get("id")
+        if not subscription.get("id") or not item.get("id") or not price_id or current == price_id:
+            return None
+        return {
+            "type": "subscription_update_confirm",
+            "subscription_update_confirm": {
+                "subscription": subscription["id"],
+                "items": [{"id": item["id"], "price": price_id, "quantity": 1}],
+            },
+            "after_completion": {"type": "redirect", "redirect": {"return_url": return_url}},
+        }
+    except (AttributeError, KeyError, IndexError, TypeError):
+        return None
 
 
 @app.post("/create-checkout-session")
@@ -421,10 +463,27 @@ async def create_checkout_session(payload: dict, request: Request):
         try:
             subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
             if subs and subs.get("data"):
-                portal = stripe.billing_portal.Session.create(
-                    customer=customer_id,
-                    return_url=portal_return_url,
-                )
+                # P2-48: open Stripe's "confirm this plan change" screen for the
+                # requested plan and send the customer straight back to the app
+                # when they confirm (no "Return to site" click). Any problem ->
+                # the plain portal, exactly as before.
+                portal = None
+                flow = _plan_change_flow(subs["data"][0], price_id, portal_return_url)
+                if flow:
+                    try:
+                        portal = stripe.billing_portal.Session.create(
+                            customer=customer_id,
+                            return_url=portal_return_url,
+                            flow_data=flow,
+                        )
+                    except Exception as e:
+                        _log.warning("plan-change portal flow failed, using plain portal: %s", type(e).__name__)
+                        portal = None
+                if portal is None:
+                    portal = stripe.billing_portal.Session.create(
+                        customer=customer_id,
+                        return_url=portal_return_url,
+                    )
                 return {"portal_url": portal.url, "mode": "portal"}
         except Exception as e:
             # If portal creation fails for any reason, fall back to Checkout (but only if needed)

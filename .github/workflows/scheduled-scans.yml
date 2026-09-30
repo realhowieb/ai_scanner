@@ -18,17 +18,11 @@ on:
         options: [auto, regular, premarket, postmarket]
         default: auto
 
-  # Automated schedule (Mon–Fri, US market days)
-  # Times below are in UTC (GitHub Actions runs on UTC):
-  # 14:35 UTC  → 09:35 ET  (after open)
-  # 17:00 UTC  → 12:00 ET  (midday)
-  # 20:30 UTC  → 15:30 ET  (power hour)
-  # 21:10 UTC  → 16:10 ET  (after close)
-  schedule:
-    - cron: '35 14 * * 1-5'
-    - cron: '0 17 * * 1-5'
-    - cron: '30 20 * * 1-5'
-    - cron: '10 21 * * 1-5'
+  # No GitHub `schedule:` trigger (removed 2026-09-29). cron-job.org is the only
+  # scheduler: it dispatches this workflow on main (force=false, session=auto)
+  # at 12:35, 13:35, 16:35, 19:35, 20:35 and 21:35 UTC on weekdays. GitHub's own
+  # cron fired hours late (e.g. the 21:10 UTC slot at 00:27 UTC) and duplicated
+  # those slots; a late run after UTC midnight sent the morning digest at night.
 
 jobs:
   run-scans:

@@ -80,7 +80,7 @@ them via `st.secrets` first, then falls back to environment variables.
 - `SMTP_USER` — SMTP login username
 - `SMTP_PASS` — SMTP password or API key
 - `SMTP_FROM` — From address, e.g. `noreply@yourdomain.com`
-- `APP_BASE_URL` — full URL of the app, e.g. `https://hsf-beta.streamlit.app`
+- `APP_BASE_URL` — full URL of the app, e.g. `https://hsfinestai.streamlit.app`
 - `RESET_TOKEN_TTL_MINUTES` — how long reset links are valid (default: 30)
 
 ### Billing service

@@ -30,21 +30,30 @@ _WRAP_KEY = "evening_wrap"
 
 
 def _todays_events(user_id: str) -> List[str]:
-    """Messages of alerts that fired for this user today (UTC)."""
+    """Messages of alerts that fired for this user today (New York date)."""
     try:
         from db.alerts import list_recent_events
+        from scheduler.morning_digest import et_now
 
-        today = datetime.now(timezone.utc).date()
+        now_et = et_now()
+        today = now_et.date()
         events = list_recent_events(user_id, limit=25) or []
         seen: List[str] = []
         for ev in events:
             fired = ev.get("fired_at")
-            if fired is None or not hasattr(fired, "date") or fired.date() != today:
+            if fired is None or not hasattr(fired, "date"):
+                continue
+            if getattr(fired, "tzinfo", None) is not None:
+                fired = fired.astimezone(now_et.tzinfo)
+            if fired.date() != today:
                 continue
             msg = str(ev.get("message") or "")
             if msg and msg not in seen:
                 seen.append(msg)
-        return seen[:8]
+        # One short line per alert, overlaps removed (same rules as the alert email).
+        from scheduler.alert_email import summarize_fired
+
+        return summarize_fired(seen, max_items=8)
     except Exception:
         return []
 
@@ -52,8 +61,9 @@ def _todays_events(user_id: str) -> List[str]:
 def _tomorrows_earnings(tickers: List[str]) -> List[str]:
     try:
         from db.earnings import load_earnings_map
+        from scheduler.morning_digest import et_now
 
-        tomorrow = datetime.now(timezone.utc).date() + timedelta(days=1)
+        tomorrow = et_now().date() + timedelta(days=1)
         emap = load_earnings_map(tickers) or {}
         return sorted(
             {str(s).upper() for s, d in emap.items() if d == tomorrow and str(s).upper() in tickers}
@@ -163,9 +173,9 @@ def _compose_wrap(
     golden_crosses: List[str] | None = None,
     top_setups: List[tuple] | None = None,
 ) -> tuple:
-    from scheduler.morning_digest import _movers_table, _movers_text
+    from scheduler.morning_digest import _movers_table, _movers_text, et_now
 
-    date_s = datetime.now(timezone.utc).strftime("%A, %b %d")
+    date_s = et_now().strftime("%A, %b %d")
     html = [f"<p style='color:#666;margin:0 0 12px'>Evening wrap · {date_s}</p>"]
     text = [f"Evening wrap · {date_s}", ""]
 
@@ -221,7 +231,9 @@ def _compose_wrap(
         text += [""]
 
     if fired_today:
-        items = "".join(f"<li>{m}</li>" for m in fired_today)
+        import html as _html
+
+        items = "".join(f"<li>{_html.escape(m)}</li>" for m in fired_today)
         html.append(
             f"<h3 style='margin:16px 0 6px'>🔔 Alerts that fired today</h3><ul>{items}</ul>"
         )
@@ -247,15 +259,18 @@ def run_evening_wrap(force: bool = False) -> None:
     if not MORNING_DIGEST_ENABLED:
         return
 
-    if not force:
-        try:
-            from db.earnings import should_refresh_earnings_today
+    # Once per ET day, and only from 16:00 ET (see scheduler.morning_digest).
+    from scheduler.morning_digest import WRAP_START_ET, already_sent, daily_send_key, et_now, mark_sent
 
-            if not should_refresh_earnings_today(_WRAP_KEY):
-                print("[evening_wrap] already sent today; skipping")
-                return
-        except Exception:
-            pass
+    send_key = daily_send_key(_WRAP_KEY)
+    if not force:
+        et = et_now()
+        if et.hour < WRAP_START_ET:
+            print(f"[evening_wrap] before the evening window ({et:%H:%M} ET); skipping")
+            return
+        if already_sent(send_key):
+            print("[evening_wrap] already sent today; skipping")
+            return
 
     try:
         from auth.tiering import get_user_tier, has_min_tier
@@ -283,7 +298,13 @@ def run_evening_wrap(force: bool = False) -> None:
     day_gainers, day_losers = _day_movers(snap_df)
     golden_crosses, top_setups = _tomorrow_setups(snap_df)
 
-    from scheduler.morning_digest import _email_tier_key, email_opted_in, record_email_job, unsubscribe_link
+    from scheduler.morning_digest import (
+        _email_tier_key,
+        default_watchlist_tickers,
+        email_opted_in,
+        record_email_job,
+        unsubscribe_link,
+    )
 
     sent = 0
     skipped: Dict[str, int] = {}
@@ -313,11 +334,7 @@ def run_evening_wrap(force: bool = False) -> None:
             continue
 
         try:
-            wls = list_watchlists(email) or []
-            tickers: List[str] = []
-            for wl in wls:
-                tickers.extend(get_watchlist_tickers(wl.get("id"), email) or [])
-            tickers = sorted({str(t).strip().upper() for t in tickers if t})
+            tickers = default_watchlist_tickers(email, list_watchlists, get_watchlist_tickers)
             if not tickers:
                 _skip("empty_watchlist")
                 continue
@@ -346,12 +363,7 @@ def run_evening_wrap(force: bool = False) -> None:
             continue
 
     if sent > 0:
-        try:
-            from db.earnings import mark_earnings_refreshed_today
-
-            mark_earnings_refreshed_today(_WRAP_KEY)
-        except Exception:
-            pass
+        mark_sent(send_key)
     reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) or "none"
     print(f"[evening_wrap] sent {sent} wrap(s); skipped: {reasons}")
     record_email_job("evening", {"sent": sent, "skipped": skipped})

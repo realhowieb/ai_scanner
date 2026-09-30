@@ -148,7 +148,12 @@ SMTP_PORT: int = int(_get("SMTP_PORT", "587"))
 SMTP_USER: str | None = _get("SMTP_USER")
 SMTP_PASS: str | None = _get("SMTP_PASS")
 SMTP_FROM: str = _get("SMTP_FROM", "noreply@ai-scanner.app")
-APP_BASE_URL: str = _get("APP_BASE_URL", "https://hsf-beta.streamlit.app")
+# Inbox display name for HSF email (used unless SMTP_FROM already includes one).
+SMTP_FROM_NAME: str = _get("SMTP_FROM_NAME", "HSF Alerts")
+# P1-51: links default to the PRODUCTION app. Scheduled emails are built by the
+# GitHub job, which can't read Streamlit secrets, so this default is what they
+# use. The beta app (hsf-beta, deploys from dev) sets its own APP_BASE_URL.
+APP_BASE_URL: str = _get("APP_BASE_URL", "https://hsfinestai.streamlit.app")
 
 # ---------- Stripe Billing Configuration ----------
 STRIPE_MONTHLY_LINKS = {

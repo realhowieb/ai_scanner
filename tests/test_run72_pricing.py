@@ -78,13 +78,18 @@ class DerivedPricingTests(unittest.TestCase):
         out = plans_html()
         cards = out.count('class="hsf-plan"') + out.count('class="hsf-plan featured"')
         self.assertEqual(cards, 3)
-        self.assertEqual(out.count("Most popular"), 1)
+        self.assertEqual(out.count("Recommended"), 1)   # P2-21: no "Most popular" claim before customers
+        self.assertNotIn("Most popular", out)
         self.assertIn("$0", out)
         self.assertIn("Everything in Free", out)
         self.assertIn("Everything in Pro", out)
 
 
 class WiringTests(unittest.TestCase):
+    def test_no_unbacked_popularity_claim_anywhere(self):
+        for rel in ("ui/pricing.py", "pages/billing.py", "ui/landing.py", "ui/account_card.py"):
+            self.assertNotIn("most popular", (ROOT / rel).read_text().lower(), rel)
+
     def test_billing_and_landing_use_the_shared_source(self):
         billing = (ROOT / "pages" / "billing.py").read_text()
         self.assertIn("from ui.pricing import pricing_markdown", billing)

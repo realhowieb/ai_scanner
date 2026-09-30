@@ -134,6 +134,22 @@ def create_alert(
         raise ValueError(f"Unknown alert_type: {alert_type!r}")
     conn = _get_conn()
     cur = conn.cursor()
+    # One of each: an identical second alert only sends duplicate emails.
+    cur.execute(
+        """
+        SELECT 1 FROM user_alerts
+        WHERE user_id = %s AND alert_type = %s
+          AND ticker IS NOT DISTINCT FROM %s
+          AND threshold IS NOT DISTINCT FROM %s
+          AND direction IS NOT DISTINCT FROM %s
+          AND watchlist_only = %s
+        LIMIT 1
+        """,
+        (user_id, alert_type, (ticker or "").upper() or None, threshold, direction, bool(watchlist_only)),
+    )
+    if cur.fetchone():
+        cur.close()
+        raise ValueError("You already have this alert.")
     cur.execute(
         """
         INSERT INTO user_alerts

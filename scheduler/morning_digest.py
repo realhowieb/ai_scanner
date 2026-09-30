@@ -32,6 +32,49 @@ except Exception:  # pragma: no cover - never print an address if the helper is 
 
 _DIGEST_REFRESH_KEY = "morning_digest"
 
+# "Once a day" means once per New York trading day. Keys are dated in ET, so a
+# scheduled run that GitHub delays past UTC midnight (e.g. the 21:10 UTC slot
+# firing at 00:27 UTC = 8:27 PM ET) can neither re-send nor claim the next day.
+# Each email also has its own ET time window (bypassed by forced manual runs).
+DIGEST_WINDOW_ET = (6, 12)   # morning digest: 06:00 <= ET < 12:00
+WRAP_START_ET = 16           # evening wrap: from 16:00 ET (same ET day)
+
+
+def et_now(now=None):
+    from zoneinfo import ZoneInfo
+
+    now = now or datetime.now(timezone.utc)
+    return now.astimezone(ZoneInfo("America/New_York"))
+
+
+def daily_send_key(base: str, now=None) -> str:
+    """e.g. 'morning_digest:2026-09-29' — one record per ET day."""
+    return f"{base}:{et_now(now).date().isoformat()}"
+
+
+def already_sent(key: str) -> bool:
+    """True when this ET-dated key was recorded (any time that ET day). On a
+    database error returns False, matching the old throttle (send rather than drop)."""
+    try:
+        from db.earnings import _get_conn, ensure_earnings_refresh_log_table
+
+        conn = _get_conn(None)
+        ensure_earnings_refresh_log_table(conn)
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM earnings_refresh_log WHERE refresh_key = %s;", (key,))
+            return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+def mark_sent(key: str) -> None:
+    try:
+        from db.earnings import mark_earnings_refreshed_today
+
+        mark_earnings_refreshed_today(key)
+    except Exception:
+        pass
+
 
 def _latest_snapshot_df():
     """Load the most recent meaningful scan as a DataFrame, or None.
@@ -197,7 +240,7 @@ def _earnings_days_map(symbols: List[str], flag_days: int = 5) -> Dict[str, int]
         if not syms:
             return {}
         emap = load_earnings_map(syms)
-        today = datetime.now(timezone.utc).date()
+        today = et_now().date()
         out: Dict[str, int] = {}
         for sym, edate in emap.items():
             if edate is None:
@@ -223,7 +266,7 @@ def _earnings_today() -> set:
     try:
         from db.earnings import fetch_earnings_this_week
 
-        today = datetime.now(timezone.utc).date()
+        today = et_now().date()
         rows = fetch_earnings_this_week(days_ahead=1) or []
         return {
             str(r.get("symbol")).upper()
@@ -345,7 +388,7 @@ def _compose(
     top_setups: Optional[List[tuple]] = None,
 ) -> tuple[str, str]:
     """Return (html_inner, text_inner) for one user's digest."""
-    date_s = datetime.now(timezone.utc).strftime("%A, %b %d")
+    date_s = et_now().strftime("%A, %b %d")
     html = [f"<p style='color:#666;margin:0 0 12px'>Morning snapshot · {date_s}</p>"]
     text = [f"Morning snapshot · {date_s}", ""]
 
@@ -420,6 +463,12 @@ def _compose(
 def record_email_job(job: str, stats: Dict[str, Any]) -> None:
     """P1-36: store this run's counts for the Email delivery health card, and report
     failed sends to Sentry (counts only, never addresses). Never raises."""
+    try:  # P1-39: which email settings this environment (GitHub Actions) used
+        from ui.email_setup import describe_from_config
+
+        stats = {**stats, "smtp": describe_from_config()}
+    except Exception:
+        pass
     try:
         from db.email_job_runs import record_email_run
 
@@ -429,6 +478,18 @@ def record_email_job(job: str, stats: Dict[str, Any]) -> None:
     failed = int((stats.get("skipped") or {}).get("send_failed") or stats.get("email_failed") or 0)
     if failed:
         _capture(RuntimeError(f"{job} email: {failed} send(s) failed this run"))
+
+
+def default_watchlist_tickers(email: str, list_watchlists, get_watchlist_tickers) -> List[str]:
+    """Tickers of the account's DEFAULT watchlist only — the same list Today shows
+    as "Your watchlist". Merging every list made a 40-ticker digest for an account
+    with 8 lists (2026-09-29). Falls back to the first list if none is marked."""
+    wls = list_watchlists(email) or []
+    if not wls:
+        return []
+    default = next((w for w in wls if w.get("is_default")), wls[0])
+    tickers = get_watchlist_tickers(default.get("id"), email) or []
+    return sorted({str(t).strip().upper() for t in tickers if t})
 
 
 def email_opted_in(email: str, kind: str) -> bool:
@@ -477,16 +538,16 @@ def run_morning_digest(force: bool = False) -> None:
     if not MORNING_DIGEST_ENABLED:
         return
 
-    # Once-per-day throttle (reuses the earnings refresh-log table with our key).
+    # Once per ET day, and only in the morning (see DIGEST_WINDOW_ET).
+    send_key = daily_send_key(_DIGEST_REFRESH_KEY)
     if not force:
-        try:
-            from db.earnings import should_refresh_earnings_today
-
-            if not should_refresh_earnings_today(_DIGEST_REFRESH_KEY):
-                print("[morning_digest] already sent today; skipping")
-                return
-        except Exception:
-            pass
+        et = et_now()
+        if not DIGEST_WINDOW_ET[0] <= et.hour < DIGEST_WINDOW_ET[1]:
+            print(f"[morning_digest] outside the morning window ({et:%H:%M} ET); skipping")
+            return
+        if already_sent(send_key):
+            print("[morning_digest] already sent today; skipping")
+            return
 
     try:
         from auth.tiering import get_user_tier, has_min_tier
@@ -558,11 +619,7 @@ def run_morning_digest(force: bool = False) -> None:
             continue
 
         try:
-            wls = list_watchlists(email) or []
-            tickers: List[str] = []
-            for wl in wls:
-                tickers.extend(get_watchlist_tickers(wl.get("id"), email) or [])
-            tickers = sorted({str(t).strip().upper() for t in tickers if t})
+            tickers = default_watchlist_tickers(email, list_watchlists, get_watchlist_tickers)
             if not tickers:
                 _skip("empty_watchlist")
                 continue
@@ -604,12 +661,7 @@ def run_morning_digest(force: bool = False) -> None:
             continue
 
     if sent > 0:
-        try:
-            from db.earnings import mark_earnings_refreshed_today
-
-            mark_earnings_refreshed_today(_DIGEST_REFRESH_KEY)
-        except Exception:
-            pass
+        mark_sent(send_key)
     reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) or "none"
     print(f"[morning_digest] sent {sent} digest(s); skipped: {reasons}")
     record_email_job("digest", {"sent": sent, "skipped": skipped})

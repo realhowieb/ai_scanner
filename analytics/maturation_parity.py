@@ -127,6 +127,10 @@ def population(observations: Iterable[Dict[str, Any]], scope: str) -> List[Dict[
             continue
         if scope == "forward" and (a is None or a < start):
             continue
+        # Run 59: forward parity compares against liquidity-matched controls only.
+        if (scope == "forward" and fr.cohort(o) == "CONTROL"
+                and fr.control_design(o) != fr.FORWARD_EPOCH["control_design"]):
+            continue
         seen.add(oid)
         out.append(o)
     return out

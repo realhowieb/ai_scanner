@@ -218,7 +218,7 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
 def _unsubscribe_url(token: Optional[str]) -> Optional[str]:
     if not token:
         return None
-    base = (os.getenv("APP_BASE_URL", "") or "https://hsf-beta.streamlit.app").rstrip("/")
+    base = (os.getenv("APP_BASE_URL", "") or "https://hsfinestai.streamlit.app").rstrip("/")
     return f"{base}/unsubscribe?t={token}&k=alerts"
 
 
@@ -241,7 +241,11 @@ def _send_email(to_address: str, subject: str, body: str,
     )
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"HSFinest.AI — {subject}"
-    msg["From"] = sender
+    from email.utils import formataddr, parseaddr
+
+    name, addr = parseaddr(sender)
+    addr = addr or sender
+    msg["From"] = formataddr((name or os.getenv("SMTP_FROM_NAME", "").strip() or "HSF Alerts", addr))
     msg["To"] = to_address
     unsub_text = unsub_html = ""
     if unsubscribe_url:  # P1-41
@@ -262,7 +266,7 @@ def _send_email(to_address: str, subject: str, body: str,
             server.ehlo()
             server.starttls()
             server.login(user, password)
-            server.sendmail(sender, [to_address], msg.as_string())
+            server.sendmail(addr, [to_address], msg.as_string())
         return True
     except Exception as e:
         _log(f"email to {_redact(to_address)} failed: {type(e).__name__}: {_redact(e)}")

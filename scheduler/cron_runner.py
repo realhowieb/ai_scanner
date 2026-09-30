@@ -69,9 +69,11 @@ def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_
     Best-effort, non-fatal; side-effect only — never touches results/snapshots."""
     try:
         from analytics.research_cohorts import (
+            CONTROL_DESIGN,
             build_control_observations,
             build_near_miss_observations,
             cohort_balance,
+            liquidity_eligible,
             select_control_symbols,
         )
         from db.hsf_observations import save_observations_batch
@@ -83,13 +85,19 @@ def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_
             scan_timestamp=scan_started_at, session=session, scan_id=scan_id,
             coverage_health=health, research_run_context=research_ctx, top_n=top_n,
             price_meta=research_sink.get("price_snapshot"))
-        controls = select_control_symbols(
-            research_sink.get("evaluated_symbols") or [], scan_run_id=scan_id,
-            exclude=candidate_symbols)
+        # Run 59: controls come only from evaluated names that pass the same
+        # point-in-time liquidity floor and price range as candidates.
+        floor = research_sink.get("control_floor") or {}
+        pool = liquidity_eligible(
+            research_sink.get("evaluated_symbols") or [], research_sink.get("price_snapshot") or {},
+            min_dollar_vol=floor.get("min_dollar_vol") or 0.0,
+            min_price=floor.get("min_price"), max_price=floor.get("max_price"))
+        controls = select_control_symbols(pool, scan_run_id=scan_id, exclude=candidate_symbols)
         control_obs = build_control_observations(
             controls, research_sink.get("price_snapshot") or {}, universe=universe,
             scan_timestamp=scan_started_at, session=session, scan_id=scan_id,
-            coverage_health=health, research_run_context=research_ctx)
+            coverage_health=health, research_run_context=research_ctx,
+            control_design=CONTROL_DESIGN)
         res = save_observations_batch(near_miss + control_obs)
         bal = cohort_balance(
             [{"research_cohort": "CANDIDATE"}] * len(candidate_symbols)
@@ -97,7 +105,8 @@ def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_
             evaluated=len((research_sink.get("evaluated_symbols") or [])))
         print(f"[research_cohorts] {universe}: candidates={bal['candidate']} "
               f"near_miss={bal['near_miss']} control={bal['control']} "
-              f"written={res.get('written')} (evaluated={bal['evaluated']})")
+              f"written={res.get('written')} (evaluated={bal['evaluated']}, "
+              f"control_pool={len(pool)} liquidity-matched)")
     except Exception as e:
         print(f"[research_cohorts] failed for {universe}: {e}")
         _capture(e)
@@ -721,6 +730,29 @@ def _purge_old_login_attempts() -> None:
     print(f"[maintenance] purged {deleted} stale login_attempts row(s)")
 
 
+def _purge_expired_credentials() -> None:
+    """P2-52: delete expired sessions and used/expired tokens (throttled once/day).
+    Only rows past expiry + grace; see db/credential_cleanup.py."""
+    from db.earnings import mark_earnings_refreshed_today, should_refresh_earnings_today
+
+    key = "cron_credential_purge"
+    if not should_refresh_earnings_today(key):
+        return
+    from db.credential_cleanup import purge_expired_credentials
+    from db.engine import get_neon_conn
+
+    conn = get_neon_conn()
+    if conn is None:
+        return
+    try:
+        counts = purge_expired_credentials(conn)
+    finally:
+        conn.close()
+    mark_earnings_refreshed_today(key)
+    summary = ", ".join(f"{t}={n}" for t, n in counts.items()) or "nothing to purge"
+    print(f"[maintenance] purged expired credentials: {summary}")
+
+
 def _prune_old_runs() -> None:
     """Delete old non-snapshot runs (throttled once/day).
 
@@ -1096,6 +1128,11 @@ def main():
         _purge_old_login_attempts()
     except Exception as e:
         print(f"[cron] login purge failed: {e}")
+        _capture(e)
+    try:
+        _purge_expired_credentials()
+    except Exception as e:
+        print(f"[cron] credential purge failed: {e}")
         _capture(e)
     try:
         _prune_old_runs()

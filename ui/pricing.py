@@ -186,7 +186,8 @@ def plans_html() -> str:
         prefix = [] if tier == "basic" else [f"Everything in {TIER_NAMES['basic' if tier == 'pro' else 'pro']}"]
         items = "".join(f"<li>{html.escape(i)}</li>" for i in prefix + h[tier])
         featured = " featured" if tier == "pro" else ""
-        badge = '<p class="badge">Most popular</p>' if tier == "pro" else ""
+        # P2-21: no popularity claim until customer data backs it.
+        badge = '<p class="badge">Recommended</p>' if tier == "pro" else ""
         cards.append(
             f'<div class="hsf-plan{featured}">{badge}<h3>{TIER_NAMES[tier]}</h3>'
             f'<p class="price">{html.escape("$0" if tier == "basic" else PRICES[tier])}</p>'

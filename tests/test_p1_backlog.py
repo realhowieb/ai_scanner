@@ -127,12 +127,13 @@ class RecapTests(unittest.TestCase):
 
     def test_titles_and_diff(self):
         day_runs = market_scans.runs_on_day(self._runs(), dt.date(2026, 9, 28))
-        first = pd.DataFrame({"Ticker": ["AAA", "BBB"]})
+        first = pd.DataFrame({"Ticker": ["BBB"]})
         last = _df()
         after_close = recap.build_recap(day_runs, first, last, day=dt.date(2026, 9, 28),
                                         now=dt.datetime(2026, 9, 28, 22, 0, tzinfo=UTC))
         self.assertEqual(after_close["title"], "End-of-day recap")
-        self.assertEqual(after_close["entered"], ["CCC"])
+        # P2-51: by HSF Score with a floor — AAA (80) listed, CCC (HSF 5) left out.
+        self.assertEqual(after_close["entered"], ["AAA (80)"])
         self.assertEqual(after_close["left"], [])
         self.assertEqual(after_close["scans"], 2)
         midday = recap.build_recap(day_runs, first, last, day=dt.date(2026, 9, 28),

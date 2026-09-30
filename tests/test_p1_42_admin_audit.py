@@ -73,10 +73,10 @@ class ActionRecordingTests(unittest.TestCase):
         from db.user_admin import create_user
 
         with mock.patch("db.user_admin._conn", return_value=self.FakeDB()):
-            self.assertTrue(create_user("New@Example.com", "N", "s3cret", tier="pro", actor="me@example.com")[0])
+            self.assertTrue(create_user("New@Example.com", "N", "Maple-river-42!", tier="pro", actor="me@example.com")[0])
         self.assertEqual(self.rec.events, [("me@example.com", "create_user", "new@example.com",
                                             {"tier": "pro", "active": True})])
-        self.assertNotIn("s3cret", json.dumps(self.rec.events))
+        self.assertNotIn("Maple-river-42!", json.dumps(self.rec.events))
 
     def test_verify_and_admin_changes_are_recorded(self):
         from db.user_admin import mark_email_verified, set_admin

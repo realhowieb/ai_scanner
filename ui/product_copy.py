@@ -61,6 +61,12 @@ TRUST_POINTS = (
     ("Research-first methodology", "HSF measures its own methods forward before making claims about them."),
 )
 
+# P2-22: one sentence on what the HSF Score is (landing page, under the example).
+HSF_SCORE_ONE_LINE = (
+    "HSF Score (0–100) ranks setups by how strongly the current technical evidence "
+    "lines up. It is not a probability of profit or a prediction."
+)
+
 DISCLAIMER = (
     "HSF is a market-research and decision-support tool, not financial advice. "
     "It does not recommend buying or selling any security."

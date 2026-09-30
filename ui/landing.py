@@ -24,6 +24,7 @@ try:
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
+import ui.product_copy as _product_copy
 from ui.pricing import plans_html
 from ui.product_copy import (
     DISCLAIMER,
@@ -32,6 +33,13 @@ from ui.product_copy import (
     PRODUCT_NAME,
     TAGLINE,
     TRUST_POINTS,
+)
+
+# getattr: a stale ui.product_copy on Streamlit Cloud must not break the landing page.
+HSF_SCORE_ONE_LINE = getattr(
+    _product_copy, "HSF_SCORE_ONE_LINE",
+    "HSF Score (0–100) ranks setups by how strongly the current technical evidence lines up. "
+    "It is not a probability of profit or a prediction.",
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,12 +51,15 @@ EXAMPLE_ROWS: List[Tuple[str, int, str, Tuple[str, ...]]] = [
     ("Stock B", 74, "Gap and go", ("+4.1% gap", "1.9× avg volume")),
     ("Stock C", 67, "Trend continuation", ("+9% over 10d", "earnings in 3d ⚠️")),
 ]
+# Streamlit serves pages/methodology.py at /methodology.
+METHODOLOGY_HREF = "/methodology"
 EXAMPLE_NOTE = "Example of how results look. Illustrative names and values, not live data or recommendations."
 
 _CSS = """
 <style>
+/* .hsf-hero top margin clears Streamlit's 60px header bar, which clipped the title. */
 .hsf-land{--hsf-gold:#b8892b;--hsf-line:rgba(128,128,128,.25);--hsf-soft:rgba(128,128,128,.08)}
-.hsf-hero{display:flex;align-items:center;gap:18px;margin:4px 0 6px}
+.hsf-hero{display:flex;align-items:center;gap:18px;margin:2.75rem 0 6px}
 .hsf-hero img{width:104px;height:auto;flex:0 0 auto}
 .hsf-hero h1{font-size:clamp(1.55rem,4.2vw,2.3rem);line-height:1.1;margin:0 0 4px;padding:0}
 .hsf-hero .hsf-tag{font-size:clamp(1.02rem,2.6vw,1.25rem);font-weight:600;margin:0 0 6px;color:var(--hsf-gold)}
@@ -67,7 +78,9 @@ _CSS = """
 .hsf-row .k{opacity:.8;font-size:.9rem}
 .hsf-chip{font-size:.8rem;border:1px solid var(--hsf-line);border-radius:999px;padding:2px 8px;white-space:nowrap}
 .hsf-note{font-size:.8rem;opacity:.7;margin:6px 0 0}
+.hsf-score{font-size:.95rem;margin:10px 0 0;max-width:62ch}
 .hsf-disc{font-size:.85rem;opacity:.8;margin:18px 0 4px}
+@media (max-width:640px){.hsf-hero{margin-top:4px}}  /* phones: the page padding already clears the header */
 @media (max-width:520px){
   .hsf-hero{gap:12px;align-items:flex-start}
   .hsf-hero img{width:64px;margin-top:4px}
@@ -121,7 +134,9 @@ def details_html() -> str:
         f'<section class="hsf-sec" aria-labelledby="hsf-what"><h2 id="hsf-what">What HSF does</h2>'
         f'<div class="hsf-grid">{pillars}</div></section>'
         f'<section class="hsf-sec" aria-labelledby="hsf-ex"><h2 id="hsf-ex">What a result looks like</h2>'
-        f'<div class="hsf-ex">{rows}</div><p class="hsf-note">{html.escape(EXAMPLE_NOTE)}</p></section>'
+        f'<div class="hsf-ex">{rows}</div><p class="hsf-note">{html.escape(EXAMPLE_NOTE)}</p>'
+        f'<p class="hsf-score">{html.escape(HSF_SCORE_ONE_LINE)} '
+        f'<a href="{METHODOLOGY_HREF}" target="_self">How HSF Score works</a></p></section>'
         f'<section class="hsf-sec" aria-labelledby="hsf-trust"><h2 id="hsf-trust">Why you can trust what you see</h2>'
         f'<div class="hsf-grid">{trust}</div></section>'
         f'<section class="hsf-sec" aria-labelledby="hsf-plans"><h2 id="hsf-plans">Plans</h2>'

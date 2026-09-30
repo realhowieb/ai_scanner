@@ -149,7 +149,9 @@ class EarningsRailTests(unittest.TestCase):
     def _emap(self, days_from_today):
         import datetime as dt
 
-        today = dt.datetime.now(dt.timezone.utc).date()
+        from scheduler.morning_digest import et_now
+
+        today = et_now().date()   # the digest counts days in New York time
         return {
             sym: (today + dt.timedelta(days=d)) if d is not None else None
             for sym, d in days_from_today.items()
