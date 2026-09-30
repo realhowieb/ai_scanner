@@ -730,6 +730,29 @@ def _purge_old_login_attempts() -> None:
     print(f"[maintenance] purged {deleted} stale login_attempts row(s)")
 
 
+def _purge_expired_credentials() -> None:
+    """P2-52: delete expired sessions and used/expired tokens (throttled once/day).
+    Only rows past expiry + grace; see db/credential_cleanup.py."""
+    from db.earnings import mark_earnings_refreshed_today, should_refresh_earnings_today
+
+    key = "cron_credential_purge"
+    if not should_refresh_earnings_today(key):
+        return
+    from db.credential_cleanup import purge_expired_credentials
+    from db.engine import get_neon_conn
+
+    conn = get_neon_conn()
+    if conn is None:
+        return
+    try:
+        counts = purge_expired_credentials(conn)
+    finally:
+        conn.close()
+    mark_earnings_refreshed_today(key)
+    summary = ", ".join(f"{t}={n}" for t, n in counts.items()) or "nothing to purge"
+    print(f"[maintenance] purged expired credentials: {summary}")
+
+
 def _prune_old_runs() -> None:
     """Delete old non-snapshot runs (throttled once/day).
 
@@ -1105,6 +1128,11 @@ def main():
         _purge_old_login_attempts()
     except Exception as e:
         print(f"[cron] login purge failed: {e}")
+        _capture(e)
+    try:
+        _purge_expired_credentials()
+    except Exception as e:
+        print(f"[cron] credential purge failed: {e}")
         _capture(e)
     try:
         _prune_old_runs()
