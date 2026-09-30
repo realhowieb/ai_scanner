@@ -208,6 +208,12 @@ def _throttled(last_fired_at, throttle_hours: float) -> bool:
         return False
 
 
+# P2-51: 20-day daily volatility (%) below this = bond/cash/broad-index ETF
+# territory (VBIL 0.01, USFR 0.07, SJNK 0.2, IEI 0.25, broad ETFs 0.6-0.8;
+# the least volatile stocks in recent scans start ~1.2, median ~3.5).
+MIN_ALERT_VOLATILITY_PCT = 1.0
+
+
 def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
     """Return human-readable match lines for an alert, or [] when none."""
     ticker_col = _col(df, "Ticker", "Symbol")
@@ -228,11 +234,23 @@ def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
             if not watch_tickers:
                 return []
             sub = df[df[ticker_col].astype(str).str.upper().isin(watch_tickers)]
+        vol_col = _col(df, "Volatility20D%")
         for _, row in sub.iterrows():
             try:
                 score = float(row[score_col])
             except (TypeError, ValueError):
                 continue
+            # P2-51: bond / cash / broad-index ETFs drift steadily at 20-day highs
+            # and reach BreakoutScore 35-45 while barely moving. Market-wide
+            # breakout alerts skip names under MIN_ALERT_VOLATILITY_PCT; a
+            # watchlist-only alert keeps whatever the user chose to watch.
+            if vol_col is not None and not alert.get("watchlist_only"):
+                try:
+                    vol = float(row[vol_col])
+                except (TypeError, ValueError):
+                    vol = float("nan")
+                if vol == vol and vol < MIN_ALERT_VOLATILITY_PCT:
+                    continue
             if score >= threshold:
                 lines.append(f"{str(row[ticker_col]).upper()}: BreakoutScore {score:.1f} (≥ {threshold:g})")
 
