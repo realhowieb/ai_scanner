@@ -470,20 +470,6 @@ def alert_signature(alert: Dict[str, Any]) -> tuple:
     )
 
 
-def compose_alert_email(sections: List[tuple]) -> tuple:
-    """(subject, body) for one email covering every alert that fired for a user
-    in this run. `sections` is [(label, body)]; identical sections appear once."""
-    unique: List[tuple] = []
-    for sec in sections:
-        if sec not in unique:
-            unique.append(sec)
-    if len(unique) == 1:
-        label, body = unique[0]
-        return f"📈 {label} triggered", body
-    subject = f"📈 {len(unique)} alerts triggered"
-    return subject, "\n\n".join(f"{label}\n{body}" for label, body in unique)
-
-
 def run_alerts() -> None:
     """Evaluate all enabled alerts against the latest snapshot and notify."""
     try:
@@ -603,7 +589,9 @@ def run_alerts() -> None:
             _freeze_signal_outcomes(event_id, alert, df, lines)
             mark_alert_fired(alert.get("id"))
             fired += 1
-            pending.setdefault(user_id, []).append((label, body))
+            from scheduler.alert_email import make_section
+
+            pending.setdefault(user_id, []).append(make_section(alert, lines))
         except Exception as e:  # never let one alert kill the run
             print(f"[alert_runner] alert {alert.get('id')} failed: {redact(e)}")
             _capture(e)
@@ -618,13 +606,19 @@ def run_alerts() -> None:
                 and _alert_emails_on(user_id)
             ):
                 continue
-            from ui.email_utils import send_alert_email
+            from scheduler.alert_email import compose
+            from ui.email_utils import send_digest_email
 
-            subject, body = compose_alert_email(sections)
-            if send_alert_email(
+            email = compose(sections)
+            if email is None:
+                continue
+            subject, text, html_inner = email
+            # Same branded shell as the morning digest: sections + ticker tables.
+            if send_digest_email(
                 to_address=user_id,
                 subject=subject,
-                body=body,
+                html_inner=html_inner,
+                text_inner=text,
                 unsubscribe_url=_alert_unsubscribe_link(user_id),
             ):
                 emailed += 1

@@ -17,7 +17,8 @@ try:
 except Exception:
     _PANDAS = False
 
-from scheduler.alert_runner import alert_signature, compose_alert_email
+from scheduler.alert_email import compose, make_section
+from scheduler.alert_runner import alert_signature
 
 ME = "me@example.com"
 
@@ -29,20 +30,18 @@ def alert(aid, kind, threshold=None, user=ME, **kw):
 
 
 class ComposeTests(unittest.TestCase):
-    def test_single_alert_keeps_its_subject(self):
-        self.assertEqual(compose_alert_email([("Breakout alert", "IOVA: 105.8")]),
-                         ("📈 Breakout alert triggered", "IOVA: 105.8"))
+    def test_single_alert(self):
+        subject, text, html = compose([make_section(alert(1, "breakout", 30.0), ["IOVA: BreakoutScore 105.8 (≥ 30)"])])
+        self.assertEqual(subject, "📈 Breakout alert: IOVA")
+        self.assertIn("Breakout alert · BreakoutScore ≥ 30", text)
+        self.assertIn("IOVA", html)
 
     def test_several_alerts_in_one_email_without_repeats(self):
-        subject, body = compose_alert_email([
-            ("Watchlist alert", "SMTC: in scan results"),
-            ("Watchlist alert", "SMTC: in scan results"),
-            ("Breakout alert", "IOVA: 105.8 (≥ 30)"),
-        ])
-        self.assertEqual(subject, "📈 2 alerts triggered")
-        self.assertEqual(body.count("SMTC"), 1)
-        self.assertIn("Watchlist alert\nSMTC", body)
-        self.assertIn("Breakout alert\nIOVA", body)
+        watch = make_section(alert(1, "watchlist"), ["SMTC: in scan results (BreakoutScore 33.9)"])
+        subject, text, _ = compose([watch, dict(watch),
+                                    make_section(alert(2, "breakout", 30.0), ["IOVA: BreakoutScore 105.8 (≥ 30)"])])
+        self.assertEqual(subject, "📈 2 alerts: SMTC, IOVA")
+        self.assertEqual(text.count("SMTC"), 1)
 
     def test_signature(self):
         self.assertEqual(alert_signature(alert(1, "watchlist")), alert_signature(alert(2, "watchlist")))
@@ -70,7 +69,7 @@ class RunnerTests(unittest.TestCase):
             mock.patch("db.alerts.record_alert_event", return_value=None),
             mock.patch("db.watchlists.list_watchlists", return_value=[{"id": 1}]),
             mock.patch("db.watchlists.get_watchlist_tickers", return_value=["SMTC"]),
-            mock.patch("ui.email_utils.send_alert_email", side_effect=lambda **k: sent.append(k) or True),
+            mock.patch("ui.email_utils.send_digest_email", side_effect=lambda **k: sent.append(k) or True),
             mock.patch.object(ar, "_latest_snapshot_df", return_value=df),
             mock.patch.object(ar, "_alert_limit_for_user", return_value=25),
             mock.patch.object(ar, "_annotate_earnings", side_effect=lambda lines: lines),
@@ -95,8 +94,10 @@ class RunnerTests(unittest.TestCase):
         fired, sent, log = self.run_alerts(alerts)
         self.assertEqual(fired, [23, 12, 8])                      # duplicates 13 and 11 skipped
         self.assertEqual(len(sent), 1)
-        self.assertEqual(sent[0]["subject"], "📈 3 alerts triggered")
-        self.assertEqual(sent[0]["body"].count("Watchlist alert"), 1)
+        # ≥50 lists only IOVA, already under ≥30, so its section is dropped (P2-50)
+        self.assertEqual(sent[0]["subject"], "📈 2 alerts: SMTC, IOVA")
+        self.assertEqual(sent[0]["text_inner"].count("Watchlist alert"), 1)
+        self.assertNotIn("≥ 50", sent[0]["html_inner"])
         self.assertIn("skipped 2 duplicate alert(s)", log)
 
     def test_throttled_owner_keeps_duplicates_quiet(self):
