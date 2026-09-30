@@ -17,7 +17,7 @@ def _mask_local(local: str) -> str:
 
 
 def mask_email(value: Any) -> str:
-    """'lovenatural4life@gmail.com' -> 'lo***@gmail.com'; a plain username -> 'ho***'."""
+    """'sample.customer@gmail.com' -> 'sa***@gmail.com'; a plain username -> 'ho***'."""
     text = str(value or "").strip()
     if not text:
         return ""

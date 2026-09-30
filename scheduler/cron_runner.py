@@ -147,6 +147,15 @@ except Exception:  # pragma: no cover - fallback when monitoring is unavailable
     def _capture(exc: BaseException) -> None:
         pass
 
+# Scheduled-job logs are public (GitHub Actions on a public repo). Errors from
+# jobs that touch user data (alerts, emails, credential purges) can echo row
+# values, so they are printed with email addresses masked.
+try:
+    from ui.log_privacy import redact as _redact
+except Exception:  # pragma: no cover - fallback: show only the error type
+    def _redact(value) -> str:
+        return type(value).__name__ if isinstance(value, BaseException) else "(details hidden)"
+
 
 @dataclass
 class ScanRunSummary:
@@ -983,7 +992,7 @@ def main():
 
         run_alerts()
     except Exception as e:
-        print(f"[cron] alert evaluation failed: {e}")
+        print(f"[cron] alert evaluation failed: {_redact(e)}")
         _capture(e)
 
     # Refresh the earnings calendar once per day from FMP -> Finnhub (bulk; no
@@ -1058,7 +1067,7 @@ def main():
             print(f"[intelligence_alerts] events={m['events_detected']} "
                   f"delivered={m['delivered']} deduped={m['deduped']} failed={m['failed']}")
     except Exception as e:
-        print(f"[cron] intelligence alert evaluation failed: {e}")
+        print(f"[cron] intelligence alert evaluation failed: {_redact(e)}")
         _capture(e)
 
     # HSF intelligence alert QUALITY maturation: for each past alert, find the
@@ -1108,7 +1117,7 @@ def main():
 
             run_evening_wrap(force=os.getenv("CRON_FORCE", "").strip() == "1")
         except Exception as e:
-            print(f"[cron] evening wrap failed: {e}")
+            print(f"[cron] evening wrap failed: {_redact(e)}")
             _capture(e)
 
     # Send the Pro+ morning digest once per day (throttled to the first scan run
@@ -1120,19 +1129,19 @@ def main():
         # so admins can test the digest on demand; scheduled runs send once/day.
         run_morning_digest(force=os.getenv("CRON_FORCE", "").strip() == "1")
     except Exception as e:
-        print(f"[cron] morning digest failed: {e}")
+        print(f"[cron] morning digest failed: {_redact(e)}")
         _capture(e)
 
     # Nightly-equivalent maintenance (throttled once/day). Best-effort.
     try:
         _purge_old_login_attempts()
     except Exception as e:
-        print(f"[cron] login purge failed: {e}")
+        print(f"[cron] login purge failed: {_redact(e)}")
         _capture(e)
     try:
         _purge_expired_credentials()
     except Exception as e:
-        print(f"[cron] credential purge failed: {e}")
+        print(f"[cron] credential purge failed: {_redact(e)}")
         _capture(e)
     try:
         _prune_old_runs()

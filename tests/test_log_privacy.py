@@ -12,14 +12,14 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-ADDR = "lovenatural4life@gmail.com"
+ADDR = "sample.customer@gmail.com"
 
 
 class MaskingTests(unittest.TestCase):
     def test_mask_email(self):
         from ui.log_privacy import mask_email
 
-        self.assertEqual(mask_email(ADDR), "lo***@gmail.com")
+        self.assertEqual(mask_email(ADDR), "sa***@gmail.com")
         self.assertEqual(mask_email("ab@x.io"), "a***@x.io")
         self.assertEqual(mask_email("howard"), "ho***")
         self.assertEqual(mask_email(""), "")
@@ -32,7 +32,7 @@ class MaskingTests(unittest.TestCase):
         out = redact(text)
         self.assertNotIn(ADDR, out)
         self.assertNotIn("Jane.Doe+x", out)
-        self.assertIn("lo***@gmail.com", out)
+        self.assertIn("sa***@gmail.com", out)
         self.assertIn("Ja***@Example.co.uk", out)
 
     def test_billing_service_copy_matches(self):
@@ -57,7 +57,7 @@ class SendFailureLogTests(unittest.TestCase):
              mock.patch("config.SMTP_PASS", "p"), mock.patch("smtplib.SMTP", return_value=server), \
              mock.patch.object(eu, "_capture"), redirect_stdout(io.StringIO()) as out:
             self.assertFalse(eu.send_digest_email(ADDR, "s", "h", "t"))
-        self.assertIn("SEND FAILED to lo***@gmail.com", out.getvalue())
+        self.assertIn("SEND FAILED to sa***@gmail.com", out.getvalue())
         self.assertNotIn(ADDR, out.getvalue())
 
     def test_success_log_has_no_address(self):
@@ -69,7 +69,7 @@ class SendFailureLogTests(unittest.TestCase):
              mock.patch("config.SMTP_PASS", "p"), mock.patch("smtplib.SMTP", return_value=server), \
              redirect_stdout(io.StringIO()) as out:
             self.assertTrue(eu.send_alert_email(ADDR, "s", "b"))
-        self.assertIn("lo***@gmail.com", out.getvalue())
+        self.assertIn("sa***@gmail.com", out.getvalue())
         self.assertNotIn(ADDR, out.getvalue())
 
 
@@ -77,6 +77,16 @@ class SourceSweepTests(unittest.TestCase):
     FILES = ("ui/email_utils.py", "scheduler/morning_digest.py", "scheduler/evening_wrap.py",
              "scheduler/alert_runner.py", "billing_service/realtime_alerts.py", "telemetry.py")
     RAW = re.compile(r"(print|_log)\(f?[\"'].*\{(to_address|email|user_id|username)(!r)?\}")
+
+    def test_user_data_job_errors_are_redacted(self):
+        # Errors from cron jobs that read user rows (alerts, emails, credential
+        # purges) can carry row values, so they must go through redaction.
+        cron = (ROOT / "scheduler" / "cron_runner.py").read_text()
+        for label in ("alert evaluation", "intelligence alert evaluation", "evening wrap",
+                      "morning digest", "login purge", "credential purge"):
+            self.assertIn(f'print(f"[cron] {label} failed: {{_redact(e)}}")', cron)
+        runner = (ROOT / "scheduler" / "alert_runner.py").read_text()
+        self.assertIn('print(f"[alert_runner] could not load alerts: {redact(e)}")', runner)
 
     def test_no_log_line_prints_a_raw_address(self):
         for rel in self.FILES:
