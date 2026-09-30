@@ -266,8 +266,11 @@ def auth_ui():
 
     _stripe_return = checkout_flag == "success" or portal_flag == "return"
 
-    if _stripe_return and "username" in st.session_state:
+    if checkout_flag == "success" and "username" in st.session_state:
         _poll_for_tier_upgrade(st.session_state["username"])
+    elif portal_flag == "return" and "username" in st.session_state:
+        from ui.billing_return import handle_portal_return  # portal may downgrade: don't wait for an upgrade
+        handle_portal_return(st.session_state["username"], _resolve_tier_key)
 
     if "username" not in st.session_state and _stripe_return:
         st.success(
