@@ -204,12 +204,16 @@ def get_username_for_session(session_id: str) -> Optional[str]:
         ensure_auth_sessions_schema(conn)
 
         cur = conn.cursor()
+        # P1-54: a session only counts while its account is active, so a
+        # deactivated account is signed out on its next page load.
         cur.execute(
             """
-            SELECT username
-            FROM auth_sessions
-            WHERE session_id = %s
-              AND expires_at > now()
+            SELECT s.username
+            FROM auth_sessions s
+            JOIN users u ON lower(u.username) = lower(s.username)
+            WHERE s.session_id = %s
+              AND s.expires_at > now()
+              AND u.is_active IS NOT FALSE
             LIMIT 1;
             """,
             (sid,),
@@ -224,6 +228,29 @@ def get_username_for_session(session_id: str) -> Optional[str]:
             return None
         return row[0] if isinstance(row, (tuple, list)) else row.get("username")
     except (RuntimeError, OSError, TypeError, ValueError, KeyError):
+        return None
+
+
+def revoke_user_sessions(username: str) -> Optional[int]:
+    """Delete every session of ``username`` (P1-54: after a password reset, so a
+    stolen session cookie stops working). Returns the number removed, or None when
+    the database is unavailable."""
+    user = (username or "").strip().lower()
+    if not user or get_neon_conn is None:
+        return None
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return None
+        ensure_auth_sessions_schema(conn)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM auth_sessions WHERE lower(username) = %s;", (user,))
+        removed = cur.rowcount
+        conn.commit()
+        cur.close()
+        conn.close()
+        return int(removed or 0)
+    except (RuntimeError, OSError, TypeError, ValueError):
         return None
 
 
