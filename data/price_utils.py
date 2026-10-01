@@ -110,6 +110,6 @@ def frame_fingerprint(df: pd.DataFrame) -> str | None:
         sample_tail = df[cols].tail(4)
         sample = pd.concat([sample_head, sample_tail], axis=0)
         payload = sample.to_csv(index=False).encode("utf-8")
-        return hashlib.sha1(payload).hexdigest()
+        return hashlib.sha1(payload, usedforsecurity=False).hexdigest()
     except (AttributeError, TypeError, ValueError):
         return None

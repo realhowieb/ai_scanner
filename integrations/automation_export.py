@@ -330,7 +330,7 @@ def _feature_schema_fingerprint(features: Any) -> str | None:
     names = [str(f) for f in (features or []) if str(f).strip()]
     if not names:
         return None
-    digest = hashlib.sha1("\n".join(names).encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha1("\n".join(names).encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
     return f"fp:{len(names)}:{digest}"
 
 

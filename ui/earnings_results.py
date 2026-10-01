@@ -187,7 +187,7 @@ def _results_signature(df: pd.DataFrame) -> str:
         )
         tickers.sort()
         payload = "|".join(tickers).encode("utf-8", errors="ignore")
-        return f"{rows}|{hashlib.md5(payload).hexdigest()}"
+        return f"{rows}|{hashlib.md5(payload, usedforsecurity=False).hexdigest()}"
     except Exception:
         return f"{rows}|fallback"
 

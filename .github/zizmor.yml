@@ -1,0 +1,10 @@
+# zizmor (GitHub Actions security linter) configuration — used by
+# .github/workflows/security-scan.yml.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # GitHub's own actions are referenced by major-version tag and kept
+        # current by Dependabot; third-party actions must be pinned to a SHA.
+        "actions/*": ref-pin
+        "*": hash-pin

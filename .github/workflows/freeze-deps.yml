@@ -8,12 +8,17 @@ name: Freeze Dependency Lock
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   freeze:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python (match Streamlit Cloud runtime)
         uses: actions/setup-python@v6

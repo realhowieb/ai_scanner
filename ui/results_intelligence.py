@@ -284,7 +284,7 @@ def _df_signature(df: Any) -> str:
         # any order yields the same fingerprint.
         row_hashes = hash_pandas_object(df[cols], index=False)
         ordered = sorted(int(x) for x in row_hashes.to_numpy())
-        digest = hashlib.sha1(repr(ordered).encode()).hexdigest()[:16]
+        digest = hashlib.sha1(repr(ordered).encode(), usedforsecurity=False).hexdigest()[:16]
         return f"{len(df)}:{len(cols)}:{digest}"
     except Exception:
         return "na"

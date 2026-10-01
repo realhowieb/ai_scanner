@@ -19,11 +19,16 @@ concurrency:
   group: btc-outcome-logger
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   log:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
