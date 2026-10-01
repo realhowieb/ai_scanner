@@ -220,6 +220,17 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             type="primary" if focus == plan else "secondary",
         ):
             try:
+                from ui.acquisition import track_event
+
+                track_event(
+                    "upgrade_started",
+                    username=email,
+                    plan=current_tier_key,
+                    metadata={"requested_plan": plan, "surface": "billing_page"},
+                )
+            except Exception:
+                pass
+            try:
                 from ui.email_verification_gate import require_verified_for_upgrade
                 allowed = require_verified_for_upgrade(email, key_suffix=key)
             except Exception:

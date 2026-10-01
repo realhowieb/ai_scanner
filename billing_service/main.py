@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import re
@@ -158,6 +159,48 @@ def _mark_event_processed(conn, event_id: str, event_type: str) -> None:
             (event_id, event_type),
         )
     conn.commit()
+
+
+def _record_paid_conversion(email: str, plan: str, *, stripe_event_id: str | None = None) -> None:
+    """Best-effort acquisition conversion event. Stores a user hash, never email."""
+    try:
+        user_hash = hashlib.sha256(str(email or "").strip().lower().encode("utf-8")).hexdigest()[:24]
+        metadata = json.dumps({"stripe_event_id": stripe_event_id or "", "billing_surface": "stripe_webhook"})
+        with _db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS acquisition_events (
+                        id SERIAL PRIMARY KEY,
+                        event_name TEXT NOT NULL,
+                        source TEXT DEFAULT 'direct',
+                        utm_source TEXT,
+                        utm_medium TEXT,
+                        utm_campaign TEXT,
+                        utm_content TEXT,
+                        utm_term TEXT,
+                        referrer_domain TEXT,
+                        user_hash TEXT,
+                        plan TEXT,
+                        metadata JSONB DEFAULT '{}'::jsonb,
+                        occurred_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                    """
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_acquisition_events_name_time "
+                    "ON acquisition_events (event_name, occurred_at DESC)"
+                )
+                cur.execute(
+                    """
+                    INSERT INTO acquisition_events (event_name, source, user_hash, plan, metadata)
+                    VALUES (%s, %s, %s, %s, %s::jsonb)
+                    """,
+                    ("successful_paid_conversion", "other_unknown", user_hash, plan, metadata),
+                )
+            conn.commit()
+    except Exception as exc:
+        _log.warning("paid conversion analytics failed: %s", type(exc).__name__)
 
 
 def _normalize_db_url(url: str) -> str:
@@ -616,6 +659,7 @@ async def stripe_webhook(request: Request):
                 stripe_subscription_id=subscription_id,
                 stripe_price_id=price_id,
             )
+            _record_paid_conversion(email, plan, stripe_event_id=event_id)
         except Exception as e:
             raise HTTPException(500, f"DB update failed: {e}")
 
@@ -673,6 +717,7 @@ async def stripe_webhook(request: Request):
                 stripe_subscription_id=subscription_id,
                 stripe_price_id=price_id,
             )
+            _record_paid_conversion(email, plan, stripe_event_id=event_id)
         except Exception as e:
             raise HTTPException(500, f"DB update failed: {e}")
 

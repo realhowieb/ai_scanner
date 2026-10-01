@@ -409,6 +409,17 @@ def render_scan_controls(
                     f"✅ {label} scan complete in {dt:.1f}s. Returned {filtered_count} rows.",
                     "success",
                 )
+                try:
+                    from ui.acquisition import track_event
+
+                    track_event(
+                        "first_scanner_use",
+                        username=username,
+                        plan=st.session_state.get("tier_key") or st.session_state.get("plan"),
+                        metadata={"label": label, "rows": filtered_count},
+                    )
+                except Exception:
+                    pass
 
                 # Persist this scan to the runs DB (history + optional daily snapshot)
                 try:

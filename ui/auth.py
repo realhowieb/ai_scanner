@@ -22,46 +22,20 @@ try:
 except ImportError:
     _record_login_attempt_db = None
     _is_login_rate_limited_db = None
-from ui.auth_lockout import (
-    clear_failed_login_attempts as _clear_failed_login_attempts,
-)
-from ui.auth_lockout import (
-    is_login_locked as _is_login_locked,
-)
-from ui.auth_lockout import (
-    lockout_remaining_seconds as _lockout_remaining_seconds,
-)
-from ui.auth_lockout import (
-    register_failed_login_attempt as _register_failed_login_attempt,
-)
-from ui.auth_sessions import (
-    COOKIE_MANAGER_STATE_KEY,
-    COOKIE_NAME,
-)
-from ui.auth_sessions import (
-    cookies_ready_or_stop as _cookies_ready_or_stop,
-)
-from ui.auth_sessions import (
-    create_session as _create_session,
-)
-from ui.auth_sessions import (
-    delete_session as _delete_session,
-)
-from ui.auth_sessions import (
-    get_username_for_session as _get_username_for_session,
-)
-from ui.auth_sessions import (
-    reset_cookie_save_guard as _reset_cookie_save_guard,
-)
-from ui.auth_sessions import (
-    save_cookies as _save_cookies,
-)
-from ui.auth_signin_extras import (
-    clear_session_cookie as _clear_session_cookie,
-)
-from ui.auth_signin_extras import (
-    deactivated_with_password as _deactivated_with_password,
-)
+from ui.auth_lockout import clear_failed_login_attempts as _clear_failed_login_attempts
+from ui.auth_lockout import is_login_locked as _is_login_locked
+from ui.auth_lockout import lockout_remaining_seconds as _lockout_remaining_seconds
+from ui.auth_lockout import register_failed_login_attempt as _register_failed_login_attempt
+from ui.auth_sessions import COOKIE_MANAGER_STATE_KEY, COOKIE_NAME
+from ui.auth_sessions import cookies_ready_or_stop as _cookies_ready_or_stop
+from ui.auth_sessions import create_session as _create_session
+from ui.auth_sessions import delete_session as _delete_session
+from ui.auth_sessions import get_username_for_session as _get_username_for_session
+from ui.auth_sessions import reset_cookie_save_guard as _reset_cookie_save_guard
+from ui.auth_sessions import save_cookies as _save_cookies
+from ui.auth_signin_extras import clear_session_cookie as _clear_session_cookie
+from ui.auth_signin_extras import deactivated_with_password as _deactivated_with_password
+from ui.acquisition import capture_attribution, track_event
 
 # Direct Neon lookup fallback for username -> email mapping
 try:
@@ -241,6 +215,7 @@ def auth_ui():
             u = _get_username_for_session(str(sid))
             if u:
                 st.session_state["username"] = (u or "").strip().lower()
+                st.session_state["hsf_restored_session"] = True
                 # Re-read tier from DB so post-Stripe-upgrade redirects reflect the new plan.
                 t = _resolve_tier_key(st.session_state["username"])
                 if t:
@@ -313,10 +288,12 @@ def auth_ui():
         st.caption("Restoring session…")
         st.rerun()
 
+    capture_attribution()
     render_signed_out_hero()  # Run 62: compact hero keeps the form in the first phone viewport
 
     login_placeholder = st.empty()
     with login_placeholder.container():
+        st.markdown('<div id="hsf-signup"></div>', unsafe_allow_html=True)
         tabs = st.tabs(["Sign in", "Create account"])
 
         # ---- Login tab ----
@@ -352,7 +329,7 @@ def auth_ui():
                     su_pw1 = st.text_input("🔒 Password", type="password", key="signup_password_1", placeholder="At least 10 characters")
                     su_pw2 = st.text_input("🔒 Confirm Password", type="password", key="signup_password_2", placeholder="Re-enter password")
                     su_agree = st.checkbox("I agree to use this tool for educational/informational purposes only.", key="signup_agree")
-                    signup_clicked = st.form_submit_button("🟢 Create Free Account")
+                    signup_clicked = st.form_submit_button("Start scanning free")
 
             with st.expander("What you get with a Free account", expanded=True):
                 st.write("- ✔️ The latest full-market ranking, updated through the trading day")
@@ -368,6 +345,8 @@ def auth_ui():
     # Sign Up handling
     # ----------------------
     if 'signup_clicked' in locals() and signup_clicked:
+        track_event("primary_cta_click", metadata={"surface": "signup_form"})
+        track_event("signup_started", metadata={"surface": "signup_form"})
         email_raw = (su_email or "").strip().lower()
         username_raw = (su_username or "").strip()
 
@@ -487,6 +466,9 @@ def auth_ui():
         st.session_state["tier"] = user_rec.get("tier", "basic")
         st.session_state["plan"] = user_rec.get("plan", user_rec.get("tier", "basic"))
         st.session_state["is_admin"] = bool(user_rec.get("is_admin", False))
+        st.session_state["hsf_start_scanner_after_auth"] = True
+        st.session_state["hsf_new_signup_scanner_hint"] = True
+        track_event("signup_completed", username=email_raw, plan=st.session_state["plan"])
         # Persist login across refreshes using cookie session
         try:
             cookies2 = _cookies_ready_or_stop()
