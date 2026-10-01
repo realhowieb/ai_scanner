@@ -1,0 +1,6 @@
+# gitleaks false positives (reviewed 2026-10-01): Streamlit widget keys and a fake
+# test token in the autonomy certification harness. Not secrets.
+cd7b8ccffd6ae0f6f95807a0bad9bc355e1c17f8:ui/nav.py:generic-api-key:53
+6c90a9b714a99ed51d1d579738179ef6412eaae1:analytics/autonomy_certification.py:generic-api-key:446
+6c90a9b714a99ed51d1d579738179ef6412eaae1:analytics/autonomy_certification.py:generic-api-key:447
+a4a4280b22e6087af7a4bd20abcd7a8438036a7b:ui/scans.py:generic-api-key:641

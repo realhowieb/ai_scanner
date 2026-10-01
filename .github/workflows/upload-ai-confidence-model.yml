@@ -49,6 +49,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -97,18 +99,25 @@ jobs:
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          DAYS_BACK: ${{ inputs.days_back }}
+          MAX_RUNS: ${{ inputs.max_runs }}
+          MODEL_ASSET: ${{ inputs.model_asset }}
+          METADATA_ASSET: ${{ inputs.metadata_asset }}
         run: |
           python scripts/train_ai_confidence_model.py \
-            --days-back "${{ inputs.days_back }}" \
-            --max-runs "${{ inputs.max_runs }}" \
-            --model "models/${{ inputs.model_asset }}" \
-            --metadata "models/${{ inputs.metadata_asset }}"
+            --days-back "$DAYS_BACK" \
+            --max-runs "$MAX_RUNS" \
+            --model "models/$MODEL_ASSET" \
+            --metadata "models/$METADATA_ASSET"
 
       - name: Upload AI Confidence model to Neon
+        env:
+          MODEL_ASSET: ${{ inputs.model_asset }}
+          METADATA_ASSET: ${{ inputs.metadata_asset }}
         run: |
           python scripts/save_ai_confidence_model.py \
-            --model "models/${{ inputs.model_asset }}" \
-            --metadata "models/${{ inputs.metadata_asset }}"
+            --model "models/$MODEL_ASSET" \
+            --metadata "models/$METADATA_ASSET"
 
       - name: Verify DB model loads
         run: |

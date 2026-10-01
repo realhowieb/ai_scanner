@@ -24,7 +24,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v7
+        # Keeps the checkout credentials on purpose: this job commits and pushes
+        # the refreshed universe files. No artifacts are uploaded from it.
+        uses: actions/checkout@v7 # zizmor: ignore[artipacked]
 
       - name: Set up Python
         uses: actions/setup-python@v6

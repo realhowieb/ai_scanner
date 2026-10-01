@@ -16,12 +16,17 @@ concurrency:
   group: observation-health
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -33,8 +38,9 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          LIMIT: ${{ inputs.limit || '50000' }}
         run: |
-          python -m scripts.observation_health --limit "${{ inputs.limit || '50000' }}" --out artifacts/automation
+          python -m scripts.observation_health --limit "$LIMIT" --out artifacts/automation
           echo "### Observation dataset health" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat artifacts/automation/observation_health.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
