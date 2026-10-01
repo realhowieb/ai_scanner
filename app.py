@@ -53,6 +53,7 @@ except (ImportError, KeyError):
     install_streamlit_compat = _app_boot.install_streamlit_compat
     _quiet_external_calls = _app_boot.quiet_external_calls
 try:
+    from ui.acquisition import track_authenticated_session_once, track_scanner_view_once
     from ui.app_runtime import (
         get_market_session,
         render_active_filters_summary,
@@ -80,7 +81,6 @@ try:
         render_admin_build_stamp,
         set_latest_results_snapshot,
     )
-    from ui.acquisition import track_authenticated_session_once, track_scanner_view_once
 except (KeyError, ImportError) as _boot_err:
     # Streamlit Cloud hot-redeploy race: the module table is mid-swap when the
     # watcher re-executes this script, so imports raise KeyError instead of

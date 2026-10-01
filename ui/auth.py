@@ -22,6 +22,7 @@ try:
 except ImportError:
     _record_login_attempt_db = None
     _is_login_rate_limited_db = None
+from ui.acquisition import capture_attribution, track_event
 from ui.auth_lockout import clear_failed_login_attempts as _clear_failed_login_attempts
 from ui.auth_lockout import is_login_locked as _is_login_locked
 from ui.auth_lockout import lockout_remaining_seconds as _lockout_remaining_seconds
@@ -35,7 +36,6 @@ from ui.auth_sessions import reset_cookie_save_guard as _reset_cookie_save_guard
 from ui.auth_sessions import save_cookies as _save_cookies
 from ui.auth_signin_extras import clear_session_cookie as _clear_session_cookie
 from ui.auth_signin_extras import deactivated_with_password as _deactivated_with_password
-from ui.acquisition import capture_attribution, track_event
 
 # Direct Neon lookup fallback for username -> email mapping
 try:
