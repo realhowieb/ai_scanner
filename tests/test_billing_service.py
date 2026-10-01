@@ -556,6 +556,52 @@ class BillingServiceWebhookLifecycleTest(unittest.TestCase):
         self.bm._set_user_plan_by_email.side_effect = RuntimeError("write failed")
         self.assertEqual(_webhook(self.bm, event).status_code, 500)
 
+    def test_subscription_events_find_the_account_by_customer_id_not_email(self):
+        # P1-53: the customer's Stripe email changed to someone else's address;
+        # the account linked to cus_test at checkout still gets the change.
+        self.bm._get_username_by_customer = MagicMock(return_value="payer@example.com")
+        self.bm.stripe.Customer.retrieve.return_value = {"email": "someone.else@example.com"}
+        for event in (
+            _stripe_event("customer.subscription.deleted", {"id": "sub_test", "customer": "cus_test"},
+                          event_id="evt_del"),
+            _stripe_event("customer.subscription.updated",
+                          {"id": "sub_test", "customer": "cus_test", "status": "active",
+                           "cancel_at_period_end": False,
+                           "items": {"data": [{"price": {"id": "price_pro_fake"}}]}},
+                          event_id="evt_upd"),
+        ):
+            with self.subTest(event=event["type"]):
+                self.bm._set_user_plan_by_email.reset_mock()
+                self.assertEqual(_webhook(self.bm, event).status_code, 200)
+                self.assertEqual(self.bm._set_user_plan_by_email.call_args.kwargs["email"], "payer@example.com")
+        self.bm.stripe.Customer.retrieve.assert_not_called()
+
+    def test_email_fallback_never_takes_over_an_account_linked_to_another_customer(self):
+        self.bm._get_username_by_customer = MagicMock(return_value=None)
+        self.bm._get_user_by_email = MagicMock(
+            return_value={"username": "victim@example.com", "tier": "pro", "stripe_customer_id": "cus_victim"}
+        )
+        self.bm.stripe.Customer.retrieve.return_value = {"email": "victim@example.com"}
+        event = _stripe_event("customer.subscription.deleted", {"id": "sub_x", "customer": "cus_other"})
+        self.assertEqual(_webhook(self.bm, event).status_code, 500)
+        self.bm._set_user_plan_by_email.assert_not_called()
+
+    def test_email_fallback_applies_to_an_unlinked_account(self):
+        self.bm._get_username_by_customer = MagicMock(return_value=None)
+        self.bm._get_user_by_email = MagicMock(
+            return_value={"username": "member@example.com", "tier": "pro", "stripe_customer_id": None}
+        )
+        self.bm.stripe.Customer.retrieve.return_value = {"email": "member@example.com"}
+        event = _stripe_event("customer.subscription.deleted", {"id": "sub_x", "customer": "cus_new"})
+        self.assertEqual(_webhook(self.bm, event).status_code, 200)
+        self.assertEqual(self.bm._set_user_plan_by_email.call_args.kwargs["email"], "member@example.com")
+
+    def test_customer_lookup_failure_returns_500_without_granting(self):
+        self.bm._get_username_by_customer = MagicMock(side_effect=RuntimeError("db down"))
+        event = _stripe_event("customer.subscription.deleted", {"id": "sub_x", "customer": "cus_test"})
+        self.assertEqual(_webhook(self.bm, event).status_code, 500)
+        self.bm._set_user_plan_by_email.assert_not_called()
+
     def test_duplicate_event_is_skipped_without_reapplying_tier(self):
         self.bm._is_event_processed.return_value = True
         response = _webhook(

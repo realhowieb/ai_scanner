@@ -281,6 +281,52 @@ def _get_user_by_email(email: str) -> dict:
     return {"username": row[0], "tier": row[1], "stripe_customer_id": row[2]}
 
 
+def _get_username_by_customer(customer_id: str) -> Optional[str]:
+    """The HSF account that stored this Stripe customer id at checkout, if any."""
+    cid = (customer_id or "").strip()
+    if not cid:
+        return None
+    with _db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT username FROM users WHERE stripe_customer_id = %s LIMIT 1",
+                (cid,),
+            )
+            row = cur.fetchone()
+    return (row[0] or "").strip().lower() if row and row[0] else None
+
+
+def _account_for_customer(customer_id: str, context: str) -> str:
+    """HSF username for a subscription webhook (P1-53).
+
+    The Stripe customer id stored at checkout identifies the account; the Stripe
+    customer's email can change (e.g. edited in the Billing Portal), so it is only
+    a fallback for accounts that never stored a customer id, and never for an
+    account already linked to a different customer. Raises HTTPException(500) when
+    no account can be resolved, so Stripe retries instead of the event being lost.
+    """
+    try:
+        username = _get_username_by_customer(customer_id)
+    except Exception as exc:
+        raise HTTPException(500, f"Customer lookup failed for {context}: {type(exc).__name__}")
+    if username:
+        return username
+    try:
+        cust = stripe.Customer.retrieve(customer_id)
+        email = _validate_email(cust.get("email") or "")
+    except Exception as exc:
+        raise HTTPException(500, f"Missing customer email for {context}: {exc}")
+    try:
+        user = _get_user_by_email(email)
+    except Exception as exc:
+        raise HTTPException(500, f"Account lookup failed for {context}: {type(exc).__name__}")
+    linked = (user.get("stripe_customer_id") or "").strip() if user else ""
+    if linked and linked != (customer_id or "").strip():
+        _log.warning("%s: customer email matches an account linked to a different Stripe customer", context)
+        raise HTTPException(500, f"No account is linked to this Stripe customer for {context}")
+    return email
+
+
 def _price_to_plan(price_id: str) -> str:
     if price_id == STRIPE_PRICE_PRO:
         return "pro"
@@ -694,15 +740,8 @@ async def stripe_webhook(request: Request):
         status = (data.get("status") or "").strip().lower()
         cancel_at_period_end = bool(data.get("cancel_at_period_end"))
 
-        # We need user_email; safest is to look it up from Stripe customer email
-        try:
-            cust = stripe.Customer.retrieve(customer_id)
-            email = _validate_email(cust.get("email") or "")
-        except Exception as exc:
-            raise HTTPException(500, f"Missing customer email for subscription update: {exc}")
-
-        if not email:
-            raise HTTPException(500, "Missing customer email for subscription update")
+        # The account that pays: matched by Stripe customer id, not by email (P1-53).
+        email = _account_for_customer(customer_id, "subscription update")
 
         # Immediate cancellation -> downgrade to basic now
         if status == "canceled":
@@ -747,14 +786,7 @@ async def stripe_webhook(request: Request):
     # 3) Subscription cancelled → downgrade to Basic (unless admin)
     elif etype == "customer.subscription.deleted":
         customer_id = data.get("customer")
-        try:
-            cust = stripe.Customer.retrieve(customer_id)
-            email = _validate_email(cust.get("email") or "")
-        except Exception as exc:
-            raise HTTPException(500, f"Missing customer email for subscription deletion: {exc}")
-
-        if not email:
-            raise HTTPException(500, "Missing customer email for subscription deletion")
+        email = _account_for_customer(customer_id, "subscription deletion")
         try:
             _set_user_plan_by_email(
                 email=email,

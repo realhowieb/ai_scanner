@@ -105,9 +105,15 @@ def _set_new_password_form(token: str) -> None:
 
         from db.users import update_neon_user_password
         hashed = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
-        update_neon_user_password(username, hashed)
+        if not update_neon_user_password(username, hashed):
+            st.error("HSF couldn't update your password right now. Please request a new reset link.")
+            return
+        # P1-54: sign the account out everywhere, so a stolen session stops working.
+        from ui.auth_sessions import revoke_user_sessions
+        revoke_user_sessions(username)
+        st.session_state.pop("username", None)
         # The page's own "← Back to login" link (below) covers this; no second link.
-        st.success("Password updated! You can now log in with your new password.")
+        st.success("Password updated! You've been signed out on all devices — log in with your new password.")
     except Exception as exc:
         _show_error("your password update", exc, level="error", message="HSF couldn't update your password right now. Try again shortly.")
 
