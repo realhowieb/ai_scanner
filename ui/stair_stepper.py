@@ -80,7 +80,8 @@ def render_stair_steppers(symbols: Sequence[str]) -> None:
             c1, c2, c3 = st.columns(3)
             direction = c1.selectbox("Direction", ["up", "down", "either"], key="ss_direction")
             r2_min = c2.slider("Minimum R²", 0.50, 0.99, 0.80, 0.01, key="ss_r2")
-            window = c3.selectbox("Bars fitted", [30, 45, 60], index=[30, 45, 60].index(DEFAULT_WINDOW),
+            window_options = [10, 15, 20, 30, 45, 60]
+            window = c3.selectbox("Bars fitted", window_options, index=window_options.index(DEFAULT_WINDOW),
                                   key="ss_window", help="Most recent 1-minute bars of the latest session.")
             c4, c5 = st.columns(2)
             max_pb = c4.number_input("Max pullback %", 0.1, 5.0, 1.0, 0.1, key="ss_pullback",
