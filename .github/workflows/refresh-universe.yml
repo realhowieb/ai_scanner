@@ -50,10 +50,12 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          echo "### Universe changes" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          git --no-pager diff --stat -- sp500.txt nasdaq.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Universe changes"
+            echo '```'
+            git --no-pager diff --stat -- sp500.txt nasdaq.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           git add sp500.txt nasdaq.txt
           git commit -m "Auto-refresh universe files (sp500 / nasdaq)"
           git push
