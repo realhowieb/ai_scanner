@@ -49,7 +49,7 @@ ACCOUNT_SESSION_KEYS = (
     "hsf_alert_prefill_ticker", "hsf_alert_prefill_event",
     # Run 83 (B2): account-derived state that used to survive logout.
     "active_watchlist_quote_rows", "_watchlist_prior_rows", "_loaded_user_settings",
-    "_portal_url", "post_checkout_refreshed", "_tier_poll_attempt",
+    "_portal_url", "_cancel_portal_url", "post_checkout_refreshed", "_tier_poll_attempt",
     "_wl_pending_scan", "_wl_pending_scan_all", "_wl_tools_state",
     "dt_rows", "dt_watch_symbols", "dt_watch_baseline",
     "latest_results_df", "results_signature", "scan_ran_at_utc", "force_results_refresh",

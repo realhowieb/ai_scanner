@@ -81,6 +81,23 @@ class BillingAuthTests(unittest.TestCase):
         self.assertEqual(r.json(), {"portal_url": "https://portal.test/cus_ALICE"})
         self.bm._get_user_by_email.assert_called_once_with("alice@example.com")
 
+    def test_cancel_flow_uses_the_authenticated_accounts_subscription(self):
+        self.bm.stripe.billing_portal.Session.create.side_effect = None
+        self.bm.stripe.billing_portal.Session.create.return_value = types.SimpleNamespace(
+            url="https://portal.test/cancel"
+        )
+        self.bm.stripe.Subscription.list.return_value = {"data": [{"id": "sub_ALICE"}]}
+
+        r = self.portal(token=self.token("alice@example.com"), flow="cancel")
+
+        self.assertEqual(r.status_code, 200)
+        self.bm.stripe.Subscription.list.assert_called_once_with(
+            customer="cus_ALICE", status="active", limit=1
+        )
+        kwargs = self.bm.stripe.billing_portal.Session.create.call_args.kwargs
+        self.assertEqual(kwargs["customer"], "cus_ALICE")
+        self.assertEqual(kwargs["flow_data"]["subscription_cancel"]["subscription"], "sub_ALICE")
+
     # --- cross-account --------------------------------------------------------
     def test_user_a_cannot_request_user_b_portal(self):
         r = self.portal(token=self.token("alice@example.com"), email="bob@example.com")

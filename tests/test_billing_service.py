@@ -330,6 +330,84 @@ class BillingServiceCheckoutTest(unittest.TestCase):
 
 
 @unittest.skipUnless(_FASTAPI_AVAILABLE, "fastapi not installed in this environment")
+class BillingServicePortalTest(unittest.TestCase):
+    def setUp(self):
+        self.bm = _configured_module()
+        self.bm._consume_billing_token = MagicMock(return_value="member@example.com")
+        self.bm._get_user_by_email = MagicMock(return_value={
+            "username": "member@example.com",
+            "tier": "pro",
+            "stripe_customer_id": "cus_member",
+        })
+        self.bm.stripe.billing_portal.Session.create.return_value = types.SimpleNamespace(
+            url="https://billing.test/portal"
+        )
+
+    def _portal(self, **payload):
+        return _client(self.bm).post(
+            "/create-portal-session",
+            json=payload,
+            headers={"X-HSF-Auth": "test-token"},
+        )
+
+    def test_cancel_flow_targets_active_subscription_and_redirects_after_completion(self):
+        self.bm.stripe.Subscription.list.return_value = {"data": [{"id": "sub_active"}]}
+
+        response = self._portal(
+            flow="cancel",
+            return_url="https://hsf-beta.streamlit.app/?portal=return&rt=restore-token",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"portal_url": "https://billing.test/portal"})
+        self.bm.stripe.Subscription.list.assert_called_once_with(
+            customer="cus_member", status="active", limit=1
+        )
+        kwargs = self.bm.stripe.billing_portal.Session.create.call_args.kwargs
+        self.assertEqual(kwargs["customer"], "cus_member")
+        self.assertEqual(kwargs["flow_data"], {
+            "type": "subscription_cancel",
+            "subscription_cancel": {"subscription": "sub_active"},
+            "after_completion": {
+                "type": "redirect",
+                "redirect": {"return_url": kwargs["return_url"]},
+            },
+        })
+
+    def test_cancel_flow_without_active_subscription_fails_closed(self):
+        self.bm.stripe.Subscription.list.return_value = {"data": []}
+
+        response = self._portal(flow="cancel")
+
+        self.assertEqual(response.status_code, 400)
+        self.bm.stripe.billing_portal.Session.create.assert_not_called()
+
+    def test_cancel_flow_failure_does_not_fall_back_to_generic_portal(self):
+        self.bm.stripe.Subscription.list.return_value = {"data": [{"id": "sub_active"}]}
+        self.bm.stripe.billing_portal.Session.create.side_effect = RuntimeError("flow rejected")
+
+        response = self._portal(flow="cancel")
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(self.bm.stripe.billing_portal.Session.create.call_count, 1)
+
+    def test_unsupported_portal_flow_is_rejected_before_stripe(self):
+        response = self._portal(flow="change_owner")
+
+        self.assertEqual(response.status_code, 400)
+        self.bm.stripe.Subscription.list.assert_not_called()
+        self.bm.stripe.billing_portal.Session.create.assert_not_called()
+
+    def test_generic_portal_behavior_is_unchanged(self):
+        response = self._portal()
+
+        self.assertEqual(response.status_code, 200)
+        self.bm.stripe.Subscription.list.assert_not_called()
+        kwargs = self.bm.stripe.billing_portal.Session.create.call_args.kwargs
+        self.assertNotIn("flow_data", kwargs)
+
+
+@unittest.skipUnless(_FASTAPI_AVAILABLE, "fastapi not installed in this environment")
 class BillingServiceWebhookLifecycleTest(unittest.TestCase):
     def setUp(self):
         self.bm = _configured_module()
