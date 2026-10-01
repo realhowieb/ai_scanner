@@ -27,6 +27,8 @@ from ui.auth_lockout import clear_failed_login_attempts as _clear_failed_login_a
 from ui.auth_lockout import is_login_locked as _is_login_locked
 from ui.auth_lockout import lockout_remaining_seconds as _lockout_remaining_seconds
 from ui.auth_lockout import register_failed_login_attempt as _register_failed_login_attempt
+from ui.auth_routing import apply_post_auth_target as _apply_post_auth_target_for
+from ui.auth_routing import capture_entry_intent as _capture_entry_intent_for
 from ui.auth_sessions import COOKIE_MANAGER_STATE_KEY, COOKIE_NAME
 from ui.auth_sessions import cookies_ready_or_stop as _cookies_ready_or_stop
 from ui.auth_sessions import create_session as _create_session
@@ -178,9 +180,16 @@ def _resolve_tier_key(username: str) -> str | None:
     return str(result) if result else None
 
 
+def _capture_entry_intent() -> bool:
+    return _capture_entry_intent_for(st)
+
+def _apply_post_auth_target() -> bool:
+    return _apply_post_auth_target_for(st)
+
 def auth_ui():
     # Reset the once-per-run cookie-save guard at the start of each run.
     _reset_cookie_save_guard()
+    signup_requested = _capture_entry_intent()
 
     # --- Stripe return: ?rt= is a single-use, 2-hour restore token (Run 83), since
     # cookies are unreliable across the Stripe round-trip on Streamlit Cloud.
@@ -260,6 +269,7 @@ def auth_ui():
         username = (st.session_state["username"] or "").strip().lower()
         st.session_state["username"] = username
         display_name = st.session_state.get("display_name", username)
+        _apply_post_auth_target()
         return True, username, display_name
 
     # Basic login rate limiting to prevent brute-force attempts
@@ -294,10 +304,15 @@ def auth_ui():
     login_placeholder = st.empty()
     with login_placeholder.container():
         st.markdown('<div id="hsf-signup"></div>', unsafe_allow_html=True)
-        tabs = st.tabs(["Sign in", "Create account"])
+        if signup_requested:
+            tabs = st.tabs(["Create account", "Sign in"])
+            signup_tab, login_tab = tabs
+        else:
+            tabs = st.tabs(["Sign in", "Create account"])
+            login_tab, signup_tab = tabs
 
         # ---- Login tab ----
-        with tabs[0]:
+        with login_tab:
             st.markdown("### Sign in")
             card = st.container(border=True)
             with card:
@@ -311,7 +326,7 @@ def auth_ui():
                 st.page_link("pages/reset_password.py", label="Forgot password?", icon="🔑")
 
         # ---- Sign Up tab ----
-        with tabs[1]:
+        with signup_tab:
             st.markdown("### Create your free account")
             st.caption("Start scanning the U.S. market in minutes.")
 
@@ -469,6 +484,7 @@ def auth_ui():
         st.session_state["hsf_start_scanner_after_auth"] = True
         st.session_state["hsf_new_signup_scanner_hint"] = True
         track_event("signup_completed", username=email_raw, plan=st.session_state["plan"])
+        _apply_post_auth_target()
         # Persist login across refreshes using cookie session
         try:
             cookies2 = _cookies_ready_or_stop()
@@ -651,6 +667,8 @@ def auth_ui():
                 _record_login_attempt_db(login_key, success=True)
             except _AUTH_BACKEND_ERRORS:
                 pass
+
+        _apply_post_auth_target()
 
         # Remove the login form from the screen after successful login.
         login_placeholder.empty()

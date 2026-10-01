@@ -118,6 +118,32 @@ class PublicAcquisitionCopyTests(unittest.TestCase):
         self.assertIn('st.session_state.pop("hsf_start_scanner_after_auth", False)', app)
         self.assertIn('track_scanner_view_once(username, plan=tier_key)', app)
 
+    def test_signup_query_intent_selects_signup_and_routes_to_scanner(self):
+        from ui import auth
+
+        fake_st = mock.Mock()
+        fake_st.query_params = {"view": "signup", "next": "scanner"}
+        fake_st.session_state = {}
+        with mock.patch.object(auth, "st", fake_st):
+            self.assertTrue(auth._capture_entry_intent())
+            self.assertEqual(fake_st.session_state["hsf_post_auth_target"], "scanner")
+            self.assertTrue(auth._apply_post_auth_target())
+
+        self.assertTrue(fake_st.session_state["hsf_start_scanner_after_auth"])
+        self.assertNotIn("view", fake_st.query_params)
+        self.assertNotIn("next", fake_st.query_params)
+        self.assertNotIn("hsf_post_auth_target", fake_st.session_state)
+
+    def test_unapproved_post_auth_destination_is_ignored(self):
+        from ui import auth
+
+        fake_st = mock.Mock()
+        fake_st.query_params = {"view": "signup", "next": "billing"}
+        fake_st.session_state = {}
+        with mock.patch.object(auth, "st", fake_st):
+            self.assertTrue(auth._capture_entry_intent())
+            self.assertNotIn("hsf_post_auth_target", fake_st.session_state)
+
     def test_pricing_still_comes_from_entitlement_source(self):
         landing = (ROOT / "ui" / "landing.py").read_text()
         pricing = (ROOT / "ui" / "pricing.py").read_text()
