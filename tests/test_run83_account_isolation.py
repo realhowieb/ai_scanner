@@ -37,6 +37,7 @@ def signed_in_as_a() -> SS:
            active_watchlist_tickers=["ALICEPICK"], active_watchlist_id=11,
            active_watchlist_quote_rows=list(A_ROWS), _watchlist_prior_rows={"ALICEPICK": {}},
            _loaded_user_settings=True, _portal_url="https://billing.stripe.test/p/ALICE",
+           _cancel_portal_url="https://billing.stripe.test/cancel/ALICE",
            dt_watch_symbols="ALICEPICK", dt_watch_baseline={"ALICEPICK": 12.0},
            alert_price_tk="ALICEPICK", **BROWSER_PREFS)
     enforce_account_boundary(s, A)
@@ -44,7 +45,7 @@ def signed_in_as_a() -> SS:
 
 
 ACCOUNT_KEYS_IN_FIXTURE = ("active_watchlist_tickers", "active_watchlist_id", "active_watchlist_quote_rows",
-                           "_watchlist_prior_rows", "_loaded_user_settings", "_portal_url",
+                           "_watchlist_prior_rows", "_loaded_user_settings", "_portal_url", "_cancel_portal_url",
                            "dt_watch_symbols", "dt_watch_baseline", "alert_price_tk")
 
 
@@ -89,7 +90,7 @@ class BoundaryTests(unittest.TestCase):
 
     def test_every_audited_account_key_is_cleared(self):
         for key in ("active_watchlist_quote_rows", "_watchlist_prior_rows", "_loaded_user_settings",
-                    "_portal_url", "dt_watch_baseline", "latest_results_df", "pt_secret"):
+                    "_portal_url", "_cancel_portal_url", "dt_watch_baseline", "latest_results_df", "pt_secret"):
             self.assertIn(key, ACCOUNT_SESSION_KEYS, key)
 
     def test_app_enforces_the_boundary_before_any_page_switch(self):

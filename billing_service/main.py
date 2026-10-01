@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import re
@@ -158,6 +159,48 @@ def _mark_event_processed(conn, event_id: str, event_type: str) -> None:
             (event_id, event_type),
         )
     conn.commit()
+
+
+def _record_paid_conversion(email: str, plan: str, *, stripe_event_id: str | None = None) -> None:
+    """Best-effort acquisition conversion event. Stores a user hash, never email."""
+    try:
+        user_hash = hashlib.sha256(str(email or "").strip().lower().encode("utf-8")).hexdigest()[:24]
+        metadata = json.dumps({"stripe_event_id": stripe_event_id or "", "billing_surface": "stripe_webhook"})
+        with _db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS acquisition_events (
+                        id SERIAL PRIMARY KEY,
+                        event_name TEXT NOT NULL,
+                        source TEXT DEFAULT 'direct',
+                        utm_source TEXT,
+                        utm_medium TEXT,
+                        utm_campaign TEXT,
+                        utm_content TEXT,
+                        utm_term TEXT,
+                        referrer_domain TEXT,
+                        user_hash TEXT,
+                        plan TEXT,
+                        metadata JSONB DEFAULT '{}'::jsonb,
+                        occurred_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                    """
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_acquisition_events_name_time "
+                    "ON acquisition_events (event_name, occurred_at DESC)"
+                )
+                cur.execute(
+                    """
+                    INSERT INTO acquisition_events (event_name, source, user_hash, plan, metadata)
+                    VALUES (%s, %s, %s, %s, %s::jsonb)
+                    """,
+                    ("successful_paid_conversion", "other_unknown", user_hash, plan, metadata),
+                )
+            conn.commit()
+    except Exception as exc:
+        _log.warning("paid conversion analytics failed: %s", type(exc).__name__)
 
 
 def _normalize_db_url(url: str) -> str:
@@ -398,6 +441,17 @@ def _plan_change_flow(subscription, price_id: str, return_url: str) -> Optional[
         return None
 
 
+def _subscription_cancel_flow(subscription_id: str, return_url: str) -> Optional[dict]:
+    """Stripe portal flow that confirms cancellation, then returns to HSF."""
+    if not subscription_id or not return_url:
+        return None
+    return {
+        "type": "subscription_cancel",
+        "subscription_cancel": {"subscription": subscription_id},
+        "after_completion": {"type": "redirect", "redirect": {"return_url": return_url}},
+    }
+
+
 @app.post("/create-checkout-session")
 async def create_checkout_session(payload: dict, request: Request):
     """
@@ -514,9 +568,9 @@ async def create_checkout_session(payload: dict, request: Request):
 async def create_portal_session(payload: dict, request: Request):
     """
     Requires the X-HSF-Auth billing token of the signed-in account (Run 83).
-    Optional payload: { "return_url": "<same-host URL>" }. Any "email" must match
-    the authenticated account; the Stripe customer always comes from that
-    account's own users row, never from the request.
+    Optional payload: { "return_url": "<same-host URL>", "flow": "cancel" }.
+    Any "email" must match the authenticated account; the Stripe customer
+    always comes from that account's own users row, never from the request.
     """
     _require_env("APP_SUCCESS_URL", "DATABASE_URL")
     email = _authenticated_user(request, payload)
@@ -528,6 +582,10 @@ async def create_portal_session(payload: dict, request: Request):
     customer_id = (user or {}).get("stripe_customer_id")
     if not customer_id:
         raise HTTPException(400, "No subscription found for this account yet.")
+
+    flow = (payload.get("flow") or "").strip().lower()
+    if flow not in {"", "cancel"}:
+        raise HTTPException(400, "Unsupported billing portal flow.")
 
     return_url = _append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL, "portal", "return")
     override = (payload.get("return_url") or "").strip()
@@ -541,11 +599,19 @@ async def create_portal_session(payload: dict, request: Request):
             pass
 
     try:
-        portal = stripe.billing_portal.Session.create(
-            customer=customer_id,
-            return_url=return_url,
-        )
+        portal_kwargs = {"customer": customer_id, "return_url": return_url}
+        if flow == "cancel":
+            subscriptions = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
+            active = (subscriptions or {}).get("data") or []
+            subscription_id = (active[0] or {}).get("id") if active else None
+            flow_data = _subscription_cancel_flow(subscription_id, return_url)
+            if not flow_data:
+                raise HTTPException(400, "No active subscription is available to cancel.")
+            portal_kwargs["flow_data"] = flow_data
+        portal = stripe.billing_portal.Session.create(**portal_kwargs)
         return {"portal_url": portal.url}
+    except HTTPException:
+        raise
     except Exception as e:
         _log.warning("portal session create failed: %s", type(e).__name__)
         raise HTTPException(502, "The billing portal is temporarily unavailable. Please try again.")
@@ -616,6 +682,7 @@ async def stripe_webhook(request: Request):
                 stripe_subscription_id=subscription_id,
                 stripe_price_id=price_id,
             )
+            _record_paid_conversion(email, plan, stripe_event_id=event_id)
         except Exception as e:
             raise HTTPException(500, f"DB update failed: {e}")
 
@@ -673,6 +740,7 @@ async def stripe_webhook(request: Request):
                 stripe_subscription_id=subscription_id,
                 stripe_price_id=price_id,
             )
+            _record_paid_conversion(email, plan, stripe_event_id=event_id)
         except Exception as e:
             raise HTTPException(500, f"DB update failed: {e}")
 

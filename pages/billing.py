@@ -113,8 +113,10 @@ def _portal_return_url(email: str) -> str | None:
         return None
 
 
-def _create_portal_url(*, email: str) -> str:
+def _create_portal_url(*, email: str, flow: str | None = None) -> str:
     body = {"email": email}
+    if flow:
+        body["flow"] = flow
     ret = _portal_return_url(email)
     if ret:
         body["return_url"] = ret
@@ -219,6 +221,17 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             width="stretch",
             type="primary" if focus == plan else "secondary",
         ):
+            try:
+                from ui.acquisition import track_event
+
+                track_event(
+                    "upgrade_started",
+                    username=email,
+                    plan=current_tier_key,
+                    metadata={"requested_plan": plan, "surface": "billing_page"},
+                )
+            except Exception:
+                pass
             try:
                 from ui.email_verification_gate import require_verified_for_upgrade
                 allowed = require_verified_for_upgrade(email, key_suffix=key)
@@ -356,6 +369,23 @@ def render_billing_page() -> None:
             st.link_button("🔧 Open Stripe Customer Portal", portal_url, width="stretch")
             st.caption("Opens in a new tab. After managing your plan, return here — your changes apply automatically.")
 
+        with st.expander("Cancel subscription"):
+            st.caption(
+                "Review and confirm cancellation securely in Stripe. Your access follows the cancellation "
+                "date shown there."
+            )
+            if st.button("Cancel subscription", key="billing_cancel_subscription", width="stretch"):
+                try:
+                    st.session_state["_cancel_portal_url"] = _create_portal_url(email=email, flow="cancel")
+                except Exception as e:
+                    st.error(str(e))
+                    st.caption("The billing service may be waking up. Try again in about 30 seconds.")
+
+            cancel_portal_url = st.session_state.get("_cancel_portal_url")
+            if cancel_portal_url:
+                st.link_button("Review cancellation in Stripe", cancel_portal_url, width="stretch")
+                st.caption("After you confirm, Stripe automatically returns you to HSF.")
+
     _pricing_table()
     _benefits_block()
 
@@ -368,6 +398,7 @@ def render_billing_page() -> None:
         st.session_state.pop("pricing_focus", None)
         st.session_state.pop("stripe_redirect_url", None)
         st.session_state.pop("stripe_redirect_kind", None)
+        st.session_state.pop("_cancel_portal_url", None)
         st.session_state.pop("post_checkout_refreshed", None)
         try:
             st.switch_page("app.py")

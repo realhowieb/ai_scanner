@@ -25,6 +25,7 @@ except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
 import ui.product_copy as _product_copy
+from ui.acquisition import track_landing_visit_once
 from ui.pricing import plans_html
 from ui.product_copy import (
     DISCLAIMER,
@@ -64,7 +65,10 @@ _CSS = """
 .hsf-hero h1{font-size:clamp(1.55rem,4.2vw,2.3rem);line-height:1.1;margin:0 0 4px;padding:0}
 .hsf-hero .hsf-tag{font-size:clamp(1.02rem,2.6vw,1.25rem);font-weight:600;margin:0 0 6px;color:var(--hsf-gold)}
 .hsf-hero p{margin:0;max-width:62ch;opacity:.9}
-.hsf-cta-hint{font-size:.9rem;opacity:.8;margin:6px 0 0}
+.hsf-cta-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0 0}
+.hsf-cta{display:inline-block;border-radius:8px;background:var(--hsf-gold);color:#111!important;
+  padding:8px 12px;text-decoration:none;font-weight:700}
+.hsf-cta-hint{font-size:.9rem;opacity:.8;margin:0}
 .hsf-sec h2{font-size:1.2rem;margin:22px 0 10px;padding:0}
 .hsf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .hsf-card{border:1px solid var(--hsf-line);border-radius:10px;padding:12px 14px;background:var(--hsf-soft)}
@@ -108,7 +112,8 @@ def hero_html(logo_uri: str = "") -> str:
         f'<h1>{html.escape(PRODUCT_NAME)}</h1>'
         f'<p class="hsf-tag">{html.escape(TAGLINE)}</p>'
         f'<p>{html.escape(POSITIONING_SHORT)}</p>'
-        '<p class="hsf-cta-hint">Sign in or create a free account below.</p>'
+        '<div class="hsf-cta-row"><a class="hsf-cta" href="#hsf-signup">Start scanning free</a>'
+        '<p class="hsf-cta-hint">Sign in or create a free account. No credit card required.</p></div>'
         '</div></div></div>'
     )
 
@@ -132,8 +137,10 @@ def details_html() -> str:
     return (
         f'{_CSS}<div class="hsf-land">'
         f'<section class="hsf-sec" aria-labelledby="hsf-what"><h2 id="hsf-what">What HSF does</h2>'
+        '<p>Thousands of symbols become one ranked short list, using market context, technical signals, '
+        'unusual activity and ML-assisted ranking to help you decide what deserves research time.</p>'
         f'<div class="hsf-grid">{pillars}</div></section>'
-        f'<section class="hsf-sec" aria-labelledby="hsf-ex"><h2 id="hsf-ex">What a result looks like</h2>'
+        f'<section class="hsf-sec" aria-labelledby="hsf-ex"><h2 id="hsf-ex">What a result looks like: What HSF AI surfaces and why</h2>'
         f'<div class="hsf-ex">{rows}</div><p class="hsf-note">{html.escape(EXAMPLE_NOTE)}</p>'
         f'<p class="hsf-score">{html.escape(HSF_SCORE_ONE_LINE)} '
         f'<a href="{METHODOLOGY_HREF}" target="_self">How HSF Score works</a></p></section>'
@@ -151,6 +158,7 @@ def render_signed_out_hero() -> None:
     if st is None:
         return
     try:
+        track_landing_visit_once()
         st.markdown(hero_html(_logo_data_uri()), unsafe_allow_html=True)
     except Exception as exc:
         from ui.safe_errors import report_error

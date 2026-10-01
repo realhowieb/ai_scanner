@@ -49,7 +49,7 @@ ACCOUNT_SESSION_KEYS = (
     "hsf_alert_prefill_ticker", "hsf_alert_prefill_event",
     # Run 83 (B2): account-derived state that used to survive logout.
     "active_watchlist_quote_rows", "_watchlist_prior_rows", "_loaded_user_settings",
-    "_portal_url", "post_checkout_refreshed", "_tier_poll_attempt",
+    "_portal_url", "_cancel_portal_url", "post_checkout_refreshed", "_tier_poll_attempt",
     "_wl_pending_scan", "_wl_pending_scan_all", "_wl_tools_state",
     "dt_rows", "dt_watch_symbols", "dt_watch_baseline",
     "latest_results_df", "results_signature", "scan_ran_at_utc", "force_results_refresh",
@@ -60,6 +60,7 @@ ACCOUNT_SESSION_KEYS = (
     "alert_price_tk", "alert_price_val", "alert_break_thr", "alert_break_wl",
     "alert_ema_tk", "alert_ema_dir", "alert_rvol_tk", "alert_rvol_thr",
     "pt_key", "pt_secret", "_three_step_flash",
+    "hsf_start_scanner_after_auth", "hsf_new_signup_scanner_hint", "hsf_restored_session",
 )
 
 # Premium AI output keys include ticker/snapshot identifiers, so enumerating

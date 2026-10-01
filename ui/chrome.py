@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover
 CHROME_CSS = (
     "<style>"
     '[data-testid="stToolbarActions"]{display:none !important;}'
+    '[data-testid="stAppDeployButton"]{display:none !important;}'
     # Run 67: the top menu (ui.nav.render_top_menu) is for phones only.
     ".st-key-hsf_top_menu{display:none !important;}"
     # P1-4: phone widths get tighter gutters and smaller headings so content,

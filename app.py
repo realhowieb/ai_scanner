@@ -53,6 +53,7 @@ except (ImportError, KeyError):
     install_streamlit_compat = _app_boot.install_streamlit_compat
     _quiet_external_calls = _app_boot.quiet_external_calls
 try:
+    from ui.acquisition import track_authenticated_session_once, track_scanner_view_once
     from ui.app_runtime import (
         get_market_session,
         render_active_filters_summary,
@@ -496,7 +497,9 @@ def main():
     if st.session_state.get("hsf_after_login_page"):  # P2-5 shared link; B4: context resolved first
         st.session_state["hsf_today_landed_for"] = str(username or "").strip().lower()
         st.switch_page(st.session_state.pop("hsf_after_login_page"))
-    if should_land_on_today(st.session_state, username):
+    if st.session_state.pop("hsf_start_scanner_after_auth", False):
+        st.session_state["hsf_today_landed_for"] = str(username or "").strip().lower()
+    elif should_land_on_today(st.session_state, username):
         st.switch_page("pages/today.py")
     # At this point, auth_ui has decided we're logged in.
     # The login form might still be in the DOM for this rerun, so hide it with CSS.
@@ -510,6 +513,7 @@ def main():
         unsafe_allow_html=True,
     )
 
+    track_authenticated_session_once(username, plan=tier_key)
 
     # -------- ONLY NOW RENDER HEADER + TICKER --------
     # Show ticker above the header (layout option B)
@@ -604,6 +608,9 @@ def main():
     render_market_snapshot(results_df=_snapshot_df)
 
     st.markdown("## Scanner")  # P0-6/Run 83B: results render FIRST, before watchlists/Custom scan
+    track_scanner_view_once(username, plan=tier_key)
+    if st.session_state.pop("hsf_new_signup_scanner_hint", False):
+        st.info("You're in. The latest full-market ranking is shown below, so you can start with the current short list before running a custom scan.")
     results_slot = st.container()
     st.markdown("---")
     getattr(sys.modules.get("ui.watchlists"), "ensure_active_watchlist_state", lambda _u: None)(username)  # ★ badges

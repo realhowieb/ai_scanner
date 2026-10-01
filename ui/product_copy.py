@@ -16,7 +16,7 @@ PRODUCT_NAME = "HSF AI Stock Scanner"
 BRAND = "HSFinest.AI"
 
 # The headline promise, used as the hero line and page subtitle.
-TAGLINE = "Know what matters in the market right now."
+TAGLINE = "Turn the whole market into a short list."
 
 # One line: what HSF is.
 POSITIONING_ONE_LINE = (
@@ -26,8 +26,8 @@ POSITIONING_ONE_LINE = (
 
 # Short description: the landing hero body.
 POSITIONING_SHORT = (
-    "HSF continuously scans thousands of tradable U.S. stocks and organizes "
-    "noteworthy setups so you can focus your research."
+    "Signal intelligence, not a prediction machine. HSF continuously scans thousands "
+    "of tradable U.S. stocks and organizes noteworthy setups so you can focus your research."
 )
 
 # Long description: methodology intro, about text.
