@@ -7,11 +7,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 try:
-    from db.engine import get_neon_conn
+    from db.engine import get_neon_conn, schema_once
 except Exception:
     get_neon_conn = None  # type: ignore[assignment]
+    schema_once = lambda fn: fn  # noqa: E731
 
 
+@schema_once
 def _ensure_schema(conn) -> None:
     cur = conn.cursor()
     cur.execute(

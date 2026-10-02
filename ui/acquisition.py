@@ -11,6 +11,8 @@ import re
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
+from db.engine import schema_once
+
 try:
     import streamlit as st
 except Exception:  # pragma: no cover
@@ -121,6 +123,7 @@ def user_hash(username: object | None) -> str | None:
     return hashlib.sha256(user.encode("utf-8")).hexdigest()[:24]
 
 
+@schema_once
 def _ensure_schema(conn: Any) -> None:
     cur = conn.cursor()
     cur.execute(

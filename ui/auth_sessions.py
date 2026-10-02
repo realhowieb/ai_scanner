@@ -16,9 +16,10 @@ except ImportError:  # pragma: no cover - optional dependency
     EncryptedCookieManager = None
 
 try:
-    from db.engine import get_neon_conn
+    from db.engine import get_neon_conn, schema_once
 except ImportError:  # pragma: no cover - optional DB dependency
     get_neon_conn = None
+    schema_once = lambda fn: fn  # noqa: E731
 
 
 COOKIE_PREFIX = os.environ.get("COOKIE_PREFIX", "ai_scanner")
@@ -115,6 +116,7 @@ def save_cookies(cookies) -> None:
         pass
 
 
+@schema_once
 def ensure_auth_sessions_schema(conn) -> None:
     """Create auth_sessions table if missing."""
     cur = conn.cursor()

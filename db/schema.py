@@ -1,4 +1,8 @@
 # db/schema.py
+from db.engine import schema_once
+
+
+@schema_once
 def ensure_neon_scan_errors_schema(conn):
     """Ensure the scan_errors table exists for telemetry logging."""
     cur = conn.cursor()
@@ -24,6 +28,7 @@ def ensure_neon_scan_errors_schema(conn):
     cur.close()
 
 
+@schema_once
 def ensure_neon_runs_schema(conn):
     """Ensure the Neon 'runs' table exists with the expected schema, including watchlist_id."""
     cur = conn.cursor()
@@ -80,6 +85,7 @@ def ensure_sqlite_runs_schema(conn):
     cur.close()
 
 
+@schema_once
 def ensure_neon_users_schema(conn):
     """Ensure the Neon 'users' table exists with the expected schema."""
     cur = conn.cursor()
@@ -110,6 +116,7 @@ def ensure_neon_users_schema(conn):
     cur.close()
 
 
+@schema_once
 def ensure_neon_login_attempts_schema(conn):
     """Ensure the login_attempts table exists for rate limiting."""
     cur = conn.cursor()
@@ -191,6 +198,7 @@ def ensure_sqlite_login_attempts_schema(conn):
     cur.close()
 
 
+@schema_once
 def ensure_neon_watchlists_schema(conn):
     """Ensure the Neon 'watchlists' and 'watchlist_items' tables exist."""
     cur = conn.cursor()

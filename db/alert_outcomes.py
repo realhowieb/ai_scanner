@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from db.engine import get_neon_conn
+from db.engine import get_neon_conn, schema_once
 
 HIT_TARGET_PCT = 5.0
 HORIZON_DAYS = 3
 
 
+@schema_once
 def _ensure_schema(conn) -> None:
     cur = conn.cursor()
     cur.execute(

@@ -17,7 +17,7 @@ from datetime import datetime
 from io import StringIO
 from typing import Any, Dict, Iterable, Optional, Tuple
 
-from db.engine import get_neon_conn
+from db.engine import get_neon_conn, schema_once
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -26,6 +26,7 @@ def normalize_symbol(symbol: str) -> str:
     return (symbol or "").strip().upper()
 
 
+@schema_once
 def _ensure_schema(conn) -> None:
     cur = conn.cursor()
     cur.execute(

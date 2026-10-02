@@ -11,9 +11,11 @@ import datetime as _dt
 import json
 from typing import Any, Dict, List, Mapping
 
+from db.engine import schema_once
 from db.hsf_observations import _ph, _resolve_conn
 
 
+@schema_once
 def _ensure(c, is_sqlite: bool) -> None:
     cur = c.cursor()
     if is_sqlite:

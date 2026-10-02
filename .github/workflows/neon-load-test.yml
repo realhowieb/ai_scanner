@@ -1,0 +1,60 @@
+name: Neon Load Test
+
+# P1-44: manual multi-user load test (scripts/neon_load_test.py). Runs only
+# against the LOADTEST_DATABASE_URL secret, which must point at a Neon BRANCH
+# (Neon console → Branches → create from main), never the production database.
+# The script refuses to run if that URL has the same host as DATABASE_URL.
+# Results: the job summary and the neon-load-test artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      users:
+        description: "Concurrency levels (comma-separated, max 500)"
+        type: string
+        default: "10,25,50,100"
+      seconds:
+        description: "Seconds per level"
+        type: string
+        default: "60"
+      reconnect:
+        description: "New connection for every operation (worst case)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Run load test
+        env:
+          LOADTEST_DATABASE_URL: ${{ secrets.LOADTEST_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          USERS: ${{ inputs.users }}
+          SECONDS_PER_LEVEL: ${{ inputs.seconds }}
+          RECONNECT: ${{ inputs.reconnect }}
+        run: |
+          args=(--users "$USERS" --seconds "$SECONDS_PER_LEVEL")
+          if [ "$RECONNECT" = "true" ]; then args+=(--reconnect); fi
+          python scripts/neon_load_test.py "${args[@]}"
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: neon-load-test
+          path: artifacts/neon_load_test.json
+          if-no-files-found: warn

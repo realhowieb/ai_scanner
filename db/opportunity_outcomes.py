@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from db.engine import get_neon_conn
+from db.engine import get_neon_conn, schema_once
 
 # Comparable outcome-rate denominators exclude these (Step 20/24). PENDING/
 # UNAVAILABLE are never persisted; only VERSION_CHANGED must be excluded. NEUTRAL
@@ -33,6 +33,7 @@ _SIGNAL_CASE = (
     "WHEN initial_signal_count = 1 THEN '1' ELSE '0' END")
 
 
+@schema_once
 def _ensure_schema(conn) -> None:
     cur = conn.cursor()
     cur.execute(
