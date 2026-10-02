@@ -3,13 +3,13 @@
 Replaces the old "giant logo + login form" first screen with:
 
   hero (small logo, product name, tagline, one-paragraph description)
+  → three real product views (Scanner, Stair-Stepper, Market Brief)
   → sign-in / create-account form (unchanged auth logic, in ui.auth)
-  → What HSF does · example result layout · why you can trust it · disclaimer
+  → What HSF does · why you can trust it · disclaimer
 
-The hero is sized to leave the sign-in form inside the first phone viewport.
-All copy comes from ui.product_copy (factual, no performance claims). The
-example results are clearly labelled illustrations with placeholder names —
-never live data, never Run 56 research data.
+All copy comes from ui.product_copy (factual, no performance claims). Product
+screenshots are current customer-facing views captured without account,
+browser, admin, or diagnostic chrome.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import base64
 import html
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, Tuple
 
 try:
     import streamlit as st
@@ -45,16 +45,34 @@ HSF_SCORE_ONE_LINE = getattr(
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Illustrative only: placeholder names and example evidence lines in the same
-# format the scanner's "Why" column uses. Not live data, not recommendations.
-EXAMPLE_ROWS: List[Tuple[str, int, str, Tuple[str, ...]]] = [
-    ("Stock A", 82, "Momentum breakout", ("2.4× avg volume", "at 20d high", "outpacing SPY")),
-    ("Stock B", 74, "Gap and go", ("+4.1% gap", "1.9× avg volume")),
-    ("Stock C", 67, "Trend continuation", ("+9% over 10d", "earnings in 3d ⚠️")),
-]
+SHOWCASE_VIEWS: Tuple[Tuple[str, str, str, str, str, str], ...] = (
+    (
+        "scanner",
+        "SCANNER",
+        "Ranked Opportunities",
+        "Thousands of symbols. One focused shortlist.",
+        "assets/scanner-showcase.webp",
+        "HSF Scanner showing ranked opportunities, HSF Scores, statuses, and why the leading setup ranked",
+    ),
+    (
+        "stair-stepper",
+        "DAY TRADE",
+        "Stair-Stepper",
+        "Analyze smooth intraday momentum across multiple confirmation windows.",
+        "assets/day-trader-stair-stepper.webp",
+        "HSF Day Trader Stair-Stepper controls and ranked one-minute trend results",
+    ),
+    (
+        "market-brief",
+        "MARKET INTELLIGENCE",
+        "Market Brief",
+        "Know the market environment before evaluating the setup.",
+        "assets/market-brief-showcase.webp",
+        "HSF Market Brief showing market regime, index performance, breadth, and intelligent alerts",
+    ),
+)
 # Streamlit serves pages/methodology.py at /methodology.
 METHODOLOGY_HREF = "/methodology"
-EXAMPLE_NOTE = "Example of how results look. Illustrative names and values, not live data or recommendations."
 
 _CSS = """
 <style>
@@ -68,19 +86,43 @@ _CSS = """
 .hsf-cta-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0 0}
 .hsf-cta{display:inline-block;border-radius:8px;background:var(--hsf-gold);color:#111!important;
   padding:8px 12px;text-decoration:none;font-weight:700}
+.hsf-cta-secondary{display:inline-block;color:inherit!important;padding:8px 4px;text-decoration:none;font-weight:650}
+.hsf-cta-secondary:hover{text-decoration:underline}
 .hsf-cta-hint{font-size:.9rem;opacity:.8;margin:0}
+.hsf-showcase{margin:16px 0 22px;border:1px solid var(--hsf-line);border-radius:8px;
+  background:#0d1016;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.22)}
+.hsf-showcase-head{display:flex;align-items:end;justify-content:space-between;gap:12px;padding:14px 16px 10px}
+.hsf-showcase-head h2{font-size:1.15rem;margin:0;padding:0}
+.hsf-showcase-kicker{font-size:.72rem;font-weight:750;letter-spacing:.08em;color:#5bd17d;white-space:nowrap}
+.hsf-show-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.hsf-show-control{position:absolute;width:1px;height:1px;opacity:0}
+.hsf-show-tab{display:flex;align-items:center;justify-content:center;min-height:46px;padding:8px 10px;
+  border-top:1px solid var(--hsf-line);border-bottom:1px solid var(--hsf-line);cursor:pointer;
+  font-size:.88rem;font-weight:650;text-align:center;opacity:.68;background:rgba(255,255,255,.015)}
+.hsf-show-tab+.hsf-show-control+.hsf-show-tab{border-left:1px solid var(--hsf-line)}
+.hsf-show-control:focus-visible+.hsf-show-tab{outline:2px solid #5bd17d;outline-offset:-3px}
+#hsf-view-scanner:checked+.hsf-show-tab,
+#hsf-view-stair-stepper:checked+.hsf-show-tab,
+#hsf-view-market-brief:checked+.hsf-show-tab{opacity:1;color:#fff;background:rgba(91,209,125,.09);
+  box-shadow:inset 0 -3px 0 #5bd17d}
+.hsf-show-panels{grid-column:1/-1;min-width:0}
+.hsf-show-panel{display:none;margin:0}
+#hsf-view-scanner:checked~.hsf-show-panels .hsf-panel-scanner,
+#hsf-view-stair-stepper:checked~.hsf-show-panels .hsf-panel-stair-stepper,
+#hsf-view-market-brief:checked~.hsf-show-panels .hsf-panel-market-brief{display:block}
+.hsf-show-copy{padding:13px 16px 11px}
+.hsf-show-copy p{margin:0}
+.hsf-show-eyebrow{font-size:.7rem;font-weight:750;letter-spacing:.07em;color:#5bd17d}
+.hsf-show-title{font-size:1.02rem;font-weight:700;margin-top:2px!important}
+.hsf-show-desc{font-size:.88rem;opacity:.76;margin-top:2px!important}
+.hsf-show-media{aspect-ratio:1.56/1;overflow:hidden;background:#0d1016;border-top:1px solid var(--hsf-line)}
+.hsf-show-media img{display:block;width:100%;height:100%;object-fit:cover;object-position:top left}
+.hsf-show-missing{display:grid;place-items:center;height:100%;min-height:260px;opacity:.72}
 .hsf-sec h2{font-size:1.2rem;margin:22px 0 10px;padding:0}
 .hsf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .hsf-card{border:1px solid var(--hsf-line);border-radius:10px;padding:12px 14px;background:var(--hsf-soft)}
 .hsf-card h3{font-size:1rem;margin:0 0 4px;padding:0}
 .hsf-card p{margin:0;font-size:.9rem;opacity:.85;line-height:1.4}
-.hsf-ex{display:flex;flex-direction:column;gap:8px}
-.hsf-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;border:1px solid var(--hsf-line);
-  border-radius:10px;padding:10px 12px}
-.hsf-row .t{font-weight:700;min-width:5.5rem}
-.hsf-row .s{font-variant-numeric:tabular-nums;font-weight:600}
-.hsf-row .k{opacity:.8;font-size:.9rem}
-.hsf-chip{font-size:.8rem;border:1px solid var(--hsf-line);border-radius:999px;padding:2px 8px;white-space:nowrap}
 .hsf-note{font-size:.8rem;opacity:.7;margin:6px 0 0}
 .hsf-score{font-size:.95rem;margin:10px 0 0;max-width:62ch}
 .hsf-disc{font-size:.85rem;opacity:.8;margin:18px 0 4px}
@@ -88,6 +130,15 @@ _CSS = """
 @media (max-width:520px){
   .hsf-hero{gap:12px;align-items:flex-start}
   .hsf-hero img{width:64px;margin-top:4px}
+  .hsf-showcase-head{display:block;padding:12px 12px 9px}
+  .hsf-showcase-kicker{display:block;margin-bottom:3px}
+  .hsf-show-tab{min-height:48px;padding:7px 5px;font-size:.78rem}
+  .hsf-show-copy{padding:11px 12px 9px}
+  .hsf-show-media{aspect-ratio:1.15/1}
+  .hsf-show-media img{width:175%;max-width:none;height:auto;min-height:100%;object-fit:cover}
+  .hsf-panel-scanner .hsf-show-media img{margin-left:-2%}
+  .hsf-panel-stair-stepper .hsf-show-media img{margin-left:-38%}
+  .hsf-panel-market-brief .hsf-show-media img{margin-left:-3%}
 }
 </style>
 """
@@ -105,6 +156,17 @@ def _logo_data_uri() -> str:
         return ""
 
 
+@lru_cache(maxsize=8)
+def _asset_data_uri(relative_path: str) -> str:
+    """Return a packaged landing asset as a data URI without exposing a file path."""
+    try:
+        path = ROOT / relative_path
+        mime = "image/webp" if path.suffix.lower() == ".webp" else "image/png"
+        return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+    except Exception:
+        return ""
+
+
 def hero_html(logo_uri: str = "") -> str:
     img = (f'<img src="{logo_uri}" alt="HSFinest.AI logo">' if logo_uri else "")
     return (
@@ -113,23 +175,61 @@ def hero_html(logo_uri: str = "") -> str:
         f'<p class="hsf-tag">{html.escape(TAGLINE)}</p>'
         f'<p>{html.escape(POSITIONING_SHORT)}</p>'
         '<div class="hsf-cta-row"><a class="hsf-cta" href="#hsf-signup">Start scanning free</a>'
+        '<a class="hsf-cta-secondary" href="#hsf-product-showcase">Explore the platform ↓</a>'
         '<p class="hsf-cta-hint">Sign in or create a free account. No credit card required.</p></div>'
         '</div></div></div>'
+    )
+
+
+def showcase_html(asset_uris: Dict[str, str] | None = None) -> str:
+    """Three authentic, lightweight product views with CSS-only tab controls."""
+    sources = asset_uris or {slug: _asset_data_uri(path) for slug, _k, _t, _d, path, _a in SHOWCASE_VIEWS}
+    controls = []
+    panels = []
+    for index, (slug, eyebrow, title, description, _path, alt) in enumerate(SHOWCASE_VIEWS):
+        checked = " checked" if index == 0 else ""
+        controls.append(
+            f'<input class="hsf-show-control" type="radio" name="hsf-product-view" '
+            f'id="hsf-view-{slug}"{checked}>'
+            f'<label class="hsf-show-tab" for="hsf-view-{slug}">{html.escape(title)}</label>'
+        )
+        source = sources.get(slug, "")
+        loading = "eager" if index == 0 else "lazy"
+        priority = ' fetchpriority="high"' if index == 0 else ""
+        media = (
+            f'<img src="{source}" alt="{html.escape(alt)}" loading="{loading}" '
+            f'decoding="async"{priority}>'
+            if source
+            else '<div class="hsf-show-missing">Product preview unavailable.</div>'
+        )
+        panels.append(
+            f'<figure class="hsf-show-panel hsf-panel-{slug}">'
+            '<figcaption class="hsf-show-copy">'
+            f'<p class="hsf-show-eyebrow">{html.escape(eyebrow)}</p>'
+            f'<p class="hsf-show-title">{html.escape(title)}</p>'
+            f'<p class="hsf-show-desc">{html.escape(description)}</p>'
+            '</figcaption>'
+            f'<div class="hsf-show-media">{media}</div>'
+            '</figure>'
+        )
+    return (
+        f'{_CSS}<section class="hsf-showcase" id="hsf-product-showcase" '
+        'aria-labelledby="hsf-showcase-title">'
+        '<div class="hsf-showcase-head">'
+        '<span class="hsf-showcase-kicker">ACTUAL PRODUCT VIEW</span>'
+        '<h2 id="hsf-showcase-title">What HSF AI surfaces and why</h2>'
+        '</div>'
+        '<div class="hsf-show-grid" role="radiogroup" aria-label="Product views">'
+        + "".join(controls)
+        + '<div class="hsf-show-panels">'
+        + "".join(panels)
+        + '</div></div></section>'
     )
 
 
 def details_html() -> str:
     pillars = "".join(
         f'<div class="hsf-card"><h3>{html.escape(t)}</h3><p>{html.escape(d)}</p></div>' for t, d in PILLARS
-    )
-    rows = "".join(
-        '<div class="hsf-row">'
-        f'<span class="t">{html.escape(name)}</span>'
-        f'<span class="s" aria-label="HSF Score {score}">HSF Score {score}</span>'
-        f'<span class="k">{html.escape(setup)}</span>'
-        + "".join(f'<span class="hsf-chip">{html.escape(w)}</span>' for w in why)
-        + "</div>"
-        for name, score, setup, why in EXAMPLE_ROWS
     )
     trust = "".join(
         f'<div class="hsf-card"><h3>{html.escape(t)}</h3><p>{html.escape(d)}</p></div>' for t, d in TRUST_POINTS
@@ -140,8 +240,7 @@ def details_html() -> str:
         '<p>Thousands of symbols become one ranked short list, using market context, technical signals, '
         'unusual activity and ML-assisted ranking to help you decide what deserves research time.</p>'
         f'<div class="hsf-grid">{pillars}</div></section>'
-        f'<section class="hsf-sec" aria-labelledby="hsf-ex"><h2 id="hsf-ex">What a result looks like: What HSF AI surfaces and why</h2>'
-        f'<div class="hsf-ex">{rows}</div><p class="hsf-note">{html.escape(EXAMPLE_NOTE)}</p>'
+        f'<section class="hsf-sec" aria-labelledby="hsf-score"><h2 id="hsf-score">One clear opportunity score</h2>'
         f'<p class="hsf-score">{html.escape(HSF_SCORE_ONE_LINE)} '
         f'<a href="{METHODOLOGY_HREF}" target="_self">How HSF Score works</a></p></section>'
         f'<section class="hsf-sec" aria-labelledby="hsf-trust"><h2 id="hsf-trust">Why you can trust what you see</h2>'
@@ -160,6 +259,7 @@ def render_signed_out_hero() -> None:
     try:
         track_landing_visit_once()
         st.markdown(hero_html(_logo_data_uri()), unsafe_allow_html=True)
+        st.markdown(showcase_html(), unsafe_allow_html=True)
     except Exception as exc:
         from ui.safe_errors import report_error
 
