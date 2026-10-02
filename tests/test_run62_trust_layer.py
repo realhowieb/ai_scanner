@@ -71,18 +71,19 @@ class LandingTests(unittest.TestCase):
 
     def test_details_sections_and_labelled_example(self):
         d = landing.details_html()
-        for heading in ("What HSF does", "What a result looks like", "Why you can trust what you see"):
+        for heading in ("What HSF does", "One clear opportunity score", "Why you can trust what you see"):
             self.assertIn(heading, d)
         for title, _desc in pc.PILLARS:
             self.assertIn(f"<h3>{title}</h3>", d)
-        self.assertIn("not live data or recommendations", d)
         self.assertIn(pc.DISCLAIMER, d)
         self.assertEqual(pc.find_prohibited_claims(d), [])
 
-    def test_example_rows_use_placeholder_names(self):
-        for name, score, _setup, _why in landing.EXAMPLE_ROWS:
-            self.assertTrue(name.startswith("Stock "))
-            self.assertTrue(0 <= score <= 100)
+    def test_showcase_uses_real_product_views(self):
+        html = landing.showcase_html({slug: f"data:image/webp;base64,{slug}" for slug, *_rest in landing.SHOWCASE_VIEWS})
+        for slug, _eyebrow, title, _description, _path, _alt in landing.SHOWCASE_VIEWS:
+            self.assertIn(f'id="hsf-view-{slug}"', html)
+            self.assertIn(title, html)
+        self.assertNotIn("Stock A", html)
 
     def test_landing_grids_do_not_force_many_columns(self):
         d = landing.details_html()

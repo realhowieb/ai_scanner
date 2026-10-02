@@ -90,13 +90,19 @@ class AcquisitionAttributionTests(unittest.TestCase):
 
 class PublicAcquisitionCopyTests(unittest.TestCase):
     def test_landing_has_primary_free_cta_and_no_credit_card_copy(self):
-        from ui.landing import details_html, hero_html
+        from ui.landing import details_html, hero_html, showcase_html
 
         hero = hero_html("")
+        showcase = showcase_html({
+            "scanner": "data:image/webp;base64,scanner",
+            "stair-stepper": "data:image/webp;base64,stair",
+            "market-brief": "data:image/webp;base64,brief",
+        })
         details = details_html()
         self.assertIn("Start scanning free", hero)
         self.assertIn("No credit card required", hero)
-        self.assertIn("What HSF AI surfaces and why", details)
+        self.assertIn("Explore the platform", hero)
+        self.assertIn("What HSF AI surfaces and why", showcase)
         self.assertIn("Thousands of symbols", details)
         self.assertIn("Free", details)
         self.assertIn("Pro", details)
