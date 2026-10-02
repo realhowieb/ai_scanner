@@ -57,7 +57,9 @@ class NavTests(unittest.TestCase):
 
     def test_labs_only_in_admin_menu(self):
         self.assertNotIn("Labs", self.sections(False))
+        self.assertNotIn("Admin", self.sections(False))
         self.assertIn("Labs", self.sections(True))
+        self.assertIn("Admin", self.sections(True))
         self.assertEqual(self.sections(False), ["Today", "Discover", "Research", "My Stocks", "Account"])
 
     def test_both_menus_use_the_filter(self):

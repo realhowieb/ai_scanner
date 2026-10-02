@@ -36,6 +36,9 @@ _NAV_SECTIONS = [
         ("pages/settings.py", "Settings", "⚙️"),
         ("pages/billing.py", "Billing", "💳"),
     ]),
+    ("Admin", [
+        ("pages/admin.py", "Admin Console", "🛠️"),
+    ]),
     ("Labs", [
         ("pages/kalshi.py", "Kalshi BTC", "🪙"),
     ]),
@@ -45,7 +48,7 @@ _NAV = [item for _section, items in _NAV_SECTIONS for item in items]
 
 # P2-25 (owner, 2026-09-29): Labs (Kalshi BTC) is admin-only. The page checks
 # the database itself; hiding the section here just keeps the menu clean.
-ADMIN_ONLY_SECTIONS = frozenset({"Labs"})
+ADMIN_ONLY_SECTIONS = frozenset({"Admin", "Labs"})
 
 
 def _visible_sections():

@@ -218,7 +218,6 @@ try:
         get_user_settings = None
         upsert_user_settings = None
 
-    from ui.admin_users import render_admin_users_panel
     from ui.alerts import render_alerts_panel
     from ui.day_trader import render_day_trader_panel
     from ui.db_status import render_db_status_badge
@@ -255,7 +254,6 @@ except Exception as _e:
         _startup_problem(f"Import error: {_IMPORT_ERROR}")
         st.stop()
 
-    render_admin_users_panel = _missing  # type: ignore
     render_results = _missing  # type: ignore
     get_results_df = lambda: None  # type: ignore
     render_scan_controls = _missing  # type: ignore
@@ -548,8 +546,8 @@ def main():
         logout_and_reset_session=logout_and_reset_session,
     )
 
-    # -------- DB Status (admin-only badge; status still computed for all) --------
-    db_status = render_db_status_badge(show_badge=bool(st.session_state.get("is_admin")))
+    # -------- DB Status (admin-only badge) --------
+    render_db_status_badge(show_badge=bool(st.session_state.get("is_admin")))
     # Curated sidebar nav (auto page list is disabled in config). The main app
     # renders its own richer account header, so skip the nav's identity block.
     try:
@@ -633,16 +631,12 @@ def main():
             flags=flags,
             scan_ran_at=scan_ran_at,
             username=username,
-            db_status=db_status,
-            admin_users=ADMIN_USERS,
             list_runs=list_runs,
             load_run_results=load_run_results,
             render_results=with_card_view(render_results),
             render_prebreakout_tab=render_prebreakout_tab,
-            render_admin_users_panel=render_admin_users_panel,
             render_chart_for_ticker=render_chart_for_ticker,
             generate_ai_note=generate_ai_note,
-            get_db_conn=_get_db_conn_for_app,
             normalize_results_to_df=_normalize_results_to_df,
         )
 

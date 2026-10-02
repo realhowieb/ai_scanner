@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Callable
 
@@ -26,7 +27,29 @@ def render_admin_tab(
     render_admin_users_panel: Callable[..., Any],
     get_db_conn: Callable[[], Any],
 ) -> None:
-    with tab_admin:
+    """Backward-compatible wrapper for older callers that provide a tab."""
+    render_admin_page(
+        container=tab_admin,
+        username=username,
+        db_status=db_status,
+        admin_users=admin_users,
+        render_admin_users_panel=render_admin_users_panel,
+        get_db_conn=get_db_conn,
+    )
+
+
+def render_admin_page(
+    *,
+    username: str,
+    db_status: str,
+    admin_users: object,
+    render_admin_users_panel: Callable[..., Any],
+    get_db_conn: Callable[[], Any],
+    container: Any = None,
+) -> None:
+    """Render the complete Admin console on a page or legacy tab container."""
+    context = container if container is not None else nullcontext()
+    with context:
         st.markdown("## Admin")
         st.caption("Product usage, research evidence, operational health and account administration.")
 
