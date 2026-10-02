@@ -18,7 +18,7 @@ import json
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from db.engine import get_neon_conn, get_sqlite_conn
+from db.engine import get_neon_conn, get_sqlite_conn, schema_once
 
 
 def _resolve_conn(conn):
@@ -39,6 +39,7 @@ def _ph(is_sqlite: bool) -> str:
     return "?" if is_sqlite else "%s"
 
 
+@schema_once
 def _ensure_schema(conn, is_sqlite: bool) -> None:
     cur = conn.cursor()
     if is_sqlite:

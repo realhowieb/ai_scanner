@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from db.engine import get_neon_conn
+from db.engine import get_neon_conn, schema_once
 from db.secret_box import decrypt_secret, encrypt_secret, encryption_available
 
 
+@schema_once
 def _ensure_schema(conn) -> None:
     cur = conn.cursor()
     cur.execute(

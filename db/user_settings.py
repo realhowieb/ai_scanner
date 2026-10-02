@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
-from .engine import get_db_status, get_neon_conn
+from .engine import get_db_status, get_neon_conn, schema_once
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,11 @@ def _ensure_user_settings_schema() -> None:
     conn = get_neon_conn()
     if conn is None:
         return
+    _create_user_settings_schema(conn)
 
+
+@schema_once
+def _create_user_settings_schema(conn) -> None:
     with conn:
         with conn.cursor() as cur:
             cur.execute(

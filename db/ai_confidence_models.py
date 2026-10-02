@@ -5,9 +5,10 @@ import io
 import json
 from typing import Any
 
-from db.engine import get_neon_conn
+from db.engine import get_neon_conn, schema_once
 
 
+@schema_once
 def ensure_ai_confidence_models_schema(conn) -> None:
     cur = conn.cursor()
     cur.execute(

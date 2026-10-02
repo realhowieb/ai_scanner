@@ -20,13 +20,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from db.engine import get_neon_conn
+from db.engine import get_neon_conn, schema_once
 
 # 'move' (abs % change today >= threshold) and 'rvol' (today's volume vs 20d
 # avg >= threshold) are evaluated by the real-time worker, not the cron.
 ALERT_TYPES = ("breakout", "watchlist", "price", "move", "rvol", "ema_cross", "ewo_cross")
 
 
+@schema_once
 def _ensure_alerts_schema(conn) -> None:
     """Create the alert tables/indexes if they don't exist (idempotent)."""
     cur = conn.cursor()

@@ -92,9 +92,63 @@ def _checkout_warm(url: str):
             except Exception:
                 pass
             _pool_local.conn = None
-    real = psycopg.connect(url, row_factory=psycopg.rows.dict_row)
+    real = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_connect_timeout())
     _pool_local.conn = real
     return _WarmConn(real)
+
+
+def _connect_timeout() -> int:
+    """libpq connect_timeout (seconds) so a network stall never hangs a page."""
+    try:
+        return max(1, int(os.environ.get("DB_CONNECT_TIMEOUT", "10")))
+    except (TypeError, ValueError):
+        return 10
+
+
+# ---------------------------------------------------------------------------
+# Schema setup once per process (P1-44). The ensure-schema helpers run
+# CREATE TABLE / ALTER TABLE ... ADD COLUMN IF NOT EXISTS / CREATE INDEX IF NOT
+# EXISTS before their queries. Even when nothing changes, ALTER TABLE takes an
+# ACCESS EXCLUSIVE lock and CREATE INDEX a SHARE lock, so with many users each
+# request waited on every open write to the table and, while waiting, blocked
+# every read queued behind it. The DDL is idempotent: run it the first time per
+# process and database, then skip. Connections without psycopg connection info
+# (SQLite, test fakes) always run it. AI_SCANNER_SCHEMA_ONCE=0 turns this off.
+# ---------------------------------------------------------------------------
+import functools as _functools
+
+_schema_done: set = set()
+
+
+def _database_key(conn):
+    """(host, port, dbname) of a psycopg connection, else None."""
+    try:
+        info = conn.info
+        key = (info.host, info.port, info.dbname)
+    except Exception:
+        return None
+    if all(isinstance(part, (str, int)) for part in key):
+        return key
+    return None
+
+
+def schema_once(fn):
+    """Run an ensure-schema function ``fn(conn, ...)`` once per process and database."""
+
+    @_functools.wraps(fn)
+    def wrapper(conn, *args, **kwargs):
+        key = _database_key(conn)
+        if key is None or os.environ.get("AI_SCANNER_SCHEMA_ONCE", "1").strip() == "0":
+            return fn(conn, *args, **kwargs)
+        tag = (fn.__module__, fn.__qualname__, key)
+        if tag in _schema_done:
+            return None
+        result = fn(conn, *args, **kwargs)  # an exception leaves it to run again next time
+        _schema_done.add(tag)
+        return result
+
+    return wrapper
+
 
 def get_neon_conn():
     """Return a new Neon PostgreSQL connection.
@@ -149,11 +203,7 @@ def get_neon_conn():
 
         # Bounded connect timeout so a network stall never hangs a page render
         # indefinitely (libpq connect_timeout, overridable via env). Run 30 P1.
-        try:
-            _ct = max(1, int(os.environ.get("DB_CONNECT_TIMEOUT", "10")))
-        except (TypeError, ValueError):
-            _ct = 10
-        conn = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_ct)
+        conn = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_connect_timeout())
         return conn
     except ImportError:
         # Never echo the exception (could include the DSN / connection string).

@@ -16,11 +16,13 @@
 - [ ] Trading-effectiveness: rerun Run 48 once evidence ≥ MODERATE; publish an
       honest effectiveness summary (or explicitly market as "signals, not returns")
 - [ ] Load-test multi-user Neon path (concurrent users, watchlist writes)
+      Tooling ready: scripts/neon_load_test.py + the manual "Neon Load Test"
+      workflow (run against a Neon branch). Schema-setup deadlocks fixed (P1-44).
 - [ ] Billing/entitlements verified end-to-end (billing_service/)
 - [ ] Move perf_history + operational telemetry to durable storage
 - [ ] Document + test market-data provider failover
 - [ ] Backup/restore runbook for Neon (below)
-- [ ] Secret rotation policy
+- [x] Secret rotation policy — docs/SECRET_ROTATION.md (P1-45)
 
 ## Before PUBLIC LAUNCH
 - [ ] Security pentest + secret rotation
