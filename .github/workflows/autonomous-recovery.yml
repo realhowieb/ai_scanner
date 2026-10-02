@@ -16,13 +16,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "observe = plan only; recover = execute if HSF_AUTONOMY_ENABLED=true"
+        description: "observe = plan only; recover = execute if HSF_AUTONOMY_ENABLED=true; auto = follow HSF_AUTONOMY_MODE (scheduler)"
         type: choice
-        options: [observe, recover]
+        options: [observe, recover, auto]
         default: observe
-  schedule:
-    - cron: "25 17 * * 1-5"   # after the 17:05 UTC health run
-    - cron: "5 0 * * 2-6"     # after the 23:45 UTC health run (next UTC day)
+  # No GitHub `schedule:` trigger (removed 2026-10-02). cron-job.org dispatches
+  # this workflow on main with mode=auto at 17:25 UTC Mon-Fri and 00:05 UTC
+  # Tue-Sat, 20 minutes after each System Health run. mode=auto behaves exactly
+  # like the old scheduled runs: the repository variable decides.
 
 permissions:
   contents: read
@@ -51,7 +52,7 @@ jobs:
         id: recovery
         env:
           HSF_AUTONOMY_ENABLED: ${{ vars.HSF_AUTONOMY_ENABLED || 'false' }}
-          HSF_AUTONOMY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || vars.HSF_AUTONOMY_MODE || 'observe' }}
+          HSF_AUTONOMY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode != 'auto' && inputs.mode || vars.HSF_AUTONOMY_MODE || 'observe' }}
           GH_TOKEN: ${{ github.token }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -17,11 +17,12 @@ on:
         description: "Build outcomes without writing (true/false)"
         type: string
         default: "false"
-  schedule:
-    # Every 30 min during US market hours + a post-close sweep (Mon-Fri, UTC).
-    # 13:30-21:00 UTC covers 09:30-16:00 ET (plus DST slack); 22:00 sweeps the
-    # tail so the last hour's +60m horizons mature.
-    - cron: "*/30 13-22 * * 1-5"
+
+  # No GitHub `schedule:` trigger (removed 2026-10-02). cron-job.org dispatches
+  # this workflow on main at :10 and :40, 13:00-22:40 UTC, Mon-Fri (US market
+  # hours plus a post-close sweep so the last hour's +60m horizons mature).
+  # GitHub's cron ran it ~1-3 times a day instead of ~20, so the backlog hit
+  # the per-run cap and the first run of the day took ~19 minutes.
 
 concurrency:
   group: mature-observations
