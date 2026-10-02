@@ -146,7 +146,7 @@ def _last_scan() -> Optional[dict]:
     try:
         from db.runs import list_runs
 
-        runs = list_runs(limit=10) or []
+        runs = list_runs(limit=10, all_users=True) or []
         return runs[0] if runs else None
     except Exception:
         return None

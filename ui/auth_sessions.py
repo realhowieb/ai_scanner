@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -134,8 +136,36 @@ def ensure_auth_sessions_schema(conn) -> None:
     )
     cur.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_username ON auth_sessions(username);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);")
+    # P2-58: sessions are looked up by the SHA-256 of the cookie value; the raw
+    # value is never stored. Rows from before this change hold the raw id in
+    # session_id: store its hash and replace the id with a fresh random one, so
+    # existing cookies keep working and the table no longer holds usable ids.
+    cur.execute("ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS session_hash text;")
+    cur.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_sessions_hash ON auth_sessions(session_hash);"
+    )
+    _migrate_legacy_sessions(cur)
     conn.commit()
     cur.close()
+
+
+def session_hash(session_id: str) -> str:
+    """SHA-256 of the cookie value (the only form a session is stored in)."""
+    return hashlib.sha256((session_id or "").strip().encode("utf-8")).hexdigest()
+
+
+def _migrate_legacy_sessions(cur) -> int:
+    """Hash pre-P2-58 sessions in place. The hash is computed here with the same
+    session_hash() the lookup uses, so a legacy cookie (the uuid text) matches."""
+    cur.execute("SELECT session_id::text FROM auth_sessions WHERE session_hash IS NULL;")
+    legacy = [r[0] if isinstance(r, (tuple, list)) else r.get("session_id") for r in (cur.fetchall() or [])]
+    for sid in legacy:
+        cur.execute(
+            "UPDATE auth_sessions SET session_hash = %s, session_id = gen_random_uuid() "
+            "WHERE session_id::text = %s AND session_hash IS NULL;",
+            (session_hash(str(sid)), str(sid)),
+        )
+    return len(legacy)
 
 
 # Set by delete_session (called only by logout). Logout reruns before the
@@ -145,7 +175,7 @@ SIGNED_OUT_FLAG = "_hsf_signed_out"
 
 
 def create_session(username: str, ttl_days: int | None = None) -> Optional[str]:
-    """Create a new session row and return session_id as str."""
+    """Create a new session row; returns the cookie value (only its hash is stored)."""
     try:  # a fresh sign-in ends any pending "signed out" notice
         st.session_state.pop(SIGNED_OUT_FLAG, None)
     except (RuntimeError, AttributeError):
@@ -168,24 +198,19 @@ def create_session(username: str, ttl_days: int | None = None) -> Optional[str]:
         ensure_auth_sessions_schema(conn)
 
         expires = datetime.now(timezone.utc) + timedelta(days=int(ttl_days))
+        token = secrets.token_urlsafe(32)  # the cookie value; only its hash is stored
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO auth_sessions (username, expires_at)
-            VALUES (%s, %s)
-            RETURNING session_id;
+            INSERT INTO auth_sessions (username, expires_at, session_hash)
+            VALUES (%s, %s, %s);
             """,
-            (user_key, expires),
+            (user_key, expires, session_hash(token)),
         )
-        row = cur.fetchone()
         conn.commit()
         cur.close()
         conn.close()
-        if not row:
-            return None
-        # Connection may use a tuple cursor or a dict cursor (RealDictCursor).
-        sid = row[0] if isinstance(row, (tuple, list)) else row.get("session_id")
-        return str(sid) if sid else None
+        return token
     except (RuntimeError, OSError, TypeError, ValueError, KeyError):
         return None
 
@@ -211,16 +236,19 @@ def get_username_for_session(session_id: str) -> Optional[str]:
             SELECT s.username
             FROM auth_sessions s
             JOIN users u ON lower(u.username) = lower(s.username)
-            WHERE s.session_id = %s
+            WHERE s.session_hash = %s
               AND s.expires_at > now()
               AND u.is_active IS NOT FALSE
             LIMIT 1;
             """,
-            (sid,),
+            (session_hash(sid),),
         )
         row = cur.fetchone()
         if row:
-            cur.execute("UPDATE auth_sessions SET last_seen_at = now() WHERE session_id = %s;", (sid,))
+            cur.execute(
+                "UPDATE auth_sessions SET last_seen_at = now() WHERE session_hash = %s;",
+                (session_hash(sid),),
+            )
             conn.commit()
         cur.close()
         conn.close()
@@ -270,7 +298,7 @@ def delete_session(session_id: str) -> None:
             return
         ensure_auth_sessions_schema(conn)
         cur = conn.cursor()
-        cur.execute("DELETE FROM auth_sessions WHERE session_id = %s;", (sid,))
+        cur.execute("DELETE FROM auth_sessions WHERE session_hash = %s;", (session_hash(sid),))
         conn.commit()
         cur.close()
         conn.close()

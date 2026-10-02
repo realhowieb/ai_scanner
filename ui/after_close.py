@@ -113,7 +113,7 @@ def render_after_close(now: Optional[_dt.datetime] = None) -> None:
     try:
         from db.runs import list_runs
 
-        run = current_postmarket_run(list_runs(limit=60, include_snapshots=False) or [], now)
+        run = current_postmarket_run(list_runs(limit=60, include_snapshots=False, username="scheduler") or [], now)
     except Exception:
         run = None
     if run is None:

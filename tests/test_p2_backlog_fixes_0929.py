@@ -95,7 +95,7 @@ class P2_40_DeactivatedTests(unittest.TestCase):
         src = (ROOT / "ui" / "auth.py").read_text()
         i = src.index("This account is deactivated. Contact support.")
         self.assertLess(src.index("_deactivated_with_password(login_key"), i)
-        self.assertLess(i, src.index('"User not found. Please use the email'))
+        self.assertLess(i, src.index('_fail("Email or password is incorrect.", reason="user_not_found")'))
 
 
 class P2_22_LandingTests(unittest.TestCase):

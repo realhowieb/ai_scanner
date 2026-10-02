@@ -588,13 +588,13 @@ def auth_ui():
             # correct password, so the message can't reveal which accounts exist.
             if _deactivated_with_password(login_key, (password, raw_password)):
                 return _fail("This account is deactivated. Contact support.", reason="deactivated")
-            return _fail("User not found. Please use the email you signed up with, or your username.", reason="user_not_found")
+            return _fail("Email or password is incorrect.", reason="user_not_found")  # P2-57
 
         # Expect user dict to contain a 'password' field.
         # Supports legacy plain-text passwords and new bcrypt hashes, with auto-migration.
         stored_password = user.get("password")
         if stored_password is None:
-            return _fail("User record is missing a password field.", reason="no_password_field")
+            return _fail("Email or password is incorrect.", reason="no_password_field")
 
         # Normalize stored password to a clean string (handles bytes from DB as well)
         if isinstance(stored_password, (bytes, bytearray)):
@@ -611,7 +611,7 @@ def auth_ui():
             if not bcrypt.checkpw(password.encode("utf-8"), stored_str.encode("utf-8")):
                 # Fallback: try raw input (older accounts may have accidental whitespace)
                 if not bcrypt.checkpw(raw_password.encode("utf-8"), stored_str.encode("utf-8")):
-                    return _fail("Incorrect password.", reason="wrong_password")
+                    return _fail("Email or password is incorrect.", reason="wrong_password")
                 else:
                     # Normalize forward: re-hash stripped password
                     try:
@@ -623,7 +623,7 @@ def auth_ui():
         else:
             # Legacy plain-text password in DB
             if stored_str != password and stored_str != raw_password:
-                return _fail("Incorrect password.")
+                return _fail("Email or password is incorrect.", reason="wrong_password")
 
             # Auto-migrate: convert legacy plain-text to bcrypt hash in Neon (normalize to stripped password)
             try:

@@ -89,7 +89,7 @@ def _latest_snapshot_df():
         from db.runs import list_runs, load_run_results
         from ui.app_runtime import normalize_results_to_df
 
-        runs = list_runs(limit=25) or []
+        runs = list_runs(limit=25, all_users=True) or []
         if not runs:
             return None
         # Snapshots first (newest→oldest), then any run reporting results, then

@@ -258,12 +258,7 @@ def _render_scan_history_tab(
 
         runs = None
         try:
-            runs = list_runs(username=username)
-        except TypeError:
-            try:
-                runs = list_runs(user_id=username)
-            except TypeError:
-                runs = list_runs()
+            runs = list_runs(username=username) if username else []
         except RESULTS_TAB_ERRORS as e:
             from ui.safe_errors import show_error
 

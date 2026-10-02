@@ -86,7 +86,7 @@ def _latest_snapshot_df():
         from db.runs import list_runs, load_run_results
         from ui.app_runtime import normalize_results_to_df
 
-        runs = list_runs(limit=10) or []
+        runs = list_runs(limit=10, all_users=True) or []
         snap = next((r for r in runs if r.get("is_snapshot")), None) or (
             runs[0] if runs else None
         )
