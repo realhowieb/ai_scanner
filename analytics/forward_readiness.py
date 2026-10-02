@@ -40,10 +40,14 @@ COHORTS = (CANDIDATE, NEAR_MISS, CONTROL)
 # from the whole universe (Run 58: CRITICAL parity gap), so they can't be pooled
 # with the new liquidity-matched controls. Gates below are unchanged.
 # See docs/RUN59_LIQUIDITY_CONTROLS.md.
+# Run 59B (owner decision 2026-10-02) restarts it again: near-miss names are now
+# excluded from the control draw (H_research_integrity failed on near-miss /
+# control overlap). See docs/RUN59B_DISJOINT_CONTROLS.md.
 FORWARD_EPOCH = {
-    "forward_epoch_start_timestamp": "2026-10-01T12:00:00+00:00",  # Run 59: before Thu 8:35 AM ET scan
+    "forward_epoch_start_timestamp": "2026-10-05T12:00:00+00:00",  # Run 59B: before Mon 8:35 AM ET scan
     "run59_decision": "liquidity_comparable_controls",
-    "control_design": "run59_liquidity_matched_v1",
+    "run59b_decision": "near_miss_excluded_from_controls",
+    "control_design": "run59b_liquidity_matched_disjoint_v2",
     "run55_evaluation_commit": "284e2ac8ec8640d73679c55555772eeda2505485",
     "run55_criteria_commit": "c5d34a751d00b9245a43d34e98694ce1e94de1dc",
     "run55_workflow_run": 36226568240,
@@ -54,6 +58,9 @@ FORWARD_EPOCH = {
 PREVIOUS_EPOCHS = (
     {"forward_epoch_start_timestamp": "2026-09-26T07:23:11+00:00", "run": "Run 56",
      "ended_by": "Run 59 (control design changed)"},
+    {"forward_epoch_start_timestamp": "2026-10-01T12:00:00+00:00", "run": "Run 59",
+     "control_design": "run59_liquidity_matched_v1",
+     "ended_by": "Run 59B (near-miss names excluded from controls)"},
 )
 
 

@@ -77,7 +77,7 @@ class ParityClassTests(unittest.TestCase):
 class ScopeTests(unittest.TestCase):
     def test_historical_forward_split(self):
         hist, _ = dataset(runs=1)
-        fwd_day = dt.datetime(2026, 10, 1, tzinfo=UTC)  # Run 59 epoch
+        fwd_day = dt.datetime(2026, 10, 5, tzinfo=UTC)  # Run 59B epoch
         fwd, _ = dataset(runs=1, day=fwd_day)
         for o in fwd:
             o["observation_id"] = "f" + o["observation_id"]
@@ -333,7 +333,7 @@ class ContractTests(unittest.TestCase):
         r = fr.monitor(obs, outs, now=now_after(3), maturation_report={"symbols_deferred": 12})
         self.assertEqual(r["maturation_parity"]["+60m"]["parity_classification"], "CRITICAL")
         self.assertTrue(r["data_quality"]["maturation_capacity_binding"])
-        self.assertEqual(r["epoch"]["forward_epoch_start_timestamp"], "2026-10-01T12:00:00+00:00")
+        self.assertEqual(r["epoch"]["forward_epoch_start_timestamp"], "2026-10-05T12:00:00+00:00")
         self.assertEqual(fr.forbidden_keys(r), [])
 
 

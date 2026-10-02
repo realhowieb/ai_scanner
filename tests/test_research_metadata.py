@@ -250,7 +250,7 @@ class Run56CompatibilityTests(unittest.TestCase):
         self.assertEqual(mc["CONTROL"]["tier_metadata_coverage_pct"], 0.0)
         self.assertEqual(mc["CONTROL"]["scoring_version_coverage_pct"], 100.0)
         self.assertEqual(fr.forbidden_keys(r), [])
-        self.assertEqual(r["epoch"]["forward_epoch_start_timestamp"], "2026-10-01T12:00:00+00:00")
+        self.assertEqual(r["epoch"]["forward_epoch_start_timestamp"], "2026-10-05T12:00:00+00:00")
 
     def test_metadata_audit_is_observation_only(self):
         from scripts import audit_research_metadata as audit
@@ -266,7 +266,7 @@ class Run56CompatibilityTests(unittest.TestCase):
         self.assertIn("## Coverage by cohort", audit.render_markdown(r))
 
     def test_epoch_not_reset(self):
-        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-10-01T12:00:00+00:00")
+        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-10-05T12:00:00+00:00")
 
 
 class CronWiringTests(unittest.TestCase):

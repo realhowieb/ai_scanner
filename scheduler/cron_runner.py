@@ -92,7 +92,11 @@ def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_
             research_sink.get("evaluated_symbols") or [], research_sink.get("price_snapshot") or {},
             min_dollar_vol=floor.get("min_dollar_vol") or 0.0,
             min_price=floor.get("min_price"), max_price=floor.get("max_price"))
-        controls = select_control_symbols(pool, scan_run_id=scan_id, exclude=candidate_symbols)
+        # Run 59B: controls exclude near-misses as well as candidates, so the
+        # three cohorts never share a symbol within a scan.
+        near_miss_symbols = [o.get("symbol") for o in near_miss if o.get("symbol")]
+        controls = select_control_symbols(pool, scan_run_id=scan_id,
+                                          exclude=list(candidate_symbols or []) + near_miss_symbols)
         control_obs = build_control_observations(
             controls, research_sink.get("price_snapshot") or {}, universe=universe,
             scan_timestamp=scan_started_at, session=session, scan_id=scan_id,

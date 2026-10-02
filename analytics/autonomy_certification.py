@@ -33,11 +33,11 @@ NOT_CERTIFIED = "NOT_CERTIFIED"
 ROOT = Path(__file__).resolve().parents[1]
 UTC = _dt.timezone.utc
 RECOVER = {"HSF_AUTONOMY_ENABLED": "true", "HSF_AUTONOMY_MODE": "recover"}
-# Run 59 (owner-approved 2026-09-30) restarted the forward epoch; certification
+# Run 59 (owner-approved 2026-09-30) and Run 59B (2026-10-02) restarted the forward epoch; certification
 # still proves automation never moves it.
 EXPECTED_EPOCH = {
-    "forward_epoch_start_timestamp": "2026-10-01T12:00:00+00:00",
-    "control_design": "run59_liquidity_matched_v1",
+    "forward_epoch_start_timestamp": "2026-10-05T12:00:00+00:00",
+    "control_design": "run59b_liquidity_matched_disjoint_v2",
     "run55_evaluation_commit": "284e2ac8ec8640d73679c55555772eeda2505485",
     "run55_criteria_commit": "c5d34a751d00b9245a43d34e98694ce1e94de1dc",
 }

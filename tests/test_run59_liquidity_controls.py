@@ -57,10 +57,10 @@ class EligibilityTests(unittest.TestCase):
         self.assertEqual(picked, ["LIQ"])
 
     def test_new_controls_are_tagged_and_legacy_ones_unchanged(self):
-        new = rc.build_control_observations(["LIQ"], self.SNAP, universe="US_MARKET", scan_timestamp="2026-10-01T13:35:00+00:00",
+        new = rc.build_control_observations(["LIQ"], self.SNAP, universe="US_MARKET", scan_timestamp="2026-10-05T13:35:00+00:00",
                                             control_design=rc.CONTROL_DESIGN)[0]
-        old = rc.build_control_observations(["LIQ"], self.SNAP, universe="US_MARKET", scan_timestamp="2026-10-01T13:35:00+00:00")[0]
-        self.assertEqual(new["market_context"]["control_design"], "run59_liquidity_matched_v1")
+        old = rc.build_control_observations(["LIQ"], self.SNAP, universe="US_MARKET", scan_timestamp="2026-10-05T13:35:00+00:00")[0]
+        self.assertEqual(new["market_context"]["control_design"], "run59b_liquidity_matched_disjoint_v2")
         self.assertEqual(new["selection_reason"], "liquidity_matched_sample")
         self.assertNotIn("control_design", old["market_context"])
         self.assertEqual(old["selection_reason"], "deterministic_sample")
@@ -71,7 +71,8 @@ class WiringTests(unittest.TestCase):
     def test_cron_draws_controls_from_the_liquidity_pool(self):
         src = (ROOT / "scheduler" / "cron_runner.py").read_text()
         self.assertIn("pool = liquidity_eligible(", src)
-        self.assertIn("select_control_symbols(pool, scan_run_id=scan_id, exclude=candidate_symbols)", src)
+        self.assertIn("select_control_symbols(pool, scan_run_id=scan_id,", src)
+        self.assertIn("exclude=list(candidate_symbols or []) + near_miss_symbols)", src)
         self.assertIn("control_design=CONTROL_DESIGN", src)
 
     def test_engine_records_floor_and_dollar_volume_without_changing_output(self):
@@ -90,22 +91,36 @@ class EpochTests(unittest.TestCase):
                 "market_context": mc}
 
     def test_epoch_restarted_and_old_epoch_recorded(self):
-        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-10-01T12:00:00+00:00")
+        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-10-05T12:00:00+00:00")
         self.assertEqual(fr.FORWARD_EPOCH["control_design"], rc.CONTROL_DESIGN)
         self.assertEqual(fr.PREVIOUS_EPOCHS[0]["forward_epoch_start_timestamp"], "2026-09-26T07:23:11+00:00")
+        self.assertEqual((fr.PREVIOUS_EPOCHS[1]["forward_epoch_start_timestamp"], fr.PREVIOUS_EPOCHS[1]["control_design"]),
+                         ("2026-10-01T12:00:00+00:00", rc.RUN59_CONTROL_DESIGN))
 
     def test_gates_are_unchanged(self):
         self.assertEqual(fr.GATES["E_maturation_parity"], {"max_gap_pp": 10.0, "preferred_gap_pp": 5.0})
         self.assertEqual(fr.GATES["A_trading_days"], {"min": 10, "preferred": 20})
 
     def test_old_design_controls_in_the_epoch_are_never_pooled(self):
-        ts, before = "2026-10-01T13:35:00+00:00", "2026-09-30T13:35:00+00:00"
+        ts, before = "2026-10-05T13:35:00+00:00", "2026-10-02T13:35:00+00:00"
         obs = [self.rec("c1", "CANDIDATE", ts), self.rec("k_new", "CONTROL", ts, rc.CONTROL_DESIGN),
-               self.rec("k_old", "CONTROL", ts), self.rec("k_pre", "CONTROL", before, rc.CONTROL_DESIGN)]
+               self.rec("k_old", "CONTROL", ts), self.rec("k_v1", "CONTROL", ts, rc.RUN59_CONTROL_DESIGN),
+               self.rec("k_pre", "CONTROL", before, rc.CONTROL_DESIGN)]
         sel = fr.select_forward(obs)
         self.assertEqual(sorted(o["observation_id"] for o in sel["forward"]), ["c1", "k_new"])
-        self.assertEqual((sel["legacy_control_design_excluded"], sel["pre_epoch_excluded"]), (1, 1))
+        self.assertEqual((sel["legacy_control_design_excluded"], sel["pre_epoch_excluded"]), (2, 1))
         self.assertEqual(sorted(o["observation_id"] for o in mp.population(obs, "forward")), ["c1", "k_new"])
+
+    def test_near_misses_are_never_drawn_as_controls(self):
+        pool = ["AAA", "BBB", "CCC", "NM1", "NM2", "CAND"]
+        picked = rc.select_control_symbols(pool, scan_run_id="r1", exclude=["CAND", "NM1", "NM2"], n=100)
+        self.assertEqual(picked, ["AAA", "BBB", "CCC"])
+
+    def test_run59b_decision_is_pre_registered(self):
+        doc = (ROOT / "docs" / "RUN59B_DISJOINT_CONTROLS.md").read_text()
+        for must in ("2026-10-05T12:00:00+00:00", "run59b_liquidity_matched_disjoint_v2", "near-miss overlaps=22",
+                     "not decided from effectiveness results", "Gates A–H are unchanged"):
+            self.assertIn(must, doc)
 
     def test_decision_is_pre_registered(self):
         doc = (ROOT / "docs" / "RUN59_LIQUIDITY_CONTROLS.md").read_text()
