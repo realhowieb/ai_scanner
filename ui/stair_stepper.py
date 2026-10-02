@@ -70,7 +70,7 @@ def render_stair_steppers(symbols: Sequence[str]) -> None:
     if st is None or not symbols:
         return
     try:
-        from analytics.stair_step import DEFAULT_WINDOW, is_stair_stepper
+        from analytics.stair_step import DEFAULT_WINDOW, WINDOW_OPTIONS, is_stair_stepper
 
         with st.expander("🪜 Stair-steppers: smooth 1-minute trends", expanded=False):
             st.caption(
@@ -80,7 +80,8 @@ def render_stair_steppers(symbols: Sequence[str]) -> None:
             c1, c2, c3 = st.columns(3)
             direction = c1.selectbox("Direction", ["up", "down", "either"], key="ss_direction")
             r2_min = c2.slider("Minimum R²", 0.50, 0.99, 0.80, 0.01, key="ss_r2")
-            window = c3.selectbox("Bars fitted", [30, 45, 60], index=[30, 45, 60].index(DEFAULT_WINDOW),
+            window_options = list(WINDOW_OPTIONS)
+            window = c3.selectbox("Bars fitted", window_options, index=window_options.index(DEFAULT_WINDOW),
                                   key="ss_window", help="Most recent 1-minute bars of the latest session.")
             c4, c5 = st.columns(2)
             max_pb = c4.number_input("Max pullback %", 0.1, 5.0, 1.0, 0.1, key="ss_pullback",
@@ -101,7 +102,26 @@ def render_stair_steppers(symbols: Sequence[str]) -> None:
             except Exception:
                 st.warning("Couldn't load 1-minute bars right now. Try again in a minute.")
                 return
-            rows = build_rows(bars, checked, int(window))
+            # Research uses the same snapshot and unchanged qualification logic
+            # for every supported window. The selected window still controls only
+            # what this UI renders.
+            rows_by_window = {w: build_rows(bars, checked, w) for w in window_options}
+            rows = rows_by_window[int(window)]
+            try:
+                from analytics.stair_step_research import capture_qualifying_observations
+                from data.price_alpaca import get_alpaca_data_feed
+
+                capture_qualifying_observations(
+                    rows_by_window,
+                    r2_min=float(r2_min),
+                    max_pullback_pct=float(max_pb),
+                    min_trend_pct_per_hour=float(min_trend),
+                    data_source="alpaca_minute_bars",
+                    data_feed=get_alpaca_data_feed(),
+                )
+            except Exception:
+                # Research capture is observe-only and must never break the tool.
+                pass
             hits = [r for r in rows if is_stair_stepper(
                 r, r2_min=float(r2_min), direction=direction,
                 max_pullback_pct=float(max_pb), min_trend_pct_per_hour=float(min_trend))]

@@ -317,7 +317,7 @@ def load_observations_for_symbol(symbol: str, *, limit: int = 500,
 
 
 def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
-                             attach_outcomes: bool = False,
+                             attach_outcomes: bool | str = False,
                              conn=None) -> List[Dict[str, Any]]:
     """Most recent observations (newest first). Non-fatal; [] if DB unavailable.
 
@@ -327,7 +327,12 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
     that is already matured is classified ``already`` instead of being re-fetched
     every run — without it the worker cannot tell matured from unmatured work and
     burns its bounded fetch budget re-processing completed observations. This does
-    NOT change outcome values; it only tells the worker which horizons exist."""
+    NOT change outcome values; it only tells the worker which horizons exist.
+
+    ``attach_outcomes="full"`` is the bounded research/reporting path: it loads
+    complete outcome records for the selected observations in one additional
+    query (never one query per observation). Existing boolean behavior is
+    unchanged."""
     c, opened, is_sqlite = _resolve_conn(conn)
     if c is None:
         return []
@@ -336,7 +341,30 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
         cur = c.cursor()
         ph = _ph(is_sqlite)
         agg = "group_concat(horizon, ',')" if is_sqlite else "string_agg(horizon, ',')"
-        if attach_outcomes:
+        full_outcomes = attach_outcomes == "full"
+        outcome_rows = []
+        if full_outcomes:
+            where = "" if context is None else f"WHERE context = {ph} "
+            params = (int(limit),) if context is None else (str(context), int(limit))
+            cur.execute(
+                f"SELECT observation_id, record FROM hsf_observations {where}"
+                f"ORDER BY timestamp DESC LIMIT {ph}",
+                params,
+            )
+            rows = cur.fetchall() or []
+            ids = [
+                str(row.get("observation_id") if isinstance(row, dict) else row[0])
+                for row in rows
+            ]
+            if ids:
+                placeholders = ",".join([ph] * len(ids))
+                cur.execute(
+                    f"SELECT observation_id, horizon, record FROM hsf_observation_outcomes "
+                    f"WHERE observation_id IN ({placeholders})",
+                    tuple(ids),
+                )
+                outcome_rows = cur.fetchall() or []
+        elif attach_outcomes:
             select = (f"SELECT o.record, oc.horizons FROM hsf_observations o "
                       f"LEFT JOIN (SELECT observation_id, {agg} AS horizons "
                       f"FROM hsf_observation_outcomes GROUP BY observation_id) oc "
@@ -351,15 +379,38 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
         else:
             cur.execute(f"SELECT record FROM hsf_observations WHERE context = {ph} "
                         f"ORDER BY timestamp DESC LIMIT {ph}", (str(context), int(limit)))
-        rows = cur.fetchall() or []
+        if not full_outcomes:
+            rows = cur.fetchall() or []
         cur.close()
         out: List[Dict[str, Any]] = []
+        full_by_id: Dict[str, Dict[str, Any]] = {}
+        for outcome_row in outcome_rows:
+            if isinstance(outcome_row, dict):
+                oid = str(outcome_row.get("observation_id"))
+                horizon = str(outcome_row.get("horizon"))
+                payload = _loads(outcome_row.get("record"))
+            else:
+                oid, horizon, payload = (
+                    str(outcome_row[0]),
+                    str(outcome_row[1]),
+                    _loads(outcome_row[2]),
+                )
+            if payload:
+                full_by_id.setdefault(oid, {})[horizon] = payload
         for r in rows:
             vals = list(r.values()) if isinstance(r, dict) else r
-            rec = _loads(vals[0])
+            oid = str(r.get("observation_id")) if full_outcomes and isinstance(r, dict) \
+                else (str(vals[0]) if full_outcomes else None)
+            payload = r.get("record") if isinstance(r, dict) else (
+                vals[1] if full_outcomes else vals[0]
+            )
+            rec = _loads(payload)
             if not rec:
                 continue
-            if attach_outcomes:
+            if full_outcomes:
+                if oid in full_by_id:
+                    rec["outcomes"] = full_by_id[oid]
+            elif attach_outcomes:
                 horizons = vals[1] if len(vals) > 1 else None
                 matured = [h for h in str(horizons or "").split(",") if h]
                 if matured:

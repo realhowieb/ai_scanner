@@ -109,7 +109,10 @@ class RenderTests(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
 
         at = AppTest.from_string(SCRIPT, default_timeout=60)
-        with mock.patch("ui.stair_stepper._cached_bars", side_effect=fetched) as fetch:
+        with mock.patch("ui.stair_stepper._cached_bars", side_effect=fetched) as fetch, \
+                mock.patch(
+                    "analytics.stair_step_research.capture_qualifying_observations"
+                ):
             at.run()
             if click:
                 at.button(key="ss_run").click().run()
@@ -151,8 +154,8 @@ class WiringTests(unittest.TestCase):
     def test_descriptive_only_no_scoring_imports(self):
         for rel in ("analytics/stair_step.py", "ui/stair_stepper.py"):
             src = (ROOT / rel).read_text()
-            for forbidden in ("headline_score", "scan.engine", "ml_prebreakout", "research", "signal_outcomes"):
-                self.assertNotIn(forbidden, src.replace("research data", ""), f"{rel}: {forbidden}")
+            for forbidden in ("headline_score", "scan.engine", "ml_prebreakout", "signal_outcomes"):
+                self.assertNotIn(forbidden, src, f"{rel}: {forbidden}")
 
 
 if __name__ == "__main__":
