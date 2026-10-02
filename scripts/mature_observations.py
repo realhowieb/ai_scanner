@@ -40,8 +40,17 @@ from analytics.observation_capture import (
     compute_matured_outcomes,
     horizon_eligibility,
 )
+from analytics.stair_step_research import (
+    OUTCOME_HORIZONS as STAIR_STEP_HORIZONS,
+)
+from analytics.stair_step_research import (
+    compute_stair_step_outcomes,
+    horizons_for_observation,
+    is_stair_step_observation,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_HORIZONS = {**HORIZON_BARS, **STAIR_STEP_HORIZONS}
 
 # Per-run distinct-symbol cap. Raised 400 -> 2000 after dry-run 36224599421
 # measured 4 requests / 400 symbols (0.01 req/symbol, 0 x 429, 55 s job) with
@@ -173,7 +182,7 @@ def _new_report() -> Dict[str, Any]:
         "symbols_with_ready_horizons": 0,
         "symbols_deferred": 0,
         "horizons": {h: {"new": 0, "already": 0, "not_ready": 0, "failed": 0}
-                     for h in HORIZON_BARS},
+                     for h in REPORT_HORIZONS},
         "failures": {},
         "attached": 0,
         # Run 52 — backlog capacity telemetry (measurement only).
@@ -216,6 +225,12 @@ def _fail(report: Dict[str, Any], horizon: str | None, reason: str) -> None:
     report["failures"][reason] = report["failures"].get(reason, 0) + 1
     if horizon:
         report["horizons"][horizon]["failed"] += 1
+
+
+def _horizons_for(observation: Dict[str, Any]) -> Dict[str, int]:
+    """Return the observation's declared horizons without changing defaults."""
+    stair_step_horizons = horizons_for_observation(observation)
+    return stair_step_horizons or HORIZON_BARS
 
 
 def _t(trace, o, horizon, status) -> None:
@@ -374,8 +389,13 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
         symbol_retired = False
         for o in obs_list:
             anchor = o.get("scan_timestamp") or o.get("timestamp")
-            elig = horizon_eligibility(anchor, now, (o.get("outcomes") or {}).keys(),
-                                       slack_min=slack_min)
+            elig = horizon_eligibility(
+                anchor,
+                now,
+                (o.get("outcomes") or {}).keys(),
+                horizon_bars=_horizons_for(o),
+                slack_min=slack_min,
+            )
             for h, status in elig.items():
                 if status in ("already", "not_ready"):
                     report["horizons"][h][status] += 1
@@ -501,20 +521,29 @@ def _mature_from_bars(ordered, report, bars_by_symbol, fetch_errors, budget_defe
 
         for o, anchor, ready in plans:
             a = _parse(anchor)
-            after = [b for b in bars if (_parse(b.get("t")) or a) >= a]
-            closes = [b.get("c") for b in after if b.get("c") is not None]
-            if len(closes) < 2:
-                for h in ready:
-                    _fail(report, h, "INSUFFICIENT_FUTURE_BARS")
-                    _t(trace, o, h, "INSUFFICIENT_FUTURE_BARS")
-                continue
-            eval_times = {h: (a + _dt.timedelta(minutes=HORIZON_BARS[h])).isoformat()
-                          for h in ready}
-            direction = str((o.get("scanners") or [{}])[0].get("direction") or "long")
-            outcomes = compute_matured_outcomes(
-                o, prices_after=closes,
-                horizon_bars={h: HORIZON_BARS[h] for h in ready},
-                evaluation_times=eval_times, direction=direction)
+            if is_stair_step_observation(o):
+                outcomes = compute_stair_step_outcomes(o, bars, horizons=ready)
+            else:
+                after = [b for b in bars if (_parse(b.get("t")) or a) >= a]
+                closes = [b.get("c") for b in after if b.get("c") is not None]
+                if len(closes) < 2:
+                    for h in ready:
+                        _fail(report, h, "INSUFFICIENT_FUTURE_BARS")
+                        _t(trace, o, h, "INSUFFICIENT_FUTURE_BARS")
+                    continue
+                horizon_bars = _horizons_for(o)
+                eval_times = {
+                    h: (a + _dt.timedelta(minutes=horizon_bars[h])).isoformat()
+                    for h in ready
+                }
+                direction = str((o.get("scanners") or [{}])[0].get("direction") or "long")
+                outcomes = compute_matured_outcomes(
+                    o,
+                    prices_after=closes,
+                    horizon_bars={h: horizon_bars[h] for h in ready},
+                    evaluation_times=eval_times,
+                    direction=direction,
+                )
             produced = {oc["horizon"] for oc in outcomes}
             for h in ready:
                 if h not in produced:
@@ -610,7 +639,7 @@ def render_report_text(r: Dict[str, Any]) -> str:
              f"(scanned {r['observations_scanned']})",
              f"Symbols ready: {r.get('symbols_with_ready_horizons', 0)} "
              f"(deferred this run: {r.get('symbols_deferred', 0)})"]
-    for h in HORIZON_BARS:
+    for h in REPORT_HORIZONS:
         s = r["horizons"][h]
         lines.append(f"{h}: new={s['new']} already={s['already']} "
                      f"not_ready={s['not_ready']} failed={s['failed']}")

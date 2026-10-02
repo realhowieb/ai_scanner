@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 _ET = ZoneInfo("America/New_York")
 
 DEFAULT_WINDOW = 45        # most recent 1-minute bars fitted
+WINDOW_OPTIONS = (10, 15, 20, 30, 45, 60)
 MIN_COVERAGE = 0.6         # bars / minutes spanned; below this the feed is too gappy
 
 
@@ -65,6 +66,8 @@ def stair_step_metrics(
     out: Dict[str, Any] = {"status": "insufficient", "bars": len(recent), "r2": None,
                            "trend_pct_per_hour": None, "direction": None,
                            "max_pullback_pct": None, "coverage": None,
+                           "slope_per_minute": None, "current_price": None,
+                           "fitted_price": None,
                            "as_of": recent[-1]["t"] if recent else None}
     if len(recent) < max(3, int(window * 0.8)):
         return out
@@ -104,9 +107,12 @@ def stair_step_metrics(
             high = max(high, y)
             worst = max(worst, (high - y) / high)
 
+    fitted_price = my + slope * (xs[-1] - mx)
     out.update(status="ok", r2=round(r2, 3), direction=direction,
                trend_pct_per_hour=round(slope * 60.0 / my * 100.0, 2),
-               max_pullback_pct=round(worst * 100.0, 2))
+               max_pullback_pct=round(worst * 100.0, 2),
+               slope_per_minute=round(slope, 8), current_price=ys[-1],
+               fitted_price=round(fitted_price, 8))
     return out
 
 

@@ -1,7 +1,8 @@
 name: Mature Observations
 
-# Run 38B — attach matured intraday outcomes (+5m/+15m/+30m/+60m) to captured
-# canonical observations. Idempotent and safe to rerun: each horizon matures once
+# Run 38B — attach matured intraday outcomes to captured canonical observations.
+# Stair-stepper research uses +5m/+10m/+15m/+30m; existing contexts retain their
+# +5m/+15m/+30m/+60m contract. Idempotent: each horizon matures once
 # its wall-clock elapses; already-matured pairs are skipped. Read-only w.r.t.
 # scans/scanners — only writes hsf_observation_outcomes. Non-fatal.
 
@@ -63,10 +64,19 @@ jobs:
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat artifacts/automation/maturation_report.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Analyze Stair-stepper outcomes
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python -m scripts.analyze_stair_stepper --out artifacts/automation/stair_stepper
+          cat artifacts/automation/stair_stepper/stair_stepper_validation.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload maturation report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: maturation-report
-          path: artifacts/automation/maturation_report.json
+          path: |
+            artifacts/automation/maturation_report.json
+            artifacts/automation/stair_stepper/*
           if-no-files-found: warn
