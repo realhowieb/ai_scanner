@@ -86,9 +86,12 @@ def collect_workflows() -> Dict[str, Any]:
 
 
 def latest_maturation_report() -> Optional[Dict[str, Any]]:
-    """maturation_report.json from the latest successful SCHEDULED (non-dry-run) run."""
+    """maturation_report.json from the latest successful non-dry-run run.
+
+    Maturation is dispatched by cron-job.org (workflow_dispatch) since 2026-10-02,
+    so runs of either event count; dry-run reports are skipped below."""
     session, repo = _gh()
-    runs = workflow_runs(session, repo, "mature-observations.yml", event="schedule", status="success", per_page=5)
+    runs = workflow_runs(session, repo, "mature-observations.yml", status="success", per_page=10)
     for run in runs:
         arts = session.get(f"{GH_API}/repos/{repo}/actions/runs/{run['id']}/artifacts", timeout=15).json()
         for a in arts.get("artifacts") or []:
@@ -306,7 +309,8 @@ def collect(now: _dt.datetime) -> Dict[str, Any]:
         "db_runs": runs,
         "observations_summary": summary,
         "maturation_report": mat_report,
-        "maturation_runs": [r for r in (wf.get("mature-observations.yml") or []) if r.get("event") == "schedule"]
+        "maturation_runs": [r for r in (wf.get("mature-observations.yml") or [])
+                            if r.get("event") in ("schedule", "workflow_dispatch")]
         if workflows is not None and wf.get("mature-observations.yml") is not None else None,
         "db_probe": probe,
         "workflows": workflows,

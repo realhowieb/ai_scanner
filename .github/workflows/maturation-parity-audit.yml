@@ -40,8 +40,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p artifacts/research
-          gh run list --workflow mature-observations.yml --event schedule -L 300 \
-            --json createdAt,conclusion -q '[.[] | select(.conclusion=="success" or .conclusion=="failure") | .createdAt]' \
+          gh run list --workflow mature-observations.yml -L 300 \
+            --json createdAt,conclusion,event -q '[.[] | select(.event=="schedule" or .event=="workflow_dispatch") | select(.conclusion=="success" or .conclusion=="failure") | .createdAt]' \
             > artifacts/research/maturation_run_times.json || echo "[]" > artifacts/research/maturation_run_times.json
       - name: Maturation parity audit (read-only, dry-run trace)
         env:

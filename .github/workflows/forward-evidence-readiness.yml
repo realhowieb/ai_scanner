@@ -40,13 +40,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
-      - name: Fetch latest scheduled (non-dry-run) maturation report (optional, run-level RATE_LIMITED)
+      - name: Fetch latest non-dry-run maturation report (optional, run-level RATE_LIMITED)
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+        # Maturation is dispatched by cron-job.org (workflow_dispatch), so take the
+        # newest successful run of either kind whose report is not a dry run.
         run: |
-          RID=$(gh run list --workflow mature-observations.yml --event schedule --status success -L 1 --json databaseId -q '.[0].databaseId')
-          if [ -n "$RID" ]; then gh run download "$RID" -n maturation-report -D artifacts/maturation || true; fi
+          for RID in $(gh run list --workflow mature-observations.yml --status success -L 10 --json databaseId -q '.[].databaseId'); do
+            rm -rf artifacts/maturation
+            gh run download "$RID" -n maturation-report -D artifacts/maturation || continue
+            if [ "$(jq -r '.dry_run // false' artifacts/maturation/maturation_report.json 2>/dev/null)" = "false" ]; then
+              echo "maturation report from run $RID"
+              exit 0
+            fi
+          done
+          rm -rf artifacts/maturation  # none found: never pass on a dry-run report
       - name: Forward evidence readiness (read-only)
         id: monitor
         env:

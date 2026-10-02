@@ -11,9 +11,10 @@ name: System Health
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "5 17 * * 1-5"   # ~13:05 ET, after the 12:35 ET scan
-    - cron: "45 23 * * 1-5"  # after the last maturation cycle and the readiness monitor
+  # No GitHub `schedule:` trigger (removed 2026-10-02). cron-job.org dispatches
+  # this workflow on main at 17:05 UTC (after the midday scan) and 23:45 UTC
+  # (after the last maturation and the readiness monitor), Mon-Fri. GitHub's
+  # cron ran these 3-4 hours late.
 
 permissions:
   contents: read
