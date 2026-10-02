@@ -70,6 +70,12 @@ def _ensure_schema(conn, is_sqlite: bool) -> None:
         )
         cur.execute("CREATE INDEX IF NOT EXISTS idx_hsf_obs_symbol_ts "
                     "ON hsf_observations (symbol, timestamp)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_hsf_obs_timestamp "
+                    "ON hsf_observations (timestamp DESC)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_hsf_obs_context_timestamp "
+                    "ON hsf_observations (context, timestamp DESC)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_hsf_outcomes_horizon_observation "
+                    "ON hsf_observation_outcomes (horizon, observation_id)")
     else:
         cur.execute(
             """
@@ -98,6 +104,12 @@ def _ensure_schema(conn, is_sqlite: bool) -> None:
         )
         cur.execute("CREATE INDEX IF NOT EXISTS idx_hsf_obs_symbol_ts "
                     "ON hsf_observations (symbol, timestamp)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_hsf_obs_timestamp "
+                    "ON hsf_observations (timestamp DESC)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_hsf_obs_context_timestamp "
+                    "ON hsf_observations (context, timestamp DESC)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_hsf_outcomes_horizon_observation "
+                    "ON hsf_observation_outcomes (horizon, observation_id)")
     conn.commit()
     cur.close()
 
