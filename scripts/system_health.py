@@ -168,8 +168,17 @@ def db_probe(recent: Optional[List[Dict[str, Any]]]) -> Dict[str, Any]:
 
 
 def recent_observations() -> List[Dict[str, Any]]:
+    """Recent scanner research observations.
+
+    Stair-stepper observations (``day_trader:stair_stepper``) are a separate
+    study captured from the Day Trader page. They carry no research cohort,
+    research_metadata or scan_id by design, so counting them made the capture
+    checks report untagged rows, incomplete metadata and null scan ids.
+    """
+    from analytics.stair_step_research import CONTEXT as STAIR_STEP_CONTEXT
     from db.hsf_observations import load_recent_observations
-    return load_recent_observations(limit=20000) or []
+    return [o for o in (load_recent_observations(limit=20000) or [])
+            if o.get("context") != STAIR_STEP_CONTEXT]
 
 
 def forward_outcomes() -> Dict[str, List[Dict[str, Any]]]:
