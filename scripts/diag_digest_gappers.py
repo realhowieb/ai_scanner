@@ -53,7 +53,7 @@ def main() -> None:
     try:
         from db.runs import list_runs
 
-        runs = list_runs(limit=10) or []
+        runs = list_runs(limit=10, all_users=True) or []
         snaps = [r for r in runs if r.get("is_snapshot")]
         print(f"\nrecent runs: {len(runs)}  (snapshots among them: {len(snaps)})")
         for r in runs[:6]:

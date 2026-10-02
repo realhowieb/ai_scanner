@@ -182,7 +182,7 @@ def _render_runs_table(max_rows: int = 200):
         st.info("Database not available yet — list_runs() missing.")
         return
     try:
-        runs_df = list_runs(limit=max_rows)  # expected to return a pandas DataFrame
+        runs_df = list_runs(limit=max_rows, all_users=True)  # expected to return a pandas DataFrame
     except (RuntimeError, TypeError, ValueError, OSError) as e:  # pragma: no cover
         st.error(f"Failed to load history: {e}")
         return

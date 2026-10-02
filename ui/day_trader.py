@@ -317,7 +317,7 @@ def _session_scan_symbols(label: str, limit: int = 40) -> List[str]:
         from db.runs import list_runs, load_run_results
         from ui.app_runtime import normalize_results_to_df
 
-        runs = list_runs(limit=60, include_snapshots=False) or []
+        runs = list_runs(limit=60, include_snapshots=False, username="scheduler") or []
         target = str(label).strip().lower()
         run = next(
             (r for r in runs if str(r.get("label") or "").strip().lower() == target),

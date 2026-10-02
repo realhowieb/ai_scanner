@@ -410,7 +410,7 @@ def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
       VolRel20, DollarVol20, Trend10D%, Trend20D%, Last, etc. (where available).
     """
     try:
-        runs = list_runs(limit=max_runs)
+        runs = list_runs(limit=max_runs, all_users=True)
     except Exception as e:
         print(f"[ml_prebreakout] Failed to load runs from DB: {e}")
         return pd.DataFrame()

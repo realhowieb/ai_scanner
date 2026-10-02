@@ -25,7 +25,7 @@ def main() -> None:
     from db.runs import list_runs, load_run_results
     from ui.app_runtime import normalize_results_to_df
 
-    runs = list_runs(limit=400) or []
+    runs = list_runs(limit=400, all_users=True) or []
     print(f"inspecting {len(runs)} recent runs")
     flagged = 0
     for r in runs:

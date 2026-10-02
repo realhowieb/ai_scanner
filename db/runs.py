@@ -197,9 +197,16 @@ def list_runs(
     limit: int = 50,
     include_snapshots: bool = True,
     username: Optional[str] = None,
+    *,
+    all_users: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     List recent runs from Neon if available, otherwise SQLite.
+
+    Scoped to one ``username``. Every user's runs are returned only with an
+    explicit ``all_users=True`` (scheduler/admin/research callers); a call with
+    neither returns [] so a caller that loses the username can never show other
+    users' scan history (P2-59).
 
     Returns a list of dicts:
     {
@@ -214,6 +221,8 @@ def list_runs(
     }
     """
     runs: List[Dict[str, Any]] = []
+    if not username and not all_users:
+        return runs
 
     # ---- Try Neon first ----
     try:
