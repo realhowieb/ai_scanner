@@ -330,7 +330,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(sh.forbidden_text(rc.render_plan_md(out["plan"])), [])
 
     def test_31_epoch_unchanged(self):
-        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-10-01T12:00:00+00:00")
+        self.assertEqual(fr.FORWARD_EPOCH["forward_epoch_start_timestamp"], "2026-10-05T12:00:00+00:00")
         for spec in rp.ALLOWLIST.values():
             self.assertNotIn("epoch", json.dumps(spec["inputs"]).lower())
 

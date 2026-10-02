@@ -72,7 +72,13 @@ def select_control_symbols(
 # have no IEX minute bars. From the Run 59 epoch on, controls are drawn only from
 # evaluated non-candidates that pass the SAME point-in-time liquidity and price
 # rules candidates must pass. Same seeded hash; same sample size.
-CONTROL_DESIGN = "run59_liquidity_matched_v1"
+#
+# Run 59B (owner decision 2026-10-02): near-miss names are excluded from the
+# control draw too. With the liquidity-matched pool (~180 names, 100 drawn) a
+# near-miss was often also drawn as a control in the same scan, failing the
+# H_research_integrity overlap gate. Same pool, hash and sample size otherwise.
+CONTROL_DESIGN = "run59b_liquidity_matched_disjoint_v2"
+RUN59_CONTROL_DESIGN = "run59_liquidity_matched_v1"  # 2026-10-01 .. 2026-10-02, superseded
 LEGACY_CONTROL_DESIGN = "run47_universe_sample_v1"
 
 
