@@ -15,9 +15,9 @@ except Exception:  # pragma: no cover - fallback when monitoring is unavailable
 
 # Customer addresses never reach logs unmasked (GitHub Actions logs are public).
 try:
-    from ui.log_privacy import mask_email, redact
+    from ui.log_privacy import log_id, redact
 except Exception:  # pragma: no cover - never print an address if the helper is missing
-    def mask_email(value) -> str:  # type: ignore[no-redef]
+    def log_id(value) -> str:  # type: ignore[no-redef]
         return "***"
 
     def redact(value) -> str:  # type: ignore[no-redef]
@@ -100,7 +100,7 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
         return True
     except Exception as e:
         # A silently-failing password reset locks the user out with no trace.
-        print(f"[email] password reset SEND FAILED to {mask_email(to_address)}: {type(e).__name__}: {redact(e)}")
+        print(f"[email] password reset SEND FAILED to {log_id(to_address)}: {type(e).__name__}: {redact(e)}")
         _capture(e)
         return False
 
@@ -143,10 +143,10 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str,
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(envelope_from, [to_address], msg.as_string())
-        print(f"[email] sent '{subject}' to {mask_email(to_address)} from {SMTP_FROM} via {SMTP_HOST}")
+        print(f"[email] sent '{subject}' to {log_id(to_address)} from {SMTP_FROM} via {SMTP_HOST}")
         return True
     except Exception as e:
-        print(f"[email] SEND FAILED to {mask_email(to_address)} via {SMTP_HOST}:{SMTP_PORT} from {SMTP_FROM} — {type(e).__name__}: {redact(e)}")
+        print(f"[email] SEND FAILED to {log_id(to_address)} via {SMTP_HOST}:{SMTP_PORT} from {SMTP_FROM} — {type(e).__name__}: {redact(e)}")
         _note_failure("", exc=e)
         _capture(e)
         return False

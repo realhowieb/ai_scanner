@@ -248,6 +248,64 @@ def save_outcome(outcome: Dict[str, Any], *, conn=None) -> bool:
                 pass
 
 
+def save_outcomes_batch(outcomes: List[Dict[str, Any]], *, conn) -> List[bool]:
+    """Persist several outcomes in ONE transaction (P2-41). Same rule as
+    `save_outcome`: INSERT ... ON CONFLICT (observation_id, horizon) DO NOTHING,
+    first write wins, nothing is ever rewritten. Returns one bool per outcome,
+    True only for a NEW row (a repeat of a key earlier in the batch is False).
+
+    Any database error rolls the whole batch back and is RAISED, so the caller
+    can retry row by row; an error is never reported as "already written"."""
+    keys = [(str(o.get("observation_id") or ""), str(o.get("horizon") or "")) for o in outcomes]
+    valid = [(k, o) for k, o in zip(keys, outcomes) if k[0] and k[1]]
+    if not valid:
+        return [False] * len(outcomes)
+    c, _opened, is_sqlite = _resolve_conn(conn)
+    if c is None:
+        raise RuntimeError("no database connection")
+    try:
+        _ensure_schema(c, is_sqlite)
+        cur = c.cursor()
+        inserted: set = set()
+        if is_sqlite:
+            for k, o in valid:
+                cur.execute(
+                    "INSERT INTO hsf_observation_outcomes "
+                    "(observation_id, horizon, schema_version, record) VALUES (?,?,?,?) "
+                    "ON CONFLICT (observation_id, horizon) DO NOTHING",
+                    (k[0], k[1], str(o.get("schema_version") or ""), json.dumps(o)))
+                if cur.rowcount == 1:
+                    inserted.add(k)
+        else:
+            values = ",".join(["(%s,%s,%s,%s::jsonb)"] * len(valid))
+            params: List[Any] = []
+            for k, o in valid:
+                params += [k[0], k[1], str(o.get("schema_version") or ""), json.dumps(o)]
+            cur.execute(
+                "INSERT INTO hsf_observation_outcomes "
+                f"(observation_id, horizon, schema_version, record) VALUES {values} "
+                "ON CONFLICT (observation_id, horizon) DO NOTHING "
+                "RETURNING observation_id, horizon",
+                tuple(params))
+            for row in cur.fetchall() or []:
+                vals = list(row.values()) if isinstance(row, dict) else list(row)
+                inserted.add((str(vals[0]), str(vals[1])))
+        c.commit()
+        cur.close()
+    except Exception:
+        try:
+            c.rollback()
+        except Exception:
+            pass
+        raise
+    out, seen = [], set()
+    for k in keys:
+        new = k in inserted and k not in seen
+        seen.add(k)
+        out.append(new)
+    return out
+
+
 def _loads(payload: Any) -> Dict[str, Any]:
     if isinstance(payload, str):
         try:

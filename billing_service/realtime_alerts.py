@@ -28,10 +28,12 @@ _EMAIL_RE = re.compile(r"([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
 
 
 def _redact(value: Any) -> str:
-    """Mask email addresses in log text (same rule as ui.log_privacy; this
-    service deploys on its own and can't import the app)."""
+    """Replace email addresses in log text with a pseudonym (same rule as
+    ui.log_privacy.redact; this service deploys on its own and can't import the app)."""
+    import hashlib
+
     return _EMAIL_RE.sub(
-        lambda m: (m.group(1)[:2] if len(m.group(1)) > 2 else m.group(1)[:1]) + f"***@{m.group(2)}",
+        lambda m: "user#" + hashlib.sha256(m.group(0).strip().lower().encode("utf-8")).hexdigest()[:8],
         str(value),
     )
 

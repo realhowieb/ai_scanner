@@ -22,9 +22,9 @@ except Exception:  # pragma: no cover - fallback when monitoring is unavailable
 
 # Customer addresses never reach logs unmasked (GitHub Actions logs are public).
 try:
-    from ui.log_privacy import mask_email, redact
+    from ui.log_privacy import log_id, redact
 except Exception:  # pragma: no cover - never print an address if the helper is missing
-    def mask_email(value) -> str:  # type: ignore[no-redef]
+    def log_id(value) -> str:  # type: ignore[no-redef]
         return "***"
 
     def redact(value) -> str:  # type: ignore[no-redef]
@@ -644,7 +644,7 @@ def run_alerts() -> None:
                 email_failed += 1
         except Exception as e:
             email_failed += 1
-            print(f"[alert_runner] email to {mask_email(user_id)} failed: {redact(e)}")
+            print(f"[alert_runner] email to {log_id(user_id)} failed: {redact(e)}")
             _capture(e)
 
     print(f"[alert_runner] fired {fired} alert(s), emailed {emailed}"

@@ -2,10 +2,16 @@
 
 Scheduled jobs run in GitHub Actions on a public repository, so their logs are
 public. Anything printed that may contain an address (a recipient, a username,
-an SMTP error) goes through `mask_email` or `redact` first.
+an SMTP error) goes through `log_id` or `redact` first.
+
+P2-33: logs show no part of an address. `log_id` turns an email or username
+into a stable pseudonym ("user#3fa9c2d1", the first 8 hex of its SHA-256), so
+one person's lines can still be followed without revealing who they are; the
+partial mask ("sa***@gmail.com") is only for screens the person themselves sees.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
@@ -27,6 +33,14 @@ def mask_email(value: Any) -> str:
     return _mask_local(text)
 
 
+def log_id(value: Any) -> str:
+    """'Sample.Customer@gmail.com' -> 'user#<8 hex>'; same person -> same id."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    return "user#" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
+
+
 def redact(value: Any) -> str:
-    """Mask every email address inside free text (e.g. an exception message)."""
-    return _EMAIL_RE.sub(lambda m: f"{_mask_local(m.group(1))}@{m.group(2)}", str(value))
+    """Replace every email address inside free text (e.g. an exception message)."""
+    return _EMAIL_RE.sub(lambda m: log_id(m.group(0)), str(value))
