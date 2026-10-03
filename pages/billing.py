@@ -212,11 +212,12 @@ def _upgrade_buttons(current_tier_key: str) -> None:
 
     # Yearly plans: shown only once enabled (config.BILLING_YEARLY_ENABLED).
     try:
-        from config import BILLING_YEARLY_ENABLED
+        from config import billing_yearly_enabled
+        yearly_enabled = billing_yearly_enabled()  # per render, not cached at import
     except ImportError:
-        BILLING_YEARLY_ENABLED = False
+        yearly_enabled = False
     interval = "month"
-    if BILLING_YEARLY_ENABLED:
+    if yearly_enabled:
         choice = st.radio("Billing", ["Monthly", "Yearly · 2 months free"], horizontal=True,
                           key="billing_interval_choice")
         interval = "year" if str(choice).startswith("Yearly") else "month"

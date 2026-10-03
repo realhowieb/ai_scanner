@@ -763,3 +763,17 @@ class YearlyClientTests(unittest.TestCase):
         import config
 
         self.assertFalse(config.BILLING_YEARLY_ENABLED)
+        self.assertFalse(config.billing_yearly_enabled())
+
+    def test_yearly_flag_is_read_live_not_cached(self):
+        from unittest import mock
+
+        import config
+
+        with mock.patch.dict("os.environ", {"BILLING_YEARLY_ENABLED": "1"}):
+            self.assertTrue(config.billing_yearly_enabled())  # no reimport needed
+        self.assertFalse(config.billing_yearly_enabled())
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parents[1] / "pages" / "billing.py").read_text()
+        self.assertIn("billing_yearly_enabled()", src)
