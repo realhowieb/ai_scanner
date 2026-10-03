@@ -45,8 +45,12 @@ ALERT_EMAIL = "..."                          # email fallback if Slack absent
 ```
 STRIPE_SECRET_KEY            # LIVE key (sk_live_...) at launch
 STRIPE_WEBHOOK_SECRET        # LIVE webhook signing secret
-STRIPE_PRICE_PRO            # LIVE price id
-STRIPE_PRICE_PREMIUM        # LIVE price id
+STRIPE_PRICE_PRO            # LIVE price id, $25 / month
+STRIPE_PRICE_PREMIUM        # LIVE price id, $40 / month
+STRIPE_PRICE_PRO_YEARLY     # LIVE price id, $250 / year (set both yearly ids or neither)
+STRIPE_PRICE_PREMIUM_YEARLY # LIVE price id, $400 / year
+STRIPE_PRICE_PRO_LEGACY     # optional: older LIVE price ids still billed (comma-separated); none at first launch
+STRIPE_PRICE_PREMIUM_LEGACY # optional, same
 DATABASE_URL                # same Neon DB
 APP_SUCCESS_URL  = https://hsfinestai.streamlit.app
 APP_CANCEL_URL   = https://hsfinestai.streamlit.app
@@ -62,7 +66,22 @@ APP_PORTAL_RETURN_URL = https://hsfinestai.streamlit.app/billing
   - `checkout.session.completed`
   - `customer.subscription.updated`
   - `customer.subscription.deleted`
+- [ ] Settings → Billing → **Customer portal → Cancellations**: "At end of billing period" (P2-49; set it in live mode too)
 - [ ] Set a **monthly spend alert** in the Anthropic console as an AI-cost backstop
+
+## 3b. Billing pre-flight (after the live env vars are saved on Render)
+
+1. Render → Environment: add `BILLING_DEBUG_STATUS = 1` and let it redeploy.
+2. Open `https://ai-scanner-h2c8.onrender.com/debug/status` and look at `billing_preflight`:
+   - `stripe_mode` must say `"live"`.
+   - `ok` must be `true` and `problems` empty. It flags any price that is missing, in the
+     wrong mode (a test price with the live key), archived, the wrong amount or interval,
+     a yearly pair with only one id set, and a webhook endpoint that isn't enabled at
+     `/webhook` or misses one of the three events.
+   - A `warnings` line about webhooks means the key can't list endpoints; check them by hand.
+3. Remove `BILLING_DEBUG_STATUS` again (the page is hidden without it).
+
+The page shows only whether values are set and what is wrong; it never shows keys or price ids.
 
 ---
 

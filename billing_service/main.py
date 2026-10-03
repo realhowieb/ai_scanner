@@ -6,6 +6,7 @@ import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
 import psycopg2
 import stripe
@@ -496,8 +497,114 @@ def debug_status():
         "DATABASE_URL",
     )
     status["missing_env"] = _required_env_missing(*required)
+    status["billing_preflight"] = _billing_preflight()
     status["ok"] = not status["missing_env"] and bool(status["db"]["reachable"])
     return status
+
+
+# Go-live pre-flight. Amounts in cents; keep in step with config.TIERS_CONFIG
+# (a test checks). A mismatch here means Render points at the wrong price.
+_EXPECTED_PRICES = (
+    ("STRIPE_PRICE_PRO", "month", 2500),
+    ("STRIPE_PRICE_PREMIUM", "month", 4000),
+    ("STRIPE_PRICE_PRO_YEARLY", "year", 25000),
+    ("STRIPE_PRICE_PREMIUM_YEARLY", "year", 40000),
+)
+_WEBHOOK_EVENTS = (
+    "checkout.session.completed",
+    "customer.subscription.updated",
+    "customer.subscription.deleted",
+)
+
+
+def _stripe_key_mode(key: str) -> str:
+    if key.startswith(("sk_live_", "rk_live_")):
+        return "live"
+    if key.startswith(("sk_test_", "rk_test_")):
+        return "test"
+    return "unknown"
+
+
+def _check_price(price_id: str, mode: str, interval: Optional[str], amount: Optional[int]) -> dict:
+    """Problems with one configured price id (empty list = fine). Never raises."""
+    out = {"id_set": True, "problems": []}
+    try:
+        p = stripe.Price.retrieve(price_id)
+    except Exception as e:  # wrong mode, typo or deleted: Stripe says "No such price"
+        out["problems"].append(f"not found with this key ({type(e).__name__})")
+        return out
+    recurring = p.get("recurring") or {}
+    if mode in ("live", "test") and bool(p.get("livemode")) != (mode == "live"):
+        out["problems"].append(f"price is {'live' if p.get('livemode') else 'test'} but key is {mode}")
+    if not p.get("active", True):
+        out["problems"].append("price is archived")
+    if interval and recurring.get("interval") != interval:
+        out["problems"].append(f"interval {recurring.get('interval')!r}, expected {interval!r}")
+    if amount is not None and p.get("unit_amount") != amount:
+        out["problems"].append(f"amount {p.get('unit_amount')}, expected {amount}")
+    if (p.get("currency") or "usd") != "usd":
+        out["problems"].append(f"currency {p.get('currency')!r}, expected 'usd'")
+    return out
+
+
+def _check_webhooks() -> dict:
+    """Is a Stripe webhook endpoint pointed at this service's /webhook with the
+    three events? Restricted keys may not list endpoints; that's reported, not fatal."""
+    try:
+        endpoints = list(stripe.WebhookEndpoint.list(limit=100).auto_paging_iter())
+    except Exception as e:
+        return {"checked": False, "problems": [f"could not list endpoints ({type(e).__name__})"]}
+    matching = [ep for ep in endpoints
+                if urlparse(str(ep.get("url") or "")).path.rstrip("/") == "/webhook"
+                and ep.get("status") == "enabled"]
+    if not matching:
+        urls = sorted({str(ep.get("url") or "") for ep in endpoints})
+        return {"checked": True, "problems": ["no enabled endpoint at path /webhook"], "urls": urls}
+    events = set()
+    for ep in matching:
+        events.update(ep.get("enabled_events") or [])
+    missing = [] if "*" in events else [e for e in _WEBHOOK_EVENTS if e not in events]
+    return {"checked": True, "problems": [f"missing events: {', '.join(missing)}"] if missing else [],
+            "urls": sorted(str(ep.get("url")) for ep in matching)}
+
+
+def _billing_preflight() -> dict:
+    """What would break a real checkout: key mode, webhook secret, each price id
+    (exists in this key's mode, active, right interval and amount) and the
+    webhook endpoint. Reads Stripe only; never returns key or price values."""
+    mode = _stripe_key_mode(STRIPE_SECRET_KEY)
+    problems = []
+    if mode == "unknown":
+        problems.append("STRIPE_SECRET_KEY is not an sk_/rk_ live or test key")
+    if STRIPE_WEBHOOK_SECRET and not STRIPE_WEBHOOK_SECRET.startswith("whsec_"):
+        problems.append("STRIPE_WEBHOOK_SECRET does not start with whsec_")
+    prices = {}
+    for name, interval, amount in _EXPECTED_PRICES:
+        price_id = os.getenv(name, "").strip()
+        if not price_id:
+            prices[name] = {"id_set": False, "problems": []}
+            if not name.endswith("_YEARLY"):
+                problems.append(f"{name} not set")
+            continue
+        prices[name] = _check_price(price_id, mode, interval, amount)
+        problems += [f"{name}: {p}" for p in prices[name]["problems"]]
+    for name in ("STRIPE_PRICE_PRO_LEGACY", "STRIPE_PRICE_PREMIUM_LEGACY"):
+        for i, price_id in enumerate(sorted(_price_ids(name))):
+            key = f"{name}[{i}]"
+            # Legacy prices may be archived and are old amounts: only mode matters.
+            prices[key] = _check_price(price_id, mode, None, None)
+            prices[key]["problems"] = [p for p in prices[key]["problems"] if p != "price is archived"]
+            problems += [f"{key}: {p}" for p in prices[key]["problems"]]
+    yearly = [bool(os.getenv(n, "").strip()) for n in ("STRIPE_PRICE_PRO_YEARLY", "STRIPE_PRICE_PREMIUM_YEARLY")]
+    if any(yearly) and not all(yearly):
+        problems.append("only one yearly price is set; set both or neither")
+    webhooks = _check_webhooks()
+    # An endpoint we couldn't list is a warning (check it by hand), not a failure.
+    warnings = [] if webhooks["checked"] else [f"webhook: {p}" for p in webhooks["problems"]]
+    if webhooks["checked"]:
+        problems += [f"webhook: {p}" for p in webhooks["problems"]]
+    return {"ok": not problems, "stripe_mode": mode, "problems": problems,
+            "warnings": warnings, "prices": prices, "webhooks": webhooks}
 
 
 def _plan_change_flow(subscription, price_id: str, return_url: str, *, interval: str = "month") -> Optional[dict]:
