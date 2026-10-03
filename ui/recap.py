@@ -46,8 +46,23 @@ def recap_day(runs: Sequence[Dict[str, Any]], now: _dt.datetime) -> Optional[_dt
     return today if today in days else max(days)
 
 
+def session_scan_counts(runs: Sequence[Dict[str, Any]], day: _dt.date) -> Dict[str, int]:
+    """P2-73: premarket / postmarket scheduler runs on `day` (ET). They're separate
+    session scans, not full-market sweeps, so they're counted apart."""
+    from ui.market_scans import _ts
+
+    counts = {"premarket": 0, "postmarket": 0}
+    for r in runs or []:
+        label = str(r.get("label") or "").strip().lower()
+        ts = _ts(r.get("created_at"))
+        if label in counts and ts is not None and ts.astimezone(mc.ET).date() == day:
+            counts[label] += 1
+    return counts
+
+
 def build_recap(day_runs: Sequence[Dict[str, Any]], first_df: Any, last_df: Any, *,
-                day: _dt.date, now: _dt.datetime) -> Dict[str, Any]:
+                day: _dt.date, now: _dt.datetime,
+                session_counts: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     """Plain-data recap for one session (newest-first runs of that day)."""
     from ui.market_scans import diff_tickers, tickers_of, top_setups
 
@@ -60,6 +75,8 @@ def build_recap(day_runs: Sequence[Dict[str, Any]], first_df: Any, last_df: Any,
         "title": ("End-of-day recap" if closed else "Today so far") if day == today
         else f"Last session recap · {day.strftime('%a %b')} {day.day}",
         "scans": len(day_runs),
+        "premarket_scans": int((session_counts or {}).get("premarket", 0)),
+        "postmarket_scans": int((session_counts or {}).get("postmarket", 0)),
         "entered": _by_score(d["entered"], last_df),
         "left": _by_score(d["left"], first_df),
         "standouts": [{"ticker": o["ticker"], "score": o["score"], "setup": o["primary_setup"]}
@@ -73,7 +90,13 @@ def recap_lines(r: Dict[str, Any]) -> List[str]:
         more = f" and {len(xs) - MAX_NAMES} more" if len(xs) > MAX_NAMES else ""
         return ", ".join(xs[:MAX_NAMES]) + more
 
-    lines = [f"- **{r['scans']}** full-market scan{'s' if r['scans'] != 1 else ''} ran."]
+    extra = []
+    if r.get("premarket_scans"):
+        extra.append(f"{r['premarket_scans']} pre-market")
+    if r.get("postmarket_scans"):
+        extra.append(f"{r['postmarket_scans']} after-hours")
+    plus = f" (plus {' and '.join(extra)})" if extra else ""
+    lines = [f"- **{r['scans']}** full-market scan{'s' if r['scans'] != 1 else ''} ran{plus}."]
     if r["scans"] > 1:
         lines.append(f"- Entered the ranked list (HSF {RECAP_MIN_SCORE}+): {names(r['entered'])}." if r["entered"]
                      else f"- No names scoring HSF {RECAP_MIN_SCORE}+ entered the ranked list.")
@@ -101,7 +124,13 @@ def render_recap(now: Optional[_dt.datetime] = None) -> None:
         day_runs = runs_on_day(runs, day)
         first_df = safe_run_df(day_runs[-1]["id"])
         last_df = safe_run_df(day_runs[0]["id"])
-        r = build_recap(day_runs, first_df, last_df, day=day, now=now)
+        try:
+            from db.runs import list_runs
+
+            counts = session_scan_counts(list_runs(limit=60, include_snapshots=False, username="scheduler") or [], day)
+        except Exception:
+            counts = None
+        r = build_recap(day_runs, first_df, last_df, day=day, now=now, session_counts=counts)
         st.markdown(f"### {r['title']}")
         st.markdown("\n".join(recap_lines(r)))
         st.caption("What HSF's scheduled scans saw. Descriptive only: not a performance record.")
