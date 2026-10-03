@@ -397,6 +397,15 @@ def _platform_statuses(data: Mapping[str, Any], funnel: Mapping[str, Any]) -> li
     ]
 
 
+def _axis_label(value: Any) -> str:
+    """Heatmap row/column label. A missing key (e.g. an outcome row without a
+    horizon) would become a NaN column label, which Streamlit writes into the
+    table's JSON metadata and the browser can't parse ("Unexpected identifier NaN")."""
+    if value is None or (isinstance(value, float) and value != value):
+        return "(none)"
+    return str(value)
+
+
 def _render_heatmap(groups: Sequence[Mapping[str, Any]], *, row_key: str, col_key: str,
                     metric_label: str, min_n: int) -> None:
     if not groups:
@@ -408,6 +417,13 @@ def _render_heatmap(groups: Sequence[Mapping[str, Any]], *, row_key: str, col_ke
         "MFE": "average_mfe", "MAE": "average_mae",
     }
     metric = metric_map[metric_label]
+    # Pending observations are listed once with no horizon (for the funnel); they
+    # hold no outcomes, so they don't belong in a performance matrix.
+    groups = [g for g in groups if not ((g.get(row_key) is None or g.get(col_key) is None)
+                                        and not int(g.get("n") or 0))]
+    if not groups:
+        st.info("No matured observations are available for this matrix.")
+        return
     display_rows = []
     for group in groups:
         value = group.get(metric)
@@ -420,7 +436,8 @@ def _render_heatmap(groups: Sequence[Mapping[str, Any]], *, row_key: str, col_ke
             shown = "—"
         else:
             shown = _pct(value)
-        display_rows.append({row_key: group.get(row_key), col_key: group.get(col_key), "value": shown})
+        display_rows.append({row_key: _axis_label(group.get(row_key)), col_key: _axis_label(group.get(col_key)),
+                             "value": shown})
     frame = pd.DataFrame(display_rows).pivot(index=row_key, columns=col_key, values="value")
     st.dataframe(arrow_safe(frame), width="stretch")
     st.caption(f"Evidence threshold: n ≥ {min_n}. Every insufficient cell retains its sample count.")
