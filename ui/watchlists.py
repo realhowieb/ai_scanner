@@ -470,6 +470,12 @@ def render_active_watchlist_tools() -> tuple[bool, bool, bool, bool, bool, str]:
                         st.rerun()
                     except Exception:
                         st.error("Could not duplicate watchlist right now.")
+        try:  # P2-72
+            from ui.watchlist_import import render_watchlist_import
+
+            render_watchlist_import(username, active_id, active_name)
+        except ImportError:  # new module; a stale deploy must not break My Stocks
+            pass
         if has_watchlist:
             m1, m2 = st.columns([3, 1])
             with m1:
