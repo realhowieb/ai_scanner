@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import time
 from collections.abc import Iterable
 
@@ -152,6 +153,35 @@ def add_after_hours_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def add_premarket_columns(df: pd.DataFrame, today=None) -> pd.DataFrame:
+    """Annotate premarket results with pre-market pricing (display only).
+
+    Adds `PMLast` (today's latest pre-market trade) and `PMPctChange` (% move
+    vs the previous regular-session close, both from Alpaca snapshots). Names
+    with no trade yet today stay blank. Candidates, scores and ordering are
+    unchanged. Fails open like add_after_hours_columns.
+    """
+    if df is None or df.empty or "Ticker" not in df.columns:
+        return df
+    if today is None:
+        from analytics import market_calendar as mc
+
+        today = dt.datetime.now(dt.timezone.utc).astimezone(mc.ET).date()
+    try:
+        from ui.scan_providers import get_alpaca_premarket_quotes
+
+        quotes = get_alpaca_premarket_quotes(df["Ticker"].astype(str).str.upper().tolist(), today)
+    except HEADLESS_BOUNDARY_ERRORS:
+        quotes = {}
+    out = df.copy()
+    tickers = out["Ticker"].astype(str).str.upper()
+    last = pd.to_numeric(tickers.map(lambda t: (quotes.get(t) or (None, None))[0]), errors="coerce")
+    prev = pd.to_numeric(tickers.map(lambda t: (quotes.get(t) or (None, None))[1]), errors="coerce")
+    out["PMLast"] = last
+    out["PMPctChange"] = ((last / prev - 1.0) * 100.0).where(prev > 0).round(2)
+    return out
+
+
 def run_headless_pipeline(
     run_type: str,
     universe: Iterable[str],
@@ -206,6 +236,8 @@ def run_headless_pipeline(
     )
     if (session_label or run_type) == "postmarket":
         breakout_df = add_after_hours_columns(breakout_df)
+    elif (session_label or run_type) == "premarket":
+        breakout_df = add_premarket_columns(breakout_df)
     meta = {
         "downloaded_count": len({ticker for ticker in price_data if ticker in set(symbols)}),
         "skipped_count": len(skipped),

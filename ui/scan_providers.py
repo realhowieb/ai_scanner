@@ -133,6 +133,71 @@ def get_alpaca_extended_last_prices(symbols: List[str]) -> dict[str, float]:
     return out
 
 
+def _et_date(ts: Any):
+    """ET calendar date of an Alpaca RFC3339 timestamp, or None."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    try:
+        parsed = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(ZoneInfo("America/New_York")).date()
+
+
+def premarket_quote_from_snapshot(snapshot: Any, today) -> tuple[float, float] | None:
+    """(latest pre-market trade, previous close) for `today` (an ET date), or None.
+
+    Needs a trade printed today: a latest trade from an earlier day is last
+    night's after-hours print, not pre-market. The previous close is the newest
+    daily bar dated before today (Alpaca's dailyBar can already be today's).
+    """
+    if not isinstance(snapshot, dict):
+        return None
+    trade = snapshot.get("latestTrade") or {}
+    if not isinstance(trade, dict) or _et_date(trade.get("t")) != today:
+        return None
+    prev = None
+    for key in ("dailyBar", "prevDailyBar"):
+        bar = snapshot.get(key) or {}
+        d = _et_date(bar.get("t")) if isinstance(bar, dict) else None
+        if d is not None and d < today:
+            prev = bar.get("c")
+            break
+    try:
+        last, prev = float(trade.get("p")), float(prev)
+    except (TypeError, ValueError):
+        return None
+    return (last, prev) if last > 0 and prev > 0 else None
+
+
+def get_alpaca_premarket_quotes(symbols: List[str], today) -> dict[str, tuple[float, float]]:
+    """{symbol: (pre-market last, previous close)} from Alpaca snapshots."""
+    if requests is None:
+        return {}
+    headers = get_alpaca_headers()
+    if not headers:
+        return {}
+    normalized_symbols = sanitize_universe_symbols(symbols)
+    out: dict[str, tuple[float, float]] = {}
+    for index in range(0, len(normalized_symbols), ALPACA_MAX_SNAPSHOT_BATCH):
+        batch = normalized_symbols[index : index + ALPACA_MAX_SNAPSHOT_BATCH]
+        params = {"symbols": ",".join(batch), "feed": get_alpaca_data_feed()}
+        try:
+            resp = requests.get(ALPACA_SNAPSHOT_URL, headers=headers, params=params, timeout=5)
+            resp.raise_for_status()
+            snapshots = _normalize_snapshot_payload(resp.json())
+        except (ValueError, requests_exc.RequestException):  # type: ignore[union-attr]
+            continue
+        for symbol in batch:
+            quote = premarket_quote_from_snapshot(snapshots.get(symbol), today)
+            if quote is not None:
+                out[symbol] = quote
+    return out
+
+
 def apply_alpaca_extended_prices(df: pd.DataFrame) -> pd.DataFrame:
     """Override the current price column using Alpaca extended-hours prices."""
     if df is None or df.empty:

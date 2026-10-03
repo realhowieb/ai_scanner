@@ -57,13 +57,20 @@ def current_postmarket_run(runs: List[Dict[str, Any]], now: _dt.datetime) -> Opt
 
 def after_hours_movers(df: Any, n: int = 5) -> List[Dict[str, Any]]:
     """Biggest absolute after-hours moves: [{ticker, ah_pct, ah_last, score}]."""
+    return [{"ticker": m["ticker"], "ah_pct": m["pct"], "ah_last": m["last"], "score": m["score"]}
+            for m in session_movers(df, "AHPctChange", "AHLast", n=n)]
+
+
+def session_movers(df: Any, pct_col: str, last_col: str, n: int = 5) -> List[Dict[str, Any]]:
+    """Biggest absolute extended-hours moves in `pct_col` (at least MIN_ABS_MOVE_PCT):
+    [{ticker, pct, last, score}]. Shared by After the close and Before the open."""
     import pandas as pd
 
-    if df is None or getattr(df, "empty", True) or "AHPctChange" not in df.columns or "Ticker" not in df.columns:
+    if df is None or getattr(df, "empty", True) or pct_col not in df.columns or "Ticker" not in df.columns:
         return []
     rows = df.copy()
-    rows["AHPctChange"] = pd.to_numeric(rows["AHPctChange"], errors="coerce")
-    rows = rows[rows["AHPctChange"].notna() & (rows["AHPctChange"].abs() >= MIN_ABS_MOVE_PCT)]
+    rows[pct_col] = pd.to_numeric(rows[pct_col], errors="coerce")
+    rows = rows[rows[pct_col].notna() & (rows[pct_col].abs() >= MIN_ABS_MOVE_PCT)]
     if rows.empty:
         return []
     try:
@@ -72,13 +79,13 @@ def after_hours_movers(df: Any, n: int = 5) -> List[Dict[str, Any]]:
         scores = hsf_scores_by_ticker(df.to_dict(orient="records"))
     except Exception:
         scores = {}
-    rows = rows.reindex(rows["AHPctChange"].abs().sort_values(ascending=False).index).head(n)
+    rows = rows.reindex(rows[pct_col].abs().sort_values(ascending=False).index).head(n)
     out = []
     for _, r in rows.iterrows():
         t = str(r["Ticker"]).upper()
-        last = pd.to_numeric(r.get("AHLast"), errors="coerce")
-        out.append({"ticker": t, "ah_pct": float(r["AHPctChange"]),
-                    "ah_last": None if pd.isna(last) else float(last), "score": scores.get(t)})
+        last = pd.to_numeric(r.get(last_col), errors="coerce")
+        out.append({"ticker": t, "pct": float(r[pct_col]),
+                    "last": None if pd.isna(last) else float(last), "score": scores.get(t)})
     return out
 
 

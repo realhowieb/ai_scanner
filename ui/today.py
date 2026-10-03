@@ -105,6 +105,15 @@ def _section_top(scan_df: Any) -> None:
     )
 
 
+def _section_before_open() -> None:
+    """P2-74: pre-market movers from this morning's premarket scan (Pro+)."""
+    try:
+        from ui.before_open import render_before_open
+    except ImportError:  # new module; a stale deploy must not break Today
+        return
+    render_before_open()
+
+
 def _section_after_close() -> None:
     """P2-45: after-hours movers from the latest postmarket scan (Pro+)."""
     try:
@@ -186,6 +195,7 @@ def render_today(username: str) -> None:
 
     for name, fn in (("market snapshot", lambda: render_market_snapshot(results_df=scan_df)),
                      ("top setups", lambda: _section_top(scan_df)),
+                     ("before the open", _section_before_open),
                      ("after the close", _section_after_close),
                      ("new since your last visit", lambda: _section_new(scan_df, run_id)),
                      ("your watchlist", lambda: _section_watchlist(username, scan_df))):
