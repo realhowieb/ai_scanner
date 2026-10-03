@@ -10,7 +10,7 @@ class NewPagesTests(unittest.TestCase):
         return Path(f"pages/{name}").read_text()
 
     def test_all_new_pages_login_gated(self):
-        for name in ("journal.py", "watchlists.py", "settings.py"):
+        for name in ("journal.py", "watchlists.py", "settings.py", "admin.py"):
             src = self._src(name)
             self.assertIn('st.session_state.get("username")', src, name)
             self.assertIn("st.stop()", src, name)
@@ -41,15 +41,21 @@ class NewPagesTests(unittest.TestCase):
         self.assertNotIn("pages/verify_email.py", paths)
 
     def test_custom_nav_follows_hsf_product_flow(self):
-        # P1-1: grouped Today → Discover → Research → My Stocks → Account → Labs.
+        # P1-1 plus the admin-only operational destination.
         from ui.nav import _NAV, _NAV_SECTIONS
 
         self.assertEqual([s for s, _items in _NAV_SECTIONS],
-                         ["Today", "Discover", "Research", "My Stocks", "Account", "Labs"])
+                         ["Today", "Discover", "Research", "My Stocks", "Account", "Admin", "Labs"])
         labels = [label for _p, label, _i in _NAV[:5]]
         self.assertEqual(labels, ["Today", "Market Brief", "Scanner", "Day Trader", "Stock Intelligence"])
         self.assertIn("My Stocks", [label for _p, label, _i in _NAV])
         self.assertNotIn("pages/alerts.py", [p for p, _l, _i in _NAV])   # alerts live in My Stocks
+
+    def test_admin_console_is_a_dedicated_authorization_gated_page(self):
+        src = self._src("admin.py")
+        self.assertIn('st.session_state.get("is_admin")', src)
+        self.assertIn("render_admin_page", src)
+        self.assertIn("Admin Console is only available", src)
 
 
 if __name__ == "__main__":

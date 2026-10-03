@@ -29,7 +29,10 @@ def render_system_health(report: Optional[Dict[str, Any]] = None) -> None:
     report = report or _load()
     st.markdown("### 🩺 System Health")
     if not report:
-        st.info("No health snapshot yet. Run the **System Health** workflow (Actions → System Health).")
+        st.info(
+            "No health snapshot yet. Confirm the external scheduler dispatched System Health, "
+            "or run the **System Health** workflow manually."
+        )
         return
     status = report["system_status"]
     c1, c2, c3 = st.columns(3)

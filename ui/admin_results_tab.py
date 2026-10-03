@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Callable
 
@@ -26,61 +27,92 @@ def render_admin_tab(
     render_admin_users_panel: Callable[..., Any],
     get_db_conn: Callable[[], Any],
 ) -> None:
-    with tab_admin:
-        st.markdown("## 🛠 Admin Panel")
+    """Backward-compatible wrapper for older callers that provide a tab."""
+    render_admin_page(
+        container=tab_admin,
+        username=username,
+        db_status=db_status,
+        admin_users=admin_users,
+        render_admin_users_panel=render_admin_users_panel,
+        get_db_conn=get_db_conn,
+    )
+
+
+def render_admin_page(
+    *,
+    username: str,
+    db_status: str,
+    admin_users: object,
+    render_admin_users_panel: Callable[..., Any],
+    get_db_conn: Callable[[], Any],
+    container: Any = None,
+) -> None:
+    """Render the complete Admin console on a page or legacy tab container."""
+    context = container if container is not None else nullcontext()
+    with context:
+        st.markdown("## Admin")
+        st.caption("Product usage, research evidence, operational health and account administration.")
+
+        if not bool(st.session_state.get("is_admin")):
+            st.info("Admin tools are only available to admin users.")
+            return
 
         try:
-            render_admin_users_panel(
+            from ui.admin_analytics import render_admin_analytics
+            from ui.system_health_view import render_system_health
+
+            def _render_system_health_panel(report: Any = None) -> None:
+                if report is None:
+                    render_system_health()
+                else:
+                    render_system_health(report=report)
+
+            render_admin_analytics(
                 username=username,
-                ADMIN_USERS=admin_users,
                 db_status=db_status,
+                admin_users=admin_users,
+                render_admin_users_panel=render_admin_users_panel,
+                render_system_health_panel=_render_system_health_panel,
             )
         except ADMIN_TAB_ERRORS as exc:
-            st.error("Admin panel failed to render.")
+            st.error("Admin analytics failed to render. Existing Admin tools remain available below.")
             _show_exception(exc)
 
         st.markdown("---")
-        st.markdown("### 🧰 Admin Tools")
+        st.markdown("### Admin tools")
+        c1, c2, c3 = st.columns(3)
+        _render_force_tier_resync(c1)
+        _render_earnings_refresh(c2, get_db_conn)
+        _render_db_integrity_checks(c3, get_db_conn)
 
-        if not bool(st.session_state.get("is_admin")):
-            st.info("🔒 Admin tools are only available to admin users.")
-        else:
-            c1, c2, c3 = st.columns(3)
-            _render_force_tier_resync(c1)
-            _render_earnings_refresh(c2, get_db_conn)
-            _render_db_integrity_checks(c3, get_db_conn)
+        try:  # P1-36: email delivery (separate signal; never changes Run 59 status)
+            from ui.email_health_view import render_email_health
 
-        if bool(st.session_state.get("is_admin")):
-            st.markdown("---")
-            # Run 59 System Health (guarded import: a stale Streamlit Cloud module
-            # must never break the admin tab).
-            try:
-                from ui.system_health_view import render_system_health
+            render_email_health()
+        except ADMIN_TAB_ERRORS:
+            pass
+        try:  # P1-39: email settings per environment (+ website test email)
+            from ui.email_setup_view import render_email_setup
 
-                render_system_health()
-            except (*ADMIN_TAB_ERRORS, KeyError) as exc:
-                st.caption(f"System Health unavailable: {type(exc).__name__}")
-            try:  # P1-36: email delivery (separate signal; never changes Run 59 status)
-                from ui.email_health_view import render_email_health
+            render_email_setup()
+        except ADMIN_TAB_ERRORS:
+            pass
+        st.markdown("---")
+        st.markdown("### Diagnostics")
+        _render_billing_health_badge()
+        try:  # moved here from the top of Scanner; panel unchanged
+            from ui.provider_health import render_provider_health
 
-                render_email_health()
-            except ADMIN_TAB_ERRORS:
-                pass
-            try:  # P1-39: email settings per environment (+ website test email)
-                from ui.email_setup_view import render_email_setup
-
-                render_email_setup()
-            except ADMIN_TAB_ERRORS:
-                pass
-            st.markdown("---")
-            st.markdown("### 📊 Diagnostics")
-            _render_billing_health_badge()
-            diag_col1, diag_col2 = st.columns(2)
-            with diag_col1:
-                _render_scan_errors_panel(get_db_conn)
-            with diag_col2:
-                _render_login_attempts_panel(get_db_conn)
-            _render_ai_usage_panel()
+            with st.expander("🩺 Provider Health", expanded=False):
+                render_provider_health()
+        except ADMIN_TAB_ERRORS:
+            pass
+        diag_col1, diag_col2 = st.columns(2)
+        with diag_col1:
+            _render_scan_errors_panel(get_db_conn)
+        with diag_col2:
+            _render_login_attempts_panel(get_db_conn)
+        _render_ai_usage_panel()
 
         st.caption(
             "Tip: Earnings refresh is intentionally admin-only and never runs automatically during scans."

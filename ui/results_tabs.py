@@ -5,7 +5,6 @@ from typing import Any, Callable
 import pandas as pd
 import streamlit as st
 
-from ui.admin_results_tab import render_admin_tab
 from ui.lazy_panel import lazy_open
 from ui.market_default import MARKET_VIEW_KEY, market_view_caption
 from ui.results_empty import results_empty_message, results_tab_label
@@ -24,16 +23,12 @@ def render_results_tabs(
     flags: dict[str, bool],
     scan_ran_at: Any,
     username: str,
-    db_status: str,
-    admin_users: object,
     list_runs: Callable[..., Any] | None,
     load_run_results: Callable[..., Any] | None,
     render_results: Callable[..., Any],
     render_prebreakout_tab: Callable[..., Any],
-    render_admin_users_panel: Callable[..., Any],
     render_chart_for_ticker: Callable[..., Any],
     generate_ai_note: Callable[..., Any],
-    get_db_conn: Callable[[], Any],
     normalize_results_to_df: Callable[[object], pd.DataFrame | None],
 ) -> None:
     rows = 0 if df is None else len(df)
@@ -42,7 +37,6 @@ def render_results_tabs(
         flags.get("can_track_record")
         or flags.get("can_scan_history")
         or flags.get("can_early_breakout")
-        or flags.get("can_admin_panel")
     ):
         tab_names = [results_tab_label(df, st.session_state.get(MARKET_VIEW_KEY))]
 
@@ -52,8 +46,6 @@ def render_results_tabs(
             tab_names.append("🔮 Early Breakout Candidates")
         if flags.get("can_scan_history"):
             tab_names.append("📚 Scan History")
-        if flags.get("can_admin_panel"):
-            tab_names.append("🛠 Admin")
 
         tabs = st.tabs(tab_names)
 
@@ -75,15 +67,11 @@ def render_results_tabs(
             tab_history = tabs[idx]
             idx += 1
 
-        tab_admin = None
-        if flags.get("can_admin_panel"):
-            tab_admin = tabs[idx]
     else:
         (tab_latest,) = st.tabs([results_tab_label(df, st.session_state.get(MARKET_VIEW_KEY))])
         tab_track = None
         tab_early = None
         tab_history = None
-        tab_admin = None
 
     _render_latest_results_tab(
         tab_latest=tab_latest,
@@ -123,15 +111,6 @@ def render_results_tabs(
             normalize_results_to_df=normalize_results_to_df,
         )
 
-    if tab_admin is not None:
-        render_admin_tab(
-            tab_admin=tab_admin,
-            username=username,
-            db_status=db_status,
-            admin_users=admin_users,
-            render_admin_users_panel=render_admin_users_panel,
-            get_db_conn=get_db_conn,
-        )
 
 
 def _render_track_record_tab(*, tab_track: Any) -> None:
