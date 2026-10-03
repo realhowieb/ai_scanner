@@ -1,12 +1,15 @@
 """P2-29 — a daily-bar batch that times out (or gets a 429/5xx) is retried once,
 so its 150 symbols aren't dropped from the scan; a second failure still skips
 the batch without failing the scan."""
+import importlib.util
 import unittest
 from unittest import mock
 
-import requests
+HAS_REQUESTS = importlib.util.find_spec("requests") is not None
+if HAS_REQUESTS:
+    import requests
 
-from data import price_alpaca as pa
+    from data import price_alpaca as pa
 
 CFG = {"api_key": "k", "api_secret": "s", "data_url": "https://data.example"}
 BARS = {"bars": {"AAPL": [{"t": "2026-10-01T04:00:00Z", "o": 1, "h": 2, "l": 0.5, "c": 1.5, "v": 100}]},
@@ -26,6 +29,7 @@ def status(code):
     return r
 
 
+@unittest.skipUnless(HAS_REQUESTS, "requests not installed in this environment")
 class BatchRetryTests(unittest.TestCase):
     def fetch(self, responses):
         with (
