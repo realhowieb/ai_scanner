@@ -100,6 +100,13 @@ def render_admin_page(
         st.markdown("---")
         st.markdown("### Diagnostics")
         _render_billing_health_badge()
+        try:  # moved here from the top of Scanner; panel unchanged
+            from ui.provider_health import render_provider_health
+
+            with st.expander("🩺 Provider Health", expanded=False):
+                render_provider_health()
+        except ADMIN_TAB_ERRORS:
+            pass
         diag_col1, diag_col2 = st.columns(2)
         with diag_col1:
             _render_scan_errors_panel(get_db_conn)

@@ -24,3 +24,14 @@ def test_scanner_results_no_longer_render_admin_console():
     assert "render_admin_tab" not in source
     assert '🛠 Admin' not in source
     assert 'can_admin_panel' not in source
+
+
+def test_provider_health_lives_in_the_admin_console_not_scanner():
+    app = (ROOT / "app.py").read_text()
+    assert "render_provider_health" not in app
+    assert "🩺 Provider Health" not in app
+    admin = (ROOT / "ui" / "admin_results_tab.py").read_text()
+    diagnostics = admin.index('st.markdown("### Diagnostics")')
+    panel = admin.index('with st.expander("🩺 Provider Health", expanded=False):')
+    assert diagnostics < panel
+    assert "render_provider_health()" in admin[panel:panel + 120]

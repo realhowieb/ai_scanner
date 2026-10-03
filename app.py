@@ -578,17 +578,6 @@ def main():
     except Exception:
         pass
 
-    # -------- Provider Health (admin diagnostics) --------
-    if flags.get("can_diagnostics"):
-        try:
-            from ui.provider_health import render_provider_health
-
-            with st.expander("🩺 Provider Health", expanded=False):
-                render_provider_health()
-        except Exception:
-            pass
-
-
     # -------- Market Snapshot (moved back up near the top) --------
     # Render early so it appears above scans/results like before.
     # It can render with or without a recent results_df.
