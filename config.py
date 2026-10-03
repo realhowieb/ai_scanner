@@ -103,8 +103,13 @@ BILLING_API_BASE: str = _get("BILLING_API_BASE", "https://ai-scanner-h2c8.onrend
 # Yearly plans ($250 / $400 per year): the Billing page shows a Monthly/Yearly
 # choice only when this is on. Turn it on after the yearly Stripe prices exist
 # and STRIPE_PRICE_PRO_YEARLY / STRIPE_PRICE_PREMIUM_YEARLY are set on Render.
-BILLING_YEARLY_ENABLED: bool = str(_get("BILLING_YEARLY_ENABLED", "") or "").strip().lower() in {
-    "1", "true", "yes", "on"}
+def billing_yearly_enabled() -> bool:
+    """Read on every call: Streamlit Cloud updates secrets without restarting
+    the app, so a module-level constant would miss a newly added secret."""
+    return str(_get("BILLING_YEARLY_ENABLED", "") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+BILLING_YEARLY_ENABLED: bool = billing_yearly_enabled()  # value at import time (kept for callers)
 
 # --- AI scan summary (Anthropic) ---
 ANTHROPIC_API_KEY: str | None = _get("ANTHROPIC_API_KEY")
