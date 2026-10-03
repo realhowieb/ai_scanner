@@ -57,7 +57,7 @@ APP_PORTAL_RETURN_URL = https://hsfinestai.streamlit.app/billing
 
 - [ ] **Switch from Test mode → Live mode** ⚠️ (the #1 launch step)
 - [ ] Use **live** publishable/secret keys and **live** price IDs
-- [ ] Webhook endpoint → `https://ai-scanner-h2c8.onrender.com/stripe/webhook`
+- [ ] Webhook endpoint → `https://ai-scanner-h2c8.onrender.com/webhook` (the service has no `/stripe/webhook` route; that path would return 404 and paid users would not be upgraded)
 - [ ] Webhook events subscribed:
   - `checkout.session.completed`
   - `customer.subscription.updated`
