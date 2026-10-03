@@ -269,9 +269,15 @@ def download_multi_alpaca(
                 params["page_token"] = page_token
 
             try:
-                resp = requests.get(url, headers=headers, params=params, timeout=timeout_s)  # type: ignore[union-attr]
-                resp.raise_for_status()
-                payload = resp.json()
+                # P2-29: one retry (2 s) on a timeout, dropped connection, 429 or
+                # 5xx. A timed-out batch used to drop all 150 symbols from the scan
+                # (seen 2026-09-28); one retry keeps the scan's run time bounded.
+                payload = _alpaca_get(url, headers=headers, params=params, timeout_s=timeout_s,
+                                      max_retries=1, base_delay_s=2.0, max_delay_s=2.0)
+            except AlpacaRateLimitError as exc:
+                logger.warning("Alpaca rate-limited %s symbols (%s): %s", len(chunk), symbols_param, exc)
+                failed = True
+                break
             except requests_exc.RequestException as exc:  # type: ignore[union-attr]
                 logger.warning("Alpaca request failed for %s symbols (%s): %s", len(chunk), symbols_param, exc)
                 failed = True
