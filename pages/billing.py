@@ -270,7 +270,7 @@ def _upgrade_buttons(current_tier_key: str) -> None:
     # Plan cards: same structure for both plans; buttons sit in their own row
     # underneath so they line up whatever the card heights are.
     features = {
-        "pro": ["5 alerts with email delivery", "Interactive results and CSV export",
+        "pro": ["5 alerts with email delivery", "Live Day Trader monitor", "Interactive results and CSV export",
                 "Advanced scans", "Scan history"],
         "premium": ["25 alerts", "AI scan summaries and chat", "Setup notes and Early Breakout research",
                     "Custom full-market scans", "Paper trading"],
