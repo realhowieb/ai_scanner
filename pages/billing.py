@@ -218,16 +218,15 @@ def _upgrade_buttons(current_tier_key: str) -> None:
         yearly_enabled = False
     interval = "month"
     if yearly_enabled:
-        choice = st.radio("Billing", ["Monthly", "Yearly · 2 months free"], horizontal=True,
-                          key="billing_interval_choice")
-        interval = "year" if str(choice).startswith("Yearly") else "month"
+        options = ["Monthly", "Yearly · 2 months free"]
+        if hasattr(st, "segmented_control"):
+            choice = st.segmented_control("Billing", options, default="Monthly",
+                                          key="billing_interval_choice", label_visibility="collapsed")
+        else:  # older Streamlit
+            choice = st.radio("Billing", options, horizontal=True, key="billing_interval_choice")
+        interval = "year" if str(choice or "").startswith("Yearly") else "month"
 
-    from ui.pricing import PRICES, YEARLY_PRICES
-
-    def _price(plan: str) -> str:
-        return YEARLY_PRICES[plan] if interval == "year" else PRICES[plan]
-
-    col_pro, col_premium = st.columns(2)
+    from config import TIERS_CONFIG
 
     email = _logged_in_email()
 
@@ -268,24 +267,46 @@ def _upgrade_buttons(current_tier_key: str) -> None:
         elif err:
             st.caption(f"⚠️ {err}")
 
-    with col_pro:
-        st.markdown(f"### Pro · {_price('pro')} · Recommended")  # P2-21: no popularity claim yet
-        st.caption(TAGLINES["pro"])
-        st.caption("5 alerts, email delivery, interactive results, CSV export, advanced scans and history.")
-        if current_tier_key in ("pro", "premium", "admin"):
-            st.success("You already have Pro (or higher).")
-        else:
-            _plan_button("pro", "billing_upgrade_pro")
+    # Plan cards: same structure for both plans; buttons sit in their own row
+    # underneath so they line up whatever the card heights are.
+    features = {
+        "pro": ["5 alerts with email delivery", "Interactive results and CSV export",
+                "Advanced scans", "Scan history"],
+        "premium": ["25 alerts", "AI scan summaries and chat", "Setup notes and Early Breakout research",
+                    "Custom full-market scans", "Paper trading"],
+    }
+    owned = {"pro": current_tier_key in ("pro", "premium", "admin"),
+             "premium": current_tier_key in ("premium", "admin")}
 
-    with col_premium:
-        st.markdown(f"### Premium · {_price('premium')}")
-        st.caption(TAGLINES["premium"])
-        st.caption("25 alerts, AI scan summaries and chat, setup notes, Early Breakout research, custom full-market scans and paper trading.")
-        if current_tier_key in ("premium", "admin"):
-            st.success("You already have Premium (or Admin).")
-        else:
-            _plan_button("premium", "billing_upgrade_premium")
+    cards = st.columns(2, gap="medium")
+    for col, plan in zip(cards, ("pro", "premium")):
+        monthly = TIERS_CONFIG[plan]["price_monthly"]
+        yearly = TIERS_CONFIG[plan]["price_yearly"]
+        with col, st.container(border=True):
+            if plan == "pro":
+                st.badge("Recommended", color="green")  # P2-21: no popularity claim yet
+            else:
+                st.badge("Everything in Pro, plus", color="violet")
+            st.markdown(f"#### {plan.title()}")
+            if interval == "year":
+                st.markdown(f"## ${yearly}<span style='font-size:1rem;font-weight:400'> / year</span>",
+                            unsafe_allow_html=True)
+                st.caption(f"${yearly / 12:.2f}/mo, billed yearly · 2 months free")
+            else:
+                st.markdown(f"## ${monthly}<span style='font-size:1rem;font-weight:400'> / month</span>",
+                            unsafe_allow_html=True)
+                st.caption("Billed monthly · cancel anytime")
+            st.caption(TAGLINES[plan])
+            st.markdown("\n".join(f"- {f}" for f in features[plan]))
 
+    actions = st.columns(2, gap="medium")
+    for col, plan in zip(actions, ("pro", "premium")):
+        with col:
+            if owned[plan]:
+                st.success("You already have Pro (or higher)." if plan == "pro"
+                           else "You already have Premium (or Admin).")
+            else:
+                _plan_button(plan, f"billing_upgrade_{plan}")
 
 # =========================
 # Main page
