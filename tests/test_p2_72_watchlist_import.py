@@ -111,7 +111,13 @@ class UiTests(unittest.TestCase):
         self.assertEqual(at.radio(key="wl_import_target").options, ["Create a new watchlist"])
 
 
+@unittest.skipUnless(HAS_ST, "needs streamlit")
 class WiringTests(unittest.TestCase):
+    def test_ticker_rule_matches_bulk_edit(self):
+        from ui.watchlists import _TICKER_RE
+
+        self.assertEqual(wi._TICKER_RE.pattern, _TICKER_RE.pattern)
+
     def test_manage_watchlist_renders_import(self):
         src = open("ui/watchlists.py").read()
         self.assertIn("render_watchlist_import(username, active_id, active_name)", src)

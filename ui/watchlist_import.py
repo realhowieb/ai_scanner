@@ -13,12 +13,16 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from pathlib import Path
 from typing import Dict, List
 
 MAX_FILE_BYTES = 512 * 1024
 MAX_TICKERS = 200
 _HEADER_NAMES = {"symbol", "symbols", "ticker", "tickers", "ticker symbol", "instrument"}
+# Same rule as ui.watchlists._TICKER_RE (a test keeps them equal); kept here so
+# the parser doesn't import the Streamlit page module.
+_TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,7}$")
 _NOT_TICKERS = {"SYMBOL", "SYMBOLS", "TICKER", "TICKERS", "CASH", "TOTAL", "N/A", "NA"}
 
 
@@ -57,8 +61,6 @@ def _csv_column(text: str) -> List[str] | None:
 
 def parse_watchlist_file(name: str, data: bytes) -> Dict[str, List[str]]:
     """{'tickers': [...], 'skipped': [...]} from an uploaded file's bytes."""
-    from ui.watchlists import _TICKER_RE
-
     if len(data or b"") > MAX_FILE_BYTES:
         raise ValueError("That file is too large (512 KB max).")
     text = _decode(data or b"")
