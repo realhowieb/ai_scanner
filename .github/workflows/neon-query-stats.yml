@@ -1,0 +1,37 @@
+name: Neon Query Stats
+
+# P2-54: read-only report of pg_stat_statements (slowest / most frequent
+# queries), largest tables and connections. Manual only. Query text is the
+# normalized form ($1 for values) and is redacted and truncated before printing.
+on:
+  workflow_dispatch:
+    inputs:
+      top:
+        description: "Queries per list (max 50)"
+        type: string
+        default: "15"
+
+permissions:
+  contents: read
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary "psycopg[binary]" -c requirements.lock
+      - name: Query stats
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TOP: ${{ inputs.top }}
+        run: python scripts/neon_query_stats.py --top "$TOP"
