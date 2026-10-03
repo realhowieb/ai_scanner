@@ -8,7 +8,7 @@ only finished when every place that holds the secret has the new value:
 |---|---|---|
 | **Streamlit** | share.streamlit.io → app → Settings → Secrets | the web app |
 | **GitHub** | repo → Settings → Secrets and variables → Actions | scheduled scans and other jobs |
-| **Render** | dashboard → billing service → Environment | the billing service (deploys from `dev`) |
+| **Render** | dashboard → billing service → Environment | the billing service (deploys from `main` since 2026-10-03) |
 | **cron-job.org** | each job → Advanced → Headers | the dispatch calls that start the scheduled jobs |
 
 ## When to rotate
