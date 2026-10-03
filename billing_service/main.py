@@ -427,6 +427,17 @@ def _email_setup() -> dict:
     return {"configured": not missing, "missing": missing, "sender_domain": domain}
 
 
+@app.get("/healthz")
+def healthz():
+    """Liveness for the Render health check: the process is up and serving.
+
+    Deliberately no database or Stripe call: Render polls this every few
+    seconds, and a DB check there would keep the Neon compute awake 24/7 and
+    restart the service on every brief Neon blip. Use /health for the full
+    readiness check (env + database)."""
+    return {"ok": True}
+
+
 @app.get("/health")
 def health():
     missing = _required_env_missing(

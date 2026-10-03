@@ -72,6 +72,7 @@ APP_PORTAL_RETURN_URL = https://hsfinestai.streamlit.app/billing
 - [ ] Log in → run a scan → "✨ Generate AI summary" returns a result (confirms ANTHROPIC_API_KEY)
 - [ ] Do a **real** small upgrade with a live card → land back as Pro, **no re-login**
 - [ ] `curl https://ai-scanner-h2c8.onrender.com/health` → shows `"features": [...]`
+- [ ] Render → Settings → Health Check Path = `/healthz` (liveness only; `/health` checks the database and would keep Neon awake 24/7)
 - [ ] Trigger a password reset → reset email arrives and works
 
 ---

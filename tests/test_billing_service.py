@@ -777,3 +777,19 @@ class YearlyClientTests(unittest.TestCase):
 
         src = (Path(__file__).resolve().parents[1] / "pages" / "billing.py").read_text()
         self.assertIn("billing_yearly_enabled()", src)
+
+
+
+@unittest.skipUnless(_FASTAPI_AVAILABLE, "fastapi not installed in this environment")
+class BillingServiceLivenessTest(unittest.TestCase):
+    def test_healthz_is_200_without_touching_the_database(self):
+        bm = _load_billing_module({"DATABASE_URL": ""})  # readiness would fail
+        bm._db_status = MagicMock(side_effect=AssertionError("healthz must not call the database"))
+        response = _client(bm).get("/healthz")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+        bm._db_status.assert_not_called()
+
+    def test_health_still_reports_readiness(self):
+        bm = _load_billing_module({"DATABASE_URL": ""})
+        self.assertEqual(_client(bm).get("/health").status_code, 503)
