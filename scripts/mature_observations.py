@@ -155,6 +155,21 @@ class _RunSaver:
             self._reset()
         raise RuntimeError("outcome write failed after reconnect")
 
+    def save_many(self, outcomes) -> list:
+        """P2-41: one transaction (one commit) for a symbol's outcomes. Raises on
+        any error after resetting the connection; the caller then saves row by
+        row through __call__, so an error is never counted as already written."""
+        from db.hsf_observations import save_outcomes_batch
+
+        conn = self._open()
+        if conn is None:
+            raise RuntimeError("no Neon connection; use the per-row path")
+        try:
+            return save_outcomes_batch(list(outcomes), conn=conn)
+        except Exception:
+            self._reset()
+            raise
+
     def close(self) -> None:
         self.close_quietly(self.conn)
         self.conn = None
@@ -519,6 +534,7 @@ def _mature_from_bars(ordered, report, bars_by_symbol, fetch_errors, budget_defe
             continue
         report["cache_hits"] += len(plans) - 1
 
+        pending = []  # (observation, outcome) for this symbol, saved together below
         for o, anchor, ready in plans:
             a = _parse(anchor)
             if is_stair_step_observation(o):
@@ -555,23 +571,47 @@ def _mature_from_bars(ordered, report, bars_by_symbol, fetch_errors, budget_defe
                     report["attached"] += 1
                     _t(trace, o, oc["horizon"], "MATURED")
                 continue
-            for oc in outcomes:
-                try:
-                    wrote = (save_fn or _default_save)(oc)
-                except Exception:
-                    _fail(report, oc["horizon"], "DATABASE_ERROR")
-                    _t(trace, o, oc["horizon"], "DATABASE_ERROR")
-                    continue
-                saved += 1
-                if saved % PROGRESS_EVERY_SAVES == 0:
-                    _log(f"saved {saved} outcomes")
-                if wrote:
-                    report["horizons"][oc["horizon"]]["new"] += 1
-                    report["attached"] += 1
-                    _t(trace, o, oc["horizon"], "MATURED")
-                else:
-                    report["horizons"][oc["horizon"]]["already"] += 1
-                    _t(trace, o, oc["horizon"], "ALREADY_WRITTEN")
+            pending.extend((o, oc) for oc in outcomes)
+        saved = _save_symbol_outcomes(pending, report, trace, save_fn, saved)
+
+
+def _save_symbol_outcomes(pending, report, trace, save_fn, saved: int) -> int:
+    """Save one symbol's outcomes and record each result.
+
+    P2-41: a saver with `save_many` writes them in one transaction (one commit
+    instead of one per row). If that batch fails it was rolled back as a whole,
+    so every row is retried one at a time and classified individually. Savers
+    without `save_many` (tests, SQLite fallback) keep the per-row path."""
+    if not pending:
+        return saved
+    results = None
+    save_many = getattr(save_fn, "save_many", None)
+    if save_many is not None:
+        try:
+            results = list(save_many([oc for _o, oc in pending]))
+        except Exception:
+            results = None
+    for i, (o, oc) in enumerate(pending):
+        if results is not None and i < len(results):
+            wrote = bool(results[i])
+        else:
+            try:
+                wrote = (save_fn or _default_save)(oc)
+            except Exception:
+                _fail(report, oc["horizon"], "DATABASE_ERROR")
+                _t(trace, o, oc["horizon"], "DATABASE_ERROR")
+                continue
+        saved += 1
+        if saved % PROGRESS_EVERY_SAVES == 0:
+            _log(f"saved {saved} outcomes")
+        if wrote:
+            report["horizons"][oc["horizon"]]["new"] += 1
+            report["attached"] += 1
+            _t(trace, o, oc["horizon"], "MATURED")
+        else:
+            report["horizons"][oc["horizon"]]["already"] += 1
+            _t(trace, o, oc["horizon"], "ALREADY_WRITTEN")
+    return saved
 
 
 def _apply_budget_deferral(report, ordered, budget_deferred, now, trace) -> None:
