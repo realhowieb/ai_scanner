@@ -41,9 +41,11 @@ def billing_auth_headers(username: str) -> dict[str, str] | None:
     return {"X-HSF-Auth": token} if token else None
 
 
-def create_checkout_url(email: str, plan: str) -> tuple[str | None, str | None]:
-    """Create a Stripe checkout/portal session. Returns (url, error)."""
-    if not email or plan not in {"pro", "premium"}:
+def create_checkout_url(email: str, plan: str, interval: str = "month") -> tuple[str | None, str | None]:
+    """Create a Stripe checkout/portal session. Returns (url, error).
+
+    interval: "month" (default) or "year" (yearly price, when enabled)."""
+    if not email or plan not in {"pro", "premium"} or interval not in {"month", "year"}:
         return None, "Invalid plan or missing account."
     try:
         from config import BILLING_API_BASE
@@ -56,6 +58,8 @@ def create_checkout_url(email: str, plan: str) -> tuple[str | None, str | None]:
             return None, "Couldn't verify your account right now. Please try again in a moment."
         success_url, return_url = _build_return_urls(email)
         body: dict[str, str] = {"email": email, "plan": plan}
+        if interval == "year":
+            body["interval"] = "year"
         if success_url:
             body["success_url"] = success_url
         if return_url:

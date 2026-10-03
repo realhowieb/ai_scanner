@@ -197,6 +197,18 @@ class BillingServiceLegacyPriceTest(unittest.TestCase):
         self.assertIsNone(self.bm._plan_change_flow(self._sub("price_pro_19"), "price_pro_fake", "https://x/r"))
         self.assertIsNone(self.bm._plan_change_flow(self._sub("price_premium_39"), "price_premium_fake", "https://x/r"))
 
+    def test_monthly_and_yearly_switches_on_the_same_plan_are_offered(self):
+        bm = _load_billing_module({"STRIPE_PRICE_PRO_LEGACY": "price_pro_19",
+                                   "STRIPE_PRICE_PRO_YEARLY": "price_pro_yearly"})
+        to_year = bm._plan_change_flow(self._sub("price_pro_fake"), "price_pro_yearly", "https://x/r", interval="year")
+        self.assertEqual(to_year["subscription_update_confirm"]["items"][0]["price"], "price_pro_yearly")
+        to_month = bm._plan_change_flow(self._sub("price_pro_yearly"), "price_pro_fake", "https://x/r")
+        self.assertEqual(to_month["subscription_update_confirm"]["items"][0]["price"], "price_pro_fake")
+        # A grandfathered monthly subscriber may choose yearly, but isn't moved to the new monthly price.
+        self.assertIsNotNone(bm._plan_change_flow(self._sub("price_pro_19"), "price_pro_yearly", "https://x/r",
+                                                  interval="year"))
+        self.assertIsNone(bm._plan_change_flow(self._sub("price_pro_19"), "price_pro_fake", "https://x/r"))
+
     def test_grandfathered_subscriber_can_still_change_plan(self):
         flow = self.bm._plan_change_flow(self._sub("price_pro_19"), "price_premium_fake", "https://x/r")
         self.assertEqual(flow["subscription_update_confirm"]["items"][0]["price"], "price_premium_fake")
@@ -271,7 +283,8 @@ class BillingServiceCheckoutTest(unittest.TestCase):
         self.assertEqual(response.json(), {"checkout_url": "https://checkout.test/session", "mode": "checkout"})
         kwargs = self.bm.stripe.checkout.Session.create.call_args.kwargs
         self.assertEqual(kwargs["line_items"], [{"price": "price_pro_fake", "quantity": 1}])
-        self.assertEqual(kwargs["metadata"], {"user_email": "member@example.com", "requested_plan": "pro"})
+        self.assertEqual(kwargs["metadata"], {"user_email": "member@example.com", "requested_plan": "pro",
+                                              "interval": "month"})
         self.assertEqual(kwargs["customer_email"], "member@example.com")
         self.assertIn("checkout=success", kwargs["success_url"])
         self.assertIn("checkout=cancel", kwargs["cancel_url"])
@@ -284,6 +297,35 @@ class BillingServiceCheckoutTest(unittest.TestCase):
         self.assertEqual(kwargs["line_items"], [{"price": "price_premium_fake", "quantity": 1}])
         self.assertEqual(kwargs["metadata"]["requested_plan"], "premium")
         self.assertNotIn("price_pro_fake", repr(kwargs["line_items"]))
+
+    def _checkout_interval(self, plan: str, interval: str):
+        return _client(self.bm).post(
+            "/create-checkout-session",
+            json={"email": "member@example.com", "plan": plan, "interval": interval},
+            headers={"X-HSF-Auth": "test-token"},
+        )
+
+    def test_yearly_checkout_uses_the_yearly_price(self):
+        self.bm.STRIPE_PRICE_PRO_YEARLY = "price_pro_yearly"
+        self.bm.STRIPE_PRICE_PREMIUM_YEARLY = "price_premium_yearly"
+        for plan, pid in (("pro", "price_pro_yearly"), ("premium", "price_premium_yearly")):
+            with self.subTest(plan=plan):
+                self.assertEqual(self._checkout_interval(plan, "year").status_code, 200)
+                kwargs = self.bm.stripe.checkout.Session.create.call_args.kwargs
+                self.assertEqual(kwargs["line_items"], [{"price": pid, "quantity": 1}])
+                self.assertEqual(kwargs["metadata"]["interval"], "year")
+                self.assertEqual(self.bm._price_to_plan(pid), plan)
+
+    def test_yearly_without_yearly_prices_is_refused_before_stripe(self):
+        self.bm.STRIPE_PRICE_PRO_YEARLY = ""
+        response = self._checkout_interval("pro", "year")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Yearly billing", response.json()["detail"])
+        self.bm.stripe.checkout.Session.create.assert_not_called()
+
+    def test_unknown_interval_is_rejected(self):
+        self.assertEqual(self._checkout_interval("pro", "weekly").status_code, 400)
+        self.bm.stripe.checkout.Session.create.assert_not_called()
 
     def test_forged_and_unknown_plans_are_rejected_before_stripe(self):
         for plan in ("admin", "price_pro_fake", "enterprise", ""):
@@ -671,3 +713,53 @@ class BillingContractTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class YearlyClientTests(unittest.TestCase):
+    """App side of yearly billing: the checkout client and the price labels."""
+
+    def test_checkout_client_sends_interval_only_for_yearly(self):
+        from unittest import mock
+
+        import ui.checkout as co
+
+        sent = []
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b'{"checkout_url": "https://checkout.test/s"}'
+
+        def fake_urlopen(req, timeout=30):
+            import json as _json
+            sent.append(_json.loads(req.data))
+            return _Resp()
+
+        with mock.patch.object(co, "billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
+                mock.patch.object(co, "_build_return_urls", return_value=(None, None)), \
+                mock.patch("urllib.request.urlopen", fake_urlopen):
+            self.assertEqual(co.create_checkout_url("m@example.com", "pro")[0], "https://checkout.test/s")
+            self.assertEqual(co.create_checkout_url("m@example.com", "pro", "year")[0], "https://checkout.test/s")
+            self.assertEqual(co.create_checkout_url("m@example.com", "pro", "weekly"),
+                             (None, "Invalid plan or missing account."))
+        self.assertNotIn("interval", sent[0])
+        self.assertEqual(sent[1]["interval"], "year")
+
+    def test_yearly_labels_are_ten_months(self):
+        import config
+        from ui.pricing import PRICES, YEARLY_PRICES
+
+        self.assertEqual(YEARLY_PRICES, {"pro": "$250/yr", "premium": "$400/yr"})
+        for tier in ("pro", "premium"):
+            self.assertEqual(config.TIERS_CONFIG[tier]["price_yearly"], 10 * config.TIERS_CONFIG[tier]["price_monthly"])
+        self.assertEqual(PRICES["pro"], "$25/mo")
+
+    def test_yearly_choice_is_off_by_default(self):
+        import config
+
+        self.assertFalse(config.BILLING_YEARLY_ENABLED)

@@ -67,6 +67,9 @@ def _price_ids(name: str) -> frozenset:
 # old price id would map to Free on the next subscription webhook.
 STRIPE_PRICE_PRO_LEGACY = _price_ids("STRIPE_PRICE_PRO_LEGACY")
 STRIPE_PRICE_PREMIUM_LEGACY = _price_ids("STRIPE_PRICE_PREMIUM_LEGACY")
+# Yearly prices ($250 / $400). Optional: unset means checkout is monthly only.
+STRIPE_PRICE_PRO_YEARLY = os.getenv("STRIPE_PRICE_PRO_YEARLY", "").strip()
+STRIPE_PRICE_PREMIUM_YEARLY = os.getenv("STRIPE_PRICE_PREMIUM_YEARLY", "").strip()
 
 APP_SUCCESS_URL = os.getenv("APP_SUCCESS_URL", "").strip()  # e.g. https://yourapp.com
 APP_CANCEL_URL = os.getenv("APP_CANCEL_URL", "").strip()    # e.g. https://yourapp.com
@@ -344,11 +347,16 @@ def _price_to_plan(price_id: str) -> str:
     price_id = (price_id or "").strip()
     if not price_id:
         return "basic"
-    if price_id == STRIPE_PRICE_PRO or price_id in STRIPE_PRICE_PRO_LEGACY:
+    if price_id in {STRIPE_PRICE_PRO, STRIPE_PRICE_PRO_YEARLY} or price_id in STRIPE_PRICE_PRO_LEGACY:
         return "pro"
-    if price_id == STRIPE_PRICE_PREMIUM or price_id in STRIPE_PRICE_PREMIUM_LEGACY:
+    if price_id in {STRIPE_PRICE_PREMIUM, STRIPE_PRICE_PREMIUM_YEARLY} or price_id in STRIPE_PRICE_PREMIUM_LEGACY:
         return "premium"
     return "basic"
+
+
+def _is_legacy_price(price_id: str) -> bool:
+    price_id = (price_id or "").strip()
+    return bool(price_id) and (price_id in STRIPE_PRICE_PRO_LEGACY or price_id in STRIPE_PRICE_PREMIUM_LEGACY)
 
 
 # ---------- Caller authentication (Run 83) ----------
@@ -481,7 +489,7 @@ def debug_status():
     return status
 
 
-def _plan_change_flow(subscription, price_id: str, return_url: str) -> Optional[dict]:
+def _plan_change_flow(subscription, price_id: str, return_url: str, *, interval: str = "month") -> Optional[dict]:
     """Stripe portal flow_data that confirms switching `subscription` to `price_id`
     and redirects to `return_url` afterwards; None when there's nothing to switch
     (no item, unknown ids, or already on that price)."""
@@ -491,9 +499,11 @@ def _plan_change_flow(subscription, price_id: str, return_url: str) -> Optional[
         current = (item.get("price") or {}).get("id")
         if not subscription.get("id") or not item.get("id") or not price_id or current == price_id:
             return None
-        # Already on this plan at an older (grandfathered) price: don't offer a
-        # "switch" that would move them onto the new, higher price.
-        if _price_to_plan(current) != "basic" and _price_to_plan(current) == _price_to_plan(price_id):
+        # Already on this plan at an older (grandfathered) price and asking for the
+        # same plan monthly: don't offer a "switch" onto the new, higher price.
+        # Switching between monthly and yearly on the same plan stays allowed.
+        same_plan = _price_to_plan(current) != "basic" and _price_to_plan(current) == _price_to_plan(price_id)
+        if same_plan and _is_legacy_price(current) and interval != "year":
             return None
         return {
             "type": "subscription_update_confirm",
@@ -524,7 +534,8 @@ async def create_checkout_session(payload: dict, request: Request):
     Payload example:
     {
       "email": "user@email.com",
-      "plan": "pro" | "premium"
+      "plan": "pro" | "premium",
+      "interval": "month" | "year"   (optional; yearly needs STRIPE_PRICE_*_YEARLY)
     }
     """
     _require_env(
@@ -543,6 +554,10 @@ async def create_checkout_session(payload: dict, request: Request):
 
     if plan not in {"pro", "premium"}:
         raise HTTPException(400, "Plan must be 'pro' or 'premium'")
+
+    interval = (payload.get("interval") or "month").strip().lower()
+    if interval not in {"month", "year"}:
+        raise HTTPException(400, "Interval must be 'month' or 'year'")
 
     # Optional success_url / return_url overrides — only honored if they point at
     # the same host as APP_SUCCESS_URL (prevents this becoming an open redirect).
@@ -566,7 +581,12 @@ async def create_checkout_session(payload: dict, request: Request):
     if return_override:
         portal_return_url = return_override
 
-    price_id = STRIPE_PRICE_PRO if plan == "pro" else STRIPE_PRICE_PREMIUM
+    if interval == "year":
+        price_id = STRIPE_PRICE_PRO_YEARLY if plan == "pro" else STRIPE_PRICE_PREMIUM_YEARLY
+        if not price_id:
+            raise HTTPException(400, "Yearly billing isn't available yet.")
+    else:
+        price_id = STRIPE_PRICE_PRO if plan == "pro" else STRIPE_PRICE_PREMIUM
 
     try:
         user = _get_user_by_email(email)
@@ -588,7 +608,7 @@ async def create_checkout_session(payload: dict, request: Request):
                 # when they confirm (no "Return to site" click). Any problem ->
                 # the plain portal, exactly as before.
                 portal = None
-                flow = _plan_change_flow(subs["data"][0], price_id, portal_return_url)
+                flow = _plan_change_flow(subs["data"][0], price_id, portal_return_url, interval=interval)
                 if flow:
                     try:
                         portal = stripe.billing_portal.Session.create(
@@ -621,6 +641,7 @@ async def create_checkout_session(payload: dict, request: Request):
             metadata={
                 "user_email": email,
                 "requested_plan": plan,
+                "interval": interval,
             },
         )
         return {"checkout_url": session.url, "mode": "checkout"}

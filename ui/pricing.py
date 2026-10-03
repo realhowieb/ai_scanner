@@ -18,6 +18,7 @@ from ui.plan_labels import PLAN_LABELS  # noqa: E402  (Run 85B: one source of pl
 
 TIER_NAMES = {k: PLAN_LABELS[k] for k in ("basic", "pro", "premium")}
 PRICES = {"basic": "Free", "pro": "$25/mo", "premium": "$40/mo"}
+YEARLY_PRICES = {"pro": "$250/yr", "premium": "$400/yr"}  # 10 x monthly: two months free
 TAGLINES = {
     "basic": "Discover what matters in the market.",
     "pro": "Monitor and investigate the opportunities that matter to you.",
