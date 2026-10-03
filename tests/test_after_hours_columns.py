@@ -57,6 +57,7 @@ class PipelineSessionTests(unittest.TestCase):
             mock.patch.object(hc, "maybe_run_gap_filter"),
             mock.patch.object(hc, "run_headless_breakout", return_value=_results()),
             mock.patch("ui.scan_providers.get_alpaca_extended_last_prices", return_value={"NVDA": 101.0}) as q,
+            mock.patch("ui.scan_providers.get_alpaca_premarket_quotes", return_value={}),
         ):
             df, _meta = hc.run_headless_pipeline(
                 run_type,
