@@ -31,7 +31,7 @@ into an issue.
 
 | Secret | Streamlit | GitHub | Render | cron-job.org | Notes |
 |---|:-:|:-:|:-:|:-:|---|
-| `DATABASE_URL` / `NEON_DATABASE_URL` (Neon) | ✓ | ✓ | ✓ | | Same database, three copies. GitHub has both names. |
+| `DATABASE_URL` (Neon) | ✓ | ✓ | ✓ | | Same database, three copies. Workflows pass it on as `NEON_DATABASE_URL` too; there is no separate secret. |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | ✓ | ✓ | ✓ | | Market data. `ALPACA_DATA_URL` / `ALPACA_FEED` are settings, not secrets. |
 | `STRIPE_SECRET_KEY` | | | ✓ | | Billing API key. |
 | `STRIPE_WEBHOOK_SECRET` | | | ✓ | | Signs Stripe → billing webhooks. |
@@ -54,8 +54,7 @@ and needs no rotation.
    This ends the old password at once, so have the four places open first.
 2. Copy the new connection string. Use the **pooled** one (host contains
    `-pooler`); it allows far more connections than the direct one.
-3. Update `DATABASE_URL` in Streamlit, `DATABASE_URL` and `NEON_DATABASE_URL`
-   in GitHub, and `DATABASE_URL` in Render.
+3. Update `DATABASE_URL` in Streamlit, GitHub and Render.
 4. Check: the app signs in and shows your watchlist; Render's `/health` is OK;
    run **Scheduled Market Scans** by hand from the Actions tab and it succeeds.
 

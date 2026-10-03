@@ -17,7 +17,7 @@ TIERS = ("basic", "pro", "premium")
 from ui.plan_labels import PLAN_LABELS  # noqa: E402  (Run 85B: one source of plan names)
 
 TIER_NAMES = {k: PLAN_LABELS[k] for k in ("basic", "pro", "premium")}
-PRICES = {"basic": "Free", "pro": "$19/mo", "premium": "$39/mo"}
+PRICES = {"basic": "Free", "pro": "$25/mo", "premium": "$40/mo"}
 TAGLINES = {
     "basic": "Discover what matters in the market.",
     "pro": "Monitor and investigate the opportunities that matter to you.",

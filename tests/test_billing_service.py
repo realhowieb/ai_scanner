@@ -169,6 +169,40 @@ class BillingServicePriceToPlanTest(unittest.TestCase):
 
 
 @unittest.skipUnless(_FASTAPI_AVAILABLE, "fastapi not installed in this environment")
+class BillingServiceLegacyPriceTest(unittest.TestCase):
+    """2026-10 price change: subscribers on the old prices keep their plan."""
+
+    def setUp(self):
+        self.bm = _load_billing_module({
+            "STRIPE_PRICE_PRO_LEGACY": "price_pro_19, price_pro_19_yearly",
+            "STRIPE_PRICE_PREMIUM_LEGACY": "price_premium_39",
+        })
+
+    def _sub(self, price_id):
+        return {"id": "sub_1", "items": {"data": [{"id": "si_1", "price": {"id": price_id}}]}}
+
+    def test_legacy_prices_keep_their_plan(self):
+        for pid in ("price_pro_19", "price_pro_19_yearly"):
+            self.assertEqual(self.bm._price_to_plan(pid), "pro")
+        self.assertEqual(self.bm._price_to_plan("price_premium_39"), "premium")
+        self.assertEqual(self.bm._price_to_plan("price_pro_fake"), "pro")  # new price still works
+        self.assertEqual(self.bm._price_to_plan("price_unknown"), "basic")
+
+    def test_unset_legacy_vars_change_nothing(self):
+        bm = _load_billing_module()
+        self.assertEqual(bm.STRIPE_PRICE_PRO_LEGACY, frozenset())
+        self.assertEqual(bm._price_to_plan("price_pro_19"), "basic")
+
+    def test_grandfathered_subscriber_is_not_moved_to_the_new_price(self):
+        self.assertIsNone(self.bm._plan_change_flow(self._sub("price_pro_19"), "price_pro_fake", "https://x/r"))
+        self.assertIsNone(self.bm._plan_change_flow(self._sub("price_premium_39"), "price_premium_fake", "https://x/r"))
+
+    def test_grandfathered_subscriber_can_still_change_plan(self):
+        flow = self.bm._plan_change_flow(self._sub("price_pro_19"), "price_premium_fake", "https://x/r")
+        self.assertEqual(flow["subscription_update_confirm"]["items"][0]["price"], "price_premium_fake")
+
+
+@unittest.skipUnless(_FASTAPI_AVAILABLE, "fastapi not installed in this environment")
 class BillingServiceWebhookSignatureTest(unittest.TestCase):
     def setUp(self):
         self.bm = _load_billing_module(
@@ -629,7 +663,7 @@ class BillingContractTest(unittest.TestCase):
         bm = _configured_module()
         self.assertEqual(TIERS, ("basic", "pro", "premium"))
         self.assertEqual(TIER_NAMES, {"basic": "Free", "pro": "Pro", "premium": "Premium"})
-        self.assertEqual(PRICES, {"basic": "Free", "pro": "$19/mo", "premium": "$39/mo"})
+        self.assertEqual(PRICES, {"basic": "Free", "pro": "$25/mo", "premium": "$40/mo"})
         self.assertEqual(bm._price_to_plan(bm.STRIPE_PRICE_PRO), "pro")
         self.assertEqual(bm._price_to_plan(bm.STRIPE_PRICE_PREMIUM), "premium")
         self.assertEqual(bm._price_to_plan("unconfigured"), "basic")

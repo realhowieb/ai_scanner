@@ -47,7 +47,7 @@ class DerivedPricingTests(unittest.TestCase):
         from ui.pricing import pricing_markdown
 
         md = pricing_markdown()
-        for s in ("| Feature | Free | Pro | Premium |", "$19/mo", "$39/mo"):
+        for s in ("| Feature | Free | Pro | Premium |", "$25/mo", "$40/mo"):
             self.assertIn(s, md)
         alert_row = next(line for line in md.splitlines() if line.startswith("| Alerts"))
         for tier in ("basic", "pro", "premium"):

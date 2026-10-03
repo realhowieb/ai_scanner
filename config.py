@@ -179,8 +179,8 @@ TIERS_CONFIG = {
     },
     "pro": {
         "name": "Pro",
-        "price_monthly": 19,
-        "price_yearly": 190,
+        "price_monthly": 25,
+        "price_yearly": 250,
         "features": [
             "SP500 Scan",
             "NASDAQ",
@@ -193,8 +193,8 @@ TIERS_CONFIG = {
     },
     "premium": {
         "name": "Premium",
-        "price_monthly": 39,
-        "price_yearly": 390,
+        "price_monthly": 40,
+        "price_yearly": 400,
         "features": [
             "SP500 Scan",
             "NASDAQ",
