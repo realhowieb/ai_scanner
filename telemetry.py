@@ -155,9 +155,9 @@ def check_and_alert_scan_errors() -> None:
 def log_provider_warning(provider: str, message: str, *, username: str | None = None) -> None:
     """Log a non-fatal provider issue (rate limit, timeout, partial data)."""
     try:
-        from ui.log_privacy import mask_email, redact
+        from ui.log_privacy import log_id, redact
 
-        shown_user, shown_msg = (mask_email(username) if username else None), redact(message)
+        shown_user, shown_msg = (log_id(username) if username else None), redact(message)
     except Exception:
         shown_user, shown_msg = ("***" if username else None), "(details hidden)"
     print(f"[PROVIDER WARNING] provider={provider!r} user={shown_user!r} msg={shown_msg!r}")

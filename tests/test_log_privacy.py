@@ -25,15 +25,24 @@ class MaskingTests(unittest.TestCase):
         self.assertEqual(mask_email(""), "")
         self.assertEqual(mask_email(None), "")
 
-    def test_redact_masks_every_address_in_text(self):
-        from ui.log_privacy import redact
+    def test_redact_replaces_every_address_in_text(self):
+        from ui.log_privacy import log_id, redact
 
         text = f"{{'{ADDR}': (550, b'bad')}} and Jane.Doe+x@Example.co.uk"
         out = redact(text)
-        self.assertNotIn(ADDR, out)
-        self.assertNotIn("Jane.Doe+x", out)
-        self.assertIn("sa***@gmail.com", out)
-        self.assertIn("Ja***@Example.co.uk", out)
+        for part in (ADDR, "sa***", "gmail.com", "Jane.Doe", "Ja***", "Example.co.uk"):
+            self.assertNotIn(part, out)  # P2-33: no part of an address
+        self.assertIn(log_id(ADDR), out)
+        self.assertIn(log_id("jane.doe+x@example.co.uk"), out)
+
+    def test_log_id_is_a_stable_pseudonym(self):
+        from ui.log_privacy import log_id
+
+        self.assertRegex(log_id(ADDR), r"^user#[0-9a-f]{8}$")
+        self.assertEqual(log_id(ADDR), log_id("  Sample.Customer@GMAIL.com "))
+        self.assertNotEqual(log_id(ADDR), log_id("other@example.com"))
+        self.assertEqual(log_id(""), "")
+        self.assertEqual(log_id(None), "")
 
     def test_billing_service_copy_matches(self):
         from ui.log_privacy import redact
@@ -57,8 +66,11 @@ class SendFailureLogTests(unittest.TestCase):
              mock.patch("config.SMTP_PASS", "p"), mock.patch("smtplib.SMTP", return_value=server), \
              mock.patch.object(eu, "_capture"), redirect_stdout(io.StringIO()) as out:
             self.assertFalse(eu.send_digest_email(ADDR, "s", "h", "t"))
-        self.assertIn("SEND FAILED to sa***@gmail.com", out.getvalue())
-        self.assertNotIn(ADDR, out.getvalue())
+        from ui.log_privacy import log_id
+
+        self.assertIn(f"SEND FAILED to {log_id(ADDR)}", out.getvalue())
+        self.assertNotIn("gmail.com", out.getvalue())
+        self.assertNotIn("sa***", out.getvalue())
 
     def test_success_log_has_no_address(self):
         import ui.email_utils as eu
@@ -69,14 +81,17 @@ class SendFailureLogTests(unittest.TestCase):
              mock.patch("config.SMTP_PASS", "p"), mock.patch("smtplib.SMTP", return_value=server), \
              redirect_stdout(io.StringIO()) as out:
             self.assertTrue(eu.send_alert_email(ADDR, "s", "b"))
-        self.assertIn("sa***@gmail.com", out.getvalue())
-        self.assertNotIn(ADDR, out.getvalue())
+        from ui.log_privacy import log_id
+
+        self.assertIn(log_id(ADDR), out.getvalue())
+        self.assertNotIn("gmail.com", out.getvalue())
 
 
 class SourceSweepTests(unittest.TestCase):
     FILES = ("ui/email_utils.py", "scheduler/morning_digest.py", "scheduler/evening_wrap.py",
              "scheduler/alert_runner.py", "billing_service/realtime_alerts.py", "telemetry.py")
     RAW = re.compile(r"(print|_log)\(f?[\"'].*\{(to_address|email|user_id|username)(!r)?\}")
+    PARTIAL = re.compile(r"(print|_log)\(f?[\"'].*\{mask_email\(")
 
     def test_user_data_job_errors_are_redacted(self):
         # Errors from cron jobs that read user rows (alerts, emails, credential
@@ -92,6 +107,13 @@ class SourceSweepTests(unittest.TestCase):
         for rel in self.FILES:
             for n, line in enumerate((ROOT / rel).read_text().splitlines(), 1):
                 self.assertIsNone(self.RAW.search(line), f"{rel}:{n}: {line.strip()}")
+
+    def test_no_log_line_prints_a_partial_address(self):
+        # P2-33: mask_email ("sa***@gmail.com") is for screens the person sees,
+        # never for logs.
+        for rel in self.FILES:
+            for n, line in enumerate((ROOT / rel).read_text().splitlines(), 1):
+                self.assertIsNone(self.PARTIAL.search(line), f"{rel}:{n}: {line.strip()}")
 
 
 if __name__ == "__main__":
