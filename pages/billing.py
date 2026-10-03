@@ -210,14 +210,31 @@ def _upgrade_buttons(current_tier_key: str) -> None:
         st.warning("Please sign in before upgrading. Upgrades are tied to your account.")
         return
 
+    # Yearly plans: shown only once enabled (config.BILLING_YEARLY_ENABLED).
+    try:
+        from config import BILLING_YEARLY_ENABLED
+    except ImportError:
+        BILLING_YEARLY_ENABLED = False
+    interval = "month"
+    if BILLING_YEARLY_ENABLED:
+        choice = st.radio("Billing", ["Monthly", "Yearly · 2 months free"], horizontal=True,
+                          key="billing_interval_choice")
+        interval = "year" if str(choice).startswith("Yearly") else "month"
+
+    from ui.pricing import PRICES, YEARLY_PRICES
+
+    def _price(plan: str) -> str:
+        return YEARLY_PRICES[plan] if interval == "year" else PRICES[plan]
+
     col_pro, col_premium = st.columns(2)
 
     email = _logged_in_email()
 
     def _plan_button(plan: str, key: str) -> None:
+        state_key = f"{plan}_{interval}"
         if st.button(
-            f"Upgrade to {plan.title()}",
-            key=key,
+            f"Upgrade to {plan.title()}" + (" (yearly)" if interval == "year" else ""),
+            key=f"{key}_{interval}",
             width="stretch",
             type="primary" if focus == plan else "secondary",
         ):
@@ -228,7 +245,7 @@ def _upgrade_buttons(current_tier_key: str) -> None:
                     "upgrade_started",
                     username=email,
                     plan=current_tier_key,
-                    metadata={"requested_plan": plan, "surface": "billing_page"},
+                    metadata={"requested_plan": plan, "interval": interval, "surface": "billing_page"},
                 )
             except Exception:
                 pass
@@ -240,18 +257,18 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             if allowed:
                 with st.spinner("Preparing checkout…"):
                     from ui.checkout import create_checkout_url
-                    url, err = create_checkout_url(email, plan)
-                st.session_state[f"_checkout_url_{plan}"] = url
-                st.session_state[f"_checkout_err_{plan}"] = err
-        url = st.session_state.get(f"_checkout_url_{plan}")
-        err = st.session_state.get(f"_checkout_err_{plan}")
+                    url, err = create_checkout_url(email, plan, interval)
+                st.session_state[f"_checkout_url_{state_key}"] = url
+                st.session_state[f"_checkout_err_{state_key}"] = err
+        url = st.session_state.get(f"_checkout_url_{state_key}")
+        err = st.session_state.get(f"_checkout_err_{state_key}")
         if url:
             st.link_button(f"💳 Continue to Stripe ({plan.title()})", url, width="stretch")
         elif err:
             st.caption(f"⚠️ {err}")
 
     with col_pro:
-        st.markdown("### Pro · $25/mo · Recommended")  # P2-21: no popularity claim yet
+        st.markdown(f"### Pro · {_price('pro')} · Recommended")  # P2-21: no popularity claim yet
         st.caption(TAGLINES["pro"])
         st.caption("5 alerts, email delivery, interactive results, CSV export, advanced scans and history.")
         if current_tier_key in ("pro", "premium", "admin"):
@@ -260,7 +277,7 @@ def _upgrade_buttons(current_tier_key: str) -> None:
             _plan_button("pro", "billing_upgrade_pro")
 
     with col_premium:
-        st.markdown("### Premium · $40/mo")
+        st.markdown(f"### Premium · {_price('premium')}")
         st.caption(TAGLINES["premium"])
         st.caption("25 alerts, AI scan summaries and chat, setup notes, Early Breakout research, custom full-market scans and paper trading.")
         if current_tier_key in ("premium", "admin"):
