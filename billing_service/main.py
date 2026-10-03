@@ -55,6 +55,19 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
 STRIPE_PRICE_PRO = os.getenv("STRIPE_PRICE_PRO", "").strip()
 STRIPE_PRICE_PREMIUM = os.getenv("STRIPE_PRICE_PREMIUM", "").strip()
 
+
+def _price_ids(name: str) -> frozenset:
+    """Comma-separated Stripe price ids from an env var (blank entries dropped)."""
+    return frozenset(p.strip() for p in os.getenv(name, "").split(",") if p.strip())
+
+
+# Price change 2026-10 ($19/$39 -> $25/$40): Stripe prices can't be edited, so
+# new prices get new ids. Subscribers still on an older price keep their plan
+# (grandfathered): list the previous ids here, comma-separated. Without this an
+# old price id would map to Free on the next subscription webhook.
+STRIPE_PRICE_PRO_LEGACY = _price_ids("STRIPE_PRICE_PRO_LEGACY")
+STRIPE_PRICE_PREMIUM_LEGACY = _price_ids("STRIPE_PRICE_PREMIUM_LEGACY")
+
 APP_SUCCESS_URL = os.getenv("APP_SUCCESS_URL", "").strip()  # e.g. https://yourapp.com
 APP_CANCEL_URL = os.getenv("APP_CANCEL_URL", "").strip()    # e.g. https://yourapp.com
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()        # Neon Postgres URL
@@ -328,9 +341,12 @@ def _account_for_customer(customer_id: str, context: str) -> str:
 
 
 def _price_to_plan(price_id: str) -> str:
-    if price_id == STRIPE_PRICE_PRO:
+    price_id = (price_id or "").strip()
+    if not price_id:
+        return "basic"
+    if price_id == STRIPE_PRICE_PRO or price_id in STRIPE_PRICE_PRO_LEGACY:
         return "pro"
-    if price_id == STRIPE_PRICE_PREMIUM:
+    if price_id == STRIPE_PRICE_PREMIUM or price_id in STRIPE_PRICE_PREMIUM_LEGACY:
         return "premium"
     return "basic"
 
@@ -474,6 +490,10 @@ def _plan_change_flow(subscription, price_id: str, return_url: str) -> Optional[
         item = items[0] if items else {}
         current = (item.get("price") or {}).get("id")
         if not subscription.get("id") or not item.get("id") or not price_id or current == price_id:
+            return None
+        # Already on this plan at an older (grandfathered) price: don't offer a
+        # "switch" that would move them onto the new, higher price.
+        if _price_to_plan(current) != "basic" and _price_to_plan(current) == _price_to_plan(price_id):
             return None
         return {
             "type": "subscription_update_confirm",

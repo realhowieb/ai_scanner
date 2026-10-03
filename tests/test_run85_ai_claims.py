@@ -254,7 +254,7 @@ class PackagingAndTierTests(unittest.TestCase):
         adds = pricing.plan_highlights()["premium"]
         self.assertTrue(any("AI scan summaries" in a for a in adds))
         self.assertTrue(any("Early Breakout" in a for a in adds))
-        self.assertEqual(pricing.PRICES, {"basic": "Free", "pro": "$19/mo", "premium": "$39/mo"})
+        self.assertEqual(pricing.PRICES, {"basic": "Free", "pro": "$25/mo", "premium": "$40/mo"})
 
     def test_ai_gate_is_premium_and_admin_only(self):
         from types import SimpleNamespace
