@@ -1,6 +1,6 @@
 # HSF API service (Render web service, root = repository root).
 #   Build:  pip install -r api/requirements.txt
-#   Start:  uvicorn api.main:app --host 0.0.0.0 --port $PORT
+#   Start:  python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT
 # Reuses the app's core dependency group, pinned by requirements.lock (Python 3.13).
 -c ../requirements.lock
 -r ../requirements-core.txt

@@ -37,7 +37,7 @@ New → Web Service → this repository, branch `main`.
 |---|---|
 | Root directory | (repository root) |
 | Build command | `pip install -r api/requirements.txt` |
-| Start command | `uvicorn api.main:app --host 0.0.0.0 --port $PORT` |
+| Start command | `python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT` |
 | Health check path | `/healthz` |
 | Python version | 3.13 (from `.python-version`) |
 
