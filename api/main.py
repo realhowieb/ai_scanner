@@ -11,11 +11,11 @@ from typing import Any, Dict, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from api import store, tokens
+from api import models, store, tokens
 from api.settings import Settings, load_settings
 
 log = logging.getLogger("hsf_api")
@@ -32,11 +32,23 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
                            allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type"])
 
+    @app.exception_handler(store.DatabaseUnavailable)
+    def _db_down(_request: Request, _exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": "Service temporarily unavailable. Try again shortly."},
+                            status_code=503, headers={"Retry-After": "30"})
+
+    try:  # connection drops mid-query are an outage too, not a server bug
+        import psycopg
+
+        app.add_exception_handler(psycopg.OperationalError, _db_down)
+    except ImportError:  # pragma: no cover
+        pass
+
     @app.get("/", include_in_schema=False)
     def root() -> RedirectResponse:
         return RedirectResponse("/docs")
 
-    @app.get("/healthz")
+    @app.get("/healthz", response_model=models.Health)
     def healthz() -> Dict[str, bool]:
         """Liveness only: no database call (for the Render health check)."""
         return {"ok": True}
@@ -97,7 +109,9 @@ def entitlements_for(account: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _routes(app: FastAPI) -> None:
-    @app.post("/v1/auth/login")
+    @app.post("/v1/auth/login", response_model=models.TokenPair,
+              responses={401: {"description": "Wrong email or password"}, 429: {"description": "Rate limited"},
+                         503: {"description": "Database unavailable"}})
     def login(body: LoginBody, request: Request) -> Dict[str, Any]:
         from db.users import is_login_rate_limited, record_login_attempt
 
@@ -116,13 +130,16 @@ def _routes(app: FastAPI) -> None:
             raise HTTPException(401, _BAD_LOGIN)
         return _token_pair(str(account["username"]).strip().lower(), settings, body.client)
 
-    @app.post("/v1/auth/refresh")
+    @app.post("/v1/auth/refresh", response_model=models.TokenPair,
+              responses={401: {"description": "Unknown, expired or reused refresh token"}})
     def refresh(body: RefreshBody, request: Request) -> Dict[str, Any]:
         settings = _settings(request)
         status, username = store.use_refresh_token(tokens.hash_refresh_token(body.refresh_token))
         if status == "reused":
             log.warning("refresh token reuse: all sessions revoked for one account")
-        account = store.get_account(username) if status == "ok" and username else None
+        elif status == "grace":
+            log.info("refresh token retried within the grace window")
+        account = store.get_account(username) if status in ("ok", "grace") and username else None
         if not account or account.get("is_active") is False:
             raise HTTPException(401, _UNAUTHORIZED)
         return _token_pair(str(account["username"]).strip().lower(), settings, None)
@@ -131,7 +148,7 @@ def _routes(app: FastAPI) -> None:
     def logout(body: RefreshBody) -> None:
         store.revoke_refresh_token(tokens.hash_refresh_token(body.refresh_token))
 
-    @app.get("/v1/me")
+    @app.get("/v1/me", response_model=models.Me, responses={401: {"description": "Not signed in"}})
     def me(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         from ui.plan_labels import plan_label
 
@@ -142,20 +159,34 @@ def _routes(app: FastAPI) -> None:
                 "is_admin": ent["is_admin"], "alert_limit": ent["alert_limit"],
                 "entitlements": ent["entitlements"]}
 
-    @app.get("/v1/today")
+    @app.get("/v1/today", response_model=models.Today, responses={401: {"description": "Not signed in"}})
     def today(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         from api.today import build_today
 
         return build_today(dt.datetime.now(dt.timezone.utc), entitlements_for(account)["entitlements"])
 
 
-def _lazy_app():
-    """Module-level app for `uvicorn api.main:app` (settings from the environment)."""
-    return create_app()
+def _failing_app(message: str):
+    """ASGI app that refuses to start with `message`, so uvicorn logs
+    "Application startup failed" with the real reason and exits."""
+    async def app(scope, receive, send):
+        if scope["type"] == "lifespan":
+            await receive()
+            await send({"type": "lifespan.startup.failed", "message": message})
+            return
+        raise RuntimeError(message)
+
+    return app
 
 
-try:
-    app = _lazy_app()
-except RuntimeError as _e:  # missing API_JWT_SECRET: import still works for tests
-    app = None  # type: ignore[assignment]
-    log.error("HSF API not started: %s", _e)
+def _module_app():
+    """Module-level app for `uvicorn api.main:app` (settings from the environment).
+    Importing never raises, so tests can import create_app without the secret."""
+    try:
+        return create_app()
+    except RuntimeError as e:
+        log.error("HSF API not started: %s", e)
+        return _failing_app(f"HSF API not started: {e}")
+
+
+app = _module_app()

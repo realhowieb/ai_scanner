@@ -13,10 +13,14 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 |---|---|---|---|
 | GET | `/healthz` | none | Liveness only (no database call). Use as the Render health check. |
 | POST | `/v1/auth/login` | none | `{"email","password","client"?}` → `access_token` (15 min), `refresh_token` (30 days). Same accounts and passwords as the web app. 10 failed attempts in 10 minutes → 429. |
-| POST | `/v1/auth/refresh` | none | `{"refresh_token"}` → a new pair. Each refresh token works once; reusing an old one revokes every session of that account. |
+| POST | `/v1/auth/refresh` | none | `{"refresh_token"}` → a new pair. Each refresh token works once. A retry within 30 s of rotating (lost response, two refreshes at once) gets another pair; a later replay, or one after logout, is treated as theft and revokes every session of that account. |
 | POST | `/v1/auth/logout` | none | `{"refresh_token"}` → 204, token revoked. |
 | GET | `/v1/me` | Bearer | Email, name, plan (`basic`/`pro`/`premium`/`admin`), plan label, alert limit, entitlement flags. |
 | GET | `/v1/today` | Bearer | Market phase, Before the open, Top setups, After the close, last session recap. Pre/after-hours movers are Pro+ (`locked: true` below Pro); Premium model fields are redacted below Premium. Each section fails on its own (`errors` lists it). |
+
+Every route declares a response model, so `/openapi.json` describes each payload
+and clients can be generated from it. A database outage answers **503** with
+`Retry-After: 30`.
 
 Send the access token as `Authorization: Bearer <token>`. Plan and admin status
 are read from the database on every request, so a plan change applies at once.
@@ -49,7 +53,8 @@ Environment variables:
 | `API_JWT_SECRET` | New random secret, 32+ characters (e.g. `openssl rand -base64 48`). Only on this service. |
 | `API_CORS_ORIGINS` | Comma-separated web origins allowed to call it, e.g. the new web app's URL. Empty = no browser access. |
 
-The service won't start without `API_JWT_SECRET`. Changing it signs every app
+The service won't start without `API_JWT_SECRET` (uvicorn logs
+"HSF API not started: API_JWT_SECRET must be set…" and exits). Changing it signs every app
 user out once (access tokens stop verifying; refresh tokens still work).
 
 The free plan sleeps after 15 minutes idle; move to Starter before the app has

@@ -134,6 +134,25 @@ class TodayBuilderTests(unittest.TestCase):
         self.assertTrue(out["before_open"]["movers"])
         self.assertNotIn("secret", json.dumps(out))
 
+    @unittest.skipUnless(importlib.util.find_spec("pydantic"), "needs pydantic")
+    def test_payload_matches_the_response_model(self):
+        from api.models import Today
+
+        for now in (TUE_840_ET, TUE_NOON_ET, TUE_6PM_ET, SAT):
+            Today(**self.build(now, PRO))
+            Today(**self.build(now, FREE))
+
+    def test_cache_drops_expired_entries_and_is_capped(self):
+        t = self.today
+        t.clear_cache()
+        with mock.patch.object(t.time, "monotonic", return_value=1000.0):
+            for i in range(t.CACHE_MAX_ENTRIES + 10):
+                t._cached(("k", i), lambda: i)
+        self.assertEqual(t.cache_size(), t.CACHE_MAX_ENTRIES)
+        with mock.patch.object(t.time, "monotonic", return_value=1000.0 + t.CACHE_TTL_S + 1):
+            t._cached("fresh", lambda: 1)
+        self.assertEqual(t.cache_size(), 1)
+
     def test_no_scans_at_all(self):
         with mock.patch("db.runs.list_runs", return_value=[]):
             self.today.clear_cache()
@@ -153,14 +172,24 @@ class RefreshStorePostgresTests(unittest.TestCase):
         from api import store
 
         self.store = store
-        store.ensure_refresh_schema.__wrapped__  # noqa: B018 (decorated)
+        # schema_once already ran in this process; each test dropped the table, so recreate it
+        with psycopg.connect(PG_URL) as conn:
+            store.ensure_refresh_schema.__wrapped__(conn)
         self.addCleanup(os.environ.pop, "DATABASE_URL", None)
+
+    def _age(self, token_hash, seconds=31):
+        import psycopg
+
+        with psycopg.connect(PG_URL) as conn:
+            conn.execute("UPDATE api_refresh_tokens SET revoked_at = NOW() - make_interval(secs => %s) "
+                         "WHERE token_hash = %s", (seconds, token_hash))
 
     def test_rotate_reuse_logout_and_expiry(self):
         s = self.store
         s.save_refresh_token("h1", "pro@example.com", 3600, "ios")
         s.save_refresh_token("h2", "pro@example.com", 3600, "web")
         self.assertEqual(s.use_refresh_token("h1"), ("ok", "pro@example.com"))
+        self._age("h1")  # replayed after the grace window: theft
         self.assertEqual(s.use_refresh_token("h1"), ("reused", "pro@example.com"))
         self.assertEqual(s.use_refresh_token("h2")[0], "reused")  # reuse revoked every session
         self.assertEqual(s.use_refresh_token("nope"), ("invalid", None))
@@ -168,7 +197,21 @@ class RefreshStorePostgresTests(unittest.TestCase):
         self.assertEqual(s.use_refresh_token("h3"), ("invalid", None))  # expired
         s.save_refresh_token("h4", "x@example.com", 3600, None)
         s.revoke_refresh_token("h4")
-        self.assertEqual(s.use_refresh_token("h4")[0], "reused")
+        self.assertEqual(s.use_refresh_token("h4")[0], "reused")  # logout gets no grace
+
+    def test_grace_window_for_a_just_rotated_token(self):
+        s = self.store
+        s.save_refresh_token("g1", "g@example.com", 3600, "ios")
+        s.save_refresh_token("g2", "g@example.com", 3600, "web")
+        self.assertEqual(s.use_refresh_token("g1"), ("ok", "g@example.com"))
+        # retry right away (lost response / concurrent refresh): no theft verdict
+        self.assertEqual(s.use_refresh_token("g1"), ("grace", "g@example.com"))
+        self.assertEqual(s.use_refresh_token("g2"), ("ok", "g@example.com"))  # other session untouched
+        # past the window, the same replay is treated as theft
+        self._age("g1")
+        s.save_refresh_token("g3", "g@example.com", 3600, None)
+        self.assertEqual(s.use_refresh_token("g1"), ("reused", "g@example.com"))
+        self.assertEqual(s.use_refresh_token("g3")[0], "reused")  # sweep revoked it
 
 
 if __name__ == "__main__":
