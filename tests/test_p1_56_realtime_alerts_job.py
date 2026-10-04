@@ -22,7 +22,7 @@ class ScheduleGateTests(unittest.TestCase):
 
     def test_skips_after_hours_weekends_and_holidays(self):
         self.assertFalse(job.should_run(TUE_9PM_ET)[0])
-        self.assertFalse(job.should_run(SAT_NOON_ET)[0])
+        self.assertEqual(job.should_run(SAT_NOON_ET)[1], "outside extended hours (4:00-20:00 ET, Mon-Fri)")
         self.assertEqual(job.should_run(THANKSGIVING_NOON_ET), (False, "market holiday"))
 
 

@@ -26,11 +26,11 @@ def should_run(now: dt.datetime) -> tuple[bool, str]:
     from analytics import market_calendar as mc
     from billing_service.realtime_alerts import market_session_open
 
+    if not market_session_open(now):  # weekends included
+        return False, "outside extended hours (4:00-20:00 ET, Mon-Fri)"
     day = now.astimezone(mc.ET).date()
     if mc.calendar_covered(day) and not mc.is_trading_day(day):
         return False, "market holiday"
-    if not market_session_open(now):
-        return False, "outside extended hours (4:00-20:00 ET, Mon-Fri)"
     return True, ""
 
 
