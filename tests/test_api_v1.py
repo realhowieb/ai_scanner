@@ -84,6 +84,11 @@ class HealthAndSettingsTests(ApiTestCase):
     def test_healthz_needs_nothing(self):
         self.assertEqual(self.client.get("/healthz").json(), {"ok": True})
 
+    def test_root_redirects_to_docs(self):
+        r = self.client.get("/", follow_redirects=False)
+        self.assertIn(r.status_code, (302, 307))
+        self.assertEqual(r.headers["location"], "/docs")
+
     def test_short_secret_refuses_to_start(self):
         from api.settings import load_settings
 
@@ -98,6 +103,21 @@ class HealthAndSettingsTests(ApiTestCase):
         bad = self.client.options("/v1/me", headers={"Origin": "https://evil.example",
                                                       "Access-Control-Request-Method": "GET"})
         self.assertNotIn("access-control-allow-origin", bad.headers)
+
+
+class DocsTests(ApiTestCase):
+    def test_openapi_declares_bearer_auth_so_docs_show_authorize(self):
+        spec = self.client.get("/openapi.json").json()
+        schemes = spec["components"]["securitySchemes"]
+        self.assertEqual(list(schemes.values())[0]["scheme"], "bearer")
+        self.assertTrue(spec["paths"]["/v1/me"]["get"].get("security"))
+        self.assertTrue(spec["paths"]["/v1/today"]["get"].get("security"))
+        self.assertFalse(spec["paths"]["/v1/auth/login"]["post"].get("security"))
+
+    def test_wrong_scheme_is_rejected(self):
+        token = self.login().json()["access_token"]
+        self.assertEqual(self.client.get("/v1/me", headers={"Authorization": f"Basic {token}"}).status_code, 401)
+        self.assertEqual(self.client.get("/v1/me", headers={"Authorization": token}).status_code, 401)
 
 
 class LoginTests(ApiTestCase):

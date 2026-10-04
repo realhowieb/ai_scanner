@@ -9,8 +9,10 @@ import datetime as dt
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from api import store, tokens
@@ -29,6 +31,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     if settings.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
                            allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type"])
+
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        return RedirectResponse("/docs")
 
     @app.get("/healthz")
     def healthz() -> Dict[str, bool]:
@@ -60,12 +66,18 @@ def _token_pair(username: str, settings: Settings, client: Optional[str]) -> Dic
             "expires_in": settings.access_ttl_s, "refresh_token": refresh}
 
 
-def current_account(request: Request, authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+# Declared as a security scheme so /docs shows an Authorize button (paste the
+# access token only; the docs page adds "Bearer ").
+_bearer = HTTPBearer(auto_error=False, description="Access token from POST /v1/auth/login")
+
+
+def current_account(request: Request,
+                    creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer)) -> Dict[str, Any]:
     """The signed-in, active account for a `Authorization: Bearer <access token>` header."""
-    scheme, _, token = (authorization or "").partition(" ")
-    if scheme.lower() != "bearer" or not token:
+    token = (creds.credentials if creds and (creds.scheme or "").lower() == "bearer" else "").strip()
+    if not token:
         raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
-    username = tokens.verify_access_token(token.strip(), _settings(request))
+    username = tokens.verify_access_token(token, _settings(request))
     account = store.get_account(username) if username else None
     if not account or account.get("is_active") is False:
         raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
