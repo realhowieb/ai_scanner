@@ -277,6 +277,45 @@ def _earnings_today() -> set:
         return set()
 
 
+def _premarket_movers(now=None, limit: int = 5) -> List[Dict[str, Any]]:
+    """P2-74: biggest pre-market moves from this morning's premarket scan
+    ({ticker, pct, last, score}), the same list as Today's Before the open card.
+    Empty before that scan exists, after the open, or on any error."""
+    try:
+        import datetime as _dt
+
+        from db.runs import list_runs
+        from ui.before_open import current_premarket_run, premarket_movers
+        from ui.market_scans import _run_df_uncached
+
+        now = now or _dt.datetime.now(_dt.timezone.utc)
+        run = current_premarket_run(list_runs(limit=60, include_snapshots=False, username="scheduler") or [], now)
+        if run is None:
+            return []
+        return premarket_movers(_run_df_uncached(int(run["id"])), n=limit)
+    except Exception:
+        return []
+
+
+def _premarket_section(rows: List[Dict[str, Any]]) -> tuple[str, str]:
+    """(html, text) for the pre-market movers section, or ('', '') when empty."""
+    if not rows:
+        return "", ""
+    items, lines = [], []
+    for r in rows:
+        color = "#16a34a" if r["pct"] >= 0 else "#dc2626"
+        price = f" · ${r['last']:,.2f}" if r.get("last") is not None else ""
+        score = f" · HSF Score {r['score']}" if r.get("score") is not None else ""
+        items.append(f"<li><strong>{r['ticker']}</strong> "
+                     f"<span style='color:{color}'>{r['pct']:+.2f}%</span>{price}{score}</li>")
+        lines.append(f"  {r['ticker']} {r['pct']:+.2f}%{price}{score}")
+    html = ("<h3 style='margin:16px 0 6px'>🌅 Pre-market movers</h3>"
+            f"<ul style='margin:4px 0 0;padding-left:18px'>{''.join(items)}</ul>"
+            "<p style='margin:4px 0 0;font-size:12px;color:#888'>From the 8:35 AM ET "
+            "pre-market scan, vs the previous close. Pre-market prices keep moving.</p>")
+    return html, "\n".join(["Pre-market movers (8:35 AM ET scan, vs previous close):", *lines, ""])
+
+
 def _movers_table(rows: List[Dict[str, Any]], *, show_gap: bool = True) -> str:
     if not rows:
         return "<p style='color:#888'>No data.</p>"
@@ -386,6 +425,7 @@ def _compose(
     notes: Optional[List[str]] = None,
     golden: Optional[List[str]] = None,
     top_setups: Optional[List[tuple]] = None,
+    premarket: Optional[List[Dict[str, Any]]] = None,
 ) -> tuple[str, str]:
     """Return (html_inner, text_inner) for one user's digest."""
     date_s = et_now().strftime("%A, %b %d")
@@ -408,6 +448,11 @@ def _compose(
     html.append("<h3 style='margin:16px 0 6px'>🚀 Top market gappers</h3>")
     html.append(_movers_table(gappers, show_gap=True))
     text += ["Top market gappers:", _movers_text(gappers), ""]
+
+    pm_html, pm_text = _premarket_section(premarket or [])
+    if pm_html:
+        html.append(pm_html)
+        text.append(pm_text)
 
     if earnings_hits:
         names = ", ".join(sorted(earnings_hits))
@@ -560,6 +605,7 @@ def run_morning_digest(force: bool = False) -> None:
 
     df = _latest_snapshot_df()
     gappers = _market_gappers(df)
+    premarket = _premarket_movers()
     picks = _prebreakout_picks(df) if df is not None else []
     golden, top_setups = _todays_setups(df) if df is not None else ([], [])
     earnings_today = _earnings_today()
@@ -641,7 +687,7 @@ def run_morning_digest(force: bool = False) -> None:
                 user_picks = []
             html_inner, text_inner = _compose(
                 email, watch_rows, gappers, earnings_hits, user_picks, notes=notes,
-                golden=golden, top_setups=top_setups,
+                golden=golden, top_setups=top_setups, premarket=premarket,
             )
             # Count only sends the mail service accepted.
             if send_digest_email(
