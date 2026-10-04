@@ -12,12 +12,15 @@ from typing import Any, Callable, Dict, List, Optional
 from analytics import market_calendar as mc
 
 CACHE_TTL_S = 60
+CACHE_MAX_ENTRIES = 32  # two run lists + a handful of runs; old runs drop out
 _cache: Dict[Any, tuple[float, Any]] = {}
 _lock = threading.Lock()
 
 
 def _cached(key: Any, loader: Callable[[], Any]) -> Any:
-    """Scans change a few times a day; one read per minute is plenty."""
+    """Scans change a few times a day; one read per minute is plenty. Expired
+    entries are dropped on every write and the cache never exceeds
+    CACHE_MAX_ENTRIES, so a long-running instance doesn't grow."""
     now = time.monotonic()
     with _lock:
         hit = _cache.get(key)
@@ -25,8 +28,17 @@ def _cached(key: Any, loader: Callable[[], Any]) -> Any:
             return hit[1]
     value = loader()
     with _lock:
+        for k in [k for k, (t, _) in _cache.items() if now - t >= CACHE_TTL_S]:
+            del _cache[k]
         _cache[key] = (now, value)
+        while len(_cache) > CACHE_MAX_ENTRIES:
+            del _cache[min(_cache, key=lambda k: _cache[k][0])]
     return value
+
+
+def cache_size() -> int:
+    with _lock:
+        return len(_cache)
 
 
 def clear_cache() -> None:
@@ -159,7 +171,15 @@ def recap(now: dt.datetime) -> Optional[Dict[str, Any]]:
     day_runs = runs_on_day(runs, day)
     r = build_recap(day_runs, run_df(int(day_runs[-1]["id"])), run_df(int(day_runs[0]["id"])),
                     day=day, now=now, session_counts=session_scan_counts(session_runs(), day))
-    return {**r, "day": r["day"].isoformat()}
+    return {  # explicit shape (api.models.Recap), not build_recap's dict passed through
+        "day": r["day"].isoformat(), "title": str(r["title"]), "scans": int(r["scans"]),
+        "premarket_scans": int(r.get("premarket_scans") or 0),
+        "postmarket_scans": int(r.get("postmarket_scans") or 0),
+        "entered": [str(x) for x in r.get("entered") or []],
+        "left": [str(x) for x in r.get("left") or []],
+        "standouts": [{"ticker": str(o["ticker"]), "score": int(o["score"]), "setup": o.get("setup")}
+                      for o in r.get("standouts") or []],
+    }
 
 
 def build_today(now: dt.datetime, entitlements: Dict[str, bool]) -> Dict[str, Any]:

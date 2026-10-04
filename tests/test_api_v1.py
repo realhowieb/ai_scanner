@@ -120,6 +120,68 @@ class DocsTests(ApiTestCase):
         self.assertEqual(self.client.get("/v1/me", headers={"Authorization": token}).status_code, 401)
 
 
+class ReviewFixTests(ApiTestCase):
+    """P1-59 review: refresh grace window, typed schema, 503 on outage, clear startup failure."""
+
+    def test_grace_retry_gets_a_new_pair_without_revoking_anything(self):
+        first = self.login().json()
+        with mock.patch("api.store.use_refresh_token", return_value=("grace", "pro@example.com")):
+            r = self.client.post("/v1/auth/refresh", json={"refresh_token": first["refresh_token"]})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["refresh_token"])
+
+    def test_openapi_describes_every_payload(self):
+        spec = self.client.get("/openapi.json").json()
+        schemas = spec["components"]["schemas"]
+        for name in ("TokenPair", "Me", "Today", "Recap", "SessionCard", "Mover", "Setup", "TopSetups"):
+            self.assertIn(name, schemas)
+        ref = lambda path, method="get": spec["paths"][path][method]["responses"]["200"]["content"][
+            "application/json"]["schema"]["$ref"]
+        self.assertTrue(ref("/v1/me").endswith("/Me"))
+        self.assertTrue(ref("/v1/today").endswith("/Today"))
+        self.assertTrue(ref("/v1/auth/login", "post").endswith("/TokenPair"))
+        self.assertEqual(set(schemas["Recap"]["properties"]),
+                         {"day", "title", "scans", "premarket_scans", "postmarket_scans", "entered", "left", "standouts"})
+
+    def test_database_outage_is_503_not_500(self):
+        from api import store
+
+        with mock.patch("api.store.get_account", side_effect=store.DatabaseUnavailable("down")):
+            r = self.client.post("/v1/auth/login", json={"email": "pro@example.com", "password": "right pw"})
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.headers.get("retry-after"), "30")
+        self.assertNotIn("down", r.text)
+
+    @unittest.skipUnless(importlib.util.find_spec("psycopg"), "needs psycopg")
+    def test_connection_drop_mid_query_is_503(self):
+        import psycopg
+
+        token = self.login().json()["access_token"]
+        with mock.patch("api.store.get_account", side_effect=psycopg.OperationalError("server closed")):
+            r = self.client.get("/v1/me", headers=self.auth(token))
+        self.assertEqual(r.status_code, 503)
+        self.assertNotIn("server closed", r.text)
+
+    def test_missing_secret_fails_startup_with_the_reason(self):
+        import asyncio
+
+        from api import main
+
+        with mock.patch.dict("os.environ", {"API_JWT_SECRET": ""}):
+            app = main._module_app()
+        sent = []
+
+        async def receive():
+            return {"type": "lifespan.startup"}
+
+        async def send(msg):
+            sent.append(msg)
+
+        asyncio.run(app({"type": "lifespan"}, receive, send))
+        self.assertEqual(sent[0]["type"], "lifespan.startup.failed")
+        self.assertIn("API_JWT_SECRET", sent[0]["message"])
+
+
 class LoginTests(ApiTestCase):
     def test_login_returns_tokens_and_records_success(self):
         r = self.login(" Pro@Example.com ")
@@ -230,9 +292,12 @@ class RefreshTests(ApiTestCase):
 class TodayEndpointTests(ApiTestCase):
     def test_today_passes_the_accounts_entitlements(self):
         token = self.login().json()["access_token"]
-        with mock.patch("api.today.build_today", return_value={"ok": 1}) as build:
+        payload = {"as_of": "2026-10-05T12:40:00+00:00", "market": {"phase": "premarket"}, "errors": []}
+        with mock.patch("api.today.build_today", return_value=payload) as build:
             r = self.client.get("/v1/today", headers=self.auth(token))
-        self.assertEqual(r.json(), {"ok": 1})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["market"], {"phase": "premarket"})
+        self.assertIsNone(r.json()["recap"])
         now, ent = build.call_args[0]
         self.assertTrue(ent["can_day_trader"])
         self.assertEqual(now.tzinfo, dt.timezone.utc)

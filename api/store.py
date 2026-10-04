@@ -5,7 +5,6 @@ own `api_refresh_tokens` table.
 """
 from __future__ import annotations
 
-import datetime as dt
 import functools
 from typing import Any, Dict, Optional
 
@@ -23,10 +22,22 @@ def _dummy_hash() -> bytes:
     return bcrypt.hashpw(secrets.token_bytes(16), bcrypt.gensalt(12))
 
 
+# P1-59 review: a rotated token replayed within this many seconds is a lost
+# response or two concurrent refreshes (flaky phone network), not theft.
+REUSE_GRACE_S = 30
+
+
+class DatabaseUnavailable(RuntimeError):
+    """No connection or a connection-level error; the API answers 503."""
+
+
 def _conn():
-    conn = get_neon_conn()
+    try:
+        conn = get_neon_conn()
+    except Exception as e:  # driver/connect errors never carry through with details
+        raise DatabaseUnavailable("database unavailable") from e
     if conn is None:
-        raise RuntimeError("database unavailable")
+        raise DatabaseUnavailable("database unavailable")
     return conn
 
 
@@ -54,6 +65,7 @@ def ensure_refresh_schema(conn) -> None:
         )
         """
     )
+    cur.execute("ALTER TABLE api_refresh_tokens ADD COLUMN IF NOT EXISTS revoked_reason TEXT")
     cur.execute("CREATE INDEX IF NOT EXISTS api_refresh_tokens_user ON api_refresh_tokens (username)")
     conn.commit()
     cur.close()
@@ -118,32 +130,40 @@ def save_refresh_token(token_hash: str, username: str, ttl_s: int, client: str |
 
 def use_refresh_token(token_hash: str) -> tuple[str, Optional[str]]:
     """Consume a refresh token (one use). Returns (status, username):
-    "ok" (now revoked; caller issues a new one), "reused" (already revoked:
-    every session of that account is revoked, since the token was copied),
-    or "invalid" (unknown or expired)."""
+    "ok" (now revoked as rotated; caller issues a new pair),
+    "grace" (rotated less than REUSE_GRACE_S ago: a retry after a lost response
+    or a concurrent refresh; caller issues another pair, nothing is revoked),
+    "reused" (rotated earlier, or replayed after logout or a reuse sweep: the
+    token was copied, so every session of that account is revoked), or
+    "invalid" (unknown or expired)."""
     conn = _conn()
     try:
         ensure_refresh_schema(conn)
         cur = conn.cursor()
         cur.execute(
-            "SELECT username, expires_at, revoked_at FROM api_refresh_tokens WHERE token_hash = %s FOR UPDATE",
-            (token_hash,),
+            "SELECT username, expires_at <= NOW() AS expired, revoked_at IS NOT NULL AS revoked, "
+            "revoked_reason, revoked_at > NOW() - make_interval(secs => %s) AS recent "
+            "FROM api_refresh_tokens WHERE token_hash = %s FOR UPDATE",
+            (REUSE_GRACE_S, token_hash),
         )
         row = _row(cur)
         if row is None:
             conn.rollback()
             return "invalid", None
         username = row["username"]
-        if row["revoked_at"] is not None:
-            cur.execute("UPDATE api_refresh_tokens SET revoked_at = NOW() "
+        if row["revoked"]:
+            if row["revoked_reason"] == "rotated" and row["recent"] and not row["expired"]:
+                conn.rollback()
+                return "grace", username
+            cur.execute("UPDATE api_refresh_tokens SET revoked_at = NOW(), revoked_reason = 'reuse' "
                         "WHERE username = %s AND revoked_at IS NULL", (username,))
             conn.commit()
             return "reused", username
-        expires = row["expires_at"]
-        if expires is not None and expires <= dt.datetime.now(dt.timezone.utc):
+        if row["expired"]:
             conn.rollback()
             return "invalid", None
-        cur.execute("UPDATE api_refresh_tokens SET revoked_at = NOW() WHERE token_hash = %s", (token_hash,))
+        cur.execute("UPDATE api_refresh_tokens SET revoked_at = NOW(), revoked_reason = 'rotated' "
+                    "WHERE token_hash = %s", (token_hash,))
         conn.commit()
         cur.close()
         return "ok", username
@@ -156,7 +176,7 @@ def revoke_refresh_token(token_hash: str) -> None:
     try:
         ensure_refresh_schema(conn)
         cur = conn.cursor()
-        cur.execute("UPDATE api_refresh_tokens SET revoked_at = NOW() "
+        cur.execute("UPDATE api_refresh_tokens SET revoked_at = NOW(), revoked_reason = 'logout' "
                     "WHERE token_hash = %s AND revoked_at IS NULL", (token_hash,))
         conn.commit()
         cur.close()
