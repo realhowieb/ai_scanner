@@ -94,8 +94,9 @@ check that the next scan's earnings column is filled. Then revoke the old key.
 
 1. GitHub → Settings → Developer settings → Fine-grained tokens → generate a new
    token: this repository only, **Actions: Read and write**, expiry 1 year.
-2. In cron-job.org, replace the `Authorization: Bearer …` header in every job
-   (the scan slots and the BTC logger).
+2. In cron-job.org, replace the `Authorization: Bearer …` header in every job:
+   the scan slots, BTC logger, Mature Observations, System Health, Autonomous
+   Recovery, Forward Evidence Readiness and Realtime Alerts.
 3. Check: each job's next run shows a new run in the Actions tab. Then delete
    the old token.
 
