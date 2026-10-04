@@ -4,3 +4,7 @@
 # in-process TestClient. Stripe and Postgres are mocked at their boundaries.
 fastapi==0.141.1  # keep in step with billing_service/requirements.txt
 httpx==0.28.1
+
+# HSF API contract tests (api/, P1-59): token signing and password checks.
+PyJWT==2.15.0  # keep in step with api/requirements.txt
+bcrypt==4.3.0  # same as requirements.lock

@@ -49,7 +49,7 @@ jobs:
           STRIPE_PRICE_PRO: price_ci_pro
           STRIPE_PRICE_PREMIUM: price_ci_premium
         run: |
-          python -c "import fastapi, httpx"
+          python -c "import fastapi, httpx, jwt, bcrypt"
           python -m pytest \
             tests/test_billing_service.py \
             tests/test_run83_billing_auth.py \
@@ -60,6 +60,8 @@ jobs:
             tests/test_app_session.py \
             tests/test_p1_39_billing_email_health.py \
             tests/test_p2_backlog_fixes_0929.py \
+            tests/test_api_v1.py \
+            tests/test_api_today_and_store.py \
             -v --tb=short
 
   smoke:
