@@ -189,10 +189,14 @@ class CardTests(unittest.TestCase):
         self.assertNotIn("CCC", t)
         self.assertNotIn("DDD", t)
 
-    def test_free_sees_a_pro_note_and_no_data_is_loaded(self):
-        at, list_runs = self.render("basic")
+    def test_free_sees_a_pro_note_and_no_movers(self):
+        at, _ = self.render("basic")
         self.assertIn("Pro shows this morning's biggest pre-market movers", self.text(at))
-        list_runs.assert_not_called()
+        self.assertNotIn("BBB", self.text(at))
+
+    def test_free_note_waits_for_this_mornings_scan(self):
+        at, _ = self.render("basic", now=TUE_830_ET)   # before the 8:35 scan
+        self.assertNotIn("Before the open", self.text(at))
 
     def test_hidden_after_the_open_and_on_weekends(self):
         for now in (TUE_NOON_ET, SAT):

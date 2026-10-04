@@ -58,17 +58,17 @@ def render_before_open(now: Optional[_dt.datetime] = None) -> None:
         return
     from ui.after_close import MIN_ABS_MOVE_PCT, _can_see
 
-    if not _can_see():
-        st.markdown("### Before the open")
-        st.caption("Pro shows this morning's biggest pre-market movers here, plus live pre-market prices in Day Trader.")
-        return
     try:
         from db.runs import list_runs
 
         run = current_premarket_run(list_runs(limit=60, include_snapshots=False, username="scheduler") or [], now)
     except Exception:
         run = None
-    if run is None:
+    if run is None:  # nothing to show (or to upsell) until this morning's scan exists
+        return
+    if not _can_see():
+        st.markdown("### Before the open")
+        st.caption("Pro shows this morning's biggest pre-market movers here, plus live pre-market prices in Day Trader.")
         return
     from ui.market_scans import safe_run_df
 
