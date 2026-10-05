@@ -20,7 +20,7 @@ from __future__ import annotations
 import secrets
 from typing import Any, Dict, Optional
 
-from .engine import get_neon_conn
+from .engine import get_neon_conn, schema_once
 
 KINDS = ("digest", "evening", "alerts")
 LABELS = {"digest": "Morning market digest", "evening": "Evening market wrap", "alerts": "Alert emails"}
@@ -40,14 +40,20 @@ def _norm(user: Any) -> str:
     return str(user or "").strip().lower()
 
 
-def _conn():
-    conn = get_neon_conn()
-    if conn is None:
-        return None
+@schema_once
+def _ensure_table(conn) -> None:
+    """Once per process and database (P2-81: it ran on every preference read)."""
     cur = conn.cursor()
     cur.execute(TABLE_SQL)
     conn.commit()
     cur.close()
+
+
+def _conn():
+    conn = get_neon_conn()
+    if conn is None:
+        return None
+    _ensure_table(conn)
     return conn
 
 
