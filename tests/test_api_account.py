@@ -6,10 +6,8 @@ db.password_reset, db.email_verification, db.email_prefs, ui.email_utils,
 ui.checkout, ui.auth_sessions), so these tests check the API's wiring and rules
 against the same functions the Streamlit pages call.
 """
-import io
 import json
 import unittest
-import urllib.error
 from unittest import mock
 
 from tests.test_api_v1 import DEPS, ApiTestCase
@@ -236,25 +234,31 @@ class PrefsAndBillingTests(AccountApiTestCase):
         self.assertNotIn("sk_live", r.text)
 
     def test_portal(self):
-        def fake_urlopen(req, timeout=30):
-            body = json.loads(req.data)
-            self.assertEqual(req.headers.get("X-hsf-auth"), "billing-token")
-            self.assertEqual(body["email"], "pro@example.com")
-            self.assertEqual(body.get("flow"), "cancel")
-            return io.BytesIO(json.dumps({"portal_url": "https://billing.stripe.com/p/session/x"}).encode())
+        calls = []
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            calls.append((url, json, headers))
+            return mock.Mock(status_code=200, json=lambda: {"portal_url": "https://billing.stripe.com/p/session/x"})
 
         with mock.patch("ui.checkout.billing_auth_headers", return_value={"X-HSF-Auth": "billing-token"}), \
-                mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+                mock.patch("requests.post", side_effect=fake_post):
             r = self.client.post("/v1/billing/portal", headers=self.h, json={"flow": "cancel"})
         self.assertEqual(r.json(), {"url": "https://billing.stripe.com/p/session/x", "mode": "portal"})
-
-        def no_sub(req, timeout=30):
-            raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {}, io.BytesIO(b"{}"))
+        url, body, headers = calls[0]
+        self.assertTrue(url.endswith("/create-portal-session"))
+        self.assertEqual((body["email"], body.get("flow"), headers), ("pro@example.com", "cancel", {"X-HSF-Auth": "billing-token"}))
 
         with mock.patch("ui.checkout.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
-                mock.patch("urllib.request.urlopen", side_effect=no_sub):
+                mock.patch("requests.post", return_value=mock.Mock(status_code=400)):
             r = self.client.post("/v1/billing/portal", headers=self.h, json={})
         self.assertEqual(r.status_code, 404)
+        with mock.patch("ui.checkout.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
+                mock.patch("requests.post", return_value=mock.Mock(status_code=500)):
+            r = self.client.post("/v1/billing/portal", headers=self.h, json={})
+        self.assertEqual(r.status_code, 502)
+        with mock.patch("config.BILLING_API_BASE", "file:///etc/passwd"):
+            r = self.client.post("/v1/billing/portal", headers=self.h, json={})
+        self.assertEqual(r.status_code, 502)  # only http(s) billing URLs are called
         self.assertEqual(self.client.post("/v1/billing/portal", headers=self.h, json={"flow": "delete"}).status_code, 422)
 
     def test_all_account_routes_need_sign_in(self):

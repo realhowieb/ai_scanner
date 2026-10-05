@@ -220,17 +220,17 @@ def checkout_url(username: str, plan: str, interval: str) -> Dict[str, str]:
 def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
     """Stripe Customer Portal (manage plan, payment method, invoices; flow='cancel'
     opens the cancellation screen), via the billing service like the web page."""
-    import json
-    import urllib.error
-    import urllib.request
+    import requests
 
     from config import BILLING_API_BASE
     from ui.checkout import billing_auth_headers
 
     base = (BILLING_API_BASE or "").rstrip("/")
+    if not base.startswith(("https://", "http://")):
+        raise BillingUnavailable("billing service URL not configured")
     auth = billing_auth_headers(username)
-    if not base or not auth:
-        raise BillingUnavailable("billing not configured or token unavailable")
+    if not auth:
+        raise BillingUnavailable("billing token unavailable")
     body: Dict[str, Any] = {"email": username}
     if flow:
         body["flow"] = flow
@@ -242,17 +242,18 @@ def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
             body["return_url"] = ret
     except Exception:
         pass
-    req = urllib.request.Request(f"{base}/create-portal-session", data=json.dumps(body).encode(),
-                                 headers={"Content-Type": "application/json", **auth}, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        if e.code in (400, 404):  # billing service: 400 "No subscription found for this account yet."
-            raise AccountError("No subscription to manage yet. Choose a plan first.", status=404) from e
-        raise BillingUnavailable(f"billing service HTTP {e.code}") from e
+        resp = requests.post(f"{base}/create-portal-session", json=body, headers=auth, timeout=30)
     except Exception as e:
         raise BillingUnavailable(type(e).__name__) from e
+    if resp.status_code in (400, 404):  # billing service: 400 "No subscription found for this account yet."
+        raise AccountError("No subscription to manage yet. Choose a plan first.", status=404)
+    if resp.status_code != 200:
+        raise BillingUnavailable(f"billing service HTTP {resp.status_code}")
+    try:
+        data = resp.json()
+    except ValueError as e:
+        raise BillingUnavailable("billing service returned non-JSON") from e
     url = str(data.get("portal_url") or "").strip()
     if not url:
         raise BillingUnavailable("no portal_url")
