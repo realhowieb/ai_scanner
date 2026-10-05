@@ -121,6 +121,10 @@ _SELECT_COLS = (
 )
 
 
+class AlertLimitReached(ValueError):
+    """The user already has `max_alerts` alerts."""
+
+
 def create_alert(
     user_id: str,
     alert_type: str,
@@ -129,45 +133,70 @@ def create_alert(
     threshold: Optional[float] = None,
     direction: Optional[str] = None,
     watchlist_only: bool = False,
-) -> None:
-    """Create an alert for the user. alert_type must be in ALERT_TYPES."""
+    max_alerts: Optional[int] = None,
+) -> Optional[int]:
+    """Create an alert for the user and return its id. alert_type must be in ALERT_TYPES.
+
+    The duplicate check, the optional plan-limit check (`max_alerts`) and the
+    insert run in one transaction under a per-user advisory lock, so two
+    requests at the same moment can't both pass the checks (API acceptance
+    run: concurrent requests left a Pro account with 10 of 5 alerts and
+    saved identical alerts twice).
+    """
     if alert_type not in ALERT_TYPES:
         raise ValueError(f"Unknown alert_type: {alert_type!r}")
     conn = _get_conn()
     cur = conn.cursor()
-    # One of each: an identical second alert only sends duplicate emails.
-    cur.execute(
-        """
-        SELECT 1 FROM user_alerts
-        WHERE user_id = %s AND alert_type = %s
-          AND ticker IS NOT DISTINCT FROM %s
-          AND threshold IS NOT DISTINCT FROM %s
-          AND direction IS NOT DISTINCT FROM %s
-          AND watchlist_only = %s
-        LIMIT 1
-        """,
-        (user_id, alert_type, (ticker or "").upper() or None, threshold, direction, bool(watchlist_only)),
-    )
-    if cur.fetchone():
+    try:
+        cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", ("user_alerts:" + str(user_id),))
+        # One of each: an identical second alert only sends duplicate emails.
+        cur.execute(
+            """
+            SELECT 1 FROM user_alerts
+            WHERE user_id = %s AND alert_type = %s
+              AND ticker IS NOT DISTINCT FROM %s
+              AND threshold IS NOT DISTINCT FROM %s
+              AND direction IS NOT DISTINCT FROM %s
+              AND watchlist_only = %s
+            LIMIT 1
+            """,
+            (user_id, alert_type, (ticker or "").upper() or None, threshold, direction, bool(watchlist_only)),
+        )
+        if cur.fetchone():
+            raise ValueError("You already have this alert.")
+        if max_alerts is not None:
+            cur.execute("SELECT COUNT(*) AS n FROM user_alerts WHERE user_id = %s", (user_id,))
+            row = cur.fetchone()
+            used = int((row.get("n") if isinstance(row, dict) else row[0]) or 0)
+            if used >= int(max_alerts):
+                noun = "alert" if int(max_alerts) == 1 else "alerts"
+                raise AlertLimitReached(f"You've reached the maximum of {max_alerts} {noun} on your plan.")
+        cur.execute(
+            """
+            INSERT INTO user_alerts
+                (user_id, alert_type, ticker, threshold, direction, watchlist_only)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                user_id,
+                alert_type,
+                (ticker or "").upper() or None,
+                threshold,
+                direction,
+                bool(watchlist_only),
+            ),
+        )
+        row = cur.fetchone()
+        conn.commit()
+    except BaseException:
+        conn.rollback()  # releases the advisory lock
+        raise
+    finally:
         cur.close()
-        raise ValueError("You already have this alert.")
-    cur.execute(
-        """
-        INSERT INTO user_alerts
-            (user_id, alert_type, ticker, threshold, direction, watchlist_only)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """,
-        (
-            user_id,
-            alert_type,
-            (ticker or "").upper() or None,
-            threshold,
-            direction,
-            bool(watchlist_only),
-        ),
-    )
-    conn.commit()
-    cur.close()
+    if row is None:
+        return None
+    return int(row.get("id") if isinstance(row, dict) else row[0])
 
 
 def list_alerts(user_id: str) -> List[Dict[str, Any]]:

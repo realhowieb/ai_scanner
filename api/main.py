@@ -8,12 +8,19 @@ OpenAPI docs at /docs.
 from __future__ import annotations
 
 import datetime as dt
+import functools
+import inspect
+import json
 import logging
-from typing import Any, Dict, List, Optional
+import re
+import time
+import uuid
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -22,18 +29,73 @@ from api.scans import json_safe
 from api.settings import Settings, load_settings
 
 log = logging.getLogger("hsf_api")
+access_log = logging.getLogger("hsf_api.access")
+if not access_log.handlers:  # uvicorn only configures its own loggers; one JSON line per request to stdout
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(message)s"))
+    access_log.addHandler(_h)
+    access_log.setLevel(logging.INFO)
+    access_log.propagate = False
+_SAFE_RID = re.compile(r"^[A-Za-z0-9._-]{8,64}$")
 
 _UNAUTHORIZED = "Invalid or expired token"
 _BAD_LOGIN = "Email or password is incorrect."
 
 
+class _ReleasingRoute(APIRoute):
+    """Runs each endpoint, then ends the transaction on that worker thread's warm
+    database connection. Several db.* helpers never call close(), so without this
+    a worker thread sits idle in a transaction holding table locks until its next
+    request (API acceptance run). Same thread as the endpoint, so it's the right
+    connection."""
+
+    def __init__(self, path: str, endpoint: Callable[..., Any], **kwargs: Any):
+        if not inspect.iscoroutinefunction(endpoint):
+            inner = endpoint
+
+            @functools.wraps(inner)
+            def endpoint(*args: Any, **kw: Any) -> Any:
+                try:
+                    return inner(*args, **kw)
+                finally:
+                    from db.engine import release_thread_connection
+
+                    release_thread_connection()
+        super().__init__(path, endpoint, **kwargs)
+
+
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     settings = settings or load_settings()
     app = FastAPI(title="HSFinest.AI API", version="1.0.0")
+    app.router.route_class = _ReleasingRoute
     app.state.settings = settings
     if settings.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
-                           allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type"])
+                           allow_methods=["GET", "POST", "PATCH", "DELETE"],
+                           allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+                           expose_headers=["X-Request-ID"])
+
+    @app.middleware("http")
+    async def _request_id(request: Request, call_next):
+        """X-Request-ID on every response (a caller's own id is kept when it looks
+        safe) and one JSON access-log line: method, route template, status, time.
+        Never logs headers, bodies, query strings or tokens."""
+        incoming = request.headers.get("x-request-id", "")
+        rid = incoming if _SAFE_RID.match(incoming) else uuid.uuid4().hex
+        request.state.request_id = rid
+        t0 = time.perf_counter()
+        status = 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+        finally:
+            route = request.scope.get("route")
+            access_log.info(json.dumps({
+                "request_id": rid, "method": request.method,
+                "route": getattr(route, "path", None) or "unmatched", "status": status,
+                "ms": round((time.perf_counter() - t0) * 1000, 1)}))
+        response.headers["X-Request-ID"] = rid
+        return response
 
     @app.exception_handler(store.DatabaseUnavailable)
     def _db_down(_request: Request, _exc: Exception) -> JSONResponse:
@@ -67,6 +129,26 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     @app.exception_handler(user_data.Conflict)
     def _conflict(_request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=409)
+
+    @app.get("/readyz", response_model=models.Ready, responses={503: {"description": "Database unavailable"}})
+    def readyz() -> Dict[str, Any]:
+        """Readiness: the database answers, plus the latest market scan's age for
+        freshness monitoring. /healthz stays the liveness check."""
+        store.ping()
+        latest, age = None, None
+        try:
+            from api.today import market_runs
+
+            runs = market_runs()
+            if runs:
+                created = runs[0]["created_at"]
+                latest = created.isoformat()
+                age = round((dt.datetime.now(dt.timezone.utc) - created).total_seconds() / 60.0, 1)
+        except store.DatabaseUnavailable:
+            raise
+        except Exception:  # scan freshness is informational
+            pass
+        return {"ok": True, "database": "ok", "latest_scan_at": latest, "scan_age_minutes": age}
 
     _routes(app)
     _data_routes(app)

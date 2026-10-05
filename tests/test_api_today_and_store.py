@@ -154,7 +154,8 @@ class TodayBuilderTests(unittest.TestCase):
         self.assertEqual(t.cache_size(), 1)
 
     def test_no_scans_at_all(self):
-        with mock.patch("db.runs.list_runs", return_value=[]):
+        # an empty run list is only believed when the database answers (api.today._runs_or_outage)
+        with mock.patch("db.runs.list_runs", return_value=[]), mock.patch("api.store.ping"):
             self.today.clear_cache()
             out = self.build(SAT, PRO)
         self.assertEqual(out["top_setups"]["state"], "empty_scan")

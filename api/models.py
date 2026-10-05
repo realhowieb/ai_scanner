@@ -14,6 +14,13 @@ class Health(BaseModel):
     ok: bool
 
 
+class Ready(BaseModel):
+    ok: bool
+    database: Literal["ok"]
+    latest_scan_at: Optional[str] = Field(default=None, description="Latest market scan (ISO); null when none")
+    scan_age_minutes: Optional[float] = None
+
+
 class TokenPair(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"

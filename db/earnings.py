@@ -380,8 +380,22 @@ def load_earnings_map(
     *,
     conn=None,
 ) -> Dict[str, Optional[date]]:
-    """Return symbol -> earnings_date for the provided symbols."""
+    """Closes the connection it opened itself (an injected one is left open).
+    It used to leak one open, idle-in-transaction connection per call
+    (API acceptance run: one per stock page)."""
     c = _get_conn(conn)
+    try:
+        return _load_earnings_map(symbols, c)
+    finally:
+        if conn is None:
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
+def _load_earnings_map(symbols: Iterable[str], c) -> Dict[str, Optional[date]]:
+    """Return symbol -> earnings_date for the provided symbols."""
     ensure_earnings_table(c)
 
     syms = _norm_symbols(symbols)
@@ -419,8 +433,22 @@ def load_earnings_details_map(
     *,
     conn=None,
 ) -> Dict[str, Tuple[Optional[date], Optional[str]]]:
-    """Return symbol -> (earnings_date, earnings_time)."""
+    """Closes the connection it opened itself (an injected one is left open).
+    It used to leak one open, idle-in-transaction connection per call
+    (API acceptance run: one per stock page)."""
     c = _get_conn(conn)
+    try:
+        return _load_earnings_details_map(symbols, c)
+    finally:
+        if conn is None:
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
+def _load_earnings_details_map(symbols: Iterable[str], c) -> Dict[str, Tuple[Optional[date], Optional[str]]]:
+    """Return symbol -> (earnings_date, earnings_time)."""
     ensure_earnings_table(c)
 
     syms = _norm_symbols(symbols)

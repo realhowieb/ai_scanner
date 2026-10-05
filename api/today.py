@@ -56,6 +56,18 @@ def _cached(key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S) -> 
     return _cache.get(key, loader, ttl_s)
 
 
+def _runs_or_outage(runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """db.runs.list_runs answers [] when the database fails (it falls back to an
+    empty local SQLite), which would read as "no scan yet". An empty list is
+    only believed (and cached) when the database answers a ping; when it
+    doesn't, DatabaseUnavailable propagates and nothing is cached."""
+    if not runs:
+        from api.store import ping
+
+        ping()  # raises DatabaseUnavailable -> 503 / section error
+    return runs
+
+
 def cache_size() -> int:
     return _cache.size()
 
@@ -85,14 +97,15 @@ def market_runs() -> List[Dict[str, Any]]:
     from ui.market_scans import MARKET_USER
     from ui.market_scans import market_runs as _market_runs
 
-    return _cached("market_runs", lambda: _market_runs(
-        list_runs(limit=60, include_snapshots=True, username=MARKET_USER) or []))
+    return _cached("market_runs", lambda: _runs_or_outage(_market_runs(
+        list_runs(limit=60, include_snapshots=True, username=MARKET_USER) or [])))
 
 
 def session_runs() -> List[Dict[str, Any]]:
     from db.runs import list_runs
 
-    return _cached("session_runs", lambda: list_runs(limit=60, include_snapshots=False, username="scheduler") or [])
+    return _cached("session_runs", lambda: _runs_or_outage(
+        list_runs(limit=60, include_snapshots=False, username="scheduler") or []))
 
 
 def run_df(run_id: int):

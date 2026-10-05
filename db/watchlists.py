@@ -159,7 +159,10 @@ def _repair_default_watchlist(user_id: str, conn=None) -> Optional[int]:
             break
     if default_id is None:
         default_id = int(_row_get(rows[0], "id", 0))
-    cur.execute("UPDATE watchlists SET is_default = (id = %s) WHERE user_id = %s", (default_id, user_id))
+    # Only rows whose flag is wrong: a read no longer rewrites every watchlist
+    # row (and its WAL) when the default is already consistent.
+    cur.execute("UPDATE watchlists SET is_default = (id = %s) WHERE user_id = %s "
+                "AND is_default IS DISTINCT FROM (id = %s)", (default_id, user_id, default_id))
     conn.commit()
     cur.close()
     return default_id
@@ -181,30 +184,53 @@ def set_default_watchlist(watchlist_id: int, user_id: str) -> bool:
     return True
 
 
-def create_watchlist(user_id: str, name: str, *, make_default: bool = False) -> int:
+class WatchlistLimitReached(ValueError):
+    """The user already has `max_watchlists` watchlists."""
+
+
+def _lock_user_watchlists(user_id: str, conn) -> None:
+    """Per-user advisory lock for the rest of this transaction, so the name and
+    count checks and the write can't interleave with a concurrent request
+    (API acceptance run: concurrent creates saved one name 4 times)."""
+    cur = conn.cursor()
+    cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", ("watchlists:" + str(user_id),))
+    cur.close()
+
+
+def create_watchlist(user_id: str, name: str, *, make_default: bool = False,
+                     max_watchlists: Optional[int] = None) -> int:
     """Create a new watchlist for the user.
 
     The first watchlist is automatically default. Name validation happens here
-    so every UI path shares the same persistence rules.
+    so every UI path shares the same persistence rules. Checks and insert run
+    under a per-user lock; `max_watchlists` caps the count (the API passes it).
     """
     cleaned = normalize_watchlist_name(name)
     if not user_id or not cleaned:
         raise ValueError("Watchlist name is required.")
     conn = _get_conn()
-    if _watchlist_name_exists(user_id, cleaned, conn):
-        raise ValueError("A watchlist with that name already exists.")
-    first_list = _user_watchlist_count(user_id, conn) == 0
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO watchlists (user_id, name, is_default) VALUES (%s, %s, %s) RETURNING id",
-        (user_id, cleaned, bool(make_default or first_list)),
-    )
-    row = cur.fetchone()
-    watchlist_id = int(_row_get(row, "id", 0, -1))
-    if make_default or first_list:
-        cur.execute("UPDATE watchlists SET is_default = (id = %s) WHERE user_id = %s", (watchlist_id, user_id))
-    conn.commit()
-    cur.close()
+    try:
+        _lock_user_watchlists(user_id, conn)
+        if _watchlist_name_exists(user_id, cleaned, conn):
+            raise ValueError("A watchlist with that name already exists.")
+        count = _user_watchlist_count(user_id, conn)
+        if max_watchlists is not None and count >= int(max_watchlists):
+            raise WatchlistLimitReached(f"You can have up to {max_watchlists} watchlists.")
+        first_list = count == 0
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO watchlists (user_id, name, is_default) VALUES (%s, %s, %s) RETURNING id",
+            (user_id, cleaned, bool(make_default or first_list)),
+        )
+        row = cur.fetchone()
+        watchlist_id = int(_row_get(row, "id", 0, -1))
+        if make_default or first_list:
+            cur.execute("UPDATE watchlists SET is_default = (id = %s) WHERE user_id = %s", (watchlist_id, user_id))
+        conn.commit()
+        cur.close()
+    except BaseException:
+        conn.rollback()  # releases the lock
+        raise
     return watchlist_id
 
 
@@ -213,18 +239,24 @@ def rename_watchlist(watchlist_id: int, user_id: str, new_name: str) -> bool:
     if not cleaned:
         raise ValueError("Watchlist name is required.")
     conn = _get_conn()
-    if not _watchlist_owner_exists(watchlist_id, user_id, conn):
-        return False
-    if _watchlist_name_exists(user_id, cleaned, conn, exclude_id=int(watchlist_id)):
-        raise ValueError("A watchlist with that name already exists.")
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE watchlists SET name = %s WHERE id = %s AND user_id = %s",
-        (cleaned, int(watchlist_id), user_id),
-    )
-    changed = cur.rowcount > 0
-    conn.commit()
-    cur.close()
+    try:
+        _lock_user_watchlists(user_id, conn)
+        if not _watchlist_owner_exists(watchlist_id, user_id, conn):
+            conn.rollback()
+            return False
+        if _watchlist_name_exists(user_id, cleaned, conn, exclude_id=int(watchlist_id)):
+            raise ValueError("A watchlist with that name already exists.")
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE watchlists SET name = %s WHERE id = %s AND user_id = %s",
+            (cleaned, int(watchlist_id), user_id),
+        )
+        changed = cur.rowcount > 0
+        conn.commit()
+        cur.close()
+    except BaseException:
+        conn.rollback()
+        raise
     return bool(changed)
 
 

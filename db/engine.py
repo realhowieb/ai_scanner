@@ -28,7 +28,7 @@ DB_PATH = Path(__file__).resolve().parent.parent / "scanner.sqlite"
 # Connection reuse: 40+ call sites open a Neon connection, use it once, and
 # close it — each open is a full TCP+TLS+auth handshake (~200-500ms) to a
 # remote Postgres. Keep one warm connection per thread behind a proxy whose
-# close() is a no-op; checkout validates it with rollback() (one cheap round
+# close() only ends the transaction (rollback); checkout validates it with rollback() (one cheap round
 # trip that also clears any dangling transaction) and reconnects when dead.
 # Set AI_SCANNER_DB_POOL=0 to restore connect-per-call behavior.
 # ---------------------------------------------------------------------------
@@ -51,8 +51,16 @@ class _WarmConn:
     def __setattr__(self, name, value):
         setattr(object.__getattribute__(self, "_conn"), name, value)
 
-    def close(self):  # noqa: D102 - deliberate no-op; connection stays warm
-        pass
+    def close(self):
+        """Keep the socket warm but end the transaction, as a real close() would.
+        A warm connection left idle in a transaction keeps its table locks until
+        the thread's next checkout, so any ALTER TABLE elsewhere (a deploy, a
+        job, another process's schema check) waits on it and every query queued
+        behind that ALTER stalls (API acceptance run)."""
+        try:
+            object.__getattribute__(self, "_conn").rollback()
+        except Exception:
+            pass
 
     # Dunder methods bypass __getattr__ (looked up on the class), so the
     # context-manager protocol must be implemented explicitly. psycopg3's own
@@ -95,6 +103,22 @@ def _checkout_warm(url: str):
     real = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_connect_timeout())
     _pool_local.conn = real
     return _WarmConn(real)
+
+
+def release_thread_connection() -> None:
+    """End any open transaction on this thread's warm connection (keeps the
+    socket). For long-running servers whose helpers don't call close()."""
+    conn = getattr(_pool_local, "conn", None)
+    if conn is None:
+        return
+    try:
+        conn.rollback()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _pool_local.conn = None
 
 
 def _connect_timeout() -> int:

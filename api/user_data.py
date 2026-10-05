@@ -65,10 +65,10 @@ def get_watchlist(user: str, watchlist_id: int) -> Dict[str, Any]:
 def create_watchlist(user: str, name: str, make_default: bool = False) -> Dict[str, Any]:
     from db import watchlists as wl
 
-    if len(list_watchlists(user)) >= MAX_WATCHLISTS:
-        raise LimitReached(f"You can have up to {MAX_WATCHLISTS} watchlists.")
     try:
-        new_id = _db(wl.create_watchlist, user, name, make_default=make_default)
+        new_id = _db(wl.create_watchlist, user, name, make_default=make_default, max_watchlists=MAX_WATCHLISTS)
+    except wl.WatchlistLimitReached as e:
+        raise LimitReached(str(e)) from e
     except ValueError as e:
         raise Conflict(str(e)) from e
     return get_watchlist(user, new_id)
@@ -191,20 +191,19 @@ def list_alerts(user: str) -> List[Dict[str, Any]]:
 
 
 def create_alert(user: str, alert_limit: int, alert_type: str, **fields: Any) -> Dict[str, Any]:
+    """The limit and duplicate checks run with the insert under a per-user lock
+    (db.alerts.create_alert), so concurrent requests can't exceed the plan limit."""
     from db import alerts
 
     clean = validate_alert(alert_type, fields.get("ticker"), fields.get("threshold"),
                            fields.get("direction"), bool(fields.get("watchlist_only")))
-    before = {a["id"] for a in list_alerts(user)}
-    if len(before) >= int(alert_limit):
-        noun = "alert" if int(alert_limit) == 1 else "alerts"
-        raise LimitReached(f"You've reached the maximum of {alert_limit} {noun} on your plan.")
     try:
-        _db(alerts.create_alert, user, alert_type, **clean)
+        new_id = _db(alerts.create_alert, user, alert_type, max_alerts=int(alert_limit), **clean)
+    except alerts.AlertLimitReached as e:
+        raise LimitReached(str(e)) from e
     except ValueError as e:
         raise Conflict(str(e)) from e
-    created = [a for a in list_alerts(user) if a["id"] not in before]
-    return created[0] if created else _alert_out({"id": 0, "alert_type": alert_type, "enabled": True, **clean})
+    return _owned_alert(user, int(new_id))
 
 
 def _owned_alert(user: str, alert_id: int) -> Dict[str, Any]:

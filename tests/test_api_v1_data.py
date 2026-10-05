@@ -27,12 +27,16 @@ class FakeWatchlists:
         return [{"id": i, "name": w["name"], "is_default": w["is_default"], "created_at": None,
                  "symbol_count": len(w["items"])} for i, w in self.lists.items() if w["user"] == user]
 
-    def create_watchlist(self, user, name, *, make_default=False):
+    def create_watchlist(self, user, name, *, make_default=False, max_watchlists=None):
+        from db.watchlists import WatchlistLimitReached
+
         name = " ".join(str(name).split())[:80]
         if not name:
             raise ValueError("Watchlist name is required.")
         if any(w["user"] == user and w["name"].lower() == name.lower() for w in self.lists.values()):
             raise ValueError("A watchlist with that name already exists.")
+        if max_watchlists is not None and len(self.list_watchlists(user)) >= max_watchlists:
+            raise WatchlistLimitReached(f"You can have up to {max_watchlists} watchlists.")
         first = not self.list_watchlists(user)
         i = next(self.ids)
         self.lists[i] = {"user": user, "name": name, "is_default": False, "items": {}}
@@ -100,15 +104,23 @@ class FakeAlerts:
     def list_alerts(self, user):
         return [dict(r) for r in reversed(self.rows) if r["user_id"] == user]
 
-    def create_alert(self, user, alert_type, *, ticker=None, threshold=None, direction=None, watchlist_only=False):
+    def create_alert(self, user, alert_type, *, ticker=None, threshold=None, direction=None, watchlist_only=False,
+                     max_alerts=None):
+        from db.alerts import AlertLimitReached
+
         key = (user, alert_type, ticker, threshold, direction, watchlist_only)
         if any((r["user_id"], r["alert_type"], r["ticker"], r["threshold"], r["direction"], r["watchlist_only"]) == key
                for r in self.rows):
             raise ValueError("You already have this alert.")
-        self.rows.append({"id": next(self.ids), "user_id": user, "alert_type": alert_type, "ticker": ticker,
+        if max_alerts is not None and sum(1 for r in self.rows if r["user_id"] == user) >= max_alerts:
+            noun = "alert" if max_alerts == 1 else "alerts"
+            raise AlertLimitReached(f"You've reached the maximum of {max_alerts} {noun} on your plan.")
+        new_id = next(self.ids)
+        self.rows.append({"id": new_id, "user_id": user, "alert_type": alert_type, "ticker": ticker,
                           "threshold": threshold, "direction": direction, "watchlist_only": watchlist_only,
                           "enabled": True, "last_fired_at": None,
                           "created_at": dt.datetime(2026, 10, 5, 13, 0, tzinfo=UTC)})
+        return new_id
 
     def set_alert_enabled(self, i, user, enabled):
         for r in self.rows:
@@ -309,3 +321,67 @@ class ScanAndStockApiTests(DataApiBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(DEPS, "needs fastapi, httpx, PyJWT and bcrypt")
+class ReliabilityTests(DataApiBase):
+    """API acceptance run: readiness, outage during the scan read, request ids."""
+
+    def setUp(self):
+        super().setUp()
+        from api import today
+
+        today.clear_cache()
+        self.addCleanup(today.clear_cache)
+
+    def test_readyz_reports_database_and_scan_age(self):
+        created = dt.datetime.now(UTC) - dt.timedelta(minutes=30)
+        with mock.patch("api.store.ping"), \
+                mock.patch("api.today.market_runs", return_value=[{"id": 1, "created_at": created}]):
+            r = self.client.get("/readyz")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["database"], "ok")
+        self.assertAlmostEqual(r.json()["scan_age_minutes"], 30, delta=1)
+
+    def test_readyz_503_when_database_down(self):
+        from api.store import DatabaseUnavailable
+
+        with mock.patch("api.store.ping", side_effect=DatabaseUnavailable("x")):
+            r = self.client.get("/readyz")
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(self.client.get("/healthz").status_code, 200)  # liveness unaffected
+
+    @unittest.skipUnless(HAS_PANDAS, "needs pandas")
+    def test_empty_run_list_from_a_failed_read_is_503_not_no_scan(self):
+        """db.runs.list_runs answers [] when the database fails; that must not read as
+        'no scan yet', and must not be cached past the outage."""
+        from api.store import DatabaseUnavailable
+
+        with mock.patch("db.runs.list_runs", return_value=[]), \
+                mock.patch("api.store.ping", side_effect=DatabaseUnavailable("x")):
+            r = self.client.get("/v1/scans/latest", headers=self.h)
+        self.assertEqual(r.status_code, 503)
+        runs = [{"id": 5, "label": "US_MARKET", "username": "cron", "created_at": dt.datetime(2026, 10, 5, 13, 35, tzinfo=UTC)}]
+        with mock.patch("db.runs.list_runs", return_value=runs), \
+                mock.patch("db.runs.load_run_results", return_value="[]"):
+            r = self.client.get("/v1/scans/latest", headers=self.h)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["scan_at"], "2026-10-05T13:35:00+00:00")  # nothing stale was cached
+
+    @unittest.skipUnless(HAS_PANDAS, "needs pandas")
+    def test_genuinely_empty_scan_table_is_not_an_error(self):
+        with mock.patch("db.runs.list_runs", return_value=[]), mock.patch("api.store.ping"):
+            r = self.client.get("/v1/scans/latest", headers=self.h)
+        self.assertEqual((r.status_code, r.json()["scan_at"], r.json()["setups"]), (200, None, []))
+
+    def test_request_id_and_access_log(self):
+        with self.assertLogs("hsf_api.access", level="INFO") as logs:
+            r = self.client.get("/v1/watchlists?secret=1", headers={**self.h, "X-Request-ID": "client-abc-123"})
+            bad = self.client.get("/healthz", headers={"X-Request-ID": "bad id\nwith newline"})
+        self.assertEqual(r.headers["X-Request-ID"], "client-abc-123")
+        self.assertRegex(bad.headers["X-Request-ID"], r"^[0-9a-f]{32}$")
+        line = json.loads(logs.records[0].getMessage())
+        self.assertEqual((line["route"], line["status"], line["request_id"]), ("/v1/watchlists", 200, "client-abc-123"))
+        joined = " ".join(x.getMessage() for x in logs.records)
+        self.assertNotIn("secret", joined)
+        self.assertNotIn(self.h["Authorization"].split()[1], joined)

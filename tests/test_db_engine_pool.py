@@ -41,15 +41,16 @@ class WarmConnTests(unittest.TestCase):
             "os.environ", {"NEON_DATABASE_URL": "postgres://x", "AI_SCANNER_DB_POOL": "1"}
         )
 
-    def test_connection_reused_and_close_is_noop(self):
+    def test_connection_reused_and_close_ends_the_transaction(self):
         real = FakeConn()
         with self._env(), mock.patch.dict(sys.modules, {"psycopg": _fake_psycopg([real])}):
             c1 = engine.get_neon_conn()
-            c1.close()  # no-op: keeps the underlying connection warm
+            c1.close()  # keeps the socket warm but ends the transaction (no idle-in-transaction locks)
             self.assertFalse(real.closed)
+            self.assertEqual(real.rollbacks, 1)
             c2 = engine.get_neon_conn()
         # Second checkout validated the same underlying connection via rollback.
-        self.assertEqual(real.rollbacks, 1)
+        self.assertEqual(real.rollbacks, 2)
         self.assertIs(
             object.__getattribute__(c1, "_conn"), object.__getattribute__(c2, "_conn")
         )

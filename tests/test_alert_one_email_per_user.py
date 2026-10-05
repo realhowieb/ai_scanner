@@ -136,8 +136,9 @@ class CreateTests(unittest.TestCase):
         conn, cur = self._conn(existing=False)
         with mock.patch.object(alerts, "_get_conn", return_value=conn):
             alerts.create_alert(ME, "price", ticker="aapl", threshold=5.0, direction="above")
-        sql, params = cur.execute.call_args_list[0].args
-        self.assertIn("IS NOT DISTINCT FROM", sql)
+        calls = [c.args for c in cur.execute.call_args_list]
+        self.assertIn("pg_advisory_xact_lock", calls[0][0])  # per-user lock before the checks
+        sql, params = next(a for a in calls if "IS NOT DISTINCT FROM" in a[0])
         self.assertEqual(params, (ME, "price", "AAPL", 5.0, "above", False))
         self.assertIn("INSERT", str(cur.execute.call_args_list[-1].args[0]))
         conn.commit.assert_called_once()
