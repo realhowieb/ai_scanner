@@ -75,11 +75,12 @@ them via `st.secrets` first, then falls back to environment variables.
 - `LOGIN_RATE_LIMIT_MAX_ATTEMPTS` — max failures before lockout (default: 10)
 
 ### Password reset (required for self-service password reset)
-- `SMTP_HOST` — e.g. `smtp.sendgrid.net` or `smtp.gmail.com`
+- `SMTP_HOST` — `smtp.resend.com` (HSF sends through Resend; `SMTP_USER` is `resend`)
 - `SMTP_PORT` — default 587 (TLS)
 - `SMTP_USER` — SMTP login username
-- `SMTP_PASS` — SMTP password or API key
-- `SMTP_FROM` — From address, e.g. `noreply@yourdomain.com`
+- `SMTP_PASS` — Resend API key
+- `SMTP_FROM` — From address, e.g. `alerts@ai.hsfinest.com`
+- `SMTP_FROM_NAME` — optional display name (default: `HSF Alerts`)
 - `APP_BASE_URL` — full URL of the app, e.g. `https://hsfinestai.streamlit.app`
 - `RESET_TOKEN_TTL_MINUTES` — how long reset links are valid (default: 30)
 
@@ -97,6 +98,13 @@ The billing service itself requires its own env vars (set in Render dashboard):
 - `STRIPE_PRICE_PREMIUM`
 - `DATABASE_URL` — same Neon connection string as the main app
 - `APP_SUCCESS_URL` / `APP_CANCEL_URL` / `APP_PORTAL_RETURN_URL`
+- `REALTIME_ALERTS_ENABLED=1` — starts the real-time price-alert worker inside the billing service (default: off)
+- `REALTIME_POLL_SECONDS` — worker poll interval (default: 60)
+- `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` and `SMTP_*` — needed by that worker
+
+### HSF API (web and mobile backend)
+A third service on Render. Setup, endpoints and its env vars
+(`DATABASE_URL`, `API_JWT_SECRET`, `API_CORS_ORIGINS`) are in [docs/API.md](docs/API.md).
 
 ### Alerting (optional but recommended)
 - `SLACK_WEBHOOK_URL` — Incoming Webhook URL for a Slack channel; alerts fire when scan errors exceed threshold

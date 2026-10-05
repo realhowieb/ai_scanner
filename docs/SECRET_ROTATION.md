@@ -1,14 +1,15 @@
 # Secret rotation runbook (P1-45)
 
 How to replace every credential HSF uses, where each one lives, and how to check
-that the new one works. Secrets are kept in **four** places, and a rotation is
+that the new one works. Secrets are kept in **four** stores (Render holds two services), and a rotation is
 only finished when every place that holds the secret has the new value:
 
 | Store | Where | Who reads it |
 |---|---|---|
 | **Streamlit** | share.streamlit.io → app → Settings → Secrets | the web app |
 | **GitHub** | repo → Settings → Secrets and variables → Actions | scheduled scans and other jobs |
-| **Render** | dashboard → billing service → Environment | the billing service (deploys from `main` since 2026-10-03) |
+| **Render** | dashboard → billing service → Environment | the billing service and its real-time alert worker (deploys from `main` since 2026-10-03) |
+| **Render** | dashboard → `hsf-api` → Environment | the HSF API for the new web and mobile apps (P1-59, deploys from `main`) |
 | **cron-job.org** | each job → Advanced → Headers | the dispatch calls that start the scheduled jobs |
 
 ## When to rotate
@@ -31,10 +32,11 @@ into an issue.
 
 | Secret | Streamlit | GitHub | Render | cron-job.org | Notes |
 |---|:-:|:-:|:-:|:-:|---|
-| `DATABASE_URL` (Neon) | ✓ | ✓ | ✓ | | Same database, three copies. Workflows pass it on as `NEON_DATABASE_URL` too; there is no separate secret. |
+| `DATABASE_URL` (Neon) | ✓ | ✓ | ✓ | | Same database; on Render it is set on both services (billing and `hsf-api`). Workflows pass it on as `NEON_DATABASE_URL` too; there is no separate secret. |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | ✓ | ✓ | ✓ | | Market data. `ALPACA_DATA_URL` / `ALPACA_FEED` are settings, not secrets. |
 | `STRIPE_SECRET_KEY` | | | ✓ | | Billing API key. |
 | `STRIPE_WEBHOOK_SECRET` | | | ✓ | | Signs Stripe → billing webhooks. |
+| `API_JWT_SECRET` | | | ✓ | | `hsf-api` only. Signs app access tokens. `API_CORS_ORIGINS` is a setting, not a secret. |
 | `SMTP_USER`, `SMTP_PASS` (Resend) | ✓ | ✓ | ✓ | | Email. `SMTP_HOST/PORT/FROM` are settings. |
 | `COOKIE_PASSWORD` | ✓ | | | | Encrypts the sign-in cookie. **See the warning below.** |
 | `APP_ENCRYPTION_KEY` | ✓ | | | | Encrypts users' saved Alpaca paper keys. **See the warning below.** |
@@ -84,6 +86,20 @@ step 3. Do it outside market hours.
 2. Update Streamlit, GitHub and Render.
 3. Check: request a password reset for your own account and receive it; then
    delete the old key in Resend.
+
+### `API_JWT_SECRET` (HSF API)
+
+1. Generate a new value yourself (32+ characters, e.g. `openssl rand -base64 48`)
+   and paste it straight into Render → `hsf-api` → Environment. Never put it in
+   chat, a commit or a note.
+2. Render redeploys. The service refuses to start if the value is missing or
+   shorter than 32 characters; the log says why.
+3. Check: `/healthz` returns `{"ok": true}`, and signing in at `/docs` returns a token.
+
+Every app user's access token stops working at once; apps refresh with their
+refresh token (stored in the database, not signed with this secret), so nobody
+has to sign in again. To force everyone to sign in again, also revoke all rows
+in `api_refresh_tokens`.
 
 ### FMP, Finnhub
 

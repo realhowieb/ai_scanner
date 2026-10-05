@@ -16,19 +16,20 @@ AI_SCANNER_SQLITE_FALLBACK = "false"        # never silently fall back to sqlite
 COOKIE_PASSWORD = "..."                      # required for session restore after Stripe redirect
 APP_BASE_URL = "https://hsfinestai.streamlit.app"   # production app; the BETA app (hsf-beta) sets "https://hsf-beta.streamlit.app"
 
-# --- Email (password reset, verification, digests) ---
-SMTP_HOST = "smtp.gmail.com"
+# --- Email (password reset, verification, digests; Resend over SMTP) ---
+SMTP_HOST = "smtp.resend.com"
 SMTP_PORT = "587"
-SMTP_USER = "..."
-SMTP_PASS = "..."
-SMTP_FROM = "..."
+SMTP_USER = "resend"
+SMTP_PASS = "re_..."                         # Resend API key
+SMTP_FROM = "alerts@ai.hsfinest.com"
+# SMTP_FROM_NAME = "HSF Alerts"              # optional display name (default "HSF Alerts")
 
 # --- Billing service ---
 BILLING_API_BASE = "https://ai-scanner-h2c8.onrender.com"
 
 # --- AI features ---
 ANTHROPIC_API_KEY = "sk-ant-..."
-ANTHROPIC_MODEL = "claude-haiku-4-5"         # ~5x cheaper than Opus for this use
+ANTHROPIC_MODEL = "claude-haiku-4-5"         # recommended: ~5x cheaper; unset = claude-opus-4-8 (config.py default)
 AI_ENABLED = "1"                             # set "0" to kill all AI instantly, no redeploy
 AI_DAILY_LIMIT = "25"                        # per-user AI calls / 24h (0 = unlimited)
 
@@ -55,7 +56,33 @@ DATABASE_URL                # same Neon DB
 APP_SUCCESS_URL  = https://hsfinestai.streamlit.app
 APP_CANCEL_URL   = https://hsfinestai.streamlit.app
 APP_PORTAL_RETURN_URL = https://hsfinestai.streamlit.app/billing
+
+# Real-time price-alert worker (runs inside the billing service)
+REALTIME_ALERTS_ENABLED = 1  # "0" or unset = worker off
+REALTIME_POLL_SECONDS = 60   # optional, default 60
+ALPACA_API_KEY_ID           # same keys as Streamlit / GitHub
+ALPACA_API_SECRET_KEY
+SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM   # same Resend values as section 1
+SMTP_FROM_NAME              # optional
 ```
+
+The GitHub **Realtime Alerts** job (cron-job.org, every 5 minutes on weekdays)
+checks the same alerts with GitHub's own secrets, so alerts keep firing when the
+Render service sleeps. Both mark `user_alerts.last_fired_at`, so an alert never
+fires twice.
+
+## 2b. Render (HSF API service) env vars
+
+Separate Render web service (`hsf-api`), set up per [docs/API.md](docs/API.md):
+
+```
+DATABASE_URL       # same Neon DB
+API_JWT_SECRET     # 32+ random characters; only on this service, never in chat or git
+API_CORS_ORIGINS   # comma-separated web origins; empty = no browser access
+```
+
+- [ ] Health check path `/healthz`
+- [ ] Move off the free plan (it sleeps after 15 idle minutes) before the app has real users
 
 ## 3. Stripe dashboard
 
