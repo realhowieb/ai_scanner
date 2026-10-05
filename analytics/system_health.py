@@ -394,9 +394,19 @@ def eval_maturation(report: Optional[Mapping[str, Any]], runs: Optional[Sequence
                          detected_at=_parse(r.get("generated_at")), human="WATCH",
                          action="cohort-neutral only while the cap does not bind (Run 58); review MAX_SYMBOLS"))
     retired = int(((r.get("retired") or {}).get("observations")) or 0)
-    prev_ret = ((prev or {}).get("metrics") or {}).get("retired_observations") if prev else None
-    if retired > max(100, 2 * (prev_ret or 0)) and prev_ret is not None:
-        f.append(finding("RETIREMENT_SPIKE", "WARNING", f"{retired} observations retired (previous {prev_ret})",
+    # P2-79: alert on the flow (window closed in the last 24 h), not the total.
+    # The total is a level over the latest N observations: after a weekend the
+    # same window reaches further past the retirement line, so it doubled every
+    # Monday without anything being starved. Reports without the flow (older
+    # schema) don't alert.
+    new_ret = (r.get("retired") or {}).get("new_24h")
+    new_ret = int(new_ret) if new_ret is not None else None
+    prev_new = ((prev or {}).get("metrics") or {}).get("retired_new_24h") if prev else None
+    if new_ret is not None and prev_new is not None and new_ret > max(100, 2 * int(prev_new)):
+        f.append(finding("RETIREMENT_SPIKE", "WARNING",
+                         f"{new_ret} observations newly retired in 24 h (previous {prev_new}; {retired} in total)",
+                         evidence={"new_24h": new_ret, "previous_new_24h": prev_new, "total": retired,
+                                   "deferred": deferred},
                          detected_at=_parse(r.get("generated_at")), human="WATCH",
                          action="check whether observations were starved before their window closed"))
     proc = int(r.get("symbols_processed") or b.get("processed_symbols") or 0)
@@ -417,6 +427,7 @@ def eval_maturation(report: Optional[Mapping[str, Any]], runs: Optional[Sequence
                               "matured_this_run": r.get("outcomes_matured", r.get("attached")),
                               "ready_symbols": ready, "ready_observations": b.get("ready_observations"),
                               "deferred_symbols": deferred, "retired_observations": retired,
+                              "retired_new_24h": new_ret,
                               "oldest_pending_age_min": b.get("oldest_pending_age_min"),
                               "last_success": _iso(last_ok), "runtime_min": dur,
                               "alpaca_requests": r.get("alpaca_requests"), "alpaca_429_count": n429,

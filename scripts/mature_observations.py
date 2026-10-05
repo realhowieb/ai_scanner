@@ -71,6 +71,8 @@ FORWARD_WINDOW = _dt.timedelta(days=4)
 # observation many attempts first. Non-destructive: nothing is written; pass
 # retire_after=None (CLI --retire-after-days 0) to re-attempt for a backfill.
 RETIRE_AFTER = FORWARD_WINDOW + _dt.timedelta(days=2)
+# P2-79: "newly retired" = the retirement line was crossed within this window.
+RETIRED_NEW_WINDOW = _dt.timedelta(hours=24)
 # Wall-clock budget per scheduled run (CLI default). When it runs out, symbols not
 # yet reached are deferred to the next run like cap overflow, so the job finishes
 # and reports inside its CI timeout (30 min) instead of being cancelled with no
@@ -231,7 +233,12 @@ def _new_report() -> Dict[str, Any]:
         "ineligible": {"symbols": 0, "observations": 0, "reasons": {}},
         # Ready horizons skipped because their bounded window closed long ago.
         "retired": {"observations": 0, "horizons": 0, "symbols": 0,
-                    "retire_after_days": None},
+                    "retire_after_days": None,
+                    # P2-79: retired observations whose window closed in the last
+                    # 24 h — about one trading day's worth, comparable run to run.
+                    # The total above is a level over the latest N observations and
+                    # jumps after every weekend.
+                    "new_24h": 0},
         "fetch_mode": None,
     }
 
@@ -419,6 +426,8 @@ def mature_observations(observations, *, now=None, slack_min: int = 15,
             a = _parse(anchor)
             if ready and retire_after is not None and a is not None and now >= a + retire_after:
                 retired["observations"] += 1
+                if now < a + retire_after + RETIRED_NEW_WINDOW:
+                    retired["new_24h"] += 1
                 retired["horizons"] += len(ready)
                 for h in ready:
                     _t(trace, o, h, "RETIRED")
@@ -694,7 +703,7 @@ def render_report_text(r: Dict[str, Any]) -> str:
     ret = r.get("retired") or {}
     lines.append(f"Retired (window closed > {ret.get('retire_after_days')}d): "
                  f"observations={ret.get('observations')} horizons={ret.get('horizons')} "
-                 f"symbols={ret.get('symbols')}")
+                 f"symbols={ret.get('symbols')} new_in_24h={ret.get('new_24h')}")
     if r["failures"]:
         lines.append("Failures: " + ", ".join(f"{k}={v}" for k, v in sorted(r["failures"].items())))
     b = r.get("backlog") or {}
