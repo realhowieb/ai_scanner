@@ -1,0 +1,75 @@
+name: Stair-stepper Threshold Check
+
+# P2-35 step 1: replays one session's 1-minute bars through the Day Trader
+# Stair-stepper thresholds and reports how often and how steadily names qualify
+# under a small grid around the defaults. Read-only (latest market scan + Alpaca
+# bars); writes nothing to the database and changes no defaults. Manual only:
+# run it after the close, then decide whether the defaults need tuning.
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "ET session date YYYY-MM-DD (blank = last completed session)"
+        type: string
+        default: ""
+      symbols:
+        description: "Comma-separated tickers (blank = top setups of the latest scan)"
+        type: string
+        default: ""
+      top:
+        description: "How many top setups when symbols is blank (max 100)"
+        type: string
+        default: "40"
+      window:
+        description: "1-minute bars fitted"
+        type: choice
+        options: ["45", "10", "15", "20", "30", "60"]
+        default: "45"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stair-stepper-threshold-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Threshold check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          ALPACA_FEED: ${{ secrets.ALPACA_FEED }}
+          SESSION_DATE: ${{ inputs.date }}
+          SYMBOLS: ${{ inputs.symbols }}
+          TOP: ${{ inputs.top || '40' }}
+          WINDOW: ${{ inputs.window || '45' }}
+        run: |
+          ARGS=(--top "$TOP" --window "$WINDOW")
+          if [ -n "$SESSION_DATE" ]; then ARGS+=(--date "$SESSION_DATE"); fi
+          if [ -n "$SYMBOLS" ]; then ARGS+=(--symbols "$SYMBOLS"); fi
+          python scripts/stair_stepper_threshold_check.py "${ARGS[@]}"
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stair-stepper-threshold-check
+          path: artifacts/automation/stair_stepper/
+          if-no-files-found: ignore
+          retention-days: 30
