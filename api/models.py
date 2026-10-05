@@ -35,6 +35,7 @@ class Me(BaseModel):
     plan_label: str = Field(description="Customer-facing name, e.g. Free, Pro")
     is_admin: bool
     alert_limit: int
+    email_verified: bool = Field(default=True, description="False until the emailed link is used; needed to upgrade and for email alerts")
     entitlements: Dict[str, bool] = Field(description="Feature flags, e.g. can_day_trader, can_ai_notes")
 
 
@@ -231,3 +232,25 @@ class AlertEvent(BaseModel):
     ticker: Optional[str] = None
     message: str
     fired_at: Optional[str] = None
+
+
+# ---- account step: sign-up, verification, passwords, preferences, billing -----------------------
+class SignupResult(TokenPair):
+    email: str
+    verification_sent: bool = Field(description="False when email isn't configured; the account still works")
+
+
+class Message(BaseModel):
+    ok: bool = True
+    message: str
+
+
+class EmailPrefs(BaseModel):
+    digest: bool = Field(description="Morning market digest")
+    evening: bool = Field(description="Evening market wrap")
+    alerts: bool = Field(description="Alert emails")
+
+
+class BillingLink(BaseModel):
+    url: str = Field(description="Stripe-hosted page to open in the browser")
+    mode: Literal["checkout", "portal"]

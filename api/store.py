@@ -25,6 +25,8 @@ def _dummy_hash() -> bytes:
 # P1-59 review: a rotated token replayed within this many seconds is a lost
 # response or two concurrent refreshes (flaky phone network), not theft.
 REUSE_GRACE_S = 30
+# Tokens revoked for these reasons answer "invalid" when replayed (no theft sweep).
+SIGNED_OUT_REASONS = ("password_change", "password_reset")
 
 
 class DatabaseUnavailable(RuntimeError):
@@ -149,7 +151,7 @@ def use_refresh_token(token_hash: str) -> tuple[str, Optional[str]]:
     or a concurrent refresh; caller issues another pair, nothing is revoked),
     "reused" (rotated earlier, or replayed after logout or a reuse sweep: the
     token was copied, so every session of that account is revoked), or
-    "invalid" (unknown or expired)."""
+    "invalid" (unknown, expired, or signed out by a password change/reset)."""
     conn = _conn()
     try:
         ensure_refresh_schema(conn)
@@ -169,6 +171,12 @@ def use_refresh_token(token_hash: str) -> tuple[str, Optional[str]]:
             if row["revoked_reason"] == "rotated" and row["recent"] and not row["expired"]:
                 conn.rollback()
                 return "grace", username
+            if row["revoked_reason"] in SIGNED_OUT_REASONS:
+                # A device signed out by a password change/reset retrying its old
+                # token is expected, not theft: no sweep (it would also sign out
+                # the session that just changed the password).
+                conn.rollback()
+                return "invalid", None
             cur.execute("UPDATE api_refresh_tokens SET revoked_at = NOW(), revoked_reason = 'reuse' "
                         "WHERE username = %s AND revoked_at IS NULL", (username,))
             conn.commit()
@@ -194,5 +202,22 @@ def revoke_refresh_token(token_hash: str) -> None:
                     "WHERE token_hash = %s AND revoked_at IS NULL", (token_hash,))
         conn.commit()
         cur.close()
+    finally:
+        conn.close()
+
+
+def revoke_all_refresh_tokens(username: str, reason: str) -> int:
+    """Sign the account out of every app session (password reset or change).
+    Access tokens already issued still expire on their own (15 min)."""
+    conn = _conn()
+    try:
+        ensure_refresh_schema(conn)
+        cur = conn.cursor()
+        cur.execute("UPDATE api_refresh_tokens SET revoked_at = NOW(), revoked_reason = %s "
+                    "WHERE username = %s AND revoked_at IS NULL", (str(reason)[:20], username))
+        n = cur.rowcount or 0
+        conn.commit()
+        cur.close()
+        return int(n)
     finally:
         conn.close()

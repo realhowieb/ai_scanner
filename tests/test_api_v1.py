@@ -25,8 +25,11 @@ class ApiTestCase(unittest.TestCase):
     def setUp(self):
         from fastapi.testclient import TestClient
 
-        from api import main
+        from api import main, ratelimit
         from api.settings import Settings
+
+        ratelimit.reset()  # per-IP limits are process-wide; each test starts clean
+        self.addCleanup(ratelimit.reset)
 
         self.settings = Settings(jwt_secret=SECRET, access_ttl_s=900, refresh_ttl_s=3600,
                                  cors_origins=("https://app.example.com",))

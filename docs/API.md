@@ -16,7 +16,16 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | POST | `/v1/auth/login` | none | `{"email","password","client"?}` → `access_token` (15 min), `refresh_token` (30 days). Same accounts and passwords as the web app. 10 failed attempts in 10 minutes → 429. |
 | POST | `/v1/auth/refresh` | none | `{"refresh_token"}` → a new pair. Each refresh token works once. A retry within 30 s of rotating (lost response, two refreshes at once) gets another pair; a later replay, or one after logout, is treated as theft and revokes every session of that account. |
 | POST | `/v1/auth/logout` | none | `{"refresh_token"}` → 204, token revoked. |
-| GET | `/v1/me` | Bearer | Email, name, plan (`basic`/`pro`/`premium`/`admin`), plan label, alert limit, entitlement flags. |
+| POST | `/v1/auth/signup` | none | `{"email","password","username","accept_terms","client"?}` → 201 with a token pair (signed in) and `verification_sent`. Same rules as the web form (password rule, unique email and username, usage agreement); Free plan. 5 per hour per address. |
+| POST | `/v1/auth/verify-email` | none | `{"token"}` from the verification link → verified. |
+| POST | `/v1/auth/password-reset` | none | `{"email"}` → 202, same answer whether or not the account exists; emails a reset link (3 per hour per account, 5 per hour per address). |
+| POST | `/v1/auth/password-reset/confirm` | none | `{"token","new_password"}` → new password; signs the account out of the web app and every app session. |
+| GET | `/v1/me` | Bearer | Email, name, plan (`basic`/`pro`/`premium`/`admin`), plan label, alert limit, `email_verified`, entitlement flags. |
+| POST | `/v1/me/verify-email` | Bearer | Resend the verification link to your own email (3 per hour). |
+| POST | `/v1/me/password` | Bearer | `{"current_password","new_password"}` → a new token pair for this device; every other session (web and app) is signed out. |
+| GET / PATCH | `/v1/me/email-preferences` | Bearer | `{"digest","evening","alerts"}` on/off. |
+| POST | `/v1/billing/checkout` | Bearer | `{"plan":"pro"\|"premium","interval":"month"\|"year"}` → `{url, mode}`: Stripe checkout, or Stripe's plan-change screen for existing subscribers (`mode: portal`). Needs a verified email (403 otherwise), as on the web. |
+| POST | `/v1/billing/portal` | Bearer | `{"flow"?: "cancel"}` → Stripe Customer Portal URL (404 when there's no subscription yet). |
 | GET | `/v1/today` | Bearer | Market phase, Before the open (this morning's pre-market movers, 8:35-10:30 ET), Top setups, After the close, last session recap. Pre/after-hours movers are Pro+ (`locked: true` below Pro); Premium model fields are redacted below Premium. Each section fails on its own (`errors` lists it). |
 | GET | `/v1/scans/latest` | Bearer | The latest market scan's HSF setups, ranked as in the Scanner. `limit` (≤200), `offset`, `min_score`, `signal`. A plan sees its Scanner row cap (Free 25, Pro 100, Premium 200; `limited: true` when the cap hides some). PreBreakout (`prob`, `signal=prebreakout`) is Premium. |
 | GET | `/v1/stocks/{ticker}` | Bearer | Stock Intelligence (same builder as the web page): score, components, signals, reasons, risks, what to watch, lifecycle, historical context, daily bars the scans cached (up to 120), and your watchlists and alerts on it. |
@@ -31,6 +40,14 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 Every route declares a response model, so `/openapi.json` describes each payload
 and clients can be generated from it. A database outage answers **503** with
 `Retry-After: 30`.
+
+Account flows call the same functions as the web app, so password rules, emails,
+tokens and limits match. Emailed links (verification, password reset) open the web
+app's pages (`APP_BASE_URL`), which already handle them; a new frontend can instead
+post the same tokens to the confirm endpoints. After Stripe, customers return to the
+web app (`APP_SUCCESS_URL` on the billing service). Sign-in, sign-up, password reset
+and verification are also limited per client address (in-process; Render's
+proxy-added `X-Forwarded-For` entry is the one counted).
 
 Send the access token as `Authorization: Bearer <token>`. Plan and admin status
 are read from the database on every request, so a plan change applies at once.
@@ -76,6 +93,8 @@ Environment variables:
 | `DATABASE_URL` | Same Neon URL as the billing service |
 | `API_JWT_SECRET` | New random secret, 32+ characters (e.g. `openssl rand -base64 48`). Only on this service. |
 | `API_CORS_ORIGINS` | Comma-separated web origins allowed to call it, e.g. the new web app's URL. Empty = no browser access. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (`SMTP_FROM_NAME` optional) | Same Resend values as the web app. Needed for sign-up verification and password-reset emails; without them sign-up still works (`verification_sent: false`) and reset requests send nothing. |
+| `APP_BASE_URL`, `BILLING_API_BASE` | Optional; default to the production web app and billing service. |
 
 The service won't start without `API_JWT_SECRET` (uvicorn logs
 "HSF API not started: API_JWT_SECRET must be set…" and exits). Changing it signs every app
