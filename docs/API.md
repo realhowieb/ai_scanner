@@ -12,6 +12,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | Method | Path | Auth | What |
 |---|---|---|---|
 | GET | `/healthz` | none | Liveness only (no database call). Use as the Render health check. |
+| GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring; 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
 | POST | `/v1/auth/login` | none | `{"email","password","client"?}` → `access_token` (15 min), `refresh_token` (30 days). Same accounts and passwords as the web app. 10 failed attempts in 10 minutes → 429. |
 | POST | `/v1/auth/refresh` | none | `{"refresh_token"}` → a new pair. Each refresh token works once. A retry within 30 s of rotating (lost response, two refreshes at once) gets another pair; a later replay, or one after logout, is treated as theft and revokes every session of that account. |
 | POST | `/v1/auth/logout` | none | `{"refresh_token"}` → 204, token revoked. |
@@ -33,6 +34,15 @@ and clients can be generated from it. A database outage answers **503** with
 
 Send the access token as `Authorization: Bearer <token>`. Plan and admin status
 are read from the database on every request, so a plan change applies at once.
+
+Logout revokes the refresh token only. Access tokens are stateless: one already
+issued keeps working until it expires (at most 15 minutes). Deactivating an
+account or changing its plan applies on the next request.
+
+Every response carries `X-Request-ID` (a client's own id is kept when it is
+8-64 characters of letters, digits, `.`, `_` or `-`). Each request writes one
+JSON log line: request id, method, route template, status, milliseconds. Logs
+never include headers, bodies, query strings or tokens.
 
 Watchlists and alerts use the same tables and functions as the web app, so a
 change in one shows in the other. The web app caches watchlists for up to 2
@@ -74,11 +84,29 @@ user out once (access tokens stop verifying; refresh tokens still work).
 The free plan sleeps after 15 minutes idle; move to Starter before the app has
 real users.
 
+## Acceptance journey
+
+`scripts/api_acceptance.py` runs the full user journey (sign in, scanner, stock
+page, watchlist, note, alert, disable, delete, logout) for each plan, plus
+two-account isolation, plan alert limits, refresh rotation and CORS, and
+reports PASS / FAIL / BLOCKED with evidence and per-route timings. It reads
+test-account credentials from `ACC_<ROLE>_EMAIL` / `ACC_<ROLE>_PASSWORD`
+(ROLE = FREE, PRO, PRO2, PREMIUM, ADMIN), never prints them, writes only with
+`--allow-writes`, names everything it creates `zz-acceptance-<run id>` and
+deletes it at the end. Alerts use a threshold that cannot fire, so no email is
+sent. Use dedicated test accounts only.
+
+    API_BASE_URL=https://hsf-api.onrender.com python scripts/api_acceptance.py \
+        --allow-writes --origin https://<frontend origin> --report acceptance.json
+
 ## Tests
 
 `tests/test_api_v1.py` (sign-in, tokens, refresh rotation and reuse, /me),
-`tests/test_api_v1_data.py` (scans, stock detail, watchlists, alerts; plan caps and
-ownership) and `tests/test_api_today_and_store.py` (Today builder on saved-run fixtures; refresh
+`tests/test_api_v1_data.py` (scans, stock detail, watchlists, alerts; plan caps,
+ownership, readiness, request ids), `tests/test_alerts_atomic_create.py` and
+`tests/test_api_db_sessions.py` (concurrency limits, no idle-in-transaction
+connections, no leaked connections; the Postgres parts need `HSF_TEST_PG_URL`)
+and `tests/test_api_today_and_store.py` (Today builder on saved-run fixtures; refresh
 storage on a real Postgres when `HSF_TEST_PG_URL` is set). All run in CI's
 billing-contract job; the scan and stock tests need pandas, so they run in the
 full suite.

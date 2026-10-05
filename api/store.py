@@ -41,6 +41,20 @@ def _conn():
     return conn
 
 
+def ping() -> None:
+    """One round trip to the database; DatabaseUnavailable when it can't answer."""
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+    except Exception as e:
+        raise DatabaseUnavailable("database unavailable") from e
+    finally:
+        conn.close()
+
+
 def _row(cur) -> Optional[Dict[str, Any]]:
     row = cur.fetchone()
     if row is None:
