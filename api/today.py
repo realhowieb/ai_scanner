@@ -12,38 +12,59 @@ from typing import Any, Callable, Dict, List, Optional
 from analytics import market_calendar as mc
 
 CACHE_TTL_S = 60
-CACHE_MAX_ENTRIES = 32  # two run lists + a handful of runs; old runs drop out
-_cache: Dict[Any, tuple[float, Any]] = {}
-_lock = threading.Lock()
+CACHE_MAX_ENTRIES = 32  # run lists + a handful of runs; old runs drop out
 
 
-def _cached(key: Any, loader: Callable[[], Any]) -> Any:
+class TTLCache:
     """Scans change a few times a day; one read per minute is plenty. Expired
-    entries are dropped on every write and the cache never exceeds
-    CACHE_MAX_ENTRIES, so a long-running instance doesn't grow."""
-    now = time.monotonic()
-    with _lock:
-        hit = _cache.get(key)
-        if hit and now - hit[0] < CACHE_TTL_S:
-            return hit[1]
-    value = loader()
-    with _lock:
-        for k in [k for k, (t, _) in _cache.items() if now - t >= CACHE_TTL_S]:
-            del _cache[k]
-        _cache[key] = (now, value)
-        while len(_cache) > CACHE_MAX_ENTRIES:
-            del _cache[min(_cache, key=lambda k: _cache[k][0])]
-    return value
+    entries are dropped on every write and the cache never exceeds max_entries,
+    so a long-running instance doesn't grow."""
+
+    def __init__(self, max_entries: int):
+        self.max_entries = max_entries
+        self._items: Dict[Any, tuple[float, Any]] = {}  # key -> (expires at, value)
+        self._lock = threading.Lock()
+
+    def get(self, key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S) -> Any:
+        now = time.monotonic()
+        with self._lock:
+            hit = self._items.get(key)
+            if hit and now < hit[0]:
+                return hit[1]
+        value = loader()
+        with self._lock:
+            for k in [k for k, (expires, _) in self._items.items() if now >= expires]:
+                del self._items[k]
+            self._items[key] = (now + ttl_s, value)
+            while len(self._items) > self.max_entries:
+                del self._items[min(self._items, key=lambda k: self._items[k][0])]
+        return value
+
+    def size(self) -> int:
+        with self._lock:
+            return len(self._items)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+
+
+_cache = TTLCache(CACHE_MAX_ENTRIES)
+
+
+def _cached(key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S) -> Any:
+    return _cache.get(key, loader, ttl_s)
 
 
 def cache_size() -> int:
-    with _lock:
-        return len(_cache)
+    return _cache.size()
 
 
 def clear_cache() -> None:
-    with _lock:
-        _cache.clear()
+    _cache.clear()
+    from api import scans  # stock pages have their own cache (api.scans)
+
+    scans.stock_cache.clear()
 
 
 def _num(v: Any) -> Optional[float]:
