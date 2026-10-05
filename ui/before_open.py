@@ -2,7 +2,9 @@
 
 Shows the biggest pre-market movers from this morning's premarket scan
 (PMLast / PMPctChange: today's latest pre-market trade vs the previous close)
-until the 9:30 ET open. It's a snapshot as of that scan; Day Trader has live
+until 10:30 ET: "Before the open" until 9:30, then "This morning's pre-market
+movers" for the first hour of trading (owner, 2026-10-05: the card was too easy
+to miss when it disappeared at the open). It's a snapshot as of that scan; Day Trader has live
 pre-market prices. Display only: nothing here changes scores, ranking or
 research data.
 """
@@ -17,15 +19,30 @@ except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
 PREMARKET_LABEL = "premarket"
+SHOW_UNTIL_ET = _dt.time(10, 30)  # keep this morning's movers up through the first hour of trading
+
+
+def _window_open(now: _dt.datetime) -> bool:
+    """A trading day, before SHOW_UNTIL_ET New York time."""
+    from analytics import market_calendar as mc
+
+    et = now.astimezone(mc.ET)
+    return mc.is_trading_day(et.date()) and et.time() < SHOW_UNTIL_ET
+
+
+def after_open(now: _dt.datetime) -> bool:
+    from analytics import market_calendar as mc
+
+    return now >= mc.session_bounds_utc(now.astimezone(mc.ET).date())[0]
 
 
 def current_premarket_run(runs: List[Dict[str, Any]], now: _dt.datetime) -> Optional[Dict[str, Any]]:
-    """The latest premarket run from today (ET) while today's session hasn't opened."""
+    """The latest premarket run from today (ET), until SHOW_UNTIL_ET."""
     from analytics import market_calendar as mc
     from ui.market_scans import _ts
 
     today = now.astimezone(mc.ET).date()
-    if not mc.is_trading_day(today) or now >= mc.session_bounds_utc(today)[0]:
+    if not _window_open(now):
         return None
     best = None
     for r in runs or []:
@@ -47,15 +64,15 @@ def premarket_movers(df: Any, n: int = 5) -> List[Dict[str, Any]]:
 
 
 def render_before_open(now: Optional[_dt.datetime] = None) -> None:
-    """Today card. Renders nothing outside the pre-open window or with no premarket scan today."""
+    """Today card. Renders nothing outside 8:35-10:30 ET or with no premarket scan today."""
     if st is None:
         return
     now = now or _dt.datetime.now(_dt.timezone.utc)
     from analytics import market_calendar as mc
 
-    today = now.astimezone(mc.ET).date()
-    if not mc.is_trading_day(today) or now >= mc.session_bounds_utc(today)[0]:
+    if not _window_open(now):
         return
+    title = "This morning's pre-market movers" if after_open(now) else "Before the open"
     from ui.after_close import MIN_ABS_MOVE_PCT, _can_see
 
     try:
@@ -67,13 +84,13 @@ def render_before_open(now: Optional[_dt.datetime] = None) -> None:
     if run is None:  # nothing to show (or to upsell) until this morning's scan exists
         return
     if not _can_see():
-        st.markdown("### Before the open")
+        st.markdown(f"### {title}")
         st.caption("Pro shows this morning's biggest pre-market movers here, plus live pre-market prices in Day Trader.")
         return
     from ui.market_scans import safe_run_df
 
     movers = premarket_movers(safe_run_df(int(run["id"])))
-    st.markdown("### Before the open")
+    st.markdown(f"### {title}")
     as_of = run["created_at"].astimezone(mc.ET).strftime("%-I:%M %p ET")
     if not movers:
         st.caption(f"No pre-market moves of {MIN_ABS_MOVE_PCT:g}% or more in the {as_of} pre-market scan.")

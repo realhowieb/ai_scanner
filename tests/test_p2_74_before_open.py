@@ -1,5 +1,5 @@
 """P2-74 — Today's "Before the open" card: pre-market movers from this morning's
-premarket scan, Pro+, until the 9:30 ET open."""
+premarket scan, Pro+, until 10:30 ET ("This morning's pre-market movers" after the open)."""
 import datetime as dt
 import importlib.util
 import math
@@ -18,6 +18,8 @@ TUE = dt.date(2026, 9, 29)
 TUE_840_ET = dt.datetime(2026, 9, 29, 12, 40, tzinfo=UTC)     # after the 8:35 scan, before the open
 TUE_830_ET = dt.datetime(2026, 9, 29, 12, 30, tzinfo=UTC)     # before the 8:35 scan
 TUE_NOON_ET = dt.datetime(2026, 9, 29, 16, 0, tzinfo=UTC)     # market open
+TUE_1000_ET = dt.datetime(2026, 9, 29, 14, 0, tzinfo=UTC)     # first hour of trading: still shown
+TUE_1030_ET = dt.datetime(2026, 9, 29, 14, 30, tzinfo=UTC)    # window closed
 MON_8PM_ET = dt.datetime(2026, 9, 29, 0, 0, tzinfo=UTC)
 SAT = dt.datetime(2026, 10, 3, 13, 0, tzinfo=UTC)
 
@@ -124,8 +126,12 @@ class WindowTests(unittest.TestCase):
     def test_todays_premarket_run_before_the_open(self):
         self.assertEqual(bo.current_premarket_run(RUNS, TUE_840_ET)["id"], 1)
 
-    def test_nothing_before_the_scan_after_the_open_or_off_days(self):
+    def test_still_shown_in_the_first_hour_of_trading(self):
+        self.assertEqual(bo.current_premarket_run(RUNS, TUE_1000_ET)["id"], 1)
+
+    def test_nothing_before_the_scan_after_1030_or_off_days(self):
         self.assertIsNone(bo.current_premarket_run(RUNS, TUE_830_ET))   # Monday's run is stale
+        self.assertIsNone(bo.current_premarket_run(RUNS, TUE_1030_ET))
         self.assertIsNone(bo.current_premarket_run(RUNS, TUE_NOON_ET))
         self.assertIsNone(bo.current_premarket_run(RUNS, MON_8PM_ET))
         self.assertIsNone(bo.current_premarket_run(RUNS, SAT))
@@ -198,9 +204,18 @@ class CardTests(unittest.TestCase):
         at, _ = self.render("basic", now=TUE_830_ET)   # before the 8:35 scan
         self.assertNotIn("Before the open", self.text(at))
 
-    def test_hidden_after_the_open_and_on_weekends(self):
-        for now in (TUE_NOON_ET, SAT):
-            self.assertNotIn("Before the open", self.text(self.render("pro", now=now)[0]))
+    def test_after_the_open_it_is_this_mornings_movers_until_1030(self):
+        t = self.text(self.render("pro", now=TUE_1000_ET)[0])
+        self.assertIn("This morning's pre-market movers", t)
+        self.assertNotIn("Before the open", t)
+        self.assertIn("**BBB** -10.00% pre-market", t)
+        self.assertIn("As of the 8:35 AM ET pre-market scan", t)
+
+    def test_hidden_from_1030_and_on_weekends(self):
+        for now in (TUE_1030_ET, TUE_NOON_ET, SAT):
+            t = self.text(self.render("pro", now=now)[0])
+            self.assertNotIn("Before the open", t)
+            self.assertNotIn("pre-market movers", t)
 
     def test_scan_without_premarket_columns(self):
         at, _ = self.render("pro", df=pd.DataFrame([{"Ticker": "A", "Last": 1.0}]))
