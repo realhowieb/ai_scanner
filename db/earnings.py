@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Iterable, Optional, Tuple
 
+from db.engine import schema_once
+
 
 def _norm_symbol(sym: str) -> str:
     """Normalize symbols for consistent DB keys and joins.
@@ -128,7 +130,23 @@ ON CONFLICT (symbol) DO UPDATE SET
 
 
 def ensure_earnings_table(conn=None) -> None:
+    """Create earnings_calendar and normalize legacy symbols, once per process and
+    database (P2-81: it ran on every read, two full-table UPDATEs each time).
+    New rows are written normalized, so the cleanup only matters for old data.
+    Closes the connection only when it opened it."""
     c = _get_conn(conn)
+    try:
+        _ensure_earnings_table_once(c)
+    finally:
+        if conn is None:
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
+@schema_once
+def _ensure_earnings_table_once(c) -> None:
     # Support both context-managed and plain connections
     with c.cursor() as cur:
         cur.execute(CREATE_EARNINGS_TABLE_SQL)
@@ -499,7 +517,20 @@ ON CONFLICT (refresh_key) DO UPDATE SET
 
 
 def ensure_earnings_refresh_log_table(conn=None) -> None:
+    """Once per process and database (P2-81). Closes only a connection it opened."""
     c = _get_conn(conn)
+    try:
+        _ensure_refresh_log_once(c)
+    finally:
+        if conn is None:
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
+@schema_once
+def _ensure_refresh_log_once(c) -> None:
     with c.cursor() as cur:
         cur.execute(CREATE_EARNINGS_REFRESH_LOG_SQL)
     try:
