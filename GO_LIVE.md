@@ -79,6 +79,7 @@ Separate Render web service (`hsf-api`), set up per [docs/API.md](docs/API.md):
 DATABASE_URL       # same Neon DB
 API_JWT_SECRET     # 32+ random characters; only on this service, never in chat or git
 API_CORS_ORIGINS   # comma-separated web origins; empty = no browser access
+SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM   # same Resend values; sign-up and reset emails
 ```
 
 - [ ] Health check path `/healthz`

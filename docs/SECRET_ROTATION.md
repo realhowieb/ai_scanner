@@ -37,7 +37,7 @@ into an issue.
 | `STRIPE_SECRET_KEY` | | | ✓ | | Billing API key. |
 | `STRIPE_WEBHOOK_SECRET` | | | ✓ | | Signs Stripe → billing webhooks. |
 | `API_JWT_SECRET` | | | ✓ | | `hsf-api` only. Signs app access tokens. `API_CORS_ORIGINS` is a setting, not a secret. |
-| `SMTP_USER`, `SMTP_PASS` (Resend) | ✓ | ✓ | ✓ | | Email. `SMTP_HOST/PORT/FROM` are settings. |
+| `SMTP_USER`, `SMTP_PASS` (Resend) | ✓ | ✓ | ✓ | | Email. `SMTP_HOST/PORT/FROM` are settings. On Render, set on both services (billing and `hsf-api`). |
 | `COOKIE_PASSWORD` | ✓ | | | | Encrypts the sign-in cookie. **See the warning below.** |
 | `APP_ENCRYPTION_KEY` | ✓ | | | | Encrypts users' saved Alpaca paper keys. **See the warning below.** |
 | `FMP_API_KEY`, `FINNHUB_API_KEY` | ✓ | ✓ | | | Earnings calendar. |

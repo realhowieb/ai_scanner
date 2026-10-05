@@ -2,7 +2,8 @@
 
 Endpoints (v1): GET /healthz · POST /v1/auth/login · POST /v1/auth/refresh ·
 POST /v1/auth/logout · GET /v1/me · GET /v1/today · GET /v1/scans/latest ·
-GET /v1/stocks/{ticker} · /v1/watchlists · /v1/alerts. Full list in docs/API.md;
+GET /v1/stocks/{ticker} · /v1/watchlists · /v1/alerts · sign-up, email
+verification, password reset/change, email preferences, billing links. Full list in docs/API.md;
 OpenAPI docs at /docs.
 """
 from __future__ import annotations
@@ -24,7 +25,8 @@ from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from api import models, store, tokens, user_data
+from api import account as acct
+from api import models, ratelimit, store, tokens, user_data
 from api.scans import json_safe
 from api.settings import Settings, load_settings
 
@@ -130,6 +132,16 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     def _conflict(_request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=409)
 
+    @app.exception_handler(acct.AccountError)
+    def _account_error(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=getattr(exc, "status", 400))
+
+    @app.exception_handler(acct.BillingUnavailable)
+    def _billing_down(_request: Request, exc: Exception) -> JSONResponse:
+        log.warning("billing service call failed: %s", str(exc)[:120])
+        return JSONResponse({"detail": "Billing is temporarily unavailable. Please try again in a minute."},
+                            status_code=502)
+
     @app.get("/readyz", response_model=models.Ready, responses={503: {"description": "Database unavailable"}})
     def readyz() -> Dict[str, Any]:
         """Readiness: the database answers, plus the latest market scan's age for
@@ -152,6 +164,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     _routes(app)
     _data_routes(app)
+    _account_routes(app)
     return app
 
 
@@ -210,7 +223,7 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/auth/login", response_model=models.TokenPair,
               responses={401: {"description": "Wrong email or password"}, 429: {"description": "Rate limited"},
                          503: {"description": "Database unavailable"}})
-    def login(body: LoginBody, request: Request) -> Dict[str, Any]:
+    def login(body: LoginBody, request: Request, _limited: None = Depends(ratelimit.limit("login"))) -> Dict[str, Any]:
         from db.users import is_login_rate_limited, record_login_attempt
 
         settings = _settings(request)
@@ -255,6 +268,7 @@ def _routes(app: FastAPI) -> None:
                 "name": account.get("full_name") or None,
                 "plan": ent["tier"], "plan_label": plan_label(ent["tier"]),
                 "is_admin": ent["is_admin"], "alert_limit": ent["alert_limit"],
+                "email_verified": acct.is_verified(str(account["username"]).strip().lower()),
                 "entitlements": ent["entitlements"]}
 
     @app.get("/v1/today", response_model=models.Today, responses={401: {"description": "Not signed in"}})
@@ -417,6 +431,127 @@ def _data_routes(app: FastAPI) -> None:
                      limit: int = Query(20, ge=1, le=100)) -> List[Dict[str, Any]]:
         """Your most recent fired alerts, newest first."""
         return json_safe(user_data.alert_events(_user(account), limit))
+
+
+class SignupBody(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=256)
+    username: str = Field(min_length=1, max_length=40, description="Shown in the app; can also be used to sign in on the web")
+    accept_terms: bool = Field(description="The usage agreement checkbox on the web sign-up form")
+    client: Optional[str] = Field(default=None, max_length=80)
+
+
+class TokenBody(BaseModel):
+    token: str = Field(min_length=10, max_length=128)
+
+
+class EmailBody(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
+class ResetConfirmBody(BaseModel):
+    token: str = Field(min_length=10, max_length=128)
+    new_password: str = Field(min_length=1, max_length=256)
+
+
+class PasswordChangeBody(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=1, max_length=256)
+
+
+class EmailPrefsUpdate(BaseModel):
+    digest: Optional[bool] = None
+    evening: Optional[bool] = None
+    alerts: Optional[bool] = None
+
+
+class CheckoutBody(BaseModel):
+    plan: str = Field(pattern="^(pro|premium)$")
+    interval: str = Field(default="month", pattern="^(month|year)$")
+
+
+class PortalBody(BaseModel):
+    flow: Optional[str] = Field(default=None, pattern="^cancel$", description="'cancel' opens the cancellation screen")
+
+
+_RESET_SENT = ("If that email is registered, a reset link has been sent. "
+               "Check your inbox (and spam folder).")
+
+
+def _account_routes(app: FastAPI) -> None:
+    @app.post("/v1/auth/signup", response_model=models.SignupResult, status_code=201,
+              responses={400: {"description": "Invalid input or password rule"}, 409: {"description": "Email or username taken"},
+                         429: {"description": "Too many sign-ups from this address"}})
+    def signup(body: SignupBody, request: Request, _l: None = Depends(ratelimit.limit("signup"))) -> Dict[str, Any]:
+        """Create a Free account (same rules as the web form) and sign in. A verification
+        email is sent; verifying is needed to upgrade and for alert emails."""
+        res = acct.signup(body.email, body.password, body.username, body.accept_terms)
+        return {**_token_pair(res["email"], _settings(request), body.client),
+                "email": res["email"], "verification_sent": res["verification_sent"]}
+
+    @app.post("/v1/auth/verify-email", response_model=models.Message,
+              responses={400: {"description": "Invalid or expired link"}})
+    def verify_email(body: TokenBody, _l: None = Depends(ratelimit.limit("verify"))) -> Dict[str, Any]:
+        """Confirm an email address with the token from the verification link."""
+        acct.verify_email(body.token)
+        return {"message": "Email verified."}
+
+    @app.post("/v1/me/verify-email", response_model=models.Message, responses={401: {"description": "Not signed in"}})
+    def resend_verification(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Send a new verification link to the signed-in account's email (3 per hour)."""
+        user = _user(account)
+        if acct.is_verified(user):
+            return {"message": "Your email is already verified."}
+        ratelimit.check("verify_resend", user)
+        if not acct.send_verification(user):
+            raise HTTPException(503, "We couldn't send the email right now. Try again later.")
+        return {"message": "Verification email sent. Check your inbox (and spam)."}
+
+    @app.post("/v1/auth/password-reset", response_model=models.Message, status_code=202,
+              responses={429: {"description": "Too many requests from this address"}})
+    def password_reset(body: EmailBody, _l: None = Depends(ratelimit.limit("password_reset"))) -> Dict[str, Any]:
+        """Email a reset link. Same answer whether or not the account exists."""
+        acct.request_password_reset(body.email)
+        return {"message": _RESET_SENT}
+
+    @app.post("/v1/auth/password-reset/confirm", response_model=models.Message,
+              responses={400: {"description": "Invalid link or password rule"}})
+    def password_reset_confirm(body: ResetConfirmBody, _l: None = Depends(ratelimit.limit("verify"))) -> Dict[str, Any]:
+        """Set a new password with the token from the reset link; signs the account out everywhere."""
+        acct.confirm_password_reset(body.token, body.new_password)
+        return {"message": "Password updated. You've been signed out on all devices; sign in with the new password."}
+
+    @app.post("/v1/me/password", response_model=models.TokenPair,
+              responses={400: {"description": "Wrong current password or password rule"}, 401: {"description": "Not signed in"}})
+    def change_password(body: PasswordChangeBody, request: Request,
+                        account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Change the password. Every other session (web and app) is signed out; this
+        device gets a new token pair."""
+        ratelimit.check("login", ratelimit.client_ip(request))
+        acct.change_password(account, body.current_password, body.new_password)
+        return _token_pair(_user(account), _settings(request), None)
+
+    @app.get("/v1/me/email-preferences", response_model=models.EmailPrefs, responses=_AUTH)
+    def email_prefs(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        return acct.get_email_prefs(_user(account))
+
+    @app.patch("/v1/me/email-preferences", response_model=models.EmailPrefs, responses=_AUTH)
+    def email_prefs_update(body: EmailPrefsUpdate, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        return acct.set_email_prefs(_user(account), body.model_dump(exclude_none=True))
+
+    @app.post("/v1/billing/checkout", response_model=models.BillingLink,
+              responses={**_AUTH, 403: {"description": "Verify your email first"},
+                         502: {"description": "Billing service unavailable"}})
+    def billing_checkout(body: CheckoutBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Stripe checkout for Pro or Premium (monthly or yearly when enabled). Existing
+        subscribers get Stripe's plan-change screen instead (mode=portal). Open the URL in a browser."""
+        return acct.checkout_url(_user(account), body.plan, body.interval)
+
+    @app.post("/v1/billing/portal", response_model=models.BillingLink,
+              responses={**_AUTH, 404: {"description": "No subscription yet"}, 502: {"description": "Billing service unavailable"}})
+    def billing_portal(body: PortalBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Stripe Customer Portal: payment method, invoices, plan, cancellation (flow=cancel)."""
+        return acct.portal_url(_user(account), body.flow)
 
 
 def _failing_app(message: str):
