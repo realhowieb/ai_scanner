@@ -5,7 +5,7 @@ clients can be generated from the OpenAPI schema.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -99,3 +99,127 @@ class Today(BaseModel):
     after_close: Optional[SessionCard] = None
     recap: Optional[Recap] = None
     errors: List[SectionError] = []
+
+
+# ---- step 5: scans and stock detail --------------------------------------------------------------
+class ScanSetup(Setup):
+    signals: List[str] = []
+    fading: bool = False
+    breakout_score: Optional[float] = None
+
+
+class LatestScan(BaseModel):
+    scan_at: Optional[str] = Field(default=None, description="ISO time of the market scan; null when none exists")
+    total: int = Field(description="Setups matching the filters, before the plan cap")
+    max_results: int = Field(description="Rows this plan sees (Free 25, Pro 100, Premium 200)")
+    limited: bool = Field(description="True when the plan cap hides some matching setups")
+    setups: List[ScanSetup] = []
+
+
+class LifecycleEvent(BaseModel):
+    time: Optional[str] = None
+    score: Optional[int] = None
+    status: Optional[str] = None
+    label: Optional[str] = None
+    movement: Optional[str] = None
+    delta: Optional[int] = None
+    signals: List[str] = []
+    signals_added: List[str] = []
+    signals_removed: List[str] = []
+
+
+class Bar(BaseModel):
+    date: str
+    open: Optional[float] = None
+    high: Optional[float] = None
+    low: Optional[float] = None
+    close: float
+    volume: Optional[float] = None
+
+
+class WatchlistRef(BaseModel):
+    id: int
+    name: str
+
+
+class Alert(BaseModel):
+    id: int
+    type: Literal["breakout", "watchlist", "price", "move", "rvol", "ema_cross", "ewo_cross"]
+    ticker: Optional[str] = None
+    threshold: Optional[float] = None
+    direction: Optional[str] = None
+    watchlist_only: bool = False
+    enabled: bool
+    last_fired_at: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class StockDetail(BaseModel):
+    ticker: str
+    scan_at: Optional[str] = Field(default=None, description="Latest market scan used")
+    in_latest_scan: bool = Field(description="The ticker had at least one row in that scan")
+    has_setup: bool = Field(description="It qualifies as an HSF setup (or has a recent recorded score)")
+    from_history: bool = Field(description="Score comes from the last recorded observation, not the latest scan")
+    price: Optional[float] = None
+    change_pct: Optional[float] = None
+    hsf_score: Optional[int] = None
+    status: Optional[str] = None
+    primary_setup: Optional[str] = None
+    signals: List[str] = []
+    score_components: Optional[Dict[str, float]] = None
+    movement: Optional[str] = Field(default=None, description="RISING, FALLING, UNCHANGED, NEW, NO_BASELINE or VERSION_CHANGED")
+    score_change: Optional[int] = None
+    reasons: List[str] = []
+    risks: List[str] = []
+    watch_next: List[str] = []
+    breakout_score: Optional[float] = None
+    prob: Optional[float] = Field(default=None, description="PreBreakout model output; null below Premium")
+    earnings_days: Optional[int] = None
+    history_summary: Optional[Dict[str, Any]] = None
+    historical_context: Optional[Dict[str, Any]] = Field(default=None, description="Matured outcomes for this score range")
+    outcome_cohort: Optional[Dict[str, Any]] = None
+    lifecycle: List[LifecycleEvent] = []
+    bars: List[Bar] = Field(default=[], description="Daily bars cached by the scans, oldest first (up to 120)")
+    bars_as_of: Optional[str] = None
+    watchlists: List[WatchlistRef] = Field(default=[], description="Your watchlists that hold this ticker")
+    alerts: List[Alert] = Field(default=[], description="Your alerts on this ticker")
+
+
+# ---- step 6: watchlists and alerts ---------------------------------------------------------------
+class Watchlist(BaseModel):
+    id: int
+    name: str
+    is_default: bool
+    symbol_count: int
+
+
+class WatchlistItem(BaseModel):
+    ticker: str
+    added_at: Optional[str] = None
+    price_when_added: Optional[float] = None
+    note: Optional[str] = None
+
+
+class WatchlistDetail(Watchlist):
+    items: List[WatchlistItem] = []
+
+
+class TickersResult(BaseModel):
+    added: List[str] = []
+    already_present: List[str] = []
+    invalid: List[str] = Field(default=[], description="Not valid ticker symbols; nothing was saved for them")
+
+
+class Alerts(BaseModel):
+    limit: int = Field(description="Alerts this plan may have (Free 1, Pro 5, Premium 25)")
+    used: int
+    email_enabled: bool = Field(description="Pro+ get alert emails; everyone gets in-app alerts")
+    alerts: List[Alert] = []
+
+
+class AlertEvent(BaseModel):
+    id: int
+    alert_id: Optional[int] = None
+    ticker: Optional[str] = None
+    message: str
+    fired_at: Optional[str] = None
