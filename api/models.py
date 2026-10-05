@@ -50,7 +50,8 @@ class Mover(BaseModel):
 
 
 class SessionCard(BaseModel):
-    """Before the open / After the close. Pro+; below Pro `locked` is true and `movers` empty."""
+    """Before the open (shown 8:35-10:30 ET) / After the close. Pro+; below Pro `locked`
+    is true and `movers` empty."""
     scan_at: Optional[str] = Field(default=None, description="ISO time of the session scan")
     locked: bool
     movers: List[Mover] = []
