@@ -110,10 +110,13 @@ def _due_price_alerts(conn) -> List[Dict[str, Any]]:
           AND a.ticker IS NOT NULL
           AND a.threshold IS NOT NULL
           AND (a.last_fired_at IS NULL
-               OR a.last_fired_at < NOW() - make_interval(hours => %s))
+               OR a.last_fired_at < NOW() - make_interval(secs => %s))
         ORDER BY a.user_id ASC, a.created_at DESC, a.id DESC
         """,
-        (THROTTLE_HOURS,),
+        # secs, not hours: make_interval(hours => ...) takes an integer, and
+        # THROTTLE_HOURS is a float, so "hours => 12.0" failed every pass with
+        # UndefinedFunction (first weekday run of Realtime Alerts, 2026-10-05).
+        (THROTTLE_HOURS * 3600.0,),
     )
     rows = cur.fetchall()
     cur.close()
