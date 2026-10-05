@@ -415,6 +415,41 @@ class FalsePositiveTests(unittest.TestCase):
         self.assertIn("COHORT_MISSING_IN_SCAN", codes(run(b)))
 
 
+class RetirementSpikeTests(unittest.TestCase):
+    """P2-79: alert on newly retired observations, not the total. The total is a
+    level over the latest N observations and doubled every Monday (2026-10-05:
+    406 vs 188) with nothing starved."""
+
+    def with_retired(self, total, new, prev_total=188, prev_new=60):
+        b = baseline()
+        b["maturation_report"]["retired"] = {"observations": total, "new_24h": new}
+        b["previous"]["subsystems"]["maturation"]["metrics"].update(
+            {"retired_observations": prev_total, "retired_new_24h": prev_new})
+        return run(b)
+
+    def test_monday_jump_in_the_total_is_not_a_spike(self):
+        r = self.with_retired(total=406, new=70)
+        self.assertNotIn("RETIREMENT_SPIKE", codes(r))
+        self.assertEqual(r["subsystems"]["maturation"]["metrics"]["retired_new_24h"], 70)
+
+    def test_jump_in_newly_retired_is_a_spike(self):
+        r = self.with_retired(total=420, new=260)
+        self.assertIn("RETIREMENT_SPIKE", codes(r))
+
+    def test_small_numbers_never_alert(self):
+        self.assertNotIn("RETIREMENT_SPIKE", codes(self.with_retired(total=90, new=90, prev_new=5)))
+
+    def test_reports_without_the_flow_do_not_alert(self):
+        b = baseline()
+        b["maturation_report"]["retired"] = {"observations": 900}
+        self.assertNotIn("RETIREMENT_SPIKE", codes(run(b)))
+
+    def test_first_report_with_the_flow_does_not_alert(self):
+        b = baseline()   # previous metrics predate P2-79 (no retired_new_24h)
+        b["maturation_report"]["retired"] = {"observations": 900, "new_24h": 400}
+        self.assertNotIn("RETIREMENT_SPIKE", codes(run(b)))
+
+
 class StoreAndScriptTests(unittest.TestCase):
     def test_snapshot_store_roundtrip(self):
         import sqlite3

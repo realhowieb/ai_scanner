@@ -260,11 +260,20 @@ class RetirementTests(unittest.TestCase):
             fetch_bars_batch=lambda s, a, b: fetched.extend(s) or {x: _bars() for x in s})
         self.assertEqual(sorted(fetched), ["MIXD", "NVDA"])
         self.assertEqual(r["retired"], {"observations": 2, "horizons": 8, "symbols": 1,
-                                        "retire_after_days": 6.0})
+                                        "retire_after_days": 6.0, "new_24h": 0})
         self.assertEqual(r["backlog"]["ready_symbols"], 2)
         self.assertEqual(r["eligible_observations"], 2)
         self.assertEqual(r["failures"], {})  # retirement is not a failure
         self.assertIn("Retired (window closed > 6.0d)", worker.render_report_text(r))
+
+    def test_newly_retired_counts_only_the_last_24h(self):
+        """P2-79: new_24h = the retirement line was crossed in the last day."""
+        just_crossed = "2026-08-19T06:00:00+00:00"   # 6 d 12 h before NOW
+        r = worker.mature_observations(
+            [_obs("NEWX", just_crossed), _obs("OLDX", self.OLD)], now=NOW, save_fn=lambda o: True,
+            fetch_bars_batch=lambda s, a, b: {})
+        self.assertEqual((r["retired"]["observations"], r["retired"]["new_24h"]), (2, 1))
+        self.assertIn("new_in_24h=1", worker.render_report_text(r))
 
     def test_already_matured_horizons_are_not_counted_as_retired(self):
         o = _obs("OLDX", self.OLD)
