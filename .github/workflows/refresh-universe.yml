@@ -5,6 +5,10 @@ name: Refresh Universe
 # new listings change slowly, and the live tradability filter already drops
 # delistings at scan time. Both scripts fail safe: if a fetch is bad, the file
 # is left unchanged.
+#
+# Commits go to dev, never main: main only moves by fast-forward promotion from
+# dev, so a bot commit on main would block the next promote. The new lists reach
+# the scheduled scans with the next promotion.
 
 on:
   schedule:
@@ -27,6 +31,8 @@ jobs:
         # Keeps the checkout credentials on purpose: this job commits and pushes
         # the refreshed universe files. No artifacts are uploaded from it.
         uses: actions/checkout@v7 # zizmor: ignore[artipacked]
+        with:
+          ref: dev
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -58,4 +64,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           git add sp500.txt nasdaq.txt
           git commit -m "Auto-refresh universe files (sp500 / nasdaq)"
-          git push
+          for attempt in 1 2 3; do
+            git pull --rebase origin dev && git push origin HEAD:dev && exit 0
+            sleep $((attempt * 5))
+          done
+          echo "::error::could not push the universe refresh to dev"
+          exit 1

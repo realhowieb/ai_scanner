@@ -7,12 +7,11 @@ name: Forward Evidence Readiness
 # does NOT trigger Run 55: when ready it only surfaces RUN55_RERUN_RECOMMENDED=true.
 #
 # Runs once per trading day after the final Mature Observations cycle (its cron
-# ends 22:30 UTC), plus manual dispatch.
+# ends 22:30 UTC). Started by cron-job.org (workflow_dispatch, weekdays 23:15
+# UTC; P2-69 dropped the GitHub schedule, which ran hours late), or by hand.
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "15 23 * * 1-5"
 
 permissions:
   contents: read
