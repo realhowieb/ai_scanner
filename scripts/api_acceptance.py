@@ -44,7 +44,20 @@ REQUIRED_PATHS = ["/healthz", "/v1/auth/login", "/v1/auth/refresh", "/v1/auth/lo
                   "/readyz", "/v1/auth/signup", "/v1/auth/verify-email", "/v1/auth/password-reset",
                   "/v1/auth/password-reset/confirm", "/v1/me/password", "/v1/me/verify-email",
                   "/v1/me/email-preferences", "/v1/billing/checkout", "/v1/billing/portal",
-                  "/v1/me/devices", "/v1/me/devices/{device_id}", "/v1/scans", "/v1/scans/{scan_id}"]
+                  "/v1/me/devices", "/v1/me/devices/{device_id}", "/v1/scans", "/v1/scans/{scan_id}",
+                  "/v1/runs", "/v1/runs/{run_id}", "/v1/track-record", "/v1/track-record/daily", "/v1/earnings",
+                  "/v1/brief", "/v1/day-trader", "/v1/day-trader/stair-steppers", "/v1/ai/summary", "/v1/ai/chat",
+                  "/v1/ai/notes/{ticker}", "/v1/ai/brief-narrative", "/v1/journal", "/v1/journal/{trade_id}",
+                  "/v1/journal/{trade_id}/close", "/v1/stocks/{ticker}/plan", "/v1/paper/account",
+                  "/v1/paper/activity", "/v1/paper/orders"]
+# Plan floor for each paid feature: (method, path, body, lowest plan that gets 2xx). AI is checked only
+# for refusals below Premium (a Premium call would spend money); paper only for status/activity.
+PAID_CHECKS = [("GET", "/v1/runs", None, "pro"), ("GET", "/v1/track-record", None, "pro"),
+               ("GET", "/v1/earnings?days=7", None, "pro"), ("GET", "/v1/day-trader?source=megacaps", None, "pro"),
+               ("GET", "/v1/journal", None, "basic"), ("GET", "/v1/brief", None, "basic"),
+               ("POST", "/v1/ai/summary", {}, "premium"), ("GET", "/v1/paper/account", None, "premium"),
+               ("GET", "/v1/paper/activity", None, "premium")]
+PLAN_ORDER = {"basic": 0, "pro": 1, "premium": 2, "admin": 3}
 SCAN_TIMEOUT_S = float(os.environ.get("API_SCAN_TIMEOUT_S", "300"))
 NEVER_FIRES = 999_999.0  # % move threshold no stock reaches
 
@@ -194,6 +207,15 @@ def journey(run: Run, s: Dict[str, Any], allow_writes: bool) -> None:
     run.check(A, "unknown ticker", c.status_code == 200 and not c.json().get("in_latest_scan"), f"HTTP {c.status_code}")
     c = run.req("GET", "/v1/stocks/bad%20ticker", headers=h).status_code
     run.check(A, "invalid ticker 422", c == 422, f"HTTP {c}")
+
+    for method, path, body, floor in PAID_CHECKS:
+        allowed = PLAN_ORDER[tier] >= PLAN_ORDER[floor]
+        if allowed and path.startswith("/v1/ai/"):
+            continue                       # don't spend AI calls in acceptance runs
+        r = run.req(method, path, headers=h, **({"json": body} if body is not None else {}))
+        ok = (200 <= r.status_code < 300 or (r.status_code == 503 and path.startswith("/v1/paper"))) if allowed \
+            else r.status_code == 403
+        run.check(A, f"plan gate {path.split('?')[0]} ({floor}+)", ok, f"HTTP {r.status_code} for {tier}")
 
     if not allow_writes:
         run.check(A, "watchlist/alert writes", None, "run without --allow-writes")

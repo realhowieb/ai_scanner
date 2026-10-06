@@ -1,5 +1,10 @@
 # API v1 client readiness / frontend migration gate (2026-10-06)
 
+> **Update (same day, after the paid-feature parity run): READY_FOR_WEB_V2 on the API side.**
+> The six blockers in section 6 now have APIs, plus account deletion (see the
+> addendum at the end). What remains is deployment configuration on hsf-api
+> (owner, P1-73) and the live acceptance run (P1-63).
+
 Question: could a completely separate frontend reproduce the core HSF AI customer
 experience using only the API, without Streamlit code or session state?
 
@@ -173,3 +178,43 @@ Smallest API run to reach READY_FOR_WEB_V2: **"API v1 paid-feature parity"**:
 snapshot), then AI summaries (Premium) and paper trading (Premium) as their own
 runs. In parallel, the owner adds the Alpaca keys to hsf-api and runs the live
 acceptance (P1-63).
+
+
+## Addendum: paid-feature parity (2026-10-06, later the same day)
+
+Every blocker from section 6 now has an API, with plan rules enforced on the server
+and the web's own code reused:
+
+| Capability (plan) | Status | API | Notes |
+|---|---|---|---|
+| Scan history (Pro) | READY | `GET /v1/runs`, `/v1/runs/{id}` | Ownership checked in SQL (the shared `load_run_results` doesn't) |
+| Historical research / track record (Pro) | READY | `GET /v1/track-record`, `/daily` | Descriptive, with the web's disclaimer |
+| Earnings calendar (Pro) | READY | `GET /v1/earnings` | DB only |
+| Market Brief (all plans) | READY | `GET /v1/brief` | Read-only: never writes opportunity snapshots or research rows; PreBreakout picks Premium |
+| Live Day Trader + stair-steppers (Pro) | READY | `GET /v1/day-trader`, `/stair-steppers` | Quotes shared 30 s, movers 2 min |
+| AI summary, chat, setup notes, brief narrative (Premium) | READY | `/v1/ai/*` | Same prompts, guardrails and daily limit as the web; shared answers cached per scan |
+| Journal (read all plans, write Pro) | READY | `/v1/journal` | Live P&L, stats |
+| Trade plan (Pro) | READY | `GET /v1/stocks/{ticker}/plan` | — |
+| Paper trading (Premium) | READY | `/v1/paper/account`, `/activity`, `/orders` | Own keys, encrypted, never returned; `confirm: true` per order; refused unless the endpoint is Alpaca's paper host |
+| Account deletion | READY | `DELETE /v1/me` + Settings | Blocked while a paid subscription is active and for admins; one transaction |
+
+Fixed along the way: `GET /v1/stocks/{ticker}` returned historical research to
+every plan; the web shows it from Pro. It is now redacted below Pro
+(`historical_locked: true`).
+
+Tests: `tests/test_api_paid_features.py` (27), `tests/test_account_deletion.py` (4);
+full suite with Postgres 2668 passed; smoke-style 2259 passed; Bandit clean.
+Isolated acceptance (external client, 5 plans): **238 PASS, 0 FAIL, 1 BLOCKED**
+(expired token, needs the server secret), including plan gates for every new
+endpoint. AI endpoints were exercised only with the model mocked (unit tests) and
+for refusals below Premium; no live model calls were made.
+
+**Verdict: READY_FOR_WEB_V2** (API side). Before Web v2 ships against production,
+set on hsf-api (P1-73): `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` (scans, Day
+Trader, quotes), `ANTHROPIC_API_KEY` (AI), `APP_ENCRYPTION_KEY` (paper keys), move
+it off the free plan, then run the live acceptance (P1-63).
+
+**Recommended next run: Web v2 foundation.** Next.js (or Expo web, per P1-58)
+app shell with sign-in/refresh, the API client generated from `/openapi.json`,
+and the first three screens from the design canvas: Today, Scanner (latest scan +
+Custom Scan with job polling) and Stock Intelligence.
