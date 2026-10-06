@@ -16,7 +16,7 @@ import logging
 import re
 import time
 import uuid
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +26,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from api import account as acct
-from api import models, ratelimit, store, tokens, user_data
+from api import devices, models, ratelimit, store, tokens, user_data
 from api.scans import json_safe
 from api.settings import Settings, load_settings
 
@@ -132,6 +132,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     def _conflict(_request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=409)
 
+    @app.exception_handler(devices.InvalidDevice)
+    def _bad_device(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
     @app.exception_handler(acct.AccountError)
     def _account_error(_request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=getattr(exc, "status", 400))
@@ -165,6 +169,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     _routes(app)
     _data_routes(app)
     _account_routes(app)
+    _device_routes(app)
     return app
 
 
@@ -176,6 +181,11 @@ class LoginBody(BaseModel):
 
 class RefreshBody(BaseModel):
     refresh_token: str = Field(min_length=20, max_length=200)
+
+
+class LogoutBody(RefreshBody):
+    push_token: Optional[str] = Field(default=None, max_length=600,
+                                      description="This device's push token, so it stops getting this account's pushes")
 
 
 def _settings(request: Request) -> Settings:
@@ -248,6 +258,8 @@ def _routes(app: FastAPI) -> None:
         status, username = store.use_refresh_token(tokens.hash_refresh_token(body.refresh_token))
         if status == "reused":
             log.warning("refresh token reuse: all sessions revoked for one account")
+            if username:
+                devices.remove_all(username)  # P1-64: no pushes to a possibly stolen session
         elif status == "grace":
             log.info("refresh token retried within the grace window")
         account = store.get_account(username) if status in ("ok", "grace") and username else None
@@ -256,8 +268,10 @@ def _routes(app: FastAPI) -> None:
         return _token_pair(str(account["username"]).strip().lower(), settings, None)
 
     @app.post("/v1/auth/logout", status_code=204)
-    def logout(body: RefreshBody) -> None:
-        store.revoke_refresh_token(tokens.hash_refresh_token(body.refresh_token))
+    def logout(body: LogoutBody) -> None:
+        username = store.revoke_refresh_token(tokens.hash_refresh_token(body.refresh_token))
+        if username and body.push_token:
+            devices.remove_token(username, body.push_token.strip())
 
     @app.get("/v1/me", response_model=models.Me, responses={401: {"description": "Not signed in"}})
     def me(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
@@ -552,6 +566,47 @@ def _account_routes(app: FastAPI) -> None:
     def billing_portal(body: PortalBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Stripe Customer Portal: payment method, invoices, plan, cancellation (flow=cancel)."""
         return acct.portal_url(_user(account), body.flow)
+
+
+class DeviceBody(BaseModel):
+    push_token: str = Field(min_length=10, max_length=600, description="Token from APNs, FCM or Expo")
+    platform: Literal["ios", "android"]
+    provider: Optional[Literal["apns", "fcm", "expo"]] = Field(
+        default=None, description="Default: expo for Expo tokens, apns on iOS, fcm on Android")
+    device_name: Optional[str] = Field(default=None, max_length=80, description="Shown in the app's device list")
+    app_version: Optional[str] = Field(default=None, max_length=40)
+
+
+def _device_out(d: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(d)
+    for k in ("created_at", "last_seen_at"):
+        if isinstance(out.get(k), (dt.datetime, dt.date)):
+            out[k] = out[k].isoformat()
+    return out
+
+
+def _device_routes(app: FastAPI) -> None:
+    """P1-64: push devices. Register at every app start and after each sign-in,
+    sign-up or password change (all sessions signed out also removes devices);
+    re-registering the same token is a no-op apart from last_seen_at."""
+
+    @app.post("/v1/me/devices", response_model=models.Device,
+              responses={**_AUTH, 400: {"description": "Not a push token for that provider"}})
+    def device_register(body: DeviceBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        token = body.push_token.strip()
+        provider = devices.resolve_provider(token, body.platform, body.provider)
+        name = (body.device_name or "").strip() or None
+        version = (body.app_version or "").strip() or None
+        return _device_out(devices.register(_user(account), token, provider, body.platform, name, version))
+
+    @app.get("/v1/me/devices", response_model=List[models.Device], responses=_AUTH)
+    def device_list(account: Dict[str, Any] = Depends(current_account)) -> List[Dict[str, Any]]:
+        return [_device_out(d) for d in devices.list_devices(_user(account))]
+
+    @app.delete("/v1/me/devices/{device_id}", status_code=204, responses=_OWNED)
+    def device_remove(device_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> None:
+        if not devices.remove(_user(account), device_id):
+            raise user_data.NotFound("device")
 
 
 def _failing_app(message: str):

@@ -254,3 +254,13 @@ class EmailPrefs(BaseModel):
 class BillingLink(BaseModel):
     url: str = Field(description="Stripe-hosted page to open in the browser")
     mode: Literal["checkout", "portal"]
+
+
+class Device(BaseModel):
+    id: int = Field(description="Use with DELETE /v1/me/devices/{id}")
+    provider: Literal["apns", "fcm", "expo"]
+    platform: Literal["ios", "android"]
+    device_name: Optional[str] = None
+    app_version: Optional[str] = None
+    created_at: Optional[str] = None
+    last_seen_at: Optional[str] = None

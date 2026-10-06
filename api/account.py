@@ -151,6 +151,9 @@ def _set_password_and_sign_out(username: str, new_password: str, reason: str) ->
     except Exception:
         pass
     revoke_all_refresh_tokens(username, reason)
+    from api.devices import remove_all
+
+    remove_all(username)  # P1-64: signed-out phones stop getting this account's pushes
 
 
 def confirm_password_reset(token: str, new_password: str) -> str:
