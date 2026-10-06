@@ -4,10 +4,11 @@ The new web frontend: Next.js (App Router) + TypeScript, built entirely on the H
 API (`hsf-api`). It runs **beside** the Streamlit app; Streamlit, its landing page and
 the production domain are unchanged.
 
-Screens in this foundation: **Sign in**, **Today**, **Scanner** (latest scan) with
-**Custom scan**, and **Stock Intelligence**. Everything else (watchlists, alerts,
-Day Trader, journal, billing pages, sign-up, password reset) still lives in the
-Streamlit app, linked from the account menu ("Open classic app") and the sign-in page.
+Screens: **Sign in**, **Today**, **Scanner** (latest scan) with **Custom scan**,
+**Stock Intelligence**, **Watchlists** and **Alerts**, plus "Save to watchlist" (Scanner
+rows, stock page) and "Set price alert" (stock page). Everything else (Day Trader, Market
+Brief, journal, billing pages, sign-up, password reset) still lives in the Streamlit app,
+linked from the account menu ("Open classic app") and the sign-in page.
 
 ## How it talks to the API
 
@@ -73,6 +74,16 @@ Screenshots at desktop and phone sizes against a running server, with a test acc
 ```
 BASE_URL=http://localhost:3000 HSF_TEST_EMAIL=<test account> HSF_TEST_PASSWORD_FILE=<file> \
   STOCK=AAPL OUT_DIR=screenshots npm run screenshots
+```
+
+The whole daily journey (sign in → Scanner → stock → save to a new watchlist → price
+alert → sign out and back in → isolation → cleanup) as a browser check, against any
+deployment, with dedicated test accounts. It names everything `zz-e2e-<run>`, uses a
+price alert that can't fire, and deletes only what it created:
+
+```
+BASE_URL=https://<web v2> HSF_TEST_EMAIL=<test account> HSF_TEST_PASSWORD_FILE=<file> \
+  [HSF_TEST_EMAIL_2=<second test account>] OUT_DIR=screenshots node scripts/journey.mjs
 ```
 
 ## Deploy on Render (not done yet; needs the owner)

@@ -1,10 +1,22 @@
-# Web v2 Foundation + Production API Acceptance Gate (2026-10-06)
+# Web v2 Foundation, Daily Workflow + Production API Acceptance Gate (2026-10-06)
 
-**Result: Web v2 foundation built and verified locally and in an isolated environment.
-Production: unauthenticated checks PASS (after the owner allowed `hsf-api.onrender.com`
-in this environment's network settings); signed-in acceptance BLOCKED (no test
-credentials, no Render access). Streamlit is unchanged and still
-serves all production traffic.
+## Current verdict (latest; supersedes earlier statements below)
+
+**Web v2 covers the daily customer journey: sign in → find a setup → inspect the stock →
+save it to a watchlist → create an alert → return later.** It passes in an isolated
+environment (real API code, local Postgres, synthetic data, the production build in
+Chromium: 12/12 journey steps, 4/4 custom-scan checks) and in 73 frontend and 2672 Python
+tests.
+
+**Production: unauthenticated checks PASS; every signed-in check is BLOCKED** on test
+accounts (no `ACC_*` credentials in this environment). The owner has signed in to Web v2
+locally against production by hand; that isn't recorded evidence.
+
+**Not live yet:** this branch (PR #8) isn't merged or promoted. Two API additions the new
+screens use, `DELETE /v1/scans/{id}` (cancel) and `GET /v1/alerts/types`, exist only
+here. Until it's promoted, Web v2 against production can't cancel a scan, and its alert
+forms show a "needs the latest API" note instead of breaking. Streamlit is unchanged and
+still serves all production traffic.
 
 Evidence levels used below:
 
@@ -12,25 +24,20 @@ Evidence levels used below:
 - **Isolated**: the real API code (`api.main:create_app`) on a local Postgres with
   synthetic data (tickers `T000`–`T299`, made-up prices), price downloads mocked, driven
   through the real Web v2 production build in Chromium. Not production evidence.
-- **Production**: none. Every production check is BLOCKED.
+- **Live (production)**: requests to `https://hsf-api.onrender.com` from this
+  environment, unauthenticated only.
 
-## 1. P0: production API readiness
+## 1. P0: production API readiness (as of the latest check)
 
 | Check | Result | Evidence / dependency |
 |---|---|---|
-| `GET /healthz` | PASS | 200 (first call 42.8 s: the free plan was asleep and woke up; see Hosting). |
-| `GET /readyz` | PASS | 200 `{"ok":true,"database":"ok"}`, latest market scan 19.8 minutes old. |
-| `GET /openapi.json` | PASS | Live spec is **identical** to `web/openapi.json` (48 paths, every schema equal), so the generated client matches production. |
-| Data routes without a token | PASS | `/v1/me`, `/v1/today`, `/v1/scans/latest`, `/v1/stocks/AAPL` → 401. Responses carry `X-Request-ID`. |
-| Endpoints for the first three screens | Signed-in: BLOCKED (no test accounts); PASS (isolated) | `/v1/auth/login`, `/refresh`, `/logout`, `/v1/me`, `/v1/today`, `/v1/scans/latest`, `POST /v1/scans`, `GET /v1/scans/{id}`, `GET /v1/scans`, `/v1/stocks/{ticker}`, `/v1/watchlists`, `/v1/billing/checkout`: all exercised through the BFF against the isolated API. |
-| CORS for the frontend origin | N/A by design; PASS (no CORS for an unknown origin: preflight 405, no `Access-Control-Allow-Origin`) | Web v2 calls the API from its own server (BFF), never from the browser, so `API_CORS_ORIGINS` is **not needed** and should stay empty. |
-| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | BLOCKED | No Render access from here. Owner item P1-73 (still open per the backlog): needed for custom scans, the US market list, Day Trader and quotes. |
-| `ANTHROPIC_API_KEY` | BLOCKED | P1-73. Not used by the three screens; `/v1/ai/*` answers 503 without it. |
-| `APP_ENCRYPTION_KEY` | BLOCKED | P1-73 (same value as Streamlit). Not used by the three screens (paper trading). |
-| `API_SCAN_WORKERS` | BLOCKED | Optional; default 1 is right for the current instance size. |
-| `API_CORS_ORIGINS` | N/A | See CORS above. |
-| Hosting | FAIL (likely) | The 42.8 s first response on 2026-10-06 looks like a free-plan wake-up, so `hsf-api` is probably still on Render's free plan (sleeps after 15 min, 512 MB). A US market custom scan needs Starter or more (P1-73). Not changed: no authorization to change hosting. |
-| `scripts/api_acceptance.py` against production | BLOCKED | Network access now works; still needs the five `ACC_*` test accounts as environment variables (P1-63). Not run. |
+| `GET /healthz`, `GET /readyz` | PASS | 200; database ok. The latest check found the newest market scan 178 minutes old (16:40 UTC). The first call of the day took 42.8 s (free-plan wake-up). |
+| `GET /openapi.json` vs this branch | PASS with 2 expected gaps | Every live operation is in `web/openapi.json`. Missing on production, because they ship in this PR: `DELETE /v1/scans/{scan_id}`, `GET /v1/alerts/types`. |
+| Data routes without a token | PASS | `/v1/me`, `/v1/today`, `/v1/scans/latest`, `/v1/stocks/AAPL`, `/v1/watchlists`, `/v1/alerts`, `/v1/alerts/events` → 401, with `X-Request-ID`. |
+| Signed-in journey (sign-in, Today, Scanner, Stock, Custom scan, watchlists, alerts) | **BLOCKED** (live); PASS (isolated) | Needs dedicated test accounts as environment variables (`HSF_TEST_EMAIL`, `HSF_TEST_PASSWORD_FILE`, optional `HSF_TEST_EMAIL_2`) for `web/scripts/journey.mjs`, and the five `ACC_*` accounts for `scripts/api_acceptance.py`. |
+| CORS | N/A by design; PASS | Web v2 calls the API from its server (BFF). An unknown origin's preflight gets no `Access-Control-Allow-Origin`. The owner deleted a misspelled `API_CORS_ORGINS`; `API_CORS_ORIGINS` isn't needed. |
+| hsf-api configuration | PASS (owner screenshot) | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `ANTHROPIC_API_KEY`, `APP_ENCRYPTION_KEY` are set, and `API_SCAN_WORKERS=1`. Values weren't viewed. |
+| Hosting | FAIL (known) | hsf-api is on Render's free plan (owner confirmed): it sleeps after 15 min and has 512 MB. Restarts lose queued scans, and big lists can run out of memory. Move to Starter (P1-73). Not changed: no authorization to change hosting. |
 
 ## 2. What was built (`web/`)
 
@@ -156,7 +163,7 @@ and cut at 2,600 px):
 | Stock Intelligence (Pro, chart) | `stock-desktop.webp` | `stock-mobile.webp` |
 | Stock Intelligence (Free, historical locked) | `free-stock-desktop.webp` | `free-stock-mobile.webp` |
 
-## 5. Deployment and configuration requirements
+## 5. Deployment and configuration requirements (foundation run; current list in "Production blockers" below)
 
 Web v2 isn't deployed; that needs the owner. Steps are in `web/README.md` (Render web
 service, root `web`, `npm ci && npm run build`, `npm start`, health `/login`, env
@@ -175,17 +182,16 @@ Before Web v2 is used against production:
    domain and routing as they are.
 4. `API_CORS_ORIGINS`: leave empty (the BFF doesn't need it).
 
-## 6. Remaining gaps (not in this run)
+## 6. Remaining gaps (as of the foundation run; see the daily-workflow run for updates)
 
-- Screens still only in Streamlit: watchlists, alerts, Day Trader, Market Brief, scan
-  history and track record, earnings, AI notes and chat, journal and paper trading,
-  settings and billing, sign-up, password reset, email verification. Their APIs exist.
-- Watchlist add and price alert from the Stock and Scanner pages (APIs exist; buttons
-  not built yet).
+- Screens still only in Streamlit: Day Trader, Market Brief, scan history and track
+  record, earnings, AI notes and chat, journal and paper trading, settings and billing,
+  sign-up, password reset, email verification. Their APIs exist. (Watchlists and Alerts
+  were added in the daily-workflow run below.)
 - CSV export (client-side from rows).
 - After Stripe checkout, customers return to the Streamlit app (`APP_SUCCESS_URL`).
 
-## 7. Recommended next run
+## 7. Recommended next run (superseded by the daily-workflow run's recommendation)
 
 **"Web v2 beta deploy + production acceptance"**, once P1-73 and P1-63 are done:
 deploy `hsf-web-beta` from `dev`, run `scripts/api_acceptance.py` and
@@ -199,8 +205,8 @@ APIs already.
 
 The owner's first production custom scan stayed at "Queued, waiting for a scanner".
 The API had accepted it, but its single scan worker never started it: either the worker
-was busy (without the Alpaca keys, P1-73, downloads fall back to slow one-by-one calls)
-or hsf-api restarted and lost its in-process queue. Such a job used to block the account
+was busy, or (most likely, since the Alpaca keys turned out to be set) hsf-api restarted
+on the free plan and lost its in-process queue. Such a job used to block the account
 for 60 minutes. Three fixes:
 
 | Fix | What changed | Evidence |
@@ -209,4 +215,82 @@ for 60 minutes. Three fixes:
 | Faster recovery after a restart | Each API process marks the jobs it holds (queued or running) as alive every 30 s. A job left by a dead process expires after 3 minutes (was 60 queued / 20 running) with "The scan was interrupted because the service restarted. Start it again."; a job waiting in line keeps its heartbeat and never expires. | Postgres tests (heartbeat keeps a 30-min wait queued; no heartbeat → failed). Isolated end to end: API process killed mid-queue → job cleared 170 s after the restart, new scan accepted. |
 | Clearer waiting in Web v2 | The progress card shows "Waiting for 1m 05s" / "Running for …", a **Cancel scan** button, and after 60 s queued a note saying why it may be slow and suggesting a smaller list. A cancelled scan shows "Scan cancelled" with a fresh start. The page scrolls to the status when a scan starts (it was off-screen below the Start button). | `tests/scanJob.test.tsx`, `tests/screens.test.tsx` (54 Vitest tests in all). Chromium check at 1440 px and 390 px. |
 
-Still needed for large lists in production: P1-73 (Alpaca keys, and Starter for memory).
+Still needed for large lists in production: Starter for hsf-api (P1-73; the keys are set).
+
+
+## Daily workflow run: Watchlists, Alerts and live journey validation (2026-10-06, later)
+
+### Built
+
+| Area | What |
+|---|---|
+| Watchlists screen (`/watchlists`) | List, create (optionally as default), rename, make default and delete. Delete is confirmed and names what goes. Each list shows its tickers with notes: add one or many (the server reports added, already present and invalid), edit notes (500 characters), and remove a ticker (confirmed). Tickers open Stock Intelligence. The HSF Score and price come from **one** latest-scan request, labelled with the scan time, and appear only for tickers among the plan's ranked rows; others say "Not ranked in the latest scan". No per-ticker requests and no live quotes. "N of 50" shows the limit. |
+| Save to watchlist | A "+" on every Scanner row (table and phone cards) and a button on Stock Intelligence. The dialog lists your watchlists and marks the ones that already hold the ticker (from `/v1/stocks`). It can also create a new list and save in one step, and it reports "Saved" or "Already in it" from the server's answer. |
+| Alerts screen (`/alerts`) | Your alerts with "Using N of M on your plan", each with a description, last fired and created times, Turn on/off and Delete (confirmed). Recently fired events show, with an empty state. The New alert form is built from the API's rules. At the limit it is replaced by a clear next step (Upgrade from Free or Pro; "delete one" on Premium). Delivery: an email toggle (`/v1/me/email-preferences`) for Pro+, Upgrade for Free, and the note "Phone push notifications aren't available yet." |
+| Price alert from Stock Intelligence | A dialog prefilled with the ticker, direction "Rises above" and the last scan price, labelled with the scan time, "not a live quote". It checks the alert quota first. |
+| API: `GET /v1/alerts/types` | Read-only. Each alert type with its label, description, whether it needs a ticker, the threshold minimum (exclusive or not), maximum and default, and the allowed directions. These are the same `ALERT_RULES` that `POST /v1/alerts` enforces, so forms never copy the rules. Before this API is deployed, the forms show a note instead of breaking. |
+| Shared | An accessible dialog (`role="dialog"`, `aria-modal`, focus moves in and back to the opener, Tab stays inside, Escape and backdrop close). Mutations update the UI only after the server confirms, then reload the affected data. Failures keep the previous state and show the message with its support code. Nav adds Watchlists and Alerts and wraps on phones. Plan labels still come from `/v1/me`. |
+
+### Validation
+
+**Local**
+| Check | Result |
+|---|---|
+| Vitest | PASS: 73 tests in 6 files. `tests/workflows.test.tsx` (19) runs against an in-memory fake that follows the API's rules. It covers watchlist CRUD; duplicate name inside the dialog; rename and default; delete with Keep it and Delete; failed delete keeping the list and showing the support code; add with already present and invalid; notes; remove; one scan request for scores. Save from a Scanner row and from Stock Intelligence (already present, create and save). Alert validation before sending; duplicate (409); server 422; web defaults; on/off; delete; failed toggle; limit; email toggle; no push promise; empty history; session expiry handing over once; the not-deployed-yet fallback; Escape and focus return. |
+| Python | PASS: 2672 passed. New: `/v1/alerts/types` matches the rules POST enforces (every advertised minimum, and anything below it refused); the web test fixture equals the API's output. |
+| Typecheck, lint, production build, OpenAPI contract (`web/openapi.json` and `src/api/schema.d.ts` regenerated, 49 paths) | PASS |
+
+**Isolated** (`web/scripts/journey.mjs` through the BFF; Pro account plus a Premium account for isolation)
+| Step | Result |
+|---|---|
+| Sign in; session survives reload and navigation | PASS |
+| Find a setup on the Scanner, save it to a new watchlist from the row | PASS |
+| Stock Intelligence shows the list; saving again → "Already in it" | PASS |
+| Price alert from the stock page at a non-firing $999,999 | PASS |
+| Duplicate alert refused with the server's message and support code | PASS |
+| Watchlist: note saved; duplicate and invalid tickers reported | PASS |
+| Alerts: capacity shown; turned off | PASS |
+| Return later: sign out (protected pages go to sign-in), sign back in, list, note and alert state all still there | PASS |
+| Phone layout (390 px): watchlist, alerts, save dialog, no sideways scroll | PASS |
+| A second account sees neither the list nor the alert | PASS |
+| Clean up through the UI (confirmed deletes); database check: 0 test lists, 0 test alerts left | PASS |
+| Custom scan: progresses and completes with results | PASS |
+| Reload or second tab resumes the running scan instead of starting another | PASS |
+| Cancel frees the account to start another scan | PASS |
+| API process killed mid-scan → the page shows "The scan was interrupted because the service restarted. Start it again." (177 s after the API came back) | PASS |
+
+403, 409, 429 and 503 UI states are covered by unit tests (`tests/scanJob.test.tsx`,
+`tests/screens.test.tsx`, `tests/workflows.test.tsx`), not forced in the isolated run.
+
+**Live (production)**: section 1 at the top. Unauthenticated checks PASS; the signed-in
+journey is BLOCKED on test accounts.
+
+### Screenshots (`docs/screenshots/web-v2/`, synthetic isolated data)
+
+| Screen | Desktop | Mobile |
+|---|---|---|
+| Watchlists (ticker, note, score from the scan) | `watchlists-desktop.webp` | `watchlists-mobile.webp` |
+| Alerts (capacity, off, empty history, email toggle) | `alerts-desktop.webp` | `alerts-mobile.webp` |
+| Save to watchlist from the Scanner | `scanner-save-desktop.webp` | `save-dialog-mobile.webp` |
+| Price alert from Stock Intelligence | `stock-price-alert-desktop.webp` | |
+| Stock Intelligence with its list and alert | `stock-actions-desktop.webp` | |
+| Custom scan interrupted by a restart | `custom-scan-interrupted-desktop.webp` | |
+
+### Production blockers (exact, current)
+
+1. **Merge PR #8 into dev and promote to main.** Render deploys hsf-api from main, and it
+   needs cancel and `/v1/alerts/types`. Promotion happens only when the owner says "promote".
+2. **Move hsf-api to Starter** (P1-73). The keys are already set.
+3. **Test accounts for live acceptance** (P1-63): `ACC_FREE`, `ACC_PRO`, `ACC_PRO2`,
+   `ACC_PREMIUM`, `ACC_ADMIN` (`_EMAIL` / `_PASSWORD`) for `scripts/api_acceptance.py`,
+   and one or two of them for `web/scripts/journey.mjs` (`HSF_TEST_EMAIL`,
+   `HSF_TEST_PASSWORD_FILE`, `HSF_TEST_EMAIL_2`), set as environment variables here.
+4. **A deployed Web v2** (Render web service from `dev`, steps in `web/README.md`) to
+   run the journey against, rather than a laptop.
+
+### Recommended next run
+
+**"Web v2 beta deploy + live acceptance"** once blockers 1–3 are done. Deploy
+`hsf-web-beta`, then run `scripts/api_acceptance.py --allow-writes` and
+`web/scripts/journey.mjs` against production with the test accounts, and fix what they
+find. Next screens after that: Market Brief and Day Trader.
