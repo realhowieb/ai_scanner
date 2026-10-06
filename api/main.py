@@ -780,6 +780,14 @@ def _market_routes(app: FastAPI) -> None:
         wanted = [t for t in (tickers or "").split(",") if t.strip()][:500]
         return market.earnings(days, wanted)
 
+    @app.get("/v1/brief", response_model=models.Brief, responses=_AUTH, summary="Market Brief")
+    def brief(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The web's Market Brief (same builder as the morning email): market backdrop, top
+        opportunities with movement, gappers, movers, setups and catalysts. Cached 5 minutes.
+        PreBreakout picks and model fields are Premium. AI narrative: /v1/ai (Premium);
+        historical scorecard: /v1/track-record (Pro); your alerts: /v1/alerts/events."""
+        return json_safe(market.brief(entitlements_for(account)["entitlements"]))
+
 
 def _failing_app(message: str):
     """ASGI app that refuses to start with `message`, so uvicorn logs

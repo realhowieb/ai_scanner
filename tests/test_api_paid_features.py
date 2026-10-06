@@ -116,6 +116,63 @@ class EarningsTests(PaidApiTestCase):
         self.assertEqual(self.get("pro@example.com", "/v1/earnings?days=31").status_code, 422)
 
 
+class BriefTests(PaidApiTestCase):
+    DATA = {"gappers": [{"ticker": "MSFT ⚠️E3d", "last": 400.0, "chg_pct": 2.0, "gap_pct": 3.1}],
+            "golden": ["AAPL"], "top_setups": [("NVDA", 91.5)],
+            "picks": [{"symbol": "AMD ⚠️E1d", "prob": 77.0}], "earnings_today": ["ORCL"],
+            "market_close": [("S&P 500 (SPY)", 580.0, 0.4)], "gainers": [("TSLA", 5.0)], "losers": [("INTC", -3.0)],
+            "breadth": (300, 200), "sectors": [("Tech", 1.2)], "snapshot_time": "2026-10-06T13:35:00+00:00"}
+
+    def setUp(self):
+        super().setUp()
+        from api.today import _cache as cache
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def _get(self, email):
+        with mock.patch("ui.market_brief._compute_brief", return_value=dict(self.DATA)), \
+                mock.patch("ui.market_brief._market_phase", return_value="regular"), \
+                mock.patch("ui.opportunities.build_opportunities",
+                           return_value=[{"ticker": "NVDA", "score": 91, "prob": 0.8, "signals": ["prebreakout"]}]), \
+                mock.patch("ui.opportunities.compare_opportunities", side_effect=lambda o, p: o), \
+                mock.patch("db.opportunity_snapshots.load_previous_opportunity_snapshot", return_value=None), \
+                mock.patch("db.opportunity_snapshots.save_opportunity_snapshot") as save, \
+                mock.patch("db.signal_outcomes.freeze_opportunities") as freeze:
+            r = self.get(email, "/v1/brief")
+        self.assertFalse(save.called or freeze.called, "the API must not write research/snapshot rows")
+        return r
+
+    def test_shape_and_earnings_flags(self):
+        r = self._get("prem@example.com")
+        self.assertEqual(r.status_code, 200, r.text)
+        b = r.json()
+        self.assertTrue(b["available"])
+        self.assertEqual(b["gappers"][0]["ticker"], "MSFT")
+        self.assertEqual(b["gappers"][0]["earnings_days"], 3)
+        self.assertEqual(b["prebreakout_picks"], [{"ticker": "AMD", "prob": 77.0, "earnings_days": 1}])
+        self.assertEqual(b["breadth"], {"advancers": 300, "decliners": 200})
+        self.assertEqual(b["top_breakout_scores"], [{"ticker": "NVDA", "score": 91.5}])
+        self.assertEqual(b["market"][0]["label"], "S&P 500 (SPY)")
+        self.assertFalse(b["prebreakout_locked"])
+
+    def test_premium_content_redacted_below_premium(self):
+        from api.today import _cache as cache
+
+        b = self._get("pro@example.com").json()
+        self.assertEqual(b["prebreakout_picks"], [])
+        self.assertTrue(b["prebreakout_locked"])
+        self.assertTrue(all(o.get("prob") is None and "prebreakout" not in (o.get("signals") or [])
+                            for o in b["opportunities"]))
+        cache.clear()
+        self.assertTrue(self._get("free@example.com").json()["available"])   # the brief itself is every plan
+
+    def test_no_snapshot_yet(self):
+        with mock.patch("ui.market_brief._compute_brief", return_value=None):
+            b = self.get("free@example.com", "/v1/brief").json()
+        self.assertEqual(b["available"], False)
+
+
 @unittest.skipUnless(PG_URL, "set HSF_TEST_PG_URL to a throwaway Postgres to run")
 class OwnedRunPostgresTests(unittest.TestCase):
     def test_owned_run_checks_the_owner(self):

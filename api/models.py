@@ -369,3 +369,48 @@ class EarningsItem(BaseModel):
     earnings_date: Optional[str] = Field(default=None, description="YYYY-MM-DD")
     days_until: Optional[int] = None
     time: Optional[str] = Field(default=None, description="bmo / amc / … when known")
+
+
+class BriefIndex(BaseModel):
+    label: str
+    last: Optional[float] = None
+    chg_pct: Optional[float] = None
+
+
+class BriefMover(BaseModel):
+    ticker: str
+    chg_pct: Optional[float] = None
+
+
+class BriefGapper(BaseModel):
+    ticker: str
+    last: Optional[float] = None
+    chg_pct: Optional[float] = None
+    gap_pct: Optional[float] = None
+    earnings_days: Optional[int] = Field(default=None, description="Earnings in N days, when imminent")
+
+
+class BriefPick(BaseModel):
+    ticker: str
+    prob: Optional[float] = None
+    earnings_days: Optional[int] = None
+
+
+class Brief(BaseModel):
+    available: bool = Field(description="False until the day's first scan snapshot exists")
+    snapshot_time: Optional[str] = None
+    phase: Optional[str] = Field(default=None, description="premarket / regular / afterhours / closed")
+    market: List[BriefIndex] = []
+    breadth: Optional[Dict[str, int]] = Field(default=None, description="{advancers, decliners} in the snapshot")
+    sectors: List[Dict[str, Any]] = Field(default=[], description="[{sector, chg_pct}] best first")
+    opportunities: List[Dict[str, Any]] = Field(default=[], description="Top opportunities with movement since the "
+                                                "previous snapshot (same objects as the web's Market Brief)")
+    has_previous_snapshot: bool = False
+    gappers: List[BriefGapper] = []
+    gainers: List[BriefMover] = []
+    losers: List[BriefMover] = []
+    golden_crosses: List[str] = []
+    top_breakout_scores: List[Dict[str, Any]] = Field(default=[], description="[{ticker, score}]")
+    prebreakout_picks: List[BriefPick] = Field(default=[], description="Premium; empty below Premium")
+    prebreakout_locked: bool = False
+    earnings_today: List[str] = []
