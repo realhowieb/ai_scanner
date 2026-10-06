@@ -1,8 +1,9 @@
 # Web v2 Foundation + Production API Acceptance Gate (2026-10-06)
 
 **Result: Web v2 foundation built and verified locally and in an isolated environment.
-Production API acceptance: BLOCKED** (this environment can't reach `hsf-api.onrender.com`,
-and no test credentials or Render access were provided). Streamlit is unchanged and still
+Production: unauthenticated checks PASS (after the owner allowed `hsf-api.onrender.com`
+in this environment's network settings); signed-in acceptance BLOCKED (no test
+credentials, no Render access). Streamlit is unchanged and still
 serves all production traffic.
 
 Evidence levels used below:
@@ -17,18 +18,19 @@ Evidence levels used below:
 
 | Check | Result | Evidence / dependency |
 |---|---|---|
-| `GET /healthz` | BLOCKED | Egress to `hsf-api.onrender.com` denied by this environment's network policy (`CONNECT tunnel failed, 403`; WebFetch `EGRESS_BLOCKED`). Last verified 2026-10-05 (`docs/API_ACCEPTANCE_2026-10-05.md`). |
-| `GET /readyz` | BLOCKED | Same. |
-| `GET /openapi.json` | BLOCKED (live); PASS (code) | The contract was exported from the code on `dev` = `main` (de341de), 48 paths, and committed as `web/openapi.json`. Live parity is unverified until the deployed service can be fetched. |
-| Endpoints for the first three screens | BLOCKED (live); PASS (isolated) | `/v1/auth/login`, `/refresh`, `/logout`, `/v1/me`, `/v1/today`, `/v1/scans/latest`, `POST /v1/scans`, `GET /v1/scans/{id}`, `GET /v1/scans`, `/v1/stocks/{ticker}`, `/v1/watchlists`, `/v1/billing/checkout`: all exercised through the BFF against the isolated API. |
-| CORS for the frontend origin | N/A by design | Web v2 calls the API from its own server (BFF), never from the browser, so `API_CORS_ORIGINS` is **not needed** and should stay empty. |
+| `GET /healthz` | PASS | 200 (first call 42.8 s: the free plan was asleep and woke up; see Hosting). |
+| `GET /readyz` | PASS | 200 `{"ok":true,"database":"ok"}`, latest market scan 19.8 minutes old. |
+| `GET /openapi.json` | PASS | Live spec is **identical** to `web/openapi.json` (48 paths, every schema equal), so the generated client matches production. |
+| Data routes without a token | PASS | `/v1/me`, `/v1/today`, `/v1/scans/latest`, `/v1/stocks/AAPL` → 401. Responses carry `X-Request-ID`. |
+| Endpoints for the first three screens | Signed-in: BLOCKED (no test accounts); PASS (isolated) | `/v1/auth/login`, `/refresh`, `/logout`, `/v1/me`, `/v1/today`, `/v1/scans/latest`, `POST /v1/scans`, `GET /v1/scans/{id}`, `GET /v1/scans`, `/v1/stocks/{ticker}`, `/v1/watchlists`, `/v1/billing/checkout`: all exercised through the BFF against the isolated API. |
+| CORS for the frontend origin | N/A by design; PASS (no CORS for an unknown origin: preflight 405, no `Access-Control-Allow-Origin`) | Web v2 calls the API from its own server (BFF), never from the browser, so `API_CORS_ORIGINS` is **not needed** and should stay empty. |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | BLOCKED | No Render access from here. Owner item P1-73 (still open per the backlog): needed for custom scans, the US market list, Day Trader and quotes. |
 | `ANTHROPIC_API_KEY` | BLOCKED | P1-73. Not used by the three screens; `/v1/ai/*` answers 503 without it. |
 | `APP_ENCRYPTION_KEY` | BLOCKED | P1-73 (same value as Streamlit). Not used by the three screens (paper trading). |
 | `API_SCAN_WORKERS` | BLOCKED | Optional; default 1 is right for the current instance size. |
 | `API_CORS_ORIGINS` | N/A | See CORS above. |
-| Hosting | BLOCKED | `hsf-api` was on Render's free plan at the last check (sleeps after 15 min, 512 MB). A US market custom scan needs Starter or more (P1-73). Not changed: no authorization to change hosting. |
-| `scripts/api_acceptance.py` against production | BLOCKED | Needs network access to `hsf-api.onrender.com` and the five `ACC_*` test accounts (P1-63). Not run. |
+| Hosting | FAIL (likely) | The 42.8 s first response on 2026-10-06 looks like a free-plan wake-up, so `hsf-api` is probably still on Render's free plan (sleeps after 15 min, 512 MB). A US market custom scan needs Starter or more (P1-73). Not changed: no authorization to change hosting. |
+| `scripts/api_acceptance.py` against production | BLOCKED | Network access now works; still needs the five `ACC_*` test accounts as environment variables (P1-63). Not run. |
 
 ## 2. What was built (`web/`)
 
@@ -136,7 +138,8 @@ upgrade button calls `POST /v1/billing/checkout` but wasn't followed to Stripe.
 
 ### Production
 
-All BLOCKED (section 1). No production data was read or written.
+Unauthenticated checks PASS (section 1); everything signed in is BLOCKED on test
+accounts. Nothing was written to production, and no production account was used.
 
 ## 4. Screenshots
 
@@ -164,8 +167,8 @@ Before Web v2 is used against production:
 1. **P1-73** (owner): on `hsf-api` set `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`,
    `ANTHROPIC_API_KEY`, `APP_ENCRYPTION_KEY` (same value as Streamlit); don't set
    `ALPACA_BASE_URL`; move to Starter.
-2. **P1-63** (owner + run): allow `hsf-api.onrender.com` in this environment's network
-   settings and provide the five `ACC_*` test accounts, then run
+2. **P1-63** (owner + run): network access is done; provide the five `ACC_*` test
+   accounts as environment variables, then run
    `scripts/api_acceptance.py --allow-writes`, and this frontend's
    `npm run screenshots` against a deployed Web v2 beta.
 3. Create the Render service for Web v2 (beta first, from `dev`). Keep the Streamlit
