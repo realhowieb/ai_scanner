@@ -210,3 +210,45 @@ class UniverseSelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UsMarketSelectionTests(unittest.TestCase):
+    """Custom Scan "US market" (Premium, 2026-10-06): every US stock, no plan cap."""
+
+    def _resolve(self, state, loader, transform=None, admin=False):
+        return resolve_scan_universe(
+            "US_MARKET", state, is_admin=admin, safe_call=_safe_call,
+            load_sp500_universe=lambda: ["SPY1"], load_nasdaq_universe=lambda: ["NQ1"],
+            filter_universe=_identity, sanitize_symbols=_sanitize,
+            combo_universe_transform=transform, load_us_market_universe=loader,
+        )
+
+    def test_loads_whole_list_without_the_nasdaq_or_combo_caps(self):
+        state = {"max_nasdaq_scan": 1, "max_combo_scan": 1}
+        symbols = [f"s{i}" for i in range(50)]
+        result = self._resolve(state, lambda: symbols)
+        self.assertEqual(len(result), 50)
+        self.assertEqual(state["us_market_universe"][0], "S0")
+        self.assertNotIn("sp500_universe", state)        # not built from the S&P / NASDAQ lists
+
+    def test_cached_in_session_and_liquidity_transform_applies(self):
+        state = {}
+        calls = []
+        loader = lambda: calls.append(1) or ["aaa", "bbb", "ccc"]  # noqa: E731
+        liquid = lambda syms: [s for s in syms if s != "BBB"]       # noqa: E731
+        self.assertEqual(self._resolve(state, loader, liquid), ["AAA", "CCC"])
+        self.assertEqual(self._resolve(state, loader, liquid), ["AAA", "CCC"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(state["us_market_universe"], ["AAA", "BBB", "CCC"])  # transform not cached over the list
+
+    def test_unavailable_list_is_empty_never_a_substitute(self):
+        state = {}
+        self.assertEqual(self._resolve(state, lambda: []), [])
+        self.assertNotIn("us_market_universe", state)   # a failure isn't cached
+        self.assertEqual(self._resolve(state, None), [])
+
+    def test_market_name_is_recognised(self):
+        from scan.options import DEFAULT_MARKET, normalize_market
+
+        self.assertEqual(normalize_market("us_market"), "US_MARKET")
+        self.assertEqual(normalize_market("everything"), DEFAULT_MARKET)

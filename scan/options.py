@@ -32,7 +32,7 @@ class ScanRunOptions:
 
 def normalize_market(value: object) -> str:
     market = str(value or "").strip().upper()
-    if market in {"SP500", "NASDAQ", "COMBO"}:
+    if market in {"SP500", "NASDAQ", "COMBO", "US_MARKET"}:
         return market
     return DEFAULT_MARKET
 

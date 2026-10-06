@@ -33,6 +33,7 @@ from scan.options import (
 from scan.strategies import apply_strategy_filter
 from scan.universe_selection import resolve_scan_universe
 from ui.scan_providers import sanitize_universe_symbols
+from ui.universe_us import us_market_symbols
 
 try:
     from ui.universe import (
@@ -71,8 +72,9 @@ def run_scan_engine(
     strategy: str,
     profile: str,
     live_mode: bool = False,
-) -> pd.DataFrame:
-    """Run a scan based on Market / Strategy / Profile selections."""
+) -> pd.DataFrame | None:
+    """Run a scan based on Market / Strategy / Profile selections. None when the
+    US market list can't be loaded (nothing was scanned)."""
     market = normalize_market(market)
     profile = normalize_profile(profile)
     strategy = normalize_strategy(strategy)
@@ -86,10 +88,11 @@ def run_scan_engine(
         load_nasdaq_universe=load_nasdaq_universe,
         filter_universe=filter_universe,
         sanitize_symbols=sanitize_universe_symbols,
+        load_us_market_universe=us_market_symbols,
     )
 
     if not tickers:
-        return pd.DataFrame()
+        return None if market == "US_MARKET" else pd.DataFrame()
 
     opts = build_scan_run_options(profile, st.session_state, is_admin=_is_admin())
 
@@ -284,7 +287,8 @@ def render_three_step_scanner(container: Any = None) -> None:
         "momentum": "Momentum",
         "breakout_only": "Breakout-Only",
     }
-    MARKETS = {"SP500": "SP500", "NASDAQ": "NASDAQ", "COMBO": "Combo (SP500+NASDAQ)"}
+    MARKETS = {"SP500": "SP500", "NASDAQ": "NASDAQ", "COMBO": "Combo (SP500+NASDAQ)",
+               "US_MARKET": "US market (every US stock, a few minutes)"}
     PROFILES = {"aggressive": "Aggressive", "regular": "Regular", "conservative": "Conservative"}
 
     c1, c2, c3, c4, c5 = st.columns([1, 1.3, 1, 1, 0.9])
@@ -353,6 +357,11 @@ def render_three_step_scanner(container: Any = None) -> None:
                 live_mode=st.session_state.scan_live_mode,
             )
         duration_sec = time.perf_counter() - started_at
+        if df is None:  # US market list unavailable: nothing scanned, keep the current results
+            from ui.universe_us import US_MARKET_UNAVAILABLE
+
+            status_placeholder.warning(US_MARKET_UNAVAILABLE)
+            return
 
         num_rows = 0 if df is None else len(df)
         status_placeholder.success(

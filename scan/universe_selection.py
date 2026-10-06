@@ -1,7 +1,7 @@
 """Universe resolution helpers for scanner flows.
 
 This module keeps Streamlit state mechanics out of the selection rules so SP500,
-NASDAQ, and Combo behavior can be tested without running the UI.
+NASDAQ, Combo and US market behavior can be tested without running the UI.
 """
 from __future__ import annotations
 
@@ -65,6 +65,7 @@ def resolve_scan_universe(
     label_suffix: str = "3-step",
     combo_universe_transform: SymbolTransform | None = None,
     combo_cache_key: object = None,
+    load_us_market_universe: SymbolLoader | None = None,
 ) -> list[str]:
     """Resolve a scanner universe and update the related state caches."""
     market_name = normalize_market(market)
@@ -143,6 +144,31 @@ def resolve_scan_universe(
             state["combo_capped_transform_key"] = combo_cache_key
         return combo_capped
 
+    def ensure_us_market() -> list[str]:
+        """Every tradable U.S. stock (the automatic scans' universe), no plan cap;
+        the same liquidity transform as Combo trims it before scanning. Empty
+        when the list is unavailable: never a silent substitute."""
+        if load_us_market_universe is None:
+            return []
+        us = _state_list(state, "us_market_universe")
+        if not us:
+            us = _load_filtered_universe(
+                label=label("US market universe"),
+                loader=load_us_market_universe,
+                safe_call=safe_call,
+                filter_universe=filter_universe,
+                sanitize_symbols=sanitize_symbols,
+            )
+            if us:
+                state["us_market_universe"] = us
+        if us and combo_universe_transform is not None:
+            transformed = combo_universe_transform(us)
+            if transformed:
+                return sanitize_symbols(transformed)
+        return us
+
+    if market_name == "US_MARKET":
+        return ensure_us_market()
     if market_name == "SP500":
         return ensure_sp500()
     if market_name == "NASDAQ":

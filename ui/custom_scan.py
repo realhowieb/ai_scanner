@@ -185,6 +185,7 @@ def render_custom_scan(username: str, tier: Any, flags: Dict[str, Any]) -> None:
         unusual_vol=bool(unusual_vol),
         diagnostics=bool(diagnostics),
         username=username,
+        can_scan_us_market=bool(flags.get("can_full_universe")),  # Premium
     )
 
     # A finished scan opens the Scanner, where its results render.

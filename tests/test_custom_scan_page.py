@@ -28,6 +28,9 @@ if st.session_state.get("_test_plan"):
     st.session_state["tier_key"] = plan
     st.session_state["is_admin"] = False
     st.session_state["entitlements"] = dict(compute_entitlements(tier_obj=tier, is_admin=False))
+if st.session_state.get("_test_no_us_list"):
+    import ui.scans as _sc
+    _sc.us_market_symbols = lambda: []
 runpy.run_path(%r, run_name="__main__")
 ''' % str(ROOT / "pages" / "custom_scan.py")
 
@@ -67,6 +70,21 @@ class CustomScanPageTests(unittest.TestCase):
     def test_pro_can_scan_nasdaq(self):
         at = self._run(username="tester@example.com", _test_plan="pro")
         self.assertFalse(next(b for b in at.button if b.label == "Run NASDAQ Scan").disabled)
+
+    def test_us_market_button_is_premium(self):
+        label = "Run US Market Scan (every US stock) · Premium"
+        for plan, enabled in (("basic", False), ("pro", False), ("premium", True)):
+            at = self._run(username="tester@example.com", _test_plan=plan)
+            with self.subTest(plan=plan):
+                self.assertEqual(not next(b for b in at.button if b.label == label).disabled, enabled)
+
+    def test_us_market_unavailable_shows_a_message_and_scans_nothing(self):
+        at = self._run(username="tester@example.com", _test_plan="premium", _test_no_us_list=True)
+        next(b for b in at.button if b.label.startswith("Run US Market")).click().run()
+        self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
+        self.assertTrue(any("US market list isn't available" in w.value for w in at.warning))
+        self.assertNotIn("results_df", at.session_state)
+        self.assertNotIn("_test_switched_to", at.session_state)
 
     def test_finished_scan_opens_the_scanner(self):
         at = self._run(username="tester@example.com", _test_plan="basic", force_results_refresh=True)
