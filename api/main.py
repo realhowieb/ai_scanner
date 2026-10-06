@@ -220,6 +220,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     _market_routes(app)
     _ai_routes(app)
     _trading_routes(app)
+    _delete_account_route(app)
     return app
 
 
@@ -763,7 +764,7 @@ def _history_routes(app: FastAPI) -> None:
              include_snapshots: bool = Query(False, description="Include daily snapshot copies")) -> List[Dict[str, Any]]:
         """Your saved scans, newest first (the web's Scan History tab)."""
         require_feature(account, "can_scan_history")
-        return json_safe(history.list_runs(_user(account), limit, include_snapshots))
+        return json_safe(history.saved_runs(_user(account), limit, include_snapshots))
 
     @app.get("/v1/runs/{run_id}", response_model=models.RunDetail, responses={**_PRO, **_OWNED},
              summary="One of your saved scans with its rows (Pro)")
@@ -1033,6 +1034,24 @@ def _trading_routes(app: FastAPI) -> None:
         user = _user(account)
         ratelimit.check("paper_order", user)
         return json_safe(trading.order(user, body.ticker.upper(), body.qty))
+
+
+class DeleteAccountBody(BaseModel):
+    password: str = Field(min_length=1, max_length=256)
+    confirm: Literal["DELETE"] = Field(description='Type "DELETE": the user confirmed permanent deletion')
+
+
+def _delete_account_route(app: FastAPI) -> None:
+    @app.delete("/v1/me", status_code=204, summary="Delete your account",
+                responses={**_AUTH, 400: {"description": "Wrong password"},
+                           409: {"description": "Cancel your paid subscription first (or admin account)"},
+                           422: {"description": 'confirm must be "DELETE"'}, 429: {"description": "Too many attempts"}})
+    def delete_me(body: DeleteAccountBody, account: Dict[str, Any] = Depends(current_account)) -> None:
+        """Permanently deletes your account and its data (watchlists, alerts, journal, paper keys,
+        settings, saved scans, sessions, devices). Refused while a paid subscription is active:
+        cancel it first via POST /v1/billing/portal {"flow": "cancel"}. Can't be undone."""
+        ratelimit.check("delete_account", _user(account))
+        acct.delete_account(account, body.password)
 
 
 def _failing_app(message: str):

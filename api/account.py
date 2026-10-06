@@ -201,6 +201,24 @@ def set_email_prefs(username: str, changes: Dict[str, bool]) -> Dict[str, bool]:
     return get_prefs(username)
 
 
+# ---- account deletion (P2-82) ---------------------------------------------------------------------
+def delete_account(account: Dict[str, Any], password: str) -> Dict[str, int]:
+    """Delete the signed-in account after re-checking its password (db.account_deletion)."""
+    from api.store import _conn, check_password
+    from db.account_deletion import DeletionBlocked
+    from db.account_deletion import delete_account as _delete
+
+    if not check_password(account, password):
+        raise AccountError("Your password is incorrect.")
+    conn = _conn()
+    try:
+        return _delete(conn, str(account["username"]).strip().lower())
+    except DeletionBlocked as e:
+        raise AccountError(str(e), status=409) from e
+    finally:
+        conn.close()
+
+
 # ---- billing ---------------------------------------------------------------------------------------
 class BillingUnavailable(RuntimeError):
     """The billing service couldn't be reached or answered unexpectedly (502)."""

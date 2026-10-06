@@ -26,7 +26,7 @@ def _run_row(r: Dict[str, Any]) -> Dict[str, Any]:
             "is_snapshot": bool(r.get("is_snapshot")), "created_at": r.get("created_at")}
 
 
-def list_runs(username: str, limit: int, include_snapshots: bool) -> List[Dict[str, Any]]:
+def saved_runs(username: str, limit: int, include_snapshots: bool) -> List[Dict[str, Any]]:
     from db.runs import list_runs as _list_runs
 
     try:

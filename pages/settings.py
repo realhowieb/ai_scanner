@@ -135,4 +135,12 @@ st.markdown(
 st.caption("This adds a shortcut to HSF. It is not an offline app and does not send push notifications.")
 
 st.divider()
+try:  # P2-82: account deletion (App Store requirement; same rules as DELETE /v1/me)
+    from ui.account_delete import render_delete_account
+
+    render_delete_account(_username)
+except Exception:
+    pass
+
+st.divider()
 st.page_link("app.py", label="← Back to scanner", icon="🏠")
