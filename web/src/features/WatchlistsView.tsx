@@ -1,0 +1,274 @@
+"use client";
+
+// Watchlists: list, create, rename, make default, delete; tickers with notes. Every
+// change is shown only after the server confirms it (then the affected data reloads).
+// Scores and prices come from ONE request (the latest market scan), labelled with its
+// time; tickers outside that scan show "—" rather than a made-up quote.
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+
+import { api, unwrap } from "@/api/client";
+import { parseTickers, watchlists } from "@/api/userData";
+import type { WatchlistDetail } from "@/api/userData";
+import { ConfirmDialog, Dialog } from "@/components/Dialog";
+import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
+import { useAction } from "@/hooks/useAction";
+import { useApi } from "@/hooks/useApi";
+import { etDate, price } from "@/lib/format";
+
+const NOTE_MAX = 500;
+
+type NameProps = {
+  title: string; initial?: string; withDefault?: boolean; submitLabel: string; error?: ReactNode;
+  onClose: () => void; onSubmit: (name: string, makeDefault: boolean) => Promise<boolean>;
+};
+
+function NameDialog({ open, ...p }: NameProps & { open: boolean }) {
+  // The form mounts with the dialog, so each opening starts from `initial`.
+  return <Dialog open={open} title={p.title} onClose={p.onClose}><NameForm {...p} /></Dialog>;
+}
+
+function NameForm({ initial = "", withDefault, submitLabel, error, onClose, onSubmit }: NameProps) {
+  const [name, setName] = useState(initial);
+  const [makeDefault, setMakeDefault] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setBusy(true);
+    const ok = await onSubmit(name.trim(), makeDefault);
+    setBusy(false);
+    if (ok) onClose();
+  };
+  return (
+    <form className="stack-sm" onSubmit={submit}>
+      <label className="field"><span>Name</span>
+        <input data-autofocus value={name} maxLength={80} required onChange={(e) => setName(e.target.value)} />
+      </label>
+      {withDefault && (
+        <label className="check"><input type="checkbox" checked={makeDefault} onChange={(e) => setMakeDefault(e.target.checked)} />
+          <span>Make it my default watchlist</span></label>
+      )}
+      {error}
+      <div className="row-actions end">
+        <button type="button" className="btn" onClick={onClose}>Cancel</button>
+        <button type="submit" className="btn btn-primary" disabled={busy || !name.trim()}>{busy ? "Saving…" : submitLabel}</button>
+      </div>
+    </form>
+  );
+}
+
+function NoteEditor({ wl, ticker, note, onSaved }: { wl: number; ticker: string; note: string | null | undefined; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(note ?? "");
+  const act = useAction();
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    const ok = await act.run(async () => { await watchlists.setNote(wl, ticker, text); return true; });
+    if (ok) {
+      setEditing(false);
+      onSaved();
+    }
+  };
+  if (!editing) {
+    return (
+      <div className="note">
+        {note ? <span className="body-sm">{note}</span> : <span className="cap">No note</span>}
+        <button type="button" className="link-btn" onClick={() => { setText(note ?? ""); setEditing(true); }} aria-label={`${note ? "Edit" : "Add"} note for ${ticker}`}>
+          {note ? "Edit" : "Add note"}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <form className="stack-sm" onSubmit={save}>
+      <label className="sr-only" htmlFor={`note-${ticker}`}>Note for {ticker}</label>
+      <textarea id={`note-${ticker}`} className="textarea" rows={2} maxLength={NOTE_MAX} value={text} autoFocus
+        onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setEditing(false); }} />
+      <div className="row-actions">
+        <button type="submit" className="btn btn-sm btn-primary" disabled={act.busy}>{act.busy ? "Saving…" : "Save note"}</button>
+        <button type="button" className="btn btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+        <span className="cap">{text.length}/{NOTE_MAX}</span>
+      </div>
+      <ErrorLine error={act.error} />
+    </form>
+  );
+}
+
+function AddTickers({ wl, onAdded }: { wl: number; onAdded: () => void }) {
+  const [text, setText] = useState("");
+  const [result, setResult] = useState<string | null>(null);
+  const act = useAction();
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const tickers = parseTickers(text);
+    if (!tickers.length) return;
+    const r = await act.run(() => watchlists.addTickers(wl, tickers));
+    if (!r) return;
+    const parts = [];
+    if (r.added.length) parts.push(`Added ${r.added.join(", ")}.`);
+    if (r.already_present.length) parts.push(`Already in the list: ${r.already_present.join(", ")}.`);
+    if (r.invalid.length) parts.push(`Not valid ticker symbols (not saved): ${r.invalid.join(", ")}.`);
+    setResult(parts.join(" "));
+    setText(r.invalid.join(" "));
+    if (r.added.length) onAdded();
+  };
+  return (
+    <form className="stack-sm" onSubmit={submit}>
+      <div className="inline-form">
+        <label className="field grow"><span>Add tickers</span>
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="AAPL, MSFT NVDA" autoComplete="off" />
+        </label>
+        <button type="submit" className="btn btn-primary" disabled={act.busy || !text.trim()}>{act.busy ? "Adding…" : "Add"}</button>
+      </div>
+      <p className="cap">Separate with spaces or commas, up to 200 at a time.</p>
+      {result && <p className="notice" role="status">{result}</p>}
+      <ErrorLine error={act.error} />
+    </form>
+  );
+}
+
+function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => void; onDeleted: () => void }) {
+  const detail = useApi(`wl:${id}`, (signal) => watchlists.get(id, signal));
+  const scan = useApi("wl-scan", (signal) => unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: 200 } }, signal })));
+  const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const act = useAction();
+  const ren = useAction();
+  const del = useAction();
+  const rm = useAction();
+  const reload = () => { detail.reload(); onChanged(); };
+
+  const scores = useMemo(() => new Map((scan.data?.setups ?? []).map((s) => [s.ticker, s])), [scan.data]);
+
+  if (detail.error && !detail.data) return <ErrorState error={detail.error} onRetry={detail.reload} what="this watchlist" />;
+  if (!detail.data || detail.loading && detail.data.id !== id) return <Skeleton rows={5} label="Loading watchlist" />;
+  const w: WatchlistDetail = detail.data;
+
+  return (
+    <div className="stack">
+      <Card title={<>{w.name} {w.is_default && <Pill>Default</Pill>}</>} id="wl-detail"
+        aside={`${w.symbol_count} ticker${w.symbol_count === 1 ? "" : "s"}`}>
+        <div className="row-actions">
+          <button type="button" className="btn" onClick={() => { ren.clear(); setRenaming(true); }}>Rename</button>
+          <button type="button" className="btn" disabled={w.is_default || act.busy}
+            onClick={() => void act.run(async () => { await watchlists.makeDefault(w.id); reload(); return true; })}>
+            {w.is_default ? "Default list" : "Make default"}
+          </button>
+          <button type="button" className="btn btn-danger-outline" onClick={() => setDeleting(true)}>Delete</button>
+        </div>
+        <ErrorLine error={act.error} />
+        <AddTickers wl={w.id} onAdded={reload} />
+      </Card>
+
+      <Card title="Tickers" id="wl-items" aside={scan.data?.scan_at ? <Freshness at={scan.data.scan_at} label="HSF Scores from the scan" /> : undefined}>
+        {w.items.length === 0 ? (
+          <Empty title="No tickers yet.">Add some above, or use Save to watchlist on the Scanner or a stock page.</Empty>
+        ) : (
+          <ul className="wl-items">
+            {w.items.map((it) => {
+              const s = scores.get(it.ticker);
+              return (
+                <li key={it.ticker} className="wl-item">
+                  <div className="wl-main">
+                    <TickerLink ticker={it.ticker} />
+                    {s ? <><ScoreBadge score={s.score} /><span className="mono cap">{price(s.last)}</span></> : <span className="cap" title="Not among this plan's ranked rows in the latest scan">Not ranked in the latest scan</span>}
+                    <span className="grow" />
+                    <span className="cap">{it.added_at ? `Added ${etDate(it.added_at)}` : ""}{it.price_when_added ? ` at ${price(it.price_when_added)}` : ""}</span>
+                    <button type="button" className="icon-btn" aria-label={`Remove ${it.ticker} from ${w.name}`} onClick={() => { rm.clear(); setRemoving(it.ticker); }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
+                  </div>
+                  <NoteEditor wl={w.id} ticker={it.ticker} note={it.note} onSaved={detail.reload} />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {scan.data && <p className="cap">Scores and prices are from that scan, only for tickers among your plan&apos;s top {scan.data.max_results} ranked setups. Not live quotes.</p>}
+      </Card>
+
+      <NameDialog open={renaming} title="Rename watchlist" initial={w.name} submitLabel="Rename" onClose={() => setRenaming(false)}
+        error={<ErrorLine error={ren.error} />}
+        onSubmit={async (name) => !!(await ren.run(async () => { await watchlists.rename(w.id, name); reload(); return true; }))} />
+      <ConfirmDialog open={deleting} title={`Delete "${w.name}"?`} confirmLabel="Delete watchlist" busy={del.busy}
+        body={<p>This removes the list and its {w.symbol_count} ticker{w.symbol_count === 1 ? "" : "s"} and notes. Alerts aren&apos;t affected. This can&apos;t be undone.</p>}
+        error={<ErrorLine error={del.error} />} onClose={() => { del.clear(); setDeleting(false); }}
+        onConfirm={() => void del.run(async () => { await watchlists.remove(w.id); setDeleting(false); onDeleted(); return true; })} />
+      <ConfirmDialog open={removing !== null} title={`Remove ${removing ?? ""}?`} confirmLabel="Remove" busy={rm.busy}
+        body={<p>{removing} and its note will be removed from {w.name}.</p>} error={<ErrorLine error={rm.error} />}
+        onClose={() => setRemoving(null)}
+        onConfirm={() => void rm.run(async () => { await watchlists.removeTicker(w.id, removing!); setRemoving(null); reload(); return true; })} />
+    </div>
+  );
+}
+
+export function WatchlistsView() {
+  const sp = useSearchParams();
+  const router = useRouter();
+  const path = usePathname();
+  const lists = useApi("watchlists", (signal) => watchlists.list(signal));
+  const [creating, setCreating] = useState(false);
+  const create = useAction();
+
+  const all = lists.data ?? [];
+  const asked = Number(sp.get("id"));
+  const selected = all.find((w) => w.id === asked) ?? all.find((w) => w.is_default) ?? all[0] ?? null;
+  const select = (id: number | null) => router.replace(id ? `${path}?id=${id}` : path, { scroll: false });
+
+  return (
+    <div className="stack">
+      <section className="page-head">
+        <div>
+          <h1 className="h1">Watchlists</h1>
+          <p className="cap">Lists of tickers to follow. Notes stay with each ticker.</p>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={() => { create.clear(); setCreating(true); }}>New watchlist</button>
+      </section>
+
+      {lists.error && !lists.data ? <ErrorState error={lists.error} onRetry={lists.reload} what="your watchlists" /> :
+        lists.loading && !lists.data ? <Skeleton rows={5} label="Loading watchlists" /> :
+        all.length === 0 ? (
+          <Card><Empty title="No watchlists yet.">
+            <button type="button" className="btn btn-primary" onClick={() => { create.clear(); setCreating(true); }}>Create your first watchlist</button>
+          </Empty></Card>
+        ) : (
+          <div className="split">
+            <nav className="col-side card wl-nav" aria-label="Your watchlists">
+              <ul className="pick-list">
+                {all.map((w) => (
+                  <li key={w.id}>
+                    <button type="button" className={`pick${selected?.id === w.id ? " on" : ""}`} aria-current={selected?.id === w.id ? "true" : undefined} onClick={() => select(w.id)}>
+                      <span className="strong">{w.name}</span>
+                      {w.is_default && <Pill>Default</Pill>}
+                      <span className="grow" />
+                      <span className="cap">{w.symbol_count}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="cap">{all.length} of 50 watchlists</p>
+            </nav>
+            <div className="col-main">
+              {selected && <Detail key={selected.id} id={selected.id} onChanged={lists.reload}
+                onDeleted={() => { lists.reload(); select(null); }} />}
+            </div>
+          </div>
+        )}
+
+      <NameDialog open={creating} title="New watchlist" withDefault submitLabel="Create" onClose={() => setCreating(false)}
+        error={<ErrorLine error={create.error} />}
+        onSubmit={async (name, makeDefault) => {
+          const wl = await create.run(() => watchlists.create(name, makeDefault));
+          if (!wl) return false;
+          lists.reload();
+          select(wl.id);
+          return true;
+        }} />
+      <p className="cap">Changes here also show in the classic app (it may take up to 2 minutes there). <Link href="/alerts">Alerts</Link> can watch these lists.</p>
+    </div>
+  );
+}

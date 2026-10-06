@@ -491,6 +491,11 @@ def _data_routes(app: FastAPI) -> None:
     def alert_delete(alert_id: int, account: Dict[str, Any] = Depends(current_account)) -> None:
         user_data.delete_alert(_user(account), alert_id)
 
+    @app.get("/v1/alerts/types", response_model=List[models.AlertType], responses=_AUTH)
+    def alert_types(account: Dict[str, Any] = Depends(current_account)) -> List[Dict[str, Any]]:
+        """The alert types and their input rules (what POST /v1/alerts validates), for building forms."""
+        return user_data.alert_types()
+
     @app.get("/v1/alerts/events", response_model=List[models.AlertEvent], responses=_AUTH)
     def alert_events(account: Dict[str, Any] = Depends(current_account),
                      limit: int = Query(20, ge=1, le=100)) -> List[Dict[str, Any]]:
@@ -735,6 +740,17 @@ def _scan_routes(app: FastAPI) -> None:
     def scan_get(scan_id: str = Path(pattern="^[0-9a-f]{32}$"),
                  account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         job = scan_jobs.get_job(_user(account), scan_id)
+        if job is None:
+            raise user_data.NotFound("scan")
+        return _job_out(job)
+
+    @app.delete("/v1/scans/{scan_id}", response_model=models.ScanJob, responses=_OWNED, summary="Cancel a custom scan")
+    def scan_cancel(scan_id: str = Path(pattern="^[0-9a-f]{32}$"),
+                    account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Cancel your queued or running scan: it reads `failed` with error "Cancelled." and you
+        can start another at once. A running scan stops at its next progress step. A scan that
+        already finished is returned unchanged."""
+        job = scan_jobs.cancel_job(_user(account), scan_id)
         if job is None:
             raise user_data.NotFound("scan")
         return _job_out(job)

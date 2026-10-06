@@ -146,6 +146,46 @@ ALERT_RULES: Dict[str, Dict[str, Any]] = {
 }
 THRESHOLD_MAX = 1_000_000.0
 
+# What each type means and the web form's defaults (ui/alerts.py, ui/alert_copy.py), so
+# clients build their forms from the rules above instead of copying them.
+ALERT_COPY: Dict[str, Dict[str, Any]] = {
+    "breakout": {"label": "Breakout", "threshold_label": "Breakout Score at or above", "default_threshold": 8.0,
+                 "description": "Fires when a scan finds a ticker whose Breakout Score is at or above your value "
+                                "(the scanner's supporting technical score, not the 0-100 HSF Score). Lower "
+                                "values fire more often."},
+    "watchlist": {"label": "Watchlist", "description": "Fires when any ticker on your watchlist shows up in the "
+                                                       "scan results."},
+    "price": {"label": "Price", "threshold_label": "Price ($)", "default_threshold": None,
+              "description": "Fires when a ticker crosses a price you set."},
+    "move": {"label": "% move", "threshold_label": "Move at least (%)", "default_threshold": 5.0,
+             "description": "Fires when a ticker moves more than ±X% vs yesterday's close. Checked live "
+                            "(about every 60 s) during extended hours."},
+    "rvol": {"label": "Relative volume", "threshold_label": "Times 20-day average volume", "default_threshold": 2.0,
+             "description": "Fires when a ticker trades at X times its 20-day average volume. Checked live "
+                            "(about every 60 s) during extended hours."},
+    "ema_cross": {"label": "EMA cross", "description": "Fires when EMA 9 crosses EMA 21. Bullish is a short-term "
+                                                       "Golden Cross; bearish is a short-term Death Cross."},
+    "ewo_cross": {"label": "EWO cross", "description": "Fires when the Elliott Wave Oscillator (SMA 5 − SMA 35 of "
+                                                       "close) crosses zero. Up is a bullish momentum flip; down "
+                                                       "is bearish."},
+}
+
+
+def alert_types() -> List[Dict[str, Any]]:
+    """The alert types and their input rules (the same ALERT_RULES validate_alert enforces)."""
+    out = []
+    for t, r in ALERT_RULES.items():
+        copy = ALERT_COPY.get(t, {})
+        threshold = None
+        if r["threshold_min"] is not None:
+            threshold = {"min": r["threshold_min"], "min_exclusive": bool(r.get("threshold_gt")),
+                         "max": THRESHOLD_MAX, "label": copy.get("threshold_label") or "Threshold",
+                         "default": copy.get("default_threshold")}
+        out.append({"type": t, "label": copy.get("label") or t, "description": copy.get("description") or "",
+                    "needs_ticker": bool(r["ticker"]), "threshold": threshold,
+                    "directions": list(r["directions"] or []), "watchlist_only_option": t == "breakout"})
+    return out
+
 
 def validate_alert(alert_type: str, ticker: Optional[str], threshold: Optional[float],
                    direction: Optional[str], watchlist_only: bool) -> Dict[str, Any]:

@@ -1,0 +1,78 @@
+name: Web v2
+
+# The Next.js frontend in web/ (P1-58). Typecheck, lint, unit tests, production
+# build, and a contract check: web/openapi.json must match the API's current
+# OpenAPI schema, so an API change can't silently break the generated client.
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up Python (for the OpenAPI contract check)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          python -m pip install --upgrade pip
+          python -m pip install -r ../api/requirements.txt
+
+      - name: OpenAPI contract matches the API
+        env:
+          API_JWT_SECRET: ci-only-not-a-secret-0123456789abcdef
+        run: |
+          (cd .. && python scripts/export_openapi.py web/openapi.json)
+          git diff --exit-code -- openapi.json
+          npm run api:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high

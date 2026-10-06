@@ -117,6 +117,7 @@ class ScanRouteTests(ApiTestCase):
             ("api.scan_jobs.get_job", lambda u, i: self.jobs.get(i) if self.jobs.get(i, {}).get("username") == u else None),
             ("api.scan_jobs.list_jobs", lambda u, n: [j for j in self.jobs.values() if j["username"] == u][:n]),
             ("api.scan_jobs.submit", lambda job_id, work: self.submitted.append((job_id, work))),
+            ("api.scan_jobs.cancel_job", self._cancel),
             ("api.user_data.get_watchlist", self._watchlist),
         ):
             p(target, side_effect=fn).start()
@@ -132,6 +133,14 @@ class ScanRouteTests(ApiTestCase):
                           "progress": {"phase": "queued"}, "result": None, "error": None,
                           "created_at": "2026-10-06T12:00:00+00:00", "started_at": None, "finished_at": None}
         return dict(self.jobs[jid])
+
+    def _cancel(self, user, jid):
+        j = self.jobs.get(jid)
+        if not j or j["username"] != user:
+            return None
+        if j["status"] in ("queued", "running"):
+            j.update(status="failed", error="Cancelled.")
+        return dict(j)
 
     def _watchlist(self, user, wid):
         from api.user_data import NotFound
@@ -157,6 +166,18 @@ class ScanRouteTests(ApiTestCase):
         got = self.client.get(f"/v1/scans/{job['scan_id']}", headers=self.h("pro@example.com"))
         self.assertEqual(got.json()["status"], "queued")
         self.assertEqual(len(self.client.get("/v1/scans", headers=self.h("pro@example.com")).json()), 1)
+
+    def test_cancel_frees_the_slot_and_is_owner_only(self):
+        job = self.post("pro@example.com", {"universe": "sp500"}).json()
+        self.assertEqual(self.post("pro@example.com", {"universe": "sp500"}).status_code, 409)
+        other = self.client.delete(f"/v1/scans/{job['scan_id']}", headers=self.h("prem@example.com"))
+        self.assertEqual(other.status_code, 404)
+        r = self.client.delete(f"/v1/scans/{job['scan_id']}", headers=self.h("pro@example.com"))
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual((r.json()["status"], r.json()["error"]), ("failed", "Cancelled."))
+        self.assertEqual(self.post("pro@example.com", {"universe": "sp500"}).status_code, 202)
+        self.assertEqual(self.client.delete("/v1/scans/not-a-scan-id", headers=self.h("pro@example.com")).status_code, 422)
+        self.assertEqual(self.client.delete(f"/v1/scans/{job['scan_id']}").status_code, 401)
 
     def test_adversarial_plan_bypass_is_rejected_server_side(self):
         cases = [("free@example.com", {"universe": "us_market"}),
@@ -282,13 +303,19 @@ class ScanJobPostgresTests(unittest.TestCase):
         with self.assertRaises(sj.ScanInProgress):
             sj.create_job("pro@example.com", "sp500", {})
         self.assertIsNone(sj.get_job("other@example.com", job["id"]))
+        # Waiting in line in a live process: the heartbeat keeps it queued however long it waits.
+        sj._hold(job["id"])
+        self.addCleanup(sj._release, job["id"])
         with psycopg.connect(PG_URL) as conn:
             conn.execute("UPDATE api_scan_jobs SET updated_at = NOW() - interval '30 minutes'")
-        self.assertEqual(sj.get_job("pro@example.com", job["id"])["status"], "queued")   # waiting in line is fine
+        sj.heartbeat_once()
+        self.assertEqual(sj.get_job("pro@example.com", job["id"])["status"], "queued")
+        # The process that held it is gone (no heartbeat for > STALE_AFTER_S): cleared in minutes.
+        sj._release(job["id"])
         with psycopg.connect(PG_URL) as conn:
-            conn.execute("UPDATE api_scan_jobs SET updated_at = NOW() - interval '61 minutes'")
+            conn.execute("UPDATE api_scan_jobs SET updated_at = NOW() - interval '4 minutes'")
         stale = sj.get_job("pro@example.com", job["id"])
-        self.assertEqual((stale["status"], stale["error"]), ("failed", "interrupted"))
+        self.assertEqual((stale["status"], stale["error"]), ("failed", sj.INTERRUPTED))
         self.assertEqual(sj.create_job("pro@example.com", "sp500", {})["status"], "queued")  # slot free again
         with mock.patch.object(sj, "MAX_ACTIVE_JOBS", 1), self.assertRaises(sj.ScanBusy):
             sj.create_job("free@example.com", "sp500", {})
@@ -297,7 +324,43 @@ class ScanJobPostgresTests(unittest.TestCase):
         sj.submit(job["id"], lambda report: ran.append(1) or {})
         time.sleep(1)
         self.assertEqual(ran, [])
-        self.assertEqual(sj.get_job("pro@example.com", job["id"])["error"], "interrupted")
+        self.assertEqual(sj.get_job("pro@example.com", job["id"])["error"], sj.INTERRUPTED)
+
+    def test_cancel_queued_and_running(self):
+        import threading
+
+        sj = self.sj
+        job = sj.create_job("pro@example.com", "sp500", {})
+        self.assertIsNone(sj.cancel_job("other@example.com", job["id"]))       # not yours
+        out = sj.cancel_job("pro@example.com", job["id"])
+        self.assertEqual((out["status"], out["error"]), ("failed", sj.CANCELLED))
+        ran = []
+        sj.submit(job["id"], lambda report: ran.append(1) or {})               # cancelled before start
+        time.sleep(0.5)
+        self.assertEqual(ran, [])
+        # A running scan stops at its next progress report; nothing overwrites the cancel.
+        job2 = sj.create_job("pro@example.com", "sp500", {})                   # slot free at once
+        gate, after = threading.Event(), []
+
+        def work(report):
+            report({"phase": "scanning"})
+            gate.wait(10)
+            report({"phase": "finishing"})                                     # raises: cancelled
+            after.append("saved")
+            return {"setups": []}
+
+        sj.submit(job2["id"], work)
+        deadline = time.time() + 10
+        while sj.get_job("pro@example.com", job2["id"])["status"] != "running" and time.time() < deadline:
+            time.sleep(0.05)
+        self.assertEqual(sj.cancel_job("pro@example.com", job2["id"])["error"], sj.CANCELLED)
+        gate.set()
+        time.sleep(0.5)
+        final = sj.get_job("pro@example.com", job2["id"])
+        self.assertEqual((final["status"], final["error"], after), ("failed", sj.CANCELLED, []))
+        self.assertNotIn(job2["id"], sj._held)                                  # the worker let go
+        done = sj.cancel_job("pro@example.com", job2["id"])                     # finished: unchanged
+        self.assertEqual(done["error"], sj.CANCELLED)
 
     def test_running_job_without_heartbeat_expires(self):
         import psycopg
@@ -306,7 +369,7 @@ class ScanJobPostgresTests(unittest.TestCase):
         job = sj.create_job("pro@example.com", "sp500", {})
         self.assertTrue(sj._mark_running(job["id"]))
         with psycopg.connect(PG_URL) as conn:
-            conn.execute("UPDATE api_scan_jobs SET updated_at = NOW() - interval '21 minutes'")
+            conn.execute("UPDATE api_scan_jobs SET updated_at = NOW() - interval '4 minutes'")
         self.assertEqual(sj.get_job("pro@example.com", job["id"])["status"], "failed")
         sj._finish(job["id"], "complete", {"phase": "complete"}, result={})        # a late finish can't revive it
         self.assertEqual(sj.get_job("pro@example.com", job["id"])["status"], "failed")
