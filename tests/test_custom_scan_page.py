@@ -127,6 +127,7 @@ class WatchlistHandoffTests(unittest.TestCase):
             custom_scan.handle_watchlist_tools("tester@example.com")
         self.assertEqual(fake.session_state["_wl_pending_scan"], "view")
 
+    @unittest.skipUnless(HAS_ST, "ui.watchlists needs streamlit")
     def test_add_symbol_stays_on_the_page(self):
         from ui import custom_scan
 
