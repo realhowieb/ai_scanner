@@ -422,12 +422,11 @@ def apply_liquidity_filter_batch(
     *,
     min_price: float,
     min_avg_dollar_vol: float,
+    max_price: float = 0.0,
 ) -> List[str]:
-    """Filter tickers by approximate price and 20D dollar volume.
-
-    Delegates to the shared scan.liquidity.apply_liquidity_filter_batch,
-    which is now Alpaca-first with yfinance fallback.
-    """
+    """Drop tickers that can't pass the scan's price and dollar-volume rules
+    before downloading their bars (scan.liquidity: one Alpaca snapshot per
+    symbol, deliberately loose). Cached an hour per list and filter values."""
     if not tickers:
         return []
 
@@ -440,6 +439,7 @@ def apply_liquidity_filter_batch(
             tickers,
             min_price=min_price,
             min_avg_dollar_vol=min_avg_dollar_vol,
+            max_price=max_price,
         )
     except UNIVERSE_PROVIDER_ERRORS:
         # If anything goes wrong in the core filter, fall back to returning the
