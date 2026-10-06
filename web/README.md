@@ -1,0 +1,99 @@
+# HSF Web v2 (P1-58)
+
+The new web frontend: Next.js (App Router) + TypeScript, built entirely on the HSF
+API (`hsf-api`). It runs **beside** the Streamlit app; Streamlit, its landing page and
+the production domain are unchanged.
+
+Screens in this foundation: **Sign in**, **Today**, **Scanner** (latest scan) with
+**Custom scan**, and **Stock Intelligence**. Everything else (watchlists, alerts,
+Day Trader, journal, billing pages, sign-up, password reset) still lives in the
+Streamlit app, linked from the account menu ("Open classic app") and the sign-in page.
+
+## How it talks to the API
+
+```
+browser ──(same origin, HttpOnly cookies)──> Next.js server (BFF) ──(Bearer)──> hsf-api
+          /api/auth/login, /api/auth/logout      src/server/*
+          /api/hsf/v1/...  (proxy)
+```
+
+- **No token ever reaches browser JavaScript.** Sign-in posts to `/api/auth/login`;
+  the server stores the access and refresh tokens in `__Host-` cookies that are
+  `Secure`, `HttpOnly`, `SameSite=Lax`. Nothing goes to localStorage or sessionStorage.
+- **Refresh** happens on the server (`src/server/bff.ts`): before forwarding when the
+  access token is missing or about to expire, and once more after a 401. Refresh is
+  **single-flight** (`src/server/refresh.ts`): concurrent requests with the same
+  refresh token share one rotation, and requests arriving within 10 s reuse its
+  result. Across several server instances, the API's 30-second rotation grace covers
+  the same race. A failed refresh clears the cookies and answers
+  `401 {"code": "session_expired"}`; the client then sends the user to sign in again
+  (`?next=` brings them back).
+- **CSRF**: mutating calls must carry this site's `Origin` (or `Sec-Fetch-Site:
+  same-origin`); cookies are `SameSite=Lax`.
+- **Only `/v1/...` data routes** are proxied (`/v1/auth/*` is refused), bodies are
+  capped at 256 KB, and upstream calls time out after 30 s.
+- **Request IDs**: the client sends `X-Request-ID: web-<uuid>` on every call; the BFF
+  forwards it and the API logs it. Error screens show it as a "Support code".
+- **`API_CORS_ORIGINS` isn't needed**: the browser never calls the API directly. Leave it
+  empty unless another browser client needs it.
+- Plans and features come only from `GET /v1/me` (`entitlements`) and from the API's
+  own answers (`max_results`, `locked`, `historical_locked`, 403s). The frontend
+  doesn't decide what a plan includes; it only hides or labels controls. The server
+  enforces every rule.
+
+The API client is generated from the API's OpenAPI contract: `openapi.json` (exported
+by `python scripts/export_openapi.py` at the repo root) → `src/api/schema.d.ts`
+(`npm run api:types`), used through `openapi-fetch`. CI fails if either is stale.
+
+## Run locally
+
+```
+cd web
+npm ci
+cp .env.example .env.local      # point HSF_API_BASE_URL at an API (http allowed for localhost only)
+npm run dev                      # http://localhost:3000
+```
+
+Use `localhost`, not `127.0.0.1`: browsers accept `Secure` cookies on `localhost` over
+plain http.
+
+Checks (all run in CI, `.github/workflows/web.yml`):
+
+```
+npm run typecheck && npm run lint && npm test && npm run build
+```
+
+Screenshots at desktop and phone sizes against a running server, with a test account
+(credentials from the environment, never printed):
+
+```
+BASE_URL=http://localhost:3000 HSF_TEST_EMAIL=<test account> HSF_TEST_PASSWORD_FILE=<file> \
+  STOCK=AAPL OUT_DIR=screenshots npm run screenshots
+```
+
+## Deploy on Render (not done yet; needs the owner)
+
+New → Web Service → this repository.
+
+| Setting | Value |
+|---|---|
+| Branch | `dev` for a beta service first (e.g. `hsf-web-beta`); `main` later |
+| Root directory | `web` |
+| Runtime | Node (`NODE_VERSION=22`) |
+| Build command | `npm ci && npm run build` |
+| Start command | `npm start` (Next.js reads `$PORT`) |
+| Health check path | `/login` |
+
+Environment variables:
+
+| Name | Value |
+|---|---|
+| `HSF_API_BASE_URL` | `https://hsf-api.onrender.com` (server-only; https required) |
+| `NEXT_PUBLIC_STREAMLIT_URL` | The Streamlit app, for "Create account", "Forgot password", "Open classic app" (default `https://hsfinestai.streamlit.app`). Read at build time. |
+| `NODE_VERSION` | `22` |
+
+No secrets are needed: the frontend holds no API keys, and the session cookies are
+set per user. It must be served over https (Render does this), because the
+`__Host-` cookies require it. The free plan sleeps after 15 idle minutes; use Starter
+before real users depend on it. Production traffic and the domain stay on Streamlit
+until the owner decides to switch.

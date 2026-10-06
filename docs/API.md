@@ -58,7 +58,9 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET | `/v1/alerts/events` | Bearer | Your recent fired alerts (`limit` ≤100), newest first. |
 
 Every route declares a response model, so `/openapi.json` describes each payload
-and clients can be generated from it. A database outage answers **503** with
+and clients can be generated from it. Web v2's client is generated from the committed
+copy `web/openapi.json`; after an API change run `python scripts/export_openapi.py`
+and `cd web && npm run api:types` (CI fails while they're stale). A database outage answers **503** with
 `Retry-After: 30`.
 
 Account flows call the same functions as the web app, so password rules, emails,
@@ -147,7 +149,7 @@ web page.
 - Access tokens: HS256 JWT signed with `API_JWT_SECRET`, `iss=hsf-api`, 15-minute expiry.
 - Refresh tokens: random 48-byte values; only their SHA-256 is stored (`api_refresh_tokens`).
 - Sign-in attempts go to the existing `login_attempts` table (shared rate limit with the web app).
-- CORS: only the exact origins in `API_CORS_ORIGINS` (no wildcards). Preflights are cached 10 minutes; `X-Request-ID` and `Retry-After` are readable by the browser. Native apps don't need CORS.
+- CORS: only the exact origins in `API_CORS_ORIGINS` (no wildcards). Web v2 (`web/`) doesn't need it: its server (BFF) calls the API and keeps tokens in HttpOnly cookies (`web/README.md`). Preflights are cached 10 minutes; `X-Request-ID` and `Retry-After` are readable by the browser. Native apps don't need CORS.
 
 ## Deploy on Render
 

@@ -1,0 +1,7337 @@
+{
+ "components": {
+  "schemas": {
+   "AIChatAnswer": {
+    "properties": {
+     "answer": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Answer"
+     },
+     "run_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Run Id"
+     }
+    },
+    "title": "AIChatAnswer",
+    "type": "object"
+   },
+   "AIChatBody": {
+    "properties": {
+     "messages": {
+      "description": "The conversation so far, oldest first, ending with the new question",
+      "items": {
+       "$ref": "#/components/schemas/ChatTurn"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Messages",
+      "type": "array"
+     },
+     "run_id": {
+      "anyOf": [
+       {
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "One of your saved scans (GET /v1/runs); default: the latest market scan",
+      "title": "Run Id"
+     }
+    },
+    "required": [
+     "messages"
+    ],
+    "title": "AIChatBody",
+    "type": "object"
+   },
+   "AISummaryBody": {
+    "properties": {
+     "run_id": {
+      "anyOf": [
+       {
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "One of your saved scans (GET /v1/runs); default: the latest market scan",
+      "title": "Run Id"
+     }
+    },
+    "title": "AISummaryBody",
+    "type": "object"
+   },
+   "AIText": {
+    "properties": {
+     "run_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The scan the text is about",
+      "title": "Run Id"
+     },
+     "snapshot_time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Snapshot Time"
+     },
+     "text": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Markdown; null when there is nothing to explain",
+      "title": "Text"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ticker"
+     }
+    },
+    "title": "AIText",
+    "type": "object"
+   },
+   "Alert": {
+    "properties": {
+     "created_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Created At"
+     },
+     "direction": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Direction"
+     },
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "last_fired_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Fired At"
+     },
+     "threshold": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Threshold"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ticker"
+     },
+     "type": {
+      "enum": [
+       "breakout",
+       "watchlist",
+       "price",
+       "move",
+       "rvol",
+       "ema_cross",
+       "ewo_cross"
+      ],
+      "title": "Type",
+      "type": "string"
+     },
+     "watchlist_only": {
+      "default": false,
+      "title": "Watchlist Only",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "type",
+     "enabled"
+    ],
+    "title": "Alert",
+    "type": "object"
+   },
+   "AlertCreate": {
+    "properties": {
+     "direction": {
+      "anyOf": [
+       {
+        "maxLength": 12,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Direction"
+     },
+     "threshold": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Threshold"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "maxLength": 12,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ticker"
+     },
+     "type": {
+      "description": "breakout, watchlist, price, move, rvol, ema_cross or ewo_cross",
+      "title": "Type",
+      "type": "string"
+     },
+     "watchlist_only": {
+      "default": false,
+      "title": "Watchlist Only",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "type"
+    ],
+    "title": "AlertCreate",
+    "type": "object"
+   },
+   "AlertEvent": {
+    "properties": {
+     "alert_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Alert Id"
+     },
+     "fired_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fired At"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ticker"
+     }
+    },
+    "required": [
+     "id",
+     "message"
+    ],
+    "title": "AlertEvent",
+    "type": "object"
+   },
+   "AlertUpdate": {
+    "properties": {
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "enabled"
+    ],
+    "title": "AlertUpdate",
+    "type": "object"
+   },
+   "Alerts": {
+    "properties": {
+     "alerts": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/Alert"
+      },
+      "title": "Alerts",
+      "type": "array"
+     },
+     "email_enabled": {
+      "description": "Pro+ get alert emails; everyone gets in-app alerts",
+      "title": "Email Enabled",
+      "type": "boolean"
+     },
+     "limit": {
+      "description": "Alerts this plan may have (Free 1, Pro 5, Premium 25)",
+      "title": "Limit",
+      "type": "integer"
+     },
+     "used": {
+      "title": "Used",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "limit",
+     "used",
+     "email_enabled"
+    ],
+    "title": "Alerts",
+    "type": "object"
+   },
+   "Bar": {
+    "properties": {
+     "close": {
+      "title": "Close",
+      "type": "number"
+     },
+     "date": {
+      "title": "Date",
+      "type": "string"
+     },
+     "high": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "High"
+     },
+     "low": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Low"
+     },
+     "open": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Open"
+     },
+     "volume": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Volume"
+     }
+    },
+    "required": [
+     "date",
+     "close"
+    ],
+    "title": "Bar",
+    "type": "object"
+   },
+   "BillingLink": {
+    "properties": {
+     "mode": {
+      "enum": [
+       "checkout",
+       "portal"
+      ],
+      "title": "Mode",
+      "type": "string"
+     },
+     "url": {
+      "description": "Stripe-hosted page to open in the browser",
+      "title": "Url",
+      "type": "string"
+     }
+    },
+    "required": [
+     "url",
+     "mode"
+    ],
+    "title": "BillingLink",
+    "type": "object"
+   },
+   "Brief": {
+    "properties": {
+     "available": {
+      "description": "False until the day's first scan snapshot exists",
+      "title": "Available",
+      "type": "boolean"
+     },
+     "breadth": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "integer"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "{advancers, decliners} in the snapshot",
+      "title": "Breadth"
+     },
+     "earnings_today": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Earnings Today",
+      "type": "array"
+     },
+     "gainers": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/BriefMover"
+      },
+      "title": "Gainers",
+      "type": "array"
+     },
+     "gappers": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/BriefGapper"
+      },
+      "title": "Gappers",
+      "type": "array"
+     },
+     "golden_crosses": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Golden Crosses",
+      "type": "array"
+     },
+     "has_previous_snapshot": {
+      "default": false,
+      "title": "Has Previous Snapshot",
+      "type": "boolean"
+     },
+     "losers": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/BriefMover"
+      },
+      "title": "Losers",
+      "type": "array"
+     },
+     "market": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/BriefIndex"
+      },
+      "title": "Market",
+      "type": "array"
+     },
+     "opportunities": {
+      "default": [],
+      "description": "Top opportunities with movement since the previous snapshot (same objects as the web's Market Brief)",
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Opportunities",
+      "type": "array"
+     },
+     "phase": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "premarket / regular / afterhours / closed",
+      "title": "Phase"
+     },
+     "prebreakout_locked": {
+      "default": false,
+      "title": "Prebreakout Locked",
+      "type": "boolean"
+     },
+     "prebreakout_picks": {
+      "default": [],
+      "description": "Premium; empty below Premium",
+      "items": {
+       "$ref": "#/components/schemas/BriefPick"
+      },
+      "title": "Prebreakout Picks",
+      "type": "array"
+     },
+     "sectors": {
+      "default": [],
+      "description": "[{sector, chg_pct}] best first",
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Sectors",
+      "type": "array"
+     },
+     "snapshot_time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Snapshot Time"
+     },
+     "top_breakout_scores": {
+      "default": [],
+      "description": "[{ticker, score}]",
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Top Breakout Scores",
+      "type": "array"
+     }
+    },
+    "required": [
+     "available"
+    ],
+    "title": "Brief",
+    "type": "object"
+   },
+   "BriefGapper": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "earnings_days": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Earnings in N days, when imminent",
+      "title": "Earnings Days"
+     },
+     "gap_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gap Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "BriefGapper",
+    "type": "object"
+   },
+   "BriefIndex": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     }
+    },
+    "required": [
+     "label"
+    ],
+    "title": "BriefIndex",
+    "type": "object"
+   },
+   "BriefMover": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "BriefMover",
+    "type": "object"
+   },
+   "BriefPick": {
+    "properties": {
+     "earnings_days": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Earnings Days"
+     },
+     "prob": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prob"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "BriefPick",
+    "type": "object"
+   },
+   "ChatTurn": {
+    "properties": {
+     "content": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Content",
+      "type": "string"
+     },
+     "role": {
+      "enum": [
+       "user",
+       "assistant"
+      ],
+      "title": "Role",
+      "type": "string"
+     }
+    },
+    "required": [
+     "role",
+     "content"
+    ],
+    "title": "ChatTurn",
+    "type": "object"
+   },
+   "CheckoutBody": {
+    "properties": {
+     "interval": {
+      "default": "month",
+      "pattern": "^(month|year)$",
+      "title": "Interval",
+      "type": "string"
+     },
+     "plan": {
+      "pattern": "^(pro|premium)$",
+      "title": "Plan",
+      "type": "string"
+     }
+    },
+    "required": [
+     "plan"
+    ],
+    "title": "CheckoutBody",
+    "type": "object"
+   },
+   "DayTrader": {
+    "properties": {
+     "as_of": {
+      "title": "As Of",
+      "type": "string"
+     },
+     "missing": {
+      "description": "Symbols with no live quote",
+      "title": "Missing",
+      "type": "integer"
+     },
+     "rows": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/DayTraderRow"
+      },
+      "title": "Rows",
+      "type": "array"
+     },
+     "source": {
+      "title": "Source",
+      "type": "string"
+     },
+     "state": {
+      "enum": [
+       "premarket",
+       "open",
+       "afterhours",
+       "closed"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "symbols": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Symbols",
+      "type": "array"
+     }
+    },
+    "required": [
+     "state",
+     "source",
+     "symbols",
+     "missing",
+     "as_of"
+    ],
+    "title": "DayTrader",
+    "type": "object"
+   },
+   "DayTraderRow": {
+    "additionalProperties": true,
+    "properties": {
+     "adx": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Adx"
+     },
+     "change_dollar": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Change Dollar"
+     },
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "day_trade_score": {
+      "description": "Intraday momentum score (move, VWAP alignment, gap, volume)",
+      "title": "Day Trade Score",
+      "type": "number"
+     },
+     "ewo": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ewo"
+     },
+     "gap_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gap Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "open": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Open"
+     },
+     "rvol": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rvol"
+     },
+     "supertrend": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Supertrend"
+     },
+     "supertrend_direction": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Supertrend Direction"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "volume": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Volume"
+     },
+     "vs_vwap_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Vs Vwap Pct"
+     },
+     "vwap": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Vwap"
+     }
+    },
+    "required": [
+     "ticker",
+     "day_trade_score"
+    ],
+    "title": "DayTraderRow",
+    "type": "object"
+   },
+   "DeleteAccountBody": {
+    "properties": {
+     "confirm": {
+      "const": "DELETE",
+      "description": "Type \"DELETE\": the user confirmed permanent deletion",
+      "title": "Confirm",
+      "type": "string"
+     },
+     "password": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Password",
+      "type": "string"
+     }
+    },
+    "required": [
+     "password",
+     "confirm"
+    ],
+    "title": "DeleteAccountBody",
+    "type": "object"
+   },
+   "Device": {
+    "properties": {
+     "app_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "App Version"
+     },
+     "created_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Created At"
+     },
+     "device_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Device Name"
+     },
+     "id": {
+      "description": "Use with DELETE /v1/me/devices/{id}",
+      "title": "Id",
+      "type": "integer"
+     },
+     "last_seen_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Seen At"
+     },
+     "platform": {
+      "enum": [
+       "ios",
+       "android"
+      ],
+      "title": "Platform",
+      "type": "string"
+     },
+     "provider": {
+      "enum": [
+       "apns",
+       "fcm",
+       "expo"
+      ],
+      "title": "Provider",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "provider",
+     "platform"
+    ],
+    "title": "Device",
+    "type": "object"
+   },
+   "DeviceBody": {
+    "properties": {
+     "app_version": {
+      "anyOf": [
+       {
+        "maxLength": 40,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "App Version"
+     },
+     "device_name": {
+      "anyOf": [
+       {
+        "maxLength": 80,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Shown in the app's device list",
+      "title": "Device Name"
+     },
+     "platform": {
+      "enum": [
+       "ios",
+       "android"
+      ],
+      "title": "Platform",
+      "type": "string"
+     },
+     "provider": {
+      "anyOf": [
+       {
+        "enum": [
+         "apns",
+         "fcm",
+         "expo"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Default: expo for Expo tokens, apns on iOS, fcm on Android",
+      "title": "Provider"
+     },
+     "push_token": {
+      "description": "Token from APNs, FCM or Expo",
+      "maxLength": 600,
+      "minLength": 10,
+      "title": "Push Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "push_token",
+     "platform"
+    ],
+    "title": "DeviceBody",
+    "type": "object"
+   },
+   "EarningsItem": {
+    "properties": {
+     "days_until": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Days Until"
+     },
+     "earnings_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "YYYY-MM-DD",
+      "title": "Earnings Date"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "bmo / amc / \u2026 when known",
+      "title": "Time"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "EarningsItem",
+    "type": "object"
+   },
+   "EmailBody": {
+    "properties": {
+     "email": {
+      "maxLength": 254,
+      "minLength": 3,
+      "title": "Email",
+      "type": "string"
+     }
+    },
+    "required": [
+     "email"
+    ],
+    "title": "EmailBody",
+    "type": "object"
+   },
+   "EmailPrefs": {
+    "properties": {
+     "alerts": {
+      "description": "Alert emails",
+      "title": "Alerts",
+      "type": "boolean"
+     },
+     "digest": {
+      "description": "Morning market digest",
+      "title": "Digest",
+      "type": "boolean"
+     },
+     "evening": {
+      "description": "Evening market wrap",
+      "title": "Evening",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "digest",
+     "evening",
+     "alerts"
+    ],
+    "title": "EmailPrefs",
+    "type": "object"
+   },
+   "EmailPrefsUpdate": {
+    "properties": {
+     "alerts": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Alerts"
+     },
+     "digest": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Digest"
+     },
+     "evening": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Evening"
+     }
+    },
+    "title": "EmailPrefsUpdate",
+    "type": "object"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "title": "Detail",
+      "type": "array"
+     }
+    },
+    "title": "HTTPValidationError",
+    "type": "object"
+   },
+   "Health": {
+    "properties": {
+     "ok": {
+      "title": "Ok",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok"
+    ],
+    "title": "Health",
+    "type": "object"
+   },
+   "Journal": {
+    "properties": {
+     "stats": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "{closed, wins, avg_return_pct}; null before any closed trade",
+      "title": "Stats"
+     },
+     "trades": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/JournalTrade"
+      },
+      "title": "Trades",
+      "type": "array"
+     }
+    },
+    "title": "Journal",
+    "type": "object"
+   },
+   "JournalClose": {
+    "properties": {
+     "exit_price": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 1000000.0,
+      "title": "Exit Price",
+      "type": "number"
+     }
+    },
+    "required": [
+     "exit_price"
+    ],
+    "title": "JournalClose",
+    "type": "object"
+   },
+   "JournalCreate": {
+    "properties": {
+     "entry_price": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 1000000.0,
+      "title": "Entry Price",
+      "type": "number"
+     },
+     "shares": {
+      "maximum": 10000000.0,
+      "minimum": 0.0,
+      "title": "Shares",
+      "type": "integer"
+     },
+     "ticker": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "entry_price",
+     "shares"
+    ],
+    "title": "JournalCreate",
+    "type": "object"
+   },
+   "JournalTrade": {
+    "properties": {
+     "closed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Closed At"
+     },
+     "entered_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Entered At"
+     },
+     "entry_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Entry Price"
+     },
+     "exit_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Exit Price"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "mark": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Live price for open trades, exit price for closed",
+      "title": "Mark"
+     },
+     "open": {
+      "title": "Open",
+      "type": "boolean"
+     },
+     "pnl": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pnl"
+     },
+     "pnl_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pnl Pct"
+     },
+     "shares": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shares"
+     },
+     "source": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "scan, paper or api",
+      "title": "Source"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "ticker",
+     "open"
+    ],
+    "title": "JournalTrade",
+    "type": "object"
+   },
+   "LatestScan": {
+    "properties": {
+     "limited": {
+      "description": "True when the plan cap hides some matching setups",
+      "title": "Limited",
+      "type": "boolean"
+     },
+     "max_results": {
+      "description": "Rows this plan sees (Free 25, Pro 100, Premium 200)",
+      "title": "Max Results",
+      "type": "integer"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "ISO time of the market scan; null when none exists",
+      "title": "Scan At"
+     },
+     "setups": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/ScanSetup"
+      },
+      "title": "Setups",
+      "type": "array"
+     },
+     "total": {
+      "description": "Setups matching the filters, before the plan cap",
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "total",
+     "max_results",
+     "limited"
+    ],
+    "title": "LatestScan",
+    "type": "object"
+   },
+   "LifecycleEvent": {
+    "properties": {
+     "delta": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Delta"
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Label"
+     },
+     "movement": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Movement"
+     },
+     "score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score"
+     },
+     "signals": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "signals_added": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals Added",
+      "type": "array"
+     },
+     "signals_removed": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals Removed",
+      "type": "array"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Time"
+     }
+    },
+    "title": "LifecycleEvent",
+    "type": "object"
+   },
+   "LoginBody": {
+    "properties": {
+     "client": {
+      "anyOf": [
+       {
+        "maxLength": 80,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Client"
+     },
+     "email": {
+      "maxLength": 254,
+      "minLength": 3,
+      "title": "Email",
+      "type": "string"
+     },
+     "password": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Password",
+      "type": "string"
+     }
+    },
+    "required": [
+     "email",
+     "password"
+    ],
+    "title": "LoginBody",
+    "type": "object"
+   },
+   "LogoutBody": {
+    "properties": {
+     "push_token": {
+      "anyOf": [
+       {
+        "maxLength": 600,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "This device's push token, so it stops getting this account's pushes",
+      "title": "Push Token"
+     },
+     "refresh_token": {
+      "maxLength": 200,
+      "minLength": 20,
+      "title": "Refresh Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "refresh_token"
+    ],
+    "title": "LogoutBody",
+    "type": "object"
+   },
+   "Market": {
+    "properties": {
+     "phase": {
+      "enum": [
+       "premarket",
+       "open",
+       "afterhours",
+       "closed"
+      ],
+      "title": "Phase",
+      "type": "string"
+     }
+    },
+    "required": [
+     "phase"
+    ],
+    "title": "Market",
+    "type": "object"
+   },
+   "Me": {
+    "properties": {
+     "alert_limit": {
+      "title": "Alert Limit",
+      "type": "integer"
+     },
+     "email": {
+      "title": "Email",
+      "type": "string"
+     },
+     "email_verified": {
+      "default": true,
+      "description": "False until the emailed link is used; needed to upgrade and for email alerts",
+      "title": "Email Verified",
+      "type": "boolean"
+     },
+     "entitlements": {
+      "additionalProperties": {
+       "type": "boolean"
+      },
+      "description": "Feature flags, e.g. can_day_trader, can_ai_notes",
+      "title": "Entitlements",
+      "type": "object"
+     },
+     "is_admin": {
+      "title": "Is Admin",
+      "type": "boolean"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "plan": {
+      "enum": [
+       "basic",
+       "pro",
+       "premium",
+       "admin"
+      ],
+      "title": "Plan",
+      "type": "string"
+     },
+     "plan_label": {
+      "description": "Customer-facing name, e.g. Free, Pro",
+      "title": "Plan Label",
+      "type": "string"
+     }
+    },
+    "required": [
+     "email",
+     "plan",
+     "plan_label",
+     "is_admin",
+     "alert_limit",
+     "entitlements"
+    ],
+    "title": "Me",
+    "type": "object"
+   },
+   "Message": {
+    "properties": {
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "ok": {
+      "default": true,
+      "title": "Ok",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "message"
+    ],
+    "title": "Message",
+    "type": "object"
+   },
+   "Mover": {
+    "properties": {
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Move in percent vs the previous close",
+      "title": "Pct"
+     },
+     "score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "HSF Score when the name qualifies",
+      "title": "Score"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "Mover",
+    "type": "object"
+   },
+   "NoteBody": {
+    "properties": {
+     "note": {
+      "anyOf": [
+       {
+        "maxLength": 500,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     }
+    },
+    "title": "NoteBody",
+    "type": "object"
+   },
+   "PaperActivity": {
+    "properties": {
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "orders": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Orders",
+      "type": "array"
+     },
+     "positions": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Positions",
+      "type": "array"
+     },
+     "positions_available": {
+      "default": true,
+      "title": "Positions Available",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "connected"
+    ],
+    "title": "PaperActivity",
+    "type": "object"
+   },
+   "PaperConnect": {
+    "properties": {
+     "api_key": {
+      "description": "Alpaca PAPER API key ID",
+      "maxLength": 128,
+      "minLength": 8,
+      "title": "Api Key",
+      "type": "string"
+     },
+     "api_secret": {
+      "description": "Alpaca PAPER API secret (stored encrypted, never returned)",
+      "maxLength": 256,
+      "minLength": 8,
+      "title": "Api Secret",
+      "type": "string"
+     }
+    },
+    "required": [
+     "api_key",
+     "api_secret"
+    ],
+    "title": "PaperConnect",
+    "type": "object"
+   },
+   "PaperOrder": {
+    "properties": {
+     "filled_avg_price": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Filled Avg Price"
+     },
+     "order_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Order Id"
+     },
+     "qty": {
+      "title": "Qty",
+      "type": "integer"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "ticker",
+     "qty"
+    ],
+    "title": "PaperOrder",
+    "type": "object"
+   },
+   "PaperOrderBody": {
+    "properties": {
+     "confirm": {
+      "const": true,
+      "description": "Must be true: the user confirmed this order (the web's confirmation step)",
+      "title": "Confirm",
+      "type": "boolean"
+     },
+     "qty": {
+      "description": "Whole shares",
+      "maximum": 100000.0,
+      "minimum": 1.0,
+      "title": "Qty",
+      "type": "integer"
+     },
+     "ticker": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "qty",
+     "confirm"
+    ],
+    "title": "PaperOrderBody",
+    "type": "object"
+   },
+   "PaperStatus": {
+    "properties": {
+     "account": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "{status, buying_power, cash} from Alpaca; keys are never returned",
+      "title": "Account"
+     },
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "connected_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Connected At"
+     }
+    },
+    "required": [
+     "connected"
+    ],
+    "title": "PaperStatus",
+    "type": "object"
+   },
+   "PasswordChangeBody": {
+    "properties": {
+     "current_password": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Current Password",
+      "type": "string"
+     },
+     "new_password": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "New Password",
+      "type": "string"
+     }
+    },
+    "required": [
+     "current_password",
+     "new_password"
+    ],
+    "title": "PasswordChangeBody",
+    "type": "object"
+   },
+   "PortalBody": {
+    "properties": {
+     "flow": {
+      "anyOf": [
+       {
+        "pattern": "^cancel$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "'cancel' opens the cancellation screen",
+      "title": "Flow"
+     }
+    },
+    "title": "PortalBody",
+    "type": "object"
+   },
+   "Ready": {
+    "properties": {
+     "database": {
+      "const": "ok",
+      "title": "Database",
+      "type": "string"
+     },
+     "latest_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Latest market scan (ISO); null when none",
+      "title": "Latest Scan At"
+     },
+     "ok": {
+      "title": "Ok",
+      "type": "boolean"
+     },
+     "scan_age_minutes": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan Age Minutes"
+     }
+    },
+    "required": [
+     "ok",
+     "database"
+    ],
+    "title": "Ready",
+    "type": "object"
+   },
+   "Recap": {
+    "properties": {
+     "day": {
+      "description": "ET date of the recapped session (YYYY-MM-DD)",
+      "title": "Day",
+      "type": "string"
+     },
+     "entered": {
+      "default": [],
+      "description": "'TICKER (score)', HSF 40+, strongest first",
+      "items": {
+       "type": "string"
+      },
+      "title": "Entered",
+      "type": "array"
+     },
+     "left": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Left",
+      "type": "array"
+     },
+     "postmarket_scans": {
+      "default": 0,
+      "title": "Postmarket Scans",
+      "type": "integer"
+     },
+     "premarket_scans": {
+      "default": 0,
+      "title": "Premarket Scans",
+      "type": "integer"
+     },
+     "scans": {
+      "description": "Full-market scans that day",
+      "title": "Scans",
+      "type": "integer"
+     },
+     "standouts": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/Standout"
+      },
+      "title": "Standouts",
+      "type": "array"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "day",
+     "title",
+     "scans"
+    ],
+    "title": "Recap",
+    "type": "object"
+   },
+   "RefreshBody": {
+    "properties": {
+     "refresh_token": {
+      "maxLength": 200,
+      "minLength": 20,
+      "title": "Refresh Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "refresh_token"
+    ],
+    "title": "RefreshBody",
+    "type": "object"
+   },
+   "ResetConfirmBody": {
+    "properties": {
+     "new_password": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "New Password",
+      "type": "string"
+     },
+     "token": {
+      "maxLength": 128,
+      "minLength": 10,
+      "title": "Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "token",
+     "new_password"
+    ],
+    "title": "ResetConfirmBody",
+    "type": "object"
+   },
+   "RunDetail": {
+    "properties": {
+     "created_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Created At"
+     },
+     "duration_s": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration S"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "is_snapshot": {
+      "default": false,
+      "title": "Is Snapshot",
+      "type": "boolean"
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "SP500, NASDAQ, Combo, US Market, Watchlist (\u2026), Search: X, 3-Step | \u2026",
+      "title": "Label"
+     },
+     "limited": {
+      "title": "Limited",
+      "type": "boolean"
+     },
+     "max_results": {
+      "title": "Max Results",
+      "type": "integer"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "row_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Row Count"
+     },
+     "setups": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/ScanSetup"
+      },
+      "title": "Setups",
+      "type": "array"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "total",
+     "max_results",
+     "limited"
+    ],
+    "title": "RunDetail",
+    "type": "object"
+   },
+   "RunSummary": {
+    "properties": {
+     "created_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Created At"
+     },
+     "duration_s": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration S"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "is_snapshot": {
+      "default": false,
+      "title": "Is Snapshot",
+      "type": "boolean"
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "SP500, NASDAQ, Combo, US Market, Watchlist (\u2026), Search: X, 3-Step | \u2026",
+      "title": "Label"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "row_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Row Count"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "title": "RunSummary",
+    "type": "object"
+   },
+   "ScanCreate": {
+    "properties": {
+     "filters": {
+      "$ref": "#/components/schemas/ScanFilters"
+     },
+     "score_all": {
+      "default": false,
+      "description": "Watchlist only: score every symbol, ignoring the screens (as on the web)",
+      "title": "Score All",
+      "type": "boolean"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "For universe=ticker",
+      "title": "Ticker"
+     },
+     "universe": {
+      "description": "sp500 (every plan) \u00b7 nasdaq, combo (Pro+) \u00b7 us_market (Premium+) \u00b7 watchlist (one of yours) \u00b7 ticker (one symbol)",
+      "enum": [
+       "sp500",
+       "nasdaq",
+       "combo",
+       "us_market",
+       "watchlist",
+       "ticker"
+      ],
+      "title": "Universe",
+      "type": "string"
+     },
+     "watchlist_id": {
+      "anyOf": [
+       {
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "For universe=watchlist",
+      "title": "Watchlist Id"
+     }
+    },
+    "required": [
+     "universe"
+    ],
+    "title": "ScanCreate",
+    "type": "object"
+   },
+   "ScanFilters": {
+    "description": "Same filters and ranges as the web's Custom Scan page (defaults match it).",
+    "properties": {
+     "apply_gap_filter": {
+      "default": false,
+      "description": "Pro+",
+      "title": "Apply Gap Filter",
+      "type": "boolean"
+     },
+     "max_combo": {
+      "anyOf": [
+       {
+        "maximum": 100000.0,
+        "minimum": 100.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Combo ticker cap, Pro up to 6000 (default 1000); ignored for Premium (full list)",
+      "title": "Max Combo"
+     },
+     "max_nasdaq": {
+      "anyOf": [
+       {
+        "maximum": 100000.0,
+        "minimum": 100.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "NASDAQ ticker cap, Pro up to 4000 (default 1200); ignored for Premium (full list)",
+      "title": "Max Nasdaq"
+     },
+     "max_price": {
+      "default": 1000.0,
+      "maximum": 5000.0,
+      "minimum": 1.0,
+      "title": "Max Price",
+      "type": "number"
+     },
+     "min_dollar_vol": {
+      "default": 5000000.0,
+      "description": "20-day average dollar volume floor",
+      "maximum": 1000000000000.0,
+      "minimum": 0.0,
+      "title": "Min Dollar Vol",
+      "type": "number"
+     },
+     "min_gap": {
+      "default": 1.0,
+      "description": "Used with apply_gap_filter (Pro+)",
+      "maximum": 20.0,
+      "minimum": 0.0,
+      "title": "Min Gap",
+      "type": "number"
+     },
+     "min_price": {
+      "default": 1.0,
+      "maximum": 500.0,
+      "minimum": 0.5,
+      "title": "Min Price",
+      "type": "number"
+     },
+     "profile": {
+      "default": "regular",
+      "enum": [
+       "regular",
+       "aggressive",
+       "conservative"
+      ],
+      "title": "Profile",
+      "type": "string"
+     },
+     "session": {
+      "default": "regular",
+      "description": "premarket / afterhours: Pro+",
+      "enum": [
+       "regular",
+       "premarket",
+       "afterhours"
+      ],
+      "title": "Session",
+      "type": "string"
+     },
+     "top_n": {
+      "anyOf": [
+       {
+        "maximum": 10000.0,
+        "minimum": 5.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Rows to return; at most the plan's cap (Free 25, Pro 100, Premium 200). Default min(25, cap)",
+      "title": "Top N"
+     },
+     "unusual_volume": {
+      "default": false,
+      "description": "Pro+",
+      "title": "Unusual Volume",
+      "type": "boolean"
+     }
+    },
+    "title": "ScanFilters",
+    "type": "object"
+   },
+   "ScanJob": {
+    "properties": {
+     "created_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Created At"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Present when status is failed",
+      "title": "Error"
+     },
+     "finished_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Finished At"
+     },
+     "params": {
+      "$ref": "#/components/schemas/ScanParams"
+     },
+     "progress": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ScanProgress"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "result": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ScanResult"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Present when status is complete"
+     },
+     "scan_id": {
+      "title": "Scan Id",
+      "type": "string"
+     },
+     "started_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started At"
+     },
+     "status": {
+      "enum": [
+       "queued",
+       "running",
+       "complete",
+       "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "universe": {
+      "title": "Universe",
+      "type": "string"
+     }
+    },
+    "required": [
+     "scan_id",
+     "status",
+     "universe",
+     "params"
+    ],
+    "title": "ScanJob",
+    "type": "object"
+   },
+   "ScanParams": {
+    "description": "The parameters the scan actually used (after plan rules).",
+    "properties": {
+     "apply_gap_filter": {
+      "title": "Apply Gap Filter",
+      "type": "boolean"
+     },
+     "full_lists": {
+      "description": "True for Premium/admin: NASDAQ and Combo scan the full lists",
+      "title": "Full Lists",
+      "type": "boolean"
+     },
+     "max_combo": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Combo"
+     },
+     "max_nasdaq": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Nasdaq"
+     },
+     "max_price": {
+      "title": "Max Price",
+      "type": "number"
+     },
+     "max_results": {
+      "description": "This plan's row cap (Free 25, Pro 100, Premium 200)",
+      "title": "Max Results",
+      "type": "integer"
+     },
+     "min_dollar_vol": {
+      "title": "Min Dollar Vol",
+      "type": "number"
+     },
+     "min_gap": {
+      "title": "Min Gap",
+      "type": "number"
+     },
+     "min_price": {
+      "title": "Min Price",
+      "type": "number"
+     },
+     "profile": {
+      "enum": [
+       "regular",
+       "aggressive",
+       "conservative"
+      ],
+      "title": "Profile",
+      "type": "string"
+     },
+     "score_all": {
+      "default": false,
+      "title": "Score All",
+      "type": "boolean"
+     },
+     "session": {
+      "description": "Session scanned: pre-market / after-hours outside that session scan the regular session",
+      "enum": [
+       "regular",
+       "premarket",
+       "afterhours"
+      ],
+      "title": "Session",
+      "type": "string"
+     },
+     "session_requested": {
+      "enum": [
+       "regular",
+       "premarket",
+       "afterhours"
+      ],
+      "title": "Session Requested",
+      "type": "string"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ticker"
+     },
+     "top_n": {
+      "title": "Top N",
+      "type": "integer"
+     },
+     "universe": {
+      "enum": [
+       "sp500",
+       "nasdaq",
+       "combo",
+       "us_market",
+       "watchlist",
+       "ticker"
+      ],
+      "title": "Universe",
+      "type": "string"
+     },
+     "unusual_volume": {
+      "title": "Unusual Volume",
+      "type": "boolean"
+     },
+     "watchlist_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Watchlist Id"
+     }
+    },
+    "required": [
+     "universe",
+     "profile",
+     "session_requested",
+     "session",
+     "min_price",
+     "max_price",
+     "min_dollar_vol",
+     "min_gap",
+     "apply_gap_filter",
+     "unusual_volume",
+     "top_n",
+     "max_results",
+     "full_lists"
+    ],
+    "title": "ScanParams",
+    "type": "object"
+   },
+   "ScanProgress": {
+    "properties": {
+     "elapsed_s": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Elapsed S"
+     },
+     "phase": {
+      "enum": [
+       "queued",
+       "starting",
+       "loading_universe",
+       "scanning",
+       "finishing",
+       "complete",
+       "failed"
+      ],
+      "title": "Phase",
+      "type": "string"
+     },
+     "symbols": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Stocks being scanned (after the liquidity pre-filter)",
+      "title": "Symbols"
+     }
+    },
+    "required": [
+     "phase"
+    ],
+    "title": "ScanProgress",
+    "type": "object"
+   },
+   "ScanResult": {
+    "properties": {
+     "duration_s": {
+      "title": "Duration S",
+      "type": "number"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "session": {
+      "title": "Session",
+      "type": "string"
+     },
+     "setups": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/ScanSetup"
+      },
+      "title": "Setups",
+      "type": "array"
+     },
+     "symbols_scanned": {
+      "title": "Symbols Scanned",
+      "type": "integer"
+     },
+     "total": {
+      "description": "Setups found (at most top_n)",
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "label",
+     "session",
+     "symbols_scanned",
+     "duration_s",
+     "total"
+    ],
+    "title": "ScanResult",
+    "type": "object"
+   },
+   "ScanSetup": {
+    "properties": {
+     "breakout_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Breakout Score"
+     },
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "fading": {
+      "default": false,
+      "title": "Fading",
+      "type": "boolean"
+     },
+     "gap_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gap Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "n_signals": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "N Signals"
+     },
+     "primary_setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Primary Setup"
+     },
+     "prob": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "PreBreakout model output; null below Premium",
+      "title": "Prob"
+     },
+     "rvol": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rvol"
+     },
+     "score": {
+      "title": "Score",
+      "type": "integer"
+     },
+     "signals": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "score"
+    ],
+    "title": "ScanSetup",
+    "type": "object"
+   },
+   "SectionError": {
+    "properties": {
+     "error": {
+      "description": "Error type only, never details",
+      "title": "Error",
+      "type": "string"
+     },
+     "section": {
+      "title": "Section",
+      "type": "string"
+     }
+    },
+    "required": [
+     "section",
+     "error"
+    ],
+    "title": "SectionError",
+    "type": "object"
+   },
+   "SessionCard": {
+    "description": "Before the open (shown 8:35-10:30 ET) / After the close. Pro+; below Pro `locked`\nis true and `movers` empty.",
+    "properties": {
+     "locked": {
+      "title": "Locked",
+      "type": "boolean"
+     },
+     "movers": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/Mover"
+      },
+      "title": "Movers",
+      "type": "array"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "ISO time of the session scan",
+      "title": "Scan At"
+     }
+    },
+    "required": [
+     "locked"
+    ],
+    "title": "SessionCard",
+    "type": "object"
+   },
+   "Setup": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "gap_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gap Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "n_signals": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "N Signals"
+     },
+     "primary_setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Primary Setup"
+     },
+     "prob": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "PreBreakout model output; null below Premium",
+      "title": "Prob"
+     },
+     "rvol": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rvol"
+     },
+     "score": {
+      "title": "Score",
+      "type": "integer"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "score"
+    ],
+    "title": "Setup",
+    "type": "object"
+   },
+   "SignupBody": {
+    "properties": {
+     "accept_terms": {
+      "description": "The usage agreement checkbox on the web sign-up form",
+      "title": "Accept Terms",
+      "type": "boolean"
+     },
+     "client": {
+      "anyOf": [
+       {
+        "maxLength": 80,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Client"
+     },
+     "email": {
+      "maxLength": 254,
+      "minLength": 3,
+      "title": "Email",
+      "type": "string"
+     },
+     "password": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Password",
+      "type": "string"
+     },
+     "username": {
+      "description": "Shown in the app; can also be used to sign in on the web",
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "email",
+     "password",
+     "username",
+     "accept_terms"
+    ],
+    "title": "SignupBody",
+    "type": "object"
+   },
+   "SignupResult": {
+    "properties": {
+     "access_token": {
+      "title": "Access Token",
+      "type": "string"
+     },
+     "email": {
+      "title": "Email",
+      "type": "string"
+     },
+     "expires_in": {
+      "description": "Access token lifetime in seconds",
+      "title": "Expires In",
+      "type": "integer"
+     },
+     "refresh_token": {
+      "description": "Single use; POST /v1/auth/refresh returns a new one",
+      "title": "Refresh Token",
+      "type": "string"
+     },
+     "token_type": {
+      "const": "bearer",
+      "default": "bearer",
+      "title": "Token Type",
+      "type": "string"
+     },
+     "verification_sent": {
+      "description": "False when email isn't configured; the account still works",
+      "title": "Verification Sent",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "access_token",
+     "expires_in",
+     "refresh_token",
+     "email",
+     "verification_sent"
+    ],
+    "title": "SignupResult",
+    "type": "object"
+   },
+   "StairSteppers": {
+    "properties": {
+     "all": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "All",
+      "type": "array"
+     },
+     "checked": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Checked",
+      "type": "array"
+     },
+     "matches": {
+      "default": [],
+      "description": "Symbols that pass the filters (r2, trend, pullback\u2026)",
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Matches",
+      "type": "array"
+     }
+    },
+    "required": [
+     "checked"
+    ],
+    "title": "StairSteppers",
+    "type": "object"
+   },
+   "Standout": {
+    "properties": {
+     "score": {
+      "title": "Score",
+      "type": "integer"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "score"
+    ],
+    "title": "Standout",
+    "type": "object"
+   },
+   "StockDetail": {
+    "properties": {
+     "alerts": {
+      "default": [],
+      "description": "Your alerts on this ticker",
+      "items": {
+       "$ref": "#/components/schemas/Alert"
+      },
+      "title": "Alerts",
+      "type": "array"
+     },
+     "bars": {
+      "default": [],
+      "description": "Daily bars cached by the scans, oldest first (up to 120)",
+      "items": {
+       "$ref": "#/components/schemas/Bar"
+      },
+      "title": "Bars",
+      "type": "array"
+     },
+     "bars_as_of": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bars As Of"
+     },
+     "breakout_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Breakout Score"
+     },
+     "change_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Change Pct"
+     },
+     "earnings_days": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Earnings Days"
+     },
+     "from_history": {
+      "description": "Score comes from the last recorded observation, not the latest scan",
+      "title": "From History",
+      "type": "boolean"
+     },
+     "has_setup": {
+      "description": "It qualifies as an HSF setup (or has a recent recorded score)",
+      "title": "Has Setup",
+      "type": "boolean"
+     },
+     "historical_context": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Matured outcomes for this score range",
+      "title": "Historical Context"
+     },
+     "historical_locked": {
+      "default": false,
+      "description": "True below Pro: historical research (history_summary, historical_context, outcome_cohort) is a Pro feature",
+      "title": "Historical Locked",
+      "type": "boolean"
+     },
+     "history_summary": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "History Summary"
+     },
+     "hsf_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hsf Score"
+     },
+     "in_latest_scan": {
+      "description": "The ticker had at least one row in that scan",
+      "title": "In Latest Scan",
+      "type": "boolean"
+     },
+     "lifecycle": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/LifecycleEvent"
+      },
+      "title": "Lifecycle",
+      "type": "array"
+     },
+     "movement": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "RISING, FALLING, UNCHANGED, NEW, NO_BASELINE or VERSION_CHANGED",
+      "title": "Movement"
+     },
+     "outcome_cohort": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Outcome Cohort"
+     },
+     "price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price"
+     },
+     "primary_setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Primary Setup"
+     },
+     "prob": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "PreBreakout model output; null below Premium",
+      "title": "Prob"
+     },
+     "reasons": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array"
+     },
+     "risks": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Risks",
+      "type": "array"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Latest market scan used",
+      "title": "Scan At"
+     },
+     "score_change": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Change"
+     },
+     "score_components": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "number"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Components"
+     },
+     "signals": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "watch_next": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Watch Next",
+      "type": "array"
+     },
+     "watchlists": {
+      "default": [],
+      "description": "Your watchlists that hold this ticker",
+      "items": {
+       "$ref": "#/components/schemas/WatchlistRef"
+      },
+      "title": "Watchlists",
+      "type": "array"
+     }
+    },
+    "required": [
+     "ticker",
+     "in_latest_scan",
+     "has_setup",
+     "from_history"
+    ],
+    "title": "StockDetail",
+    "type": "object"
+   },
+   "TickersBody": {
+    "properties": {
+     "tickers": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 200,
+      "minItems": 1,
+      "title": "Tickers",
+      "type": "array"
+     }
+    },
+    "required": [
+     "tickers"
+    ],
+    "title": "TickersBody",
+    "type": "object"
+   },
+   "TickersResult": {
+    "properties": {
+     "added": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Added",
+      "type": "array"
+     },
+     "already_present": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Already Present",
+      "type": "array"
+     },
+     "invalid": {
+      "default": [],
+      "description": "Not valid ticker symbols; nothing was saved for them",
+      "items": {
+       "type": "string"
+      },
+      "title": "Invalid",
+      "type": "array"
+     }
+    },
+    "title": "TickersResult",
+    "type": "object"
+   },
+   "Today": {
+    "properties": {
+     "after_close": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SessionCard"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "as_of": {
+      "title": "As Of",
+      "type": "string"
+     },
+     "before_open": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SessionCard"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "errors": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/SectionError"
+      },
+      "title": "Errors",
+      "type": "array"
+     },
+     "market": {
+      "$ref": "#/components/schemas/Market"
+     },
+     "recap": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Recap"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "top_setups": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TopSetups"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "as_of",
+     "market"
+    ],
+    "title": "Today",
+    "type": "object"
+   },
+   "TokenBody": {
+    "properties": {
+     "token": {
+      "maxLength": 128,
+      "minLength": 10,
+      "title": "Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "token"
+    ],
+    "title": "TokenBody",
+    "type": "object"
+   },
+   "TokenPair": {
+    "properties": {
+     "access_token": {
+      "title": "Access Token",
+      "type": "string"
+     },
+     "expires_in": {
+      "description": "Access token lifetime in seconds",
+      "title": "Expires In",
+      "type": "integer"
+     },
+     "refresh_token": {
+      "description": "Single use; POST /v1/auth/refresh returns a new one",
+      "title": "Refresh Token",
+      "type": "string"
+     },
+     "token_type": {
+      "const": "bearer",
+      "default": "bearer",
+      "title": "Token Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "access_token",
+     "expires_in",
+     "refresh_token"
+    ],
+    "title": "TokenPair",
+    "type": "object"
+   },
+   "TopSetups": {
+    "properties": {
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan At"
+     },
+     "setups": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/Setup"
+      },
+      "title": "Setups",
+      "type": "array"
+     },
+     "state": {
+      "enum": [
+       "qualifying",
+       "no_qualifying",
+       "empty_scan"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "threshold": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Threshold"
+     }
+    },
+    "required": [
+     "state"
+    ],
+    "title": "TopSetups",
+    "type": "object"
+   },
+   "TrackRecord": {
+    "properties": {
+     "disclaimer": {
+      "title": "Disclaimer",
+      "type": "string"
+     },
+     "min_sample_size": {
+      "title": "Min Sample Size",
+      "type": "integer"
+     },
+     "summaries": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/TrackRecordSummary"
+      },
+      "title": "Summaries",
+      "type": "array"
+     }
+    },
+    "required": [
+     "disclaimer",
+     "min_sample_size"
+    ],
+    "title": "TrackRecord",
+    "type": "object"
+   },
+   "TrackRecordDay": {
+    "properties": {
+     "avg_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Excess Return"
+     },
+     "day": {
+      "title": "Day",
+      "type": "string"
+     }
+    },
+    "required": [
+     "day"
+    ],
+    "title": "TrackRecordDay",
+    "type": "object"
+   },
+   "TrackRecordSummary": {
+    "properties": {
+     "avg_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Mean return vs SPY (0.012 = +1.2%)",
+      "title": "Avg Excess Return"
+     },
+     "benchmark": {
+      "default": "SPY",
+      "title": "Benchmark",
+      "type": "string"
+     },
+     "computed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Computed At"
+     },
+     "horizon_days": {
+      "title": "Horizon Days",
+      "type": "integer"
+     },
+     "median_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Excess Return"
+     },
+     "ranking": {
+      "enum": [
+       "breakout",
+       "prebreakout"
+      ],
+      "title": "Ranking",
+      "type": "string"
+     },
+     "ranking_label": {
+      "title": "Ranking Label",
+      "type": "string"
+     },
+     "runs_used": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Runs Used"
+     },
+     "sample_size": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sample Size"
+     },
+     "sufficient": {
+      "description": "False while sample_size < min_sample_size (show 'still building')",
+      "title": "Sufficient",
+      "type": "boolean"
+     },
+     "top_n": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Top N"
+     },
+     "win_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of picks that beat SPY",
+      "title": "Win Rate"
+     }
+    },
+    "required": [
+     "ranking",
+     "ranking_label",
+     "horizon_days",
+     "sufficient"
+    ],
+    "title": "TrackRecordSummary",
+    "type": "object"
+   },
+   "TradePlan": {
+    "properties": {
+     "entry": {
+      "title": "Entry",
+      "type": "number"
+     },
+     "risk_budget": {
+      "title": "Risk Budget",
+      "type": "number"
+     },
+     "risk_per_share": {
+      "title": "Risk Per Share",
+      "type": "number"
+     },
+     "shares": {
+      "title": "Shares",
+      "type": "integer"
+     },
+     "stop": {
+      "title": "Stop",
+      "type": "number"
+     },
+     "stop_pct": {
+      "title": "Stop Pct",
+      "type": "number"
+     },
+     "target_r": {
+      "items": {
+       "type": "number"
+      },
+      "title": "Target R",
+      "type": "array"
+     },
+     "targets": {
+      "items": {
+       "type": "number"
+      },
+      "title": "Targets",
+      "type": "array"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "entry",
+     "stop",
+     "stop_pct",
+     "targets",
+     "target_r",
+     "risk_per_share",
+     "shares",
+     "risk_budget"
+    ],
+    "title": "TradePlan",
+    "type": "object"
+   },
+   "ValidationError": {
+    "properties": {
+     "ctx": {
+      "title": "Context",
+      "type": "object"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "title": "Location",
+      "type": "array"
+     },
+     "msg": {
+      "title": "Message",
+      "type": "string"
+     },
+     "type": {
+      "title": "Error Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError",
+    "type": "object"
+   },
+   "Watchlist": {
+    "properties": {
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "is_default": {
+      "title": "Is Default",
+      "type": "boolean"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "symbol_count": {
+      "title": "Symbol Count",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "is_default",
+     "symbol_count"
+    ],
+    "title": "Watchlist",
+    "type": "object"
+   },
+   "WatchlistCreate": {
+    "properties": {
+     "make_default": {
+      "default": false,
+      "title": "Make Default",
+      "type": "boolean"
+     },
+     "name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "WatchlistCreate",
+    "type": "object"
+   },
+   "WatchlistDetail": {
+    "properties": {
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "is_default": {
+      "title": "Is Default",
+      "type": "boolean"
+     },
+     "items": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/WatchlistItem"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "symbol_count": {
+      "title": "Symbol Count",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "is_default",
+     "symbol_count"
+    ],
+    "title": "WatchlistDetail",
+    "type": "object"
+   },
+   "WatchlistItem": {
+    "properties": {
+     "added_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Added At"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     },
+     "price_when_added": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price When Added"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "WatchlistItem",
+    "type": "object"
+   },
+   "WatchlistRef": {
+    "properties": {
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name"
+    ],
+    "title": "WatchlistRef",
+    "type": "object"
+   },
+   "WatchlistUpdate": {
+    "properties": {
+     "make_default": {
+      "default": false,
+      "description": "true makes this the default watchlist",
+      "title": "Make Default",
+      "type": "boolean"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "maxLength": 80,
+        "minLength": 1,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     }
+    },
+    "title": "WatchlistUpdate",
+    "type": "object"
+   }
+  },
+  "securitySchemes": {
+   "HTTPBearer": {
+    "description": "Access token from POST /v1/auth/login",
+    "scheme": "bearer",
+    "type": "http"
+   }
+  }
+ },
+ "info": {
+  "title": "HSFinest.AI API",
+  "version": "1.0.0"
+ },
+ "openapi": "3.1.0",
+ "paths": {
+  "/healthz": {
+   "get": {
+    "description": "Liveness only: no database call (for the Render health check).",
+    "operationId": "healthz_healthz_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Health"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Healthz"
+   }
+  },
+  "/readyz": {
+   "get": {
+    "description": "Readiness: the database answers, plus the latest market scan's age for\nfreshness monitoring. /healthz stays the liveness check.",
+    "operationId": "readyz_readyz_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ready"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "503": {
+      "description": "Database unavailable"
+     }
+    },
+    "summary": "Readyz"
+   }
+  },
+  "/v1/ai/brief-narrative": {
+   "get": {
+    "description": "A 2-3 sentence brief written from the Market Brief's facts only.",
+    "operationId": "ai_brief_narrative_v1_ai_brief_narrative_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIText"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "AI Market Brief narrative (Premium)"
+   }
+  },
+  "/v1/ai/chat": {
+   "post": {
+    "description": "Questions about one scan's results (the web's results chat). Send the conversation so\nfar; the last message must be the user's question. Up to 8 prior turns are used.",
+    "operationId": "ai_chat_v1_ai_chat_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AIChatBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIChatAnswer"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Ask about a scan (Premium)"
+   }
+  },
+  "/v1/ai/notes/{ticker}": {
+   "post": {
+    "description": "Claude's note on one result of the latest market scan; text is null when the ticker\nisn't in it.",
+    "operationId": "ai_note_v1_ai_notes__ticker__post",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIText"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "AI setup note for a ticker (Premium)"
+   }
+  },
+  "/v1/ai/summary": {
+   "post": {
+    "description": "Claude explains the top results in HSF Score order (the web's AI Scan Summary).\nResearch commentary, not investment advice.",
+    "operationId": "ai_summary_v1_ai_summary_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AISummaryBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIText"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "AI scan summary (Premium)"
+   }
+  },
+  "/v1/alerts": {
+   "get": {
+    "operationId": "alerts_v1_alerts_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Alerts"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Alerts"
+   },
+   "post": {
+    "description": "Same types and rules as the web app. Free 1 alert, Pro 5, Premium 25.",
+    "operationId": "alert_create_v1_alerts_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AlertCreate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Alert"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Plan alert limit reached"
+     },
+     "409": {
+      "description": "You already have this alert"
+     },
+     "422": {
+      "description": "Invalid type, ticker, threshold or direction"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Alert Create"
+   }
+  },
+  "/v1/alerts/events": {
+   "get": {
+    "description": "Your most recent fired alerts, newest first.",
+    "operationId": "alert_events_v1_alerts_events_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 20,
+       "maximum": 100,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/AlertEvent"
+         },
+         "title": "Response Alert Events V1 Alerts Events Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Alert Events"
+   }
+  },
+  "/v1/alerts/{alert_id}": {
+   "delete": {
+    "operationId": "alert_delete_v1_alerts__alert_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "alert_id",
+      "required": true,
+      "schema": {
+       "title": "Alert Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Alert Delete"
+   },
+   "patch": {
+    "operationId": "alert_update_v1_alerts__alert_id__patch",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "alert_id",
+      "required": true,
+      "schema": {
+       "title": "Alert Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AlertUpdate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Alert"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Alert Update"
+   }
+  },
+  "/v1/auth/login": {
+   "post": {
+    "operationId": "login_v1_auth_login_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LoginBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TokenPair"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Wrong email or password"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Rate limited"
+     },
+     "503": {
+      "description": "Database unavailable"
+     }
+    },
+    "summary": "Login"
+   }
+  },
+  "/v1/auth/logout": {
+   "post": {
+    "operationId": "logout_v1_auth_logout_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LogoutBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Logout"
+   }
+  },
+  "/v1/auth/password-reset": {
+   "post": {
+    "description": "Email a reset link. Same answer whether or not the account exists.",
+    "operationId": "password_reset_v1_auth_password_reset_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/EmailBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Too many requests from this address"
+     }
+    },
+    "summary": "Password Reset"
+   }
+  },
+  "/v1/auth/password-reset/confirm": {
+   "post": {
+    "description": "Set a new password with the token from the reset link; signs the account out everywhere.",
+    "operationId": "password_reset_confirm_v1_auth_password_reset_confirm_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ResetConfirmBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Invalid link or password rule"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Password Reset Confirm"
+   }
+  },
+  "/v1/auth/refresh": {
+   "post": {
+    "operationId": "refresh_v1_auth_refresh_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RefreshBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TokenPair"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Unknown, expired or reused refresh token"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Refresh"
+   }
+  },
+  "/v1/auth/signup": {
+   "post": {
+    "description": "Create a Free account (same rules as the web form) and sign in. A verification\nemail is sent; verifying is needed to upgrade and for alert emails.",
+    "operationId": "signup_v1_auth_signup_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SignupBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SignupResult"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Invalid input or password rule"
+     },
+     "409": {
+      "description": "Email or username taken"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Too many sign-ups from this address"
+     }
+    },
+    "summary": "Signup"
+   }
+  },
+  "/v1/auth/verify-email": {
+   "post": {
+    "description": "Confirm an email address with the token from the verification link.",
+    "operationId": "verify_email_v1_auth_verify_email_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TokenBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Invalid or expired link"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Verify Email"
+   }
+  },
+  "/v1/billing/checkout": {
+   "post": {
+    "description": "Stripe checkout for Pro or Premium (monthly or yearly when enabled). Existing\nsubscribers get Stripe's plan-change screen instead (mode=portal). Open the URL in a browser.",
+    "operationId": "billing_checkout_v1_billing_checkout_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CheckoutBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BillingLink"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Verify your email first"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "description": "Billing service unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Billing Checkout"
+   }
+  },
+  "/v1/billing/portal": {
+   "post": {
+    "description": "Stripe Customer Portal: payment method, invoices, plan, cancellation (flow=cancel).",
+    "operationId": "billing_portal_v1_billing_portal_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PortalBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BillingLink"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "No subscription yet"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "description": "Billing service unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Billing Portal"
+   }
+  },
+  "/v1/brief": {
+   "get": {
+    "description": "The web's Market Brief (same builder as the morning email): market backdrop, top\nopportunities with movement, gappers, movers, setups and catalysts. Cached 5 minutes.\nPreBreakout picks and model fields are Premium. AI narrative: /v1/ai (Premium);\nhistorical scorecard: /v1/track-record (Pro); your alerts: /v1/alerts/events.",
+    "operationId": "brief_v1_brief_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Brief"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Market Brief"
+   }
+  },
+  "/v1/day-trader": {
+   "get": {
+    "description": "The web's Day Trader table: live quotes, gap, VWAP, relative volume and the day-trade\nscore for a symbol source. Quotes are shared for 30 s and movers screens for 2 min;\npoll every 30-60 s while the market is open.",
+    "operationId": "day_trader_v1_day_trader_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "source",
+      "required": false,
+      "schema": {
+       "default": "watchlist",
+       "enum": [
+        "watchlist",
+        "movers",
+        "movers_sp500",
+        "movers_nasdaq",
+        "premarket",
+        "postmarket",
+        "scan_picks",
+        "megacaps",
+        "custom"
+       ],
+       "title": "Source",
+       "type": "string"
+      }
+     },
+     {
+      "description": "source=custom: comma-separated",
+      "in": "query",
+      "name": "symbols",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 2000,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "source=custom: comma-separated",
+       "title": "Symbols"
+      }
+     },
+     {
+      "description": "source=watchlist; default: your default list",
+      "in": "query",
+      "name": "watchlist_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "minimum": 1,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "source=watchlist; default: your default list",
+       "title": "Watchlist Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DayTrader"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Live Day Trader monitor (Pro)"
+   }
+  },
+  "/v1/day-trader/stair-steppers": {
+   "get": {
+    "description": "The web's Stair-steppers check: symbols moving in a tight, straight line on the\n1-minute chart. Descriptive only; not a prediction.",
+    "operationId": "stair_steppers_v1_day_trader_stair_steppers_get",
+    "parameters": [
+     {
+      "description": "Comma-separated; the first 40 are checked",
+      "in": "query",
+      "name": "symbols",
+      "required": true,
+      "schema": {
+       "description": "Comma-separated; the first 40 are checked",
+       "maxLength": 2000,
+       "title": "Symbols",
+       "type": "string"
+      }
+     },
+     {
+      "description": "Bars fitted: 10, 15, 20, 30, 45 or 60",
+      "in": "query",
+      "name": "window",
+      "required": false,
+      "schema": {
+       "default": 45,
+       "description": "Bars fitted: 10, 15, 20, 30, 45 or 60",
+       "title": "Window",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "direction",
+      "required": false,
+      "schema": {
+       "default": "up",
+       "enum": [
+        "up",
+        "down",
+        "either"
+       ],
+       "title": "Direction",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "r2_min",
+      "required": false,
+      "schema": {
+       "default": 0.8,
+       "maximum": 0.99,
+       "minimum": 0.5,
+       "title": "R2 Min",
+       "type": "number"
+      }
+     },
+     {
+      "in": "query",
+      "name": "max_pullback",
+      "required": false,
+      "schema": {
+       "default": 1.0,
+       "maximum": 5.0,
+       "minimum": 0.1,
+       "title": "Max Pullback",
+       "type": "number"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_trend",
+      "required": false,
+      "schema": {
+       "default": 0.5,
+       "maximum": 20.0,
+       "minimum": 0.0,
+       "title": "Min Trend",
+       "type": "number"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StairSteppers"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Smooth 1-minute trends (Pro)"
+   }
+  },
+  "/v1/earnings": {
+   "get": {
+    "description": "The web's earnings calendar: earnings in the next `days` days, soonest first.",
+    "operationId": "earnings_v1_earnings_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "days",
+      "required": false,
+      "schema": {
+       "default": 7,
+       "maximum": 30,
+       "minimum": 0,
+       "title": "Days",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Comma-separated tickers to keep (e.g. a scan's rows)",
+      "in": "query",
+      "name": "tickers",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 4000,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Comma-separated tickers to keep (e.g. a scan's rows)",
+       "title": "Tickers"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/EarningsItem"
+         },
+         "title": "Response Earnings V1 Earnings Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Upcoming earnings (Pro)"
+   }
+  },
+  "/v1/journal": {
+   "get": {
+    "description": "Your logged trades (open first), open ones marked to live quotes, with closed-trade stats.",
+    "operationId": "journal_v1_journal_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Journal"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Your trade journal"
+   },
+   "post": {
+    "operationId": "journal_log_v1_journal_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/JournalCreate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Log a trade (Pro)"
+   }
+  },
+  "/v1/journal/{trade_id}": {
+   "delete": {
+    "operationId": "journal_delete_v1_journal__trade_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "trade_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Trade Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete a logged trade (Pro)"
+   }
+  },
+  "/v1/journal/{trade_id}/close": {
+   "post": {
+    "operationId": "journal_close_v1_journal__trade_id__close_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "trade_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Trade Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/JournalClose"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "409": {
+      "description": "Already closed"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Close a logged trade (Pro)"
+   }
+  },
+  "/v1/me": {
+   "delete": {
+    "description": "Permanently deletes your account and its data (watchlists, alerts, journal, paper keys,\nsettings, saved scans, sessions, devices). Refused while a paid subscription is active:\ncancel it first via POST /v1/billing/portal {\"flow\": \"cancel\"}. Can't be undone.",
+    "operationId": "delete_me_v1_me_delete",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeleteAccountBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Wrong password"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "409": {
+      "description": "Cancel your paid subscription first (or admin account)"
+     },
+     "422": {
+      "description": "confirm must be \"DELETE\""
+     },
+     "429": {
+      "description": "Too many attempts"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete your account"
+   },
+   "get": {
+    "operationId": "me_v1_me_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Me"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Me"
+   }
+  },
+  "/v1/me/devices": {
+   "get": {
+    "operationId": "device_list_v1_me_devices_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Device"
+         },
+         "title": "Response Device List V1 Me Devices Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Device List"
+   },
+   "post": {
+    "operationId": "device_register_v1_me_devices_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeviceBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Device"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Not a push token for that provider"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Device Register"
+   }
+  },
+  "/v1/me/devices/{device_id}": {
+   "delete": {
+    "operationId": "device_remove_v1_me_devices__device_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "device_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Device Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Device Remove"
+   }
+  },
+  "/v1/me/email-preferences": {
+   "get": {
+    "operationId": "email_prefs_v1_me_email_preferences_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/EmailPrefs"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Email Prefs"
+   },
+   "patch": {
+    "operationId": "email_prefs_update_v1_me_email_preferences_patch",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/EmailPrefsUpdate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/EmailPrefs"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Email Prefs Update"
+   }
+  },
+  "/v1/me/password": {
+   "post": {
+    "description": "Change the password. Every other session (web and app) is signed out; this\ndevice gets a new token pair.",
+    "operationId": "change_password_v1_me_password_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PasswordChangeBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TokenPair"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Wrong current password or password rule"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Change Password"
+   }
+  },
+  "/v1/me/verify-email": {
+   "post": {
+    "description": "Send a new verification link to the signed-in account's email (3 per hour).",
+    "operationId": "resend_verification_v1_me_verify_email_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Resend Verification"
+   }
+  },
+  "/v1/paper/account": {
+   "delete": {
+    "operationId": "paper_disconnect_v1_paper_account_delete",
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "503": {
+      "description": "Paper trading unavailable on the server"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Disconnect your paper account (Premium)"
+   },
+   "get": {
+    "operationId": "paper_account_v1_paper_account_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PaperStatus"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "503": {
+      "description": "Paper trading unavailable on the server"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Paper account status (Premium)"
+   },
+   "post": {
+    "description": "Validates the keys against Alpaca's paper endpoint, then stores them encrypted. Paper keys only.",
+    "operationId": "paper_connect_v1_paper_account_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PaperConnect"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PaperStatus"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Keys rejected"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "503": {
+      "description": "Paper trading unavailable on the server"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Connect your Alpaca paper account (Premium)"
+   }
+  },
+  "/v1/paper/activity": {
+   "get": {
+    "operationId": "paper_activity_v1_paper_activity_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 25,
+       "maximum": 100,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PaperActivity"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "503": {
+      "description": "Paper trading unavailable on the server"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Paper positions and orders (Premium)"
+   }
+  },
+  "/v1/paper/orders": {
+   "post": {
+    "description": "A whole-share market BUY sent to your Alpaca PAPER account (no real money), imported into\nyour journal. Show the user what will be sent and send confirm=true only after they confirm.",
+    "operationId": "paper_order_v1_paper_orders_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PaperOrderBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PaperOrder"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Order rejected"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "422": {
+      "description": "confirm must be true"
+     },
+     "429": {
+      "description": "Too many orders this hour"
+     },
+     "503": {
+      "description": "Paper trading unavailable on the server"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Paper trade a setup (Premium)"
+   }
+  },
+  "/v1/runs": {
+   "get": {
+    "description": "Your saved scans, newest first (the web's Scan History tab).",
+    "operationId": "runs_v1_runs_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 50,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Include daily snapshot copies",
+      "in": "query",
+      "name": "include_snapshots",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Include daily snapshot copies",
+       "title": "Include Snapshots",
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/RunSummary"
+         },
+         "title": "Response Runs V1 Runs Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Your scan history (Pro)"
+   }
+  },
+  "/v1/runs/{run_id}": {
+   "get": {
+    "operationId": "run_detail_v1_runs__run_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "run_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Run Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RunDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "One of your saved scans with its rows (Pro)"
+   }
+  },
+  "/v1/scans": {
+   "get": {
+    "description": "Newest first, without results (fetch one by id for its rows). Kept 7 days.",
+    "operationId": "scan_list_v1_scans_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 10,
+       "maximum": 50,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ScanJob"
+         },
+         "title": "Response Scan List V1 Scans Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Your recent custom scans"
+   },
+   "post": {
+    "description": "Queue a custom scan (the web's Custom Scan page). Plan rules are checked here; the\nscan runs in the background \u2014 poll GET /v1/scans/{scan_id} (every 2-5 s) until\nstatus is complete or failed. One scan per account at a time; 30 per hour.",
+    "operationId": "scan_create_v1_scans_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ScanCreate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ScanJob"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Not in your plan (universe, rows, session or filter)"
+     },
+     "404": {
+      "description": "Watchlist not found (or not yours)"
+     },
+     "409": {
+      "description": "You already have a scan queued or running (body has scan_id)"
+     },
+     "422": {
+      "description": "Invalid request"
+     },
+     "429": {
+      "description": "Too many scans this hour"
+     },
+     "503": {
+      "description": "Scans busy or database unavailable (Retry-After)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Start a custom scan"
+   }
+  },
+  "/v1/scans/latest": {
+   "get": {
+    "description": "The latest market scan's HSF setups, ranked as in the Scanner, up to the plan's row cap.",
+    "operationId": "scans_latest_v1_scans_latest_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 50,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "offset",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "maximum": 10000,
+       "minimum": 0,
+       "title": "Offset",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_score",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "maximum": 100,
+       "minimum": 0,
+       "title": "Min Score",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Only setups with this signal",
+      "in": "query",
+      "name": "signal",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^(golden_cross|breakout|prebreakout|gapper|gainer)$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Only setups with this signal",
+       "title": "Signal"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LatestScan"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Scans Latest"
+   }
+  },
+  "/v1/scans/{scan_id}": {
+   "get": {
+    "operationId": "scan_get_v1_scans__scan_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "scan_id",
+      "required": true,
+      "schema": {
+       "pattern": "^[0-9a-f]{32}$",
+       "title": "Scan Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ScanJob"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "A custom scan's status and results"
+   }
+  },
+  "/v1/stocks/{ticker}": {
+   "get": {
+    "description": "Stock Intelligence for one ticker: score, signals, reasons and risks, lifecycle,\ndaily bars, and your watchlists and alerts on it.",
+    "operationId": "stock_v1_stocks__ticker__get",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StockDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Stock"
+   }
+  },
+  "/v1/stocks/{ticker}/plan": {
+   "get": {
+    "description": "The web's trade plan: stop at half the 20-day volatility (2-8%), targets at 1.5R and 3R,\nsize from your risk budget. Educational only, not advice.",
+    "operationId": "stock_plan_v1_stocks__ticker__plan_get",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "account_size",
+      "required": false,
+      "schema": {
+       "default": 10000.0,
+       "maximum": 1000000000.0,
+       "minimum": 100,
+       "title": "Account Size",
+       "type": "number"
+      }
+     },
+     {
+      "in": "query",
+      "name": "risk_pct",
+      "required": false,
+      "schema": {
+       "default": 1.0,
+       "exclusiveMinimum": 0,
+       "maximum": 10,
+       "title": "Risk Pct",
+       "type": "number"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TradePlan"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "404": {
+      "description": "Not in the latest scan"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Trade plan for a scan result (Pro)"
+   }
+  },
+  "/v1/today": {
+   "get": {
+    "operationId": "today_v1_today_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Today"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Today"
+   }
+  },
+  "/v1/track-record": {
+   "get": {
+    "description": "Descriptive backtest summaries by ranking and horizon (computed daily by the scheduler).",
+    "operationId": "track_record_v1_track_record_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TrackRecord"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Historical research: saved scan picks vs SPY (Pro)"
+   }
+  },
+  "/v1/track-record/daily": {
+   "get": {
+    "operationId": "track_record_daily_v1_track_record_daily_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "ranking",
+      "required": false,
+      "schema": {
+       "default": "breakout",
+       "enum": [
+        "breakout",
+        "prebreakout"
+       ],
+       "title": "Ranking",
+       "type": "string"
+      }
+     },
+     {
+      "description": "1, 3, 5, 10 or 20 trading days",
+      "in": "query",
+      "name": "horizon",
+      "required": false,
+      "schema": {
+       "default": 5,
+       "description": "1, 3, 5, 10 or 20 trading days",
+       "title": "Horizon",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "days",
+      "required": false,
+      "schema": {
+       "default": 120,
+       "maximum": 365,
+       "minimum": 1,
+       "title": "Days",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/TrackRecordDay"
+         },
+         "title": "Response Track Record Daily V1 Track Record Daily Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Daily excess return vs SPY (Pro)"
+   }
+  },
+  "/v1/watchlists": {
+   "get": {
+    "operationId": "watchlists_v1_watchlists_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Watchlist"
+         },
+         "title": "Response Watchlists V1 Watchlists Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Watchlists"
+   },
+   "post": {
+    "operationId": "watchlist_create_v1_watchlists_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WatchlistCreate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WatchlistDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Watchlist limit reached"
+     },
+     "409": {
+      "description": "A watchlist with that name exists"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Watchlist Create"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}": {
+   "delete": {
+    "operationId": "watchlist_delete_v1_watchlists__watchlist_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Watchlist Delete"
+   },
+   "get": {
+    "operationId": "watchlist_get_v1_watchlists__watchlist_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WatchlistDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Watchlist Get"
+   },
+   "patch": {
+    "operationId": "watchlist_update_v1_watchlists__watchlist_id__patch",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WatchlistUpdate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WatchlistDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "409": {
+      "description": "A watchlist with that name exists"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Watchlist Update"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}/tickers": {
+   "post": {
+    "operationId": "watchlist_add_v1_watchlists__watchlist_id__tickers_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TickersBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TickersResult"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Watchlist Add"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}/tickers/{ticker}": {
+   "delete": {
+    "operationId": "watchlist_remove_v1_watchlists__watchlist_id__tickers__ticker__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Watchlist Remove"
+   },
+   "patch": {
+    "operationId": "watchlist_note_v1_watchlists__watchlist_id__tickers__ticker__patch",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NoteBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Watchlist Note"
+   }
+  }
+ }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "hsf-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HSF Web v2: Next.js frontend over the HSF API (P1-58). Runs beside the Streamlit app.",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "api:types": "openapi-typescript openapi.json -o src/api/schema.d.ts",
+    "api:check": "openapi-typescript openapi.json -o src/api/schema.d.ts && git diff --exit-code -- src/api/schema.d.ts",
+    "screenshots": "node scripts/screenshots.mjs"
+  },
+  "dependencies": {
+    "next": "16.3.8",
+    "openapi-fetch": "0.17.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.3.8",
+    "jsdom": "30.1.2",
+    "openapi-typescript": "7.13.0",
+    "playwright-core": "1.56.1",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  }
+}
