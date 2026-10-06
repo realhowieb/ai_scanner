@@ -362,3 +362,10 @@ class TrackRecord(BaseModel):
 class TrackRecordDay(BaseModel):
     day: str
     avg_excess_return: Optional[float] = None
+
+
+class EarningsItem(BaseModel):
+    ticker: str
+    earnings_date: Optional[str] = Field(default=None, description="YYYY-MM-DD")
+    days_until: Optional[int] = None
+    time: Optional[str] = Field(default=None, description="bmo / amc / … when known")

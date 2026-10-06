@@ -96,6 +96,26 @@ class StockHistoricalGateTests(PaidApiTestCase):
         self.assertEqual(pro["historical_context"], {"n": 40})
 
 
+class EarningsTests(PaidApiTestCase):
+    def test_pro_gets_calendar_free_refused(self):
+        import datetime as dt
+
+        today = dt.datetime.now(dt.timezone.utc).date()
+        rows = [{"symbol": "MSFT", "earnings_date": today + dt.timedelta(days=3), "earnings_time": "AMC"},
+                {"symbol": "BRK-B", "earnings_date": today + dt.timedelta(days=1), "earnings_time": None},
+                {"symbol": "XYZ", "earnings_date": None, "earnings_time": None}]
+        with mock.patch("db.earnings.fetch_earnings_this_week", return_value=rows) as f:
+            self.assertEqual(self.get("free@example.com", "/v1/earnings").status_code, 403)
+            r = self.get("pro@example.com", "/v1/earnings?days=14")
+            only = self.get("pro@example.com", "/v1/earnings?tickers=msft,brk.b").json()
+        self.assertEqual(f.call_args_list[0].kwargs["days_ahead"], 14)
+        items = r.json()
+        self.assertEqual([i["ticker"] for i in items], ["BRK-B", "MSFT", "XYZ"])     # soonest first, unknown last
+        self.assertEqual((items[1]["days_until"], items[1]["time"]), (3, "amc"))
+        self.assertEqual({i["ticker"] for i in only}, {"MSFT", "BRK-B"})
+        self.assertEqual(self.get("pro@example.com", "/v1/earnings?days=31").status_code, 422)
+
+
 @unittest.skipUnless(PG_URL, "set HSF_TEST_PG_URL to a throwaway Postgres to run")
 class OwnedRunPostgresTests(unittest.TestCase):
     def test_owned_run_checks_the_owner(self):

@@ -189,6 +189,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     _device_routes(app)
     _scan_routes(app)
     _history_routes(app)
+    _market_routes(app)
     return app
 
 
@@ -763,6 +764,21 @@ def _history_routes(app: FastAPI) -> None:
         if horizon not in history.HORIZONS:
             raise HTTPException(422, "horizon must be 1, 3, 5, 10 or 20.")
         return json_safe(history.track_record_daily(ranking, horizon, days))
+
+
+def _market_routes(app: FastAPI) -> None:
+    from api import market
+
+    @app.get("/v1/earnings", response_model=List[models.EarningsItem], responses={**_AUTH, 403: {"description": "Pro feature"}},
+             summary="Upcoming earnings (Pro)")
+    def earnings(account: Dict[str, Any] = Depends(current_account),
+                 days: int = Query(7, ge=0, le=market.MAX_EARNINGS_DAYS),
+                 tickers: Optional[str] = Query(None, max_length=4000,
+                                                description="Comma-separated tickers to keep (e.g. a scan's rows)")) -> List[Dict[str, Any]]:
+        """The web's earnings calendar: earnings in the next `days` days, soonest first."""
+        require_feature(account, "can_earnings")
+        wanted = [t for t in (tickers or "").split(",") if t.strip()][:500]
+        return market.earnings(days, wanted)
 
 
 def _failing_app(message: str):
