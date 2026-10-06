@@ -449,3 +449,15 @@ class StairSteppers(BaseModel):
     checked: List[str]
     matches: List[Dict[str, Any]] = Field(default=[], description="Symbols that pass the filters (r2, trend, pullback…)")
     all: List[Dict[str, Any]] = []
+
+
+class AIText(BaseModel):
+    run_id: Optional[int] = Field(default=None, description="The scan the text is about")
+    ticker: Optional[str] = None
+    snapshot_time: Optional[str] = None
+    text: Optional[str] = Field(default=None, description="Markdown; null when there is nothing to explain")
+
+
+class AIChatAnswer(BaseModel):
+    run_id: Optional[int] = None
+    answer: Optional[str] = None

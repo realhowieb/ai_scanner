@@ -238,6 +238,81 @@ class DayTraderTests(PaidApiTestCase):
         self.assertEqual(self.get("pro@example.com", "/v1/day-trader/stair-steppers?symbols=AAPL&window=7").status_code, 422)
 
 
+class AITests(PaidApiTestCase):
+    def setUp(self):
+        super().setUp()
+        import pandas as pd
+
+        from api.today import _cache
+
+        _cache.clear()
+        self.addCleanup(_cache.clear)
+        self.accounts["prem2@example.com"] = dict(self.accounts["prem@example.com"], username="prem2@example.com")
+        df = pd.DataFrame([{"Ticker": "AAA", "BreakoutScore": 80, "GapPct": 3.0}, {"Ticker": "BBB", "BreakoutScore": 50}])
+        p = mock.patch
+        p("api.today.market_runs", return_value=[{"id": 5, "created_at": None}]).start()
+        p("api.today.run_df", return_value=df).start()
+        p("api.history._owned_run", side_effect=lambda u, i: {"id": i} if (u, i) == ("prem@example.com", 9) else None).start()
+        self.ask = p("ui.ai.ask_claude", return_value=("**AAA** leads.", None)).start()
+        self.chat = p("ui.ai.ask_claude_chat", return_value=("AAA has the higher score.", None)).start()
+
+    def post(self, email, path, body=None):
+        return self.client.post(path, headers=self.h(email), json=body or {})
+
+    def test_premium_only(self):
+        for path in ("/v1/ai/summary", "/v1/ai/notes/AAA"):
+            self.assertEqual(self.post("pro@example.com", path).status_code, 403, path)
+        self.assertEqual(self.get("pro@example.com", "/v1/ai/brief-narrative").status_code, 403)
+        self.assertEqual(self.post("pro@example.com", "/v1/ai/chat", {"messages": [{"role": "user", "content": "hi"}]}).status_code, 403)
+        self.ask.assert_not_called()
+
+    def test_summary_shared_per_scan_and_counted_to_the_caller(self):
+        a = self.post("prem@example.com", "/v1/ai/summary").json()
+        b = self.post("prem2@example.com", "/v1/ai/summary").json()
+        self.assertEqual((a["run_id"], a["text"]), (5, "**AAA** leads."))
+        self.assertEqual(b["text"], a["text"])
+        self.assertEqual(self.ask.call_count, 1)                                   # one call per scan
+        kw = self.ask.call_args.kwargs
+        self.assertEqual((kw["username"], kw["feature"]), ("prem@example.com", "scan_summary"))
+        self.assertIn("AAA", kw["user"])
+
+    def test_own_saved_scan_only(self):
+        self.assertEqual(self.post("prem@example.com", "/v1/ai/summary", {"run_id": 9}).status_code, 200)
+        self.assertEqual(self.post("prem2@example.com", "/v1/ai/summary", {"run_id": 9}).status_code, 404)
+
+    def test_limits_and_outages(self):
+        self.ask.return_value = (None, "You've reached today's AI usage limit. Try again tomorrow.")
+        self.assertEqual(self.post("prem@example.com", "/v1/ai/notes/AAA").status_code, 429)
+        self.ask.return_value = (None, "AI features are temporarily disabled.")
+        r = self.post("prem@example.com", "/v1/ai/notes/BBB")
+        self.assertEqual(r.status_code, 503)
+        self.ask.return_value = (None, "AI failed: boom secret detail")
+        r = self.post("prem@example.com", "/v1/ai/summary", {"run_id": 9})
+        self.assertEqual(r.status_code, 502)
+        self.assertNotIn("secret", r.text)                                         # provider errors aren't echoed
+        self.assertIsNone(self.post("prem@example.com", "/v1/ai/notes/ZZZZ").json()["text"])   # not in the scan
+
+    def test_chat(self):
+        msgs = [{"role": "user", "content": f"q{i}"} if i % 2 == 0 else {"role": "assistant", "content": f"a{i}"}
+                for i in range(15)]
+        r = self.post("prem@example.com", "/v1/ai/chat", {"messages": msgs})
+        self.assertEqual(r.json()["answer"], "AAA has the higher score.")
+        sent = self.chat.call_args.kwargs["messages"]
+        self.assertIn("scan results (CSV)", sent[0]["content"])
+        self.assertEqual(sent[-1], {"role": "user", "content": "q14"})
+        self.assertLessEqual(len(sent), 2 + 16)
+        self.assertEqual(sent[2]["role"], "user")
+        bad = self.post("prem@example.com", "/v1/ai/chat", {"messages": [{"role": "assistant", "content": "x"}]})
+        self.assertEqual(bad.status_code, 422)
+        self.assertEqual(self.post("prem@example.com", "/v1/ai/chat", {"messages": []}).status_code, 422)
+
+    def test_brief_narrative(self):
+        with mock.patch("api.market._brief_core", return_value={"data": {"snapshot_time": "t1", "breadth": (3, 2)}}):
+            r = self.get("prem@example.com", "/v1/ai/brief-narrative").json()
+        self.assertEqual(r["snapshot_time"], "t1")
+        self.assertEqual(self.ask.call_args.kwargs["feature"], "market_brief_narrative")
+
+
 @unittest.skipUnless(PG_URL, "set HSF_TEST_PG_URL to a throwaway Postgres to run")
 class OwnedRunPostgresTests(unittest.TestCase):
     def test_owned_run_checks_the_owner(self):
