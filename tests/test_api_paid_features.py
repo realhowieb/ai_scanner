@@ -313,6 +313,126 @@ class AITests(PaidApiTestCase):
         self.assertEqual(self.ask.call_args.kwargs["feature"], "market_brief_narrative")
 
 
+class JournalAndPaperTests(PaidApiTestCase):
+    def setUp(self):
+        super().setUp()
+        import pandas as pd
+
+        from api.today import _cache
+
+        _cache.clear()
+        self.addCleanup(_cache.clear)
+        self.trades, self.keys, self.logged = [], {}, []
+        df = pd.DataFrame([{"Ticker": "AAPL", "Last": 100.0, "Volatility20D%": 6.0, "BreakoutScore": 80}])
+        p = mock.patch
+        for target, fn in (
+            ("db.trades.list_trades", lambda u, limit=50: [dict(t) for t in self.trades if t["user"] == u]),
+            ("db.trades.log_trade", self._log),
+            ("db.trades.close_trade", lambda tid, u, px: [t.update(exit_price=px, closed_at="2026-10-06T15:00:00+00:00")
+                                                       for t in self.trades if t["id"] == tid and t["user"] == u]),
+            ("db.trades.delete_trade", lambda tid, u: self.trades.__setitem__(
+                slice(None), [t for t in self.trades if not (t["id"] == tid and t["user"] == u)])),
+            ("db.trades.journal_stats", lambda u: None),
+            ("market_data.get_latest_quotes", lambda syms, **k: {s: {"last": 110.0} for s in syms}),
+            ("db.paper_trading.account_meta", lambda u: {"connected_at": "2026-10-06T12:00:00+00:00"} if u in self.keys else None),
+            ("db.paper_trading.get_paper_account", lambda u: self.keys.get(u)),
+            ("db.paper_trading.save_paper_account", lambda u, k, sec: self.keys.__setitem__(u, {"api_key": k, "api_secret": sec}) or True),
+            ("db.paper_trading.delete_paper_account", lambda u: self.keys.pop(u, None)),
+            ("db.secret_box.encryption_available", lambda: True),
+            ("data.alpaca_trading._base_url", lambda: "https://paper-api.alpaca.markets"),
+            ("data.alpaca_trading.get_account", lambda k, sec: {"status": "ACTIVE", "buying_power": "100000",
+                                                                 "cash": "100000", "account_number": "PA123"} if k == "PKGOODKEY1" else None),
+            ("data.alpaca_trading.submit_market_order", lambda k, sec, sym, q, side="buy": {"ok": True, "order_id": "o1",
+                                                                                        "status": "accepted", "filled_avg_price": None}),
+            ("data.alpaca_trading.get_positions", lambda k, sec: [{"symbol": "AAPL", "qty": "3"}]),
+            ("data.alpaca_trading.get_orders", lambda k, sec, status="all", limit=25: [{"id": "o1"}]),
+            ("db.paper_events.sync_orders", lambda u, orders: len(orders)),
+            ("db.paper_events.list_events", lambda u, limit=25: [{"order_id": "o1", "symbol": "AAPL"}]),
+            ("api.today.market_runs", lambda: [{"id": 5, "created_at": None}]),
+            ("api.today.run_df", lambda rid: df),
+        ):
+            p(target, side_effect=fn).start()
+
+    def _log(self, user, ticker, entry, shares, source="scan", **kw):
+        self.logged.append((user, ticker, entry, shares, source, kw))
+        self.trades.append({"id": len(self.trades) + 1, "user": user, "ticker": ticker, "entry_price": entry,
+                            "shares": shares, "source": source, "entered_at": None, "exit_price": None, "closed_at": None})
+
+    def post(self, email, path, body=None):
+        return self.client.post(path, headers=self.h(email), json=body or {})
+
+    def test_journal_read_all_plans_write_pro(self):
+        self.assertEqual(self.get("free@example.com", "/v1/journal").json()["trades"], [])
+        self.assertEqual(self.post("free@example.com", "/v1/journal", {"ticker": "AAPL", "entry_price": 100, "shares": 5}).status_code, 403)
+        self.assertEqual(self.post("pro@example.com", "/v1/journal", {"ticker": "aapl", "entry_price": 100, "shares": 5}).status_code, 201)
+        j = self.get("pro@example.com", "/v1/journal").json()["trades"][0]
+        self.assertEqual((j["ticker"], j["open"], j["mark"], j["pnl"]), ("AAPL", True, 110.0, 50.0))
+        tid = j["id"]
+        self.assertEqual(self.client.delete(f"/v1/journal/{tid}", headers=self.h("prem@example.com")).status_code, 404)
+        self.assertEqual(self.post("pro@example.com", f"/v1/journal/{tid}/close", {"exit_price": 120}).status_code, 204)
+        self.assertEqual(self.post("pro@example.com", f"/v1/journal/{tid}/close", {"exit_price": 120}).status_code, 409)
+        closed = self.get("pro@example.com", "/v1/journal").json()["trades"][0]
+        self.assertEqual((closed["open"], closed["pnl"]), (False, 100.0))
+        self.assertEqual(self.client.delete(f"/v1/journal/{tid}", headers=self.h("pro@example.com")).status_code, 204)
+
+    def test_trade_plan(self):
+        self.assertEqual(self.get("free@example.com", "/v1/stocks/AAPL/plan").status_code, 403)
+        plan = self.get("pro@example.com", "/v1/stocks/AAPL/plan?account_size=10000&risk_pct=1").json()
+        self.assertEqual((plan["entry"], plan["stop_pct"]), (100.0, 3.0))
+        self.assertEqual(plan["shares"], 33)
+        self.assertEqual(self.get("pro@example.com", "/v1/stocks/ZZZ/plan").status_code, 404)
+
+    def test_paper_is_premium(self):
+        for path in ("/v1/paper/account", "/v1/paper/activity"):
+            self.assertEqual(self.get("pro@example.com", path).status_code, 403)
+        self.assertEqual(self.post("pro@example.com", "/v1/paper/orders", {"ticker": "AAPL", "qty": 1, "confirm": True}).status_code, 403)
+
+    def test_connect_never_returns_keys(self):
+        self.assertFalse(self.get("prem@example.com", "/v1/paper/account").json()["connected"])
+        bad = self.post("prem@example.com", "/v1/paper/account", {"api_key": "PKBADKEY12", "api_secret": "secret-xyz-123"})
+        self.assertEqual(bad.status_code, 400)
+        r = self.post("prem@example.com", "/v1/paper/account", {"api_key": "PKGOODKEY1", "api_secret": "secret-xyz-123"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()["connected"])
+        self.assertNotIn("PKGOODKEY1", r.text)
+        self.assertNotIn("secret-xyz-123", r.text)
+        self.assertNotIn("PA123", r.text)                                  # account number withheld
+        self.assertEqual(self.client.delete("/v1/paper/account", headers=self.h("prem@example.com")).status_code, 204)
+        self.assertNotIn("prem@example.com", self.keys)
+
+    def test_orders_need_confirmation_and_land_in_the_journal(self):
+        self.keys["prem@example.com"] = {"api_key": "k", "api_secret": "s"}
+        for body in ({"ticker": "AAPL", "qty": 2}, {"ticker": "AAPL", "qty": 2, "confirm": False},
+                     {"ticker": "AAPL", "qty": 0, "confirm": True}):
+            self.assertEqual(self.post("prem@example.com", "/v1/paper/orders", body).status_code, 422, body)
+        r = self.post("prem@example.com", "/v1/paper/orders", {"ticker": "aapl", "qty": 2, "confirm": True})
+        self.assertEqual(r.status_code, 201, r.text)
+        self.assertEqual(r.json()["order_id"], "o1")
+        user, ticker, entry, qty, source, kw = self.logged[-1]
+        self.assertEqual((user, ticker, entry, qty, source), ("prem@example.com", "AAPL", 100.0, 2, "paper"))
+        self.assertEqual((kw["stop_price"], kw["breakout_score"]), (97.0, 80))
+        act = self.get("prem@example.com", "/v1/paper/activity").json()
+        self.assertEqual((act["connected"], act["positions"][0]["symbol"], act["orders"][0]["order_id"]), (True, "AAPL", "o1"))
+
+    def test_orders_refused_off_the_paper_endpoint_or_without_encryption(self):
+        self.keys["prem@example.com"] = {"api_key": "k", "api_secret": "s"}
+        with mock.patch("data.alpaca_trading._base_url", return_value="https://api.alpaca.markets"):
+            r = self.post("prem@example.com", "/v1/paper/orders", {"ticker": "AAPL", "qty": 1, "confirm": True})
+        self.assertEqual(r.status_code, 503)
+        with mock.patch("db.secret_box.encryption_available", return_value=False):
+            r = self.post("prem@example.com", "/v1/paper/account",
+                          {"api_key": "PKGOODKEY1", "api_secret": "secret-xyz-123"})
+        self.assertEqual(r.status_code, 503)
+
+    def test_rejected_order_is_400_and_not_journaled(self):
+        self.keys["prem@example.com"] = {"api_key": "k", "api_secret": "s"}
+        with mock.patch("data.alpaca_trading.submit_market_order", return_value={"ok": False, "error": "insufficient buying power"}):
+            r = self.post("prem@example.com", "/v1/paper/orders", {"ticker": "AAPL", "qty": 1, "confirm": True})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("insufficient", r.json()["detail"])
+        self.assertEqual(self.logged, [])
+
+
 @unittest.skipUnless(PG_URL, "set HSF_TEST_PG_URL to a throwaway Postgres to run")
 class OwnedRunPostgresTests(unittest.TestCase):
     def test_owned_run_checks_the_owner(self):

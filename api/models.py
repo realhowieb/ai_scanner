@@ -461,3 +461,56 @@ class AIText(BaseModel):
 class AIChatAnswer(BaseModel):
     run_id: Optional[int] = None
     answer: Optional[str] = None
+
+
+class JournalTrade(BaseModel):
+    id: int
+    ticker: str
+    entry_price: Optional[float] = None
+    shares: Optional[int] = None
+    source: Optional[str] = Field(default=None, description="scan, paper or api")
+    entered_at: Optional[str] = None
+    exit_price: Optional[float] = None
+    closed_at: Optional[str] = None
+    open: bool
+    mark: Optional[float] = Field(default=None, description="Live price for open trades, exit price for closed")
+    pnl: Optional[float] = None
+    pnl_pct: Optional[float] = None
+
+
+class Journal(BaseModel):
+    trades: List[JournalTrade] = []
+    stats: Optional[Dict[str, Any]] = Field(default=None, description="{closed, wins, avg_return_pct}; null before any closed trade")
+
+
+class TradePlan(BaseModel):
+    ticker: str
+    entry: float
+    stop: float
+    stop_pct: float
+    targets: List[float]
+    target_r: List[float]
+    risk_per_share: float
+    shares: int
+    risk_budget: float
+
+
+class PaperStatus(BaseModel):
+    connected: bool
+    connected_at: Optional[str] = None
+    account: Optional[Dict[str, Any]] = Field(default=None, description="{status, buying_power, cash} from Alpaca; keys are never returned")
+
+
+class PaperActivity(BaseModel):
+    connected: bool
+    positions: List[Dict[str, Any]] = []
+    positions_available: bool = True
+    orders: List[Dict[str, Any]] = []
+
+
+class PaperOrder(BaseModel):
+    order_id: Optional[str] = None
+    status: str
+    ticker: str
+    qty: int
+    filled_avg_price: Optional[Any] = None

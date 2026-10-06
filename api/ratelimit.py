@@ -22,6 +22,8 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "verify_resend": (3, 3600),
     "scan": (30, 3600),          # per account (custom scans run on a small shared pool)
     "ai": (60, 3600),            # per account, on top of the daily AI_DAILY_LIMIT
+    "paper_connect": (5, 3600),  # per account: key validation attempts
+    "paper_order": (30, 3600),   # per account
 }
 _MAX_KEYS = 50_000  # bound memory if someone sprays many addresses
 
