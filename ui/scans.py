@@ -30,6 +30,11 @@ def _is_admin() -> bool:
     return bool(st.session_state.get("is_admin"))
 
 
+def _premium_full_lists() -> bool:
+    """Premium (can_full_universe) scans the full NASDAQ and Combo lists (2026-10-06)."""
+    return bool((st.session_state.get("entitlements") or {}).get("can_full_universe"))
+
+
 def _admin_override_caps(max_nasdaq_scan: int, max_combo_scan: int, top_n: int) -> tuple[int, int, int]:
     """Admin can scan bigger universes. Keep defaults for non-admin."""
     return apply_admin_caps(max_nasdaq_scan, max_combo_scan, top_n, is_admin=_is_admin())
@@ -231,6 +236,7 @@ def render_scan_controls(
                                       if market in ("COMBO", "US_MARKET") else None),
             combo_cache_key=combo_cache_key if market == "COMBO" else None,
             load_us_market_universe=us_market_symbols,
+            uncapped=_premium_full_lists(),
         )
 
     def do_scan(

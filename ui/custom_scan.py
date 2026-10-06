@@ -131,6 +131,7 @@ def render_custom_scan(username: str, tier: Any, flags: Dict[str, Any]) -> None:
         min_gap=float(min_gap),
         max_nasdaq_scan=int(max_nasdaq_scan),
         max_combo_scan=int(max_combo_scan),
+        full_lists=bool(flags.get("can_full_universe") or is_admin),
     )
 
     # -------- Market session gating for extended-hours toggles --------

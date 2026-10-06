@@ -53,6 +53,11 @@ def _is_admin() -> bool:
     return bool(st.session_state.get("is_admin"))
 
 
+def _premium_full_lists() -> bool:
+    """Premium (can_full_universe) scans the full NASDAQ and Combo lists (2026-10-06)."""
+    return bool((st.session_state.get("entitlements") or {}).get("can_full_universe"))
+
+
 def _init_scan_session_state() -> None:
     """Ensure the 3-step scanner has stable defaults."""
     if "scan_market" not in st.session_state:
@@ -89,6 +94,7 @@ def run_scan_engine(
         filter_universe=filter_universe,
         sanitize_symbols=sanitize_universe_symbols,
         load_us_market_universe=us_market_symbols,
+        uncapped=_premium_full_lists(),
     )
 
     if not tickers:

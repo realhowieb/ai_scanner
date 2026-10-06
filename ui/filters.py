@@ -231,6 +231,11 @@ def render_filters(tier, container: Any = None) -> Tuple[float, float, float, in
         )
         sb.caption(upgrade_message("can_scan_nasdaq"))
         sb.markdown("<br>", unsafe_allow_html=True)
+    elif is_premium_plus:
+        # Premium (2026-10-06): NASDAQ and Combo scan the full lists; the
+        # resolver ignores these caps (scan.universe_selection, uncapped=True).
+        max_nasdaq_scan = int(st.session_state["max_nasdaq_scan"])
+        sb.caption("✅ Premium: NASDAQ and Combo scans cover the full lists (no ticker limit).")
     else:
         max_nasdaq_scan = sb.number_input(
             "Max NASDAQ tickers to scan",
@@ -266,6 +271,8 @@ def render_filters(tier, container: Any = None) -> Tuple[float, float, float, in
         )
         sb.caption(upgrade_message("can_scan_nasdaq"))
         sb.markdown("<br>", unsafe_allow_html=True)
+    elif is_premium_plus:
+        max_combo_scan = int(st.session_state["max_combo_scan"])  # not applied for Premium
     else:
         max_combo_scan = sb.number_input(
             "Max Combo tickers to scan",
