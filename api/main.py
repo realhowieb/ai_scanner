@@ -75,7 +75,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
                            allow_methods=["GET", "POST", "PATCH", "DELETE"],
                            allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
-                           expose_headers=["X-Request-ID"])
+                           expose_headers=["X-Request-ID", "Retry-After"],  # 429/503 back-off
+                           max_age=600)  # browsers cache the preflight for 10 minutes
 
     @app.middleware("http")
     async def _request_id(request: Request, call_next):

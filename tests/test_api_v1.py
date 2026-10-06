@@ -138,6 +138,27 @@ class HealthAndSettingsTests(ApiTestCase):
                                                       "Access-Control-Request-Method": "GET"})
         self.assertNotIn("access-control-allow-origin", bad.headers)
 
+    def test_cors_preflight_is_cached_and_exposes_backoff_headers(self):
+        ok = self.client.options("/v1/me/devices", headers={"Origin": "https://app.example.com",
+                                                             "Access-Control-Request-Method": "DELETE"})
+        self.assertEqual(ok.status_code, 200)
+        self.assertEqual(ok.headers.get("access-control-max-age"), "600")
+        r = self.client.get("/healthz", headers={"Origin": "https://app.example.com"})
+        exposed = r.headers.get("access-control-expose-headers", "").lower()
+        self.assertIn("retry-after", exposed)
+        self.assertIn("x-request-id", exposed)
+
+    def test_cors_origins_parsing_drops_unsafe_entries(self):
+        from api.settings import parse_cors_origins
+
+        with self.assertLogs("hsf_api", level="WARNING") as logs:
+            got = parse_cors_origins(" https://App.Example.com/ ,*, https://x.example/path, http://evil.example,"
+                                     "http://localhost:8081, https://app.example.com, https://*.example.com,,"
+                                     "https://staging.example.com:8443")
+        self.assertEqual(got, ("https://app.example.com", "http://localhost:8081", "https://staging.example.com:8443"))
+        self.assertIn("ignored 4 entries", logs.output[0])
+        self.assertEqual(parse_cors_origins(""), ())
+
 
 class DocsTests(ApiTestCase):
     def test_openapi_declares_bearer_auth_so_docs_show_authorize(self):
