@@ -594,10 +594,13 @@ def main():
 
     render_market_snapshot(results_df=_snapshot_df)
 
-    st.markdown("## Scanner")  # P0-6/Run 83B: results render FIRST, before watchlists/Custom scan
+    st.markdown("## Scanner")  # P0-6/Run 83B: results render FIRST, before watchlists
     track_scanner_view_once(username, plan=tier_key)
     if st.session_state.pop("hsf_new_signup_scanner_hint", False):
-        st.info("You're in. The latest full-market ranking is shown below, so you can start with the current short list before running a custom scan.")
+        st.info("You're in. The latest full-market ranking is shown below, so you can start with the current short list before running a custom scan (Custom Scan in the menu).")
+    if st.session_state.pop("hsf_scan_just_ran", False):  # from the Custom Scan page
+        st.success(st.session_state.pop("_three_step_flash", None)
+                   or "Your scan is done. Its results are below; use “Back to the latest market scan” to return.")
     results_slot = st.container()
     st.markdown("---")
     getattr(sys.modules.get("ui.watchlists"), "ensure_active_watchlist_state", lambda _u: None)(username)  # ★ badges
@@ -648,138 +651,28 @@ def main():
         pass
     st.session_state["active_watchlist_id"] = watch_id
     st.session_state["active_watchlist_tickers"] = watch_tickers
+    # Watchlist tools: add/remove/clear act here; "Run Watchlist Scan" and
+    # "View as table" open the Custom Scan page, which runs them.
+    from ui.custom_scan import handle_watchlist_tools
+
+    handle_watchlist_tools(username)
+
+    # -------- Custom scan: its own page (owner, 2026-10-06) --------
     st.markdown("---")
-    custom_scan_box = st.expander("Custom scan", expanded=False)
-    custom_scan_box.caption(
-        "The latest full-market opportunities are already shown above. "
-        "Open this only when you want to run your own scan."
-    )
-    # Keep one collapsed Custom scan entry point. Filters render in its bounded
-    # container so phone users do not have to operate a nested popover.
-    _filters_box = custom_scan_box.container(border=True)
-    _filters_box.markdown("#### Scan filters")
-    # Pre-clamp diagnostics BEFORE filters render widgets.
-    # Streamlit forbids mutating widget-bound session_state keys after widget creation.
-    if not flags.get("can_diagnostics"):
-        st.session_state["show_diagnostics_ui"] = False
-
-    # -------- Filters --------
-    (
-        min_gap,
-        min_price,
-        max_price,
-        top_n,
-        max_nasdaq_scan,
-        max_combo_scan,
-        premarket,
-        afterhours,
-        unusual_vol,
-        diagnostics,
-        min_dollar_vol,
-        include_ta,
-        apply_gap_filter,
-    ) = render_filters(tier, container=_filters_box)
-    # Enforce admin-only diagnostics (even if UI/modules accidentally expose it)
-    if not flags.get("can_diagnostics"):
-        diagnostics = False
-    with custom_scan_box:
-        render_active_filters_summary(
-            universe=st.session_state.get("universe"),
-            min_price=float(min_price),
-            max_price=float(max_price),
-            min_dollar_vol=float(min_dollar_vol),
-            top_n=int(top_n),
-            premarket=bool(premarket),
-            afterhours=bool(afterhours),
-            include_ta=bool(include_ta),
-            unusual_vol=bool(unusual_vol),
-            apply_gap_filter=bool(apply_gap_filter),
-            min_gap=float(min_gap),
-            max_nasdaq_scan=int(max_nasdaq_scan),
-            max_combo_scan=int(max_combo_scan),
-        )
-
-    # -------- Market session gating for extended-hours toggles --------
-    session = get_market_session()
-    _filters_box.caption(f"Market session (US/Eastern): {session.capitalize()}")
-
-    # Premarket toggle only takes effect during premarket session
-    if premarket and session != "premarket":
-        # Clamp to regular mode for this run; avoid mutating widget state directly.
-        premarket = False
-        _filters_box.info(
-            "Premarket scans only run between 4:00–9:30am ET on trading days. "
-            "The toggle has been reset to Regular mode for this scan."
-        )
-
-    # After-hours toggle only takes effect during after-hours session
-    if afterhours and session != "afterhours":
-        # Clamp to regular mode for this run; avoid mutating widget state directly.
-        afterhours = False
-        _filters_box.info(
-            "After-hours scans only run between 4:00–8:00pm ET on trading days. "
-            "The toggle has been reset to Regular mode for this scan."
-        )
-
-    # -------- User Settings Footer (Save Defaults) --------
-    render_user_settings_footer(
-        username,
-        min_price=float(min_price) if min_price is not None else None,
-        max_price=float(max_price) if max_price is not None else None,
-        diagnostics=bool(diagnostics) if diagnostics is not None else None,
-        get_user_settings=get_user_settings,
-        upsert_user_settings=upsert_user_settings,
-        container=_filters_box,
-    )
-
-    # -------- Admin: allow larger scans / full universe --------
-    # Keep this override in app.py so admin can test at scale even if UI defaults are capped.
-    max_nasdaq_scan, max_combo_scan, top_n = apply_admin_scan_caps(
-        max_nasdaq_scan=max_nasdaq_scan,
-        max_combo_scan=max_combo_scan,
-        top_n=top_n,
-        is_admin=bool(st.session_state.get("is_admin")),
-    )
-
-    with custom_scan_box:
-        render_earnings_controls(
-            flags=flags,
-            render_earnings_this_week_panel=render_earnings_this_week_panel,
-        )
-
-    # -------- Scan Controls --------
-    render_scan_controls(
-        can_scan_sp500=flags["can_scan_sp500"],
-        can_scan_nasdaq=flags["can_scan_nasdaq"],
-        max_nasdaq_scan=int(max_nasdaq_scan) if max_nasdaq_scan is not None else 0,
-        max_combo_scan=int(max_combo_scan) if max_combo_scan is not None else 0,
-        min_gap=float(min_gap),
-        apply_gap_filter=bool(apply_gap_filter),
-        min_price=float(min_price),
-        max_price=float(max_price),
-        top_n=int(top_n) if top_n is not None else 0,
-        premarket=bool(premarket),
-        afterhours=bool(afterhours),
-        unusual_vol=bool(unusual_vol),
-        diagnostics=bool(diagnostics),
-        username=username,
-        container=custom_scan_box,
-    )
+    try:
+        st.page_link("pages/custom_scan.py", label="Run your own scan (Custom Scan)", icon="🧪")
+        st.caption("Choose a market and your own filters. The list above updates on its own "
+                   "after each automatic full-market scan.")
+    except Exception:
+        pass
 
     # ✅ Force results refresh after a scan completes (prevents blank / stale results)
     if st.session_state.pop("force_results_refresh", False):
-        # Best effort: clear only results cache if available
         try:
             get_results_df.clear()  # works if get_results_df is @st.cache_data
         except Exception:
-            # Fallback: clear all cache_data (safe but broader)
-            try:
-                st.cache_data.clear()
-            except Exception:
-                pass
+            pass
         st.rerun()
-
-    render_three_step_scanner(container=custom_scan_box)
 
     # P0-6: other tools live on their own pages (paper trading on Settings,
     # the journal and paper activity on Journal); one compact row links them.

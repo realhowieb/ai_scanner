@@ -16,17 +16,15 @@ class FiltersPopoverTests(unittest.TestCase):
                 # the sidebar is only the default, never written to directly
                 self.assertEqual(src.count("st.sidebar"), 1 + (1 if rel.endswith("user_settings.py") else 0))
 
-    def test_scanner_renders_filters_in_the_custom_scan_entry(self):
-        app = (ROOT / "app.py").read_text()
-        main = app[app.index("def main():"):]
-        head = main.index('st.expander("Custom scan"')
-        pop = main.index('_filters_box = custom_scan_box.container(border=True)')
-        call = main.index("render_filters(tier, container=_filters_box)")
-        self.assertLess(head, pop)
+    def test_custom_scan_page_renders_filters_in_its_box(self):
+        src = (ROOT / "ui" / "custom_scan.py").read_text()
+        main = src[src.index("def render_custom_scan("):]
+        pop = main.index("filters_box = st.container(border=True)")
+        call = main.index("render_filters(tier, container=filters_box)")
         self.assertLess(pop, call)
         self.assertLess(call, main.index("render_scan_controls("))      # values exist before scans use them
-        self.assertIn("container=_filters_box,", main)                 # save/reset defaults move too
-        self.assertNotIn("st.sidebar.info(", main)
+        self.assertIn("container=filters_box,", main)                  # save/reset defaults move too
+        self.assertNotIn("st.sidebar", main)
 
 
 class TopMenuTests(unittest.TestCase):

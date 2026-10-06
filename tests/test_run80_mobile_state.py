@@ -79,9 +79,10 @@ def test_mobile_has_one_primary_navigation_and_practical_touch_targets():
 
 def test_custom_scan_remains_one_entry_without_nested_popover():
     app = (ROOT / "app.py").read_text()
-    assert app.count('st.expander("Custom scan"') == 1
-    assert 'custom_scan_box.popover("Scan filters")' not in app
-    assert '_filters_box = custom_scan_box.container(border=True)' in app
+    page = (ROOT / "ui" / "custom_scan.py").read_text()
+    assert app.count('st.page_link("pages/custom_scan.py"') == 1
+    assert ".popover(" not in page
+    assert "filters_box = st.container(border=True)" in page
 
 
 def test_frozen_scanner_core_is_untouched_by_run80():

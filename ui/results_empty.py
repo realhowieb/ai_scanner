@@ -6,13 +6,13 @@ from typing import Any, Optional
 # Run 62 — empty states. df is None until the user runs a scan this session;
 # an empty DataFrame means their scan ran and matched nothing.
 NO_SESSION_SCAN_MESSAGE = (
-    "You haven't run a scan in this session yet. Choose what to scan under "
-    "\"Run your own scan\" below, then run it. The market status line shows when "
+    "You haven't run a scan in this session yet. Open the Custom Scan page "
+    "(link below or in the menu), choose what to scan, then run it. The market status line shows when "
     "HSF last scanned the full market."
 )
 MARKET_UNAVAILABLE_MESSAGE = (
     "HSF's latest full-market scan isn't available right now. Results will appear "
-    "after the next scheduled scan completes, or you can run your own scan below."
+    "after the next scheduled scan completes, or you can run your own scan on the Custom Scan page."
 )
 NO_MATCHES_MESSAGE = (
     "Your last scan found no stocks matching the current settings. Try another "

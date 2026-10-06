@@ -204,8 +204,8 @@ class SourceContractTests(unittest.TestCase):
         fill = app.index("with results_slot:")
         self.assertLess(app.index('st.markdown("## Scanner")'), fill)
         self.assertLess(fill, app.index("render_watchlists_panel(username)"))
-        self.assertLess(fill, app.index('st.expander("Custom scan"'))
-        self.assertLess(fill, app.index("render_three_step_scanner(container=custom_scan_box)"))
+        self.assertLess(fill, app.index('st.page_link("pages/custom_scan.py"'))
+        self.assertNotIn("render_three_step_scanner(", app[app.index("def main():"):])   # Custom Scan page
 
     def test_three_step_scan_reruns_to_show_results_at_the_top(self):
         src = (ROOT / "ui" / "three_step_scanner.py").read_text()

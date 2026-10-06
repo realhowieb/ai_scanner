@@ -22,6 +22,7 @@ _NAV_SECTIONS = [
     ]),
     ("Discover", [
         ("app.py", "Scanner", "🔎"),
+        ("pages/custom_scan.py", "Custom Scan", "🧪"),
         ("pages/day_trader.py", "Day Trader", "⚡"),
     ]),
     ("Research", [

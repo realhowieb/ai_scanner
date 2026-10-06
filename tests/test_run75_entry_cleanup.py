@@ -16,9 +16,10 @@ def test_today_landing_happens_once_per_authenticated_user():
 
 def test_scanner_has_one_custom_scan_entry():
     app = (ROOT / "app.py").read_text()
-    assert app.count('st.expander("Custom scan"') == 1
+    assert 'st.expander("Custom scan"' not in app                 # moved to its own page (2026-10-06)
+    assert app.count('st.page_link("pages/custom_scan.py"') == 1
     assert 'st.markdown("## Run your own scan")' not in app
-    assert "container=custom_scan_box" in app
+    assert (ROOT / "pages" / "custom_scan.py").exists()
 
 
 def test_tour_is_only_onboarding_renderer():

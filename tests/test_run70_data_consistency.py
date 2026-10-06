@@ -148,11 +148,12 @@ class SessionAndEmptyStateTests(unittest.TestCase):
         self.assertEqual(len({results_empty.NO_SESSION_SCAN_MESSAGE, results_empty.MARKET_UNAVAILABLE_MESSAGE,
                               results_empty.NO_MATCHES_MESSAGE}), 3)
 
-    def test_copy_points_to_scan_tools_below_the_results(self):
+    def test_copy_points_to_the_custom_scan_page(self):
         from ui.market_default import REPLACE_HINT
 
-        self.assertIn("below", REPLACE_HINT)
-        self.assertIn("below", results_empty.NO_SESSION_SCAN_MESSAGE)
+        self.assertIn("Custom Scan page", REPLACE_HINT)
+        self.assertIn("Custom Scan page", results_empty.NO_SESSION_SCAN_MESSAGE)
+        self.assertIn("Custom Scan page", results_empty.MARKET_UNAVAILABLE_MESSAGE)
 
 
 class PricingCopyTests(unittest.TestCase):
@@ -228,7 +229,8 @@ class ScannerEndToEndTests(unittest.TestCase):
     def test_market_default_renders_results_first(self):
         at = self._run()
         self.assertIn("📊 Latest market scan (2 setups)", [t.label for t in at.tabs])
-        self.assertEqual([e.label for e in at.expander].count("Custom scan"), 1)
+        self.assertEqual([e.label for e in at.expander].count("Custom scan"), 0)   # its own page now
+        self.assertFalse(any(b.label.startswith("Run SP500") for b in at.button))
         self.assertTrue(any(c.value.startswith("Latest full-market scan") for c in at.caption))
         self.assertFalse(any(b.label.startswith("↩ Back") for b in at.button))    # already on the market view
 
