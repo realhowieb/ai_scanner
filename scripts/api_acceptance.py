@@ -49,7 +49,9 @@ REQUIRED_PATHS = ["/healthz", "/v1/auth/login", "/v1/auth/refresh", "/v1/auth/lo
                   "/v1/brief", "/v1/day-trader", "/v1/day-trader/stair-steppers", "/v1/ai/summary", "/v1/ai/chat",
                   "/v1/ai/notes/{ticker}", "/v1/ai/brief-narrative", "/v1/journal", "/v1/journal/{trade_id}",
                   "/v1/journal/{trade_id}/close", "/v1/stocks/{ticker}/plan", "/v1/paper/account",
-                  "/v1/paper/activity", "/v1/paper/orders"]
+                  "/v1/paper/activity", "/v1/paper/orders", "/v1/alerts/types"]
+# Operations Web v2 needs that share a path with an older one (a path check can't see them).
+REQUIRED_OPERATIONS = [("delete", "/v1/scans/{scan_id}"), ("get", "/v1/alerts/types")]
 # Plan floor for each paid feature: (method, path, body, lowest plan that gets 2xx). AI is checked only
 # for refusals below Premium (a Premium call would spend money); paper only for status/activity.
 PAID_CHECKS = [("GET", "/v1/runs", None, "pro"), ("GET", "/v1/track-record", None, "pro"),
@@ -128,8 +130,10 @@ def deployment_checks(run: Run, origin: Optional[str]) -> None:
     r = run.req("GET", "/docs")
     run.check(A, "/docs served", r.status_code == 200 and "swagger" in r.text.lower(), f"HTTP {r.status_code}")
     r = run.req("GET", "/openapi.json")
-    paths = set((r.json() or {}).get("paths", {})) if r.status_code == 200 else set()
+    spec_paths = (r.json() or {}).get("paths", {}) if r.status_code == 200 else {}
+    paths = set(spec_paths)
     missing = [p for p in REQUIRED_PATHS if p not in paths]
+    missing += [f"{m.upper()} {p}" for m, p in REQUIRED_OPERATIONS if m not in (spec_paths.get(p) or {})]
     run.check(A, "OpenAPI has every current endpoint", r.status_code == 200 and not missing,
               f"HTTP {r.status_code}, {len(paths)} paths, missing: {missing or 'none'}")
     if origin:
