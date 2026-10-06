@@ -11,6 +11,8 @@ const NAV = [
   { href: "/today", label: "Today" },
   { href: "/scanner", label: "Scanner" },
   { href: "/scanner/custom", label: "Custom scan" },
+  { href: "/watchlists", label: "Watchlists" },
+  { href: "/alerts", label: "Alerts" },
 ];
 export const TICKER_RE = /^[A-Za-z0-9][A-Za-z0-9.-]{0,9}$/;
 const CLASSIC = process.env.NEXT_PUBLIC_STREAMLIT_URL || "https://hsfinestai.streamlit.app";

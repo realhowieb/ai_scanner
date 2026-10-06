@@ -4,6 +4,8 @@ import type { Schemas } from "@/api/client";
 import { Pill, ScoreBar, TickerLink } from "@/components/ui";
 import { num, pct, price, setupLabel } from "@/lib/format";
 
+import { SaveToWatchlistButton } from "./SaveToWatchlist";
+
 type Row = Schemas["ScanSetup"];
 
 function prob(r: Row, premium: boolean) {
@@ -23,6 +25,7 @@ export function SetupTable({ rows, offset = 0, premium }: { rows: Row[]; offset?
               <th scope="col" className="w30">HSF Score</th><th scope="col" className="num">Last</th>
               <th scope="col" className="num">Chg %</th><th scope="col" className="num">Gap %</th>
               <th scope="col" className="num">RVOL</th><th scope="col" className="num">PreBreakout</th>
+              <th scope="col"><span className="sr-only">Save</span></th>
             </tr>
           </thead>
           <tbody>
@@ -37,6 +40,7 @@ export function SetupTable({ rows, offset = 0, premium }: { rows: Row[]; offset?
                 <td className="num mono">{pct(r.gap_pct)}</td>
                 <td className="num mono">{num(r.rvol)}</td>
                 <td className="num mono">{prob(r, premium)}</td>
+                <td className="num"><SaveToWatchlistButton ticker={r.ticker} compact /></td>
               </tr>
             ))}
           </tbody>
@@ -50,6 +54,8 @@ export function SetupTable({ rows, offset = 0, premium }: { rows: Row[]; offset?
               <TickerLink ticker={r.ticker} />
               <Pill>{setupLabel(r.primary_setup)}</Pill>
               {r.fading && <Pill tone="warn">Fading</Pill>}
+              <span className="grow" />
+              <SaveToWatchlistButton ticker={r.ticker} compact />
             </div>
             <ScoreBar score={r.score} />
             <dl className="rc-facts">

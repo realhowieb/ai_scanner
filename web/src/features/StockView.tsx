@@ -1,12 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import type { Schemas } from "@/api/client";
-import { Card, Disclaimer, Empty, Freshness, Locked, Pill } from "@/components/ui";
+import { alerts } from "@/api/userData";
+import { Dialog } from "@/components/Dialog";
+import { Card, Disclaimer, Empty, ErrorLine, Freshness, Locked, Pill } from "@/components/ui";
+import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, setupLabel } from "@/lib/format";
 
+import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
 import { PriceChart } from "./PriceChart";
+import { SaveToWatchlistButton } from "./SaveToWatchlist";
 
 type Stock = Schemas["StockDetail"];
 
@@ -49,7 +55,41 @@ function Historical({ s }: { s: Stock }) {
   );
 }
 
-export function StockView({ s, premium }: { s: Stock; premium: boolean }) {
+function PriceAlertButton({ s, onCreated }: { s: Stock; onCreated?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const types = useApi(open ? "alert-types" : null, (signal) => alerts.types(signal));
+  const quota = useApi(open ? `alert-quota:${s.ticker}` : null, (signal) => alerts.list(signal));
+  const full = !!quota.data && quota.data.used >= quota.data.limit;
+  const close = () => { setOpen(false); setDone(null); };
+  return (
+    <>
+      <button type="button" className="btn" onClick={() => setOpen(true)}>Set price alert</button>
+      <Dialog open={open} title={`Price alert for ${s.ticker}`} onClose={close}>
+        {done ? (
+          <div className="stack-sm">
+            <p className="notice" role="status">Created: {done}.</p>
+            <div className="row-actions"><button type="button" className="btn" onClick={close} data-autofocus>Done</button><Link href="/alerts">See all alerts →</Link></div>
+          </div>
+        ) : types.error && typesUnavailable(types.error.status) ? <p className="notice" role="note">{TYPES_UNAVAILABLE}</p>
+          : types.error || quota.error ? <ErrorLine error={types.error ?? quota.error} /> : !types.data || !quota.data ? <p className="cap">Loading…</p> : full ? (
+          <div className="stack-sm">
+            <p className="strong">You&apos;re using all {quota.data.limit} alert{quota.data.limit === 1 ? "" : "s"} on your plan.</p>
+            <p className="cap">Delete one on the <Link href="/alerts">Alerts</Link> page, or upgrade for more.</p>
+          </div>
+        ) : (
+          <>
+            <p className="cap">Using {quota.data.used} of {quota.data.limit} alerts.{s.price != null ? ` Last scan price ${price(s.price)}${s.scan_at ? ` at ${etTime(s.scan_at)}` : ""}, not a live quote.` : ""}</p>
+            <AlertForm types={types.data} lockType prefill={{ type: "price", ticker: s.ticker, threshold: s.price != null ? Math.round(s.price * 100) / 100 : undefined, direction: "above" }}
+              onCreated={(a) => { setDone(describeAlert(a)); onCreated?.(); }} />
+          </>
+        )}
+      </Dialog>
+    </>
+  );
+}
+
+export function StockView({ s, premium, onChanged }: { s: Stock; premium: boolean; onChanged?: () => void }) {
   const comps = Object.entries(s.score_components || {}).filter(([, v]) => Number.isFinite(v));
   const compMax = Math.max(1, ...comps.map(([, v]) => Math.abs(v)));
   const noScore = s.hsf_score === null || s.hsf_score === undefined;
@@ -71,6 +111,10 @@ export function StockView({ s, premium }: { s: Stock; premium: boolean }) {
               <span className="cap">{s.from_history ? "from the last recorded observation" : s.scan_at ? `at the ${etTime(s.scan_at)} scan` : ""}, not a live quote</span>
             </div>
           ) : <p className="cap">No price from the scans.</p>}
+        </div>
+        <div className="row-actions">
+          <SaveToWatchlistButton ticker={s.ticker} inLists={s.watchlists.map((w) => w.id)} onSaved={onChanged} />
+          <PriceAlertButton s={s} onCreated={onChanged} />
         </div>
       </section>
 
@@ -135,9 +179,9 @@ export function StockView({ s, premium }: { s: Stock; premium: boolean }) {
           </Card>
 
           <Card title="Your lists and alerts" id="mine">
-            {s.watchlists.length ? <div className="chips">{s.watchlists.map((w) => <Pill key={w.id}>{w.name}</Pill>)}</div> : <p className="cap">Not on your watchlists.</p>}
+            {s.watchlists.length ? <div className="chips">{s.watchlists.map((w) => <Link key={w.id} href={`/watchlists?id=${w.id}`} className="pill">{w.name}</Link>)}</div> : <p className="cap">Not on your watchlists.</p>}
             {s.alerts.length ? (
-              <ul className="bullets">{s.alerts.map((a) => <li key={a.id}>{label(a.type)}{a.threshold !== null && a.threshold !== undefined ? ` ${a.direction ?? ""} ${a.threshold}` : ""}{a.enabled ? "" : " (off)"}</li>)}</ul>
+              <ul className="bullets">{s.alerts.map((a) => <li key={a.id}>{describeAlert(a)}{a.enabled ? "" : " (off)"}</li>)}</ul>
             ) : <p className="cap">No alerts on {s.ticker}.</p>}
           </Card>
 

@@ -1,0 +1,125 @@
+// An in-memory stand-in for the HSF API's watchlist and alert routes, following the
+// real rules (duplicates 409, limits 403, invalid tickers reported, owner-only 404),
+// with failures injectable per route. Test-only.
+import types from "./fixtures/alert-types.json";
+import { jsonResponse } from "./helpers";
+
+type Item = { ticker: string; added_at: string; price_when_added: number | null; note: string | null };
+type WL = { id: number; name: string; is_default: boolean; items: Item[] };
+type AlertRow = { id: number; type: string; ticker: string | null; threshold: number | null; direction: string | null;
+  watchlist_only: boolean; enabled: boolean; last_fired_at: string | null; created_at: string };
+
+const TICKER = /^[A-Z0-9][A-Z0-9.-]{0,9}$/;
+
+export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; scan?: { ticker: string; score: number; last: number }[] } = {}) {
+  let nextId = 1;
+  const lists: WL[] = [];
+  const alertRows: AlertRow[] = [];
+  const prefs = { digest: true, evening: true, alerts: true };
+  const calls: { method: string; path: string; body: unknown }[] = [];
+  const failures: { method: string; re: RegExp; status: number; body: unknown; headers?: Record<string, string> }[] = [];
+  const limit = opts.alertLimit ?? 5;
+  const scanAt = new Date().toISOString();
+
+  const summary = (w: WL) => ({ id: w.id, name: w.name, is_default: w.is_default, symbol_count: w.items.length });
+  const detail = (w: WL) => ({ ...summary(w), items: w.items });
+  const err = (status: number, detail: string) => jsonResponse({ detail }, status, { "x-request-id": `srv-${status}-${calls.length}` });
+
+  async function handle(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    const path = url.pathname.replace(/^\/api\/hsf/, "");
+    const method = req.method;
+    const text = method === "GET" || method === "DELETE" ? "" : await req.text();
+    const body = text ? JSON.parse(text) : null;
+    calls.push({ method, path, body });
+    const f = failures.findIndex((x) => x.method === method && x.re.test(path));
+    if (f >= 0) {
+      const [x] = failures.splice(f, 1);
+      return jsonResponse(x!.body, x!.status, { "x-request-id": "srv-injected", ...(x!.headers ?? {}) });
+    }
+    let m: RegExpMatchArray | null;
+    if (path === "/v1/scans/latest") {
+      return jsonResponse({ scan_at: scanAt, total: (opts.scan ?? []).length, max_results: 100, limited: false,
+        setups: (opts.scan ?? []).map((s) => ({ ticker: s.ticker, score: s.score, last: s.last, primary_setup: "breakout", status: "STRONG",
+          n_signals: 1, chg_pct: 1, gap_pct: null, rvol: null, prob: null, signals: [], fading: false, breakout_score: null })) });
+    }
+    if (path === "/v1/watchlists" && method === "GET") return jsonResponse(lists.map(summary));
+    if (path === "/v1/watchlists" && method === "POST") {
+      if (lists.some((w) => w.name.toLowerCase() === body.name.toLowerCase())) return err(409, `You already have a watchlist named "${body.name}".`);
+      if (lists.length >= 50) return err(403, "You've reached the limit of 50 watchlists.");
+      const w: WL = { id: nextId++, name: body.name, is_default: lists.length === 0 || !!body.make_default, items: [] };
+      if (w.is_default) lists.forEach((x) => (x.is_default = false));
+      lists.push(w);
+      return jsonResponse(detail(w), 201);
+    }
+    if ((m = path.match(/^\/v1\/watchlists\/(\d+)(?:\/tickers(?:\/([^/]+))?)?$/))) {
+      const w = lists.find((x) => x.id === Number(m![1]));
+      if (!w) return err(404, "Watchlist not found.");
+      const sub = path.includes("/tickers");
+      const t = m[2] ? decodeURIComponent(m[2]) : null;
+      if (!sub && method === "GET") return jsonResponse(detail(w));
+      if (!sub && method === "PATCH") {
+        if (body.name && lists.some((x) => x !== w && x.name.toLowerCase() === body.name.toLowerCase())) return err(409, `You already have a watchlist named "${body.name}".`);
+        if (body.name) w.name = body.name;
+        if (body.make_default) { lists.forEach((x) => (x.is_default = false)); w.is_default = true; }
+        return jsonResponse(detail(w));
+      }
+      if (!sub && method === "DELETE") { lists.splice(lists.indexOf(w), 1); return new Response(null, { status: 204 }); }
+      if (sub && !t && method === "POST") {
+        const out = { added: [] as string[], already_present: [] as string[], invalid: [] as string[] };
+        for (const raw of body.tickers as string[]) {
+          const s = raw.toUpperCase();
+          if (!TICKER.test(s)) out.invalid.push(raw);
+          else if (w.items.some((i) => i.ticker === s)) out.already_present.push(s);
+          else { w.items.push({ ticker: s, added_at: new Date().toISOString(), price_when_added: null, note: null }); out.added.push(s); }
+        }
+        return jsonResponse(out);
+      }
+      const it = w.items.find((i) => i.ticker === t);
+      if (!it) return err(404, "Ticker not in this watchlist.");
+      if (method === "DELETE") { w.items.splice(w.items.indexOf(it), 1); return new Response(null, { status: 204 }); }
+      if (method === "PATCH") { it.note = body.note; return new Response(null, { status: 204 }); }
+    }
+    if (path === "/v1/alerts/types") return jsonResponse(types);
+    if (path === "/v1/alerts/events") return jsonResponse([]);
+    if (path === "/v1/alerts" && method === "GET") return jsonResponse({ limit, used: alertRows.length, email_enabled: opts.emailEnabled ?? true, alerts: alertRows });
+    if (path === "/v1/alerts" && method === "POST") {
+      const spec = types.find((x) => x.type === body.type);
+      if (!spec) return err(422, "Unknown alert type.");
+      if (spec.threshold && (body.threshold == null || (spec.threshold.min_exclusive ? body.threshold <= spec.threshold.min : body.threshold < spec.threshold.min)))
+        return err(422, `Threshold must be ${spec.threshold.min_exclusive ? "greater than" : "at least"} ${spec.threshold.min}.`);
+      if (alertRows.length >= limit) return err(403, `Your plan allows a maximum of ${limit} alert${limit === 1 ? "" : "s"} on this plan.`);
+      if (alertRows.some((a) => a.type === body.type && a.ticker === (body.ticker ?? null) && a.threshold === (body.threshold ?? null) && a.direction === (body.direction ?? null)))
+        return err(409, "You already have this alert.");
+      const a: AlertRow = { id: nextId++, type: body.type, ticker: body.ticker ?? null, threshold: body.threshold ?? null, direction: body.direction ?? null,
+        watchlist_only: !!body.watchlist_only, enabled: true, last_fired_at: null, created_at: new Date().toISOString() };
+      alertRows.push(a);
+      return jsonResponse(a, 201);
+    }
+    if ((m = path.match(/^\/v1\/alerts\/(\d+)$/))) {
+      const a = alertRows.find((x) => x.id === Number(m![1]));
+      if (!a) return err(404, "Alert not found.");
+      if (method === "PATCH") { a.enabled = !!body.enabled; return jsonResponse(a); }
+      if (method === "DELETE") { alertRows.splice(alertRows.indexOf(a), 1); return new Response(null, { status: 204 }); }
+    }
+    if (path === "/v1/me/email-preferences") {
+      if (method === "PATCH") Object.assign(prefs, body);
+      return jsonResponse(prefs);
+    }
+    if (path === "/v1/billing/checkout") return jsonResponse({ url: "https://checkout.example/x", mode: "checkout" });
+    return err(404, `No fake for ${method} ${path}`);
+  }
+
+  return {
+    lists, alertRows, calls, prefs,
+    fetch: (input: Request | string, init?: RequestInit) => handle(typeof input === "string" ? new Request(new URL(input, "http://localhost"), init) : input),
+    fail: (method: string, re: RegExp, status: number, body: unknown = { detail: "The HSF service is unavailable right now." }, headers?: Record<string, string>) =>
+      failures.push({ method, re, status, body, headers }),
+    seedList: (name: string, tickers: string[] = [], isDefault = false) => {
+      const w: WL = { id: nextId++, name, is_default: isDefault || lists.length === 0, items: tickers.map((t) => ({ ticker: t, added_at: new Date().toISOString(), price_when_added: 10, note: null })) };
+      lists.push(w);
+      return w;
+    },
+    count: (method: string, re: RegExp) => calls.filter((c) => c.method === method && re.test(c.path)).length,
+  };
+}

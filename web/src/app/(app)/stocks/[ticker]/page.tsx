@@ -18,6 +18,7 @@ export default function StockPage() {
     unwrap(api.GET("/v1/stocks/{ticker}", { params: { path: { ticker } }, signal })));
   if (!valid) return <Card><Empty title="That isn't a ticker symbol.">Search for a symbol like AAPL.</Empty></Card>;
   if (error && !data) return <ErrorState error={error} onRetry={reload} what={ticker} />;
-  if (loading || !data) return <Skeleton rows={8} label={`Loading ${ticker}`} />;
-  return <StockView s={data} premium={can("can_early_breakout")} />;
+  // Keep the page (and any open dialog) while it refreshes after a save; blank only for a new ticker.
+  if (!data || (loading && data.ticker !== ticker)) return <Skeleton rows={8} label={`Loading ${ticker}`} />;
+  return <StockView s={data} premium={can("can_early_breakout")} onChanged={reload} />;
 }

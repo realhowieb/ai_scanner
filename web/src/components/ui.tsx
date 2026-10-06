@@ -128,3 +128,14 @@ export function TickerLink({ ticker }: { ticker: string }) {
 export function Disclaimer() {
   return <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice.</p>;
 }
+
+/** A failed action's message, with the support code when the server gave one. */
+export function ErrorLine({ error }: { error: ApiError | null }) {
+  if (!error) return null;
+  return (
+    <p className="form-error" role="alert">
+      {error.message}
+      {error.requestId && <span className="cap mono"> · Support code: {error.requestId}</span>}
+    </p>
+  );
+}
