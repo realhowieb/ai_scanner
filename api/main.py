@@ -149,6 +149,34 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         return JSONResponse({"detail": "Scans are busy right now. Try again in a minute."},
                             status_code=503, headers={"Retry-After": "60"})
 
+    from api import ai as ai_mod
+
+    @app.exception_handler(ai_mod.AIUnavailable)
+    def _ai_unavailable(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=503, headers={"Retry-After": "300"})
+
+    @app.exception_handler(ai_mod.AILimit)
+    def _ai_limit(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=429)
+
+    @app.exception_handler(ai_mod.AIFailed)
+    def _ai_failed(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=502)
+
+    from api import trading as trading_mod
+
+    @app.exception_handler(trading_mod.PaperUnavailable)
+    def _paper_unavailable(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=503)
+
+    @app.exception_handler(trading_mod.PaperRejected)
+    def _paper_rejected(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    @app.exception_handler(trading_mod.TradeClosed)
+    def _trade_closed(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+
     @app.exception_handler(devices.InvalidDevice)
     def _bad_device(_request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=400)
@@ -188,6 +216,11 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     _account_routes(app)
     _device_routes(app)
     _scan_routes(app)
+    _history_routes(app)
+    _market_routes(app)
+    _ai_routes(app)
+    _trading_routes(app)
+    _delete_account_route(app)
     return app
 
 
@@ -705,6 +738,320 @@ def _scan_routes(app: FastAPI) -> None:
         if job is None:
             raise user_data.NotFound("scan")
         return _job_out(job)
+
+
+def require_feature(account: Dict[str, Any], feature: str) -> Dict[str, Any]:
+    """The account's entitlements, or 403 with the web's upgrade wording."""
+    ent = entitlements_for(account)
+    if not ent["entitlements"].get(feature):
+        try:
+            from ui.pricing import upgrade_message
+
+            msg = upgrade_message(feature)
+        except Exception:
+            msg = "Your plan doesn't include this feature."
+        raise HTTPException(403, msg)
+    return ent
+
+
+def _history_routes(app: FastAPI) -> None:
+    from api import history
+
+    _PRO = {**_AUTH, 403: {"description": "Pro feature"}}
+
+    @app.get("/v1/runs", response_model=List[models.RunSummary], responses=_PRO, summary="Your scan history (Pro)")
+    def runs(account: Dict[str, Any] = Depends(current_account), limit: int = Query(50, ge=1, le=200),
+             include_snapshots: bool = Query(False, description="Include daily snapshot copies")) -> List[Dict[str, Any]]:
+        """Your saved scans, newest first (the web's Scan History tab)."""
+        require_feature(account, "can_scan_history")
+        return json_safe(history.saved_runs(_user(account), limit, include_snapshots))
+
+    @app.get("/v1/runs/{run_id}", response_model=models.RunDetail, responses={**_PRO, **_OWNED},
+             summary="One of your saved scans with its rows (Pro)")
+    def run_detail(run_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        ent = require_feature(account, "can_scan_history")
+        from api.scans import max_results_for
+
+        out = history.get_run(_user(account), run_id, early_breakout=bool(ent["entitlements"].get("can_early_breakout")),
+                              max_results=max_results_for(ent["tier"]))
+        if out is None:
+            raise user_data.NotFound("scan")
+        return json_safe(out)
+
+    @app.get("/v1/track-record", response_model=models.TrackRecord, responses=_PRO,
+             summary="Historical research: saved scan picks vs SPY (Pro)")
+    def track_record(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Descriptive backtest summaries by ranking and horizon (computed daily by the scheduler)."""
+        require_feature(account, "can_track_record")
+        return json_safe(history.track_record())
+
+    @app.get("/v1/track-record/daily", response_model=List[models.TrackRecordDay], responses=_PRO,
+             summary="Daily excess return vs SPY (Pro)")
+    def track_record_daily(account: Dict[str, Any] = Depends(current_account),
+                           ranking: Literal["breakout", "prebreakout"] = "breakout",
+                           horizon: int = Query(5, description="1, 3, 5, 10 or 20 trading days"),
+                           days: int = Query(120, ge=1, le=365)) -> List[Dict[str, Any]]:
+        require_feature(account, "can_track_record")
+        if horizon not in history.HORIZONS:
+            raise HTTPException(422, "horizon must be 1, 3, 5, 10 or 20.")
+        return json_safe(history.track_record_daily(ranking, horizon, days))
+
+
+def _market_routes(app: FastAPI) -> None:
+    from api import market
+
+    @app.get("/v1/earnings", response_model=List[models.EarningsItem], responses={**_AUTH, 403: {"description": "Pro feature"}},
+             summary="Upcoming earnings (Pro)")
+    def earnings(account: Dict[str, Any] = Depends(current_account),
+                 days: int = Query(7, ge=0, le=market.MAX_EARNINGS_DAYS),
+                 tickers: Optional[str] = Query(None, max_length=4000,
+                                                description="Comma-separated tickers to keep (e.g. a scan's rows)")) -> List[Dict[str, Any]]:
+        """The web's earnings calendar: earnings in the next `days` days, soonest first."""
+        require_feature(account, "can_earnings")
+        wanted = [t for t in (tickers or "").split(",") if t.strip()][:500]
+        return market.earnings(days, wanted)
+
+    _DT = {**_AUTH, 403: {"description": "Pro feature"}}
+
+    @app.get("/v1/day-trader", response_model=models.DayTrader, responses=_DT, summary="Live Day Trader monitor (Pro)")
+    def day_trader(account: Dict[str, Any] = Depends(current_account),
+                   source: Literal["watchlist", "movers", "movers_sp500", "movers_nasdaq", "premarket", "postmarket",
+                                   "scan_picks", "megacaps", "custom"] = "watchlist",
+                   symbols: Optional[str] = Query(None, max_length=2000, description="source=custom: comma-separated"),
+                   watchlist_id: Optional[int] = Query(None, ge=1, description="source=watchlist; default: your default list")
+                   ) -> Dict[str, Any]:
+        """The web's Day Trader table: live quotes, gap, VWAP, relative volume and the day-trade
+        score for a symbol source. Quotes are shared for 30 s and movers screens for 2 min;
+        poll every 30-60 s while the market is open."""
+        require_feature(account, "can_day_trader")
+        watch: List[str] = []
+        if source == "watchlist":
+            user = _user(account)
+            wid = watchlist_id or next((w["id"] for w in user_data.list_watchlists(user) if w["is_default"]), None)
+            if wid is not None:
+                watch = [i["ticker"] for i in user_data.get_watchlist(user, int(wid))["items"]]   # 404 if not yours
+        return json_safe(market.day_trader(source, (symbols or "").split(","), watch))
+
+    @app.get("/v1/day-trader/stair-steppers", response_model=models.StairSteppers, responses=_DT,
+             summary="Smooth 1-minute trends (Pro)")
+    def stair_steppers(account: Dict[str, Any] = Depends(current_account),
+                       symbols: str = Query(..., max_length=2000, description="Comma-separated; the first 40 are checked"),
+                       window: int = Query(45, description="Bars fitted: 10, 15, 20, 30, 45 or 60"),
+                       direction: Literal["up", "down", "either"] = "up",
+                       r2_min: float = Query(0.8, ge=0.5, le=0.99),
+                       max_pullback: float = Query(1.0, ge=0.1, le=5.0),
+                       min_trend: float = Query(0.5, ge=0.0, le=20.0)) -> Dict[str, Any]:
+        """The web's Stair-steppers check: symbols moving in a tight, straight line on the
+        1-minute chart. Descriptive only; not a prediction."""
+        require_feature(account, "can_day_trader")
+        from analytics.stair_step import WINDOW_OPTIONS
+
+        if window not in WINDOW_OPTIONS:
+            raise HTTPException(422, f"window must be one of {list(WINDOW_OPTIONS)}.")
+        return json_safe(market.stair_steppers(symbols.split(","), window=window, direction=direction, r2_min=r2_min,
+                                               max_pullback_pct=max_pullback, min_trend_pct_per_hour=min_trend))
+
+    @app.get("/v1/brief", response_model=models.Brief, responses=_AUTH, summary="Market Brief")
+    def brief(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The web's Market Brief (same builder as the morning email): market backdrop, top
+        opportunities with movement, gappers, movers, setups and catalysts. Cached 5 minutes.
+        PreBreakout picks and model fields are Premium. AI narrative: /v1/ai (Premium);
+        historical scorecard: /v1/track-record (Pro); your alerts: /v1/alerts/events."""
+        return json_safe(market.brief(entitlements_for(account)["entitlements"]))
+
+
+class AISummaryBody(BaseModel):
+    run_id: Optional[int] = Field(None, ge=1, description="One of your saved scans (GET /v1/runs); default: the latest market scan")
+
+
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class AIChatBody(AISummaryBody):
+    messages: List[ChatTurn] = Field(min_length=1, max_length=16,
+                                     description="The conversation so far, oldest first, ending with the new question")
+
+
+def _ai_routes(app: FastAPI) -> None:
+    from api import ai
+
+    _AI = {**_AUTH, 403: {"description": "Premium feature"}, 404: {"description": "Scan not found (or not yours)"},
+           429: {"description": "Daily AI limit or hourly request limit reached"},
+           502: {"description": "AI call failed"}, 503: {"description": "AI unavailable"}}
+
+    def _premium(account: Dict[str, Any]) -> str:
+        require_feature(account, "can_ai_notes")
+        user = _user(account)
+        ratelimit.check("ai", user)
+        return user
+
+    @app.post("/v1/ai/summary", response_model=models.AIText, responses=_AI, summary="AI scan summary (Premium)")
+    def ai_summary(body: AISummaryBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Claude explains the top results in HSF Score order (the web's AI Scan Summary).
+        Research commentary, not investment advice."""
+        user = _premium(account)
+        out = ai.summary(user, body.run_id, shared=body.run_id is None)
+        if out["run_id"] is None and body.run_id is not None:
+            raise user_data.NotFound("scan")
+        return out
+
+    @app.post("/v1/ai/chat", response_model=models.AIChatAnswer, responses=_AI, summary="Ask about a scan (Premium)")
+    def ai_chat(body: AIChatBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Questions about one scan's results (the web's results chat). Send the conversation so
+        far; the last message must be the user's question. Up to 8 prior turns are used."""
+        user = _premium(account)
+        if body.messages[-1].role != "user":
+            raise HTTPException(422, "The last message must be the user's question.")
+        out = ai.chat(user, body.run_id, [m.model_dump() for m in body.messages])
+        if out["run_id"] is None and body.run_id is not None:
+            raise user_data.NotFound("scan")
+        return out
+
+    @app.post("/v1/ai/notes/{ticker}", response_model=models.AIText, responses=_AI,
+              summary="AI setup note for a ticker (Premium)")
+    def ai_note(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Claude's note on one result of the latest market scan; text is null when the ticker
+        isn't in it."""
+        user = _premium(account)
+        return ai.ticker_note(user, ticker.strip().upper())
+
+    @app.get("/v1/ai/brief-narrative", response_model=models.AIText, responses=_AI,
+             summary="AI Market Brief narrative (Premium)")
+    def ai_brief_narrative(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """A 2-3 sentence brief written from the Market Brief's facts only."""
+        user = _premium(account)
+        return json_safe(ai.brief_narrative(user))
+
+
+class JournalCreate(BaseModel):
+    ticker: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,9}$")
+    entry_price: float = Field(gt=0, le=1_000_000)
+    shares: int = Field(ge=0, le=10_000_000)
+
+
+class JournalClose(BaseModel):
+    exit_price: float = Field(gt=0, le=1_000_000)
+
+
+class PaperConnect(BaseModel):
+    api_key: str = Field(min_length=8, max_length=128, description="Alpaca PAPER API key ID")
+    api_secret: str = Field(min_length=8, max_length=256, description="Alpaca PAPER API secret (stored encrypted, never returned)")
+
+
+class PaperOrderBody(BaseModel):
+    ticker: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,9}$")
+    qty: int = Field(ge=1, le=100_000, description="Whole shares")
+    confirm: Literal[True] = Field(description="Must be true: the user confirmed this order (the web's confirmation step)")
+
+
+def require_min_plan(account: Dict[str, Any], plan: str, message: str) -> Dict[str, Any]:
+    from auth.tiering import has_min_tier
+
+    ent = entitlements_for(account)
+    if not (ent["is_admin"] or has_min_tier(ent["tier"], plan)):
+        raise HTTPException(403, message)
+    return ent
+
+
+def _trading_routes(app: FastAPI) -> None:
+    from api import trading
+
+    _PRO = {**_AUTH, 403: {"description": "Pro feature"}}
+    _PREM = {**_AUTH, 403: {"description": "Premium feature"}, 503: {"description": "Paper trading unavailable on the server"}}
+    _PRO_MSG = "Trade plans and logging trades are part of Pro."
+
+    @app.get("/v1/journal", response_model=models.Journal, responses=_AUTH, summary="Your trade journal")
+    def journal(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Your logged trades (open first), open ones marked to live quotes, with closed-trade stats."""
+        return json_safe(trading.journal(_user(account)))
+
+    @app.post("/v1/journal", status_code=201, responses=_PRO, summary="Log a trade (Pro)")
+    def journal_log(body: JournalCreate, account: Dict[str, Any] = Depends(current_account)) -> None:
+        require_min_plan(account, "pro", _PRO_MSG)
+        trading.log(_user(account), body.ticker.upper(), body.entry_price, body.shares)
+
+    @app.post("/v1/journal/{trade_id}/close", status_code=204, responses={**_PRO, **_OWNED, 409: {"description": "Already closed"}},
+              summary="Close a logged trade (Pro)")
+    def journal_close(body: JournalClose, trade_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> None:
+        require_min_plan(account, "pro", _PRO_MSG)
+        if not trading.close(_user(account), trade_id, body.exit_price):
+            raise user_data.NotFound("trade")
+
+    @app.delete("/v1/journal/{trade_id}", status_code=204, responses={**_PRO, **_OWNED}, summary="Delete a logged trade (Pro)")
+    def journal_delete(trade_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> None:
+        require_min_plan(account, "pro", _PRO_MSG)
+        if not trading.delete(_user(account), trade_id):
+            raise user_data.NotFound("trade")
+
+    @app.get("/v1/stocks/{ticker}/plan", response_model=models.TradePlan, responses={**_PRO, 404: {"description": "Not in the latest scan"}},
+             summary="Trade plan for a scan result (Pro)")
+    def stock_plan(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account),
+                   account_size: float = Query(10_000.0, ge=100, le=1e9), risk_pct: float = Query(1.0, gt=0, le=10)
+                   ) -> Dict[str, Any]:
+        """The web's trade plan: stop at half the 20-day volatility (2-8%), targets at 1.5R and 3R,
+        size from your risk budget. Educational only, not advice."""
+        require_min_plan(account, "pro", _PRO_MSG)
+        out = trading.plan(ticker.strip().upper(), account_size, risk_pct)
+        if out is None:
+            raise HTTPException(404, "That ticker isn't in the latest market scan.")
+        return json_safe(out)
+
+    @app.get("/v1/paper/account", response_model=models.PaperStatus, responses=_PREM, summary="Paper account status (Premium)")
+    def paper_account(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        require_feature(account, "can_paper_trade")
+        return json_safe(trading.paper_status(_user(account)))
+
+    @app.post("/v1/paper/account", response_model=models.PaperStatus, responses={**_PREM, 400: {"description": "Keys rejected"}},
+              summary="Connect your Alpaca paper account (Premium)")
+    def paper_connect(body: PaperConnect, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Validates the keys against Alpaca's paper endpoint, then stores them encrypted. Paper keys only."""
+        require_feature(account, "can_paper_trade")
+        user = _user(account)
+        ratelimit.check("paper_connect", user)
+        return json_safe(trading.connect(user, body.api_key, body.api_secret))
+
+    @app.delete("/v1/paper/account", status_code=204, responses=_PREM, summary="Disconnect your paper account (Premium)")
+    def paper_disconnect(account: Dict[str, Any] = Depends(current_account)) -> None:
+        require_feature(account, "can_paper_trade")
+        trading.disconnect(_user(account))
+
+    @app.get("/v1/paper/activity", response_model=models.PaperActivity, responses=_PREM, summary="Paper positions and orders (Premium)")
+    def paper_activity(account: Dict[str, Any] = Depends(current_account),
+                       limit: int = Query(25, ge=1, le=100)) -> Dict[str, Any]:
+        require_feature(account, "can_paper_trade")
+        return json_safe(trading.activity(_user(account), limit))
+
+    @app.post("/v1/paper/orders", response_model=models.PaperOrder, status_code=201,
+              responses={**_PREM, 400: {"description": "Order rejected"}, 422: {"description": "confirm must be true"},
+                         429: {"description": "Too many orders this hour"}},
+              summary="Paper trade a setup (Premium)")
+    def paper_order(body: PaperOrderBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """A whole-share market BUY sent to your Alpaca PAPER account (no real money), imported into
+        your journal. Show the user what will be sent and send confirm=true only after they confirm."""
+        require_feature(account, "can_paper_trade")
+        user = _user(account)
+        ratelimit.check("paper_order", user)
+        return json_safe(trading.order(user, body.ticker.upper(), body.qty))
+
+
+class DeleteAccountBody(BaseModel):
+    password: str = Field(min_length=1, max_length=256)
+    confirm: Literal["DELETE"] = Field(description='Type "DELETE": the user confirmed permanent deletion')
+
+
+def _delete_account_route(app: FastAPI) -> None:
+    @app.delete("/v1/me", status_code=204, summary="Delete your account",
+                responses={**_AUTH, 400: {"description": "Wrong password"},
+                           409: {"description": "Cancel your paid subscription first (or admin account)"},
+                           422: {"description": 'confirm must be "DELETE"'}, 429: {"description": "Too many attempts"}})
+    def delete_me(body: DeleteAccountBody, account: Dict[str, Any] = Depends(current_account)) -> None:
+        """Permanently deletes your account and its data (watchlists, alerts, journal, paper keys,
+        settings, saved scans, sessions, devices). Refused while a paid subscription is active:
+        cancel it first via POST /v1/billing/portal {"flow": "cancel"}. Can't be undone."""
+        ratelimit.check("delete_account", _user(account))
+        acct.delete_account(account, body.password)
 
 
 def _failing_app(message: str):

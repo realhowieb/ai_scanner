@@ -667,6 +667,15 @@ def _brief_narrative_facts(data: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+BRIEF_NARRATIVE_SYSTEM = (
+    "You write a 2-3 sentence morning market brief for an experienced "
+    "trader. Use ONLY the facts provided — do NOT invent prices, news, "
+    "levels, forecasts, or tickers not listed. Be plain, concise, and "
+    "non-promissory (describe conditions and what to watch, don't predict). "
+    "No emojis, no bullet points, no preamble."
+)
+
+
 def _render_claude_narrative(data: Dict[str, Any]) -> None:
     """A 2-3 sentence plain-English brief written by Claude from real data.
 
@@ -689,15 +698,8 @@ def _render_claude_narrative(data: Dict[str, Any]) -> None:
     cache_key = f"brief_narrative_{ts}"
     cached = st.session_state.get(cache_key)
     if cached is None:
-        system = (
-            "You write a 2-3 sentence morning market brief for an experienced "
-            "trader. Use ONLY the facts provided — do NOT invent prices, news, "
-            "levels, forecasts, or tickers not listed. Be plain, concise, and "
-            "non-promissory (describe conditions and what to watch, don't predict). "
-            "No emojis, no bullet points, no preamble."
-        )
         text, err = ask_claude(
-            system=system,
+            system=BRIEF_NARRATIVE_SYSTEM,
             user=f"Today's scan facts:\n{facts}",
             max_tokens=200,
             username=(st.session_state.get("username") or "").strip().lower() or None,

@@ -187,6 +187,8 @@ class StockDetail(BaseModel):
     history_summary: Optional[Dict[str, Any]] = None
     historical_context: Optional[Dict[str, Any]] = Field(default=None, description="Matured outcomes for this score range")
     outcome_cohort: Optional[Dict[str, Any]] = None
+    historical_locked: bool = Field(default=False, description="True below Pro: historical research "
+                                    "(history_summary, historical_context, outcome_cohort) is a Pro feature")
     lifecycle: List[LifecycleEvent] = []
     bars: List[Bar] = Field(default=[], description="Daily bars cached by the scans, oldest first (up to 120)")
     bars_as_of: Optional[str] = None
@@ -316,3 +318,199 @@ class ScanJob(BaseModel):
     created_at: Optional[str] = None
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
+
+
+# ---- scan history & historical research (P1-67, Pro) --------------------------------------------
+class RunSummary(BaseModel):
+    id: int
+    name: Optional[str] = None
+    label: Optional[str] = Field(default=None, description="SP500, NASDAQ, Combo, US Market, Watchlist (…), Search: X, 3-Step | …")
+    row_count: Optional[int] = None
+    duration_s: Optional[float] = None
+    is_snapshot: bool = False
+    created_at: Optional[str] = None
+
+
+class RunDetail(RunSummary):
+    total: int
+    max_results: int
+    limited: bool
+    setups: List[ScanSetup] = []
+
+
+class TrackRecordSummary(BaseModel):
+    ranking: Literal["breakout", "prebreakout"]
+    ranking_label: str
+    horizon_days: int
+    avg_excess_return: Optional[float] = Field(default=None, description="Mean return vs SPY (0.012 = +1.2%)")
+    median_excess_return: Optional[float] = None
+    win_rate: Optional[float] = Field(default=None, description="Share of picks that beat SPY")
+    sample_size: Optional[int] = None
+    runs_used: Optional[int] = None
+    top_n: Optional[int] = None
+    benchmark: str = "SPY"
+    computed_at: Optional[str] = None
+    sufficient: bool = Field(description="False while sample_size < min_sample_size (show 'still building')")
+
+
+class TrackRecord(BaseModel):
+    disclaimer: str
+    min_sample_size: int
+    summaries: List[TrackRecordSummary] = []
+
+
+class TrackRecordDay(BaseModel):
+    day: str
+    avg_excess_return: Optional[float] = None
+
+
+class EarningsItem(BaseModel):
+    ticker: str
+    earnings_date: Optional[str] = Field(default=None, description="YYYY-MM-DD")
+    days_until: Optional[int] = None
+    time: Optional[str] = Field(default=None, description="bmo / amc / … when known")
+
+
+class BriefIndex(BaseModel):
+    label: str
+    last: Optional[float] = None
+    chg_pct: Optional[float] = None
+
+
+class BriefMover(BaseModel):
+    ticker: str
+    chg_pct: Optional[float] = None
+
+
+class BriefGapper(BaseModel):
+    ticker: str
+    last: Optional[float] = None
+    chg_pct: Optional[float] = None
+    gap_pct: Optional[float] = None
+    earnings_days: Optional[int] = Field(default=None, description="Earnings in N days, when imminent")
+
+
+class BriefPick(BaseModel):
+    ticker: str
+    prob: Optional[float] = None
+    earnings_days: Optional[int] = None
+
+
+class Brief(BaseModel):
+    available: bool = Field(description="False until the day's first scan snapshot exists")
+    snapshot_time: Optional[str] = None
+    phase: Optional[str] = Field(default=None, description="premarket / regular / afterhours / closed")
+    market: List[BriefIndex] = []
+    breadth: Optional[Dict[str, int]] = Field(default=None, description="{advancers, decliners} in the snapshot")
+    sectors: List[Dict[str, Any]] = Field(default=[], description="[{sector, chg_pct}] best first")
+    opportunities: List[Dict[str, Any]] = Field(default=[], description="Top opportunities with movement since the "
+                                                "previous snapshot (same objects as the web's Market Brief)")
+    has_previous_snapshot: bool = False
+    gappers: List[BriefGapper] = []
+    gainers: List[BriefMover] = []
+    losers: List[BriefMover] = []
+    golden_crosses: List[str] = []
+    top_breakout_scores: List[Dict[str, Any]] = Field(default=[], description="[{ticker, score}]")
+    prebreakout_picks: List[BriefPick] = Field(default=[], description="Premium; empty below Premium")
+    prebreakout_locked: bool = False
+    earnings_today: List[str] = []
+
+
+class DayTraderRow(BaseModel):
+    ticker: str
+    open: Optional[float] = None
+    last: Optional[float] = None
+    change_dollar: Optional[float] = None
+    chg_pct: Optional[float] = None
+    gap_pct: Optional[float] = None
+    vwap: Optional[float] = None
+    vs_vwap_pct: Optional[float] = None
+    rvol: Optional[float] = None
+    volume: Optional[float] = None
+    adx: Optional[float] = None
+    supertrend: Optional[float] = None
+    supertrend_direction: Optional[Any] = None
+    ewo: Optional[float] = None
+    day_trade_score: float = Field(description="Intraday momentum score (move, VWAP alignment, gap, volume)")
+
+    model_config = {"extra": "allow"}   # extra live fields (EMA cross, ranges, data source) pass through
+
+
+class DayTrader(BaseModel):
+    state: Literal["premarket", "open", "afterhours", "closed"]
+    source: str
+    symbols: List[str]
+    missing: int = Field(description="Symbols with no live quote")
+    as_of: str
+    rows: List[DayTraderRow] = []
+
+
+class StairSteppers(BaseModel):
+    checked: List[str]
+    matches: List[Dict[str, Any]] = Field(default=[], description="Symbols that pass the filters (r2, trend, pullback…)")
+    all: List[Dict[str, Any]] = []
+
+
+class AIText(BaseModel):
+    run_id: Optional[int] = Field(default=None, description="The scan the text is about")
+    ticker: Optional[str] = None
+    snapshot_time: Optional[str] = None
+    text: Optional[str] = Field(default=None, description="Markdown; null when there is nothing to explain")
+
+
+class AIChatAnswer(BaseModel):
+    run_id: Optional[int] = None
+    answer: Optional[str] = None
+
+
+class JournalTrade(BaseModel):
+    id: int
+    ticker: str
+    entry_price: Optional[float] = None
+    shares: Optional[int] = None
+    source: Optional[str] = Field(default=None, description="scan, paper or api")
+    entered_at: Optional[str] = None
+    exit_price: Optional[float] = None
+    closed_at: Optional[str] = None
+    open: bool
+    mark: Optional[float] = Field(default=None, description="Live price for open trades, exit price for closed")
+    pnl: Optional[float] = None
+    pnl_pct: Optional[float] = None
+
+
+class Journal(BaseModel):
+    trades: List[JournalTrade] = []
+    stats: Optional[Dict[str, Any]] = Field(default=None, description="{closed, wins, avg_return_pct}; null before any closed trade")
+
+
+class TradePlan(BaseModel):
+    ticker: str
+    entry: float
+    stop: float
+    stop_pct: float
+    targets: List[float]
+    target_r: List[float]
+    risk_per_share: float
+    shares: int
+    risk_budget: float
+
+
+class PaperStatus(BaseModel):
+    connected: bool
+    connected_at: Optional[str] = None
+    account: Optional[Dict[str, Any]] = Field(default=None, description="{status, buying_power, cash} from Alpaca; keys are never returned")
+
+
+class PaperActivity(BaseModel):
+    connected: bool
+    positions: List[Dict[str, Any]] = []
+    positions_available: bool = True
+    orders: List[Dict[str, Any]] = []
+
+
+class PaperOrder(BaseModel):
+    order_id: Optional[str] = None
+    status: str
+    ticker: str
+    qty: int
+    filled_avg_price: Optional[Any] = None

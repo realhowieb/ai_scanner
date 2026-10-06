@@ -190,4 +190,8 @@ def stock_detail(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
         "outcome_cohort": intel.get("outcome_cohort"),
         "lifecycle": intel.get("lifecycle") or [],
     }
+    # Historical research is Pro (can_track_record), as on the web's stock page (Run 85E).
+    out["historical_locked"] = not bool(entitlements.get("can_track_record"))
+    if out["historical_locked"]:
+        out.update({"history_summary": None, "historical_context": None, "outcome_cohort": None})
     return json_safe(out)

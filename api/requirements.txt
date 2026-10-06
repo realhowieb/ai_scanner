@@ -7,3 +7,4 @@
 fastapi==0.141.1  # same as billing_service
 uvicorn[standard]==0.32.1
 PyJWT==2.15.0
+anthropic>=0.69.0,<1  # /v1/ai (Premium); same pin as requirements-extended (lock: 0.116.0)

@@ -82,6 +82,8 @@ API_CORS_ORIGINS   # comma-separated exact https origins of the web frontend (no
 SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM   # same Resend values; sign-up and reset emails
 ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY                   # same keys as Streamlit; needed for custom scans (POST /v1/scans)
 API_SCAN_WORKERS   # optional, default 1: custom scans run at once (memory-bound)
+ANTHROPIC_API_KEY  # same as Streamlit; /v1/ai/* (Premium)
+APP_ENCRYPTION_KEY # same as Streamlit; stores paper-trading keys (/v1/paper/*)
 ```
 
 - [ ] Health check path `/healthz`
