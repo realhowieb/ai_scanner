@@ -193,15 +193,20 @@ def use_refresh_token(token_hash: str) -> tuple[str, Optional[str]]:
         conn.close()
 
 
-def revoke_refresh_token(token_hash: str) -> None:
+def revoke_refresh_token(token_hash: str) -> Optional[str]:
+    """Sign out one session. Returns the token's account (None when unknown), also
+    for a token already revoked, so a repeated sign-out can still remove its device."""
     conn = _conn()
     try:
         ensure_refresh_schema(conn)
         cur = conn.cursor()
+        cur.execute("SELECT username FROM api_refresh_tokens WHERE token_hash = %s", (token_hash,))
+        row = _row(cur)
         cur.execute("UPDATE api_refresh_tokens SET revoked_at = NOW(), revoked_reason = 'logout' "
                     "WHERE token_hash = %s AND revoked_at IS NULL", (token_hash,))
         conn.commit()
         cur.close()
+        return row["username"] if row else None
     finally:
         conn.close()
 

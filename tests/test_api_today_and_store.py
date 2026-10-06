@@ -200,6 +200,14 @@ class RefreshStorePostgresTests(unittest.TestCase):
         s.revoke_refresh_token("h4")
         self.assertEqual(s.use_refresh_token("h4")[0], "reused")  # logout gets no grace
 
+    def test_logout_returns_the_account(self):
+        s = self.store
+        s.save_refresh_token("lo1", "pro@example.com", 3600, "ios")
+        self.assertEqual(s.revoke_refresh_token("lo1"), "pro@example.com")
+        self.assertEqual(s.revoke_refresh_token("lo1"), "pro@example.com")  # repeat sign-out still finds it
+        self.assertIsNone(s.revoke_refresh_token("unknown"))
+        self.assertEqual(s.use_refresh_token("lo1")[0], "reused")
+
     def test_password_signout_replay_is_invalid_not_theft(self):
         """A device signed out by a password change retrying its old token must not
         trigger the reuse sweep (which would also kill the new session)."""

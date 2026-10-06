@@ -15,7 +15,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring; 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
 | POST | `/v1/auth/login` | none | `{"email","password","client"?}` → `access_token` (15 min), `refresh_token` (30 days). Same accounts and passwords as the web app. 10 failed attempts in 10 minutes → 429. |
 | POST | `/v1/auth/refresh` | none | `{"refresh_token"}` → a new pair. Each refresh token works once. A retry within 30 s of rotating (lost response, two refreshes at once) gets another pair; a later replay, or one after logout, is treated as theft and revokes every session of that account. |
-| POST | `/v1/auth/logout` | none | `{"refresh_token"}` → 204, token revoked. |
+| POST | `/v1/auth/logout` | none | `{"refresh_token","push_token"?}` → 204, token revoked; with `push_token`, that device stops getting this account's pushes. |
 | POST | `/v1/auth/signup` | none | `{"email","password","username","accept_terms","client"?}` → 201 with a token pair (signed in) and `verification_sent`. Same rules as the web form (password rule, unique email and username, usage agreement); Free plan. 5 per hour per address. |
 | POST | `/v1/auth/verify-email` | none | `{"token"}` from the verification link → verified. |
 | POST | `/v1/auth/password-reset` | none | `{"email"}` → 202, same answer whether or not the account exists; emails a reset link (3 per hour per account, 5 per hour per address). |
@@ -24,6 +24,9 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | POST | `/v1/me/verify-email` | Bearer | Resend the verification link to your own email (3 per hour). |
 | POST | `/v1/me/password` | Bearer | `{"current_password","new_password"}` → a new token pair for this device; every other session (web and app) is signed out. |
 | GET / PATCH | `/v1/me/email-preferences` | Bearer | `{"digest","evening","alerts"}` on/off. |
+| POST | `/v1/me/devices` | Bearer | Register this phone for push: `{"push_token","platform":"ios"\|"android","provider"?:"apns"\|"fcm"\|"expo","device_name"?,"app_version"?}` → the device (`id`, never the token). Idempotent; a token already registered to another account moves to this one. Provider defaults: Expo tokens → `expo`, iOS → `apns`, Android → `fcm` (400 when the token doesn't fit). Up to 10 devices per account (least recently seen dropped). |
+| GET | `/v1/me/devices` | Bearer | Your registered devices, most recently seen first. |
+| DELETE | `/v1/me/devices/{id}` | Bearer | Remove a device (204; 404 when not yours). |
 | POST | `/v1/billing/checkout` | Bearer | `{"plan":"pro"\|"premium","interval":"month"\|"year"}` → `{url, mode}`: Stripe checkout, or Stripe's plan-change screen for existing subscribers (`mode: portal`). Needs a verified email (403 otherwise), as on the web. |
 | POST | `/v1/billing/portal` | Bearer | `{"flow"?: "cancel"}` → Stripe Customer Portal URL (404 when there's no subscription yet). |
 | GET | `/v1/today` | Bearer | Market phase, Before the open (this morning's pre-market movers, 8:35-10:30 ET), Top setups, After the close, last session recap. Pre/after-hours movers are Pro+ (`locked: true` below Pro); Premium model fields are redacted below Premium. Each section fails on its own (`errors` lists it). |
@@ -55,6 +58,13 @@ are read from the database on every request, so a plan change applies at once.
 Logout revokes the refresh token only. Access tokens are stateless: one already
 issued keeps working until it expires (at most 15 minutes). Deactivating an
 account or changing its plan applies on the next request.
+
+Push devices (P1-64): the app should call `POST /v1/me/devices` at every start
+and whenever it gets new tokens (sign-in, sign-up, password change) or the OS gives
+it a new push token. Signing out with `push_token` removes that device; a password
+change or reset, or a refresh-token reuse sweep, removes every device of the
+account, so the app registers again after its next sign-in. Nothing sends pushes
+yet; the alert sender will read `api.devices.devices_for_user()`.
 
 Every response carries `X-Request-ID` (a client's own id is kept when it is
 8-64 characters of letters, digits, `.`, `_` or `-`). Each request writes one

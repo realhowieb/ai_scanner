@@ -51,7 +51,16 @@ class ApiTestCase(unittest.TestCase):
             mock.patch("db.users.is_login_rate_limited", side_effect=lambda u: u == "locked@example.com"),
             mock.patch("db.users.record_login_attempt",
                        side_effect=lambda u, success, **k: self.attempts.append((u, success))),
+            # P1-64 push devices: in-memory, same contract as api.devices
+            mock.patch("api.devices.register", side_effect=self._dev_register),
+            mock.patch("api.devices.list_devices", side_effect=self._dev_list),
+            mock.patch("api.devices.remove",
+                       side_effect=lambda u, i: self._dev_drop(lambda d: d["username"] == u and d["id"] == i) > 0),
+            mock.patch("api.devices.remove_token",
+                       side_effect=lambda u, t: self._dev_drop(lambda d: d["username"] == u and d["token"] == t)),
+            mock.patch("api.devices.remove_all", side_effect=lambda u: self._dev_drop(lambda d: d["username"] == u)),
         ]
+        self.devices = []
         for p in patches:
             p.start()
         self.addCleanup(mock.patch.stopall)
@@ -75,6 +84,28 @@ class ApiTestCase(unittest.TestCase):
     def _revoke(self, token_hash):
         if token_hash in self.refresh:
             self.refresh[token_hash]["revoked"] = True
+            return self.refresh[token_hash]["username"]
+        return None
+
+    _PUBLIC = ("id", "provider", "platform", "device_name", "app_version", "created_at", "last_seen_at")
+
+    def _dev_register(self, username, token, provider, platform, device_name, app_version):
+        old = next((d for d in self.devices if d["token"] == token), None)
+        if old:
+            self.devices.remove(old)
+        d = {"id": old["id"] if old else len(self.devices) + 100, "username": username, "token": token,
+             "provider": provider, "platform": platform, "device_name": device_name, "app_version": app_version,
+             "created_at": "2026-10-06T00:00:00+00:00", "last_seen_at": "2026-10-06T00:00:00+00:00"}
+        self.devices.append(d)
+        return {k: d[k] for k in self._PUBLIC}
+
+    def _dev_list(self, username):
+        return [{k: d[k] for k in self._PUBLIC} for d in self.devices if d["username"] == username]
+
+    def _dev_drop(self, match):
+        gone = [d for d in self.devices if match(d)]
+        self.devices = [d for d in self.devices if not match(d)]
+        return len(gone)
 
     def login(self, email="pro@example.com", password="right pw"):
         return self.client.post("/v1/auth/login", json={"email": email, "password": password})
