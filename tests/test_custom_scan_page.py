@@ -78,6 +78,15 @@ class CustomScanPageTests(unittest.TestCase):
             with self.subTest(plan=plan):
                 self.assertEqual(not next(b for b in at.button if b.label == label).disabled, enabled)
 
+    def test_premium_has_no_nasdaq_or_combo_limit_inputs(self):
+        prem = self._run(username="tester@example.com", _test_plan="premium")
+        labels = [n.label for n in prem.number_input]
+        self.assertNotIn("Max NASDAQ tickers to scan", labels)
+        self.assertNotIn("Max Combo tickers to scan", labels)
+        self.assertTrue(any("no ticker limit" in c.value for c in prem.caption))
+        pro = self._run(username="tester@example.com", _test_plan="pro")
+        self.assertIn("Max Combo tickers to scan", [n.label for n in pro.number_input])
+
     def test_us_market_unavailable_shows_a_message_and_scans_nothing(self):
         at = self._run(username="tester@example.com", _test_plan="premium", _test_no_us_list=True)
         next(b for b in at.button if b.label.startswith("Run US Market")).click().run()

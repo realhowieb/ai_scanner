@@ -120,6 +120,7 @@ def render_active_filters_summary(
     min_gap: float,
     max_nasdaq_scan: int,
     max_combo_scan: int,
+    full_lists: bool = False,
 ) -> None:
     """Render a compact summary of the active scan filters."""
     chips: list[str] = []
@@ -133,8 +134,11 @@ def render_active_filters_summary(
         chips.append(f"Min $Vol: {int(min_dollar_vol):,}")
 
     chips.append(f"Top N: {int(top_n)}")
-    chips.append(f"NASDAQ cap: {int(max_nasdaq_scan):,}")
-    chips.append(f"Combo cap: {int(max_combo_scan):,}")
+    if full_lists:
+        chips.append("NASDAQ/Combo: full lists")
+    else:
+        chips.append(f"NASDAQ cap: {int(max_nasdaq_scan):,}")
+        chips.append(f"Combo cap: {int(max_combo_scan):,}")
 
     if premarket:
         chips.append("Session: Premarket")

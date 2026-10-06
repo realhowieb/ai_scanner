@@ -252,3 +252,31 @@ class UsMarketSelectionTests(unittest.TestCase):
 
         self.assertEqual(normalize_market("us_market"), "US_MARKET")
         self.assertEqual(normalize_market("everything"), DEFAULT_MARKET)
+
+
+class PremiumFullListsTests(unittest.TestCase):
+    """Premium (uncapped=True, 2026-10-06): NASDAQ and Combo ignore the ticker caps."""
+
+    def _resolve(self, market, state, *, uncapped):
+        return resolve_scan_universe(
+            market, state, is_admin=False, safe_call=_safe_call,
+            load_sp500_universe=lambda: [f"sp{i}" for i in range(5)],
+            load_nasdaq_universe=lambda: [f"nq{i}" for i in range(20)],
+            filter_universe=_identity, sanitize_symbols=_sanitize, uncapped=uncapped,
+        )
+
+    def test_combo_and_nasdaq_full_for_premium(self):
+        state = {"max_nasdaq_scan": 3, "max_combo_scan": 4}
+        self.assertEqual(len(self._resolve("COMBO", state, uncapped=True)), 25)
+        self.assertEqual(len(self._resolve("NASDAQ", state, uncapped=True)), 20)
+
+    def test_caps_still_apply_below_premium(self):
+        state = {"max_nasdaq_scan": 3, "max_combo_scan": 4}
+        self.assertEqual(len(self._resolve("NASDAQ", state, uncapped=False)), 3)
+        self.assertEqual(len(self._resolve("COMBO", state, uncapped=False)), 4)
+
+    def test_switching_plan_in_a_session_recomputes_the_cached_cut(self):
+        state = {"max_nasdaq_scan": 3, "max_combo_scan": 4}
+        self.assertEqual(len(self._resolve("COMBO", state, uncapped=False)), 4)
+        self.assertEqual(len(self._resolve("COMBO", state, uncapped=True)), 25)   # upgrade
+        self.assertEqual(len(self._resolve("COMBO", state, uncapped=False)), 4)   # downgrade

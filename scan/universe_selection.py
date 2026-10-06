@@ -66,9 +66,14 @@ def resolve_scan_universe(
     combo_universe_transform: SymbolTransform | None = None,
     combo_cache_key: object = None,
     load_us_market_universe: SymbolLoader | None = None,
+    uncapped: bool = False,
 ) -> list[str]:
-    """Resolve a scanner universe and update the related state caches."""
+    """Resolve a scanner universe and update the related state caches.
+
+    Admins and `uncapped` callers (Premium, 2026-10-06) scan the full NASDAQ and
+    Combo lists; everyone else gets the max_nasdaq_scan / max_combo_scan caps."""
     market_name = normalize_market(market)
+    no_cap = bool(is_admin or uncapped)
     label_suffix = str(label_suffix or "").strip()
 
     def label(base: str) -> str:
@@ -104,14 +109,14 @@ def resolve_scan_universe(
             )
             state["nasdaq_universe"] = nasdaq
         configured_limit = int(state.get("max_nasdaq_scan", 2000))
-        effective_limit = max(configured_limit, len(nasdaq)) if is_admin else configured_limit
+        effective_limit = max(configured_limit, len(nasdaq)) if no_cap else configured_limit
         cached_limit = _state_int(state, "nasdaq_capped_limit")
         cached_admin = _state_bool(state, "nasdaq_capped_admin")
-        if not nasdaq_capped or cached_limit != effective_limit or cached_admin != is_admin:
+        if not nasdaq_capped or cached_limit != effective_limit or cached_admin != no_cap:
             nasdaq_capped = nasdaq[:effective_limit]
             state["nasdaq_capped"] = nasdaq_capped
             state["nasdaq_capped_limit"] = effective_limit
-            state["nasdaq_capped_admin"] = is_admin
+            state["nasdaq_capped_admin"] = no_cap
         return nasdaq_capped
 
     def ensure_combo() -> list[str]:
@@ -124,7 +129,7 @@ def resolve_scan_universe(
             if transformed:
                 universe = sanitize_symbols(transformed)
         configured_limit = int(state.get("max_combo_scan", 4000))
-        effective_limit = max(configured_limit, len(universe)) if is_admin else configured_limit
+        effective_limit = max(configured_limit, len(universe)) if no_cap else configured_limit
         cached_limit = _state_int(state, "combo_capped_limit")
         cached_admin = _state_bool(state, "combo_capped_admin")
         cached_source_count = _state_int(state, "combo_capped_source_count")
@@ -132,14 +137,14 @@ def resolve_scan_universe(
         if (
             not combo_capped
             or cached_limit != effective_limit
-            or cached_admin != is_admin
+            or cached_admin != no_cap
             or cached_source_count != len(universe)
             or cached_transform_key != combo_cache_key
         ):
             combo_capped = universe[:effective_limit]
             state["combo_capped"] = combo_capped
             state["combo_capped_limit"] = effective_limit
-            state["combo_capped_admin"] = is_admin
+            state["combo_capped_admin"] = no_cap
             state["combo_capped_source_count"] = len(universe)
             state["combo_capped_transform_key"] = combo_cache_key
         return combo_capped
