@@ -37,12 +37,14 @@ from ui.universe_us import us_market_symbols
 
 try:
     from ui.universe import (
+        apply_liquidity_filter_batch,
         filter_universe,
         load_nasdaq_universe,
         load_sp500_universe,
     )
 except ModuleNotFoundError:
     from ai_scanner.ui.universe import (  # type: ignore
+        apply_liquidity_filter_batch,
         filter_universe,
         load_nasdaq_universe,
         load_sp500_universe,
@@ -72,6 +74,26 @@ def _init_scan_session_state() -> None:
         st.session_state.scan_active_step = 1
 
 
+def _liquidity_values() -> tuple[float, float, float]:
+    ss = st.session_state
+    return (float(ss.get("min_price") or 0.0), float(ss.get("max_price") or 0.0),
+            float(ss.get("min_dollar_vol") or 0.0))
+
+
+def _liquidity_key() -> tuple:
+    return ("three_step_liquidity", *_liquidity_values())
+
+
+def _liquidity_trim(symbols):
+    """Same pre-download trim as the Custom Scan buttons (scan.liquidity)."""
+    min_price, max_price, min_dollar_vol = _liquidity_values()
+    try:
+        return list(apply_liquidity_filter_batch(list(symbols), min_price=min_price,
+                                                 min_avg_dollar_vol=min_dollar_vol, max_price=max_price))
+    except Exception:
+        return list(symbols)
+
+
 def run_scan_engine(
     market: str,
     strategy: str,
@@ -87,6 +109,8 @@ def run_scan_engine(
     tickers = resolve_scan_universe(
         market,
         st.session_state,
+        combo_universe_transform=_liquidity_trim if market in ("COMBO", "US_MARKET") else None,
+        combo_cache_key=_liquidity_key() if market == "COMBO" else None,
         is_admin=_is_admin(),
         safe_call=safe_call,
         load_sp500_universe=load_sp500_universe,

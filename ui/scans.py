@@ -209,9 +209,10 @@ def render_scan_controls(
                 symbols,
                 min_price=min_price,
                 min_avg_dollar_vol=min_dollar_vol,
+                max_price=max_price,
             )
         except (RuntimeError, TypeError, ValueError, OSError) as e:
-            _banner(f"⚠️ Combo liquidity filter failed: {e}", "warning")
+            _banner(f"⚠️ Liquidity pre-filter failed, scanning the full list: {e}", "warning")
             return symbols
         if combo_liquid is None or len(combo_liquid) == 0:
             return symbols
@@ -221,7 +222,7 @@ def render_scan_controls(
         min_dollar_vol = st.session_state.get("min_dollar_vol")
         if min_dollar_vol is None:
             min_dollar_vol = 0.0
-        combo_cache_key = ("manual_combo_liquidity", float(min_price), float(min_dollar_vol))
+        combo_cache_key = ("manual_combo_liquidity", float(min_price), float(max_price), float(min_dollar_vol))
         return resolve_scan_universe(
             market,
             st.session_state,
