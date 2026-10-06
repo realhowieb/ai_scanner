@@ -314,7 +314,7 @@ class ScanJob(BaseModel):
     params: ScanParams
     progress: Optional[ScanProgress] = None
     result: Optional[ScanResult] = Field(default=None, description="Present when status is complete")
-    error: Optional[str] = Field(default=None, description="Present when status is failed")
+    error: Optional[str] = Field(default=None, description="Present when status is failed; safe to show. \"Cancelled.\" after DELETE /v1/scans/{scan_id}")
     created_at: Optional[str] = None
     started_at: Optional[str] = None
     finished_at: Optional[str] = None

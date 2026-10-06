@@ -2615,7 +2615,7 @@
         "type": "null"
        }
       ],
-      "description": "Present when status is failed",
+      "description": "Present when status is failed; safe to show. \"Cancelled.\" after DELETE /v1/scans/{scan_id}",
       "title": "Error"
      },
      "finished_at": {
@@ -6602,6 +6602,56 @@
    }
   },
   "/v1/scans/{scan_id}": {
+   "delete": {
+    "description": "Cancel your queued or running scan: it reads `failed` with error \"Cancelled.\" and you\ncan start another at once. A running scan stops at its next progress step. A scan that\nalready finished is returned unchanged.",
+    "operationId": "scan_cancel_v1_scans__scan_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "scan_id",
+      "required": true,
+      "schema": {
+       "pattern": "^[0-9a-f]{32}$",
+       "title": "Scan Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ScanJob"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Cancel a custom scan"
+   },
    "get": {
     "operationId": "scan_get_v1_scans__scan_id__get",
     "parameters": [

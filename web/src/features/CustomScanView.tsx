@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { TICKER_RE } from "@/components/AppShell";
 import { Card, Disclaimer, Empty, ErrorState, UpgradeButton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
-import { useScanJob } from "@/hooks/useScanJob";
+import { CANCELLED, useScanJob } from "@/hooks/useScanJob";
 import type { ScanApi, ScanCreate, ScanJob } from "@/hooks/useScanJob";
 import { useSession } from "@/session/SessionProvider";
 
@@ -40,16 +40,58 @@ const PHASE_LABEL: Record<string, string> = {
   failed: "Failed",
 };
 
-function Progress({ job }: { job: ScanJob }) {
+/** Waiting this long for a scanner is unusual; say why and offer Cancel prominently. */
+export const LONG_QUEUE_S = 60;
+
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [active]);
+  return now;
+}
+
+export function clock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+}
+
+function sinceS(iso: string | null | undefined, now: number): number | null {
+  const t = iso ? Date.parse(iso) : NaN;
+  return Number.isNaN(t) ? null : Math.max(0, (now - t) / 1000);
+}
+
+function Progress({ job, onCancel, cancelling }: { job: ScanJob; onCancel: () => void; cancelling: boolean }) {
+  const now = useNow(true);
   const p = job.progress;
   const phase = p?.phase ?? job.status;
+  const queued = job.status === "queued";
+  const waited = queued ? sinceS(job.created_at, now) : sinceS(job.started_at, now) ?? p?.elapsed_s ?? null;
+  const long = queued && (waited ?? 0) >= LONG_QUEUE_S;
   return (
-    <div className="progress" role="status" aria-live="polite">
-      <div className="spinner" aria-hidden="true" />
-      <div>
-        <p className="strong">{PHASE_LABEL[phase] ?? phase}{p?.symbols ? ` ${p.symbols.toLocaleString()} stocks` : ""}</p>
-        <p className="cap">{p?.elapsed_s ? `${Math.round(p.elapsed_s)}s elapsed · ` : ""}You can leave this page; the scan keeps running and reopens here.</p>
+    <div className="stack-sm">
+      <div className="progress" role="status" aria-live="polite">
+        <div className="spinner" aria-hidden="true" />
+        <div className="grow">
+          <p className="strong">{PHASE_LABEL[phase] ?? phase}{p?.symbols ? ` ${p.symbols.toLocaleString()} stocks` : ""}</p>
+          <p className="cap">
+            {waited !== null ? `${queued ? "Waiting" : "Running"} for ${clock(waited)} · ` : ""}
+            You can leave this page; the scan keeps running and reopens here.
+          </p>
+        </div>
+        <button type="button" className="btn" onClick={onCancel} disabled={cancelling}>
+          {cancelling ? "Cancelling…" : "Cancel scan"}
+        </button>
       </div>
+      {long && (
+        <p className="notice" role="note">
+          This is taking longer than usual to start. The scanner is busy with another scan, or the service
+          just restarted (then this scan is cleared within a few minutes). You can cancel it and try a smaller
+          list, such as one ticker or a watchlist.
+        </p>
+      )}
     </div>
   );
 }
@@ -84,6 +126,16 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
   const job = scan.job;
   const active = !!job && (job.status === "queued" || job.status === "running");
 
+  // Bring the scan's status into view when it starts: the Start button sits at the
+  // bottom of the form, and on phones the status card is below the form.
+  const statusRef = useRef<HTMLDivElement>(null);
+  const startedHere = useRef(false);
+  useEffect(() => {
+    if (!startedHere.current || !job) return;
+    startedHere.current = false;
+    statusRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [job?.scan_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setFormErr(null);
@@ -99,6 +151,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
       ...(unusual ? { unusual_volume: true } : {}),
       ...(gap ? { apply_gap_filter: true, ...(optNum(minGap) !== undefined ? { min_gap: optNum(minGap) } : {}) } : {}),
     };
+    startedHere.current = true;
     void scan.start({
       universe,
       ...(universe === "ticker" ? { ticker: t } : {}),
@@ -198,7 +251,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
           </button>
         </form>
 
-        <div className="col-main stack">
+        <div className="col-main stack" ref={statusRef}>
           {err && !(err.status === 409 && job) && (
             planErr ? (
               <Card><div className="locked"><p className="strong">{err.message}</p><UpgradeButton plan={/premium/i.test(err.message) ? "premium" : "pro"} /></div></Card>
@@ -215,8 +268,14 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
           {!job && !err && (
             <Card><Empty title="Choose a list and start a scan.">Results are ranked by HSF Score and saved to your scan history.</Empty></Card>
           )}
-          {job && active && <Card title="Scan in progress"><Progress job={job} /></Card>}
-          {job && job.status === "failed" && (
+          {job && active && <Card title="Scan in progress"><Progress job={job} onCancel={() => void scan.cancel()} cancelling={scan.cancelling} /></Card>}
+          {job && job.status === "failed" && job.error === CANCELLED && (
+            <Card title="Scan cancelled">
+              <p className="cap">Start a new scan whenever you&apos;re ready.</p>
+              <button type="button" className="btn" onClick={scan.dismiss}>Start a new scan</button>
+            </Card>
+          )}
+          {job && job.status === "failed" && job.error !== CANCELLED && (
             <Card title="The scan didn't finish">
               <p role="alert">{job.error || "The scan failed."}</p>
               <button type="button" className="btn" onClick={scan.dismiss}>Start a new scan</button>

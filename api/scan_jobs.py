@@ -14,8 +14,14 @@ same liquidity pre-filter) and execution
 Plan rules are checked here, server-side, before anything is queued
 (api.scan_rules); the client's request is never trusted for entitlements.
 
-A job left queued or running when the process restarts (deploy, crash) is
-marked failed ("interrupted") the next time anyone looks at it.
+Every process marks the jobs it holds (queued in its pool, or running) as alive
+every HEARTBEAT_S seconds. A job left behind by a process that restarted or died
+(deploy, crash, out of memory) stops getting that heartbeat and is marked failed
+(INTERRUPTED) within STALE_AFTER_S, the next time anyone looks at it; a job that is
+just waiting in line behind another scan keeps its heartbeat and never expires.
+
+A job can be cancelled (DELETE /v1/scans/{id}): a queued one never starts, and a
+running one stops at its next progress report.
 """
 from __future__ import annotations
 
@@ -34,13 +40,24 @@ from db.engine import schema_once
 log = logging.getLogger("hsf_api.scans")
 
 ACTIVE = ("queued", "running")
-STALE_AFTER_S = 20 * 60          # running with no heartbeat this long = the worker is gone
-STALE_QUEUED_S = 60 * 60         # queued this long = the process that queued it is gone
+HEARTBEAT_S = 30                 # each process refreshes the jobs it holds this often
+STALE_AFTER_S = 3 * 60           # no heartbeat this long = the process that held it is gone
+INTERRUPTED = "The scan was interrupted because the service restarted. Start it again."
+CANCELLED = "Cancelled."
 MAX_ACTIVE_JOBS = 10             # across all users; beyond this the API answers 503
 KEEP_DAYS = 7
 
 _pool: Optional[ThreadPoolExecutor] = None
 _pool_lock = threading.Lock()
+_held: set = set()               # job ids this process has queued or is running
+_held_lock = threading.Lock()
+_heartbeat: Optional[threading.Thread] = None
+_beat = threading.Event()        # never set: Event.wait is the beat's timer (unlike time.sleep,
+                                 # code that patches time.sleep can't turn it into a busy loop)
+
+
+class ScanCancelled(RuntimeError):
+    """The job was cancelled (or expired) while it ran; stop working on it."""
 
 
 class ScanBusy(RuntimeError):
@@ -125,10 +142,46 @@ def _execute(sql: str, params: tuple, *, fetch: bool = False) -> List[Dict[str, 
 
 
 def _expire_stale() -> None:
-    _execute("UPDATE api_scan_jobs SET status = 'failed', error = 'interrupted', finished_at = NOW(), "
-             "updated_at = NOW() WHERE (status = 'running' AND updated_at < NOW() - make_interval(secs => %s)) "
-             "OR (status = 'queued' AND updated_at < NOW() - make_interval(secs => %s))",
-             (STALE_AFTER_S, STALE_QUEUED_S))
+    _execute("UPDATE api_scan_jobs SET status = 'failed', error = %s, progress = %s, finished_at = NOW(), "
+             "updated_at = NOW() WHERE status IN ('queued', 'running') "
+             "AND updated_at < NOW() - make_interval(secs => %s)",
+             (INTERRUPTED, json.dumps({"phase": "failed"}), STALE_AFTER_S))
+
+
+def heartbeat_once() -> None:
+    """Mark every job this process holds as alive (see the module docstring)."""
+    with _held_lock:
+        ids = list(_held)
+    if ids:
+        _execute("UPDATE api_scan_jobs SET updated_at = NOW() WHERE id = ANY(%s) "
+                 "AND status IN ('queued', 'running')", (ids,))
+
+
+def _heartbeat_loop() -> None:
+    while True:
+        _beat.wait(HEARTBEAT_S)
+        try:
+            heartbeat_once()
+        except Exception:  # a database blip; the next beat retries well inside STALE_AFTER_S
+            pass
+
+
+def _start_heartbeat() -> None:
+    global _heartbeat
+    with _pool_lock:
+        if _heartbeat is None or not _heartbeat.is_alive():
+            _heartbeat = threading.Thread(target=_heartbeat_loop, name="hsf-scan-heartbeat", daemon=True)
+            _heartbeat.start()
+
+
+def _hold(job_id: str) -> None:
+    with _held_lock:
+        _held.add(job_id)
+
+
+def _release(job_id: str) -> None:
+    with _held_lock:
+        _held.discard(job_id)
 
 
 def create_job(username: str, universe: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -179,6 +232,15 @@ def list_jobs(username: str, limit: int = 10) -> List[Dict[str, Any]]:
                     "ORDER BY created_at DESC LIMIT %s", (username, int(limit)), fetch=True)
 
 
+def cancel_job(username: str, job_id: str) -> Optional[Dict[str, Any]]:
+    """Cancel your queued or running scan. Returns the job (unchanged when it had
+    already finished), or None when it isn't yours."""
+    _execute("UPDATE api_scan_jobs SET status = 'failed', error = %s, progress = %s, finished_at = NOW(), "
+             "updated_at = NOW() WHERE id = %s AND username = %s AND status IN ('queued', 'running')",
+             (CANCELLED, json.dumps({"phase": "failed"}), job_id, username))
+    return get_job(username, job_id)
+
+
 def _mark_running(job_id: str) -> bool:
     """Start a queued job; False when it's no longer queued (expired meanwhile)."""
     return bool(_execute("UPDATE api_scan_jobs SET status = 'running', started_at = NOW(), progress = %s, "
@@ -187,8 +249,10 @@ def _mark_running(job_id: str) -> bool:
 
 
 def _set_progress(job_id: str, progress: Dict[str, Any]) -> None:
-    _execute("UPDATE api_scan_jobs SET progress = %s, updated_at = NOW() WHERE id = %s",
-             (json.dumps(progress), job_id))
+    """Record progress; raises ScanCancelled when the job is no longer running."""
+    if not _execute("UPDATE api_scan_jobs SET progress = %s, updated_at = NOW() WHERE id = %s "
+                    "AND status = 'running' RETURNING id", (json.dumps(progress), job_id), fetch=True):
+        raise ScanCancelled(job_id)
 
 
 def _finish(job_id: str, status: str, progress: Dict[str, Any], *,
@@ -213,6 +277,8 @@ def submit(job_id: str, work: Callable[[Callable[[Dict[str, Any]], None]], Dict[
             result = work(report)
             _finish(job_id, "complete", {"phase": "complete", "elapsed_s": round(time.perf_counter() - started, 1)},
                     result=result)
+        except ScanCancelled:
+            log.info("scan job %s stopped: cancelled", job_id)
         except Exception as e:  # never leave a job running; the message is safe to show
             log.warning("scan job %s failed: %s", job_id, type(e).__name__)
             msg = str(e) if isinstance(e, ScanFailed) else "The scan failed. Try again in a few minutes."
@@ -222,6 +288,7 @@ def submit(job_id: str, work: Callable[[Callable[[Dict[str, Any]], None]], Dict[
             except DatabaseUnavailable:
                 pass
         finally:
+            _release(job_id)
             try:
                 from db.engine import release_thread_connection
 
@@ -229,7 +296,13 @@ def submit(job_id: str, work: Callable[[Callable[[Dict[str, Any]], None]], Dict[
             except Exception:
                 pass
 
-    _executor().submit(run)
+    _hold(job_id)
+    _start_heartbeat()
+    try:
+        _executor().submit(run)
+    except Exception:
+        _release(job_id)
+        raise
 
 
 class ScanFailed(RuntimeError):

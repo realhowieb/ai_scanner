@@ -194,3 +194,19 @@ find. In parallel or right after: **"Web v2 screens, part 2"**: watchlists and a
 (including add-to-watchlist and price alert from the Stock and Scanner pages), then
 Market Brief and Day Trader. These cover most of what customers use daily and have
 APIs already.
+
+## Addendum: stuck "Queued" custom scans (2026-10-06, later)
+
+The owner's first production custom scan stayed at "Queued, waiting for a scanner".
+The API had accepted it, but its single scan worker never started it: either the worker
+was busy (without the Alpaca keys, P1-73, downloads fall back to slow one-by-one calls)
+or hsf-api restarted and lost its in-process queue. Such a job used to block the account
+for 60 minutes. Three fixes:
+
+| Fix | What changed | Evidence |
+|---|---|---|
+| Cancel | `DELETE /v1/scans/{scan_id}` (owner only): the job reads `failed` / "Cancelled." and the account can start another at once. A queued job never starts; a running one stops at its next progress step, so its results aren't saved and the worker is freed. | `tests/test_api_scans.py` (route: owner only, slot freed, 401/422; Postgres: queued and running cancel, nothing overwrites it, worker released). Isolated end to end: queued cancel at once, another user's scan → 404, running cancel freed the worker for the next scan. |
+| Faster recovery after a restart | Each API process marks the jobs it holds (queued or running) as alive every 30 s. A job left by a dead process expires after 3 minutes (was 60 queued / 20 running) with "The scan was interrupted because the service restarted. Start it again."; a job waiting in line keeps its heartbeat and never expires. | Postgres tests (heartbeat keeps a 30-min wait queued; no heartbeat → failed). Isolated end to end: API process killed mid-queue → job cleared 170 s after the restart, new scan accepted. |
+| Clearer waiting in Web v2 | The progress card shows "Waiting for 1m 05s" / "Running for …", a **Cancel scan** button, and after 60 s queued a note saying why it may be slow and suggesting a smaller list. A cancelled scan shows "Scan cancelled" with a fresh start. The page scrolls to the status when a scan starts (it was off-screen below the Start button). | `tests/scanJob.test.tsx`, `tests/screens.test.tsx` (54 Vitest tests in all). Chromium check at 1440 px and 390 px. |
+
+Still needed for large lists in production: P1-73 (Alpaca keys, and Starter for memory).

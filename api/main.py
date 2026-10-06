@@ -739,6 +739,17 @@ def _scan_routes(app: FastAPI) -> None:
             raise user_data.NotFound("scan")
         return _job_out(job)
 
+    @app.delete("/v1/scans/{scan_id}", response_model=models.ScanJob, responses=_OWNED, summary="Cancel a custom scan")
+    def scan_cancel(scan_id: str = Path(pattern="^[0-9a-f]{32}$"),
+                    account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Cancel your queued or running scan: it reads `failed` with error "Cancelled." and you
+        can start another at once. A running scan stops at its next progress step. A scan that
+        already finished is returned unchanged."""
+        job = scan_jobs.cancel_job(_user(account), scan_id)
+        if job is None:
+            raise user_data.NotFound("scan")
+        return _job_out(job)
+
 
 def require_feature(account: Dict[str, Any], feature: str) -> Dict[str, Any]:
     """The account's entitlements, or 403 with the web's upgrade wording."""

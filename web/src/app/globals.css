@@ -54,6 +54,7 @@ button, input, select { font: inherit; color: inherit; }
 .menu-email { padding: 6px 10px 8px; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; overflow-wrap: anywhere; }
 .menu-item { text-align: left; background: none; border: 0; padding: 10px; border-radius: 8px; color: var(--text); cursor: pointer; font-size: 14px; }
 .menu-item:hover { background: var(--raise); color: var(--text); }
+.col-main { scroll-margin-top: 84px; }
 .main { max-width: 1360px; width: 100%; margin: 0 auto; padding: 28px 32px 32px; flex: 1 0 auto; }
 .foot { max-width: 1360px; width: 100%; margin: 0 auto; padding: 18px 32px 32px; border-top: 1px solid var(--line-soft); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
 .center { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }

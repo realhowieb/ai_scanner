@@ -22,13 +22,18 @@ export type ScanApi = {
   create: (body: ScanCreate) => Promise<ScanJob>;
   get: (id: string, signal?: AbortSignal) => Promise<ScanJob>;
   list: (signal?: AbortSignal) => Promise<ScanJob[]>;
+  cancel: (id: string) => Promise<ScanJob>;
 };
 
 export const defaultScanApi: ScanApi = {
   create: (body) => unwrap(api.POST("/v1/scans", { body: body as Schemas["ScanCreate"] })) as Promise<ScanJob>,
   get: (id, signal) => unwrap(api.GET("/v1/scans/{scan_id}", { params: { path: { scan_id: id } }, signal })),
   list: (signal) => unwrap(api.GET("/v1/scans", { params: { query: { limit: 5 } }, signal })),
+  cancel: (id) => unwrap(api.DELETE("/v1/scans/{scan_id}", { params: { path: { scan_id: id } } })),
 };
+
+/** The API's error text for a scan stopped with DELETE /v1/scans/{id}. */
+export const CANCELLED = "Cancelled.";
 
 export const ACTIVE = new Set(["queued", "running"]);
 const DEFAULT_BACKOFF_S = 10;
@@ -45,6 +50,8 @@ export type ScanJobState = {
   /** Seconds until a refused start may be retried (429/503 Retry-After). */
   retryInS: number | null;
   start: (body: ScanCreate) => Promise<void>;
+  cancel: () => Promise<void>;
+  cancelling: boolean;
   dismiss: () => void;
 };
 
@@ -55,6 +62,7 @@ export function useScanJob({ enabled = true, intervalMs = 3000, client = default
   const [error, setError] = useState<ApiError | null>(null);
   const [starting, setStarting] = useState(false);
   const [retryInS, setRetryInS] = useState<number | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ctl = useRef<AbortController | null>(null);
   const alive = useRef(true);
@@ -147,11 +155,30 @@ export function useScanJob({ enabled = true, intervalMs = 3000, client = default
     }
   }, [client, poll, every]);
 
+  const cancel = useCallback(async () => {
+    const id = job?.scan_id;
+    if (!id) return;
+    setCancelling(true);
+    stop();
+    try {
+      const j = await client.cancel(id);
+      if (alive.current) setJob(j);
+      if (alive.current && ACTIVE.has(j.status)) poll(id, every); // shouldn't happen; keep following it
+    } catch (e) {
+      if (alive.current) {
+        setError(e instanceof ApiError ? e : null);
+        poll(id, every); // the scan is still there: keep showing it
+      }
+    } finally {
+      if (alive.current) setCancelling(false);
+    }
+  }, [job, client, stop, poll, every]);
+
   const dismiss = useCallback(() => {
     stop();
     setJob(null);
     setError(null);
   }, [stop]);
 
-  return { job, error, starting, retryInS, start, dismiss };
+  return { job, error, starting, retryInS, start, cancel, cancelling, dismiss };
 }

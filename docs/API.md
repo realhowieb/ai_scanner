@@ -34,6 +34,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | POST | `/v1/scans` | Bearer | Start a **custom scan** (the web's Custom Scan page) → **202** with a job: `{"universe": "sp500"\|"nasdaq"\|"combo"\|"us_market"\|"watchlist"\|"ticker", "ticker"?, "watchlist_id"?, "score_all"?, "filters"?: {min_price, max_price, min_dollar_vol, min_gap, apply_gap_filter, unusual_volume, session, profile, top_n, max_nasdaq, max_combo}}`. Plan rules are enforced here (403): NASDAQ/Combo Pro+, US market Premium+, `top_n` ≤ plan rows, pre-market/after-hours/unusual volume/gap filter Pro+, Pro ticker caps ≤ 4,000 / 6,000, Premium scans the full lists. One scan per account at a time (409 with the running `scan_id`), 30 per hour (429), 503 + `Retry-After` when the service is busy. |
 | GET | `/v1/scans/{scan_id}` | Bearer | Poll every 2–5 s: `status` `queued` → `running` (with `progress.phase` and `progress.symbols`) → `complete` (`result.setups`, same rows as `/v1/scans/latest`) or `failed` (`error`, safe to show). 404 when not yours. |
 | GET | `/v1/scans` | Bearer | Your recent custom scans (newest first, no rows; kept 7 days). |
+| DELETE | `/v1/scans/{scan_id}` | Bearer | Cancel your queued or running scan → the job, `failed` with error `Cancelled.`; you can start another at once. A running scan stops at its next progress step. 404 when not yours. |
 | GET | `/v1/runs`, `/v1/runs/{id}` | Bearer, **Pro** | Your saved scans (the web's Scan History) and one with its rows. 404 when not yours. |
 | GET | `/v1/track-record`, `/v1/track-record/daily` | Bearer, **Pro** | Historical research: saved scan picks vs SPY by ranking and horizon (descriptive, with disclaimer); daily excess return. |
 | GET | `/v1/earnings?days=7&tickers=…` | Bearer, **Pro** | Upcoming earnings (0–30 days), soonest first, optionally only for given tickers. |
@@ -92,9 +93,10 @@ and liquidity pre-filter) and `scan.execution.run_manual_scan_execution` with
 `scan.engine.run_breakout_scan`; results are shaped like `/v1/scans/latest`
 and saved to the account's scan history like a web scan. Jobs live in the
 API-owned `api_scan_jobs` table and run on `API_SCAN_WORKERS` threads (default
-1, which also bounds memory). A job interrupted by a restart or deploy reads
-`failed` / `interrupted` (after 20 minutes without progress while running, 60 while
-queued); start it again.
+1, which also bounds memory). Each API process marks the jobs it holds (queued or
+running) as alive every 30 seconds, so a job waiting in line never expires. A job left
+behind by a restart, deploy or crash reads `failed` within about 3 minutes, with
+the error "The scan was interrupted because the service restarted. Start it again."
 
 Example (shape only):
 

@@ -772,7 +772,13 @@ export interface paths {
         get: operations["scan_get_v1_scans__scan_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Cancel a custom scan
+         * @description Cancel your queued or running scan: it reads `failed` with error "Cancelled." and you
+         *     can start another at once. A running scan stops at its next progress step. A scan that
+         *     already finished is returned unchanged.
+         */
+        delete: operations["scan_cancel_v1_scans__scan_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1978,7 +1984,7 @@ export interface components {
             created_at?: string | null;
             /**
              * Error
-             * @description Present when status is failed
+             * @description Present when status is failed; safe to show. "Cancelled." after DELETE /v1/scans/{scan_id}
              */
             error?: string | null;
             /** Finished At */
@@ -4804,6 +4810,51 @@ export interface operations {
         };
     };
     scan_get_v1_scans__scan_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanJob"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_cancel_v1_scans__scan_id__delete: {
         parameters: {
             query?: never;
             header?: never;

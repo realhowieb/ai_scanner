@@ -23,6 +23,7 @@ function client(gets: Array<ScanJob | ApiError>, opts: { list?: ScanJob[]; creat
     calls,
     list: vi.fn(async () => opts.list ?? []),
     create: vi.fn(opts.create ?? (async () => job("queued"))),
+    cancel: vi.fn(async () => job("failed", { error: "Cancelled." })),
     get: vi.fn(async () => {
       const next = gets[Math.min(calls.get, gets.length - 1)]!;
       calls.get += 1;
@@ -129,6 +130,30 @@ describe("custom scan lifecycle", () => {
       expect(result.current.retryInS).toBeNull();
       unmount();
     }
+  });
+
+  it("cancels: stops polling and shows the cancelled job", async () => {
+    const c = client([job("running")]);
+    const { result } = renderHook(() => useScanJob({ client: c }));
+    await act(async () => { await result.current.start({ universe: "sp500" }); });
+    await tick(3000);
+    const polls = c.calls.get;
+    await act(async () => { await result.current.cancel(); });
+    expect(c.cancel).toHaveBeenCalledWith("a".repeat(32));
+    expect(result.current.job).toMatchObject({ status: "failed", error: "Cancelled." });
+    await tick(30_000);
+    expect(c.calls.get).toBe(polls);
+  });
+
+  it("keeps following the scan when cancel fails", async () => {
+    const c = client([job("running"), job("complete")]);
+    c.cancel = vi.fn(async () => { throw new ApiError(503, "busy", null, null, null); });
+    const { result } = renderHook(() => useScanJob({ client: c }));
+    await act(async () => { await result.current.start({ universe: "sp500" }); });
+    await act(async () => { await result.current.cancel(); });
+    expect(result.current.error?.status).toBe(503);
+    await tick(6000);
+    expect(result.current.job?.status).toBe("complete");
   });
 
   it("keeps the poll interval within 2-5 s", () => {

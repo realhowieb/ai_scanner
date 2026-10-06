@@ -88,7 +88,7 @@ describe("Scanner", () => {
   });
 });
 
-const idle: ScanApi = { list: async () => [], create: vi.fn(), get: vi.fn() };
+const idle: ScanApi = { list: async () => [], create: vi.fn(), get: vi.fn(), cancel: vi.fn() };
 
 describe("Custom scan controls follow server entitlements", () => {
   it("Free: NASDAQ, Combo, US market, pre-market and Pro filters are locked; rows above the cap disabled", async () => {
@@ -119,6 +119,44 @@ describe("Custom scan controls follow server entitlements", () => {
     screen.getByRole("button", { name: "Start scan" }).click();
     expect(await screen.findByText("US market scans are part of Premium.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upgrade to Premium" })).toBeInTheDocument();
+  });
+});
+
+describe("Custom scan waiting and cancel", () => {
+  const queuedJob = (createdAgoS: number): Schemas["ScanJob"] => ({
+    scan_id: "d".repeat(32), status: "queued", universe: "sp500",
+    params: { universe: "sp500", ticker: null, watchlist_id: null, score_all: false, profile: "regular", session_requested: "regular",
+      session: "regular", min_price: 1, max_price: 1000, min_dollar_vol: 0, min_gap: 0, apply_gap_filter: false, unusual_volume: false,
+      top_n: 25, max_results: 25, full_lists: false, max_nasdaq: null, max_combo: null },
+    progress: { phase: "queued", symbols: null, elapsed_s: null }, result: null, error: null,
+    created_at: new Date(Date.now() - createdAgoS * 1000).toISOString(), started_at: null, finished_at: null,
+  });
+
+  it("shows how long it has waited and explains a long wait", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(latest()));
+    const slow: ScanApi = { ...idle, list: async () => [queuedJob(95)], get: async () => queuedJob(95) };
+    render(<SessionProvider initialMe={me("pro")}><CustomScanView client={slow} /></SessionProvider>);
+    expect(await screen.findByText(/Waiting for 1m 3\ds/)).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent("taking longer than usual");
+  });
+
+  it("no long-wait note in the first minute", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(latest()));
+    const fresh: ScanApi = { ...idle, list: async () => [queuedJob(5)], get: async () => queuedJob(5) };
+    render(<SessionProvider initialMe={me("pro")}><CustomScanView client={fresh} /></SessionProvider>);
+    expect(await screen.findByText(/Waiting for \ds/)).toBeInTheDocument();
+    expect(screen.queryByText(/taking longer than usual/)).not.toBeInTheDocument();
+  });
+
+  it("Cancel scan stops it and offers a new scan", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(latest()));
+    const cancelled = { ...queuedJob(10), status: "failed" as const, error: "Cancelled." };
+    const api: ScanApi = { ...idle, list: async () => [queuedJob(10)], get: async () => queuedJob(10), cancel: vi.fn(async () => cancelled) };
+    render(<SessionProvider initialMe={me("pro")}><CustomScanView client={api} /></SessionProvider>);
+    (await screen.findByRole("button", { name: "Cancel scan" })).click();
+    expect(await screen.findByText("Scan cancelled")).toBeInTheDocument();
+    expect(api.cancel).toHaveBeenCalledWith("d".repeat(32));
+    expect(screen.getByRole("button", { name: "Start scan" })).toBeEnabled();
   });
 });
 
