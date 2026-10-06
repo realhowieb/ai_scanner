@@ -54,8 +54,12 @@ cp .env.example .env.local      # point HSF_API_BASE_URL at an API (http allowed
 npm run dev                      # http://localhost:3000
 ```
 
-Use `localhost`, not `127.0.0.1`: browsers accept `Secure` cookies on `localhost` over
-plain http.
+`npm run dev` uses plain (non-`Secure`) session cookies so sign-in works over http in
+every browser, Safari included; production builds (`npm run build && npm start`) always
+use `Secure` `__Host-` cookies and need https (or Chrome/Firefox on `localhost`). Dev
+mode accepts `localhost` and `127.0.0.1`; to open it from a phone on the same Wi-Fi,
+start it with `HSF_DEV_ORIGINS=<your computer's LAN IP>`. The first sign-in after the
+API has been idle can take ~45 s while Render wakes it up.
 
 Checks (all run in CI, `.github/workflows/web.yml`):
 

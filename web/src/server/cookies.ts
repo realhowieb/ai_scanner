@@ -1,8 +1,16 @@
-// Session cookies. Both tokens live only in Secure, HttpOnly cookies set by this
-// server; browser JavaScript can never read them (no localStorage, no readable cookie).
-// The __Host- prefix makes the browser refuse them unless Secure, Path=/ and no Domain.
-export const ACCESS_COOKIE = "__Host-hsf_at";
-export const REFRESH_COOKIE = "__Host-hsf_rt";
+// Session cookies. Both tokens live only in HttpOnly cookies set by this server;
+// browser JavaScript can never read them (no localStorage, no readable cookie).
+// In production they are also Secure with the __Host- prefix (the browser refuses
+// them unless Secure, Path=/ and no Domain). `npm run dev` on plain http drops
+// Secure and the prefix, because Safari (and every browser on an IP address) won't
+// store Secure cookies over http, which left sign-in stuck on the login page.
+export function secureCookies(env: Record<string, string | undefined> = process.env): boolean {
+  return env.NODE_ENV === "production" || env.HSF_COOKIE_SECURE === "1";
+}
+
+const SECURE = secureCookies();
+export const ACCESS_COOKIE = SECURE ? "__Host-hsf_at" : "hsf_at";
+export const REFRESH_COOKIE = SECURE ? "__Host-hsf_rt" : "hsf_rt";
 export const REFRESH_MAX_AGE_S = 30 * 24 * 3600; // the API's refresh-token lifetime
 const EXPIRY_MARGIN_S = 30;
 
@@ -23,7 +31,7 @@ export function parseCookies(header: string | null): Record<string, string> {
 }
 
 function serialize(name: string, value: string, maxAge: number): string {
-  return `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${Math.max(0, Math.floor(maxAge))}; HttpOnly; Secure; SameSite=Lax`;
+  return `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${Math.max(0, Math.floor(maxAge))}; HttpOnly;${SECURE ? " Secure;" : ""} SameSite=Lax`;
 }
 
 export type TokenPair = { access_token: string; refresh_token: string; expires_in: number };

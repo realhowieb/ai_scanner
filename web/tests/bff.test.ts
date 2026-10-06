@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { login, logout } from "@/server/auth";
 import { SESSION_EXPIRED, proxy } from "@/server/bff";
 import type { Upstream } from "@/server/bff";
-import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable } from "@/server/cookies";
+import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, secureCookies } from "@/server/cookies";
 import { _resetRefreshState } from "@/server/refresh";
 
 import { jsonResponse, jwt, setCookies } from "./helpers";
@@ -145,6 +145,15 @@ describe("BFF proxy", () => {
     const res = await proxy(req("/api/hsf/v1/scans/latest?limit=5&signal=breakout", { cookies: { [ACCESS_COOKIE]: jwt(600) } }), "v1/scans/latest", up);
     expect(calls[0]!.path).toBe("/v1/scans/latest?limit=5&signal=breakout");
     expect(res.status).toBe(504);
+  });
+});
+
+describe("cookie mode", () => {
+  it("is Secure with __Host- names in production, plain on local http dev", () => {
+    expect(ACCESS_COOKIE).toBe("__Host-hsf_at");
+    expect(secureCookies({ NODE_ENV: "production" })).toBe(true);
+    expect(secureCookies({ NODE_ENV: "development" })).toBe(false);
+    expect(secureCookies({ NODE_ENV: "development", HSF_COOKIE_SECURE: "1" })).toBe(true);
   });
 });
 

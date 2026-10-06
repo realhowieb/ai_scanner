@@ -14,4 +14,5 @@ function isLoopback(host: string): boolean {
   return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
 }
 
-export const UPSTREAM_TIMEOUT_MS = 30_000;
+// The API can take ~45 s to answer its first request after sleeping (Render free plan).
+export const UPSTREAM_TIMEOUT_MS = 75_000;

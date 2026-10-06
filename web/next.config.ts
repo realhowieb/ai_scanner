@@ -16,6 +16,12 @@ const csp = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  agentRules: false, // don't write AGENTS.md / CLAUDE.md into web/ on `next dev`
+  // `npm run dev` only serves its dev scripts to localhost unless the host is listed;
+  // without this, opening the dev site at 127.0.0.1 or a LAN address (a phone on the
+  // same Wi-Fi) left the page unhydrated and the Sign in button disabled.
+  // Add more with HSF_DEV_ORIGINS=192.168.1.20,my-laptop.local
+  allowedDevOrigins: ["127.0.0.1", ...(process.env.HSF_DEV_ORIGINS || "").split(",").map((h) => h.trim()).filter(Boolean)],
   reactStrictMode: true,
   async headers() {
     return [

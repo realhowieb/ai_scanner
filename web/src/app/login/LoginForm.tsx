@@ -40,7 +40,18 @@ export function LoginForm() {
         body: JSON.stringify({ email, password }),
       });
       if (res.ok) {
-        window.location.assign(next);
+        // Confirm the browser kept the session cookie before leaving this page;
+        // otherwise every page would bounce straight back here with no explanation.
+        const check = await fetch("/api/hsf/v1/me", { credentials: "same-origin", headers: { "x-request-id": newRequestId() } });
+        if (check.ok) {
+          window.location.assign(next);
+          return;
+        }
+        setError(check.status === 401
+          ? "You're signed in, but this browser didn't keep the sign-in cookie. Allow cookies for this site; when running locally, open it at http://localhost:3000 (not an IP address)."
+          : messageFrom(await check.json().catch(() => null), check.status));
+        setSupportId(check.headers.get("x-request-id"));
+        setBusy(false);
         return;
       }
       const body: unknown = await res.json().catch(() => null);
