@@ -20,6 +20,7 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "password_reset": (5, 3600),
     "verify": (30, 600),
     "verify_resend": (3, 3600),
+    "scan": (30, 3600),          # per account (custom scans run on a small shared pool)
 }
 _MAX_KEYS = 50_000  # bound memory if someone sprays many addresses
 

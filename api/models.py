@@ -264,3 +264,55 @@ class Device(BaseModel):
     app_version: Optional[str] = None
     created_at: Optional[str] = None
     last_seen_at: Optional[str] = None
+
+
+# ---- custom scans (POST /v1/scans) --------------------------------------------------------------
+class ScanProgress(BaseModel):
+    phase: Literal["queued", "starting", "loading_universe", "scanning", "finishing", "complete", "failed"]
+    symbols: Optional[int] = Field(default=None, description="Stocks being scanned (after the liquidity pre-filter)")
+    elapsed_s: Optional[float] = None
+
+
+class ScanParams(BaseModel):
+    """The parameters the scan actually used (after plan rules)."""
+    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker"]
+    ticker: Optional[str] = None
+    watchlist_id: Optional[int] = None
+    score_all: bool = False
+    profile: Literal["regular", "aggressive", "conservative"]
+    session_requested: Literal["regular", "premarket", "afterhours"]
+    session: Literal["regular", "premarket", "afterhours"] = Field(
+        description="Session scanned: pre-market / after-hours outside that session scan the regular session")
+    min_price: float
+    max_price: float
+    min_dollar_vol: float
+    min_gap: float
+    apply_gap_filter: bool
+    unusual_volume: bool
+    top_n: int
+    max_results: int = Field(description="This plan's row cap (Free 25, Pro 100, Premium 200)")
+    full_lists: bool = Field(description="True for Premium/admin: NASDAQ and Combo scan the full lists")
+    max_nasdaq: Optional[int] = None
+    max_combo: Optional[int] = None
+
+
+class ScanResult(BaseModel):
+    label: str
+    session: str
+    symbols_scanned: int
+    duration_s: float
+    total: int = Field(description="Setups found (at most top_n)")
+    setups: List[ScanSetup] = []
+
+
+class ScanJob(BaseModel):
+    scan_id: str
+    status: Literal["queued", "running", "complete", "failed"]
+    universe: str
+    params: ScanParams
+    progress: Optional[ScanProgress] = None
+    result: Optional[ScanResult] = Field(default=None, description="Present when status is complete")
+    error: Optional[str] = Field(default=None, description="Present when status is failed")
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None

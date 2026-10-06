@@ -89,7 +89,11 @@ def _num(v: Any) -> Optional[float]:
 
 
 def _iso(ts: Any) -> Optional[str]:
-    return ts.isoformat() if isinstance(ts, (dt.datetime, dt.date)) else None
+    """ISO 8601. Datetimes always carry a timezone: values from TIMESTAMP (no zone)
+    columns are UTC (Neon runs in UTC), so a browser never reads them as local time."""
+    if isinstance(ts, dt.datetime):
+        return (ts if ts.tzinfo else ts.replace(tzinfo=dt.timezone.utc)).isoformat()
+    return ts.isoformat() if isinstance(ts, dt.date) else None
 
 
 def market_runs() -> List[Dict[str, Any]]:

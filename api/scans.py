@@ -26,7 +26,7 @@ def json_safe(value: Any) -> Any:
     if isinstance(value, float):
         return value if math.isfinite(value) else None
     if isinstance(value, (dt.datetime, dt.date)):
-        return value.isoformat()
+        return _iso(value)            # datetimes always with a timezone (UTC when stored without one)
     if isinstance(value, dict):
         return {str(k): json_safe(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
