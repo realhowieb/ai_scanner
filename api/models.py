@@ -187,6 +187,8 @@ class StockDetail(BaseModel):
     history_summary: Optional[Dict[str, Any]] = None
     historical_context: Optional[Dict[str, Any]] = Field(default=None, description="Matured outcomes for this score range")
     outcome_cohort: Optional[Dict[str, Any]] = None
+    historical_locked: bool = Field(default=False, description="True below Pro: historical research "
+                                    "(history_summary, historical_context, outcome_cohort) is a Pro feature")
     lifecycle: List[LifecycleEvent] = []
     bars: List[Bar] = Field(default=[], description="Daily bars cached by the scans, oldest first (up to 120)")
     bars_as_of: Optional[str] = None
@@ -316,3 +318,47 @@ class ScanJob(BaseModel):
     created_at: Optional[str] = None
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
+
+
+# ---- scan history & historical research (P1-67, Pro) --------------------------------------------
+class RunSummary(BaseModel):
+    id: int
+    name: Optional[str] = None
+    label: Optional[str] = Field(default=None, description="SP500, NASDAQ, Combo, US Market, Watchlist (…), Search: X, 3-Step | …")
+    row_count: Optional[int] = None
+    duration_s: Optional[float] = None
+    is_snapshot: bool = False
+    created_at: Optional[str] = None
+
+
+class RunDetail(RunSummary):
+    total: int
+    max_results: int
+    limited: bool
+    setups: List[ScanSetup] = []
+
+
+class TrackRecordSummary(BaseModel):
+    ranking: Literal["breakout", "prebreakout"]
+    ranking_label: str
+    horizon_days: int
+    avg_excess_return: Optional[float] = Field(default=None, description="Mean return vs SPY (0.012 = +1.2%)")
+    median_excess_return: Optional[float] = None
+    win_rate: Optional[float] = Field(default=None, description="Share of picks that beat SPY")
+    sample_size: Optional[int] = None
+    runs_used: Optional[int] = None
+    top_n: Optional[int] = None
+    benchmark: str = "SPY"
+    computed_at: Optional[str] = None
+    sufficient: bool = Field(description="False while sample_size < min_sample_size (show 'still building')")
+
+
+class TrackRecord(BaseModel):
+    disclaimer: str
+    min_sample_size: int
+    summaries: List[TrackRecordSummary] = []
+
+
+class TrackRecordDay(BaseModel):
+    day: str
+    avg_excess_return: Optional[float] = None
