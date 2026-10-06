@@ -50,6 +50,7 @@ except ModuleNotFoundError:
         load_nasdaq_universe,
         load_sp500_universe,
     )
+from ui.universe_us import US_MARKET_UNAVAILABLE, us_market_symbols  # noqa: E402
 
 
 def _banner(msg: str, level: str = "info") -> None:
@@ -80,6 +81,7 @@ def render_scan_controls(
     username: str,
     apply_gap_filter: bool = False,
     container: Any = None,
+    can_scan_us_market: bool = False,
 ) -> None:
     """Render scan buttons and run scans when clicked.
 
@@ -104,6 +106,7 @@ def render_scan_controls(
                 diagnostics=diagnostics,
                 username=username,
                 apply_gap_filter=apply_gap_filter,
+                can_scan_us_market=can_scan_us_market,
             )
 
     # Admin override: allow larger universe caps + result caps inside this module
@@ -146,9 +149,17 @@ def render_scan_controls(
             width="stretch",
             disabled=(not (can_scan_sp500 and can_scan_nasdaq) and not is_admin),
         )
+    run_us_market_btn = st.button(
+        "Run US Market Scan (every US stock)" + ("" if is_admin else " · Premium"),
+        width="stretch",
+        disabled=(not can_scan_us_market and not is_admin),
+        help="All tradable U.S. stocks (NYSE, NASDAQ, NYSE American and more), trimmed by your "
+             "price and dollar-volume filters. Takes a few minutes.",
+    )
     st.caption(
         f"Fixed universes, current filters, **{profile_label}** profile "
-        "(profile tunes min gap and unusual-volume behavior)."
+        "(profile tunes min gap and unusual-volume behavior). "
+        "The US market scan covers every US stock and takes a few minutes; keep this page open."
     )
 
     # Watchlist tool buttons are now rendered in the unified Watchlists area
@@ -216,8 +227,10 @@ def render_scan_controls(
             filter_universe=filter_universe,
             sanitize_symbols=sanitize_universe_symbols,
             label_suffix=market,
-            combo_universe_transform=_manual_combo_liquidity_filter if market == "COMBO" else None,
+            combo_universe_transform=(_manual_combo_liquidity_filter
+                                      if market in ("COMBO", "US_MARKET") else None),
             combo_cache_key=combo_cache_key if market == "COMBO" else None,
+            load_us_market_universe=us_market_symbols,
         )
 
     def do_scan(
@@ -488,6 +501,13 @@ def render_scan_controls(
 
     if run_combo_btn:
         do_scan(_resolve_manual_universe("COMBO"), "Combo")
+
+    if run_us_market_btn and (can_scan_us_market or is_admin):
+        us_tickers = _resolve_manual_universe("US_MARKET")
+        if us_tickers:
+            do_scan(us_tickers, "US Market")
+        else:
+            _banner(US_MARKET_UNAVAILABLE, "warning")
 
     handle_single_ticker_actions(
         ticker=single_ticker,
