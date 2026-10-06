@@ -2,6 +2,10 @@
 
 ## Current verdict (latest; supersedes earlier statements below)
 
+> **Newer:** the beta readiness run (`docs/WEB_V2_BETA_READINESS_2026-10-06.md`) has the
+> current deployment parity and the GO / NO-GO for an invited beta (NO-GO until PR #8
+> is promoted, hsf-api is on Starter, the beta is deployed and live acceptance passes).
+
 **Web v2 covers the daily customer journey: sign in → find a setup → inspect the stock →
 save it to a watchlist → create an alert → return later.** It passes in an isolated
 environment (real API code, local Postgres, synthetic data, the production build in
