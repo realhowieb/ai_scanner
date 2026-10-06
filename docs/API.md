@@ -82,7 +82,7 @@ web page.
 - Access tokens: HS256 JWT signed with `API_JWT_SECRET`, `iss=hsf-api`, 15-minute expiry.
 - Refresh tokens: random 48-byte values; only their SHA-256 is stored (`api_refresh_tokens`).
 - Sign-in attempts go to the existing `login_attempts` table (shared rate limit with the web app).
-- CORS: only the origins in `API_CORS_ORIGINS`. Native apps don't need CORS.
+- CORS: only the exact origins in `API_CORS_ORIGINS` (no wildcards). Preflights are cached 10 minutes; `X-Request-ID` and `Retry-After` are readable by the browser. Native apps don't need CORS.
 
 ## Deploy on Render
 
@@ -102,7 +102,7 @@ Environment variables:
 |---|---|
 | `DATABASE_URL` | Same Neon URL as the billing service |
 | `API_JWT_SECRET` | New random secret, 32+ characters (e.g. `openssl rand -base64 48`). Only on this service. |
-| `API_CORS_ORIGINS` | Comma-separated web origins allowed to call it, e.g. the new web app's URL. Empty = no browser access. |
+| `API_CORS_ORIGINS` | Comma-separated web origins allowed to call it from a browser, exactly `scheme://host[:port]`, e.g. `https://app.hsfinest.ai,https://hsf-web.onrender.com`. `https` only (`http://localhost:<port>` allowed for local development). Wildcards, paths and plain-http hosts are ignored with a warning in the log. Empty = no browser access. Native iOS/Android apps don't need it. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (`SMTP_FROM_NAME` optional) | Same Resend values as the web app. Needed for sign-up verification and password-reset emails; without them sign-up still works (`verification_sent: false`) and reset requests send nothing. |
 | `APP_BASE_URL`, `BILLING_API_BASE` | Optional; default to the production web app and billing service. |
 
