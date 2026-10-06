@@ -10,8 +10,10 @@ PREMIUM, ADMIN (PRO2 = a second Pro account for the isolation checks). Use
 dedicated test accounts only. Roles without credentials are reported as BLOCKED.
 
 Journey per account: login -> /me -> latest scan -> stock detail -> create
-watchlist -> add tickers -> note -> create alert -> list -> disable -> delete
--> delete watchlist -> refresh rotation -> logout. Writes need --allow-writes;
+watchlist -> add tickers -> note -> custom scans (plan refusals, a one-ticker
+scan and a watchlist scan, polled to completion) -> push device register /
+list / refresh / remove -> create alert -> list -> disable -> delete -> delete
+watchlist -> refresh rotation -> logout. Writes need --allow-writes;
 everything the run creates is named "zz-acceptance-<run id>" and deleted at the
 end (only by id, only records this run created). Alerts use a threshold that
 cannot fire, so no email is sent.
@@ -38,7 +40,12 @@ ROLES = {"FREE": ("basic", 25, 1), "PRO": ("pro", 100, 5), "PRO2": ("pro", 100, 
 REQUIRED_PATHS = ["/healthz", "/v1/auth/login", "/v1/auth/refresh", "/v1/auth/logout", "/v1/me", "/v1/today",
                   "/v1/scans/latest", "/v1/stocks/{ticker}", "/v1/watchlists", "/v1/watchlists/{watchlist_id}",
                   "/v1/watchlists/{watchlist_id}/tickers", "/v1/watchlists/{watchlist_id}/tickers/{ticker}",
-                  "/v1/alerts", "/v1/alerts/{alert_id}", "/v1/alerts/events"]
+                  "/v1/alerts", "/v1/alerts/{alert_id}", "/v1/alerts/events",
+                  "/readyz", "/v1/auth/signup", "/v1/auth/verify-email", "/v1/auth/password-reset",
+                  "/v1/auth/password-reset/confirm", "/v1/me/password", "/v1/me/verify-email",
+                  "/v1/me/email-preferences", "/v1/billing/checkout", "/v1/billing/portal",
+                  "/v1/me/devices", "/v1/me/devices/{device_id}", "/v1/scans", "/v1/scans/{scan_id}"]
+SCAN_TIMEOUT_S = float(os.environ.get("API_SCAN_TIMEOUT_S", "300"))
 NEVER_FIRES = 999_999.0  # % move threshold no stock reaches
 
 
@@ -211,6 +218,9 @@ def journey(run: Run, s: Dict[str, Any], allow_writes: bool) -> None:
     c = run.req("DELETE", f"/v1/watchlists/{wid}/tickers/MSFT", headers=h).status_code
     run.check(A, "remove ticker", c == 204, f"HTTP {c}")
 
+    custom_scans(run, s, A, tier, ticker, wid)
+    devices(run, s, A)
+
     before = run.req("GET", "/v1/alerts", headers=h).json()
     r = run.req("POST", "/v1/alerts", headers=h, json={"type": "move", "ticker": ticker, "threshold": NEVER_FIRES})
     if before["used"] >= before["limit"]:
@@ -235,6 +245,69 @@ def journey(run: Run, s: Dict[str, Any], allow_writes: bool) -> None:
     c = run.req("DELETE", f"/v1/watchlists/{wid}", headers=h).status_code
     run.check(A, "remove test watchlist", c == 204, f"HTTP {c}")
     run.created.remove((h, "watchlist", wid))
+
+
+def _poll_scan(run: Run, h: Dict[str, str], scan_id: str) -> Dict[str, Any]:
+    deadline = time.time() + SCAN_TIMEOUT_S
+    job: Dict[str, Any] = {}
+    while time.time() < deadline:
+        job = run.req("GET", f"/v1/scans/{scan_id}", headers=h, label="GET /v1/scans/{scan_id}").json()
+        if job.get("status") in ("complete", "failed"):
+            return job
+        time.sleep(2)
+    return job
+
+
+def custom_scans(run: Run, s: Dict[str, Any], A: str, tier: str, ticker: str, wid: int) -> None:
+    """Custom Scan through the API: plan rules, a one-ticker scan and a watchlist scan."""
+    h = s["h"]
+    expect = {"basic": {"nasdaq": 403, "us_market": 403}, "pro": {"us_market": 403}}.get(tier, {})
+    for universe, code in expect.items():
+        c = run.req("POST", "/v1/scans", headers=h, json={"universe": universe}).status_code
+        run.check(A, f"scan: {universe} refused for {tier}", c == code, f"HTTP {c}")
+    cap = ROLES[s["role"]][1]
+    c = run.req("POST", "/v1/scans", headers=h, json={"universe": "sp500", "filters": {"top_n": cap + 5}}).status_code
+    run.check(A, "scan: rows above the plan cap refused", c == 403 if cap < 9999 else c in (202, 409, 422), f"HTTP {c}")
+    for name, body in (("ticker scan", {"universe": "ticker", "ticker": ticker}),
+                       ("watchlist scan", {"universe": "watchlist", "watchlist_id": wid, "score_all": True})):
+        r = run.req("POST", "/v1/scans", headers=h, json=body)
+        if not run.check(A, f"scan: {name} queued", r.status_code == 202, f"HTTP {r.status_code} {r.text[:120]}"):
+            continue
+        t0 = time.perf_counter()
+        job = _poll_scan(run, h, r.json()["scan_id"])
+        res = job.get("result") or {}
+        run.check(A, f"scan: {name} completes", job.get("status") == "complete" and isinstance(res.get("setups"), list),
+                  f"status={job.get('status')} error={job.get('error')} symbols={res.get('symbols_scanned')} "
+                  f"setups={res.get('total')} in {time.perf_counter() - t0:.0f}s")
+    listed = run.req("GET", "/v1/scans", headers=h).json()
+    run.check(A, "scan: history lists them", isinstance(listed, list) and len(listed) >= 2, f"{len(listed)} jobs")
+
+
+def devices(run: Run, s: Dict[str, Any], A: str) -> None:
+    """Push device register -> list -> refresh token -> remove (a fake Expo token; nothing is sent)."""
+    h = s["h"]
+    token = f"ExponentPushToken[zzacceptance{run.run_id}{s['role'].lower()}]"
+    r = run.req("POST", "/v1/me/devices", headers=h, json={"push_token": token, "platform": "ios", "device_name": "acceptance"})
+    if not run.check(A, "device: register", r.status_code == 200 and r.json().get("provider") == "expo"
+                     and "push_token" not in r.json(), f"HTTP {r.status_code}"):
+        return
+    did = r.json()["id"]
+    run.created.append((h, "device", did))
+    again = run.req("POST", "/v1/me/devices", headers=h, json={"push_token": token, "platform": "ios"}).json()
+    run.check(A, "device: re-register is idempotent", again.get("id") == did, f"id {again.get('id')} vs {did}")
+    listed = run.req("GET", "/v1/me/devices", headers=h).json()
+    run.check(A, "device: listed", any(d["id"] == did for d in listed), f"{len(listed)} devices")
+    rt = s["pair"]["refresh_token"]
+    r = run.req("POST", "/v1/auth/refresh", json={"refresh_token": rt})
+    if r.status_code == 200:   # keep the journey's later session checks on a fresh pair
+        s["pair"] = r.json()
+        s["h"] = {"Authorization": f"Bearer {s['pair']['access_token']}"}
+    run.check(A, "device: token refresh keeps the device", r.status_code == 200
+              and any(d["id"] == did for d in run.req("GET", "/v1/me/devices", headers=s["h"]).json()), f"HTTP {r.status_code}")
+    c = run.req("DELETE", f"/v1/me/devices/{did}", headers=s["h"]).status_code
+    run.check(A, "device: remove", c == 204, f"HTTP {c}")
+    if c == 204:
+        run.created.remove((h, "device", did))
 
 
 def plan_limit(run: Run, s: Dict[str, Any]) -> None:
@@ -301,7 +374,8 @@ def session_checks(run: Run, s: Dict[str, Any]) -> None:
 
 def cleanup(run: Run) -> None:
     for h, kind, rid in list(run.created):
-        path = f"/v1/watchlists/{rid}" if kind == "watchlist" else f"/v1/alerts/{rid}"
+        path = {"watchlist": f"/v1/watchlists/{rid}", "alert": f"/v1/alerts/{rid}",
+                "device": f"/v1/me/devices/{rid}"}[kind]
         c = run.req("DELETE", path, headers=h).status_code
         run.check("cleanup", f"delete {kind} {rid}", c in (204, 404), f"HTTP {c}")
     run.created.clear()

@@ -31,6 +31,9 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | POST | `/v1/billing/portal` | Bearer | `{"flow"?: "cancel"}` → Stripe Customer Portal URL (404 when there's no subscription yet). |
 | GET | `/v1/today` | Bearer | Market phase, Before the open (this morning's pre-market movers, 8:35-10:30 ET), Top setups, After the close, last session recap. Pre/after-hours movers are Pro+ (`locked: true` below Pro); Premium model fields are redacted below Premium. Each section fails on its own (`errors` lists it). |
 | GET | `/v1/scans/latest` | Bearer | The latest market scan's HSF setups, ranked as in the Scanner. `limit` (≤200), `offset`, `min_score`, `signal`. A plan sees its Scanner row cap (Free 25, Pro 100, Premium 200; `limited: true` when the cap hides some). PreBreakout (`prob`, `signal=prebreakout`) is Premium. |
+| POST | `/v1/scans` | Bearer | Start a **custom scan** (the web's Custom Scan page) → **202** with a job: `{"universe": "sp500"\|"nasdaq"\|"combo"\|"us_market"\|"watchlist"\|"ticker", "ticker"?, "watchlist_id"?, "score_all"?, "filters"?: {min_price, max_price, min_dollar_vol, min_gap, apply_gap_filter, unusual_volume, session, profile, top_n, max_nasdaq, max_combo}}`. Plan rules are enforced here (403): NASDAQ/Combo Pro+, US market Premium+, `top_n` ≤ plan rows, pre-market/after-hours/unusual volume/gap filter Pro+, Pro ticker caps ≤ 4,000 / 6,000, Premium scans the full lists. One scan per account at a time (409 with the running `scan_id`), 30 per hour (429), 503 + `Retry-After` when the service is busy. |
+| GET | `/v1/scans/{scan_id}` | Bearer | Poll every 2–5 s: `status` `queued` → `running` (with `progress.phase` and `progress.symbols`) → `complete` (`result.setups`, same rows as `/v1/scans/latest`) or `failed` (`error`, safe to show). 404 when not yours. |
+| GET | `/v1/scans` | Bearer | Your recent custom scans (newest first, no rows; kept 7 days). |
 | GET | `/v1/stocks/{ticker}` | Bearer | Stock Intelligence (same builder as the web page): score, components, signals, reasons, risks, what to watch, lifecycle, historical context, daily bars the scans cached (up to 120), and your watchlists and alerts on it. |
 | GET / POST | `/v1/watchlists` | Bearer | List; create `{"name","make_default"?}` (201; 409 duplicate name; 403 past 50 lists). |
 | GET / PATCH / DELETE | `/v1/watchlists/{id}` | Bearer | Items with notes; rename / make default `{"name"?,"make_default"?}`; delete (204). 404 when not yours. |
@@ -65,6 +68,54 @@ it a new push token. Signing out with `push_token` removes that device; a passwo
 change or reset, or a refresh-token reuse sweep, removes every device of the
 account, so the app registers again after its next sign-in. Nothing sends pushes
 yet; the alert sender will read `api.devices.devices_for_user()`.
+
+Custom scans run in the background because they take from a couple of seconds
+(one ticker, S&P 500) to minutes (US market: 224.6 s on 2026-10-06). They use
+the web's own code: `scan.universe_selection.resolve_scan_universe` (same lists
+and liquidity pre-filter) and `scan.execution.run_manual_scan_execution` with
+`scan.engine.run_breakout_scan`; results are shaped like `/v1/scans/latest`
+and saved to the account's scan history like a web scan. Jobs live in the
+API-owned `api_scan_jobs` table and run on `API_SCAN_WORKERS` threads (default
+1, which also bounds memory). A job interrupted by a restart or deploy reads
+`failed` / `interrupted` (after 20 minutes without progress while running, 60 while
+queued); start it again.
+
+Example (shape only):
+
+```
+POST /v1/scans  {"universe": "nasdaq", "filters": {"top_n": 50, "session": "regular"}}
+202 {"scan_id": "9f37c3e6…", "status": "queued", "universe": "nasdaq",
+     "params": {"universe": "nasdaq", "top_n": 50, "session": "regular", "full_lists": false,
+                "max_nasdaq": 1200, "max_results": 100, …}, "progress": {"phase": "queued"}}
+GET /v1/scans/9f37c3e6…
+200 {"status": "complete", "progress": {"phase": "complete", "elapsed_s": <seconds>},
+     "result": {"label": "NASDAQ", "symbols_scanned": <n>, "duration_s": <seconds>, "total": <≤ 50>,
+                "setups": [{"ticker": "…", "score": <0-100>, "signals": ["breakout"], …}]}}
+```
+
+Errors are `{"detail": "<message>"}` (validation errors: `{"detail": [ … ]}`, FastAPI's
+standard list). Times are ISO 8601 and always carry a timezone. Plans are
+`basic` / `pro` / `premium` / `admin` in data; `plan_label` (Free / Pro / Premium /
+Admin) is the name to show. Tickers are upper case.
+
+## Postman
+
+Import `https://hsf-api.onrender.com/openapi.json` (File → Import → Link; OpenAPI
+3.1). Set a collection variable `base_url`, and after login paste the access token
+into the collection's Bearer auth. Never save real passwords or tokens in a shared
+collection. Smoke sequence:
+
+1. `GET /healthz`, `GET /readyz`
+2. `POST /v1/auth/login` (test account) → copy `access_token`, `refresh_token`
+3. `GET /v1/me`
+4. `GET /v1/today`
+5. `GET /v1/scans/latest?limit=10`
+6. `GET /v1/stocks/AAPL`
+7. `POST /v1/scans` `{"universe": "ticker", "ticker": "AAPL"}` → poll `GET /v1/scans/{scan_id}` until `complete`
+8. `POST /v1/watchlists` `{"name": "postman-test"}` → `POST …/tickers` → `DELETE /v1/watchlists/{id}`
+9. `POST /v1/alerts` `{"type": "move", "ticker": "AAPL", "threshold": 999999}` → `DELETE /v1/alerts/{id}`
+10. `POST /v1/auth/refresh` `{"refresh_token": …}`
+11. `POST /v1/auth/logout` `{"refresh_token": <the new one>}`
 
 Every response carries `X-Request-ID` (a client's own id is kept when it is
 8-64 characters of letters, digits, `.`, `_` or `-`). Each request writes one
@@ -104,6 +155,8 @@ Environment variables:
 | `API_JWT_SECRET` | New random secret, 32+ characters (e.g. `openssl rand -base64 48`). Only on this service. |
 | `API_CORS_ORIGINS` | Comma-separated web origins allowed to call it from a browser, exactly `scheme://host[:port]`, e.g. `https://app.hsfinest.ai,https://hsf-web.onrender.com`. `https` only (`http://localhost:<port>` allowed for local development). Wildcards, paths and plain-http hosts are ignored with a warning in the log. Empty = no browser access. Native iOS/Android apps don't need it. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (`SMTP_FROM_NAME` optional) | Same Resend values as the web app. Needed for sign-up verification and password-reset emails; without them sign-up still works (`verification_sent: false`) and reset requests send nothing. |
+| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (`ALPACA_DATA_FEED` optional) | Same values as the web app. **Needed for custom scans** (`POST /v1/scans`): the US market list and the liquidity pre-filter come from Alpaca, and price downloads fall back to slow one-by-one Yahoo calls without it. |
+| `API_SCAN_WORKERS` | Optional, default 1 (max 4): custom scans that run at once. Raise only with more memory (a US market scan holds thousands of price histories). |
 | `APP_BASE_URL`, `BILLING_API_BASE` | Optional; default to the production web app and billing service. |
 
 The service won't start without `API_JWT_SECRET` (uvicorn logs

@@ -80,6 +80,8 @@ DATABASE_URL       # same Neon DB
 API_JWT_SECRET     # 32+ random characters; only on this service, never in chat or git
 API_CORS_ORIGINS   # comma-separated exact https origins of the web frontend (no wildcard/path); empty = no browser access
 SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM   # same Resend values; sign-up and reset emails
+ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY                   # same keys as Streamlit; needed for custom scans (POST /v1/scans)
+API_SCAN_WORKERS   # optional, default 1: custom scans run at once (memory-bound)
 ```
 
 - [ ] Health check path `/healthz`
