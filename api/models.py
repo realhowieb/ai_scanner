@@ -414,3 +414,38 @@ class Brief(BaseModel):
     prebreakout_picks: List[BriefPick] = Field(default=[], description="Premium; empty below Premium")
     prebreakout_locked: bool = False
     earnings_today: List[str] = []
+
+
+class DayTraderRow(BaseModel):
+    ticker: str
+    open: Optional[float] = None
+    last: Optional[float] = None
+    change_dollar: Optional[float] = None
+    chg_pct: Optional[float] = None
+    gap_pct: Optional[float] = None
+    vwap: Optional[float] = None
+    vs_vwap_pct: Optional[float] = None
+    rvol: Optional[float] = None
+    volume: Optional[float] = None
+    adx: Optional[float] = None
+    supertrend: Optional[float] = None
+    supertrend_direction: Optional[Any] = None
+    ewo: Optional[float] = None
+    day_trade_score: float = Field(description="Intraday momentum score (move, VWAP alignment, gap, volume)")
+
+    model_config = {"extra": "allow"}   # extra live fields (EMA cross, ranges, data source) pass through
+
+
+class DayTrader(BaseModel):
+    state: Literal["premarket", "open", "afterhours", "closed"]
+    source: str
+    symbols: List[str]
+    missing: int = Field(description="Symbols with no live quote")
+    as_of: str
+    rows: List[DayTraderRow] = []
+
+
+class StairSteppers(BaseModel):
+    checked: List[str]
+    matches: List[Dict[str, Any]] = Field(default=[], description="Symbols that pass the filters (r2, trend, pullback…)")
+    all: List[Dict[str, Any]] = []

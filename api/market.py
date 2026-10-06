@@ -120,3 +120,70 @@ def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
         "prebreakout_locked": not early,
         "earnings_today": list(d.get("earnings_today") or []),
     }
+
+
+# ---- Day Trader (P1-70) --------------------------------------------------------------------------
+DT_SOURCES = ("watchlist", "movers", "movers_sp500", "movers_nasdaq", "premarket", "postmarket",
+              "scan_picks", "megacaps", "custom")
+DT_ROWS_TTL_S = 30          # live quotes: shared across users for 30 s (the web refreshes every 30-60 s)
+DT_MOVERS_TTL_S = 120       # the movers screen, as on the web
+
+
+def _dt_symbols(source: str, custom: Sequence[str], watch: Sequence[str]) -> List[str]:
+    from api.today import _cached
+    from ui import day_trader as dtm
+
+    if source == "custom":
+        return dtm._parse_symbols(",".join(custom), dtm.MAX_SYMBOLS)
+    if source == "watchlist":
+        return dtm._parse_symbols(",".join(watch), dtm.MAX_SYMBOLS)
+    if source == "megacaps":
+        return dtm._parse_symbols(dtm.MEGA_CAPS)
+    loaders = {
+        "movers": lambda: dtm._top_movers_symbols(),
+        "movers_sp500": lambda: dtm._top_movers_symbols(universe=dtm._sp500_universe()),
+        "movers_nasdaq": lambda: dtm._top_movers_symbols(universe=dtm._nasdaq_universe()),
+        "premarket": lambda: dtm._session_scan_symbols("premarket"),
+        "postmarket": lambda: dtm._session_scan_symbols("postmarket"),
+        "scan_picks": lambda: dtm._scan_pick_symbols(),
+    }
+    return list(_cached(("dt_source", source), loaders[source], ttl_s=DT_MOVERS_TTL_S) or [])
+
+
+def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = ()) -> Dict[str, Any]:
+    """The web's Day Trader table: live Alpaca snapshot metrics for the source's
+    symbols, with the day-trade score; plus the market state."""
+    from api.today import _cached
+    from ui import day_trader as dtm
+
+    symbols = _dt_symbols(source, custom, watch)
+    rows: List[Dict[str, Any]] = []
+    if symbols:
+        def load():
+            from market_data import build_day_trader_metrics
+
+            return build_day_trader_metrics(list(symbols)) or []
+
+        rows = [dict(r, day_trade_score=dtm.day_trade_score(r))
+                for r in _cached(("dt_rows", tuple(symbols)), load, ttl_s=DT_ROWS_TTL_S)]
+    state = _cached("dt_state", lambda: dtm.market_state(clock_is_open=dtm._fetch_clock_is_open()), ttl_s=60)
+    return {"state": state, "source": source, "symbols": symbols, "missing": max(0, len(symbols) - len(rows)),
+            "as_of": dt.datetime.now(dt.timezone.utc), "rows": rows}
+
+
+def stair_steppers(symbols: Sequence[str], *, window: int, direction: str, r2_min: float,
+                   max_pullback_pct: float, min_trend_pct_per_hour: float) -> Dict[str, Any]:
+    """The web's Stair-steppers check (P2-26): smooth 1-minute trends."""
+    from analytics.stair_step import is_stair_stepper
+    from api.today import _cached
+    from ui.day_trader import _parse_symbols
+    from ui.stair_stepper import MAX_CHECK, build_rows, fetch_recent_minute_bars
+
+    checked = _parse_symbols(",".join(symbols), MAX_CHECK)
+    bars = _cached(("dt_minute", tuple(sorted(set(checked)))), lambda: fetch_recent_minute_bars(checked),
+                   ttl_s=DT_MOVERS_TTL_S) if checked else {}
+    rows = build_rows(bars, checked, window)
+    hits = [r for r in rows if is_stair_stepper(r, r2_min=r2_min, direction=direction,
+                                                max_pullback_pct=max_pullback_pct,
+                                                min_trend_pct_per_hour=min_trend_pct_per_hour)]
+    return {"checked": checked, "matches": hits, "all": rows}

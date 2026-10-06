@@ -173,6 +173,71 @@ class BriefTests(PaidApiTestCase):
         self.assertEqual(b["available"], False)
 
 
+class DayTraderTests(PaidApiTestCase):
+    ROWS = [{"ticker": "AAPL", "open": 100.0, "last": 103.0, "chg_pct": 3.0, "gap_pct": 1.0, "vwap": 102.0,
+             "vs_vwap_pct": 1.0, "rvol": 2.5, "volume": 1e6, "data_source": "alpaca_iex"}]
+
+    def setUp(self):
+        super().setUp()
+        from api.today import _cache
+
+        _cache.clear()
+        self.addCleanup(_cache.clear)
+        p = mock.patch
+        self.metrics = p("market_data.build_day_trader_metrics", side_effect=lambda syms, **k: [
+            dict(r) for r in self.ROWS if r["ticker"] in syms]).start()
+        p("ui.day_trader._fetch_clock_is_open", return_value=None).start()
+        p("ui.day_trader.market_state", return_value="open").start()
+        p("api.user_data.list_watchlists", side_effect=lambda u: [{"id": 7, "is_default": True}]
+          if u == "pro@example.com" else []).start()
+        p("api.user_data.get_watchlist", side_effect=self._wl).start()
+
+    def _wl(self, user, wid):
+        from api.user_data import NotFound
+
+        if user == "pro@example.com" and wid == 7:
+            return {"id": 7, "items": [{"ticker": "AAPL"}, {"ticker": "MSFT"}]}
+        raise NotFound("watchlist")
+
+    def test_free_refused(self):
+        self.assertEqual(self.get("free@example.com", "/v1/day-trader").status_code, 403)
+        self.assertEqual(self.get("free@example.com", "/v1/day-trader/stair-steppers?symbols=AAPL").status_code, 403)
+
+    def test_watchlist_source_and_score(self):
+        r = self.get("pro@example.com", "/v1/day-trader")
+        self.assertEqual(r.status_code, 200, r.text)
+        b = r.json()
+        self.assertEqual((b["state"], b["source"], b["symbols"], b["missing"]), ("open", "watchlist", ["AAPL", "MSFT"], 1))
+        self.assertGreater(b["rows"][0]["day_trade_score"], 0)
+        self.assertEqual(b["rows"][0]["data_source"], "alpaca_iex")      # extra live fields pass through
+        self.assertEqual(self.get("pro@example.com", "/v1/day-trader?watchlist_id=99").status_code, 404)
+
+    def test_custom_symbols_are_validated_and_quotes_shared(self):
+        b = self.get("pro@example.com", "/v1/day-trader?source=custom&symbols=aapl, $$$,brk.b").json()
+        self.assertEqual(b["symbols"], ["AAPL", "BRK.B"])
+        self.get("prem@example.com", "/v1/day-trader?source=custom&symbols=AAPL,BRK.B")
+        self.assertEqual(self.metrics.call_count, 1)                    # second caller hit the 30 s cache
+        self.assertEqual(self.get("pro@example.com", "/v1/day-trader?source=bogus").status_code, 422)
+
+    def test_movers_source(self):
+        with mock.patch("ui.day_trader._top_movers_symbols", return_value=["AAPL"]) as movers:
+            b = self.get("pro@example.com", "/v1/day-trader?source=movers").json()
+            self.get("prem@example.com", "/v1/day-trader?source=movers")
+        self.assertEqual(b["symbols"], ["AAPL"])
+        self.assertEqual(movers.call_count, 1)
+
+    def test_stair_steppers(self):
+        rows = [{"ticker": "AAPL", "status": "ok", "direction": "up", "r2": 0.95, "pullback_pct": 0.2,
+                 "trend_pct_per_hour": 1.5}]
+        with mock.patch("ui.stair_stepper.fetch_recent_minute_bars", return_value={"AAPL": []}), \
+                mock.patch("ui.stair_stepper.build_rows", return_value=rows), \
+                mock.patch("analytics.stair_step.is_stair_stepper", return_value=True):
+            b = self.get("pro@example.com", "/v1/day-trader/stair-steppers?symbols=aapl").json()
+        self.assertEqual(b["checked"], ["AAPL"])
+        self.assertEqual(len(b["matches"]), 1)
+        self.assertEqual(self.get("pro@example.com", "/v1/day-trader/stair-steppers?symbols=AAPL&window=7").status_code, 422)
+
+
 @unittest.skipUnless(PG_URL, "set HSF_TEST_PG_URL to a throwaway Postgres to run")
 class OwnedRunPostgresTests(unittest.TestCase):
     def test_owned_run_checks_the_owner(self):
