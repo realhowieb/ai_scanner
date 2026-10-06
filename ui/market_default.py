@@ -24,7 +24,7 @@ MARKET_VIEW_KEY = "hsf_market_view"
 MARKET_UNAVAILABLE_KEY = "hsf_market_unavailable"
 # Session keys cleared by "Back to the latest market scan" (Run 70, P1-10).
 SESSION_SCAN_KEYS = ("results_df", "results_signature", "scan_ran_at_utc")
-REPLACE_HINT = "Run your own scan below to replace this view."
+REPLACE_HINT = "Run your own scan on the Custom Scan page to replace this view."
 
 
 def pick_market_run(runs: Optional[Sequence[Mapping[str, Any]]]) -> Optional[Dict[str, Any]]:

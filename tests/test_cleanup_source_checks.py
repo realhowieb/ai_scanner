@@ -253,7 +253,7 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertIn("from ui.app_user_profile import", app_source)
         self.assertIn("render_account_sidebar(", app_source)
         self.assertIn("load_saved_user_settings(", app_source)
-        self.assertIn("apply_admin_scan_caps(", app_source)
+        self.assertIn("apply_admin_scan_caps(", (ROOT / "ui" / "custom_scan.py").read_text())  # Custom Scan page
         self.assertIn("load_latest_results_snapshot(", app_source)
         self.assertNotIn("def _account_label", app_source)
         self.assertNotIn("ADMIN_SCAN_CAP = 100_000", app_source)
@@ -329,7 +329,7 @@ class CleanupSourceChecks(unittest.TestCase):
         earnings_panel_source = (ROOT / "ui" / "earnings.py").read_text()
 
         self.assertIn("from ui.earnings_results import", app_source)
-        self.assertIn("render_earnings_controls(", app_source)
+        self.assertIn("render_earnings_controls(", (ROOT / "ui" / "custom_scan.py").read_text())  # Custom Scan page
         self.assertIn("prepare_results_with_earnings(", app_source)
         self.assertNotIn("def _apply_earnings_enrichment", app_source)
         self.assertNotIn("def _canonical_symbol_series", app_source)

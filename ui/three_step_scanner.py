@@ -383,12 +383,12 @@ def render_three_step_scanner(container: Any = None) -> None:
 
         _persist_three_step_run(df, duration_sec=duration_sec)
         st.session_state.scan_active_step = 3
-        # Run 83B: the Scanner's results render at the top, before this panel,
-        # so rerun once to show this scan there; keep the status as a flash.
+        # Run 83B: results render on the Scanner; the Custom Scan page opens it
+        # on the rerun (force_results_refresh) and the Scanner shows this flash.
         st.session_state["_three_step_flash"] = (
-            f"Scan complete in {duration_sec:.1f}s — {num_rows} rows. "
-            "They're shown in the results at the top of the Scanner."
+            f"Scan complete in {duration_sec:.1f}s — {num_rows} rows."
         )
+        st.session_state["force_results_refresh"] = True
         st.rerun()
     else:
         status_placeholder.info(

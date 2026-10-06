@@ -16,9 +16,10 @@ class ScannerLayoutTests(unittest.TestCase):
         m = _main_src()
         slot = m.index("results_slot = st.container()")
         self.assertLess(m.index("render_market_snapshot("), slot)
-        for later in ("render_watchlists_panel(", 'st.expander("Custom scan"',
-                      "render_earnings_controls(", "render_scan_controls(", "render_three_step_scanner("):
+        for later in ("render_watchlists_panel(", "pages/custom_scan.py"):
             self.assertLess(slot, m.index(later), later)
+        for gone in ('st.expander("Custom scan"', "render_scan_controls(", "render_three_step_scanner("):
+            self.assertNotIn(gone, m, gone)                      # scan tools live on the Custom Scan page
 
     def test_results_fill_before_the_scan_tools_and_scans_rerun_to_show(self):
         # Run 83B (B3): filling the slot LAST let the watchlist panel's live-quote
@@ -27,14 +28,18 @@ class ScannerLayoutTests(unittest.TestCase):
         # at the top because both scan paths rerun afterwards.
         m = _main_src()
         fill = m.index("with results_slot:")
-        for later in ("render_watchlists_panel(", "render_scan_controls(", "render_three_step_scanner("):
-            self.assertLess(fill, m.index(later), later)
+        self.assertLess(fill, m.index("render_watchlists_panel("))
         self.assertLess(fill, m.index("render_results_tabs("))
         self.assertLess(fill, m.index("default_results(get_results_df())"))
         refresh = m[m.index('st.session_state.pop("force_results_refresh", False)'):]
         self.assertIn("st.rerun()", refresh[:600])                # manual scans rerun into the results
         three_step = (ROOT / "ui" / "three_step_scanner.py").read_text()
-        self.assertIn("st.rerun()", three_step[three_step.index("_persist_three_step_run(df,"):])
+        after = three_step[three_step.index("_persist_three_step_run(df,"):]
+        self.assertIn("st.rerun()", after)
+        self.assertIn('st.session_state["force_results_refresh"] = True', after)   # opens the Scanner
+        page = (ROOT / "ui" / "custom_scan.py").read_text()
+        self.assertIn('st.session_state.pop("force_results_refresh", False)', page)
+        self.assertIn("st.switch_page(SCANNER_PAGE)", page)
 
     def test_secondary_tools_are_off_the_scanner(self):
         m = _main_src()

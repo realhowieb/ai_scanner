@@ -46,8 +46,9 @@ class NewPagesTests(unittest.TestCase):
 
         self.assertEqual([s for s, _items in _NAV_SECTIONS],
                          ["Today", "Discover", "Research", "My Stocks", "Account", "Admin", "Labs"])
-        labels = [label for _p, label, _i in _NAV[:5]]
-        self.assertEqual(labels, ["Today", "Market Brief", "Scanner", "Day Trader", "Stock Intelligence"])
+        labels = [label for _p, label, _i in _NAV[:6]]
+        self.assertEqual(labels, ["Today", "Market Brief", "Scanner", "Custom Scan", "Day Trader",
+                                  "Stock Intelligence"])
         self.assertIn("My Stocks", [label for _p, label, _i in _NAV])
         self.assertNotIn("pages/alerts.py", [p for p, _l, _i in _NAV])   # alerts live in My Stocks
 
