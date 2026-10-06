@@ -86,7 +86,14 @@ BASE_URL=https://<web v2> HSF_TEST_EMAIL=<test account> HSF_TEST_PASSWORD_FILE=<
   [HSF_TEST_EMAIL_2=<second test account>] OUT_DIR=screenshots node scripts/journey.mjs
 ```
 
+After a deploy, `BASE_URL=https://<web v2> node scripts/beta-smoke.mjs` checks health,
+security headers, redirects and the BFF without an account (add `HSF_TEST_EMAIL` and
+`HSF_TEST_PASSWORD_FILE` for cookie flags and signed-in timings).
+
 ## Deploy on Render (not done yet; needs the owner)
+
+The full beta guide (order of operations, invite list, verification, rollback) is
+[docs/WEB_V2_BETA_DEPLOY.md](../docs/WEB_V2_BETA_DEPLOY.md). Summary:
 
 New → Web Service → this repository.
 
@@ -94,10 +101,10 @@ New → Web Service → this repository.
 |---|---|
 | Branch | `dev` for a beta service first (e.g. `hsf-web-beta`); `main` later |
 | Root directory | `web` |
-| Runtime | Node (`NODE_VERSION=22`) |
+| Runtime | Node 22 (`web/.node-version`) |
 | Build command | `npm ci && npm run build` |
 | Start command | `npm start` (Next.js reads `$PORT`) |
-| Health check path | `/login` |
+| Health check path | `/api/healthz` (liveness; doesn't call the API) |
 
 Environment variables:
 
@@ -105,7 +112,8 @@ Environment variables:
 |---|---|
 | `HSF_API_BASE_URL` | `https://hsf-api.onrender.com` (server-only; https required) |
 | `NEXT_PUBLIC_STREAMLIT_URL` | The Streamlit app, for "Create account", "Forgot password", "Open classic app" (default `https://hsfinestai.streamlit.app`). Read at build time. |
-| `NODE_VERSION` | `22` |
+| `WEB_BETA_ALLOWED_EMAILS` | Optional, comma-separated: only these accounts can sign in (invite-only beta). Unset = every HSF account. |
+| `NODE_VERSION` | `22` (optional; `.node-version` already says 22) |
 
 No secrets are needed: the frontend holds no API keys, and the session cookies are
 set per user. It must be served over https (Render does this), because the

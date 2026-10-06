@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { ApiError, api, unwrap } from "@/api/client";
@@ -51,10 +51,26 @@ export function Freshness({ at, label = "Scan", staleCheck = true }: { at: strin
   );
 }
 
+/** After this long, say why: the API's host sleeps when idle and takes up to a minute to wake. */
+export const SLOW_AFTER_MS = 8000;
+export const WAKING_UP = "Still loading. The HSF service may be waking up, which can take up to a minute.";
+
+export function useSlow(active: boolean, afterMs = SLOW_AFTER_MS): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(() => setSlow(true), afterMs);
+    return () => { clearTimeout(t); setSlow(false); };
+  }, [active, afterMs]);
+  return active && slow;
+}
+
 export function Skeleton({ rows = 4, label = "Loading" }: { rows?: number; label?: string }) {
+  const slow = useSlow(true);
   return (
     <div className="skeleton" role="status" aria-live="polite">
       <span className="sr-only">{label}…</span>
+      {slow && <p className="cap">{WAKING_UP}</p>}
       {Array.from({ length: rows }, (_, i) => <div key={i} className="sk-row" />)}
     </div>
   );

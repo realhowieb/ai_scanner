@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { messageFrom, newRequestId } from "@/api/client";
+import { WAKING_UP, useSlow } from "@/components/ui";
 import { safeNext } from "@/lib/nextPath";
 import { parseRetryAfter } from "@/lib/retryAfter";
 
@@ -20,6 +21,7 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [supportId, setSupportId] = useState<string | null>(null);
   const [waitS, setWaitS] = useState<number | null>(null);
+  const slow = useSlow(busy);
 
   useEffect(() => {
     if (!waitS) return;
@@ -85,6 +87,7 @@ export function LoginForm() {
       <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email || !password || !!waitS}>
         {busy ? "Signing in…" : "Sign in"}
       </button>
+      {slow && <p className="cap" role="status">{WAKING_UP}</p>}
       <p className="cap login-links">
         <a href={CLASSIC}>Create an account</a> · <a href={CLASSIC}>Forgot password?</a>
       </p>

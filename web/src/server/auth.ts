@@ -14,7 +14,16 @@ async function detailOf(res: Response): Promise<unknown> {
   }
 }
 
-export async function login(req: Request, upstream: Upstream): Promise<Response> {
+/** WEB_BETA_ALLOWED_EMAILS (server-only, comma-separated): when set, only these accounts
+ * can sign in to this deployment. Unset = everyone with an HSF account. */
+export function betaAllowlist(raw: string | undefined = process.env.WEB_BETA_ALLOWED_EMAILS): Set<string> | null {
+  const items = (raw || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return items.length ? new Set(items) : null;
+}
+
+export const NOT_INVITED = "This preview of the new HSF app is invite-only for now. Keep using the classic app; we'll let you know when it opens.";
+
+export async function login(req: Request, upstream: Upstream, allow: Set<string> | null = betaAllowlist()): Promise<Response> {
   const rid = requestIdFor(req);
   if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
   let email = "";
@@ -48,6 +57,26 @@ export async function login(req: Request, upstream: Upstream): Promise<Response>
     return json({ detail }, res.status, id, [], extra);
   }
   const pair = (await res.json()) as TokenPair;
+  if (allow) {
+    // The account's email comes from the API, so signing in with a username works too.
+    let invited = false;
+    try {
+      const me = await upstream("/v1/me", { headers: { authorization: `Bearer ${pair.access_token}`, "x-request-id": rid } });
+      const account = me.ok ? ((await me.json()) as { email?: string }) : {};
+      invited = !!account.email && allow.has(account.email.trim().toLowerCase());
+    } catch {
+      return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, id);
+    }
+    if (!invited) {
+      try {
+        await upstream("/v1/auth/logout", { method: "POST", headers: { "content-type": "application/json", "x-request-id": rid },
+          body: JSON.stringify({ refresh_token: pair.refresh_token }) });
+      } catch {
+        /* the session was never handed to the browser either way */
+      }
+      return json({ detail: NOT_INVITED, code: "not_invited" }, 403, id);
+    }
+  }
   return json({ ok: true }, 200, id, sessionCookies(pair));
 }
 
