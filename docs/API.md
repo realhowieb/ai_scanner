@@ -56,6 +56,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | PATCH / DELETE | `/v1/watchlists/{id}/tickers/{ticker}` | Bearer | Set the note `{"note"}`; remove the ticker (204). |
 | GET / POST | `/v1/alerts` | Bearer | Your alerts with `limit`, `used`, `email_enabled`; create `{"type","ticker"?,"threshold"?,"direction"?,"watchlist_only"?}`. Same types and input rules as the web app; Free 1 alert, Pro 5, Premium 25 (403 at the limit, 409 duplicate, 422 bad input). |
 | PATCH / DELETE | `/v1/alerts/{id}` | Bearer | `{"enabled"}`; delete (204). |
+| GET | `/v1/alerts/types` | Bearer | Alert types and their input rules (ticker needed, threshold min/exclusive/max/default, allowed directions), the same rules `POST /v1/alerts` validates, for building forms. |
 | GET | `/v1/alerts/events` | Bearer | Your recent fired alerts (`limit` ≤100), newest first. |
 
 Every route declares a response model, so `/openapi.json` describes each payload

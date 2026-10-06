@@ -169,6 +169,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/alerts/types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Alert Types
+         * @description The alert types and their input rules (what POST /v1/alerts validates), for building forms.
+         */
+        get: operations["alert_types_v1_alerts_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/alerts/{alert_id}": {
         parameters: {
             query?: never;
@@ -1059,6 +1079,52 @@ export interface components {
             message: string;
             /** Ticker */
             ticker?: string | null;
+        };
+        /** AlertThreshold */
+        AlertThreshold: {
+            /**
+             * Default
+             * @description The web form's starting value
+             */
+            default?: number | null;
+            /** Label */
+            label: string;
+            /** Max */
+            max: number;
+            /** Min */
+            min: number;
+            /**
+             * Min Exclusive
+             * @description True: the value must be greater than min (price); else at least min
+             */
+            min_exclusive: boolean;
+        };
+        /** AlertType */
+        AlertType: {
+            /** Description */
+            description: string;
+            /**
+             * Directions
+             * @description Allowed `direction` values; empty when not used
+             * @default []
+             */
+            directions: string[];
+            /** Label */
+            label: string;
+            /** Needs Ticker */
+            needs_ticker: boolean;
+            /** @description Null when the type takes no threshold */
+            threshold?: components["schemas"]["AlertThreshold"] | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "breakout" | "watchlist" | "price" | "move" | "rvol" | "ema_cross" | "ewo_cross";
+            /**
+             * Watchlist Only Option
+             * @description True when `watchlist_only` applies (breakout)
+             */
+            watchlist_only_option: boolean;
         };
         /** AlertUpdate */
         AlertUpdate: {
@@ -3094,6 +3160,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    alert_types_v1_alerts_types_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertType"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

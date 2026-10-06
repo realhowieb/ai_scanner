@@ -228,6 +228,24 @@ class Alerts(BaseModel):
     alerts: List[Alert] = []
 
 
+class AlertThreshold(BaseModel):
+    min: float
+    min_exclusive: bool = Field(description="True: the value must be greater than min (price); else at least min")
+    max: float
+    label: str
+    default: Optional[float] = Field(default=None, description="The web form's starting value")
+
+
+class AlertType(BaseModel):
+    type: Literal["breakout", "watchlist", "price", "move", "rvol", "ema_cross", "ewo_cross"]
+    label: str
+    description: str
+    needs_ticker: bool
+    threshold: Optional[AlertThreshold] = Field(default=None, description="Null when the type takes no threshold")
+    directions: List[str] = Field(default=[], description="Allowed `direction` values; empty when not used")
+    watchlist_only_option: bool = Field(description="True when `watchlist_only` applies (breakout)")
+
+
 class AlertEvent(BaseModel):
     id: int
     alert_id: Optional[int] = None

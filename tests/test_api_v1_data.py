@@ -216,6 +216,27 @@ class WatchlistAndAlertApiTests(DataApiBase):
         for body in bad:
             self.assertEqual(self.client.post("/v1/alerts", json=body, headers=self.h).status_code, 422, body)
 
+    def test_alert_types_match_the_rules_post_enforces(self):
+        from api import user_data
+
+        self.assertEqual(self.client.get("/v1/alerts/types").status_code, 401)
+        types = {t["type"]: t for t in self.client.get("/v1/alerts/types", headers=self.h).json()}
+        self.assertEqual(set(types), set(user_data.ALERT_RULES))
+        self.assertEqual((types["price"]["threshold"]["min"], types["price"]["threshold"]["min_exclusive"]), (0.0, True))
+        self.assertEqual(types["price"]["directions"], ["above", "below"])
+        self.assertEqual((types["move"]["threshold"]["min"], types["move"]["threshold"]["default"]), (0.5, 5.0))
+        self.assertIsNone(types["watchlist"]["threshold"])
+        self.assertFalse(types["watchlist"]["needs_ticker"])
+        self.assertTrue(types["breakout"]["watchlist_only_option"])
+        # Every advertised minimum is accepted and anything below it is refused.
+        for t, spec in types.items():
+            body = {"type": t, "ticker": "AAPL" if spec["needs_ticker"] else None,
+                    "direction": spec["directions"][0] if spec["directions"] else None}
+            if spec["threshold"]:
+                lo = spec["threshold"]["min"]
+                body["threshold"] = lo - 0.01
+                self.assertEqual(self.client.post("/v1/alerts", json=body, headers=self.h).status_code, 422, t)
+
     def test_free_plan_gets_one_alert(self):
         h = self.auth(self.login("free@example.com").json()["access_token"])
         self.assertEqual(self.client.post("/v1/alerts", json={"type": "watchlist"}, headers=h).status_code, 201)
@@ -385,3 +406,19 @@ class ReliabilityTests(DataApiBase):
         joined = " ".join(x.getMessage() for x in logs.records)
         self.assertNotIn("secret", joined)
         self.assertNotIn(self.h["Authorization"].split()[1], joined)
+
+
+class WebFixtureContractTests(unittest.TestCase):
+    """Web v2's tests build alert forms from web/tests/fixtures/alert-types.json; it must
+    be exactly what GET /v1/alerts/types serves (regenerate: see the fixture's test)."""
+
+    def test_alert_types_fixture_matches_the_api(self):
+        import json
+        from pathlib import Path
+
+        from api.user_data import alert_types
+
+        fixture = Path(__file__).resolve().parent.parent / "web" / "tests" / "fixtures" / "alert-types.json"
+        self.assertEqual(json.loads(fixture.read_text()), json.loads(json.dumps(alert_types())),
+                         "regenerate: python -c \"import json; from api.user_data import alert_types; "
+                         "json.dump(alert_types(), open('web/tests/fixtures/alert-types.json','w'), indent=1)\"")

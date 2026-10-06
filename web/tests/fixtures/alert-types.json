@@ -1,0 +1,98 @@
+[
+ {
+  "type": "breakout",
+  "label": "Breakout",
+  "description": "Fires when a scan finds a ticker whose Breakout Score is at or above your value (the scanner's supporting technical score, not the 0-100 HSF Score). Lower values fire more often.",
+  "needs_ticker": false,
+  "threshold": {
+   "min": 0.0,
+   "min_exclusive": false,
+   "max": 1000000.0,
+   "label": "Breakout Score at or above",
+   "default": 8.0
+  },
+  "directions": [],
+  "watchlist_only_option": true
+ },
+ {
+  "type": "watchlist",
+  "label": "Watchlist",
+  "description": "Fires when any ticker on your watchlist shows up in the scan results.",
+  "needs_ticker": false,
+  "threshold": null,
+  "directions": [],
+  "watchlist_only_option": false
+ },
+ {
+  "type": "price",
+  "label": "Price",
+  "description": "Fires when a ticker crosses a price you set.",
+  "needs_ticker": true,
+  "threshold": {
+   "min": 0.0,
+   "min_exclusive": true,
+   "max": 1000000.0,
+   "label": "Price ($)",
+   "default": null
+  },
+  "directions": [
+   "above",
+   "below"
+  ],
+  "watchlist_only_option": false
+ },
+ {
+  "type": "move",
+  "label": "% move",
+  "description": "Fires when a ticker moves more than \u00b1X% vs yesterday's close. Checked live (about every 60 s) during extended hours.",
+  "needs_ticker": true,
+  "threshold": {
+   "min": 0.5,
+   "min_exclusive": false,
+   "max": 1000000.0,
+   "label": "Move at least (%)",
+   "default": 5.0
+  },
+  "directions": [],
+  "watchlist_only_option": false
+ },
+ {
+  "type": "rvol",
+  "label": "Relative volume",
+  "description": "Fires when a ticker trades at X times its 20-day average volume. Checked live (about every 60 s) during extended hours.",
+  "needs_ticker": true,
+  "threshold": {
+   "min": 1.0,
+   "min_exclusive": false,
+   "max": 1000000.0,
+   "label": "Times 20-day average volume",
+   "default": 2.0
+  },
+  "directions": [],
+  "watchlist_only_option": false
+ },
+ {
+  "type": "ema_cross",
+  "label": "EMA cross",
+  "description": "Fires when EMA 9 crosses EMA 21. Bullish is a short-term Golden Cross; bearish is a short-term Death Cross.",
+  "needs_ticker": true,
+  "threshold": null,
+  "directions": [
+   "bullish",
+   "bearish"
+  ],
+  "watchlist_only_option": false
+ },
+ {
+  "type": "ewo_cross",
+  "label": "EWO cross",
+  "description": "Fires when the Elliott Wave Oscillator (SMA 5 \u2212 SMA 35 of close) crosses zero. Up is a bullish momentum flip; down is bearish.",
+  "needs_ticker": true,
+  "threshold": null,
+  "directions": [
+   "up",
+   "down"
+  ],
+  "watchlist_only_option": false
+ }
+]

@@ -491,6 +491,11 @@ def _data_routes(app: FastAPI) -> None:
     def alert_delete(alert_id: int, account: Dict[str, Any] = Depends(current_account)) -> None:
         user_data.delete_alert(_user(account), alert_id)
 
+    @app.get("/v1/alerts/types", response_model=List[models.AlertType], responses=_AUTH)
+    def alert_types(account: Dict[str, Any] = Depends(current_account)) -> List[Dict[str, Any]]:
+        """The alert types and their input rules (what POST /v1/alerts validates), for building forms."""
+        return user_data.alert_types()
+
     @app.get("/v1/alerts/events", response_model=List[models.AlertEvent], responses=_AUTH)
     def alert_events(account: Dict[str, Any] = Depends(current_account),
                      limit: int = Query(20, ge=1, le=100)) -> List[Dict[str, Any]]:

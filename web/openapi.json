@@ -329,6 +329,110 @@
     "title": "AlertEvent",
     "type": "object"
    },
+   "AlertThreshold": {
+    "properties": {
+     "default": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The web form's starting value",
+      "title": "Default"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "max": {
+      "title": "Max",
+      "type": "number"
+     },
+     "min": {
+      "title": "Min",
+      "type": "number"
+     },
+     "min_exclusive": {
+      "description": "True: the value must be greater than min (price); else at least min",
+      "title": "Min Exclusive",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "min",
+     "min_exclusive",
+     "max",
+     "label"
+    ],
+    "title": "AlertThreshold",
+    "type": "object"
+   },
+   "AlertType": {
+    "properties": {
+     "description": {
+      "title": "Description",
+      "type": "string"
+     },
+     "directions": {
+      "default": [],
+      "description": "Allowed `direction` values; empty when not used",
+      "items": {
+       "type": "string"
+      },
+      "title": "Directions",
+      "type": "array"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "needs_ticker": {
+      "title": "Needs Ticker",
+      "type": "boolean"
+     },
+     "threshold": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/AlertThreshold"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Null when the type takes no threshold"
+     },
+     "type": {
+      "enum": [
+       "breakout",
+       "watchlist",
+       "price",
+       "move",
+       "rvol",
+       "ema_cross",
+       "ewo_cross"
+      ],
+      "title": "Type",
+      "type": "string"
+     },
+     "watchlist_only_option": {
+      "description": "True when `watchlist_only` applies (breakout)",
+      "title": "Watchlist Only Option",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "type",
+     "label",
+     "description",
+     "needs_ticker",
+     "watchlist_only_option"
+    ],
+    "title": "AlertType",
+    "type": "object"
+   },
    "AlertUpdate": {
     "properties": {
      "enabled": {
@@ -4721,6 +4825,37 @@
      }
     ],
     "summary": "Alert Events"
+   }
+  },
+  "/v1/alerts/types": {
+   "get": {
+    "description": "The alert types and their input rules (what POST /v1/alerts validates), for building forms.",
+    "operationId": "alert_types_v1_alerts_types_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/AlertType"
+         },
+         "title": "Response Alert Types V1 Alerts Types Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Alert Types"
    }
   },
   "/v1/alerts/{alert_id}": {
