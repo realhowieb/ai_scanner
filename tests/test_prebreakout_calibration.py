@@ -7,6 +7,7 @@ The calibrated value is PRIMARY for ranking; the raw model probability is a
 deterministic secondary tie-break. These tests guard against someone "fixing"
 valid calibration and against a regression of the tie-break.
 """
+import importlib.util
 import unittest
 
 import numpy as np
@@ -100,6 +101,33 @@ class RankingTieBreakTests(unittest.TestCase):
         df = self._df().drop(columns=["PreBreakoutProbRaw"])
         out = apply_default_ranking(df)  # must not raise
         self.assertEqual(out.iloc[0]["Ticker"], "DDD")
+
+
+@unittest.skipUnless(importlib.util.find_spec("sklearn"), "scikit-learn not installed")
+class SigmoidCalibrationTests(unittest.TestCase):
+    def setUp(self):
+        m._load_ml_libs()
+        rng = np.random.default_rng(7)
+        self.raw = rng.beta(1.2, 6, 4000)
+        self.y = (rng.random(4000) < self.raw).astype(int)
+
+    def test_sigmoid_map_keeps_low_scores_distinct(self):
+        cmap = m.fit_sigmoid_calibration_map(self.y, self.raw)
+        self.assertEqual(cmap["method"], "sigmoid")
+        out = m.apply_calibration_map([0.003, 0.010, 0.020, 0.030], cmap)
+        self.assertTrue(np.all(np.diff(out) > 0))  # strictly increasing, no plateau
+
+    def test_smoothing_report_scores_out_of_time(self):
+        report = m.calibration_smoothing_report(self.y, self.raw, live_map=_MAP)
+        self.assertEqual(report["fit_rows"] + report["test_rows"], 4000)
+        for key in ("raw", "isotonic", "sigmoid", "live_map"):
+            self.assertIn("brier", report[key])
+            self.assertEqual(len(report[key]["deciles"]), 10)
+        self.assertGreater(report["sigmoid"]["spread"]["distinct_whole_pcts"], report["live_map"]["spread"]["distinct_whole_pcts"])
+        self.assertEqual(report["sigmoid_map_all_rows"]["n"], 4000)
+
+    def test_smoothing_report_skips_tiny_inputs(self):
+        self.assertIn("skipped", m.calibration_smoothing_report([0, 1] * 10, [0.1, 0.2] * 10))
 
 
 if __name__ == "__main__":

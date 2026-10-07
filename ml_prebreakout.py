@@ -3345,6 +3345,111 @@ def fit_isotonic_calibration_map_from_buckets(buckets: list[dict], *, min_total:
         return None
 
 
+def fit_sigmoid_calibration_map(y_true, y_proba, *, min_samples: int = 50, grid_points: int = 61) -> dict | None:
+    """Fit Platt scaling on logit(raw) and export it as a dense ``{x, y}`` map.
+
+    Unlike isotonic, the sigmoid is strictly increasing, so names the isotonic
+    step-map pools onto one value (the ~13% floor) keep distinct calibrated
+    probabilities. Exported as a grid so ``apply_calibration_map`` (np.interp)
+    applies it with no scoring-code change.
+    """
+    actual = pd.Series(y_true).reset_index(drop=True).astype(int)
+    raw = pd.Series(y_proba).reset_index(drop=True).astype(float).clip(1e-6, 1.0 - 1e-6)
+    if len(actual) < int(min_samples) or actual.nunique(dropna=True) < 2:
+        return None
+    try:
+        from sklearn.linear_model import LogisticRegression
+
+        logit = np.log(raw.to_numpy() / (1.0 - raw.to_numpy())).reshape(-1, 1)
+        lr = LogisticRegression(C=1e6, random_state=42)
+        lr.fit(logit, actual.to_numpy())
+        a, b = float(lr.coef_[0][0]), float(lr.intercept_[0])
+        xs = np.unique(np.concatenate([[1e-6, 1.0 - 1e-6], np.quantile(raw, np.linspace(0, 1, grid_points))]))
+        ys = 1.0 / (1.0 + np.exp(-(a * np.log(xs / (1.0 - xs)) + b)))
+        return {
+            "method": "sigmoid",
+            "x": [float(v) for v in xs],
+            "y": [float(v) for v in ys],
+            "slope": a,
+            "intercept": b,
+            "n": int(len(actual)),
+        }
+    except Exception as e:
+        print(f"[ml_prebreakout] sigmoid calibration fit failed: {e}")
+        return None
+
+
+def calibration_smoothing_report(y_true, y_proba, *, live_map: dict | None = None) -> dict:
+    """Compare isotonic vs sigmoid calibration out of time, plus how the % spreads.
+
+    OOF rows arrive in chronological fold order, so the calibrators are fit on
+    the earlier half and scored on the later half. ``spread`` describes the
+    calibrated % a user would see on the later half: the share of rows sharing
+    the single most common whole-number %, distinct whole-number values, and
+    percentiles. ``live_map`` (the champion's stored map) is applied to the same
+    rows to show today's behavior for reference; it was fit on other OOF data.
+    """
+    actual = pd.Series(y_true).reset_index(drop=True).astype(int)
+    raw = pd.Series(y_proba).reset_index(drop=True).astype(float).clip(1e-6, 1.0 - 1e-6)
+    if len(actual) < 200 or actual.nunique(dropna=True) < 2:
+        return {"skipped": "insufficient OOF predictions"}
+    half = len(actual) // 2
+    fit_y, fit_p = actual.iloc[:half], raw.iloc[:half]
+    test_y, test_p = actual.iloc[half:].to_numpy(), raw.iloc[half:].to_numpy()
+    if pd.Series(test_y).nunique() < 2:
+        return {"skipped": "later half has one class"}
+
+    def spread(pred) -> dict:
+        pct = np.round(np.asarray(pred, dtype=float) * 100.0)
+        values, counts = np.unique(pct, return_counts=True)
+        top = int(np.argmax(counts))
+        q = np.percentile(np.asarray(pred, dtype=float) * 100.0, [10, 25, 50, 75, 90, 99])
+        return {
+            "most_common_pct": float(values[top]),
+            "share_at_most_common": round(float(counts[top]) / len(pct), 4),
+            "distinct_whole_pcts": int(len(values)),
+            "p10_p25_p50_p75_p90_p99": [round(float(v), 1) for v in q],
+        }
+
+    def score(pred) -> dict:
+        pred = np.clip(np.asarray(pred, dtype=float), 1e-6, 1.0 - 1e-6)
+        out = {"spread": spread(pred)}
+        if brier_score_loss is not None:
+            out["brier"] = round(float(brier_score_loss(test_y, pred)), 5)
+        if log_loss is not None:
+            out["log_loss"] = round(float(log_loss(test_y, pred)), 5)
+        buckets = confidence_bucket_diagnostics(pd.Series(test_y), pd.Series(pred))
+        out["calibration_error"] = calibration_error_from_buckets(buckets)
+        # Deciles by raw-score rank (same grouping for every monotonic map):
+        # mean shown % vs actual hit rate, lowest decile first.
+        groups = np.array_split(np.argsort(test_p, kind="stable"), 10)
+        out["deciles"] = [
+            {"pred": round(float(pred[g].mean()) * 100, 1), "actual": round(float(test_y[g].mean()) * 100, 1), "n": int(len(g))}
+            for g in groups if len(g)
+        ]
+        return out
+
+    report = {
+        "fit_rows": int(half),
+        "test_rows": int(len(test_y)),
+        "test_base_rate_pct": round(float(np.mean(test_y)) * 100.0, 2),
+        "raw": score(test_p),
+    }
+    iso_map = fit_isotonic_calibration_map(fit_y, fit_p)
+    if iso_map:
+        report["isotonic"] = score(apply_calibration_map(test_p, iso_map))
+    sig_map = fit_sigmoid_calibration_map(fit_y, fit_p)
+    if sig_map:
+        report["sigmoid"] = score(apply_calibration_map(test_p, sig_map))
+        report["sigmoid_params"] = {"slope": sig_map["slope"], "intercept": sig_map["intercept"]}
+    if isinstance(live_map, dict) and live_map.get("x"):
+        report["live_map"] = score(apply_calibration_map(test_p, live_map))
+        report["live_map_method"] = live_map.get("method")
+    # The map to ship, if approved, is refit on all OOF rows.
+    report["sigmoid_map_all_rows"] = fit_sigmoid_calibration_map(actual, raw)
+    return report
+
+
 def recalibrate_active_champion() -> dict:
     """Attach an isotonic calibration map to the live champion, in place.
 
@@ -3783,6 +3888,11 @@ def train_prebreakout_model_run17(
         baseline_eval.get("validation_actual") or [],
         baseline_eval.get("validation_proba") or [],
     )
+    calibration_smoothing = calibration_smoothing_report(
+        baseline_eval.get("validation_actual") or [],
+        baseline_eval.get("validation_proba") or [],
+        live_map=(champion_bundle or {}).get("calibration_map") if isinstance(champion_bundle, dict) else None,
+    )
     regime_analysis = _run17_regime_analysis(
         df_base,
         baseline_eval.get("validation_actual") or [],
@@ -3834,6 +3944,7 @@ def train_prebreakout_model_run17(
         "ranking_objective_results": ranking_results,
         "regime_analysis": regime_analysis,
         "calibration_comparison": baseline_calibration,
+        "calibration_smoothing": calibration_smoothing,
         "best_same_target_challenger": same_target_candidate.get("name"),
         "best_alternative_target": best_alt_target.get("name") if best_alt_target else None,
         "target_change_result": target_change_result,
