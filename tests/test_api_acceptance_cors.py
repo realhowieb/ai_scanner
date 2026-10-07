@@ -1,14 +1,16 @@
+import importlib.util
 import os
 import sys
 import unittest
 
-import httpx
-
+HAS_HTTPX = importlib.util.find_spec("httpx") is not None
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-import api_acceptance  # noqa: E402
 
 
 def _run_with(allow_origin):
+    import api_acceptance
+    import httpx
+
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/healthz":
             return httpx.Response(200, json={"ok": True})
@@ -26,19 +28,25 @@ def _run_with(allow_origin):
     return run
 
 
+def _deployment_checks(run):
+    import api_acceptance
+    api_acceptance.deployment_checks(run, None)
+
+
 def _cors(run):
     return {r["check"]: r["status"] for r in run.results if "CORS" in r["check"]}
 
 
+@unittest.skipUnless(HAS_HTTPX, "needs httpx")
 class CorsChecksWithoutOrigin(unittest.TestCase):
     def test_no_origin_still_checks_unlisted_origin_is_refused(self):
         run = _run_with(None)
-        api_acceptance.deployment_checks(run, None)
+        _deployment_checks(run)
         self.assertEqual(_cors(run), {"CORS refuses an unlisted origin": "PASS"})
 
     def test_no_origin_fails_when_any_origin_is_allowed(self):
         run = _run_with("https://evil.example")
-        api_acceptance.deployment_checks(run, None)
+        _deployment_checks(run)
         self.assertEqual(_cors(run), {"CORS refuses an unlisted origin": "FAIL"})
 
 
