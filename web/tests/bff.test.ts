@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { login, logout } from "@/server/auth";
+import { API_STARTING, login, logout } from "@/server/auth";
 import { SESSION_EXPIRED, proxy } from "@/server/bff";
 import type { Upstream } from "@/server/bff";
 import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, secureCookies } from "@/server/cookies";
@@ -190,6 +190,49 @@ describe("login and logout", () => {
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("120");
     expect(setCookies(res)).toEqual([]);
+  });
+
+  it("retries once when the API is waking up, then signs in", async () => {
+    vi.useFakeTimers();
+    try {
+      const { up, calls } = fakeUpstream((_c, all) =>
+        all.length === 1 ? new Response("<html>502</html>", { status: 502 }) : jsonResponse(pair(7)));
+      const pending = login(req("/api/auth/login", { method: "POST", body }), up);
+      await vi.advanceTimersByTimeAsync(3000);
+      const res = await pending;
+      expect(res.status).toBe(200);
+      expect(calls).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("explains a cold start instead of a bare failure, and keeps an API 503's own message", async () => {
+    vi.useFakeTimers();
+    try {
+      let { up, calls } = fakeUpstream(() => new Response("<html>503</html>", { status: 503 }));
+      let pending = login(req("/api/auth/login", { method: "POST", body }), up);
+      await vi.advanceTimersByTimeAsync(3000);
+      let res = await pending;
+      expect(res.status).toBe(503);
+      expect(calls).toHaveLength(2);
+      expect((await res.json()).detail).toBe(API_STARTING);
+      expect(res.headers.get("retry-after")).toBe("30");
+      expect(setCookies(res)).toEqual([]);
+      ({ up, calls } = fakeUpstream(() => jsonResponse({ detail: "database unavailable" }, 503)));
+      pending = login(req("/api/auth/login", { method: "POST", body }), up);
+      await vi.advanceTimersByTimeAsync(3000);
+      res = await pending;
+      expect((await res.json()).detail).toBe("database unavailable");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry a wrong password", async () => {
+    const { up, calls } = fakeUpstream(() => jsonResponse({ detail: "Invalid credentials" }, 401));
+    await login(req("/api/auth/login", { method: "POST", body }), up);
+    expect(calls).toHaveLength(1);
   });
 
   it("refuses a cross-site sign-in", async () => {

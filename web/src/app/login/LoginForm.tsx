@@ -59,7 +59,7 @@ export function LoginForm() {
       const body: unknown = await res.json().catch(() => null);
       setError(messageFrom(body, res.status));
       setSupportId(res.status >= 500 ? res.headers.get("x-request-id") : null);
-      if (res.status === 429) setWaitS(parseRetryAfter(res.headers.get("retry-after")) ?? 60);
+      if (res.status === 429 || res.status === 503) setWaitS(parseRetryAfter(res.headers.get("retry-after")) ?? 60);
     } catch {
       setError("Couldn't reach HSF. Check your connection and try again.");
     }
