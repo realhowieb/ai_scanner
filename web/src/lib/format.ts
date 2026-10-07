@@ -3,6 +3,12 @@ export function pct(v: number | null | undefined, digits = 2): string {
   return `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
 }
 
+/** PreBreakout probability. The API sends it in percent (0–100), as PreBreakoutProb% is stored. */
+export function probPct(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  return `${Math.round(v)}%`;
+}
+
 export function price(v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 })}`;

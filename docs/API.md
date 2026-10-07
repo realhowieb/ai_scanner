@@ -187,6 +187,11 @@ user out once (access tokens stop verifying; refresh tokens still work).
 The free plan sleeps after 15 minutes idle; move to Starter before the app has
 real users.
 
+Memory: the API idles at about 90 MB. The first custom scan loads the PreBreakout
+model libraries (xgboost, scikit-learn), which adds about 230 MB for the life of
+the process, before the scan's own price data. Watch the service's memory graph
+after the first scans; a 512 MB instance has little headroom for a US market scan.
+
 ## Acceptance journey
 
 `scripts/api_acceptance.py` runs the full user journey (sign in, scanner, stock

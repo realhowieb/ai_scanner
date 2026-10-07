@@ -1,16 +1,19 @@
-// Sign-in and sign-out for the BFF. Credentials pass through to the API once and are
+// Sign-in and sign-out for the BFF. Credentials pass through to the API (retried once
+// only when a gateway error shows the request never reached it) and are
 // never stored or logged; the token pair goes straight into HttpOnly cookies.
 import type { Upstream } from "./bff";
 import { json, requestIdFor, sameOrigin } from "./bff";
 import { REFRESH_COOKIE, clearedCookies, parseCookies, sessionCookies } from "./cookies";
 import type { TokenPair } from "./cookies";
 
+const FAILED = "Sign-in failed.";
+
 async function detailOf(res: Response): Promise<unknown> {
   try {
     const body = (await res.json()) as { detail?: unknown };
-    return body.detail ?? "Sign-in failed.";
+    return body.detail ?? FAILED;
   } catch {
-    return "Sign-in failed.";
+    return FAILED;
   }
 }
 
@@ -20,6 +23,11 @@ export function betaAllowlist(raw: string | undefined = process.env.WEB_BETA_ALL
   const items = (raw || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
   return items.length ? new Set(items) : null;
 }
+
+/** Shown when the API is still starting (Render answers 502/503/504 while it wakes up). */
+export const API_STARTING = "The HSF service is starting up. Wait a moment and sign in again.";
+const GATEWAY = new Set([502, 503, 504]);
+export const LOGIN_RETRY_MS = 3000;
 
 export const NOT_INVITED = "This preview of the new HSF app is invite-only for now. Keep using the classic app; we'll let you know when it opens.";
 
@@ -38,15 +46,27 @@ export async function login(req: Request, upstream: Upstream, allow: Set<string>
   if (!email || !password || email.length > 320 || password.length > 1024) {
     return json({ detail: "Enter your email and password." }, 400, rid);
   }
+  const attempt = () => upstream("/v1/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-request-id": rid },
+    body: JSON.stringify({ email, password, client: "web" }),
+  });
   let res: Response;
   try {
-    res = await upstream("/v1/auth/login", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-request-id": rid },
-      body: JSON.stringify({ email, password, client: "web" }),
-    });
+    res = await attempt();
+    // A gateway error means the request never reached the API (it was waking up or
+    // restarting), so no session was created and one retry is safe.
+    if (GATEWAY.has(res.status)) {
+      await new Promise((r) => setTimeout(r, LOGIN_RETRY_MS));
+      res = await attempt();
+    }
   } catch {
     return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid);
+  }
+  if (GATEWAY.has(res.status)) {
+    // Render's own error page isn't JSON; an API 503 ("database unavailable") keeps its message.
+    const detail = await detailOf(res);
+    return json({ detail: detail === FAILED ? API_STARTING : detail }, 503, rid, [], { "retry-after": "30" });
   }
   const id = res.headers.get("x-request-id") || rid;
   if (!res.ok) {
