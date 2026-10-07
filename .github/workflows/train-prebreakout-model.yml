@@ -157,6 +157,16 @@ jobs:
           smoothing["sigmoid_map_all_rows"] = {k: ship_map.get(k) for k in ("slope", "intercept", "n")}
           print("=== PREBREAKOUT CALIBRATION SMOOTHING ===")
           print(json.dumps(smoothing, indent=1, sort_keys=True, default=str))
+
+          # The live champion's own out-of-sample scores since it was trained:
+          # the data a live recalibration would be fit on. Read only.
+          from ml_prebreakout import live_calibration_report
+
+          live = live_calibration_report(days_back=days_back)
+          live_map = live.pop("sigmoid_map_all_rows", None) or {}
+          live["sigmoid_map_all_rows"] = {k: live_map.get(k) for k in ("slope", "intercept", "n")}
+          print("=== PREBREAKOUT LIVE MODEL CALIBRATION ===")
+          print(json.dumps(live, indent=1, sort_keys=True, default=str))
           PY
 
       - name: Upload debug model artifact

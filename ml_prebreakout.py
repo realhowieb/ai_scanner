@@ -3450,6 +3450,50 @@ def calibration_smoothing_report(y_true, y_proba, *, live_map: dict | None = Non
     return report
 
 
+def live_calibration_report(days_back: int = 90, *, maturity_days: int = 10) -> dict:
+    """Score the live champion on setups seen since it was trained, then compare
+    calibrations on those out-of-sample scores (see calibration_smoothing_report).
+
+    Rows go through ``score_prebreakout`` exactly as live scans do. Rows newer
+    than ``maturity_days`` are dropped because their 1-3 day setup + 5 day
+    outcome label may not have resolved yet. Read only: nothing is saved.
+    """
+    _load_ml_libs()
+    bundle = load_prebreakout_model()
+    if not bundle or bundle.get("model") is None:
+        return {"skipped": "no live model"}
+    trained_at = pd.to_datetime(bundle.get("trained_at"), utc=True, errors="coerce")
+    df = load_run_history(days_back=days_back)
+    if df.empty:
+        return {"skipped": "no run history"}
+    labeled = add_prebreakout_target_label(df, lookback_days=days_back)
+    if labeled.empty or PREBREAKOUT_TARGET_COLUMN not in labeled.columns:
+        return {"skipped": "no labeled candidate rows"}
+    ts = pd.to_datetime(labeled["Timestamp"], utc=True, errors="coerce")
+    keep = ts.notna() & (ts <= _utc_now() - timedelta(days=int(maturity_days)))
+    if pd.notna(trained_at):
+        keep &= ts > trained_at
+    recent = labeled.loc[keep].assign(_ts=ts[keep]).sort_values("_ts").drop(columns="_ts").reset_index(drop=True)
+    meta = {
+        "model_version": bundle.get("model_version"),
+        "trained_at": str(bundle.get("trained_at")),
+        "rows_since_trained": int(len(recent)),
+        "first_row": str(recent["Timestamp"].iloc[0]) if len(recent) else None,
+        "last_row": str(recent["Timestamp"].iloc[-1]) if len(recent) else None,
+    }
+    if recent.empty:
+        return {**meta, "skipped": "no matured rows since the live model was trained"}
+    scored = score_prebreakout(recent.copy())
+    raw = pd.to_numeric(scored["PreBreakoutProbRaw"], errors="coerce")
+    y = scored[PREBREAKOUT_TARGET_COLUMN].astype(int)
+    ok = raw.notna()
+    report = calibration_smoothing_report(y[ok], raw[ok], live_map=bundle.get("calibration_map"))
+    if roc_auc_score is not None and y[ok].nunique() == 2:
+        meta["live_auc"] = round(float(roc_auc_score(y[ok], raw[ok])), 4)
+    meta["base_rate_pct"] = round(float(y[ok].mean()) * 100.0, 2)
+    return {**meta, **report}
+
+
 def recalibrate_active_champion() -> dict:
     """Attach an isotonic calibration map to the live champion, in place.
 

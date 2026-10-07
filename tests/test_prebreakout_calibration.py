@@ -9,6 +9,7 @@ valid calibration and against a regression of the tie-break.
 """
 import importlib.util
 import unittest
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -128,6 +129,28 @@ class SigmoidCalibrationTests(unittest.TestCase):
 
     def test_smoothing_report_skips_tiny_inputs(self):
         self.assertIn("skipped", m.calibration_smoothing_report([0, 1] * 10, [0.1, 0.2] * 10))
+
+    def test_live_report_uses_only_matured_rows_since_training(self):
+        now = pd.Timestamp("2026-10-07", tz="UTC")
+        stamps = pd.date_range("2026-08-01", periods=len(self.raw), freq="15min", tz="UTC")
+        labeled = pd.DataFrame({"Timestamp": stamps, m.PREBREAKOUT_TARGET_COLUMN: self.y})
+        raw_by_ts = dict(zip(stamps, self.raw))
+
+        def fake_score(df):
+            df["PreBreakoutProbRaw"] = [raw_by_ts[t] for t in df["Timestamp"]]
+            return df
+
+        bundle = {"model": object(), "trained_at": "2026-08-10T00:00:00Z", "model_version": "v", "calibration_map": _MAP}
+        with mock.patch.object(m, "load_prebreakout_model", return_value=bundle), \
+                mock.patch.object(m, "load_run_history", return_value=pd.DataFrame({"x": [1]})), \
+                mock.patch.object(m, "add_prebreakout_target_label", return_value=labeled), \
+                mock.patch.object(m, "score_prebreakout", side_effect=fake_score), \
+                mock.patch.object(m, "_utc_now", return_value=now.to_pydatetime()):
+            report = m.live_calibration_report(days_back=90)
+        expected = int(((stamps > pd.Timestamp("2026-08-10", tz="UTC")) & (stamps <= now - pd.Timedelta(days=10))).sum())
+        self.assertEqual(report["rows_since_trained"], expected)
+        self.assertIn("sigmoid", report)
+        self.assertIn("live_auc", report)
 
 
 if __name__ == "__main__":
