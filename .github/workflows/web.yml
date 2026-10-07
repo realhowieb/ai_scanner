@@ -40,7 +40,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Set up Python (for the OpenAPI contract check)
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
           cache: "pip"
