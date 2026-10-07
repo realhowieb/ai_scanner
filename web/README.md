@@ -32,7 +32,7 @@ browser ──(same origin, HttpOnly cookies)──> Next.js server (BFF) ──
 - **CSRF**: mutating calls must carry this site's `Origin` (or `Sec-Fetch-Site:
   same-origin`); cookies are `SameSite=Lax`.
 - **Only `/v1/...` data routes** are proxied (`/v1/auth/*` is refused), bodies are
-  capped at 256 KB, and upstream calls time out after 30 s.
+  capped at 256 KB, and upstream calls time out after 75 s (an idle free-plan API can take ~60 s to wake). Sign-in retries once on a gateway error (502/503/504) and otherwise says the service is starting up.
 - **Request IDs**: the client sends `X-Request-ID: web-<uuid>` on every call; the BFF
   forwards it and the API logs it. Error screens show it as a "Support code".
 - **`API_CORS_ORIGINS` isn't needed**: the browser never calls the API directly. Leave it

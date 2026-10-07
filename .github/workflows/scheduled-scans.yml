@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   run-scans:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repo
@@ -38,7 +38,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           # Match the Streamlit Cloud runtime and the requirements.lock platform
           # so the cron runs the exact same dependency stack as the app.

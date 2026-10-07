@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -49,13 +49,13 @@ jobs:
         run: ./gitleaks git . --redact --no-banner --exit-code 1
 
   code:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Bandit (new medium+ findings fail)
@@ -64,13 +64,13 @@ jobs:
           bandit -r . -x ./tests,./.venv -ll -ii -b .github/bandit-baseline.json
 
   workflows:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Install actionlint (pinned, checksum-verified)
@@ -89,13 +89,13 @@ jobs:
           zizmor --offline --config .github/zizmor.yml .github/workflows
 
   dependencies:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: pip-audit the app lock

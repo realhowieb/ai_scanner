@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   freeze:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repo
         uses: actions/checkout@v7
@@ -21,7 +21,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python (match Streamlit Cloud runtime)
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
 

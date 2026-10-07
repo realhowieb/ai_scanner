@@ -7,7 +7,8 @@ One command builds the complete health model:
 
 Collectors gather telemetry that already exists (GitHub workflow runs, the latest
 scheduled maturation report, a bounded DB probe, the Run 56 readiness monitor,
-the committed Run 58 parity audit, one Alpaca assets call for the universe).
+the newer of the committed and latest-run Run 58 parity audit, one Alpaca assets
+call for the universe).
 Each collector is isolated: a failure becomes None, which the model reports as
 UNKNOWN; it never becomes HEALTHY. Nothing here writes research data. With
 --persist, one snapshot row is appended to the separate operational table
@@ -74,7 +75,32 @@ def workflow_runs(session, repo: str, workflow: str, *, event: Optional[str] = N
             for x in (r.json().get("workflow_runs") or [])]
 
 
-def collect_workflows() -> Dict[str, Any]:
+def _never_got_runner(jobs: List[Dict[str, Any]]) -> bool:
+    """True when no job of the run was ever assigned a runner (no runner, no steps).
+
+    GitHub cancels such jobs after waiting for a machine; that is a GitHub
+    capacity problem, not a scan failure."""
+    return bool(jobs) and all(not j.get("runner_id") and not j.get("runner_name") and not j.get("steps")
+                              for j in jobs)
+
+
+def mark_runnerless(session, repo: str, runs: List[Dict[str, Any]], now: _dt.datetime) -> List[Dict[str, Any]]:
+    """Flag recent unsuccessful runs whose jobs never got a runner (bounded: last RECENT_DAYS)."""
+    since = now - _dt.timedelta(days=RECENT_DAYS)
+    for r in runs:
+        created = sh._parse(r.get("created_at"))
+        if r.get("status") != "completed" or r.get("conclusion") == "success" or created is None or created < since:
+            continue
+        try:
+            resp = session.get(f"{GH_API}/repos/{repo}/actions/runs/{r['id']}/jobs", timeout=15)
+            resp.raise_for_status()
+            r["no_runner"] = _never_got_runner(resp.json().get("jobs") or [])
+        except Exception:
+            pass  # unknown stays unflagged: reported as a failed scan, as before
+    return runs
+
+
+def collect_workflows(now: Optional[_dt.datetime] = None) -> Dict[str, Any]:
     session, repo = _gh()
     out: Dict[str, Any] = {}
     for name in sh.WORKFLOW_SPECS:
@@ -82,7 +108,23 @@ def collect_workflows() -> Dict[str, Any]:
             out[name] = workflow_runs(session, repo, name)
         except Exception:
             out[name] = None
+    if out.get("scheduled-scans.yml"):
+        mark_runnerless(session, repo, out["scheduled-scans.yml"], now or _dt.datetime.now(_dt.timezone.utc))
     return out
+
+
+def _run_artifact_json(session, repo: str, run_id: Any, artifact: str, filename: str) -> Optional[Dict[str, Any]]:
+    """One JSON file from a run's uploaded artifact (None if absent or expired)."""
+    arts = session.get(f"{GH_API}/repos/{repo}/actions/runs/{run_id}/artifacts", timeout=15).json()
+    for a in arts.get("artifacts") or []:
+        if a.get("name") != artifact or a.get("expired"):
+            continue
+        z = session.get(a["archive_download_url"], timeout=30)
+        z.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(z.content)) as zf:
+            if filename in zf.namelist():
+                return json.loads(zf.read(filename))
+    return None
 
 
 def latest_maturation_report() -> Optional[Dict[str, Any]]:
@@ -93,16 +135,9 @@ def latest_maturation_report() -> Optional[Dict[str, Any]]:
     session, repo = _gh()
     runs = workflow_runs(session, repo, "mature-observations.yml", status="success", per_page=10)
     for run in runs:
-        arts = session.get(f"{GH_API}/repos/{repo}/actions/runs/{run['id']}/artifacts", timeout=15).json()
-        for a in arts.get("artifacts") or []:
-            if a.get("name") != "maturation-report" or a.get("expired"):
-                continue
-            z = session.get(a["archive_download_url"], timeout=30)
-            z.raise_for_status()
-            with zipfile.ZipFile(io.BytesIO(z.content)) as zf:
-                rep = json.loads(zf.read("maturation_report.json"))
-            if not rep.get("dry_run"):
-                return rep
+        rep = _run_artifact_json(session, repo, run["id"], "maturation-report", "maturation_report.json")
+        if rep is not None and not rep.get("dry_run"):
+            return rep
     return None
 
 
@@ -264,9 +299,40 @@ def _recovery_status() -> Dict[str, Any]:
             "production_state": cfg["production_state"], "reason": cfg["reason"]}
 
 
-def parity_report() -> Optional[Dict[str, Any]]:
+def _committed_parity_report() -> Optional[Dict[str, Any]]:
     p = ROOT / "artifacts" / "research" / "maturation_parity_audit.json"
     return json.loads(p.read_text()) if p.exists() else None
+
+
+def _latest_parity_artifact() -> Optional[Dict[str, Any]]:
+    """maturation_parity_audit.json uploaded by the newest successful audit run.
+
+    The audit workflow is read-only and never commits, so re-running it (by hand
+    or by recovery's RERUN_PARITY_AUDIT) only produces this artifact."""
+    session, repo = _gh()
+    for run in workflow_runs(session, repo, "maturation-parity-audit.yml", status="success", per_page=5):
+        rep = _run_artifact_json(session, repo, run["id"], "maturation-parity-audit",
+                                 "maturation_parity_audit.json")
+        if rep is not None:
+            return rep
+    return None
+
+
+def _newer_report(*reports: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    dated = [(sh._parse(r.get("generated_at")), r) for r in reports if r]
+    dated = [(t, r) for t, r in dated if t is not None]
+    if dated:
+        return max(dated, key=lambda x: x[0])[1]
+    return next((r for r in reports if r), None)
+
+
+def parity_report() -> Optional[Dict[str, Any]]:
+    """The newer of the committed Run 58 audit and the latest audit run's artifact."""
+    try:
+        latest = _latest_parity_artifact()
+    except Exception:
+        latest = None  # no token / GitHub unavailable: the committed file still counts
+    return _newer_report(_committed_parity_report(), latest)
 
 
 # ---- orchestration -------------------------------------------------------------------------
@@ -274,7 +340,7 @@ def collect(now: _dt.datetime) -> Dict[str, Any]:
     errors: Dict[str, str] = {}
     timings: Dict[str, float] = {}
     T = lambda n, f: _timed(errors, timings, n, f)  # noqa: E731
-    workflows = T("workflows", collect_workflows)
+    workflows = T("workflows", lambda: collect_workflows(now))
     mat_report = T("maturation_report", latest_maturation_report)
     obs = T("observations", recent_observations)
     probe = T("db_probe", lambda: db_probe(obs))
