@@ -30,6 +30,9 @@ def redact_prebreakout_opportunity(value: Dict[str, Any], *, allowed: bool) -> D
         }
         out["primary_setup"] = next((labels[s] for s in signals if s in labels), "Signal")
     out["prob"] = None
+    for key in ("prob_raw", "prob_rank"):
+        if key in out:
+            out[key] = None
     model = dict(out.get("model") or {})
     model["prebreakout_prob"] = None
     out["model"] = model

@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from api.today import TTLCache, _cached, _iso, _num, market_runs, run_df
 
 SCAN_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
-SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob")
+SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob", "prob_rank")
 CALIBRATION_TTL_S = 1800  # matured outcomes change once a day; same as the web
 BAR_LIMIT = 120
 # Stock pages get their own cache so a client paging through many tickers can't

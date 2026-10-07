@@ -2195,6 +2195,11 @@ export interface components {
              * @description PreBreakout model output; null below Premium
              */
             prob?: number | null;
+            /**
+             * Prob Rank
+             * @description Premium. Where the raw PreBreakout model score sits among this scan's setups, as 'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob.
+             */
+            prob_rank?: number | null;
             /** Rvol */
             rvol?: number | null;
             /** Score */

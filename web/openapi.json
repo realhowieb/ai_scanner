@@ -3117,6 +3117,18 @@
       "description": "PreBreakout model output; null below Premium",
       "title": "Prob"
      },
+     "prob_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Premium. Where the raw PreBreakout model score sits among this scan's setups, as 'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob.",
+      "title": "Prob Rank"
+     },
      "rvol": {
       "anyOf": [
        {

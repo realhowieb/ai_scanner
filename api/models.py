@@ -115,6 +115,9 @@ class ScanSetup(Setup):
     signals: List[str] = []
     fading: bool = False
     breakout_score: Optional[float] = None
+    prob_rank: Optional[int] = Field(default=None, description=(
+        "Premium. Where the raw PreBreakout model score sits among this scan's setups, as "
+        "'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob."))
 
 
 class LatestScan(BaseModel):
