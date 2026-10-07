@@ -33,7 +33,7 @@ permissions:
 
 jobs:
   mature:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30  # work stops at the 12-min time budget; see scripts/mature_observations.py
     steps:
       - uses: actions/checkout@v7
