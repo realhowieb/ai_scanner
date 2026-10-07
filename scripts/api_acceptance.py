@@ -142,11 +142,11 @@ def deployment_checks(run: Run, origin: Optional[str]) -> None:
         allowed = r.headers.get("access-control-allow-origin")
         run.check(A, f"CORS preflight from {origin}", r.status_code == 200 and allowed == origin,
                   f"HTTP {r.status_code}, allow-origin={allowed!r}")
-        r = run.req("OPTIONS", "/v1/me", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
-        run.check(A, "CORS refuses an unlisted origin", r.headers.get("access-control-allow-origin") is None,
-                  f"HTTP {r.status_code}, allow-origin={r.headers.get('access-control-allow-origin')!r}")
-    else:
-        run.check(A, "CORS preflight for the frontend origin", None, "no --origin given")
+    # Runs with or without --origin: Web v2 calls the API through its BFF, so API_CORS_ORIGINS is
+    # normally empty and no browser origin should be allowed. That is a real check, not a BLOCKED one.
+    r = run.req("OPTIONS", "/v1/me", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
+    run.check(A, "CORS refuses an unlisted origin", r.headers.get("access-control-allow-origin") is None,
+              f"HTTP {r.status_code}, allow-origin={r.headers.get('access-control-allow-origin')!r}")
 
 
 def auth_rejections(run: Run, expired_token: Optional[str]) -> None:
