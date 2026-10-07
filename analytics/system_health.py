@@ -119,7 +119,7 @@ def _runs(runs: Optional[Sequence[Mapping[str, Any]]]) -> List[Dict[str, Any]]:
         u = _parse(r.get("updated_at") or r.get("updatedAt"))
         out.append({"created": c, "updated": u, "conclusion": r.get("conclusion"),
                     "status": r.get("status") or ("completed" if r.get("conclusion") else None),
-                    "event": r.get("event")})
+                    "event": r.get("event"), "no_runner": bool(r.get("no_runner"))})
     return sorted(out, key=lambda r: r["created"])
 
 
@@ -203,15 +203,17 @@ def eval_scanner(scan_runs: Optional[Sequence[Mapping[str, Any]]], db_runs: Opti
         return unknown("scheduled-scan workflow history unavailable (GitHub API)")
     runs = _runs(scan_runs)
     slots = expected_slots(now)
-    matched, missing, failed = [], [], []
+    matched, missing, failed, no_runner = [], [], [], []
     for s in slots:
         hit = [r for r in runs if s - SLOT_EARLY <= r["created"] <= s + SLOT_LATE]
         if not hit:
             missing.append(s)
-        elif not any(r["conclusion"] == "success" for r in hit):
-            failed.append(s)
-        else:
+        elif any(r["conclusion"] == "success" for r in hit):
             matched.append(s)
+        elif all(r["no_runner"] for r in hit):
+            no_runner.append(s)   # GitHub never assigned a machine; the scan never started
+        else:
+            failed.append(s)
     succ = [r for r in runs if r["conclusion"] == "success"]
     last_ok = succ[-1] if succ else None
     f: List[Dict[str, Any]] = []
@@ -230,6 +232,13 @@ def eval_scanner(scan_runs: Optional[Sequence[Mapping[str, Any]]], db_runs: Opti
                          evidence=[_iso(s) for s in failed[-6:]], detected_at=failed[0],
                          human="AUTOMATIC_RECOVERY_CANDIDATE", automation=True,
                          action="re-dispatch the scan; inspect the failed run if it repeats"))
+    if no_runner:
+        f.append(finding("SCAN_NO_RUNNER", "INFO",
+                         f"{len(no_runner)} expected slot(s) never got a GitHub runner",
+                         evidence=[_iso(s) for s in no_runner[-6:]], detected_at=no_runner[0],
+                         human="WATCH",
+                         action="GitHub capacity, not the scan: check githubstatus.com; a late re-dispatch "
+                                "can't fill a past slot"))
     today = now.astimezone(mc.ET).date()
     if mc.is_market_open(now) and last_ok and now - last_ok["created"] > _dt.timedelta(hours=3, minutes=30):
         f.append(finding("STALE_SCANNER", "WARNING", "market is open and the last successful scan is > 3.5h old",
@@ -238,7 +247,7 @@ def eval_scanner(scan_runs: Optional[Sequence[Mapping[str, Any]]], db_runs: Opti
                          action="re-dispatch scheduled-scans"))
     last_day_slots = [s for s in slots if s.astimezone(mc.ET).date() == (max(slots).astimezone(mc.ET).date()
                                                                           if slots else today)]
-    if last_day_slots and all(s in missing + failed for s in last_day_slots):
+    if last_day_slots and all(s in missing + failed + no_runner for s in last_day_slots):
         f.append(finding("STALE_SCANNER", "CRITICAL", "no successful scan on the most recent trading day",
                          evidence={"trading_day": str(last_day_slots[0].astimezone(mc.ET).date())},
                          detected_at=last_day_slots[0], human="HUMAN_ACTION_REQUIRED",
