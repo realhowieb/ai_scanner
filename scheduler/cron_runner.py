@@ -228,6 +228,34 @@ def _load_universe(universe: str) -> list[str]:
     return _load_universe_result(universe)[0]
 
 
+def _score_prebreakout(results):
+    """Add PreBreakoutProb% to scheduled results before they are saved.
+
+    The API Scanner and stock page read `prob` from the saved run, so without
+    this Premium never sees PreBreakout on scheduled scans. Scores only when the
+    model loads (score_prebreakout writes 0.0 without one, which would read as a
+    real 0%). Adds columns only and keeps the engine's row order; the HSF Score
+    built from the run on read (ui.results_intelligence) then counts the model,
+    as it already does for manual scans. Non-fatal: any failure saves the
+    results unscored.
+    """
+    if not hasattr(results, "columns") or getattr(results, "empty", True):
+        return results
+    try:
+        from ml_prebreakout import MODEL_PATH, load_prebreakout_model, score_prebreakout
+
+        if not load_prebreakout_model(MODEL_PATH):
+            print("[prebreakout] model unavailable; saving results unscored")
+            return results
+        scored = score_prebreakout(results.copy())
+        print(f"[prebreakout] scored {len(scored)} rows")
+        return scored
+    except Exception as e:
+        print(f"[prebreakout] scoring failed; saving results unscored: {type(e).__name__}")
+        _capture(e)
+        return results
+
+
 def _results_to_json(results) -> str:
     if hasattr(results, "to_json"):
         return results.to_json(orient="records", date_format="iso")
@@ -517,6 +545,7 @@ def run_and_save(
                 error=f"SkippedSave: {msg}",
             )
 
+        results = _score_prebreakout(results)
         results_json = _results_to_json(results)
         save_run(
             name=run_name,
