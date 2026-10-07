@@ -35,7 +35,7 @@ function urlOf(call: unknown[]): URL {
 
 const latest = (over: Partial<Schemas["LatestScan"]> = {}): Schemas["LatestScan"] => ({
   scan_at: new Date().toISOString(), total: 140, max_results: 25, limited: true,
-  setups: [setup("AAA", 88), setup("BBB", 70, { prob: 0.62 })], ...over,
+  setups: [setup("AAA", 88), setup("BBB", 70, { prob: 62.4 })], ...over,
 });
 
 describe("Scanner", () => {
@@ -163,7 +163,7 @@ describe("Custom scan waiting and cancel", () => {
 const stock = (over: Partial<Schemas["StockDetail"]> = {}): Schemas["StockDetail"] => ({
   ticker: "AAA", scan_at: new Date().toISOString(), in_latest_scan: true, has_setup: true, from_history: false, price: 12.5, change_pct: 1.2,
   hsf_score: 77, status: "STRONG", primary_setup: "breakout", signals: ["breakout"], score_components: { signals_component: 30 },
-  movement: "RISING", score_change: 4, reasons: ["Breaking out"], risks: [], watch_next: [], breakout_score: 80, prob: 0.7,
+  movement: "RISING", score_change: 4, reasons: ["Breaking out"], risks: [], watch_next: [], breakout_score: 80, prob: 13.1,
   earnings_days: 3, history_summary: { observations: 4, matured: 3, positive: 2 }, historical_context: null, outcome_cohort: null,
   historical_locked: false, lifecycle: [], bars: [], bars_as_of: null, watchlists: [], alerts: [], ...over,
 });
@@ -173,7 +173,7 @@ describe("Stock Intelligence", () => {
     render(<StockView s={stock()} premium />);
     expect(screen.getByText(/not a live quote/)).toBeInTheDocument();
     expect(screen.getByText("No price history cached for this ticker.")).toBeInTheDocument();
-    expect(screen.getByText("70%")).toBeInTheDocument();
+    expect(screen.getByText("13%")).toBeInTheDocument();
   });
 
   it("explains the historical fallback when the ticker isn't in the latest scan", () => {
@@ -194,6 +194,12 @@ describe("Stock Intelligence", () => {
     expect(screen.getByText("Historical research is part of Pro")).toBeInTheDocument();
     expect(screen.queryByText(/earlier HSF observation/)).not.toBeInTheDocument();
     expect(screen.getAllByText("Premium").length).toBeGreaterThan(0);
+  });
+
+  it("shows PreBreakout in the API's percent units", () => {
+    render(<StockView s={stock()} premium />);
+    expect(screen.getByText("13%")).toBeInTheDocument();
+    expect(screen.queryByText("1310%")).not.toBeInTheDocument();
   });
 
   it("draws the chart from returned bars", () => {

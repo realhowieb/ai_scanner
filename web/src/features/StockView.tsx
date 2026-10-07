@@ -8,7 +8,7 @@ import { alerts } from "@/api/userData";
 import { Dialog } from "@/components/Dialog";
 import { Card, Disclaimer, Empty, ErrorLine, Freshness, Locked, Pill } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
-import { etTime, pct, price, setupLabel } from "@/lib/format";
+import { etTime, pct, price, probPct, setupLabel } from "@/lib/format";
 
 import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
 import { PriceChart } from "./PriceChart";
@@ -173,7 +173,7 @@ export function StockView({ s, premium, onChanged }: { s: Stock; premium: boolea
             {s.signals.length ? <div className="chips">{s.signals.map((g) => <Pill key={g}>{setupLabel(g)}</Pill>)}</div> : <p className="cap">No active signals.</p>}
             <dl className="kv">
               <div><dt>Breakout score</dt><dd className="mono">{s.breakout_score ?? "—"}</dd></div>
-              <div><dt>PreBreakout</dt><dd className="mono">{premium ? (s.prob !== null && s.prob !== undefined ? `${Math.round(s.prob * 100)}%` : "—") : <Pill tone="gold">Premium</Pill>}</dd></div>
+              <div><dt>PreBreakout</dt><dd className="mono">{premium ? probPct(s.prob) : <Pill tone="gold">Premium</Pill>}</dd></div>
               <div><dt>Earnings</dt><dd className="mono">{s.earnings_days === null || s.earnings_days === undefined ? "—" : s.earnings_days === 0 ? "Today" : `in ${s.earnings_days}d`}</dd></div>
             </dl>
           </Card>
