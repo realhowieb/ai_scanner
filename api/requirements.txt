@@ -4,6 +4,10 @@
 # Reuses the app's core dependency group, pinned by requirements.lock (Python 3.13).
 -c ../requirements.lock
 -r ../requirements-core.txt
+# PreBreakout model (xgboost/scikit-learn/joblib): custom scans score with it, as the
+# web's manual scans do. Without it every row reads PreBreakout 0%. Loaded only
+# when a scan runs (~230 MB more memory then).
+-r ../requirements-ml.txt
 fastapi==0.141.1  # same as billing_service
 uvicorn[standard]==0.32.1
 PyJWT==2.15.0
