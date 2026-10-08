@@ -58,7 +58,7 @@ describe("sign-up and account recovery pages", () => {
     const { unmount } = render(<ResetPasswordForm />);
     expect(screen.getByRole("link", { name: "Send a new link" })).toHaveAttribute("href", "/forgot-password");
     unmount();
-    search = new URLSearchParams("token=tok-1234567890");
+    search = new URLSearchParams("token=expired");
     fetchMock.mockResolvedValueOnce(jsonResponse({ detail: "This reset link is invalid or has expired." }, 400))
       .mockResolvedValueOnce(jsonResponse({ ok: true, message: "Password updated." }));
     const u = userEvent.setup();
@@ -69,11 +69,11 @@ describe("sign-up and account recovery pages", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("invalid or has expired");
     await u.click(screen.getByRole("button", { name: "Set password" }));
     expect(await screen.findByText(/Password updated/)).toBeInTheDocument();
-    expect(bodies()[1]).toEqual(["/api/auth/password-reset-confirm", { token: "tok-1234567890", new_password: "a-long-password" }]);
+    expect(bodies()[1]).toEqual(["/api/auth/password-reset-confirm", { token: "expired", new_password: "a-long-password" }]);
   });
 
   it("verify email: confirms the token once", async () => {
-    search = new URLSearchParams("token=tok-abcdefghij");
+    search = new URLSearchParams("token=emailed");
     fetchMock.mockResolvedValue(jsonResponse({ ok: true, message: "Email verified." }));
     render(<VerifyEmail />);
     expect(await screen.findByText(/Email verified/)).toBeInTheDocument();

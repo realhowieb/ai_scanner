@@ -325,7 +325,7 @@ describe("public account routes", () => {
       : jsonResponse({ ok: true, message: "If that email is registered, a reset link has been sent." }, 202)));
     const ok = await publicAuth(req("/api/auth/password-reset", { method: "POST", body: { email: "a@b.co" } }), "password-reset", up);
     expect((await ok.json()).message).toContain("reset link");
-    const bad = await publicAuth(req("/api/auth/verify-email", { method: "POST", body: { token: "t-1234567890" } }), "verify-email", up);
+    const bad = await publicAuth(req("/api/auth/verify-email", { method: "POST", body: { token: "expired" } }), "verify-email", up);
     expect(bad.status).toBe(400);
     expect((await bad.json()).detail).toContain("invalid");
     expect((await publicAuth(req("/api/auth/verify-email", { method: "POST", body: { token: "x" }, origin: "https://evil.example" }), "verify-email", up)).status).toBe(403);

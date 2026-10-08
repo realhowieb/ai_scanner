@@ -8,3 +8,7 @@ a4a4280b22e6087af7a4bd20abcd7a8438036a7b:ui/scans.py:generic-api-key:641
 a3af3cdbf82c993b338eeb6362ebadf5d717184a:tests/test_api_paid_features.py:generic-api-key:392
 a3af3cdbf82c993b338eeb6362ebadf5d717184a:tests/test_api_paid_features.py:generic-api-key:394
 a3af3cdbf82c993b338eeb6362ebadf5d717184a:tests/test_api_paid_features.py:generic-api-key:424
+# Placeholder reset/verify tokens in web auth tests (reviewed 2026-10-08), since renamed.
+2b88fb25556704607a6a0b3f2580f31c06f3cd10:web/tests/bff.test.ts:generic-api-key:328
+2b88fb25556704607a6a0b3f2580f31c06f3cd10:web/tests/auth-pages.test.tsx:generic-api-key:61
+2b88fb25556704607a6a0b3f2580f31c06f3cd10:web/tests/auth-pages.test.tsx:generic-api-key:72
