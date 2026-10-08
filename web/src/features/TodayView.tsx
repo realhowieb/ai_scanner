@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import type { Schemas } from "@/api/client";
 import { Card, Disclaimer, Empty, Freshness, Locked, Pill, RANKED_MIN, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
@@ -41,7 +42,7 @@ function TickerChips({ items }: { items: string[] }) {
   );
 }
 
-function SectionFailed({ name }: { name: string }) {
+export function SectionFailed({ name }: { name: string }) {
   return <p className="section-error" role="alert">{name} couldn&apos;t load right now. The rest of the page is current.</p>;
 }
 
@@ -131,7 +132,7 @@ function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
 }
 
 /** `mine` is the signed-in sections (GET /v1/today/me); they load separately and never hold up the page. */
-export function TodayView({ data, mine, mineFailed = false }: { data: Today; mine?: Mine | null; mineFailed?: boolean }) {
+export function TodayView({ data, mine, mineFailed = false, side }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode }) {
   const failed = new Set(data.errors.map((e) => e.section));
   const mineErr = new Set(mine?.errors.map((e) => e.section) ?? (mineFailed ? ["new_since", "watchlist"] : []));
   const phase = PHASES[data.market.phase] ?? PHASES.closed!;
@@ -251,6 +252,7 @@ export function TodayView({ data, mine, mineFailed = false }: { data: Today; min
               {data.recap.entered.length === 0 && data.recap.left.length === 0 && <p className="cap">No names entered or left the ranked list.</p>}
             </Card>
           )}
+          {side}
         </aside>
       </div>
     </div>
