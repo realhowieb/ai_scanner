@@ -3,12 +3,14 @@
 // Session restoration: /v1/me through the BFF (which refreshes the cookie session if
 // the access token expired). Plan labels and feature availability come only from
 // the server's answer; the client never decides what a plan includes.
-import { createContext, useCallback, useContext, useMemo } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 
 import { api, unwrap } from "@/api/client";
 import type { ApiError, Schemas } from "@/api/client";
 import { useApi } from "@/hooks/useApi";
+
+import { clearCachedMe, readCachedMe, subscribeCachedMe, writeCachedMe } from "./meCache";
 
 export type Me = Schemas["Me"];
 export type Feature = keyof typeof FEATURE_PLAN;
@@ -38,6 +40,7 @@ type Ctx = {
 const SessionContext = createContext<Ctx | null>(null);
 
 export async function signOut(): Promise<void> {
+  clearCachedMe();
   try {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
   } finally {
@@ -49,7 +52,13 @@ export async function signOut(): Promise<void> {
 
 export function SessionProvider({ children, initialMe = null }: { children: ReactNode; initialMe?: Me | null }) {
   const state = useApi<Me>(initialMe ? null : "me", (signal) => unwrap(api.GET("/v1/me", { signal })));
-  const me = initialMe ?? state.data;
+  // This tab's last answer lets the page render (and fetch its data) while /v1/me revalidates.
+  const cached = useSyncExternalStore(subscribeCachedMe, readCachedMe, () => null);
+  useEffect(() => {
+    if (state.data) writeCachedMe(state.data);
+    else if (state.error?.status === 401) clearCachedMe();
+  }, [state.data, state.error]);
+  const me = initialMe ?? state.data ?? cached;
   const can = useCallback((feature: string) => !!me?.entitlements?.[feature], [me]);
   const value = useMemo<Ctx>(() => ({ me, loading: !me && state.loading, error: state.error, can, signOut, reload: state.reload }),
     [me, state.loading, state.error, can, state.reload]);

@@ -5,6 +5,7 @@ import createClient from "openapi-fetch";
 import type { Middleware } from "openapi-fetch";
 
 import { parseRetryAfter } from "@/lib/retryAfter";
+import { clearCachedMe } from "@/session/meCache";
 
 import type { components, paths } from "./schema";
 
@@ -30,6 +31,7 @@ export class ApiError extends Error {
 
 let onSessionExpired: () => void = () => {
   if (typeof window === "undefined") return;
+  clearCachedMe();
   const here = window.location.pathname + window.location.search;
   // A full page load on purpose: it drops every piece of client state from the old session.
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination
