@@ -92,3 +92,37 @@ describe("Today", () => {
     expect(screen.queryByText("After the close")).not.toBeInTheDocument();
   });
 });
+
+describe("Today market snapshot", () => {
+  const snapshot: Schemas["Snapshot"] = {
+    universe_symbols: 11553, ranked_count: 100, status: { level: "ok", label: "Operational" },
+    indices: [{ symbol: "SPY", label: "S&P 500", last: 777.3, chg_pct: -0.23 }, { symbol: "QQQ", label: "Nasdaq 100", last: 757.84, chg_pct: null }],
+    top_gainer: { ticker: "BSP", chg_pct: 20.36, last: 4.1, volume: 2e6 },
+    most_active: { ticker: "AMD", chg_pct: 1.2, last: 160, volume: 379.1e6 },
+  };
+
+  it("shows the status strip and the four tiles", () => {
+    render(<TodayView data={{ ...base, market: { phase: "closed", latest_scan_at: now }, snapshot }} />);
+    const strip = screen.getByRole("region", { name: "Market data status" });
+    expect(strip).toHaveTextContent("Universe 11,553 tradable stocks");
+    expect(strip).toHaveTextContent("100 ranked setups");
+    expect(strip).toHaveTextContent("System: Operational");
+    expect(strip).toHaveTextContent(/Last scan .* ET \(0m ago\)/);
+    expect(screen.getByText("777.30")).toBeInTheDocument();
+    expect(screen.getByText("-0.23%")).toHaveClass("down");
+    expect(screen.getByText("757.84").nextSibling).toHaveTextContent("—");  // no previous close, no made-up change
+    expect(screen.getByRole("link", { name: "BSP" })).toHaveAttribute("href", "/stocks/BSP");
+    expect(screen.getByText("+20.36%")).toHaveClass("up");
+    expect(screen.getByText("379.1M shares")).toBeInTheDocument();
+  });
+
+  it("works with an API that doesn't send a snapshot yet, and when it fails", () => {
+    const { rerender } = render(<TodayView data={{ ...base, market: { phase: "open", latest_scan_at: now } }} />);
+    expect(screen.getByRole("region", { name: "Market data status" })).toHaveTextContent(/Last scan/);
+    expect(screen.queryByText(/System:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Market snapshot" })).not.toBeInTheDocument();
+    rerender(<TodayView data={{ ...base, errors: [{ section: "snapshot", error: "RuntimeError" }] }} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Market snapshot couldn't load");
+    expect(screen.getByRole("region", { name: "Market data status" })).toHaveTextContent("Latest market scan unavailable");
+  });
+});

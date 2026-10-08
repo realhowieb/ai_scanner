@@ -76,7 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main id="main" className="main">{children}</main>
       <footer className="foot">
         <p className="cap">Educational research only, not financial advice.</p>
-        <p className="cap">Data: scheduled HSF scans · Alpaca. Prices shown come from the latest scan, not live quotes.</p>
+        <p className="cap">Data: scheduled HSF scans · Alpaca. Setup prices come from the latest scan; SPY, QQQ and the price strip are quotes refreshed every few minutes.</p>
       </footer>
     </div>
   );

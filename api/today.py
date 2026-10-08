@@ -40,6 +40,10 @@ class TTLCache:
                 del self._items[min(self._items, key=lambda k: self._items[k][0])]
         return value
 
+    def clear_key(self, key: Any) -> None:
+        with self._lock:
+            self._items.pop(key, None)
+
     def size(self) -> int:
         with self._lock:
             return len(self._items)
@@ -284,6 +288,94 @@ def recap(now: dt.datetime) -> Optional[Dict[str, Any]]:
     }
 
 
+# ---- market snapshot (the Streamlit trust banner + "Today's Market Snapshot") -------------------
+SNAPSHOT_INDICES = (("SPY", "S&P 500"), ("QQQ", "Nasdaq 100"))
+# The Streamlit price strip (ui.header.TICKER_STRIP) without VIX, which the stock
+# quote provider doesn't carry. One provider call serves the strip and the snapshot.
+TAPE_SYMBOLS = ("SPY", "QQQ", "IWM", "DIA", "AAPL", "MSFT", "NVDA", "TSLA")
+QUOTE_TTL_S = 180   # the Streamlit strip caches quotes for 3 minutes too
+
+
+def tape_quotes() -> List[Dict[str, Any]]:
+    """Last price and change vs the previous close for TAPE_SYMBOLS, in that order, from
+    the quote provider (Alpaca). Symbols without a price are left out; an empty answer
+    (no provider keys, provider down) is not cached, so the next call retries."""
+    def load():
+        from market_data import get_latest_quotes
+
+        quotes = get_latest_quotes(list(TAPE_SYMBOLS)) or {}
+        out = []
+        for sym in TAPE_SYMBOLS:
+            q = quotes.get(sym)
+            last = _num(q.get("last")) if isinstance(q, dict) else None
+            prev = _num(q.get("prev_close")) if isinstance(q, dict) else None
+            if last is not None:
+                out.append({"symbol": sym, "last": last, "chg_pct": (last - prev) / prev * 100.0 if prev else None})
+        return out
+
+    try:
+        out = _cached("tape_quotes", load, ttl_s=QUOTE_TTL_S)
+    except Exception:
+        return []
+    if not out:
+        _cache.clear_key("tape_quotes")
+    return out
+
+
+def _index_quotes() -> List[Dict[str, Any]]:
+    by_symbol = {q["symbol"]: q for q in tape_quotes()}
+    return [{**by_symbol[sym], "label": label} for sym, label in SNAPSHOT_INDICES if sym in by_symbol]
+
+
+def _system_status(now: dt.datetime) -> Dict[str, Any]:
+    """User-facing status and universe size from the latest health snapshot, read the
+    same way as the Streamlit trust banner (ui.trust_banner.build_trust_info)."""
+    from db.system_health import load_latest
+    from ui.trust_banner import build_trust_info
+
+    health = _cached("system_health", load_latest, ttl_s=QUOTE_TTL_S)
+    info = build_trust_info([], health, now)
+    return {"status": info["status"], "universe_symbols": info["universe_symbols"]}
+
+
+def _scan_leader(df: Any, column: str) -> Optional[Dict[str, Any]]:
+    """The row with the largest `column` value in a scan's results (one row per ticker)."""
+    if df is None or column not in df.columns or "Ticker" not in df.columns:
+        return None
+    import pandas as pd
+
+    work = df.assign(_v=pd.to_numeric(df[column], errors="coerce")).dropna(subset=["_v"])
+    work = work[work["Ticker"].astype(str).str.strip() != ""]
+    if work.empty:
+        return None
+    row = work.loc[work["_v"].idxmax()]
+    chg = _num(row.get("PctChange")) if "PctChange" in work.columns else None
+    return {"ticker": str(row["Ticker"]).strip().upper(), "chg_pct": chg,
+            "last": _num(row.get("Last")) if "Last" in work.columns else None,
+            "volume": _num(row.get("Volume")) if "Volume" in work.columns else None}
+
+
+def snapshot(now: dt.datetime) -> Dict[str, Any]:
+    """Universe, ranked count and system status for the status strip; SPY, QQQ, the
+    scan's top gainer and most active name for the snapshot tiles. Each part degrades
+    to null on its own."""
+    out: Dict[str, Any] = {"universe_symbols": None, "ranked_count": None,
+                           "status": {"level": "unknown", "label": "Status unavailable"},
+                           "indices": _index_quotes(), "top_gainer": None, "most_active": None}
+    try:
+        out.update(_system_status(now))
+    except Exception:
+        pass
+    runs = market_runs()
+    if runs:
+        rc = runs[0].get("row_count")
+        out["ranked_count"] = int(rc) if isinstance(rc, (int, float)) and rc > 0 else None
+        df = run_df(int(runs[0]["id"]))
+        out["top_gainer"] = _scan_leader(df, "PctChange")
+        out["most_active"] = _scan_leader(df, "Volume")
+    return out
+
+
 def build_today(now: dt.datetime, entitlements: Dict[str, bool]) -> Dict[str, Any]:
     """Each section fails on its own: one bad read never blanks the whole page."""
     pro = bool(entitlements.get("can_day_trader"))
@@ -292,6 +384,7 @@ def build_today(now: dt.datetime, entitlements: Dict[str, bool]) -> Dict[str, An
         "top_setups": lambda: top_setups(entitlements),
         "after_close": lambda: after_close(now, pro),
         "recap": lambda: recap(now),
+        "snapshot": lambda: snapshot(now),
     }
     out: Dict[str, Any] = {"as_of": now.isoformat(), "market": market_status(now), "errors": []}
     for name, fn in sections.items():

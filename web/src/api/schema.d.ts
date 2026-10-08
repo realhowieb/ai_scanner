@@ -521,6 +521,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/market/tape": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Price strip
+         * @description SPY, QQQ, IWM, DIA, AAPL, MSFT, NVDA and TSLA: last price and change vs the previous close.
+         */
+        get: operations["market_tape_v1_market_tape_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -1515,6 +1535,23 @@ export interface components {
             /** Ok */
             ok: boolean;
         };
+        /** IndexQuote */
+        IndexQuote: {
+            /**
+             * Chg Pct
+             * @description Percent vs the previous close
+             */
+            chg_pct?: number | null;
+            /** Label */
+            label: string;
+            /** Last */
+            last: number;
+            /**
+             * Symbol
+             * @description SPY or QQQ
+             */
+            symbol: string;
+        };
         /** Journal */
         Journal: {
             /**
@@ -2101,6 +2138,23 @@ export interface components {
             /** Universe */
             universe: string;
         };
+        /** ScanLeader */
+        ScanLeader: {
+            /**
+             * Chg Pct
+             * @description Percent vs the previous close, from the scan
+             */
+            chg_pct?: number | null;
+            /** Last */
+            last?: number | null;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Volume
+             * @description Shares traded in the session, from the scan
+             */
+            volume?: number | null;
+        };
         /**
          * ScanParams
          * @description The parameters the scan actually used (after plan rules).
@@ -2346,6 +2400,34 @@ export interface components {
              */
             verification_sent: boolean;
         };
+        /**
+         * Snapshot
+         * @description The status strip and market snapshot (the Streamlit app's trust banner and
+         *     "Today's Market Snapshot"). Each field is null when its source isn't available.
+         */
+        Snapshot: {
+            /**
+             * Indices
+             * @description SPY and QQQ; empty when no quote is available
+             * @default []
+             */
+            indices: components["schemas"]["IndexQuote"][];
+            /** @description Most shares traded in the latest full-market scan */
+            most_active?: components["schemas"]["ScanLeader"] | null;
+            /**
+             * Ranked Count
+             * @description Results in the latest full-market scan
+             */
+            ranked_count?: number | null;
+            status: components["schemas"]["SystemStatus"];
+            /** @description Biggest gain in the latest full-market scan */
+            top_gainer?: components["schemas"]["ScanLeader"] | null;
+            /**
+             * Universe Symbols
+             * @description Tradable U.S. stocks in the scan universe
+             */
+            universe_symbols?: number | null;
+        };
         /** StairSteppers */
         StairSteppers: {
             /**
@@ -2496,6 +2578,43 @@ export interface components {
              */
             watchlists: components["schemas"]["WatchlistRef"][];
         };
+        /** SystemStatus */
+        SystemStatus: {
+            /**
+             * Label
+             * @description Operational, Limited, Service issue or Status unavailable
+             */
+            label: string;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "ok" | "limited" | "issue" | "unknown";
+        };
+        /**
+         * Tape
+         * @description The scrolling price strip: market ETFs and a few large caps.
+         */
+        Tape: {
+            /**
+             * Quotes
+             * @description In display order; empty when no quote is available
+             * @default []
+             */
+            quotes: components["schemas"]["TapeQuote"][];
+        };
+        /** TapeQuote */
+        TapeQuote: {
+            /**
+             * Chg Pct
+             * @description Percent vs the previous close
+             */
+            chg_pct?: number | null;
+            /** Last */
+            last: number;
+            /** Symbol */
+            symbol: string;
+        };
         /** TickersBody */
         TickersBody: {
             /** Tickers */
@@ -2533,6 +2652,7 @@ export interface components {
             errors: components["schemas"]["SectionError"][];
             market: components["schemas"]["Market"];
             recap?: components["schemas"]["Recap"] | null;
+            snapshot?: components["schemas"]["Snapshot"] | null;
             top_setups?: components["schemas"]["TopSetups"] | null;
         };
         /** TokenBody */
@@ -4105,6 +4225,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    market_tape_v1_market_tape_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tape"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

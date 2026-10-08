@@ -1441,6 +1441,42 @@
     "title": "Health",
     "type": "object"
    },
+   "IndexQuote": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Percent vs the previous close",
+      "title": "Chg Pct"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "last": {
+      "title": "Last",
+      "type": "number"
+     },
+     "symbol": {
+      "description": "SPY or QQQ",
+      "title": "Symbol",
+      "type": "string"
+     }
+    },
+    "required": [
+     "symbol",
+     "label",
+     "last"
+    ],
+    "title": "IndexQuote",
+    "type": "object"
+   },
    "Journal": {
     "properties": {
      "stats": {
@@ -2868,6 +2904,54 @@
     "title": "ScanJob",
     "type": "object"
    },
+   "ScanLeader": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Percent vs the previous close, from the scan",
+      "title": "Chg Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "volume": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Shares traded in the session, from the scan",
+      "title": "Volume"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "ScanLeader",
+    "type": "object"
+   },
    "ScanParams": {
     "description": "The parameters the scan actually used (after plan rules).",
     "properties": {
@@ -3497,6 +3581,74 @@
     "title": "SignupResult",
     "type": "object"
    },
+   "Snapshot": {
+    "description": "The status strip and market snapshot (the Streamlit app's trust banner and\n\"Today's Market Snapshot\"). Each field is null when its source isn't available.",
+    "properties": {
+     "indices": {
+      "default": [],
+      "description": "SPY and QQQ; empty when no quote is available",
+      "items": {
+       "$ref": "#/components/schemas/IndexQuote"
+      },
+      "title": "Indices",
+      "type": "array"
+     },
+     "most_active": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ScanLeader"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Most shares traded in the latest full-market scan"
+     },
+     "ranked_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Results in the latest full-market scan",
+      "title": "Ranked Count"
+     },
+     "status": {
+      "$ref": "#/components/schemas/SystemStatus"
+     },
+     "top_gainer": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ScanLeader"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Biggest gain in the latest full-market scan"
+     },
+     "universe_symbols": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Tradable U.S. stocks in the scan universe",
+      "title": "Universe Symbols"
+     }
+    },
+    "required": [
+     "status"
+    ],
+    "title": "Snapshot",
+    "type": "object"
+   },
    "StairSteppers": {
     "properties": {
      "all": {
@@ -3851,6 +4003,77 @@
     "title": "StockDetail",
     "type": "object"
    },
+   "SystemStatus": {
+    "properties": {
+     "label": {
+      "description": "Operational, Limited, Service issue or Status unavailable",
+      "title": "Label",
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "ok",
+       "limited",
+       "issue",
+       "unknown"
+      ],
+      "title": "Level",
+      "type": "string"
+     }
+    },
+    "required": [
+     "level",
+     "label"
+    ],
+    "title": "SystemStatus",
+    "type": "object"
+   },
+   "Tape": {
+    "description": "The scrolling price strip: market ETFs and a few large caps.",
+    "properties": {
+     "quotes": {
+      "default": [],
+      "description": "In display order; empty when no quote is available",
+      "items": {
+       "$ref": "#/components/schemas/TapeQuote"
+      },
+      "title": "Quotes",
+      "type": "array"
+     }
+    },
+    "title": "Tape",
+    "type": "object"
+   },
+   "TapeQuote": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Percent vs the previous close",
+      "title": "Chg Pct"
+     },
+     "last": {
+      "title": "Last",
+      "type": "number"
+     },
+     "symbol": {
+      "title": "Symbol",
+      "type": "string"
+     }
+    },
+    "required": [
+     "symbol",
+     "last"
+    ],
+    "title": "TapeQuote",
+    "type": "object"
+   },
    "TickersBody": {
     "properties": {
      "tickers": {
@@ -3941,6 +4164,16 @@
       "anyOf": [
        {
         "$ref": "#/components/schemas/Recap"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "snapshot": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Snapshot"
        },
        {
         "type": "null"
@@ -5987,6 +6220,33 @@
      }
     ],
     "summary": "Close a logged trade (Pro)"
+   }
+  },
+  "/v1/market/tape": {
+   "get": {
+    "description": "SPY, QQQ, IWM, DIA, AAPL, MSFT, NVDA and TSLA: last price and change vs the previous close.",
+    "operationId": "market_tape_v1_market_tape_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Tape"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Price strip"
    }
   },
   "/v1/me": {

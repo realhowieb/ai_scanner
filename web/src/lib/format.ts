@@ -57,11 +57,17 @@ export function minutesSince(iso: string | null | undefined, nowMs = Date.now())
 /** Scans run several times a day; older than this reads "stale" (the web's 6 hours). */
 export const STALE_AFTER_MIN = 360;
 
-export function freshness(iso: string | null | undefined, nowMs = Date.now()): { label: string; stale: boolean } {
+/** "8h ago"; null when the time is unknown. */
+export function ago(iso: string | null | undefined, nowMs = Date.now()): string | null {
   const m = minutesSince(iso, nowMs);
-  if (m === null) return { label: "Updated time unavailable", stale: true };
-  const label = m < 90 ? `Updated ${m}m ago` : m < 36 * 60 ? `Updated ${Math.floor(m / 60)}h ago` : `Updated ${Math.floor(m / 1440)}d ago`;
-  return { label, stale: m >= STALE_AFTER_MIN };
+  if (m === null) return null;
+  return m < 90 ? `${m}m ago` : m < 36 * 60 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
+}
+
+export function freshness(iso: string | null | undefined, nowMs = Date.now()): { label: string; stale: boolean } {
+  const a = ago(iso, nowMs);
+  if (a === null) return { label: "Updated time unavailable", stale: true };
+  return { label: `Updated ${a}`, stale: (minutesSince(iso, nowMs) ?? 0) >= STALE_AFTER_MIN };
 }
 
 export function greeting(iso: string, nowMs = Date.now()): string {
