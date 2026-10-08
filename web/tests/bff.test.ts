@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API_STARTING, login, logout } from "@/server/auth";
+import { API_STARTING, changePassword, login, logout } from "@/server/auth";
 import { SESSION_EXPIRED, proxy } from "@/server/bff";
 import type { Upstream } from "@/server/bff";
 import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, secureCookies } from "@/server/cookies";
@@ -249,5 +249,56 @@ describe("login and logout", () => {
     expect(res.status).toBe(204);
     expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ refresh_token: "rt-7" });
     expect(setCookies(res).every((c) => c.includes("Max-Age=0"))).toBe(true);
+  });
+});
+
+describe("password change", () => {
+  const cookies = { [ACCESS_COOKIE]: jwt(600), [REFRESH_COOKIE]: "rt-0" };
+  const body = { current_password: "old-pass", new_password: "new-pass-123" };
+
+  it("is never proxied, because the API answers with a token pair", async () => {
+    const { up, calls } = fakeUpstream(() => jsonResponse(pair(1)));
+    const res = await proxy(req("/api/hsf/v1/me/password", { method: "POST", cookies, body }), "v1/me/password", up);
+    expect(res.status).toBe(404);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("stores the new pair in HttpOnly cookies and returns no token", async () => {
+    const { up, calls } = fakeUpstream(() => jsonResponse(pair(7)));
+    const res = await changePassword(req("/api/auth/password", { method: "POST", cookies, body }), up);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).not.toContain("rt-7");
+    expect(calls[0]!.path).toBe("/v1/me/password");
+    expect(auth(calls[0]!)).toBe(`Bearer ${cookies[ACCESS_COOKIE]}`);
+    const set = setCookies(res);
+    expect(set.some((c) => c.startsWith(`${REFRESH_COOKIE}=rt-7`) && c.includes("HttpOnly"))).toBe(true);
+  });
+
+  it("passes the API's rule message and keeps the session on a wrong password", async () => {
+    const { up } = fakeUpstream(() => jsonResponse({ detail: "Current password is incorrect." }, 400));
+    const res = await changePassword(req("/api/auth/password", { method: "POST", cookies, body }), up);
+    expect(res.status).toBe(400);
+    expect((await res.json()).detail).toBe("Current password is incorrect.");
+    expect(setCookies(res)).toEqual([]);
+  });
+
+  it("refreshes an expired access token first, and ends a dead session", async () => {
+    const { up, calls } = fakeUpstream((c) => (c.path === "/v1/auth/refresh" ? jsonResponse(pair(2)) : jsonResponse(pair(3))));
+    const ok = await changePassword(req("/api/auth/password", { method: "POST", cookies: { [REFRESH_COOKIE]: "rt-0" }, body }), up);
+    expect(ok.status).toBe(200);
+    expect(calls.map((c) => c.path)).toEqual(["/v1/auth/refresh", "/v1/me/password"]);
+    _resetRefreshState();
+    const dead = fakeUpstream(() => jsonResponse({ detail: "no" }, 401));
+    const res = await changePassword(req("/api/auth/password", { method: "POST", cookies: { [REFRESH_COOKIE]: "rt-9" }, body }), dead.up);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual(SESSION_EXPIRED);
+  });
+
+  it("refuses cross-site requests and empty fields without calling the API", async () => {
+    const { up, calls } = fakeUpstream(() => jsonResponse(pair(1)));
+    expect((await changePassword(req("/api/auth/password", { method: "POST", cookies, body, origin: "https://evil.example" }), up)).status).toBe(403);
+    expect((await changePassword(req("/api/auth/password", { method: "POST", cookies, body: { current_password: "x" } }), up)).status).toBe(400);
+    expect(calls).toHaveLength(0);
   });
 });

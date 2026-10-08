@@ -2,8 +2,10 @@
 
 // Watchlists: list, create, rename, make default, delete; tickers with notes. Every
 // change is shown only after the server confirms it (then the affected data reloads).
-// Scores and prices come from ONE request (the latest market scan), labelled with its
-// time; tickers outside that scan show "—" rather than a made-up quote.
+// Scores and prices come from the latest market scan, labelled with its time: the API
+// attaches each ticker's scan row (items[].latest); an older API without it falls back to
+// matching the plan's ranked rows. Tickers that aren't ranked setups show no score
+// rather than a made-up quote.
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -16,7 +18,7 @@ import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
-import { etDate, price } from "@/lib/format";
+import { etDate, pct, price, setupLabel } from "@/lib/format";
 
 const NOTE_MAX = 500;
 
@@ -132,7 +134,10 @@ function AddTickers({ wl, onAdded }: { wl: number; onAdded: () => void }) {
 
 function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => void; onDeleted: () => void }) {
   const detail = useApi(`wl:${id}`, (signal) => watchlists.get(id, signal));
-  const scan = useApi("wl-scan", (signal) => unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: 200 } }, signal })));
+  // Only an API that predates items[].latest (no scan_at key at all) needs the ranked rows.
+  const legacy = !!detail.data && detail.data.scan_at === undefined;
+  const scan = useApi(legacy ? "wl-scan" : null, (signal) => unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: 200 } }, signal })));
+  const [byScore, setByScore] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -142,11 +147,17 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const rm = useAction();
   const reload = () => { detail.reload(); onChanged(); };
 
-  const scores = useMemo(() => new Map((scan.data?.setups ?? []).map((s) => [s.ticker, s])), [scan.data]);
+  const scores = useMemo(() => {
+    if (!legacy) return new Map((detail.data?.items ?? []).filter((i) => i.latest).map((i) => [i.ticker, i.latest!]));
+    return new Map((scan.data?.setups ?? []).map((s) => [s.ticker, s]));
+  }, [legacy, detail.data, scan.data]);
 
   if (detail.error && !detail.data) return <ErrorState error={detail.error} onRetry={detail.reload} what="this watchlist" />;
   if (!detail.data || detail.loading && detail.data.id !== id) return <Skeleton rows={5} label="Loading watchlist" />;
   const w: WatchlistDetail = detail.data;
+  const scanAt = legacy ? scan.data?.scan_at : w.scan_at;
+  const stale = legacy ? scan.data?.stale : w.stale;
+  const items = byScore ? [...w.items].sort((a, b) => (scores.get(b.ticker)?.score ?? -1) - (scores.get(a.ticker)?.score ?? -1)) : w.items;
 
   return (
     <div className="stack">
@@ -164,18 +175,37 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
         <AddTickers wl={w.id} onAdded={reload} />
       </Card>
 
-      <Card title="Tickers" id="wl-items" aside={scan.data?.scan_at ? <Freshness at={scan.data.scan_at} label="HSF Scores from the scan" /> : undefined}>
+      <Card title="Tickers" id="wl-items" aside={scanAt ? <Freshness at={scanAt} label="HSF Scores from the scan" stale={stale} /> : undefined}>
+        {w.items.length > 1 && (
+          <div className="seg-group sort-toggle" role="radiogroup" aria-label="Sort tickers">
+            {([[false, "A to Z"], [true, "HSF Score"]] as const).map(([v, label]) => (
+              <label key={label} className={`seg${byScore === v ? " on" : ""}`}>
+                <input type="radio" className="sr-only" name={`wl-sort-${w.id}`} checked={byScore === v} onChange={() => setByScore(v)} />{label}
+              </label>
+            ))}
+          </div>
+        )}
         {w.items.length === 0 ? (
           <Empty title="No tickers yet.">Add some above, or use Save to watchlist on the Scanner or a stock page.</Empty>
         ) : (
           <ul className="wl-items">
-            {w.items.map((it) => {
+            {items.map((it) => {
               const s = scores.get(it.ticker);
+              const rank = !legacy ? it.latest?.rank : undefined;
               return (
                 <li key={it.ticker} className="wl-item">
                   <div className="wl-main">
                     <TickerLink ticker={it.ticker} />
-                    {s ? <><ScoreBadge score={s.score} /><span className="mono cap">{price(s.last)}</span></> : <span className="cap" title="Not among this plan's ranked rows in the latest scan">Not ranked in the latest scan</span>}
+                    {s ? (
+                      <>
+                        <ScoreBadge score={s.score} />
+                        <Pill>{setupLabel(s.primary_setup)}</Pill>
+                        {s.fading && <Pill tone="warn">Fading</Pill>}
+                        <span className="mono cap">{price(s.last)}</span>
+                        <span className={`mono cap ${(s.chg_pct ?? 0) > 0 ? "up" : (s.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(s.chg_pct)}</span>
+                        {rank && <span className="cap">#{rank}{w.scan_total ? ` of ${w.scan_total}` : ""}</span>}
+                      </>
+                    ) : <span className="cap">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not a ranked setup in the latest scan"}</span>}
                     <span className="grow" />
                     <span className="cap">{it.added_at ? `Added ${etDate(it.added_at)}` : ""}{it.price_when_added ? ` at ${price(it.price_when_added)}` : ""}</span>
                     <button type="button" className="icon-btn" aria-label={`Remove ${it.ticker} from ${w.name}`} onClick={() => { rm.clear(); setRemoving(it.ticker); }}>
@@ -188,7 +218,8 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
             })}
           </ul>
         )}
-        {scan.data && <p className="cap">Scores and prices are from that scan, only for tickers among your plan&apos;s top {scan.data.max_results} ranked setups. Not live quotes.</p>}
+        {legacy && scan.data && <p className="cap">Scores and prices are from that scan, only for tickers among your plan&apos;s top {scan.data.max_results} ranked setups. Not live quotes.</p>}
+        {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? "Score, setup, price and change are from that scan, not live quotes. The rank is the ticker's place among the scan's ranked setups." : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
       </Card>
 
       <NameDialog open={renaming} title="Rename watchlist" initial={w.name} submitLabel="Rename" onClose={() => setRenaming(false)}

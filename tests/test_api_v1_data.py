@@ -316,6 +316,24 @@ class ScanAndStockApiTests(DataApiBase):
         self.assertEqual(top[0]["ticker"], "MXL")
         self.assertEqual(top[0]["prob"], 77.0)
 
+    def test_watchlist_items_carry_their_latest_scan_row(self):
+        wid = self.client.post("/v1/watchlists", json={"name": "Mine"}, headers=self.h).json()["id"]
+        self.client.post(f"/v1/watchlists/{wid}/tickers", json={"tickers": ["MXL", "ZZZZ"]}, headers=self.h)
+        top = self.client.get("/v1/scans/latest", headers=self.h).json()["setups"]
+        with mock.patch("api.scans.max_results_for", return_value=1):   # beyond the Scanner's row cap too
+            d = self.client.get(f"/v1/watchlists/{wid}", headers=self.h).json()
+        self.assertEqual(d["scan_at"], "2026-09-28T19:35:00+00:00")
+        items = {i["ticker"]: i for i in d["items"]}
+        self.assertIsNone(items["ZZZZ"]["latest"])
+        mxl = items["MXL"]["latest"]
+        self.assertEqual((mxl["rank"], mxl["score"]), (1, top[0]["score"]))
+        self.assertIsNone(mxl["prob"])                                   # redacted below Premium
+        self.assertGreaterEqual(d["scan_total"], 1)
+        with mock.patch("api.scans.market_runs", side_effect=RuntimeError("down")):
+            d = self.client.get(f"/v1/watchlists/{wid}", headers=self.h).json()
+        self.assertIsNone(d["scan_at"])
+        self.assertTrue(all(i["latest"] is None for i in d["items"]))     # the list still loads
+
     def test_stock_detail(self):
         self.client.post("/v1/alerts", json={"type": "move", "ticker": "MXL", "threshold": 5}, headers=self.h)
         wid = self.client.post("/v1/watchlists", json={"name": "Chips"}, headers=self.h).json()["id"]

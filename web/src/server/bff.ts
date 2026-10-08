@@ -16,6 +16,10 @@ const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,64}$/;
 const MAX_BODY_BYTES = 256 * 1024;
 const PASS_HEADERS = ["content-type", "retry-after"];
 
+/** API routes that answer with a token pair. They go through /api/auth/* instead, which
+ * keeps the tokens in cookies; proxied, the pair would reach browser JavaScript. */
+const TOKEN_ROUTES = new Set(["v1/me/password"]);
+
 export const SESSION_EXPIRED = { detail: "Your session has ended. Sign in again.", code: "session_expired" };
 
 export function requestIdFor(req: Request): string {
@@ -58,7 +62,8 @@ export function upstreamRefresh(upstream: Upstream, requestId: string) {
 
 export async function proxy(req: Request, apiPath: string, upstream: Upstream): Promise<Response> {
   const rid = requestIdFor(req);
-  if (!METHODS.has(req.method) || !PATH_RE.test(apiPath) || apiPath.startsWith("v1/auth/") || apiPath.includes("..")) {
+  if (!METHODS.has(req.method) || !PATH_RE.test(apiPath) || apiPath.startsWith("v1/auth/") || apiPath.includes("..")
+    || TOKEN_ROUTES.has(apiPath.replace(/\/+$/, ""))) {
     return json({ detail: "Not found" }, 404, rid);
   }
   if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);

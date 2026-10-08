@@ -2,9 +2,10 @@
 // only when a gateway error shows the request never reached it) and are
 // never stored or logged; the token pair goes straight into HttpOnly cookies.
 import type { Upstream } from "./bff";
-import { json, requestIdFor, sameOrigin } from "./bff";
-import { REFRESH_COOKIE, clearedCookies, parseCookies, sessionCookies } from "./cookies";
+import { SESSION_EXPIRED, json, requestIdFor, sameOrigin, upstreamRefresh } from "./bff";
+import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, clearedCookies, parseCookies, sessionCookies } from "./cookies";
 import type { TokenPair } from "./cookies";
+import { refreshOnce } from "./refresh";
 
 const FAILED = "Sign-in failed.";
 
@@ -118,4 +119,52 @@ export async function logout(req: Request, upstream: Upstream): Promise<Response
   const headers = new Headers({ "cache-control": "no-store", "x-request-id": rid });
   for (const c of clearedCookies()) headers.append("set-cookie", c);
   return new Response(null, { status: 204, headers });
+}
+
+/** Change the password. The API signs every other session out and answers with a new
+ * token pair for this one, which goes straight into the cookies (never to the browser). */
+export async function changePassword(req: Request, upstream: Upstream): Promise<Response> {
+  const rid = requestIdFor(req);
+  if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
+  let current = "";
+  let next = "";
+  try {
+    const body = (await req.json()) as { current_password?: unknown; new_password?: unknown };
+    current = typeof body.current_password === "string" ? body.current_password : "";
+    next = typeof body.new_password === "string" ? body.new_password : "";
+  } catch {
+    /* handled below */
+  }
+  if (!current || !next || current.length > 256 || next.length > 256) {
+    return json({ detail: "Enter your current password and a new one." }, 400, rid);
+  }
+  const jar = parseCookies(req.headers.get("cookie"));
+  let access = jar[ACCESS_COOKIE];
+  const refresh = jar[REFRESH_COOKIE];
+  let pending: string[] = [];
+  try {
+    if (!accessTokenUsable(access)) {
+      const out = refresh ? await refreshOnce(refresh, upstreamRefresh(upstream, rid)) : null;
+      if (!out || !out.ok) return json(SESSION_EXPIRED, 401, rid, clearedCookies());
+      access = out.pair.access_token;
+      pending = sessionCookies(out.pair);
+    }
+    const res = await upstream("/v1/me/password", {
+      method: "POST",
+      headers: { authorization: `Bearer ${access}`, "content-type": "application/json", accept: "application/json", "x-request-id": rid },
+      body: JSON.stringify({ current_password: current, new_password: next }),
+    });
+    const id = res.headers.get("x-request-id") || rid;
+    if (res.status === 401) return json(SESSION_EXPIRED, 401, id, clearedCookies());
+    if (!res.ok) {
+      const extra: Record<string, string> = {};
+      const ra = res.headers.get("retry-after");
+      if (ra) extra["retry-after"] = ra;
+      const detail = await detailOf(res);
+      return json({ detail: detail === FAILED ? "Couldn't change the password." : detail }, res.status, id, pending, extra);
+    }
+    return json({ ok: true }, 200, id, sessionCookies((await res.json()) as TokenPair));
+  } catch {
+    return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid, pending);
+  }
 }

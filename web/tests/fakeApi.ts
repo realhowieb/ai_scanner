@@ -11,7 +11,9 @@ type AlertRow = { id: number; type: string; ticker: string | null; threshold: nu
 
 const TICKER = /^[A-Z0-9][A-Z0-9.-]{0,9}$/;
 
-export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; scan?: { ticker: string; score: number; last: number }[] } = {}) {
+export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; scan?: { ticker: string; score: number; last: number }[];
+  /** The current API: GET /v1/watchlists/{id} carries scan_at and items[].latest. Off = an API that predates them. */
+  scanState?: boolean } = {}) {
   let nextId = 1;
   const lists: WL[] = [];
   const alertRows: AlertRow[] = [];
@@ -57,7 +59,17 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
       if (!w) return err(404, "Watchlist not found.");
       const sub = path.includes("/tickers");
       const t = m[2] ? decodeURIComponent(m[2]) : null;
-      if (!sub && method === "GET") return jsonResponse(detail(w));
+      if (!sub && method === "GET") {
+        if (!opts.scanState) return jsonResponse(detail(w));
+        const rows = opts.scan ?? [];
+        return jsonResponse({ ...detail(w), scan_at: scanAt, scan_total: rows.length, stale: false,
+          items: w.items.map((i) => {
+            const k = rows.findIndex((r) => r.ticker === i.ticker);
+            const r = rows[k];
+            return { ...i, latest: r ? { ticker: r.ticker, score: r.score, last: r.last, primary_setup: "breakout", status: "STRONG", n_signals: 1,
+              chg_pct: 1.5, gap_pct: null, rvol: null, prob: null, signals: [], fading: false, breakout_score: null, rank: k + 1 } : null };
+          }) });
+      }
       if (!sub && method === "PATCH") {
         if (body.name && lists.some((x) => x !== w && x.name.toLowerCase() === body.name.toLowerCase())) return err(409, `You already have a watchlist named "${body.name}".`);
         if (body.name) w.name = body.name;

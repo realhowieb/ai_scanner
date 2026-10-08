@@ -301,3 +301,12 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .tile-value { font-size: 24px; }
   .status-level { margin-left: 0; }
 }
+
+/* account and research */
+.wrap { overflow-wrap: anywhere; white-space: normal; text-align: right; }
+.muted-list { color: var(--muted); }
+.table th.row-h { background: transparent; color: var(--text); font-weight: 500; font-size: 14px; border-top: 1px solid var(--line-soft); }
+.chart .bar-up { fill: var(--up); }
+.chart .bar-down { fill: var(--down); }
+.ai-text { white-space: pre-wrap; }
+.sort-toggle { align-self: flex-start; }

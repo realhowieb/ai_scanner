@@ -445,7 +445,14 @@ def _data_routes(app: FastAPI) -> None:
 
     @app.get("/v1/watchlists/{watchlist_id}", response_model=models.WatchlistDetail, responses=_OWNED)
     def watchlist_get(watchlist_id: int, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        return json_safe(user_data.get_watchlist(_user(account), watchlist_id))
+        """The list with each ticker's row in the latest market scan (`items[].latest`)."""
+        from api.scans import watchlist_scan_state
+
+        out = user_data.get_watchlist(_user(account), watchlist_id)
+        state = watchlist_scan_state([i["ticker"] for i in out["items"]], entitlements_for(account)["entitlements"])
+        out = {**out, "scan_at": state["scan_at"], "scan_total": state.get("total"), "stale": state["stale"],
+               "items": [{**i, "latest": state["rows"].get(str(i["ticker"]).upper())} for i in out["items"]]}
+        return json_safe(out)
 
     @app.patch("/v1/watchlists/{watchlist_id}", response_model=models.WatchlistDetail,
                responses={**_OWNED, 409: {"description": "A watchlist with that name exists"}})

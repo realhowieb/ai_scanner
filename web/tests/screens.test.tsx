@@ -8,7 +8,7 @@ import { StockView } from "@/features/StockView";
 import type { ScanApi } from "@/hooks/useScanJob";
 import { SessionProvider } from "@/session/SessionProvider";
 
-import { me, setup } from "./fixtures";
+import { me, setup, stockDetail } from "./fixtures";
 import { jsonResponse } from "./helpers";
 
 let search = new URLSearchParams();
@@ -169,13 +169,7 @@ describe("Custom scan waiting and cancel", () => {
   });
 });
 
-const stock = (over: Partial<Schemas["StockDetail"]> = {}): Schemas["StockDetail"] => ({
-  ticker: "AAA", scan_at: new Date().toISOString(), in_latest_scan: true, has_setup: true, from_history: false, price: 12.5, change_pct: 1.2,
-  hsf_score: 77, status: "STRONG", primary_setup: "breakout", signals: ["breakout"], score_components: { signals_component: 30 },
-  movement: "RISING", score_change: 4, reasons: ["Breaking out"], risks: [], watch_next: [], breakout_score: 80, prob: 13.1,
-  earnings_days: 3, history_summary: { observations: 4, matured: 3, positive: 2 }, historical_context: null, outcome_cohort: null,
-  historical_locked: false, lifecycle: [], bars: [], bars_as_of: null, watchlists: [], alerts: [], ...over,
-});
+const stock = stockDetail;
 
 describe("Stock Intelligence", () => {
   it("labels the price as the scan's, not a live quote, and handles missing bars", () => {
