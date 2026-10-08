@@ -38,7 +38,7 @@ def _scan_rows(prefix=""):
     rows = []
     for i, t in enumerate(["MXL", "STM", "GRAL", "SOXL", "TER", "CIEN"]):
         rows.append({"Ticker": t, "Signal": "Breakout", "BreakoutScore": 95 - i * 4, "Last": 10.0 + i,
-                     "PctChange": 2.5, "PMLast": 10.5 + i, "PMPctChange": 5.0 - i,
+                     "PctChange": 2.5 + i, "Volume": 1_000_000 * (6 - i), "PMLast": 10.5 + i, "PMPctChange": 5.0 - i,
                      "AHLast": 9.0 + i, "AHPctChange": -3.0 + i * 0.1})
         rows.append({"Ticker": t, "Signal": "Gapper", "GapPct": 4.0, "Last": 10.0 + i})
     rows.append({"Ticker": "NANX", "Signal": "Breakout", "BreakoutScore": float("nan"), "Last": float("nan")})
@@ -160,6 +160,51 @@ class TodayBuilderTests(unittest.TestCase):
         for now in (TUE_840_ET, TUE_NOON_ET, TUE_6PM_ET, SAT):
             Today(**self.build(now, PRO))
             Today(**self.build(now, FREE))
+
+    def test_snapshot_strip_and_tiles(self):
+        health = {"generated_at": "2026-10-03T15:00:00+00:00",
+                  "subsystems": {"universe": {"status": "OK", "metrics": {"symbol_count": 11553}},
+                                 "scanner": {"status": "OK"}, "market_data": {"status": "OK"},
+                                 "database": {"status": "OK"}}}
+        quotes = {"SPY": {"last": 777.3, "prev_close": 779.09}, "QQQ": {"last": 757.84, "prev_close": None},
+                  "DIA": {"last": 511.0, "prev_close": 514.55}}
+        runs = [{**r, "row_count": 100} for r in MARKET_RUNS]
+        with mock.patch("db.system_health.load_latest", return_value=health), \
+                mock.patch("market_data.get_latest_quotes", return_value=quotes), \
+                mock.patch("db.runs.list_runs", side_effect=lambda username=None, **k: runs if username == "cron" else []):
+            snap = self.build(SAT, FREE)["snapshot"]
+        self.assertEqual(snap["universe_symbols"], 11553)
+        self.assertEqual(snap["ranked_count"], 100)
+        self.assertEqual(snap["status"], {"level": "ok", "label": "Operational"})
+        self.assertEqual([q["symbol"] for q in snap["indices"]], ["SPY", "QQQ"])
+        self.assertAlmostEqual(snap["indices"][0]["chg_pct"], -0.2298, places=3)
+        self.assertIsNone(snap["indices"][1]["chg_pct"])  # no previous close, no made-up change
+        self.assertEqual(snap["top_gainer"]["ticker"], "CIEN")
+        self.assertEqual(snap["top_gainer"]["chg_pct"], 7.5)
+        self.assertEqual(snap["most_active"]["ticker"], "MXL")
+        self.assertEqual(snap["most_active"]["volume"], 6_000_000)
+
+    def test_tape_keeps_strip_order_and_retries_an_empty_answer(self):
+        quotes = {"TSLA": {"last": 377.69, "prev_close": 380.69}, "SPY": {"last": 777.3, "prev_close": 779.09},
+                  "AAPL": {"last": 336.58, "prev_close": float("nan")}}
+        with mock.patch("market_data.get_latest_quotes", return_value=quotes):
+            tape = self.today.tape_quotes()
+        self.assertEqual([q["symbol"] for q in tape], ["SPY", "AAPL", "TSLA"])
+        self.assertIsNone(tape[1]["chg_pct"])
+        self.today.clear_cache()
+        with mock.patch("market_data.get_latest_quotes", return_value={}) as q:
+            self.assertEqual(self.today.tape_quotes(), [])
+            self.today.tape_quotes()
+        self.assertEqual(q.call_count, 2)  # nothing cached from an empty answer
+
+    def test_snapshot_without_quotes_or_health(self):
+        with mock.patch("db.system_health.load_latest", return_value=None), \
+                mock.patch("market_data.get_latest_quotes", side_effect=RuntimeError("no keys")):
+            snap = self.build(SAT, FREE)["snapshot"]
+        self.assertEqual(snap["indices"], [])
+        self.assertEqual(snap["status"]["level"], "unknown")
+        self.assertIsNone(snap["universe_symbols"])
+        self.assertEqual(snap["top_gainer"]["ticker"], "CIEN")  # the scan still answers
 
     def test_cache_drops_expired_entries_and_is_capped(self):
         t = self.today

@@ -6,6 +6,8 @@ import type { Schemas } from "@/api/client";
 import { Card, Disclaimer, Empty, Freshness, Locked, Pill, RANKED_MIN, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
 import { etDate, etTime, freshness, greeting, pct, price, setupLabel } from "@/lib/format";
 
+import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
+
 type Today = Schemas["Today"];
 type SessionCard = Schemas["SessionCard"];
 type Setup = Schemas["Setup"];
@@ -107,12 +109,20 @@ export function TodayView({ data }: { data: Today }) {
         </div>
       </section>
 
+      <StatusStrip market={data.market} snapshot={data.snapshot} />
+
       {stale && (
         <p className="banner" role="status">
           Market data is delayed: the latest market scan is from {etTime(scanAt)}
           {data.market.expected_scan_at ? ` and the ${etTime(data.market.expected_scan_at)} scan hasn't arrived yet` : ""}.
           Scores and prices below are from that scan and may be out of date.
         </p>
+      )}
+
+      {failed.has("snapshot") ? <SectionFailed name="Market snapshot" /> : data.snapshot && (
+        <Card title="Market snapshot" id="snap" aside="Top gainer and most active are from the latest full-market scan">
+          <SnapshotTiles snapshot={data.snapshot} />
+        </Card>
       )}
 
       <div className="split today-split">

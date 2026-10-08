@@ -392,6 +392,13 @@ def _user(account: Dict[str, Any]) -> str:
 
 def _data_routes(app: FastAPI) -> None:
     # ---- step 5: scans and stock detail ----
+    @app.get("/v1/market/tape", response_model=models.Tape, responses=_AUTH, summary="Price strip")
+    def market_tape(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """SPY, QQQ, IWM, DIA, AAPL, MSFT, NVDA and TSLA: last price and change vs the previous close."""
+        from api.today import tape_quotes
+
+        return {"quotes": tape_quotes()}
+
     @app.get("/v1/scans/latest", response_model=models.LatestScan, responses=_AUTH)
     def scans_latest(account: Dict[str, Any] = Depends(current_account),
                      limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0, le=10_000),
