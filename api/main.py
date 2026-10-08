@@ -228,6 +228,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     _market_routes(app)
     _ai_routes(app)
     _trading_routes(app)
+    _public_routes(app)
     _delete_account_route(app)
     return app
 
@@ -534,6 +535,8 @@ class SignupBody(BaseModel):
     username: str = Field(min_length=1, max_length=40, description="Shown in the app; can also be used to sign in on the web")
     accept_terms: bool = Field(description="The usage agreement checkbox on the web sign-up form")
     client: Optional[str] = Field(default=None, max_length=80)
+    attribution: Optional[Dict[str, str]] = Field(
+        default=None, description="Web sign-ups: first-visit utm_* tags and referrer, for the acquisition funnel")
 
 
 class TokenBody(BaseModel):
@@ -581,6 +584,8 @@ def _account_routes(app: FastAPI) -> None:
         """Create a Free account (same rules as the web form) and sign in. A verification
         email is sent; verifying is needed to upgrade and for alert emails."""
         res = acct.signup(body.email, body.password, body.username, body.accept_terms)
+        if body.attribution is not None:
+            _track(body.attribution, "signup_completed", username=res["email"], plan="basic")
         return {**_token_pair(res["email"], _settings(request), body.client),
                 "email": res["email"], "verification_sent": res["verification_sent"]}
 
@@ -1075,6 +1080,94 @@ def _trading_routes(app: FastAPI) -> None:
         user = _user(account)
         ratelimit.check("paper_order", user)
         return json_safe(trading.order(user, body.ticker.upper(), body.qty))
+
+
+FUNNEL_EVENTS = ("landing_visit", "primary_cta_click", "signup_started")
+
+
+class FunnelEvent(BaseModel):
+    event: Literal["landing_visit", "primary_cta_click", "signup_started"]
+    attribution: Dict[str, str] = Field(default_factory=dict, max_length=12,
+                                        description="utm_* tags and referrer from the visitor's first page")
+    surface: Optional[str] = Field(default=None, max_length=40, description="Which button or page")
+
+
+class UnsubscribeBody(BaseModel):
+    token: str = Field(min_length=10, max_length=64)
+    kind: Literal["digest", "evening", "alerts", "all"]
+
+
+def _track(params: Dict[str, str], event: str, **kwargs: Any) -> None:
+    """Best-effort acquisition event for the web app (never raises, never blocks)."""
+    try:
+        from ui.acquisition import attribution_from_params, track_event
+
+        params = {str(k)[:40]: str(v)[:200] for k, v in (params or {}).items()}
+        track_event(event, attribution=attribution_from_params(params, params.get("referrer")), **kwargs)
+    except Exception:
+        log.debug("acquisition event %s not recorded", event, exc_info=True)
+
+
+def _public_routes(app: FastAPI) -> None:
+    """Signed-out endpoints for the web app: plans and pricing, funnel events and the
+    emailed unsubscribe link."""
+
+    @app.get("/v1/plans", response_model=models.Plans, summary="Plans and pricing (public)")
+    def plans() -> Dict[str, Any]:
+        """The plan comparison the landing and pricing pages show, from the same source as
+        the Billing page (ui.pricing), so copy can't drift from what each plan gets."""
+        from ui import pricing as p
+
+        highlights = p.plan_highlights()
+        tiers = [{"id": t, "name": p.TIER_NAMES[t], "price": p.PRICES[t], "yearly_price": p.YEARLY_PRICES.get(t),
+                  "tagline": p.TAGLINES[t], "alert_limit": int(p.ALERT_LIMIT_BY_TIER.get(t, 1)),
+                  "highlights": highlights.get(t, [])} for t in p.TIERS]
+        rows = [{"label": label, **{t: (int(p.ALERT_LIMIT_BY_TIER.get(t, 1)) if flag == p.ALERTS else p.included(flag, t))
+                                     for t in p.TIERS}} for label, flag in p.ROWS]
+        return {"tiers": tiers, "rows": rows}
+
+    @app.post("/v1/events", status_code=202, responses={429: {"description": "Too many events from this address"}},
+              summary="Record a signed-out funnel event")
+    def funnel_event(body: FunnelEvent, _l: None = Depends(ratelimit.limit("events"))) -> None:
+        """Landing visit, call-to-action click or sign-up started, with the visitor's utm tags.
+        Stores no email, name or IP. Best effort: always accepted."""
+        _track(body.attribution, body.event, metadata={"surface": body.surface or "web", "app": "web"})
+
+    def _unsub_user(token: str) -> str:
+        from db.email_prefs import user_for_token
+
+        user = user_for_token(token)
+        if not user:
+            raise HTTPException(400, "This unsubscribe link isn't valid. Sign in and open Account to change your emails.")
+        return user
+
+    def _unsub_state(user: str) -> Dict[str, Any]:
+        from db.email_prefs import get_prefs
+        from ui.log_privacy import mask_email
+
+        return {"email": mask_email(user), "prefs": get_prefs(user)}
+
+    _UNSUB = {400: {"description": "Invalid link"}, 429: {"description": "Too many attempts"}}
+
+    @app.get("/v1/email-preferences/unsubscribe", response_model=models.UnsubscribeState, responses=_UNSUB,
+             summary="Email settings behind an unsubscribe link")
+    def unsubscribe_state(t: str = Query(min_length=10, max_length=64), _l: None = Depends(ratelimit.limit("unsubscribe"))
+                          ) -> Dict[str, Any]:
+        """Which emails the link's account gets. Changes nothing (email scanners open links)."""
+        return _unsub_state(_unsub_user(t))
+
+    @app.post("/v1/email-preferences/unsubscribe", response_model=models.UnsubscribeState,
+              responses={**_UNSUB, 503: {"description": "Couldn't save"}}, summary="Unsubscribe with an emailed link")
+    def unsubscribe(body: UnsubscribeBody, _l: None = Depends(ratelimit.limit("unsubscribe"))) -> Dict[str, Any]:
+        """Turns off one kind of email, or all of them, for the link's account. Account emails
+        (verification, password reset) still go out."""
+        from db.email_prefs import KINDS, set_prefs
+
+        user = _unsub_user(body.token)
+        kinds = KINDS if body.kind == "all" else (body.kind,)
+        if not set_prefs(user, **{k: False for k in kinds}):
+            raise HTTPException(503, "Couldn't save that right now. Please try again in a minute.")
+        return _unsub_state(user)
 
 
 class DeleteAccountBody(BaseModel):

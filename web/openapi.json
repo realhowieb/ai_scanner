@@ -1415,6 +1415,46 @@
     "title": "EmailPrefsUpdate",
     "type": "object"
    },
+   "FunnelEvent": {
+    "properties": {
+     "attribution": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "utm_* tags and referrer from the visitor's first page",
+      "maxProperties": 12,
+      "title": "Attribution",
+      "type": "object"
+     },
+     "event": {
+      "enum": [
+       "landing_visit",
+       "primary_cta_click",
+       "signup_started"
+      ],
+      "title": "Event",
+      "type": "string"
+     },
+     "surface": {
+      "anyOf": [
+       {
+        "maxLength": 40,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Which button or page",
+      "title": "Surface"
+     }
+    },
+    "required": [
+     "event"
+    ],
+    "title": "FunnelEvent",
+    "type": "object"
+   },
    "HTTPValidationError": {
     "properties": {
      "detail": {
@@ -2281,6 +2321,116 @@
      "new_password"
     ],
     "title": "PasswordChangeBody",
+    "type": "object"
+   },
+   "PlanRow": {
+    "properties": {
+     "basic": {
+      "description": "true/false, or the alert limit for the alerts row",
+      "title": "Basic"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "premium": {
+      "title": "Premium"
+     },
+     "pro": {
+      "title": "Pro"
+     }
+    },
+    "required": [
+     "label",
+     "basic",
+     "pro",
+     "premium"
+    ],
+    "title": "PlanRow",
+    "type": "object"
+   },
+   "PlanTier": {
+    "properties": {
+     "alert_limit": {
+      "title": "Alert Limit",
+      "type": "integer"
+     },
+     "highlights": {
+      "description": "What this plan adds over the one below it",
+      "items": {
+       "type": "string"
+      },
+      "title": "Highlights",
+      "type": "array"
+     },
+     "id": {
+      "enum": [
+       "basic",
+       "pro",
+       "premium"
+      ],
+      "title": "Id",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "price": {
+      "description": "Display price, e.g. \"$25/mo\" or \"Free\"",
+      "title": "Price",
+      "type": "string"
+     },
+     "tagline": {
+      "title": "Tagline",
+      "type": "string"
+     },
+     "yearly_price": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Yearly Price"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "price",
+     "tagline",
+     "alert_limit",
+     "highlights"
+    ],
+    "title": "PlanTier",
+    "type": "object"
+   },
+   "Plans": {
+    "properties": {
+     "rows": {
+      "description": "The comparison table, derived from the real entitlement map",
+      "items": {
+       "$ref": "#/components/schemas/PlanRow"
+      },
+      "title": "Rows",
+      "type": "array"
+     },
+     "tiers": {
+      "items": {
+       "$ref": "#/components/schemas/PlanTier"
+      },
+      "title": "Tiers",
+      "type": "array"
+     }
+    },
+    "required": [
+     "tiers",
+     "rows"
+    ],
+    "title": "Plans",
     "type": "object"
    },
    "PortalBody": {
@@ -3498,6 +3648,21 @@
       "title": "Accept Terms",
       "type": "boolean"
      },
+     "attribution": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "string"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Web sign-ups: first-visit utm_* tags and referrer, for the acquisition funnel",
+      "title": "Attribution"
+     },
      "client": {
       "anyOf": [
        {
@@ -4538,6 +4703,50 @@
      "risk_budget"
     ],
     "title": "TradePlan",
+    "type": "object"
+   },
+   "UnsubscribeBody": {
+    "properties": {
+     "kind": {
+      "enum": [
+       "digest",
+       "evening",
+       "alerts",
+       "all"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "token": {
+      "maxLength": 64,
+      "minLength": 10,
+      "title": "Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "token",
+     "kind"
+    ],
+    "title": "UnsubscribeBody",
+    "type": "object"
+   },
+   "UnsubscribeState": {
+    "properties": {
+     "email": {
+      "description": "Masked, e.g. sa***@gmail.com",
+      "title": "Email",
+      "type": "string"
+     },
+     "prefs": {
+      "$ref": "#/components/schemas/EmailPrefs"
+     }
+    },
+    "required": [
+     "email",
+     "prefs"
+    ],
+    "title": "UnsubscribeState",
     "type": "object"
    },
    "ValidationError": {
@@ -6240,6 +6449,140 @@
     "summary": "Upcoming earnings (Pro)"
    }
   },
+  "/v1/email-preferences/unsubscribe": {
+   "get": {
+    "description": "Which emails the link's account gets. Changes nothing (email scanners open links).",
+    "operationId": "unsubscribe_state_v1_email_preferences_unsubscribe_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "t",
+      "required": true,
+      "schema": {
+       "maxLength": 64,
+       "minLength": 10,
+       "title": "T",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UnsubscribeState"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Invalid link"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Too many attempts"
+     }
+    },
+    "summary": "Email settings behind an unsubscribe link"
+   },
+   "post": {
+    "description": "Turns off one kind of email, or all of them, for the link's account. Account emails\n(verification, password reset) still go out.",
+    "operationId": "unsubscribe_v1_email_preferences_unsubscribe_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UnsubscribeBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UnsubscribeState"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Invalid link"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Too many attempts"
+     },
+     "503": {
+      "description": "Couldn't save"
+     }
+    },
+    "summary": "Unsubscribe with an emailed link"
+   }
+  },
+  "/v1/events": {
+   "post": {
+    "description": "Landing visit, call-to-action click or sign-up started, with the visitor's utm tags.\nStores no email, name or IP. Best effort: always accepted.",
+    "operationId": "funnel_event_v1_events_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FunnelEvent"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Too many events from this address"
+     }
+    },
+    "summary": "Record a signed-out funnel event"
+   }
+  },
   "/v1/journal": {
    "get": {
     "description": "Your logged trades (open first), open ones marked to live quotes, with closed-trade stats.",
@@ -6995,6 +7338,25 @@
      }
     ],
     "summary": "Paper trade a setup (Premium)"
+   }
+  },
+  "/v1/plans": {
+   "get": {
+    "description": "The plan comparison the landing and pricing pages show, from the same source as\nthe Billing page (ui.pricing), so copy can't drift from what each plan gets.",
+    "operationId": "plans_v1_plans_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Plans"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Plans and pricing (public)"
    }
   },
   "/v1/runs": {

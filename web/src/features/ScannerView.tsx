@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { api, unwrap } from "@/api/client";
 import { Card, Disclaimer, Empty, ErrorState, Freshness, Locked, Skeleton, UpgradeButton } from "@/components/ui";
+import { AIScanPanel } from "@/features/AIScanPanel";
 import { useApi } from "@/hooks/useApi";
 import { etTime, freshness } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
@@ -163,6 +164,7 @@ export function ScannerView() {
           <button type="button" className="btn" disabled={f.page >= pages} onClick={() => set({ page: f.page + 1 })}>Next</button>
         </nav>
       )}
+      {data && data.setups.length > 0 && <AIScanPanel />}
       <Disclaimer />
     </div>
   );

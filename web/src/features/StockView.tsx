@@ -9,6 +9,7 @@ import type { Schemas } from "@/api/client";
 import { alerts } from "@/api/userData";
 import { backLabel, usePreviousPage } from "@/components/AppShell";
 import { Dialog } from "@/components/Dialog";
+import { AIText } from "@/components/AIText";
 import { Card, Disclaimer, Empty, ErrorLine, ErrorState, Freshness, Locked, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
@@ -156,7 +157,7 @@ function AINote({ s }: { s: Stock }) {
   });
   return (
     <div className="stack-sm">
-      {note ? (note.text ? <div className="ai-text body-sm">{note.text}</div> : <p className="cap">Nothing to explain: {s.ticker} isn&apos;t in the latest scan.</p>)
+      {note ? (note.text ? <AIText text={note.text} /> : <p className="cap">Nothing to explain: {s.ticker} isn&apos;t in the latest scan.</p>)
         : <p className="cap">A short research note on why {s.ticker} ranks where it does, written by Claude from the scan&apos;s data.</p>}
       <ErrorLine error={act.error} />
       <div className="row-actions">

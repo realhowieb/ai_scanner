@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { Card, Empty, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
+import { StairSteppers } from "@/features/StairSteppers";
 import { useApi } from "@/hooks/useApi";
 import { compact, etTime, num, pct, price } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
@@ -78,6 +79,7 @@ function Live() {
           </section>
         )}
       {d && d.missing > 0 && <p className="cap"><Pill tone="warn">{d.missing} missing</Pill> {d.missing} symbol{d.missing === 1 ? " has" : "s have"} no live quote right now.</p>}
+      {rows.length > 0 && <StairSteppers symbols={rows.map((r) => r.ticker)} />}
       <p className="cap">DT score is a day-trading momentum ranking from live quotes, separate from the HSF Score. Not financial advice.</p>
     </>
   );
