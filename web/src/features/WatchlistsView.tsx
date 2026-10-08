@@ -18,7 +18,7 @@ import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
-import { etDate, pct, price, setupLabel } from "@/lib/format";
+import { pct, price, setupLabel, shortDate } from "@/lib/format";
 
 const NOTE_MAX = 500;
 
@@ -201,16 +201,22 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                         <ScoreBadge score={s.score} />
                         <Pill>{setupLabel(s.primary_setup)}</Pill>
                         {s.fading && <Pill tone="warn">Fading</Pill>}
-                        <span className="mono cap">{price(s.last)}</span>
-                        <span className={`mono cap ${(s.chg_pct ?? 0) > 0 ? "up" : (s.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(s.chg_pct)}</span>
-                        {rank && <span className="cap">#{rank}{w.scan_total ? ` of ${w.scan_total}` : ""}</span>}
                       </>
                     ) : <span className="cap">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not a ranked setup in the latest scan"}</span>}
                     <span className="grow" />
-                    <span className="cap">{it.added_at ? `Added ${etDate(it.added_at)}` : ""}{it.price_when_added ? ` at ${price(it.price_when_added)}` : ""}</span>
                     <button type="button" className="icon-btn" aria-label={`Remove ${it.ticker} from ${w.name}`} onClick={() => { rm.clear(); setRemoving(it.ticker); }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
                     </button>
+                  </div>
+                  <div className="wl-facts">
+                    {s && (
+                      <>
+                        <span className="mono">{price(s.last)}</span>
+                        <span className={`mono ${(s.chg_pct ?? 0) > 0 ? "up" : (s.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(s.chg_pct)}</span>
+                        {rank && <span>#{rank}{w.scan_total ? ` of ${w.scan_total}` : ""}</span>}
+                      </>
+                    )}
+                    {it.added_at && <span>Added {shortDate(it.added_at)}{it.price_when_added ? ` at ${price(it.price_when_added)}` : ""}</span>}
                   </div>
                   <NoteEditor wl={w.id} ticker={it.ticker} note={it.note} onSaved={detail.reload} />
                 </li>

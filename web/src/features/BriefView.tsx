@@ -11,7 +11,7 @@ import type { Schemas } from "@/api/client";
 import { Card, Disclaimer, Empty, ErrorLine, ErrorState, Locked, Pill, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
-import { etTime, pct, price, probPct } from "@/lib/format";
+import { etTime, pct, price, probPct, shortDate } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
 type Brief = Schemas["Brief"];
@@ -52,7 +52,7 @@ function Earnings() {
             {e.data.slice(0, 40).map((r) => (
               <li key={`${r.ticker}-${r.earnings_date}`} className="row">
                 <TickerLink ticker={r.ticker} />
-                <span className="cap grow">{r.days_until === 0 ? "Today" : r.days_until === 1 ? "Tomorrow" : r.earnings_date ?? ""}</span>
+                <span className="cap grow">{r.days_until === 0 ? "Today" : r.days_until === 1 ? "Tomorrow" : shortDate(r.earnings_date)}</span>
                 {r.time && <Pill>{r.time === "bmo" ? "Before open" : r.time === "amc" ? "After close" : r.time.toUpperCase()}</Pill>}
               </li>
             ))}
