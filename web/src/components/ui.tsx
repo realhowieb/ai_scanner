@@ -41,9 +41,10 @@ export function Pill({ children, tone }: { children: ReactNode; tone?: "warn" | 
 }
 
 /** `staleCheck` is off for session scans (last evening's after-hours scan is meant to be hours old). */
-export function Freshness({ at, label = "Scan", staleCheck = true }: { at: string | null | undefined; label?: string; staleCheck?: boolean }) {
+/** `stale` from the API (a missed scheduled scan) wins over the age rule when it's known. */
+export function Freshness({ at, label = "Scan", staleCheck = true, stale }: { at: string | null | undefined; label?: string; staleCheck?: boolean; stale?: boolean | null }) {
   const raw = freshness(at);
-  const f = staleCheck ? raw : { ...raw, stale: false };
+  const f = !staleCheck ? { ...raw, stale: false } : stale === null || stale === undefined ? raw : { ...raw, stale };
   return (
     <span className={`fresh${f.stale ? " stale" : ""}`} title={at ? new Date(at).toISOString() : undefined}>
       {label} {etTime(at)} · {f.label}{f.stale ? " · Stale" : ""}

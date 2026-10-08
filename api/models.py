@@ -19,6 +19,8 @@ class Ready(BaseModel):
     database: Literal["ok"]
     latest_scan_at: Optional[str] = Field(default=None, description="Latest market scan (ISO); null when none")
     scan_age_minutes: Optional[float] = None
+    stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")
+    expected_scan_at: Optional[str] = Field(default=None, description="When stale: the missed scan slot (ISO)")
 
 
 class TokenPair(BaseModel):
@@ -41,6 +43,11 @@ class Me(BaseModel):
 
 class Market(BaseModel):
     phase: Literal["premarket", "open", "afterhours", "closed"]
+    latest_scan_at: Optional[str] = Field(default=None, description="Latest full-market scan (ISO); null when none")
+    stale: Optional[bool] = Field(default=None, description=(
+        "True when a scheduled full-market scan was missed, so the data is older than the schedule "
+        "promises; null when unknown. Overnight, weekends and holidays alone are never stale."))
+    expected_scan_at: Optional[str] = Field(default=None, description="When stale: the missed scan slot (ISO)")
 
 
 class Mover(BaseModel):
@@ -122,6 +129,7 @@ class LatestScan(BaseModel):
     total: int = Field(description="Setups matching the filters, before the plan cap")
     max_results: int = Field(description="Rows this plan sees (Free 25, Pro 100, Premium 200)")
     limited: bool = Field(description="True when the plan cap hides some matching setups")
+    stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")
     setups: List[ScanSetup] = []
 
 
