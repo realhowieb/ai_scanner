@@ -18,6 +18,14 @@ SHARED_TTL_S = 1800
 MAX_CHAT_TURNS = 8          # ui.ai_chat._MAX_HISTORY
 MAX_TURN_CHARS = 2000
 
+# Appended to a prompt that carries Outcome Intelligence evidence (api.outcomes.ai_evidence).
+EVIDENCE_RULES = (
+    "\n\nHistorical HSF evidence may follow the metrics. If you mention it, state the matured sample size "
+    "and the comparison with SPY, say plainly when the evidence label is INSUFFICIENT or LIMITED, and treat it "
+    "as a description of past signals only. Never present it as a prediction, probability of profit, or "
+    "guarantee, and never single out the best horizon or period."
+)
+
 
 class AIUnavailable(RuntimeError):
     """AI is switched off or not configured (503)."""
@@ -105,9 +113,18 @@ def ticker_note(username: str, ticker: str) -> Dict[str, Any]:
     metrics = "\n".join(f"- {c}: {row.get(c)}" for c in _SUMMARY_COLUMNS
                         if c in rows.columns and row.get(c) is not None and row.get(c) == row.get(c))
 
+    from api.outcomes import ai_evidence
+
+    evidence = ai_evidence(ticker)  # full matured history, every horizon, sample sizes; None when none
+
     def make() -> str:
-        return _ask(system=_TICKER_SYSTEM_PROMPT,
-                    user=f"Technical scan metrics for {ticker}:\n\n{metrics}\n\nExplain this setup.",
+        if not evidence:
+            return _ask(system=_TICKER_SYSTEM_PROMPT,
+                        user=f"Technical scan metrics for {ticker}:\n\n{metrics}\n\nExplain this setup.",
+                        max_tokens=600, username=username, feature="ticker_deepdive")
+        return _ask(system=_TICKER_SYSTEM_PROMPT + EVIDENCE_RULES,
+                    user=(f"Technical scan metrics for {ticker}:\n\n{metrics}\n\n{evidence}\n\n"
+                          "Explain this setup."),
                     max_tokens=600, username=username, feature="ticker_deepdive")
 
     return {"run_id": rid, "ticker": ticker, "text": _shared(("note", rid, ticker), make)}

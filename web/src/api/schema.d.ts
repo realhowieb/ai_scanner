@@ -793,6 +793,148 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/outcomes/horizons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outcome Intelligence: by horizon (Pro)
+         * @description The same metrics for 1, 3 and 5 trading days. No horizon is singled out.
+         */
+        get: operations["outcomes_horizons_v1_outcomes_horizons_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/outcomes/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outcome Intelligence: filtered evidence with records (Pro)
+         * @description Any combination of the explicit filters, one horizon: metrics plus paged records.
+         */
+        get: operations["outcomes_query_v1_outcomes_query_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/outcomes/scores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outcome Intelligence: by HSF score bucket (Pro)
+         * @description Every bucket in score order, weak ones included, plus a monotonicity check
+         *     that lists each inversion (a lower bucket beating a higher one).
+         */
+        get: operations["outcomes_scores_v1_outcomes_scores_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/outcomes/setups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outcome Intelligence: by setup or signal (Pro)
+         * @description Groups ordered by sample size (never by performance), each with its counts.
+         */
+        get: operations["outcomes_setups_v1_outcomes_setups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/outcomes/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outcome Intelligence: overall evidence (Pro)
+         * @description Every eligible HSF signal unless filters are given: counts, date range, raw and
+         *     SPY-relative returns, win and beat rates, MFE/MAE, with sample sizes.
+         */
+        get: operations["outcomes_summary_v1_outcomes_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/outcomes/symbols/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outcome Intelligence: one ticker's HSF history (Pro)
+         * @description Aggregate evidence per horizon plus the observation-level records, newest first.
+         */
+        get: operations["outcomes_symbol_v1_outcomes_symbols__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/outcomes/timeseries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outcome Intelligence: through time (Pro)
+         * @description Per observation period (grouped by when the signal was observed).
+         */
+        get: operations["outcomes_timeseries_v1_outcomes_timeseries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/paper/account": {
         parameters: {
             query?: never;
@@ -2314,6 +2456,921 @@ export interface components {
         NoteBody: {
             /** Note */
             note?: string | null;
+        };
+        /** OutcomeBucket */
+        OutcomeBucket: {
+            /** Average Benchmark Return */
+            average_benchmark_return?: number | null;
+            /** Average Excess Return */
+            average_excess_return?: number | null;
+            /** Average Mae */
+            average_mae?: number | null;
+            /** Average Mfe */
+            average_mfe?: number | null;
+            /** Average Return */
+            average_return?: number | null;
+            /** @description Normal approximation; from 30 matured; assumes independence */
+            average_return_ci95?: components["schemas"]["OutcomeInterval"] | null;
+            /** Benchmark Beat Count */
+            benchmark_beat_count: number;
+            /**
+             * Benchmark Beat Rate
+             * @description Share of benchmark_count with excess > 0
+             */
+            benchmark_beat_rate?: number | null;
+            benchmark_beat_rate_ci95?: components["schemas"]["OutcomeInterval"] | null;
+            /**
+             * Benchmark Count
+             * @description Matured records with a benchmark return
+             */
+            benchmark_count: number;
+            /** Bucket */
+            bucket: string;
+            /**
+             * Distinct Days
+             * @description Distinct entry days among matured records (observations on one day are correlated)
+             */
+            distinct_days: number;
+            /**
+             * Evidence Quality
+             * @enum {string}
+             */
+            evidence_quality: "INSUFFICIENT" | "LIMITED" | "MODERATE" | "STRONG";
+            /**
+             * Horizon
+             * @description Trading days (1, 3 or 5)
+             */
+            horizon: number;
+            /**
+             * Invalid Count
+             * @description Outcome timestamp at/before the observation; excluded
+             */
+            invalid_count: number;
+            /** Mae Count */
+            mae_count: number;
+            /** Matured Count */
+            matured_count: number;
+            /** Max Score */
+            max_score: number;
+            /** Median Benchmark Return */
+            median_benchmark_return?: number | null;
+            /** Median Excess Return */
+            median_excess_return?: number | null;
+            /** Median Mae */
+            median_mae?: number | null;
+            /** Median Mfe */
+            median_mfe?: number | null;
+            /** Median Return */
+            median_return?: number | null;
+            /** Mfe Count */
+            mfe_count: number;
+            /** Min Score */
+            min_score: number;
+            /** Pending Count */
+            pending_count: number;
+            /**
+             * Sample Size
+             * @description Records in the group, any maturity
+             */
+            sample_size: number;
+            /**
+             * Unavailable Count
+             * @description Outcome computed but no price was available; excluded
+             */
+            unavailable_count: number;
+            /** Win Count */
+            win_count: number;
+            /**
+             * Win Rate
+             * @description Share of matured with return > 0
+             */
+            win_rate?: number | null;
+            /** @description Wilson interval; assumes independence */
+            win_rate_ci95?: components["schemas"]["OutcomeInterval"] | null;
+        };
+        /** OutcomeCalibration */
+        OutcomeCalibration: {
+            /** Metrics */
+            metrics: {
+                [key: string]: components["schemas"]["OutcomeMonotonicity"];
+            };
+            /** Min Matured Per Bucket */
+            min_matured_per_bucket: number;
+        };
+        /** OutcomeCoverage */
+        OutcomeCoverage: {
+            /** Benchmark Coverage */
+            benchmark_coverage?: number | null;
+            /** Matured */
+            matured: number;
+            /** Mfe Mae Available For Horizon */
+            mfe_mae_available_for_horizon: boolean;
+            /** Mfe Mae Coverage */
+            mfe_mae_coverage?: number | null;
+            /** Missing Benchmark */
+            missing_benchmark: number;
+            /** Missing Mfe Mae */
+            missing_mfe_mae: number;
+        };
+        /** OutcomeDataset */
+        OutcomeDataset: {
+            /** Loaded At */
+            loaded_at: string;
+            /** Rows Loaded */
+            rows_loaded: number;
+            /** Source */
+            source: string;
+            /**
+             * Stale
+             * @description True when the database could not be reached and the last good dataset was used
+             */
+            stale: boolean;
+            /**
+             * Truncated
+             * @description True when the row cap was hit (then the answer is not the full history)
+             */
+            truncated: boolean;
+        };
+        /** OutcomeDateRange */
+        OutcomeDateRange: {
+            /** End */
+            end?: string | null;
+            /** Start */
+            start?: string | null;
+        };
+        /**
+         * OutcomeFilters
+         * @description The filters that produced this answer. All null/false = the complete dataset.
+         */
+        OutcomeFilters: {
+            /**
+             * Certified Only
+             * @default false
+             */
+            certified_only: boolean;
+            /** End Date */
+            end_date?: string | null;
+            /**
+             * Matured Only
+             * @default false
+             */
+            matured_only: boolean;
+            /** Max Score */
+            max_score?: number | null;
+            /** Min Score */
+            min_score?: number | null;
+            /** Score Bucket */
+            score_bucket?: string | null;
+            /** Score Version */
+            score_version?: string | null;
+            /** Setup */
+            setup?: string | null;
+            /** Signal */
+            signal?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** Ticker */
+            ticker?: string | null;
+        };
+        /** OutcomeGroup */
+        OutcomeGroup: {
+            /** Average Benchmark Return */
+            average_benchmark_return?: number | null;
+            /** Average Excess Return */
+            average_excess_return?: number | null;
+            /** Average Mae */
+            average_mae?: number | null;
+            /** Average Mfe */
+            average_mfe?: number | null;
+            /** Average Return */
+            average_return?: number | null;
+            /** @description Normal approximation; from 30 matured; assumes independence */
+            average_return_ci95?: components["schemas"]["OutcomeInterval"] | null;
+            /** Benchmark Beat Count */
+            benchmark_beat_count: number;
+            /**
+             * Benchmark Beat Rate
+             * @description Share of benchmark_count with excess > 0
+             */
+            benchmark_beat_rate?: number | null;
+            benchmark_beat_rate_ci95?: components["schemas"]["OutcomeInterval"] | null;
+            /**
+             * Benchmark Count
+             * @description Matured records with a benchmark return
+             */
+            benchmark_count: number;
+            /**
+             * Distinct Days
+             * @description Distinct entry days among matured records (observations on one day are correlated)
+             */
+            distinct_days: number;
+            /**
+             * Evidence Quality
+             * @enum {string}
+             */
+            evidence_quality: "INSUFFICIENT" | "LIMITED" | "MODERATE" | "STRONG";
+            /**
+             * Horizon
+             * @description Trading days (1, 3 or 5)
+             */
+            horizon: number;
+            /**
+             * Invalid Count
+             * @description Outcome timestamp at/before the observation; excluded
+             */
+            invalid_count: number;
+            /** Mae Count */
+            mae_count: number;
+            /** Matured Count */
+            matured_count: number;
+            /** Median Benchmark Return */
+            median_benchmark_return?: number | null;
+            /** Median Excess Return */
+            median_excess_return?: number | null;
+            /** Median Mae */
+            median_mae?: number | null;
+            /** Median Mfe */
+            median_mfe?: number | null;
+            /** Median Return */
+            median_return?: number | null;
+            /** Mfe Count */
+            mfe_count: number;
+            /** Name */
+            name: string;
+            /** Pending Count */
+            pending_count: number;
+            /**
+             * Sample Size
+             * @description Records in the group, any maturity
+             */
+            sample_size: number;
+            score_distribution: components["schemas"]["OutcomeScoreDistribution"];
+            /** Supported Horizons */
+            supported_horizons: number[];
+            /**
+             * Unavailable Count
+             * @description Outcome computed but no price was available; excluded
+             */
+            unavailable_count: number;
+            /** Win Count */
+            win_count: number;
+            /**
+             * Win Rate
+             * @description Share of matured with return > 0
+             */
+            win_rate?: number | null;
+            /** @description Wilson interval; assumes independence */
+            win_rate_ci95?: components["schemas"]["OutcomeInterval"] | null;
+        };
+        /** OutcomeGroups */
+        OutcomeGroups: {
+            dataset: components["schemas"]["OutcomeDataset"];
+            date_range: components["schemas"]["OutcomeDateRange"];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Evidence Thresholds
+             * @description Minimum matured count per evidence label
+             */
+            evidence_thresholds: {
+                [key: string]: number;
+            };
+            filters: components["schemas"]["OutcomeFilters"];
+            /** Generated At */
+            generated_at: string;
+            /**
+             * Group By
+             * @enum {string}
+             */
+            group_by: "setup" | "signal";
+            /** Groups */
+            groups: components["schemas"]["OutcomeGroup"][];
+            /**
+             * Groups Overlap
+             * @description True for signals: one record can carry several
+             */
+            groups_overlap: boolean;
+            /** Horizon */
+            horizon?: number | null;
+            /**
+             * Raw Observations
+             * @description Frozen rows matching the filters before collapsing to the unit
+             */
+            raw_observations: number;
+            /** Score Versions */
+            score_versions: {
+                [key: string]: number;
+            };
+            /**
+             * Unit
+             * @description signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row
+             * @enum {string}
+             */
+            unit: "signal_day" | "observation";
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** OutcomeHorizonResult */
+        OutcomeHorizonResult: {
+            /** Benchmark Return */
+            benchmark_return?: number | null;
+            /** Excess Return */
+            excess_return?: number | null;
+            /** Horizon */
+            horizon: number;
+            /** Mae */
+            mae?: number | null;
+            /** Mfe */
+            mfe?: number | null;
+            /** Raw Return */
+            raw_return?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "matured" | "unavailable" | "invalid";
+        };
+        /** OutcomeHorizonRow */
+        OutcomeHorizonRow: {
+            /** Average Benchmark Return */
+            average_benchmark_return?: number | null;
+            /** Average Excess Return */
+            average_excess_return?: number | null;
+            /** Average Mae */
+            average_mae?: number | null;
+            /** Average Mfe */
+            average_mfe?: number | null;
+            /** Average Return */
+            average_return?: number | null;
+            /** @description Normal approximation; from 30 matured; assumes independence */
+            average_return_ci95?: components["schemas"]["OutcomeInterval"] | null;
+            /** Benchmark Beat Count */
+            benchmark_beat_count: number;
+            /**
+             * Benchmark Beat Rate
+             * @description Share of benchmark_count with excess > 0
+             */
+            benchmark_beat_rate?: number | null;
+            benchmark_beat_rate_ci95?: components["schemas"]["OutcomeInterval"] | null;
+            /**
+             * Benchmark Count
+             * @description Matured records with a benchmark return
+             */
+            benchmark_count: number;
+            coverage: components["schemas"]["OutcomeCoverage"];
+            /**
+             * Distinct Days
+             * @description Distinct entry days among matured records (observations on one day are correlated)
+             */
+            distinct_days: number;
+            /**
+             * Evidence Quality
+             * @enum {string}
+             */
+            evidence_quality: "INSUFFICIENT" | "LIMITED" | "MODERATE" | "STRONG";
+            /**
+             * Horizon
+             * @description Trading days (1, 3 or 5)
+             */
+            horizon: number;
+            /**
+             * Invalid Count
+             * @description Outcome timestamp at/before the observation; excluded
+             */
+            invalid_count: number;
+            /** Mae Count */
+            mae_count: number;
+            /** Matured Count */
+            matured_count: number;
+            /** Median Benchmark Return */
+            median_benchmark_return?: number | null;
+            /** Median Excess Return */
+            median_excess_return?: number | null;
+            /** Median Mae */
+            median_mae?: number | null;
+            /** Median Mfe */
+            median_mfe?: number | null;
+            /** Median Return */
+            median_return?: number | null;
+            /** Mfe Count */
+            mfe_count: number;
+            /** Pending Count */
+            pending_count: number;
+            /**
+             * Sample Size
+             * @description Records in the group, any maturity
+             */
+            sample_size: number;
+            /**
+             * Unavailable Count
+             * @description Outcome computed but no price was available; excluded
+             */
+            unavailable_count: number;
+            /** Win Count */
+            win_count: number;
+            /**
+             * Win Rate
+             * @description Share of matured with return > 0
+             */
+            win_rate?: number | null;
+            /** @description Wilson interval; assumes independence */
+            win_rate_ci95?: components["schemas"]["OutcomeInterval"] | null;
+        };
+        /** OutcomeHorizons */
+        OutcomeHorizons: {
+            dataset: components["schemas"]["OutcomeDataset"];
+            date_range: components["schemas"]["OutcomeDateRange"];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Evidence Thresholds
+             * @description Minimum matured count per evidence label
+             */
+            evidence_thresholds: {
+                [key: string]: number;
+            };
+            filters: components["schemas"]["OutcomeFilters"];
+            /** Generated At */
+            generated_at: string;
+            /** Horizon */
+            horizon?: number | null;
+            /** Horizons */
+            horizons: components["schemas"]["OutcomeHorizonRow"][];
+            /**
+             * Raw Observations
+             * @description Frozen rows matching the filters before collapsing to the unit
+             */
+            raw_observations: number;
+            /** Score Versions */
+            score_versions: {
+                [key: string]: number;
+            };
+            /**
+             * Unit
+             * @description signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row
+             * @enum {string}
+             */
+            unit: "signal_day" | "observation";
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** OutcomeInterval */
+        OutcomeInterval: {
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+        };
+        /** OutcomeInversion */
+        OutcomeInversion: {
+            /** Higher Bucket */
+            higher_bucket: string;
+            /** Higher Value */
+            higher_value: number;
+            /** Lower Bucket */
+            lower_bucket: string;
+            /** Lower Value */
+            lower_value: number;
+        };
+        /** OutcomeMetrics */
+        OutcomeMetrics: {
+            /** Average Benchmark Return */
+            average_benchmark_return?: number | null;
+            /** Average Excess Return */
+            average_excess_return?: number | null;
+            /** Average Mae */
+            average_mae?: number | null;
+            /** Average Mfe */
+            average_mfe?: number | null;
+            /** Average Return */
+            average_return?: number | null;
+            /** @description Normal approximation; from 30 matured; assumes independence */
+            average_return_ci95?: components["schemas"]["OutcomeInterval"] | null;
+            /** Benchmark Beat Count */
+            benchmark_beat_count: number;
+            /**
+             * Benchmark Beat Rate
+             * @description Share of benchmark_count with excess > 0
+             */
+            benchmark_beat_rate?: number | null;
+            benchmark_beat_rate_ci95?: components["schemas"]["OutcomeInterval"] | null;
+            /**
+             * Benchmark Count
+             * @description Matured records with a benchmark return
+             */
+            benchmark_count: number;
+            /**
+             * Distinct Days
+             * @description Distinct entry days among matured records (observations on one day are correlated)
+             */
+            distinct_days: number;
+            /**
+             * Evidence Quality
+             * @enum {string}
+             */
+            evidence_quality: "INSUFFICIENT" | "LIMITED" | "MODERATE" | "STRONG";
+            /**
+             * Horizon
+             * @description Trading days (1, 3 or 5)
+             */
+            horizon: number;
+            /**
+             * Invalid Count
+             * @description Outcome timestamp at/before the observation; excluded
+             */
+            invalid_count: number;
+            /** Mae Count */
+            mae_count: number;
+            /** Matured Count */
+            matured_count: number;
+            /** Median Benchmark Return */
+            median_benchmark_return?: number | null;
+            /** Median Excess Return */
+            median_excess_return?: number | null;
+            /** Median Mae */
+            median_mae?: number | null;
+            /** Median Mfe */
+            median_mfe?: number | null;
+            /** Median Return */
+            median_return?: number | null;
+            /** Mfe Count */
+            mfe_count: number;
+            /** Pending Count */
+            pending_count: number;
+            /**
+             * Sample Size
+             * @description Records in the group, any maturity
+             */
+            sample_size: number;
+            /**
+             * Unavailable Count
+             * @description Outcome computed but no price was available; excluded
+             */
+            unavailable_count: number;
+            /** Win Count */
+            win_count: number;
+            /**
+             * Win Rate
+             * @description Share of matured with return > 0
+             */
+            win_rate?: number | null;
+            /** @description Wilson interval; assumes independence */
+            win_rate_ci95?: components["schemas"]["OutcomeInterval"] | null;
+        };
+        /** OutcomeMonotonicity */
+        OutcomeMonotonicity: {
+            /** Buckets Compared */
+            buckets_compared: string[];
+            /**
+             * Inversions
+             * @default []
+             */
+            inversions: components["schemas"]["OutcomeInversion"][];
+            /**
+             * Monotonic
+             * @description null when fewer than two buckets have enough evidence
+             */
+            monotonic?: boolean | null;
+        };
+        /** OutcomeObservation */
+        OutcomeObservation: {
+            /** Benchmark Symbol */
+            benchmark_symbol?: string | null;
+            /** Certified */
+            certified: boolean;
+            /** Entry Day */
+            entry_day?: string | null;
+            /**
+             * Entry Price
+             * @description Not stored by the outcome engine yet (always null)
+             */
+            entry_price?: number | null;
+            /**
+             * Hsf Score
+             * @description As frozen at signal time
+             */
+            hsf_score?: number | null;
+            /** Observation Id */
+            observation_id?: string | null;
+            /**
+             * Observations That Day
+             * @description Frozen rows for this ticker on this entry day (they share one outcome)
+             */
+            observations_that_day?: number | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /**
+             * Outcome Price
+             * @description Not stored by the outcome engine yet (always null)
+             */
+            outcome_price?: number | null;
+            /** Outcomes */
+            outcomes: components["schemas"]["OutcomeHorizonResult"][];
+            /** Prebreakout Prob */
+            prebreakout_prob?: number | null;
+            /** Score Bucket */
+            score_bucket?: string | null;
+            /** Score Version */
+            score_version?: string | null;
+            /** Setup */
+            setup?: string | null;
+            /**
+             * Signals
+             * @default []
+             */
+            signals: string[];
+            /** Status */
+            status?: string | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /** OutcomePage */
+        OutcomePage: {
+            /** Items */
+            items: components["schemas"]["OutcomeObservation"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** OutcomePoint */
+        OutcomePoint: {
+            /** Average Excess Return */
+            average_excess_return?: number | null;
+            /** Average Return */
+            average_return?: number | null;
+            /** Benchmark Beat Rate */
+            benchmark_beat_rate?: number | null;
+            /** Benchmark Count */
+            benchmark_count: number;
+            /** Evidence Quality */
+            evidence_quality: string;
+            /** Matured Count */
+            matured_count: number;
+            /** Median Excess Return */
+            median_excess_return?: number | null;
+            /** Median Return */
+            median_return?: number | null;
+            /** Observation Count */
+            observation_count: number;
+            /** Pending Count */
+            pending_count: number;
+            /** Period Start */
+            period_start: string;
+            /** Win Rate */
+            win_rate?: number | null;
+        };
+        /** OutcomeQuery */
+        OutcomeQuery: {
+            coverage: components["schemas"]["OutcomeCoverage"];
+            dataset: components["schemas"]["OutcomeDataset"];
+            date_range: components["schemas"]["OutcomeDateRange"];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Evidence Thresholds
+             * @description Minimum matured count per evidence label
+             */
+            evidence_thresholds: {
+                [key: string]: number;
+            };
+            filters: components["schemas"]["OutcomeFilters"];
+            /** Generated At */
+            generated_at: string;
+            /** Horizon */
+            horizon?: number | null;
+            metrics: components["schemas"]["OutcomeMetrics"];
+            observations: components["schemas"]["OutcomePage"];
+            /**
+             * Raw Observations
+             * @description Frozen rows matching the filters before collapsing to the unit
+             */
+            raw_observations: number;
+            /** Score Versions */
+            score_versions: {
+                [key: string]: number;
+            };
+            /**
+             * Unit
+             * @description signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row
+             * @enum {string}
+             */
+            unit: "signal_day" | "observation";
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** OutcomeScoreDistribution */
+        OutcomeScoreDistribution: {
+            /** Bucket Counts */
+            bucket_counts: {
+                [key: string]: number;
+            };
+            /** Max */
+            max?: number | null;
+            /** Median */
+            median?: number | null;
+            /** Min */
+            min?: number | null;
+            /** Scored */
+            scored: number;
+            /** Unscored */
+            unscored: number;
+        };
+        /** OutcomeScores */
+        OutcomeScores: {
+            /** Buckets */
+            buckets: components["schemas"]["OutcomeBucket"][];
+            calibration: components["schemas"]["OutcomeCalibration"];
+            dataset: components["schemas"]["OutcomeDataset"];
+            date_range: components["schemas"]["OutcomeDateRange"];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Evidence Thresholds
+             * @description Minimum matured count per evidence label
+             */
+            evidence_thresholds: {
+                [key: string]: number;
+            };
+            filters: components["schemas"]["OutcomeFilters"];
+            /** Generated At */
+            generated_at: string;
+            /** Horizon */
+            horizon?: number | null;
+            /**
+             * Raw Observations
+             * @description Frozen rows matching the filters before collapsing to the unit
+             */
+            raw_observations: number;
+            /** Score Versions */
+            score_versions: {
+                [key: string]: number;
+            };
+            /** Unbucketed Count */
+            unbucketed_count: number;
+            /**
+             * Unit
+             * @description signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row
+             * @enum {string}
+             */
+            unit: "signal_day" | "observation";
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** OutcomeSummary */
+        OutcomeSummary: {
+            /** Certified Observations */
+            certified_observations: number;
+            coverage: components["schemas"]["OutcomeCoverage"];
+            dataset: components["schemas"]["OutcomeDataset"];
+            date_range: components["schemas"]["OutcomeDateRange"];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Evidence Thresholds
+             * @description Minimum matured count per evidence label
+             */
+            evidence_thresholds: {
+                [key: string]: number;
+            };
+            filters: components["schemas"]["OutcomeFilters"];
+            /** Generated At */
+            generated_at: string;
+            /** Horizon */
+            horizon?: number | null;
+            /** Matured Observations */
+            matured_observations: number;
+            metrics: components["schemas"]["OutcomeMetrics"];
+            /** Pending Observations */
+            pending_observations: number;
+            /**
+             * Raw Observations
+             * @description Frozen rows matching the filters before collapsing to the unit
+             */
+            raw_observations: number;
+            /** Score Versions */
+            score_versions: {
+                [key: string]: number;
+            };
+            /** Total Observations */
+            total_observations: number;
+            /** Unavailable Observations */
+            unavailable_observations: number;
+            /**
+             * Unit
+             * @description signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row
+             * @enum {string}
+             */
+            unit: "signal_day" | "observation";
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** OutcomeSymbol */
+        OutcomeSymbol: {
+            dataset: components["schemas"]["OutcomeDataset"];
+            date_range: components["schemas"]["OutcomeDateRange"];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Evidence Thresholds
+             * @description Minimum matured count per evidence label
+             */
+            evidence_thresholds: {
+                [key: string]: number;
+            };
+            filters: components["schemas"]["OutcomeFilters"];
+            /** Generated At */
+            generated_at: string;
+            /** Horizon */
+            horizon?: number | null;
+            /** Horizons */
+            horizons: components["schemas"]["OutcomeMetrics"][];
+            observations: components["schemas"]["OutcomePage"];
+            /**
+             * Raw Observations
+             * @description Frozen rows matching the filters before collapsing to the unit
+             */
+            raw_observations: number;
+            /** Score Versions */
+            score_versions: {
+                [key: string]: number;
+            };
+            /** Ticker */
+            ticker: string;
+            /**
+             * Unit
+             * @description signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row
+             * @enum {string}
+             */
+            unit: "signal_day" | "observation";
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** OutcomeTimeseries */
+        OutcomeTimeseries: {
+            dataset: components["schemas"]["OutcomeDataset"];
+            date_range: components["schemas"]["OutcomeDateRange"];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Evidence Thresholds
+             * @description Minimum matured count per evidence label
+             */
+            evidence_thresholds: {
+                [key: string]: number;
+            };
+            filters: components["schemas"]["OutcomeFilters"];
+            /** Generated At */
+            generated_at: string;
+            /** Horizon */
+            horizon?: number | null;
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "day" | "week" | "month";
+            /** Points */
+            points: components["schemas"]["OutcomePoint"][];
+            /**
+             * Raw Observations
+             * @description Frozen rows matching the filters before collapsing to the unit
+             */
+            raw_observations: number;
+            /** Score Versions */
+            score_versions: {
+                [key: string]: number;
+            };
+            /**
+             * Unit
+             * @description signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row
+             * @enum {string}
+             */
+            unit: "signal_day" | "observation";
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
         };
         /** PaperActivity */
         PaperActivity: {
@@ -5985,6 +7042,513 @@ export interface operations {
             };
             /** @description Not signed in */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    outcomes_horizons_v1_outcomes_horizons_get: {
+        parameters: {
+            query?: {
+                /** @description Canonical setup (primary_setup), e.g. breakout */
+                setup?: string | null;
+                /** @description Signal label, e.g. golden_cross */
+                signal?: string | null;
+                min_score?: number | null;
+                max_score?: number | null;
+                /** @description e.g. 80-89 */
+                score_bucket?: string | null;
+                /** @description HSF score version as frozen */
+                score_version?: string | null;
+                /** @description Observed on/after (YYYY-MM-DD, UTC) */
+                start_date?: string | null;
+                /** @description Observed on/before (YYYY-MM-DD, UTC) */
+                end_date?: string | null;
+                /** @description Only matured rows passing the canonical eligibility rule */
+                certified_only?: boolean;
+                /** @description Only records matured at the horizon (counts drop pending) */
+                matured_only?: boolean;
+                /** @description signal_day: one record per ticker per entry day (default); observation: every frozen row */
+                unit?: "signal_day" | "observation";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeHorizons"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid filter */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    outcomes_query_v1_outcomes_query_get: {
+        parameters: {
+            query?: {
+                ticker?: string | null;
+                /** @description Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one */
+                horizon?: number;
+                page?: number;
+                page_size?: number;
+                /** @description Canonical setup (primary_setup), e.g. breakout */
+                setup?: string | null;
+                /** @description Signal label, e.g. golden_cross */
+                signal?: string | null;
+                min_score?: number | null;
+                max_score?: number | null;
+                /** @description e.g. 80-89 */
+                score_bucket?: string | null;
+                /** @description HSF score version as frozen */
+                score_version?: string | null;
+                /** @description Observed on/after (YYYY-MM-DD, UTC) */
+                start_date?: string | null;
+                /** @description Observed on/before (YYYY-MM-DD, UTC) */
+                end_date?: string | null;
+                /** @description Only matured rows passing the canonical eligibility rule */
+                certified_only?: boolean;
+                /** @description Only records matured at the horizon (counts drop pending) */
+                matured_only?: boolean;
+                /** @description signal_day: one record per ticker per entry day (default); observation: every frozen row */
+                unit?: "signal_day" | "observation";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeQuery"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid filter */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    outcomes_scores_v1_outcomes_scores_get: {
+        parameters: {
+            query?: {
+                /** @description Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one */
+                horizon?: number;
+                /** @description e.g. 40-49,50-59,60-69 (default: canonical HSF buckets) */
+                buckets?: string | null;
+                /** @description Canonical setup (primary_setup), e.g. breakout */
+                setup?: string | null;
+                /** @description Signal label, e.g. golden_cross */
+                signal?: string | null;
+                min_score?: number | null;
+                max_score?: number | null;
+                /** @description e.g. 80-89 */
+                score_bucket?: string | null;
+                /** @description HSF score version as frozen */
+                score_version?: string | null;
+                /** @description Observed on/after (YYYY-MM-DD, UTC) */
+                start_date?: string | null;
+                /** @description Observed on/before (YYYY-MM-DD, UTC) */
+                end_date?: string | null;
+                /** @description Only matured rows passing the canonical eligibility rule */
+                certified_only?: boolean;
+                /** @description Only records matured at the horizon (counts drop pending) */
+                matured_only?: boolean;
+                /** @description signal_day: one record per ticker per entry day (default); observation: every frozen row */
+                unit?: "signal_day" | "observation";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeScores"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid filter */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    outcomes_setups_v1_outcomes_setups_get: {
+        parameters: {
+            query?: {
+                /** @description Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one */
+                horizon?: number;
+                group_by?: "setup" | "signal";
+                /** @description Canonical setup (primary_setup), e.g. breakout */
+                setup?: string | null;
+                /** @description Signal label, e.g. golden_cross */
+                signal?: string | null;
+                min_score?: number | null;
+                max_score?: number | null;
+                /** @description e.g. 80-89 */
+                score_bucket?: string | null;
+                /** @description HSF score version as frozen */
+                score_version?: string | null;
+                /** @description Observed on/after (YYYY-MM-DD, UTC) */
+                start_date?: string | null;
+                /** @description Observed on/before (YYYY-MM-DD, UTC) */
+                end_date?: string | null;
+                /** @description Only matured rows passing the canonical eligibility rule */
+                certified_only?: boolean;
+                /** @description Only records matured at the horizon (counts drop pending) */
+                matured_only?: boolean;
+                /** @description signal_day: one record per ticker per entry day (default); observation: every frozen row */
+                unit?: "signal_day" | "observation";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeGroups"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid filter */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    outcomes_summary_v1_outcomes_summary_get: {
+        parameters: {
+            query?: {
+                /** @description Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one */
+                horizon?: number;
+                /** @description Canonical setup (primary_setup), e.g. breakout */
+                setup?: string | null;
+                /** @description Signal label, e.g. golden_cross */
+                signal?: string | null;
+                min_score?: number | null;
+                max_score?: number | null;
+                /** @description e.g. 80-89 */
+                score_bucket?: string | null;
+                /** @description HSF score version as frozen */
+                score_version?: string | null;
+                /** @description Observed on/after (YYYY-MM-DD, UTC) */
+                start_date?: string | null;
+                /** @description Observed on/before (YYYY-MM-DD, UTC) */
+                end_date?: string | null;
+                /** @description Only matured rows passing the canonical eligibility rule */
+                certified_only?: boolean;
+                /** @description Only records matured at the horizon (counts drop pending) */
+                matured_only?: boolean;
+                /** @description signal_day: one record per ticker per entry day (default); observation: every frozen row */
+                unit?: "signal_day" | "observation";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeSummary"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid filter */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    outcomes_symbol_v1_outcomes_symbols__ticker__get: {
+        parameters: {
+            query?: {
+                /** @description 1, 3 or 5; omit for all three */
+                horizon?: number | null;
+                page?: number;
+                page_size?: number;
+                /** @description Canonical setup (primary_setup), e.g. breakout */
+                setup?: string | null;
+                /** @description Signal label, e.g. golden_cross */
+                signal?: string | null;
+                min_score?: number | null;
+                max_score?: number | null;
+                /** @description e.g. 80-89 */
+                score_bucket?: string | null;
+                /** @description HSF score version as frozen */
+                score_version?: string | null;
+                /** @description Observed on/after (YYYY-MM-DD, UTC) */
+                start_date?: string | null;
+                /** @description Observed on/before (YYYY-MM-DD, UTC) */
+                end_date?: string | null;
+                /** @description Only matured rows passing the canonical eligibility rule */
+                certified_only?: boolean;
+                /** @description Only records matured at the horizon (counts drop pending) */
+                matured_only?: boolean;
+                /** @description signal_day: one record per ticker per entry day (default); observation: every frozen row */
+                unit?: "signal_day" | "observation";
+            };
+            header?: never;
+            path: {
+                /** @description Ticker symbol, e.g. AAPL or BRK.B */
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeSymbol"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid filter */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    outcomes_timeseries_v1_outcomes_timeseries_get: {
+        parameters: {
+            query?: {
+                /** @description Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one */
+                horizon?: number;
+                period?: "day" | "week" | "month";
+                /** @description Canonical setup (primary_setup), e.g. breakout */
+                setup?: string | null;
+                /** @description Signal label, e.g. golden_cross */
+                signal?: string | null;
+                min_score?: number | null;
+                max_score?: number | null;
+                /** @description e.g. 80-89 */
+                score_bucket?: string | null;
+                /** @description HSF score version as frozen */
+                score_version?: string | null;
+                /** @description Observed on/after (YYYY-MM-DD, UTC) */
+                start_date?: string | null;
+                /** @description Observed on/before (YYYY-MM-DD, UTC) */
+                end_date?: string | null;
+                /** @description Only matured rows passing the canonical eligibility rule */
+                certified_only?: boolean;
+                /** @description Only records matured at the horizon (counts drop pending) */
+                matured_only?: boolean;
+                /** @description signal_day: one record per ticker per entry day (default); observation: every frozen row */
+                unit?: "signal_day" | "observation";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeTimeseries"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid filter */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

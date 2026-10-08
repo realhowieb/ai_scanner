@@ -16,9 +16,19 @@ vi.mock("next/navigation", () => ({
 
 const fetchMock = vi.fn();
 const urls = () => fetchMock.mock.calls.map((c) => new URL((c[0] as Request).url));
+// The Historical card also asks /v1/outcomes/symbols/{ticker}; these tests are about the plan and AI
+// note, so that call is answered here (404: an API without it) and never reaches fetchMock.
+const outcomeCalls: string[] = [];
 beforeEach(() => {
   fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
+  outcomeCalls.length = 0;
+  vi.stubGlobal("fetch", (req: Request, ...rest: unknown[]) => {
+    if (new URL(req.url).pathname.includes("/v1/outcomes/")) {
+      outcomeCalls.push(req.url);
+      return Promise.resolve(jsonResponse({ detail: "Not Found" }, 404));
+    }
+    return fetchMock(req, ...rest);
+  });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -56,6 +66,7 @@ describe("Stock detail: trade plan and AI note", () => {
     render(<StockView s={stockDetail({ in_latest_scan: false, from_history: true })} premium={false} pro />);
     expect(screen.queryByRole("heading", { name: "Trade plan" })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(outcomeCalls).toEqual([]);            // Free: historical research is locked, so no evidence request
   });
 
   it("Premium: writes an AI note on request, and shows the daily limit message", async () => {

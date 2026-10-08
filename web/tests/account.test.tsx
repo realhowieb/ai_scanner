@@ -7,7 +7,10 @@ import { AccountView } from "@/features/AccountView";
 import { TrackRecordView, signedPct } from "@/features/TrackRecordView";
 import { SessionProvider } from "@/session/SessionProvider";
 
+import { SymbolLine } from "@/features/OutcomeEvidence";
+
 import { me } from "./fixtures";
+import oc from "./fixtures/outcomes.json";
 import { jsonResponse } from "./helpers";
 
 vi.mock("next/navigation", () => ({
@@ -166,6 +169,58 @@ const summary = (horizon: number, ranking: "breakout" | "prebreakout", n: number
   ranking, ranking_label: ranking === "breakout" ? "BreakoutScore" : "PreBreakoutProb", horizon_days: horizon,
   avg_excess_return: 0.0123, median_excess_return: -0.004, win_rate: 0.56, sample_size: n, runs_used: 40, top_n: 10,
   benchmark: "SPY", computed_at: "2026-10-07T22:00:00+00:00", sufficient: n >= 25, ...extra,
+});
+
+describe("Track record: HSF evidence (Outcome Intelligence)", () => {
+  const evidence = () => routes.unshift(
+    on("GET", "/v1/outcomes/summary", () => jsonResponse(oc.summary)),
+    on("GET", "/v1/outcomes/scores", () => jsonResponse(oc.scores)),
+    on("GET", "/v1/outcomes/horizons", () => jsonResponse(oc.horizons)),
+    on("GET", "/v1/outcomes/setups", () => jsonResponse(oc.setups)),
+    on("GET", "/v1/track-record", () => jsonResponse({ disclaimer: "x", min_sample_size: 25, summaries: [] })),
+  );
+
+  it("leads with the complete dataset: sample sizes, pending, SPY coverage, and no filters", async () => {
+    evidence();
+    wrap(<TrackRecordView />, me("pro"));
+    const card = (await screen.findByRole("heading", { name: "Every HSF signal so far" })).closest("section")!;
+    expect(card).toHaveTextContent("All 6 HSF signals observed");
+    expect(card).toHaveTextContent("(7 scan readings; one per ticker per day)");
+    expect(card).toHaveTextContent("4 have a 5-trading-day outcome, 1 are still pending and 1 had no price data. No filters applied.");
+    expect(card).toHaveTextContent("+2.00%");                       // median vs SPY
+    expect(card).toHaveTextContent("67% of 3");                      // beat SPY with its own denominator
+    expect(card).toHaveTextContent("Insufficient evidence");
+    expect(card).toHaveTextContent("1 matured signal has no SPY comparison yet");
+    for (const c of calls.filter((x) => x.path.startsWith("/v1/outcomes/"))) expect(c.search).toBe("");   // no hidden filters
+  });
+
+  it("shows every score bucket (weak ones included), every horizon and every setup", async () => {
+    evidence();
+    wrap(<TrackRecordView />, me("pro"));
+    const scores = (await screen.findByRole("heading", { name: "By HSF score" })).closest("section")!;
+    const trs = within(scores).getAllByRole("row").slice(1);
+    const rows = trs.map((r) => r.textContent ?? "");
+    expect(trs.map((r) => within(r).getByRole("rowheader").textContent)).toEqual(["0-49", "50-59", "60-69", "70-79", "80-89", "90-100"]);
+    expect(rows[2]).toContain("-3.00%");                             // the losing 60-69 bucket is shown
+    const hz = (await screen.findByRole("heading", { name: "By holding period" })).closest("section")!;
+    expect(within(hz).getAllByRole("row")).toHaveLength(4);
+    const setups = (await screen.findByRole("heading", { name: "By setup" })).closest("section")!;
+    expect(within(setups).getByText("gapper")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ranking study" })).toBeInTheDocument();
+  });
+
+  it("an API without /v1/outcomes still shows the ranking study", async () => {
+    routes.unshift(on("GET", "/v1/track-record", () => jsonResponse({ disclaimer: "Old API.", min_sample_size: 25, summaries: [] })));
+    wrap(<TrackRecordView />, me("pro"));
+    expect(await screen.findByText("Old API.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Every HSF signal so far" })).not.toBeInTheDocument();
+  });
+
+  it("stock page line: matured count, SPY beats, medians, no forecast", () => {
+    render(<SymbolLine d={oc.symbol as Schemas["OutcomeSymbol"]} />);
+    expect(screen.getByText(/1 matured signal for AAA/)).toHaveTextContent("1 of 1 beat SPY over 5 trading days. Median return +4.00%, median vs SPY +3.00%.");
+    expect(screen.getByText(/not a forecast/)).toBeInTheDocument();
+  });
 });
 
 describe("Track record", () => {
