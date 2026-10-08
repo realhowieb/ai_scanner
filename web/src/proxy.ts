@@ -11,15 +11,18 @@ export function proxy(req: NextRequest) {
   if (pathname === "/login" || pathname === "/signup") {
     return signedIn ? NextResponse.redirect(new URL("/today", req.url)) : NextResponse.next();
   }
+  if (pathname === "/") {
+    // Signed out: the landing page. Its utm tags are read by the page, so keep the query.
+    return signedIn ? NextResponse.redirect(new URL("/today", req.url)) : NextResponse.next();
+  }
   if (!signedIn) {
     const to = new URL("/login", req.url);
-    if (pathname !== "/") to.searchParams.set("next", pathname + search);
+    to.searchParams.set("next", pathname + search);
     return NextResponse.redirect(to);
   }
-  if (pathname === "/") return NextResponse.redirect(new URL("/today", req.url));
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/", "/login", "/signup", "/today/:path*", "/scanner/:path*", "/stocks/:path*", "/watchlists/:path*", "/alerts/:path*", "/account/:path*", "/track-record/:path*", "/brief/:path*", "/journal/:path*", "/day-trader/:path*"],
+  matcher: ["/", "/login", "/signup", "/today/:path*", "/scanner/:path*", "/stocks/:path*", "/watchlists/:path*", "/alerts/:path*", "/account/:path*", "/track-record/:path*", "/brief/:path*", "/journal/:path*", "/day-trader/:path*", "/paper/:path*"],
 };

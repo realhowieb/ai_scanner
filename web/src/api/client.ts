@@ -75,10 +75,10 @@ export function toApiError(response: Response, body: unknown): ApiError {
   return err;
 }
 
-export function makeClient(fetchImpl?: typeof fetch) {
+export function makeClient(fetchImpl?: typeof fetch, base = "/api/hsf") {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const c = createClient<paths>({
-    baseUrl: `${origin}/api/hsf`,
+    baseUrl: `${origin}${base}`,
     fetch: fetchImpl ?? ((input: Request) => globalThis.fetch(input)), // late-bound, so a patched fetch is used
     credentials: "same-origin",
   });
@@ -87,6 +87,8 @@ export function makeClient(fetchImpl?: typeof fetch) {
 }
 
 export const api = makeClient();
+/** Signed-out routes (plans, funnel events, unsubscribe links), through /api/public. */
+export const publicApi = makeClient(undefined, "/api/public");
 
 type Result<T> = { data?: T; error?: unknown; response: Response };
 

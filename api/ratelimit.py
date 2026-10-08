@@ -25,6 +25,8 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "paper_connect": (5, 3600),  # per account: key validation attempts
     "paper_order": (30, 3600),   # per account
     "delete_account": (5, 3600), # per account: password attempts on DELETE /v1/me
+    "events": (120, 3600),       # per IP: anonymous funnel events from the web landing page
+    "unsubscribe": (30, 600),    # per IP: token lookups on the emailed unsubscribe link
 }
 _MAX_KEYS = 50_000  # bound memory if someone sprays many addresses
 

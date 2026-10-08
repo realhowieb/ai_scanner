@@ -5,6 +5,7 @@ import { API_STARTING, NOT_INVITED, changePassword, login, logout, publicAuth, s
 import { SESSION_EXPIRED, proxy } from "@/server/bff";
 import type { Upstream } from "@/server/bff";
 import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, secureCookies } from "@/server/cookies";
+import { cleanAttribution, publicApi } from "@/server/public";
 import { _resetRefreshState } from "@/server/refresh";
 
 import { jsonResponse, jwt, setCookies } from "./helpers";
@@ -331,5 +332,45 @@ describe("public account routes", () => {
     expect((await publicAuth(req("/api/auth/verify-email", { method: "POST", body: { token: "x" }, origin: "https://evil.example" }), "verify-email", up)).status).toBe(403);
     expect((await publicAuth(req("/api/auth/password-reset-confirm", { method: "POST", body: { token: "x" } }), "password-reset-confirm", up)).status).toBe(400);
     expect(calls.map((c) => c.path)).toEqual(["/v1/auth/password-reset", "/v1/auth/verify-email"]);
+  });
+});
+
+describe("signed-out API routes", () => {
+  it("passes only the listed routes and methods, with no cookies or tokens either way", async () => {
+    const { up, calls } = fakeUpstream((c) => (c.path.startsWith("/v1/plans") ? jsonResponse({ tiers: [], rows: [] })
+      : c.path === "/v1/events" ? new Response(null, { status: 202 }) : jsonResponse({ email: "a***@b.co", prefs: {} })));
+    const signedIn = { [ACCESS_COOKIE]: jwt(600), [REFRESH_COOKIE]: "rt-9" };
+    const plans = await publicApi(req("/api/public/v1/plans", { cookies: signedIn }), ["v1", "plans"], up);
+    expect(plans.status).toBe(200);
+    expect(auth(calls[0]!)).toBeUndefined();
+    expect((calls[0]!.init.headers as Record<string, string>).cookie).toBeUndefined();
+    expect(setCookies(plans)).toEqual([]);
+    expect((await publicApi(req("/api/public/v1/events", { method: "POST", body: { event: "landing_visit" } }), ["v1", "events"], up)).status).toBe(202);
+    const look = await publicApi(req("/api/public/v1/email-preferences/unsubscribe?t=abcdefghijk"), ["v1", "email-preferences", "unsubscribe"], up);
+    expect(look.status).toBe(200);
+    expect(calls.at(-1)!.path).toBe("/v1/email-preferences/unsubscribe?t=abcdefghijk");
+    expect((await publicApi(req("/api/public/v1/me", { cookies: signedIn }), ["v1", "me"], up)).status).toBe(404);
+    expect((await publicApi(req("/api/public/v1/plans", { method: "POST", body: {} }), ["v1", "plans"], up)).status).toBe(405);
+    expect((await publicApi(req("/api/public/v1/events", { method: "POST", body: {}, origin: "https://evil.example" }), ["v1", "events"], up)).status).toBe(403);
+    expect(calls).toHaveLength(3);
+  });
+
+  it("refuses oversized bodies and says when the API is waking up", async () => {
+    const { up } = fakeUpstream(() => new Response("bad gateway", { status: 502 }));
+    const big = await publicApi(req("/api/public/v1/events", { method: "POST", body: { event: "landing_visit", pad: "x".repeat(5000) } }), ["v1", "events"], up);
+    expect(big.status).toBe(413);
+    const waking = await publicApi(req("/api/public/v1/plans"), ["v1", "plans"], up);
+    expect(waking.status).toBe(502);
+    expect((await waking.json()).detail).toContain("starting up");
+  });
+
+  it("sign-up forwards only utm tags and the referrer", async () => {
+    expect(cleanAttribution({ utm_source: "reddit", referrer: "https://reddit.com/r/x", email: "a@b.co", utm_x: "1", utm_term: 5 }))
+      .toEqual({ utm_source: "reddit", referrer: "https://reddit.com/r/x" });
+    expect(cleanAttribution("reddit")).toBeNull();
+    const { up, calls } = fakeUpstream(() => jsonResponse({ ...pair(5), email: "new@example.com", verification_sent: true }, 201));
+    await signup(req("/api/auth/signup", { method: "POST", body: { email: "a@b.co", password: "a-long-password", username: "ann", accept_terms: true,
+      attribution: { utm_campaign: "launch", password: "nope" } } }), up, null);
+    expect(JSON.parse(calls[0]!.init.body as string).attribution).toEqual({ utm_campaign: "launch" });
   });
 });

@@ -5,6 +5,7 @@ import type { Upstream } from "./bff";
 import { SESSION_EXPIRED, json, requestIdFor, sameOrigin, upstreamRefresh } from "./bff";
 import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, clearedCookies, parseCookies, sessionCookies } from "./cookies";
 import type { TokenPair } from "./cookies";
+import { cleanAttribution } from "./public";
 import { refreshOnce } from "./refresh";
 
 const FAILED = "Sign-in failed.";
@@ -234,13 +235,14 @@ export async function publicAuth(req: Request, flow: keyof typeof PUBLIC, upstre
 export async function signup(req: Request, upstream: Upstream, allow: Set<string> | null = betaAllowlist()): Promise<Response> {
   const rid = requestIdFor(req);
   if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
+  const attribution = cleanAttribution(((await req.clone().json().catch(() => null)) as { attribution?: unknown } | null)?.attribution);
   const body = await readFields(req, { email: "string", password: "string", username: "string", accept_terms: "boolean" });
   if (!body) return json({ detail: "Fill in every field." }, 400, rid);
   const email = String(body.email).trim().toLowerCase();
   if (allow && !allow.has(email)) return json({ detail: NOT_INVITED, code: "not_invited" }, 403, rid);
   let res: Response;
   try {
-    res = await forward("/v1/auth/signup", { ...body, email, client: "web" }, rid, upstream);
+    res = await forward("/v1/auth/signup", { ...body, email, client: "web", ...(attribution ? { attribution } : {}) }, rid, upstream);
   } catch {
     return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid);
   }
