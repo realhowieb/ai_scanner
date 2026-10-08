@@ -13,6 +13,8 @@ from analytics import market_calendar as mc
 
 CACHE_TTL_S = 60
 CACHE_MAX_ENTRIES = 32  # run lists + a handful of runs; old runs drop out
+RUN_TTL_S = 6 * 3600  # a saved run's rows, re-validated every CACHE_TTL_S by its stamp
+RUN_CACHE_MAX_ENTRIES = 8  # parsed scans are the biggest values; keep only the recent few
 
 
 class TTLCache:
@@ -89,6 +91,7 @@ class TTLCache:
 
 
 _cache = TTLCache(CACHE_MAX_ENTRIES)
+_run_cache = TTLCache(RUN_CACHE_MAX_ENTRIES)
 
 
 def _cached(key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S, stale_s: float = 0) -> Any:
@@ -108,11 +111,12 @@ def _runs_or_outage(runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def cache_size() -> int:
-    return _cache.size()
+    return _cache.size() + _run_cache.size()
 
 
 def clear_cache() -> None:
     _cache.clear()
+    _run_cache.clear()
     from api import scans  # stock pages have their own cache (api.scans)
 
     scans.stock_cache.clear()
@@ -171,7 +175,22 @@ def run_df(run_id: int):
             return None
         return None if df.empty else df
 
-    return _cached(("run", int(run_id)), load)
+    # Saved runs are re-read by many endpoints; downloading results_json once a
+    # minute was most of the Neon egress. Check the run's tiny stamp each minute
+    # and keep the parsed rows until the stamp changes (an in-place snapshot rewrite).
+    stamp = _cached(("run_stamp", int(run_id)), lambda: _run_stamp(int(run_id)))
+    if stamp is None:
+        return _cached(("run", int(run_id)), load)
+    return _run_cache.get(("run", int(run_id), stamp), load, ttl_s=RUN_TTL_S)
+
+
+def _run_stamp(run_id: int) -> Optional[str]:
+    try:
+        from db.runs import load_run_stamp
+
+        return load_run_stamp(run_id)
+    except Exception:
+        return None
 
 
 def market_phase(now: dt.datetime) -> str:

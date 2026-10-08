@@ -15,10 +15,13 @@ unavailable, matching db.opportunity_snapshots' contract.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from db.engine import get_neon_conn, get_sqlite_conn, schema_once
+
+_FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")  # record keys safe to inline in SQL
 
 
 def _resolve_conn(conn):
@@ -387,8 +390,24 @@ def load_observations_for_symbol(symbol: str, *, limit: int = 500,
                 pass
 
 
+def _record_select(alias: str, fields: Optional[Sequence[str]], is_sqlite: bool) -> str:
+    """The record column, or (Postgres) only the named top-level keys of it.
+
+    Records carry the full scan features; callers that read a handful of keys
+    project them server-side so the rest never leaves Neon (egress)."""
+    col = f"{alias}record" if alias else "record"
+    if not fields or is_sqlite:
+        return col
+    keys = [f for f in fields if _FIELD_RE.match(str(f))]
+    if not keys:
+        return col
+    pairs = ", ".join(f"'{k}', {col}->'{k}'" for k in keys)
+    return f"jsonb_build_object({pairs}) AS record"
+
+
 def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
                              attach_outcomes: bool | str = False,
+                             fields: Optional[Sequence[str]] = None,
                              conn=None) -> List[Dict[str, Any]]:
     """Most recent observations (newest first). Non-fatal; [] if DB unavailable.
 
@@ -403,7 +422,10 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
     ``attach_outcomes="full"`` is the bounded research/reporting path: it loads
     complete outcome records for the selected observations in one additional
     query (never one query per observation). Existing boolean behavior is
-    unchanged."""
+    unchanged.
+
+    ``fields`` (Postgres, not with ``attach_outcomes="full"``) returns only those
+    top-level record keys; keys a record lacks are left out, as before."""
     c, opened, is_sqlite = _resolve_conn(conn)
     if c is None:
         return []
@@ -436,7 +458,8 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
                 )
                 outcome_rows = cur.fetchall() or []
         elif attach_outcomes:
-            select = (f"SELECT o.record, oc.horizons FROM hsf_observations o "
+            select = (f"SELECT {_record_select('o.', fields, is_sqlite)}, oc.horizons "
+                      f"FROM hsf_observations o "
                       f"LEFT JOIN (SELECT observation_id, {agg} AS horizons "
                       f"FROM hsf_observation_outcomes GROUP BY observation_id) oc "
                       f"ON o.observation_id = oc.observation_id")
@@ -445,10 +468,11 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
             params = (int(limit),) if context is None else (str(context), int(limit))
             cur.execute(f"{select} {where}{order}", params)
         elif context is None:
-            cur.execute(f"SELECT record FROM hsf_observations "
+            cur.execute(f"SELECT {_record_select('', fields, is_sqlite)} FROM hsf_observations "
                         f"ORDER BY timestamp DESC LIMIT {ph}", (int(limit),))
         else:
-            cur.execute(f"SELECT record FROM hsf_observations WHERE context = {ph} "
+            cur.execute(f"SELECT {_record_select('', fields, is_sqlite)} FROM hsf_observations "
+                        f"WHERE context = {ph} "
                         f"ORDER BY timestamp DESC LIMIT {ph}", (str(context), int(limit)))
         if not full_outcomes:
             rows = cur.fetchall() or []
@@ -478,6 +502,8 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
             rec = _loads(payload)
             if not rec:
                 continue
+            if fields and not full_outcomes:
+                rec = {k: v for k, v in rec.items() if v is not None}
             if full_outcomes:
                 if oid in full_by_id:
                     rec["outcomes"] = full_by_id[oid]
