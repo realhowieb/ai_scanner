@@ -8,6 +8,7 @@ import type { FormEvent } from "react";
 import { messageFrom, newRequestId } from "@/api/client";
 import { WAKING_UP, useSlow } from "@/components/ui";
 import { safeNext } from "@/lib/nextPath";
+import { writeCachedMe } from "@/session/meCache";
 import { parseRetryAfter } from "@/lib/retryAfter";
 
 export function LoginForm() {
@@ -45,6 +46,7 @@ export function LoginForm() {
         // otherwise every page would bounce straight back here with no explanation.
         const check = await fetch("/api/hsf/v1/me", { credentials: "same-origin", headers: { "x-request-id": newRequestId() } });
         if (check.ok) {
+          writeCachedMe(await check.json().catch(() => null));
           window.location.assign(next);
           return;
         }

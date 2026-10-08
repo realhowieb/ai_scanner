@@ -270,10 +270,48 @@ def current_account(request: Request,
     if not token:
         raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
     username = tokens.verify_access_token(token, _settings(request))
-    account = store.get_account(username) if username else None
+    account = _recent_account(username) if username else None
     if not account or account.get("is_active") is False:
         raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
     return account
+
+
+# Every signed-in request reads the account row; the database is a cross-region
+# round trip or three away, so the row is reused for a few seconds per process.
+# Plan, admin and active-flag changes show up within ACCOUNT_CACHE_S. The password
+# hash is never cached: endpoints that check a password read the row fresh.
+ACCOUNT_CACHE_S = 15
+_account_cache: Dict[str, tuple] = {}  # username -> (monotonic expiry, row without password)
+
+
+def _recent_account(username: str) -> Optional[Dict[str, Any]]:
+    key = username.strip().lower()
+    now = time.monotonic()
+    hit = _account_cache.get(key)
+    if hit and now < hit[0]:
+        return dict(hit[1])
+    account = store.get_account(key)
+    if len(_account_cache) > 1000:
+        _account_cache.clear()
+    if account:
+        safe = {k: v for k, v in account.items() if k != "password"}
+        _account_cache[key] = (now + ACCOUNT_CACHE_S, safe)
+        return dict(safe)
+    _account_cache.pop(key, None)
+    return None
+
+
+def forget_account(username: str) -> None:
+    """Drop the cached row after this process changes the account."""
+    _account_cache.pop((username or "").strip().lower(), None)
+
+
+def _fresh_account(account: Dict[str, Any]) -> Dict[str, Any]:
+    """The full row (with the password hash) for endpoints that check a password."""
+    fresh = store.get_account(_user(account))
+    if not fresh or fresh.get("is_active") is False:
+        raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
+    return fresh
 
 
 def entitlements_for(account: Dict[str, Any]) -> Dict[str, Any]:
@@ -623,7 +661,8 @@ def _account_routes(app: FastAPI) -> None:
         """Change the password. Every other session (web and app) is signed out; this
         device gets a new token pair."""
         ratelimit.check("login", ratelimit.client_ip(request))
-        acct.change_password(account, body.current_password, body.new_password)
+        acct.change_password(_fresh_account(account), body.current_password, body.new_password)
+        forget_account(_user(account))
         return _token_pair(_user(account), _settings(request), None)
 
     @app.get("/v1/me/email-preferences", response_model=models.EmailPrefs, responses=_AUTH)
@@ -1092,7 +1131,8 @@ def _delete_account_route(app: FastAPI) -> None:
         settings, saved scans, sessions, devices). Refused while a paid subscription is active:
         cancel it first via POST /v1/billing/portal {"flow": "cancel"}. Can't be undone."""
         ratelimit.check("delete_account", _user(account))
-        acct.delete_account(account, body.password)
+        acct.delete_account(_fresh_account(account), body.password)
+        forget_account(_user(account))
 
 
 def _failing_app(message: str):
@@ -1108,14 +1148,36 @@ def _failing_app(message: str):
     return app
 
 
+def _warm_brief() -> None:
+    """Build the Market Brief once in the background after a (re)start, so the first
+    visitor after a deploy or a free-plan wake-up doesn't wait 20-50 s for it."""
+    import os
+    import threading
+
+    if os.environ.get("RENDER", "").strip().lower() != "true" or os.environ.get("HSF_WARM_BRIEF", "1").strip() == "0":
+        return
+
+    def run() -> None:
+        try:
+            from api import market
+
+            market._brief_core()
+        except Exception as e:  # warming is best effort; the first visitor builds it instead
+            log.warning("brief warm-up failed: %s", str(e)[:120])
+
+    threading.Thread(target=run, name="brief-warmup", daemon=True).start()
+
+
 def _module_app():
     """Module-level app for `uvicorn api.main:app` (settings from the environment).
     Importing never raises, so tests can import create_app without the secret."""
     try:
-        return create_app()
+        app = create_app()
     except RuntimeError as e:
         log.error("HSF API not started: %s", e)
         return _failing_app(f"HSF API not started: {e}")
+    _warm_brief()
+    return app
 
 
 app = _module_app()

@@ -36,6 +36,7 @@ def earnings(days: int, tickers: Optional[Sequence[str]] = None,
 
 # ---- Market Brief (P1-69) ------------------------------------------------------------------------
 BRIEF_TTL_S = 300   # the web caches the brief for 5 minutes too
+BRIEF_STALE_S = 6 * 3600  # past 5 minutes, serve the last brief and rebuild it in the background
 
 
 def _brief_core() -> Optional[Dict[str, Any]]:
@@ -70,7 +71,7 @@ def _brief_core() -> Optional[Dict[str, Any]]:
             compared = []
         return {"data": data, "compared": compared, "has_previous": has_previous, "phase": _market_phase()}
 
-    return _cached("brief", load, ttl_s=BRIEF_TTL_S)
+    return _cached("brief", load, ttl_s=BRIEF_TTL_S, stale_s=BRIEF_STALE_S)
 
 
 _EARN_FLAG = re.compile(r"^\s*(\S+)\s*(?:⚠️\s*E(\d+)d)?\s*$")
@@ -127,6 +128,10 @@ DT_SOURCES = ("watchlist", "movers", "movers_sp500", "movers_nasdaq", "premarket
               "scan_picks", "megacaps", "custom")
 DT_ROWS_TTL_S = 30          # live quotes: shared across users for 30 s (the web refreshes every 30-60 s)
 DT_MOVERS_TTL_S = 120       # the movers screen, as on the web
+# Past their TTL, Day Trader lists and quotes are served for this long while one
+# background reload runs, so a visitor never waits on the movers screen (~16 s).
+DT_MOVERS_STALE_S = 600
+DT_ROWS_STALE_S = 90
 
 
 def _dt_symbols(source: str, custom: Sequence[str], watch: Sequence[str]) -> List[str]:
@@ -147,7 +152,8 @@ def _dt_symbols(source: str, custom: Sequence[str], watch: Sequence[str]) -> Lis
         "postmarket": lambda: dtm._session_scan_symbols("postmarket"),
         "scan_picks": lambda: dtm._scan_pick_symbols(),
     }
-    return list(_cached(("dt_source", source), loaders[source], ttl_s=DT_MOVERS_TTL_S) or [])
+    return list(_cached(("dt_source", source), loaders[source], ttl_s=DT_MOVERS_TTL_S,
+                        stale_s=DT_MOVERS_STALE_S) or [])
 
 
 def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = ()) -> Dict[str, Any]:
@@ -165,8 +171,10 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
             return build_day_trader_metrics(list(symbols)) or []
 
         rows = [dict(r, day_trade_score=dtm.day_trade_score(r))
-                for r in _cached(("dt_rows", tuple(symbols)), load, ttl_s=DT_ROWS_TTL_S)]
-    state = _cached("dt_state", lambda: dtm.market_state(clock_is_open=dtm._fetch_clock_is_open()), ttl_s=60)
+                for r in _cached(("dt_rows", tuple(symbols)), load, ttl_s=DT_ROWS_TTL_S,
+                                     stale_s=DT_ROWS_STALE_S)]
+    state = _cached("dt_state", lambda: dtm.market_state(clock_is_open=dtm._fetch_clock_is_open()), ttl_s=60,
+                    stale_s=300)
     return {"state": state, "source": source, "symbols": symbols, "missing": max(0, len(symbols) - len(rows)),
             "as_of": dt.datetime.now(dt.timezone.utc), "rows": rows}
 
