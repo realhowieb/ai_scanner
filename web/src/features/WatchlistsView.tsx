@@ -202,7 +202,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                         <Pill>{setupLabel(s.primary_setup)}</Pill>
                         {s.fading && <Pill tone="warn">Fading</Pill>}
                       </>
-                    ) : <span className="cap">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not a ranked setup in the latest scan"}</span>}
+                    ) : <span className="cap">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not ranked in the latest scan"}</span>}
                     <span className="grow" />
                     <button type="button" className="icon-btn" aria-label={`Remove ${it.ticker} from ${w.name}`} onClick={() => { rm.clear(); setRemoving(it.ticker); }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>

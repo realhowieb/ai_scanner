@@ -137,7 +137,7 @@ describe("Watchlists", () => {
     wrap(<WatchlistsView />);
     expect(await screen.findByLabelText("HSF Score 81")).toBeInTheDocument();
     expect(screen.getByText("#2 of 2")).toBeInTheDocument();          // AAPL's place in the scan
-    expect(screen.getByText("Not a ranked setup in the latest scan")).toBeInTheDocument();
+    expect(screen.getByText("Not ranked in the latest scan")).toBeInTheDocument();
     expect(screen.getAllByText("Breakout")).toHaveLength(2);
     expect(api.count("GET", /^\/v1\/scans\/latest/)).toBe(0);      // no second request
     const order = () => screen.getAllByRole("link").map((a) => a.textContent).filter((t) => ["AAPL", "NVDA", "ZZZ"].includes(t ?? ""));
