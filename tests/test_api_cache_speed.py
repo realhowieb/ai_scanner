@@ -1,5 +1,6 @@
 """Page-speed caching: stale-while-revalidate, one load per key, and the short
 account-row cache (perf thread, 2026-10-08)."""
+import importlib.util
 import threading
 import time
 import unittest
@@ -69,6 +70,8 @@ class StaleWhileRevalidateTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+@unittest.skipUnless(all(importlib.util.find_spec(m) for m in ("fastapi", "jwt", "bcrypt")),
+                     "needs fastapi, PyJWT and bcrypt")
 class AccountCacheTests(unittest.TestCase):
     def setUp(self):
         from api import main
