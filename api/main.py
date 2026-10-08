@@ -392,6 +392,15 @@ def _user(account: Dict[str, Any]) -> str:
 
 def _data_routes(app: FastAPI) -> None:
     # ---- step 5: scans and stock detail ----
+    @app.get("/v1/today/me", response_model=models.TodayPersonal, responses=_AUTH, summary="Today: your sections")
+    def today_personal(account: Dict[str, Any] = Depends(current_account),
+                       seen: Optional[int] = Query(None, ge=1, description="Market run this browser last saw (from `marker`)"),
+                       baseline: Optional[int] = Query(None, ge=1, description="Its baseline run (from `marker`)")) -> Dict[str, Any]:
+        """New since your last visit and your watchlist against the latest market scan."""
+        from api.today import build_personal
+
+        return build_personal(_user(account), seen, baseline)
+
     @app.get("/v1/market/tape", response_model=models.Tape, responses=_AUTH, summary="Price strip")
     def market_tape(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """SPY, QQQ, IWM, DIA, AAPL, MSFT, NVDA and TSLA: last price and change vs the previous close."""
