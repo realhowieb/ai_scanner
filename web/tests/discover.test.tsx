@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync, writeFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Schemas } from "@/api/client";
@@ -46,12 +47,17 @@ const brief = (over: Partial<Schemas["Brief"]> = {}): Schemas["Brief"] => ({
 });
 
 describe("Market Brief", () => {
+  it.each([["premarket", "Pre-market"], ["regular", "Market open"], ["afterhours", "After hours"], ["closed", "Market closed"]])("uses the backend %s session", async (phase, label) => {
+    route({ "/v1/brief": () => jsonResponse(brief({ phase })) });
+    wrap(<BriefView />, "basic");
+    expect(await screen.findByText(new RegExp(`${label} · snapshot`))).toBeInTheDocument();
+  });
   it("renders the snapshot, keeps sectors as text, and locks Premium and Pro sections on Free", async () => {
     route({ "/v1/brief": () => jsonResponse(brief()) });
     wrap(<BriefView />, "basic");
     expect(await screen.findByText(/Market open · snapshot/)).toBeInTheDocument();
     expect(screen.getByText("S&P 500")).toBeInTheDocument();
-    const opps = screen.getByRole("region", { name: "Top opportunities" });
+    const opps = screen.getByRole("region", { name: "HSF Opportunity Radar" });
     expect(within(opps).getByRole("link", { name: "NVDA" })).toBeInTheDocument();
     expect(within(opps).getByText("Rising +5")).toBeInTheDocument();
     const sectors = screen.getByRole("region", { name: "Sectors" });
@@ -87,6 +93,36 @@ describe("Market Brief", () => {
     expect(await screen.findByText("42%")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Write narrative" }));
     expect(await screen.findByText("Tech led today.")).toBeInTheDocument();
+  });
+
+  it("keeps the Pulse and Radar available when earnings fails", async () => {
+    route({ "/v1/brief": () => jsonResponse(brief()), "/v1/earnings": () => jsonResponse({ detail: "unavailable" }, 503) });
+    wrap(<BriefView />, "pro");
+    expect(await screen.findByText("Couldn't load the earnings calendar right now")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Market Pulse" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View Scanner →" })).toHaveAttribute("href", "/scanner");
+  });
+
+  it("reserves separate loading panels for Pulse and Radar", () => {
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    wrap(<BriefView />, "basic");
+    expect(screen.getByText("Loading Market Pulse…")).toBeInTheDocument();
+    expect(screen.getByText("Loading Opportunity Radar…")).toBeInTheDocument();
+  });
+
+  it("renders a representative responsive fixture without live services", async () => {
+    route({ "/v1/brief": () => jsonResponse(brief({
+      market: ["SPY", "QQQ", "IWM", "VIX"].map((label, i) => ({ label, last: 100 + i, chg_pct: i - 1.5 })),
+      opportunities: Array.from({ length: 5 }, (_, i) => ({ ticker: `TEST${i}`, score: 85 - i * 4, score_delta: i - 2, primary_setup: i === 0 ? "Long setup name for responsive wrapping verification" : "Momentum", status: "WATCH" })),
+      gainers: Array.from({ length: 6 }, (_, i) => ({ ticker: `GAIN${i}`, chg_pct: i + 1 })),
+    })), "/v1/earnings": () => jsonResponse([]) });
+    const view = wrap(<BriefView />, "premium");
+    await screen.findByText("TEST0");
+    await screen.findByText("No earnings on file for the next 7 days.");
+    expect(view.container.querySelector(".brief-dashboard")?.firstElementChild).toHaveClass("brief-center");
+    // Opt-in HTML export for browser layout QA. Fixtures are never shipped by the app.
+    if (process.env.BRIEF_QA_HTML) writeFileSync(process.env.BRIEF_QA_HTML,
+      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Brief fixture QA</title><style>${readFileSync("src/app/globals.css", "utf8")}</style><main class="main">${view.container.innerHTML}</main></html>`);
   });
 });
 
