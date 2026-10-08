@@ -373,8 +373,9 @@ def load_enabled_rules() -> List[Dict[str, Any]]:
     conn, is_sqlite = _connect()
     try:
         cur = conn.cursor()
-        cols = ", ".join(f"r.{c}" for c in RULE_COLUMNS)
-        cur.execute(f"SELECT {cols}, u.tier AS owner_tier, u.is_admin AS owner_is_admin, "
+        cur.execute("SELECT r.id, r.user_id, r.watchlist_id, r.ticker, r.rule_type, r.operator, r.threshold, "
+                    "r.value, r.enabled, r.delivery_channels, r.cooldown_seconds, r.created_at, r.updated_at, "
+                    "r.last_evaluated_at, r.last_triggered_at, u.tier AS owner_tier, u.is_admin AS owner_is_admin, "
                     "u.email_verified AS owner_email_verified, u.is_active AS owner_is_active "
                     "FROM hsf_alert_rules r LEFT JOIN users u ON lower(u.username) = lower(r.user_id) "
                     "WHERE r.enabled ORDER BY r.user_id, r.created_at DESC, r.id DESC")
