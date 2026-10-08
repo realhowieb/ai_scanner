@@ -17,6 +17,10 @@ on:
         description: "Build outcomes without writing (true/false)"
         type: string
         default: "false"
+      stair_stepper:
+        description: "Stair-stepper analysis: auto (post-close run only) or always"
+        type: string
+        default: "auto"
 
   # No GitHub `schedule:` trigger (removed 2026-10-02). cron-job.org dispatches
   # this workflow on main at :10 and :40, 13:00-22:40 UTC, Mon-Fri (US market
@@ -65,11 +69,21 @@ jobs:
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat artifacts/automation/maturation_report.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+      # The analysis re-reads every stair-stepper observation and outcome (~130k
+      # rows a day at every-30-min); the evidence only changes meaningfully per
+      # day, so it runs in the post-close slot (22:40 UTC dispatch) to save Neon
+      # egress. stair_stepper=always runs it on a manual dispatch.
       - name: Analyze Stair-stepper outcomes
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAIR_STEPPER: ${{ inputs.stair_stepper || 'auto' }}
         run: |
+          HHMM=$(date -u +%H%M)
+          if [ "$STAIR_STEPPER" != "always" ] && [ "$HHMM" -lt 2230 ]; then
+            echo "Stair-stepper analysis skipped (runs after 22:30 UTC; stair_stepper=always to force)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           python -m scripts.analyze_stair_stepper --out artifacts/automation/stair_stepper
           cat artifacts/automation/stair_stepper/stair_stepper_validation.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload maturation report

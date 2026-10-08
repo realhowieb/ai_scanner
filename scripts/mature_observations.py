@@ -52,6 +52,12 @@ from analytics.stair_step_research import (
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_HORIZONS = {**HORIZON_BARS, **STAIR_STEP_HORIZONS}
 
+# The only record keys maturation reads (here and in analytics.stair_step_research).
+# Loading just these instead of whole records (with every scan feature) keeps a
+# 30-minute schedule from pulling ~5,000 full records out of Neon each run.
+OBSERVATION_FIELDS = ("observation_id", "symbol", "timestamp", "scan_timestamp", "context",
+                      "session", "market", "scanners", "stair_step", "outcome_horizons")
+
 # Per-run distinct-symbol cap. Raised 400 -> 2000 after dry-run 36224599421
 # measured 4 requests / 400 symbols (0.01 req/symbol, 0 x 429, 55 s job) with
 # batched retrieval; 2000 covers the full ready set (~1.6k) in one run. That was
@@ -742,8 +748,8 @@ def main() -> int:
 
     # attach_outcomes=True (Run 52): matured horizons come back on each record so
     # already-matured work is classified `already` and skipped, not re-fetched.
-    observations = load_recent_observations(limit=args.limit,
-                                            attach_outcomes=True) or []
+    observations = load_recent_observations(limit=args.limit, attach_outcomes=True,
+                                            fields=OBSERVATION_FIELDS) or []
     _log(f"loaded {len(observations)} observations in {time.monotonic() - t0:.0f}s")
     budget = None
     if args.time_budget_min > 0:
