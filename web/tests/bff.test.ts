@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API_STARTING, login, logout } from "@/server/auth";
+import { API_STARTING, NOT_INVITED, changePassword, login, logout, publicAuth, signup } from "@/server/auth";
 import { SESSION_EXPIRED, proxy } from "@/server/bff";
 import type { Upstream } from "@/server/bff";
 import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, secureCookies } from "@/server/cookies";
@@ -249,5 +249,87 @@ describe("login and logout", () => {
     expect(res.status).toBe(204);
     expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ refresh_token: "rt-7" });
     expect(setCookies(res).every((c) => c.includes("Max-Age=0"))).toBe(true);
+  });
+});
+
+describe("password change", () => {
+  const cookies = { [ACCESS_COOKIE]: jwt(600), [REFRESH_COOKIE]: "rt-0" };
+  const body = { current_password: "old-pass", new_password: "new-pass-123" };
+
+  it("is never proxied, because the API answers with a token pair", async () => {
+    const { up, calls } = fakeUpstream(() => jsonResponse(pair(1)));
+    const res = await proxy(req("/api/hsf/v1/me/password", { method: "POST", cookies, body }), "v1/me/password", up);
+    expect(res.status).toBe(404);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("stores the new pair in HttpOnly cookies and returns no token", async () => {
+    const { up, calls } = fakeUpstream(() => jsonResponse(pair(7)));
+    const res = await changePassword(req("/api/auth/password", { method: "POST", cookies, body }), up);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).not.toContain("rt-7");
+    expect(calls[0]!.path).toBe("/v1/me/password");
+    expect(auth(calls[0]!)).toBe(`Bearer ${cookies[ACCESS_COOKIE]}`);
+    const set = setCookies(res);
+    expect(set.some((c) => c.startsWith(`${REFRESH_COOKIE}=rt-7`) && c.includes("HttpOnly"))).toBe(true);
+  });
+
+  it("passes the API's rule message and keeps the session on a wrong password", async () => {
+    const { up } = fakeUpstream(() => jsonResponse({ detail: "Current password is incorrect." }, 400));
+    const res = await changePassword(req("/api/auth/password", { method: "POST", cookies, body }), up);
+    expect(res.status).toBe(400);
+    expect((await res.json()).detail).toBe("Current password is incorrect.");
+    expect(setCookies(res)).toEqual([]);
+  });
+
+  it("refreshes an expired access token first, and ends a dead session", async () => {
+    const { up, calls } = fakeUpstream((c) => (c.path === "/v1/auth/refresh" ? jsonResponse(pair(2)) : jsonResponse(pair(3))));
+    const ok = await changePassword(req("/api/auth/password", { method: "POST", cookies: { [REFRESH_COOKIE]: "rt-0" }, body }), up);
+    expect(ok.status).toBe(200);
+    expect(calls.map((c) => c.path)).toEqual(["/v1/auth/refresh", "/v1/me/password"]);
+    _resetRefreshState();
+    const dead = fakeUpstream(() => jsonResponse({ detail: "no" }, 401));
+    const res = await changePassword(req("/api/auth/password", { method: "POST", cookies: { [REFRESH_COOKIE]: "rt-9" }, body }), dead.up);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual(SESSION_EXPIRED);
+  });
+
+  it("refuses cross-site requests and empty fields without calling the API", async () => {
+    const { up, calls } = fakeUpstream(() => jsonResponse(pair(1)));
+    expect((await changePassword(req("/api/auth/password", { method: "POST", cookies, body, origin: "https://evil.example" }), up)).status).toBe(403);
+    expect((await changePassword(req("/api/auth/password", { method: "POST", cookies, body: { current_password: "x" } }), up)).status).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("public account routes", () => {
+  const body = { email: "New@Example.com", password: "a-long-password", username: "ann", accept_terms: true };
+
+  it("sign-up keeps the tokens in cookies and refuses uninvited emails before creating anything", async () => {
+    const { up, calls } = fakeUpstream(() => jsonResponse({ ...pair(4), email: "new@example.com", verification_sent: true }, 201));
+    const res = await signup(req("/api/auth/signup", { method: "POST", body }), up, null);
+    expect(res.status).toBe(201);
+    expect(await res.text()).not.toContain("rt-4");
+    expect(setCookies(res).some((c) => c.startsWith(`${REFRESH_COOKIE}=rt-4`))).toBe(true);
+    expect(JSON.parse(calls[0]!.init.body as string)).toMatchObject({ email: "new@example.com", client: "web" });
+    const refused = await signup(req("/api/auth/signup", { method: "POST", body }), up, new Set(["someone@else.com"]));
+    expect(refused.status).toBe(403);
+    expect((await refused.json()).detail).toBe(NOT_INVITED);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("passes the API's errors and messages for reset and verification, and refuses cross-site posts", async () => {
+    const { up, calls } = fakeUpstream((c) => (c.path === "/v1/auth/verify-email"
+      ? jsonResponse({ detail: "This link is invalid or has expired." }, 400)
+      : jsonResponse({ ok: true, message: "If that email is registered, a reset link has been sent." }, 202)));
+    const ok = await publicAuth(req("/api/auth/password-reset", { method: "POST", body: { email: "a@b.co" } }), "password-reset", up);
+    expect((await ok.json()).message).toContain("reset link");
+    const bad = await publicAuth(req("/api/auth/verify-email", { method: "POST", body: { token: "expired" } }), "verify-email", up);
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).detail).toContain("invalid");
+    expect((await publicAuth(req("/api/auth/verify-email", { method: "POST", body: { token: "x" }, origin: "https://evil.example" }), "verify-email", up)).status).toBe(403);
+    expect((await publicAuth(req("/api/auth/password-reset-confirm", { method: "POST", body: { token: "x" } }), "password-reset-confirm", up)).status).toBe(400);
+    expect(calls.map((c) => c.path)).toEqual(["/v1/auth/password-reset", "/v1/auth/verify-email"]);
   });
 });

@@ -2,9 +2,10 @@
 // only when a gateway error shows the request never reached it) and are
 // never stored or logged; the token pair goes straight into HttpOnly cookies.
 import type { Upstream } from "./bff";
-import { json, requestIdFor, sameOrigin } from "./bff";
-import { REFRESH_COOKIE, clearedCookies, parseCookies, sessionCookies } from "./cookies";
+import { SESSION_EXPIRED, json, requestIdFor, sameOrigin, upstreamRefresh } from "./bff";
+import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, clearedCookies, parseCookies, sessionCookies } from "./cookies";
 import type { TokenPair } from "./cookies";
+import { refreshOnce } from "./refresh";
 
 const FAILED = "Sign-in failed.";
 
@@ -118,4 +119,133 @@ export async function logout(req: Request, upstream: Upstream): Promise<Response
   const headers = new Headers({ "cache-control": "no-store", "x-request-id": rid });
   for (const c of clearedCookies()) headers.append("set-cookie", c);
   return new Response(null, { status: 204, headers });
+}
+
+/** Change the password. The API signs every other session out and answers with a new
+ * token pair for this one, which goes straight into the cookies (never to the browser). */
+export async function changePassword(req: Request, upstream: Upstream): Promise<Response> {
+  const rid = requestIdFor(req);
+  if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
+  let current = "";
+  let next = "";
+  try {
+    const body = (await req.json()) as { current_password?: unknown; new_password?: unknown };
+    current = typeof body.current_password === "string" ? body.current_password : "";
+    next = typeof body.new_password === "string" ? body.new_password : "";
+  } catch {
+    /* handled below */
+  }
+  if (!current || !next || current.length > 256 || next.length > 256) {
+    return json({ detail: "Enter your current password and a new one." }, 400, rid);
+  }
+  const jar = parseCookies(req.headers.get("cookie"));
+  let access = jar[ACCESS_COOKIE];
+  const refresh = jar[REFRESH_COOKIE];
+  let pending: string[] = [];
+  try {
+    if (!accessTokenUsable(access)) {
+      const out = refresh ? await refreshOnce(refresh, upstreamRefresh(upstream, rid)) : null;
+      if (!out || !out.ok) return json(SESSION_EXPIRED, 401, rid, clearedCookies());
+      access = out.pair.access_token;
+      pending = sessionCookies(out.pair);
+    }
+    const res = await upstream("/v1/me/password", {
+      method: "POST",
+      headers: { authorization: `Bearer ${access}`, "content-type": "application/json", accept: "application/json", "x-request-id": rid },
+      body: JSON.stringify({ current_password: current, new_password: next }),
+    });
+    const id = res.headers.get("x-request-id") || rid;
+    if (res.status === 401) return json(SESSION_EXPIRED, 401, id, clearedCookies());
+    if (!res.ok) {
+      const extra: Record<string, string> = {};
+      const ra = res.headers.get("retry-after");
+      if (ra) extra["retry-after"] = ra;
+      const detail = await detailOf(res);
+      return json({ detail: detail === FAILED ? "Couldn't change the password." : detail }, res.status, id, pending, extra);
+    }
+    return json({ ok: true }, 200, id, sessionCookies((await res.json()) as TokenPair));
+  } catch {
+    return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid, pending);
+  }
+}
+
+type Fields = Record<string, "string" | "boolean">;
+
+async function readFields(req: Request, fields: Fields): Promise<Record<string, string | boolean> | null> {
+  let body: Record<string, unknown>;
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const out: Record<string, string | boolean> = {};
+  for (const [k, t] of Object.entries(fields)) {
+    const v = body[k];
+    if (t === "boolean") out[k] = v === true;
+    else if (typeof v === "string" && v.length > 0 && v.length <= 1024) out[k] = v;
+    else return null;
+  }
+  return out;
+}
+
+async function forward(path: string, body: unknown, rid: string, upstream: Upstream): Promise<Response> {
+  return upstream(path, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json", "x-request-id": rid },
+    body: JSON.stringify(body),
+  });
+}
+
+async function passError(res: Response, rid: string): Promise<Response> {
+  const extra: Record<string, string> = {};
+  const ra = res.headers.get("retry-after");
+  if (ra) extra["retry-after"] = ra;
+  const detail = GATEWAY.has(res.status) ? API_STARTING : await detailOf(res);
+  return json({ detail: detail === FAILED ? "Something went wrong. Try again." : detail }, res.status, res.headers.get("x-request-id") || rid, [], extra);
+}
+
+/** Public account flows that need no session: password reset (request and confirm) and
+ * email verification. The API's answer passes through; nothing is stored. */
+const PUBLIC: Record<string, { path: string; fields: Fields }> = {
+  "password-reset": { path: "/v1/auth/password-reset", fields: { email: "string" } },
+  "password-reset-confirm": { path: "/v1/auth/password-reset/confirm", fields: { token: "string", new_password: "string" } },
+  "verify-email": { path: "/v1/auth/verify-email", fields: { token: "string" } },
+};
+
+export async function publicAuth(req: Request, flow: keyof typeof PUBLIC, upstream: Upstream): Promise<Response> {
+  const rid = requestIdFor(req);
+  if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
+  const spec = PUBLIC[flow]!;
+  const body = await readFields(req, spec.fields);
+  if (!body) return json({ detail: "Fill in every field." }, 400, rid);
+  let res: Response;
+  try {
+    res = await forward(spec.path, body, rid, upstream);
+  } catch {
+    return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid);
+  }
+  if (!res.ok) return passError(res, rid);
+  const out = (await res.json().catch(() => ({}))) as { message?: string };
+  return json({ ok: true, message: out.message ?? "Done." }, 200, res.headers.get("x-request-id") || rid);
+}
+
+/** Create a Free account and sign in: the API's token pair goes into the cookies only.
+ * With an invite list (WEB_BETA_ALLOWED_EMAILS) other emails are refused before any account is created. */
+export async function signup(req: Request, upstream: Upstream, allow: Set<string> | null = betaAllowlist()): Promise<Response> {
+  const rid = requestIdFor(req);
+  if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
+  const body = await readFields(req, { email: "string", password: "string", username: "string", accept_terms: "boolean" });
+  if (!body) return json({ detail: "Fill in every field." }, 400, rid);
+  const email = String(body.email).trim().toLowerCase();
+  if (allow && !allow.has(email)) return json({ detail: NOT_INVITED, code: "not_invited" }, 403, rid);
+  let res: Response;
+  try {
+    res = await forward("/v1/auth/signup", { ...body, email, client: "web" }, rid, upstream);
+  } catch {
+    return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid);
+  }
+  if (!res.ok) return passError(res, rid);
+  const out = (await res.json()) as TokenPair & { email?: string; verification_sent?: boolean };
+  return json({ ok: true, email: out.email ?? email, verification_sent: !!out.verification_sent }, 201,
+    res.headers.get("x-request-id") || rid, sessionCookies(out));
 }

@@ -173,7 +173,7 @@ select, .field input { min-height: 40px; border-radius: 8px; background: var(--b
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* tables */
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; position: relative; } /* keeps .sr-only headers inside the scroller */
 .table { width: 100%; border-collapse: collapse; font-size: 15px; }
 .table th { font-weight: 500; padding: 12px 14px; text-align: left; color: var(--muted); font-size: 13px; white-space: nowrap; background: var(--bg-2); }
 .card:not(.flush) .table th { background: transparent; padding-left: 0; }
@@ -301,3 +301,18 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .tile-value { font-size: 24px; }
   .status-level { margin-left: 0; }
 }
+
+/* account and research */
+.wrap { overflow-wrap: anywhere; white-space: normal; text-align: right; }
+.muted-list { color: var(--muted); }
+.table th.row-h { background: transparent; color: var(--text); font-weight: 500; font-size: 14px; border-top: 1px solid var(--line-soft); }
+.chart .bar-up { fill: var(--up); }
+.chart .bar-down { fill: var(--down); }
+.ai-text { white-space: pre-wrap; }
+.sort-toggle { align-self: flex-start; }
+.index-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.index-tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.sector { min-width: 140px; font-size: 14px; }
+.doc { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
+.doc-section { margin-top: 12px; }
+.wl-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }

@@ -308,6 +308,17 @@ class ScanAndStockApiTests(DataApiBase):
             capped = self.client.get("/v1/scans/latest", headers=self.h).json()
         self.assertEqual((len(capped["setups"]), capped["limited"]), (2, True))
 
+    def test_latest_scan_sort_reorders_only_the_plans_rows(self):
+        ranked = self.client.get("/v1/scans/latest", headers=self.h).json()["setups"]
+        with mock.patch("api.scans.max_results_for", return_value=3):
+            r = self.client.get("/v1/scans/latest?sort=chg_pct", headers=self.h).json()
+        self.assertEqual({s["ticker"] for s in r["setups"]}, {s["ticker"] for s in ranked[:3]})
+        chg = [s["chg_pct"] for s in r["setups"]]
+        known = [c for c in chg if c is not None]
+        self.assertEqual(known, sorted(known, reverse=True))
+        self.assertEqual(chg[:len(known)], known)                  # missing values last
+        self.assertEqual(self.client.get("/v1/scans/latest?sort=ticker", headers=self.h).status_code, 422)
+
     def test_premium_sees_model_output(self):
         self.accounts["prem@example.com"] = {**self.accounts["pro@example.com"], "username": "prem@example.com",
                                              "tier": "premium"}
@@ -315,6 +326,24 @@ class ScanAndStockApiTests(DataApiBase):
         top = self.client.get("/v1/scans/latest?signal=prebreakout", headers=h).json()["setups"]
         self.assertEqual(top[0]["ticker"], "MXL")
         self.assertEqual(top[0]["prob"], 77.0)
+
+    def test_watchlist_items_carry_their_latest_scan_row(self):
+        wid = self.client.post("/v1/watchlists", json={"name": "Mine"}, headers=self.h).json()["id"]
+        self.client.post(f"/v1/watchlists/{wid}/tickers", json={"tickers": ["MXL", "ZZZZ"]}, headers=self.h)
+        top = self.client.get("/v1/scans/latest", headers=self.h).json()["setups"]
+        with mock.patch("api.scans.max_results_for", return_value=1):   # beyond the Scanner's row cap too
+            d = self.client.get(f"/v1/watchlists/{wid}", headers=self.h).json()
+        self.assertEqual(d["scan_at"], "2026-09-28T19:35:00+00:00")
+        items = {i["ticker"]: i for i in d["items"]}
+        self.assertIsNone(items["ZZZZ"]["latest"])
+        mxl = items["MXL"]["latest"]
+        self.assertEqual((mxl["rank"], mxl["score"]), (1, top[0]["score"]))
+        self.assertIsNone(mxl["prob"])                                   # redacted below Premium
+        self.assertGreaterEqual(d["scan_total"], 1)
+        with mock.patch("api.scans.market_runs", side_effect=RuntimeError("down")):
+            d = self.client.get(f"/v1/watchlists/{wid}", headers=self.h).json()
+        self.assertIsNone(d["scan_at"])
+        self.assertTrue(all(i["latest"] is None for i in d["items"]))     # the list still loads
 
     def test_stock_detail(self):
         self.client.post("/v1/alerts", json={"type": "move", "ticker": "MXL", "threshold": 5}, headers=self.h)

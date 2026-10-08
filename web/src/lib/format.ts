@@ -48,6 +48,15 @@ export function etDate(iso: string | null | undefined): string {
   return d.toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric" });
 }
 
+/** "Oct 8" (ET), or "Oct 8, 2025" outside the current year. */
+export function shortDate(iso: string | null | undefined, nowMs = Date.now()): string {
+  if (!iso) return "";
+  const d = new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const year = (x: Date) => x.toLocaleDateString("en-US", { timeZone: "America/New_York", year: "numeric" });
+  return d.toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", ...(year(d) !== year(new Date(nowMs)) ? { year: "numeric" } : {}) });
+}
+
 export function minutesSince(iso: string | null | undefined, nowMs = Date.now()): number | null {
   if (!iso) return null;
   const t = Date.parse(iso);

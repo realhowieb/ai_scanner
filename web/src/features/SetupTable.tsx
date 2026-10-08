@@ -14,14 +14,15 @@ function prob(r: Row, premium: boolean) {
 }
 
 /** Ranked rows, as a table on wide screens and as cards on phones. Rows come ranked from the API. */
-export function SetupTable({ rows, offset = 0, premium }: { rows: Row[]; offset?: number; premium: boolean }) {
+/** `numbered` = rows are in HSF rank order, so the position is the rank; off for other sort orders. */
+export function SetupTable({ rows, offset = 0, premium, numbered = true }: { rows: Row[]; offset?: number; premium: boolean; numbered?: boolean }) {
   return (
     <>
       <div className="table-wrap only-wide">
         <table className="table">
           <thead>
             <tr>
-              <th scope="col">#</th><th scope="col">Ticker</th><th scope="col">Setup</th>
+              <th scope="col">{numbered ? "#" : <span className="sr-only">Row</span>}</th><th scope="col">Ticker</th><th scope="col">Setup</th>
               <th scope="col" className="w30">HSF Score</th><th scope="col" className="num">Last</th>
               <th scope="col" className="num">Chg %</th><th scope="col" className="num">Gap %</th>
               <th scope="col" className="num">RVOL</th><th scope="col" className="num">PreBreakout</th>
@@ -31,7 +32,7 @@ export function SetupTable({ rows, offset = 0, premium }: { rows: Row[]; offset?
           <tbody>
             {rows.map((r, i) => (
               <tr key={`${r.ticker}-${i}`}>
-                <td className="mono cap">{offset + i + 1}</td>
+                <td className="mono cap">{numbered ? offset + i + 1 : ""}</td>
                 <td><TickerLink ticker={r.ticker} />{r.fading && <> <Pill tone="warn">Fading</Pill></>}</td>
                 <td><Pill>{setupLabel(r.primary_setup)}</Pill></td>
                 <td><ScoreBar score={r.score} /></td>
@@ -50,7 +51,7 @@ export function SetupTable({ rows, offset = 0, premium }: { rows: Row[]; offset?
         {rows.map((r, i) => (
           <li key={`${r.ticker}-${i}`} className="result-card">
             <div className="rc-top">
-              <span className="mono cap">#{offset + i + 1}</span>
+              {numbered && <span className="mono cap">#{offset + i + 1}</span>}
               <TickerLink ticker={r.ticker} />
               <Pill>{setupLabel(r.primary_setup)}</Pill>
               {r.fading && <Pill tone="warn">Fading</Pill>}

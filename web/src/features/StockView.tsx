@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import type { FormEvent, MouseEvent } from "react";
 
+import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { alerts } from "@/api/userData";
+import { backLabel, usePreviousPage } from "@/components/AppShell";
 import { Dialog } from "@/components/Dialog";
-import { Card, Disclaimer, Empty, ErrorLine, Freshness, Locked, Pill } from "@/components/ui";
+import { Card, Disclaimer, Empty, ErrorLine, ErrorState, Freshness, Locked, Pill, Skeleton } from "@/components/ui";
+import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, setupLabel } from "@/lib/format";
 
@@ -89,14 +93,90 @@ function PriceAlertButton({ s, onCreated }: { s: Stock; onCreated?: () => void }
   );
 }
 
-export function StockView({ s, premium, onChanged }: { s: Stock; premium: boolean; onChanged?: () => void }) {
+/** Back to the page the user came from (keeping its filters and scroll), else the Scanner. */
+function BackLink() {
+  const prev = usePreviousPage();
+  const label = backLabel(prev);
+  if (!prev || !label) return <Link href="/scanner" className="back">← Back to Scanner</Link>;
+  const back = (e: MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    window.history.back();
+  };
+  return <Link href={prev} className="back" onClick={back}>← {label}</Link>;
+}
+
+const DEFAULT_ACCOUNT = 10_000;
+const DEFAULT_RISK = 1;
+
+/** Pro: the API's trade plan for a name in the latest scan (stop from volatility, 1.5R and 3R targets). */
+function TradePlan({ s }: { s: Stock }) {
+  const [size, setSize] = useState(String(DEFAULT_ACCOUNT));
+  const [risk, setRisk] = useState(String(DEFAULT_RISK));
+  const [q, setQ] = useState({ size: DEFAULT_ACCOUNT, risk: DEFAULT_RISK });
+  const plan = useApi(`plan:${s.ticker}:${q.size}:${q.risk}`, (signal) =>
+    unwrap(api.GET("/v1/stocks/{ticker}/plan", { params: { path: { ticker: s.ticker }, query: { account_size: q.size, risk_pct: q.risk } }, signal })));
+  const nSize = Number(size);
+  const nRisk = Number(risk);
+  const valid = Number.isFinite(nSize) && nSize >= 100 && nSize <= 1e9 && Number.isFinite(nRisk) && nRisk > 0 && nRisk <= 10;
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (valid) setQ({ size: nSize, risk: nRisk });
+  };
+  const p = plan.data;
+  return (
+    <div className="stack-sm">
+      <form className="inline-form" onSubmit={submit} aria-label="Trade plan settings">
+        <label className="field"><span>Account size ($)</span><input inputMode="decimal" value={size} onChange={(e) => setSize(e.target.value)} /></label>
+        <label className="field"><span>Risk per trade (%)</span><input inputMode="decimal" value={risk} onChange={(e) => setRisk(e.target.value)} /></label>
+        <button type="submit" className="btn" disabled={!valid || plan.loading}>Update</button>
+      </form>
+      {!valid && <p className="form-error">Account size from $100 and risk above 0% up to 10%.</p>}
+      {plan.error && !p ? (plan.error.status === 404 ? <p className="cap">{plan.error.message}</p> : <ErrorState error={plan.error} onRetry={plan.reload} what="the trade plan" />)
+        : !p ? <Skeleton rows={3} label="Loading the trade plan" /> : (
+          <dl className="kv">
+            <div><dt>Entry (scan price)</dt><dd className="mono">{price(p.entry)}</dd></div>
+            <div><dt>Stop</dt><dd className="mono">{price(p.stop)} <span className="cap">(−{p.stop_pct.toFixed(1)}%)</span></dd></div>
+            {p.targets.map((t, i) => <div key={t}><dt>Target {i + 1}</dt><dd className="mono">{price(t)} <span className="cap">({p.target_r[i]}R)</span></dd></div>)}
+            <div><dt>Shares</dt><dd className="mono">{p.shares.toLocaleString()} <span className="cap">risking {price(p.risk_budget)}</span></dd></div>
+          </dl>
+        )}
+      <p className="cap">Stop at half the 20-day volatility (2–8%), targets at 1.5R and 3R. Educational only, not advice.</p>
+    </div>
+  );
+}
+
+/** Premium: an AI note on this name's latest scan result, generated on request. */
+function AINote({ s }: { s: Stock }) {
+  const act = useAction();
+  const [note, setNote] = useState<Schemas["AIText"] | null>(null);
+  const run = () => void act.run(async () => {
+    setNote(await unwrap(api.POST("/v1/ai/notes/{ticker}", { params: { path: { ticker: s.ticker } } })));
+    return true;
+  });
+  return (
+    <div className="stack-sm">
+      {note ? (note.text ? <div className="ai-text body-sm">{note.text}</div> : <p className="cap">Nothing to explain: {s.ticker} isn&apos;t in the latest scan.</p>)
+        : <p className="cap">A short research note on why {s.ticker} ranks where it does, written by Claude from the scan&apos;s data.</p>}
+      <ErrorLine error={act.error} />
+      <div className="row-actions">
+        <button type="button" className="btn" onClick={run} disabled={act.busy}>{act.busy ? "Writing…" : note ? "Write it again" : "Write AI note"}</button>
+      </div>
+      <p className="cap">AI commentary can be wrong. Research only, not investment advice.</p>
+    </div>
+  );
+}
+
+export function StockView({ s, premium, pro = false, aiNotes = false, onChanged }: {
+  s: Stock; premium: boolean; pro?: boolean; aiNotes?: boolean; onChanged?: () => void;
+}) {
   const comps = Object.entries(s.score_components || {}).filter(([, v]) => Number.isFinite(v));
   const compMax = Math.max(1, ...comps.map(([, v]) => Math.abs(v)));
   const noScore = s.hsf_score === null || s.hsf_score === undefined;
 
   return (
     <div className="stack">
-      <Link href="/scanner" className="back">← Back to Scanner</Link>
+      <BackLink />
       <section className="page-head">
         <div className="stack-sm">
           <div className="title-row">
@@ -139,6 +219,12 @@ export function StockView({ s, premium, onChanged }: { s: Stock; premium: boolea
             <Card title="What to watch" id="watch"><List items={s.watch_next} empty="Nothing specific to watch yet." /></Card>
           </div>
           <Card title="Historical context" id="hist"><Historical s={s} /></Card>
+          {s.in_latest_scan && s.has_setup && (
+            <Card title="Trade plan" id="plan">
+              {pro ? <TradePlan s={s} /> : <Locked title="Trade plans are part of Pro" plan="pro">Entry, stop, targets and position size from your account size and risk.</Locked>}
+            </Card>
+          )}
+          {aiNotes && s.in_latest_scan && <Card title="AI note" id="ai"><AINote s={s} /></Card>}
         </div>
 
         <aside className="col-side">
