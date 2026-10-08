@@ -9,6 +9,14 @@ export function probPct(v: number | null | undefined): string {
   return `${Math.round(v)}%`;
 }
 
+/** PreBreakout % plus where the name's raw model score sits in the scan, e.g. "13% · top 5%".
+ * Calibration gives many names the same %, so the rank is what tells them apart. */
+export function probWithRank(v: number | null | undefined, rank: number | null | undefined): string {
+  const p = probPct(v);
+  if (p === "—" || rank === null || rank === undefined || !Number.isFinite(rank)) return p;
+  return `${p} · top ${Math.round(rank)}%`;
+}
+
 export function price(v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 })}`;

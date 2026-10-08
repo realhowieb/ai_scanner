@@ -88,7 +88,7 @@ def test_prebreakout_redaction_preserves_hsf_score_and_nonpremium_evidence():
     opportunity = {
         "ticker": "XYZ", "score": 77, "status": "STRONG",
         "signals": ["prebreakout", "gapper"], "n_signals": 2,
-        "primary_setup": "PreBreakout", "prob": 72.0,
+        "primary_setup": "PreBreakout", "prob": 72.0, "prob_raw": 0.4, "prob_rank": 3,
         "reasons": ["PreBreakout setup probability 72%", "Gap +3%"],
         "model": {"breakout_score": 12.0, "prebreakout_prob": 72.0},
     }
@@ -98,6 +98,7 @@ def test_prebreakout_redaction_preserves_hsf_score_and_nonpremium_evidence():
     assert hidden["signals"] == ["gapper"]
     assert hidden["primary_setup"] == "Gapper"
     assert hidden["prob"] is None
+    assert hidden["prob_raw"] is None and hidden["prob_rank"] is None
     assert hidden["model"] == {"breakout_score": 12.0, "prebreakout_prob": None}
     assert hidden["reasons"] == ["Gap +3%"]
     assert shown == opportunity

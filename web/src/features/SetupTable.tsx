@@ -2,7 +2,7 @@
 
 import type { Schemas } from "@/api/client";
 import { Pill, ScoreBar, TickerLink } from "@/components/ui";
-import { num, pct, price, probPct, setupLabel } from "@/lib/format";
+import { num, pct, price, probWithRank, setupLabel } from "@/lib/format";
 
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 
@@ -10,7 +10,7 @@ type Row = Schemas["ScanSetup"];
 
 function prob(r: Row, premium: boolean) {
   if (!premium) return <span className="cap" title="PreBreakout probability is part of Premium">Premium</span>;
-  return probPct(r.prob);
+  return probWithRank(r.prob, r.prob_rank);
 }
 
 /** Ranked rows, as a table on wide screens and as cards on phones. Rows come ranked from the API. */

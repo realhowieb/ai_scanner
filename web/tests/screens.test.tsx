@@ -78,6 +78,15 @@ describe("Scanner", () => {
     expect(screen.queryByText("62%")).not.toBeInTheDocument();
   });
 
+  it("tells apart names on the same PreBreakout % by their model rank", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(latest({ limited: false, setups: [
+      setup("AAA", 88, { prob: 13.1, prob_rank: 5 }), setup("BBB", 70, { prob: 13.1, prob_rank: 60 }),
+    ] })));
+    render(<SessionProvider initialMe={me("premium")}><ScannerView /></SessionProvider>);
+    expect((await screen.findAllByText("13% · top 5%")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("13% · top 60%").length).toBeGreaterThan(0);
+  });
+
   it("shows a service outage with the support code and a retry", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ detail: "database unavailable" }, 503, { "retry-after": "30", "x-request-id": "web-feedbeef" }));
     render(<SessionProvider initialMe={me("pro")}><ScannerView /></SessionProvider>);

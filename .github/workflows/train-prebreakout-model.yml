@@ -11,6 +11,10 @@ on:
         description: "Optional debug artifact name for the local .pkl"
         required: true
         default: "prebreakout-model-debug"
+      mode:
+        description: "train = Run #17 training report; audit = live-vs-training feature audit only (read only)"
+        required: false
+        default: "train"
 
 permissions:
   contents: read
@@ -60,7 +64,30 @@ jobs:
             exit 1
           fi
 
+      - name: Audit live vs training features (read only)
+        if: inputs.mode == 'audit'
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          DAYS_BACK: ${{ inputs.days_back }}
+        run: |
+          python -u - <<'PY'
+          import json
+          import os
+
+          from ml_prebreakout import serving_skew_audit
+
+          report = serving_skew_audit(days_back=int(os.environ["DAYS_BACK"]))
+          print("=== PREBREAKOUT SERVING SKEW AUDIT ===")
+          print(json.dumps(report, indent=1, sort_keys=True, default=str))
+          PY
+
       - name: Train and save PreBreakout model
+        if: inputs.mode != 'audit'
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
@@ -149,6 +176,24 @@ jobs:
               raise SystemExit("PreBreakout model trained locally but was not saved to Neon.")
           if not promoted:
               print("PreBreakout Run #17 did not promote a new champion; current champion remains in Neon.")
+
+          # Printed last so it stays inside the log tail: isotonic vs sigmoid
+          # calibration out of time, and how the shown % would spread.
+          smoothing = dict(bundle.get("calibration_smoothing") or {})
+          ship_map = smoothing.pop("sigmoid_map_all_rows", None) or {}
+          smoothing["sigmoid_map_all_rows"] = {k: ship_map.get(k) for k in ("slope", "intercept", "n")}
+          print("=== PREBREAKOUT CALIBRATION SMOOTHING ===")
+          print(json.dumps(smoothing, indent=1, sort_keys=True, default=str))
+
+          # The live champion's own out-of-sample scores since it was trained:
+          # the data a live recalibration would be fit on. Read only.
+          from ml_prebreakout import live_calibration_report
+
+          live = live_calibration_report(days_back=days_back)
+          live_map = live.pop("sigmoid_map_all_rows", None) or {}
+          live["sigmoid_map_all_rows"] = {k: live_map.get(k) for k in ("slope", "intercept", "n")}
+          print("=== PREBREAKOUT LIVE MODEL CALIBRATION ===")
+          print(json.dumps(live, indent=1, sort_keys=True, default=str))
           PY
 
       - name: Upload debug model artifact
