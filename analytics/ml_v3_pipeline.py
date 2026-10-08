@@ -20,7 +20,11 @@ from analytics import research_dataset as rd
 from analytics import research_schema as rs
 
 PRIMARY_HORIZON = 5  # pre-declared (Outcome Intelligence DEFAULT_HORIZON), not chosen from results
-FOLD_KW = dict(min_train=60, min_val=30, min_val_class=5, embargo=1)
+# Fold minimums chosen from actual coverage: the frozen dataset holds ~134 matured,
+# certified signal-days over ~13 entry days, so 60/30 yields no folds. 30/20 is the
+# smallest size that still gives a validation fold both classes; results at this size
+# are diagnostic (wide CIs), which the reports state.
+FOLD_KW = dict(min_train=30, min_val=20, min_val_class=5, embargo=1)
 HOLDOUT_KW = dict(min_rows=100, min_days=5, min_remaining_folds=3)
 DEFINITIVE_MIN_ROWS = 300  # matured, certified signal-days at the primary horizon
 
