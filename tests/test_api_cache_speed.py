@@ -101,5 +101,61 @@ class AccountCacheTests(unittest.TestCase):
         self.assertEqual(get.call_count, 4)
 
 
+@unittest.skipUnless(all(importlib.util.find_spec(m) for m in ("fastapi", "jwt", "bcrypt")),
+                     "needs fastapi, PyJWT and bcrypt")
+class WarmUpTests(unittest.TestCase):
+    def _run(self, env):
+        from api import main
+
+        calls = []
+        started = []
+
+        class _Thread:
+            def __init__(self, target, **_kw):
+                self.target = target
+
+            def start(self):
+                started.append(1)
+                self.target()
+
+        with mock.patch.dict("os.environ", env, clear=False), \
+                mock.patch("threading.Thread", _Thread), \
+                mock.patch("api.market._brief_core", side_effect=lambda: calls.append("brief")), \
+                mock.patch("api.market.day_trader", side_effect=lambda src: calls.append(("dt", src))):
+            main._warm_caches()
+        return calls, started
+
+    def test_on_render_it_builds_the_brief_then_day_trader_movers(self):
+        calls, _ = self._run({"RENDER": "true", "HSF_WARM_BRIEF": "1", "HSF_WARM_DAY_TRADER": "1"})
+        self.assertEqual(calls, ["brief", ("dt", "movers")])
+
+    def test_each_has_a_kill_switch_and_nothing_runs_off_render(self):
+        calls, _ = self._run({"RENDER": "true", "HSF_WARM_BRIEF": "0", "HSF_WARM_DAY_TRADER": "1"})
+        self.assertEqual(calls, [("dt", "movers")])
+        calls, started = self._run({"RENDER": "", "HSF_WARM_BRIEF": "1", "HSF_WARM_DAY_TRADER": "1"})
+        self.assertEqual((calls, started), ([], []))
+
+    def test_a_failing_brief_still_warms_day_trader(self):
+        from api import main
+
+        calls = []
+
+        def boom():
+            raise RuntimeError("market data down")
+
+        class _Thread:
+            def __init__(self, target, **_kw):
+                self.target = target
+
+            def start(self):
+                self.target()
+
+        with mock.patch.dict("os.environ", {"RENDER": "true", "HSF_WARM_BRIEF": "1", "HSF_WARM_DAY_TRADER": "1"}), \
+                mock.patch("threading.Thread", _Thread), mock.patch("api.market._brief_core", side_effect=boom), \
+                mock.patch("api.market.day_trader", side_effect=lambda src: calls.append(src)):
+            main._warm_caches()
+        self.assertEqual(calls, ["movers"])
+
+
 if __name__ == "__main__":
     unittest.main()
