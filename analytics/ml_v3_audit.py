@@ -760,7 +760,7 @@ def score_calibration(rows: Sequence[AuditRow]) -> List[Dict[str, Any]]:
         recs = [r for r in rows if r.matured(h) and r.oi_record is not None]
         bucket_rows = []
         for lo, hi in oi.SCORE_BUCKETS:
-            grp = [r for r in recs if r.features.get("hsf_score") is not None and lo <= r.features["hsf_score"] <= hi]
+            grp = [r for r in recs if oi.score_bucket(r.features.get("hsf_score")) == f"{lo}-{hi}"]
             m = financial_metrics(grp, h)
             bucket_rows.append({"horizon": h, "bucket": f"{lo}-{hi}", "sample_size": len(grp), **m})
         view = oi.calibration_view([{**b, "matured_count": b["matured_count"] or 0,
@@ -1312,21 +1312,32 @@ def _binary_flag(series):
 
 
 def future_breakout_label(frame, horizon_scans: int = 3):
-    """Vectorized ``ml_prebreakout.add_future_breakout_label``: 1 when any of the
-    next ``horizon_scans`` scan rows of the same symbol has IsBreakout. Also
-    returns the timestamp of the last scan row the label reads."""
+    """Vectorized, exact ``ml_prebreakout.add_future_breakout_label``.
+
+    The reference looks at the next ``horizon_scans`` rows of the WHOLE frame
+    (sorted by Symbol, Timestamp) and labels 1 when any of them has the same
+    symbol AND any of them is a breakout. The two conditions need not hold on
+    the same row, so a symbol's last rows can inherit the next symbol's
+    breakout. That quirk is reproduced on purpose (``label_bleed`` marks it).
+    Also returns the latest timestamp among the rows the label reads."""
     import pandas as pd
 
     df = frame.sort_values(["Symbol", "Timestamp"], kind="mergesort").reset_index(drop=True).copy()
     df["IsBreakout"] = _binary_flag(df["IsBreakout"])
-    g = df.groupby("Symbol", sort=False)
-    fut = pd.Series(0, index=df.index)
-    last_ts = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns, UTC]")
+    any_brk = pd.Series(False, index=df.index)
+    same_sym = pd.Series(False, index=df.index)
+    same_sym_brk = pd.Series(False, index=df.index)
+    last_ts = df["Timestamp"].copy()
     for k in range(1, horizon_scans + 1):
-        fut = fut | g["IsBreakout"].shift(-k).fillna(0).astype(int)
-        ts_k = g["Timestamp"].shift(-k)
-        last_ts = last_ts.where(ts_k.isna(), ts_k)
-    df["FutureBreakout"] = fut.astype(int)
+        brk_k = df["IsBreakout"].shift(-k).fillna(0).astype(int).astype(bool)
+        sym_k = df["Symbol"].shift(-k).eq(df["Symbol"])
+        any_brk |= brk_k
+        same_sym |= sym_k
+        same_sym_brk |= brk_k & sym_k
+        ts_k = df["Timestamp"].shift(-k)
+        last_ts = last_ts.where(ts_k.isna() | (ts_k <= last_ts), ts_k)
+    df["FutureBreakout"] = (any_brk & same_sym).astype(int)
+    df["label_bleed"] = (df["FutureBreakout"].astype(bool) & ~same_sym_brk).astype(int)
     df["label_window_end_ts"] = last_ts
     return df
 
@@ -1395,6 +1406,7 @@ def legacy_v1_recipes(frame, *, params: Optional[Mapping[str, Any]] = None) -> D
                "single_feature_auc_BreakoutScore": single(y, "BreakoutScore")}
         if ycol == "FutureBreakout":
             cur = df["IsBreakout"].astype(int).to_numpy()
+            res["positives_from_cross_symbol_bleed"] = int(df["label_bleed"].sum())
             res["share_of_positives_already_breakout_now"] = round(float(cur[y == 1].mean()), 4) if y.sum() else None
             res["auc_of_current_IsBreakout_flag_alone"] = round(float(roc_auc_score(y, cur)), 4) if len(set(y)) > 1 else None
             ends = df["label_window_end_ts"]
