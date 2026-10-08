@@ -422,6 +422,32 @@ def load_many_run_results(run_ids: List[int]) -> Dict[int, str]:
         return {}
 
 
+def load_run_stamp(run_id: int) -> Optional[str]:
+    """A cheap version stamp for one saved run: created_at and row_count.
+
+    results_json is the big column; a saved run only changes when the day's
+    snapshot row is rewritten in place (save_daily_snapshot bumps created_at).
+    Callers cache results by (id, stamp) and re-check this tiny row instead of
+    re-downloading the payload. None when the run is missing or Neon is down.
+    """
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            return None
+        cur = conn.cursor()
+        cur.execute("SELECT created_at, row_count FROM runs WHERE id = %s", (int(run_id),))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+    except Exception:
+        return None
+    if not row:
+        return None
+    created = row["created_at"] if isinstance(row, dict) else row[0]
+    count = row["row_count"] if isinstance(row, dict) else row[1]
+    return f"{created}|{count}"
+
+
 def load_run_results(run_id: int) -> Optional[str]:
     """
     Load the results_json for a given run ID, preferring Neon then SQLite.
