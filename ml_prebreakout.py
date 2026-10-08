@@ -3597,6 +3597,20 @@ def serving_skew_audit(days_back: int = 90, *, maturity_days: int = 10) -> dict:
     enriched = add_historical_ohlcv_context(rows.copy(), days_back=days_back)
     train_feats = add_prebreakout_features(enriched, benchmark_context=benchmark_context, include_market_features=True)
     aucs["training"] = auc(_bundle_raw_scores(bundle, train_feats))
+
+    # Ablations: which missing input does live scoring need? Each scan scored
+    # alone (as live does) with daily bars, SPY/QQQ context, or both.
+    def per_scan(frame: pd.DataFrame, context) -> pd.Series:
+        scores = pd.Series(np.nan, index=frame.index)
+        for _, idx in frame.groupby(run_key.reindex(frame.index), sort=False).groups.items():
+            feats = add_prebreakout_features(frame.loc[idx].copy(), benchmark_context=context, include_market_features=True)
+            scores.loc[idx] = _bundle_raw_scores(bundle, feats)
+        return scores
+
+    aucs["per_scan_bars"] = auc(per_scan(enriched, None))
+    aucs["per_scan_spy_qqq"] = auc(per_scan(rows, benchmark_context))
+    aucs["per_scan_bars_spy_qqq"] = auc(per_scan(enriched, benchmark_context))
+    aucs["history_bars"] = auc(_bundle_raw_scores(bundle, add_prebreakout_features(enriched.copy())))
     out["auc"] = aucs
 
     train_X = train_feats.reindex(columns=feature_cols)

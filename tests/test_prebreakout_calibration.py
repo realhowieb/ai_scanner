@@ -188,7 +188,10 @@ class SigmoidCalibrationTests(unittest.TestCase):
                 mock.patch.object(m, "_utc_now", return_value=pd.Timestamp("2026-10-08", tz="UTC").to_pydatetime()):
             report = m.serving_skew_audit()
         self.assertEqual(report["rows"], n)
-        self.assertEqual(set(report["auc"]), {"stored", "per_scan", "history", "training"})
+        self.assertEqual(set(report["auc"]), {
+            "stored", "per_scan", "history", "training",
+            "per_scan_bars", "per_scan_spy_qqq", "per_scan_bars_spy_qqq", "history_bars",
+        })
         self.assertEqual(report["auc"]["stored"], report["auc"]["per_scan"])
         self.assertEqual(report["most_different_features"][0]["feature"], "F1")
 
