@@ -21,6 +21,14 @@ export const SIGNALS = [
 ] as const;
 const MIN_SCORES = [0, 40, 60, 75];
 const PAGE_SIZES = [25, 50, 100];
+export const SORTS = [
+  { id: "score", label: "HSF Score" },
+  { id: "chg_pct", label: "Change %" },
+  { id: "gap_pct", label: "Gap %" },
+  { id: "rvol", label: "Relative volume" },
+  { id: "prob", label: "PreBreakout", feature: "can_early_breakout" },
+] as const;
+type Sort = (typeof SORTS)[number]["id"];
 
 type Signal = "golden_cross" | "breakout" | "prebreakout" | "gapper" | "gainer";
 
@@ -30,7 +38,9 @@ export function readFilters(sp: URLSearchParams) {
   const min = Number(sp.get("min") || 0);
   const size = Number(sp.get("size") || 25);
   const page = Math.max(1, Math.floor(Number(sp.get("page") || 1)) || 1);
+  const so = sp.get("sort") || "score";
   return {
+    sort: (SORTS.some((x) => x.id === so) ? so : "score") as Sort,
     signal,
     minScore: MIN_SCORES.includes(min) ? min : 0,
     size: PAGE_SIZES.includes(size) ? size : 25,
@@ -48,17 +58,18 @@ export function ScannerView() {
   const lockedSignal = f.signal === "prebreakout" && !premium;
   const offset = (f.page - 1) * f.size;
 
-  const key = lockedSignal ? null : `scan:${f.signal}:${f.minScore}:${f.size}:${f.page}`;
+  const sort: Sort = f.sort === "prob" && !premium ? "score" : f.sort;
+  const key = lockedSignal ? null : `scan:${f.signal}:${f.minScore}:${f.size}:${f.page}:${sort}`;
   const { data, error, loading, reload } = useApi(key, (signal) =>
     unwrap(api.GET("/v1/scans/latest", {
-      params: { query: { limit: f.size, offset, min_score: f.minScore, ...(f.signal ? { signal: f.signal } : {}) } },
+      params: { query: { limit: f.size, offset, min_score: f.minScore, ...(f.signal ? { signal: f.signal } : {}), ...(sort !== "score" ? { sort } : {}) } },
       signal,
     })));
 
   const set = (patch: Record<string, string | number>) => {
     const next = new URLSearchParams(sp.toString());
     for (const [k, v] of Object.entries(patch)) {
-      if (v === "" || v === 0 || (k === "page" && v === 1) || (k === "size" && v === 25)) next.delete(k);
+      if (v === "" || v === 0 || (k === "page" && v === 1) || (k === "size" && v === 25) || (k === "sort" && v === "score")) next.delete(k);
       else next.set(k, String(v));
     }
     if (!("page" in patch)) next.delete("page");
@@ -79,7 +90,10 @@ export function ScannerView() {
             {data && ` · ${data.total} setup${data.total === 1 ? "" : "s"} ranked`}
           </p>
         </div>
-        <Link href="/scanner/custom" className="btn btn-primary">Run custom scan</Link>
+        <div className="row-actions">
+          <Link href="/scanner/history" className="btn">Scan history</Link>
+          <Link href="/scanner/custom" className="btn btn-primary">Run custom scan</Link>
+        </div>
       </section>
 
       <section aria-label="Filters" className="filters">
@@ -98,6 +112,11 @@ export function ScannerView() {
         <label className="inline-field">Min HSF Score
           <select value={f.minScore} onChange={(e) => set({ min: Number(e.target.value) })}>
             {MIN_SCORES.map((m) => <option key={m} value={m}>{m === 0 ? "Any" : m}</option>)}
+          </select>
+        </label>
+        <label className="inline-field">Sort by
+          <select value={sort} onChange={(e) => set({ sort: e.target.value })}>
+            {SORTS.filter((x) => !("feature" in x) || can(x.feature)).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
           </select>
         </label>
         <label className="inline-field">Rows
@@ -125,10 +144,11 @@ export function ScannerView() {
         </Empty></Card>
       ) : data ? (
         <section className={`card flush${loading ? " dim" : ""}`} aria-busy={loading}>
-          <SetupTable rows={data.setups} offset={offset} premium={premium} />
+          <SetupTable rows={data.setups} offset={offset} premium={premium} numbered={sort === "score"} />
         </section>
       ) : null}
 
+      {data && sort !== "score" && <p className="cap">Sorted by {SORTS.find((x) => x.id === sort)!.label.toLowerCase()} within your plan&apos;s top {Math.min(data.total, data.max_results)} HSF-ranked setups.</p>}
       {data && data.limited && (
         <div className="cap-note" role="note">
           <p>Your plan shows the top <b>{data.max_results}</b> of <b>{data.total}</b> setups in this scan.</p>

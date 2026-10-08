@@ -266,8 +266,22 @@ class WatchlistItem(BaseModel):
     note: Optional[str] = None
 
 
+class WatchlistScanState(ScanSetup):
+    """The ticker's row in the latest market scan's ranked setups."""
+    rank: int = Field(description="Position in that scan's ranked setups (1 = top)")
+
+
+class WatchlistItemDetail(WatchlistItem):
+    latest: Optional[WatchlistScanState] = Field(default=None, description=(
+        "GET /v1/watchlists/{id} only: the ticker's row in the latest market scan; null when it "
+        "isn't a ranked setup there (or the scan couldn't be read)"))
+
+
 class WatchlistDetail(Watchlist):
-    items: List[WatchlistItem] = []
+    items: List[WatchlistItemDetail] = []
+    scan_at: Optional[str] = Field(default=None, description="GET only: the market scan behind items[].latest")
+    scan_total: Optional[int] = Field(default=None, description="GET only: ranked setups in that scan")
+    stale: Optional[bool] = Field(default=None, description="GET only: a scheduled scan was missed (see Market.stale)")
 
 
 class TickersResult(BaseModel):

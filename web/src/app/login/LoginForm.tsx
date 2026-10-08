@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -8,8 +9,6 @@ import { messageFrom, newRequestId } from "@/api/client";
 import { WAKING_UP, useSlow } from "@/components/ui";
 import { safeNext } from "@/lib/nextPath";
 import { parseRetryAfter } from "@/lib/retryAfter";
-
-const CLASSIC = process.env.NEXT_PUBLIC_STREAMLIT_URL || "https://hsfinestai.streamlit.app";
 
 export function LoginForm() {
   const params = useSearchParams();
@@ -89,7 +88,7 @@ export function LoginForm() {
       </button>
       {slow && <p className="cap" role="status">{WAKING_UP}</p>}
       <p className="cap login-links">
-        <a href={CLASSIC}>Create an account</a> · <a href={CLASSIC}>Forgot password?</a>
+        <Link href="/signup">Create an account</Link> · <Link href="/forgot-password">Forgot password?</Link>
       </p>
       <p className="cap">Same account as the HSF web app.</p>
     </form>

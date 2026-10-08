@@ -4641,7 +4641,7 @@
      "items": {
       "default": [],
       "items": {
-       "$ref": "#/components/schemas/WatchlistItem"
+       "$ref": "#/components/schemas/WatchlistItemDetail"
       },
       "title": "Items",
       "type": "array"
@@ -4649,6 +4649,42 @@
      "name": {
       "title": "Name",
       "type": "string"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET only: the market scan behind items[].latest",
+      "title": "Scan At"
+     },
+     "scan_total": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET only: ranked setups in that scan",
+      "title": "Scan Total"
+     },
+     "stale": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET only: a scheduled scan was missed (see Market.stale)",
+      "title": "Stale"
      },
      "symbol_count": {
       "title": "Symbol Count",
@@ -4664,7 +4700,7 @@
     "title": "WatchlistDetail",
     "type": "object"
    },
-   "WatchlistItem": {
+   "WatchlistItemDetail": {
     "properties": {
      "added_at": {
       "anyOf": [
@@ -4676,6 +4712,17 @@
        }
       ],
       "title": "Added At"
+     },
+     "latest": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/WatchlistScanState"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET /v1/watchlists/{id} only: the ticker's row in the latest market scan; null when it isn't a ranked setup there (or the scan couldn't be read)"
      },
      "note": {
       "anyOf": [
@@ -4707,7 +4754,7 @@
     "required": [
      "ticker"
     ],
-    "title": "WatchlistItem",
+    "title": "WatchlistItemDetail",
     "type": "object"
    },
    "WatchlistRef": {
@@ -4726,6 +4773,156 @@
      "name"
     ],
     "title": "WatchlistRef",
+    "type": "object"
+   },
+   "WatchlistScanState": {
+    "description": "The ticker's row in the latest market scan's ranked setups.",
+    "properties": {
+     "breakout_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Breakout Score"
+     },
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "fading": {
+      "default": false,
+      "title": "Fading",
+      "type": "boolean"
+     },
+     "gap_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gap Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "n_signals": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "N Signals"
+     },
+     "primary_setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Primary Setup"
+     },
+     "prob": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "PreBreakout model output; null below Premium",
+      "title": "Prob"
+     },
+     "prob_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Premium. Where the raw PreBreakout model score sits among this scan's setups, as 'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob.",
+      "title": "Prob Rank"
+     },
+     "rank": {
+      "description": "Position in that scan's ranked setups (1 = top)",
+      "title": "Rank",
+      "type": "integer"
+     },
+     "rvol": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rvol"
+     },
+     "score": {
+      "title": "Score",
+      "type": "integer"
+     },
+     "signals": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "score",
+     "rank"
+    ],
+    "title": "WatchlistScanState",
     "type": "object"
    },
    "WatchlistUpdate": {
@@ -7091,6 +7288,25 @@
        "description": "Only setups with this signal",
        "title": "Signal"
       }
+     },
+     {
+      "description": "Order of the rows the plan sees (descending); the plan's rows are always its top HSF-ranked setups",
+      "in": "query",
+      "name": "sort",
+      "required": false,
+      "schema": {
+       "default": "score",
+       "description": "Order of the rows the plan sees (descending); the plan's rows are always its top HSF-ranked setups",
+       "enum": [
+        "score",
+        "chg_pct",
+        "gap_pct",
+        "rvol",
+        "prob"
+       ],
+       "title": "Sort",
+       "type": "string"
+      }
      }
     ],
     "responses": {
@@ -7621,6 +7837,7 @@
     "summary": "Watchlist Delete"
    },
    "get": {
+    "description": "The list with each ticker's row in the latest market scan (`items[].latest`).",
     "operationId": "watchlist_get_v1_watchlists__watchlist_id__get",
     "parameters": [
      {

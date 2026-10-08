@@ -121,13 +121,29 @@ describe("Watchlists", () => {
     expect(api.lists[0]!.items.map((i) => i.ticker)).toEqual(["AAPL"]);
   });
 
-  it("shows scores from one scan request, only for tickers in that scan", async () => {
+  it("an older API: scores from one scan request, only for tickers among the plan's rows", async () => {
     api.seedList("Main", ["AAPL", "ZZZ", "QQQ"]);
     wrap(<WatchlistsView />);
     expect(await screen.findByLabelText("HSF Score 81")).toBeInTheDocument();
-    expect(screen.getAllByText("Not ranked in the latest scan")).toHaveLength(2);
+    expect(screen.getAllByText("Not among your plan's ranked rows in the latest scan")).toHaveLength(2);
     expect(api.count("GET", /^\/v1\/scans\/latest/)).toBe(1);
     expect(api.count("GET", /^\/v1\/stocks\//)).toBe(0);
+  });
+
+  it("shows each ticker's scan state from the list itself, sortable by HSF Score", async () => {
+    api = fakeApi({ scanState: true, scan: [{ ticker: "NVDA", score: 90, last: 120 }, { ticker: "AAPL", score: 81, last: 201.5 }] });
+    api.seedList("Main", ["AAPL", "NVDA", "ZZZ"]);
+    const u = user();
+    wrap(<WatchlistsView />);
+    expect(await screen.findByLabelText("HSF Score 81")).toBeInTheDocument();
+    expect(screen.getByText("#2 of 2")).toBeInTheDocument();          // AAPL's place in the scan
+    expect(screen.getByText("Not ranked in the latest scan")).toBeInTheDocument();
+    expect(screen.getAllByText("Breakout")).toHaveLength(2);
+    expect(api.count("GET", /^\/v1\/scans\/latest/)).toBe(0);      // no second request
+    const order = () => screen.getAllByRole("link").map((a) => a.textContent).filter((t) => ["AAPL", "NVDA", "ZZZ"].includes(t ?? ""));
+    expect(order()).toEqual(["AAPL", "NVDA", "ZZZ"]);
+    await u.click(screen.getByLabelText("HSF Score"));
+    expect(order()).toEqual(["NVDA", "AAPL", "ZZZ"]);
   });
 });
 
