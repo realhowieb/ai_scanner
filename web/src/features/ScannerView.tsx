@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api, unwrap } from "@/api/client";
 import { Card, Disclaimer, Empty, ErrorState, Freshness, Locked, Skeleton, UpgradeButton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
-import { freshness } from "@/lib/format";
+import { etTime, freshness } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
 import { SetupTable } from "./SetupTable";
@@ -75,7 +75,7 @@ export function ScannerView() {
         <div>
           <h1 className="h1">Scanner</h1>
           <p className="cap">
-            {data?.scan_at ? <Freshness at={data.scan_at} label="Latest full-market scan" /> : "Latest full-market scan"}
+            {data?.scan_at ? <Freshness at={data.scan_at} label="Latest full-market scan" stale={data.stale} /> : "Latest full-market scan"}
             {data && ` · ${data.total} setup${data.total === 1 ? "" : "s"} ranked`}
           </p>
         </div>
@@ -107,8 +107,8 @@ export function ScannerView() {
         </label>
       </section>
 
-      {data?.scan_at && freshness(data.scan_at).stale && (
-        <p className="banner" role="status">This scan is more than 6 hours old. Scores and prices are from that scan.</p>
+      {data?.scan_at && (data.stale ?? freshness(data.scan_at).stale) && (
+        <p className="banner" role="status">Market data is delayed: a scheduled scan didn&apos;t arrive, so this is the scan from {etTime(data.scan_at)}. Scores and prices are from that scan.</p>
       )}
 
       {lockedSignal ? (

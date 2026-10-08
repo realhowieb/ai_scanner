@@ -60,7 +60,10 @@ export function TodayView({ data }: { data: Today }) {
   const failed = new Set(data.errors.map((e) => e.section));
   const phase = PHASES[data.market.phase] ?? PHASES.closed!;
   const top = data.top_setups;
-  const stale = top?.scan_at ? freshness(top.scan_at).stale : false;
+  // The API knows the scan schedule (a missed slot, not overnight or weekend gaps);
+  // the age rule is only a fallback for an API that predates market.stale.
+  const scanAt = data.market.latest_scan_at ?? top?.scan_at;
+  const stale = data.market.stale ?? (top?.scan_at ? freshness(top.scan_at).stale : false);
 
   return (
     <div className="stack">
@@ -78,7 +81,9 @@ export function TodayView({ data }: { data: Today }) {
 
       {stale && (
         <p className="banner" role="status">
-          The latest market scan is from {etTime(top?.scan_at)}. Scores and prices below are from that scan and may be out of date.
+          Market data is delayed: the latest market scan is from {etTime(scanAt)}
+          {data.market.expected_scan_at ? ` and the ${etTime(data.market.expected_scan_at)} scan hasn't arrived yet` : ""}.
+          Scores and prices below are from that scan and may be out of date.
         </p>
       )}
 
@@ -88,7 +93,7 @@ export function TodayView({ data }: { data: Today }) {
             <Movers card={data.before_open} id="bto" title="Before the open" caption="Pre-market scan vs the previous close. Pre-market prices keep moving." />
           )}
 
-          <Card title="Top setups" id="top" aside={top?.scan_at ? <Freshness at={top.scan_at} label="Full-market scan" /> : "Ranked by HSF Score"}>
+          <Card title="Top setups" id="top" aside={top?.scan_at ? <Freshness at={top.scan_at} label="Full-market scan" stale={data.market.stale} /> : "Ranked by HSF Score"}>
             {failed.has("top_setups") || !top ? (
               <SectionFailed name="Top setups" />
             ) : top.state === "empty_scan" ? (

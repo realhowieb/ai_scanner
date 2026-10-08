@@ -148,6 +148,54 @@ def market_phase(now: dt.datetime) -> str:
     return "closed"
 
 
+# A regular-session scan slot counts as missed once it is this late (System
+# Health's SLOT_LATE); a scan may start this early and still count for it.
+SCAN_SLOT_GRACE = dt.timedelta(minutes=45)
+SCAN_SLOT_EARLY = dt.timedelta(minutes=10)
+
+
+def _is_market_slot(slot: dt.datetime) -> bool:
+    """Slots whose ET time falls in regular hours run the full-market scan
+    (scheduler.cron_runner._resolve_session); the others run pre/post sessions."""
+    et = slot.astimezone(mc.ET)
+    return 9 * 60 + 30 <= et.hour * 60 + et.minute < 16 * 60
+
+
+def last_due_market_scan(now: dt.datetime, days: int = 10) -> Optional[dt.datetime]:
+    """The most recent full-market scan slot that should have produced a scan by now."""
+    today = now.astimezone(mc.ET).date()
+    for i in range(days):
+        slots = [s for s in mc.expected_scan_slots(today - dt.timedelta(days=i))
+                 if _is_market_slot(s) and s + SCAN_SLOT_GRACE <= now]
+        if slots:
+            return max(slots)
+    return None
+
+
+def scan_freshness(latest: Optional[dt.datetime], now: dt.datetime) -> Dict[str, Any]:
+    """stale = a scheduled full-market scan was missed, so the latest scan is older
+    than the schedule promises. Overnight, weekends and holidays are never stale
+    on their own (the last scan of the session is current until the next one is due)."""
+    due = last_due_market_scan(now)
+    if latest is not None and latest.tzinfo is None:
+        latest = latest.replace(tzinfo=dt.timezone.utc)
+    stale = due is not None and (latest is None or latest < due - SCAN_SLOT_EARLY)
+    return {"stale": stale, "expected_scan_at": _iso(due) if stale else None}
+
+
+def market_status(now: dt.datetime) -> Dict[str, Any]:
+    """Phase plus scan freshness for the Today page; freshness fails on its own."""
+    out: Dict[str, Any] = {"phase": market_phase(now), "latest_scan_at": None, "stale": None,
+                           "expected_scan_at": None}
+    try:
+        runs = market_runs()
+        latest = runs[0]["created_at"] if runs else None
+        out.update(latest_scan_at=_iso(latest), **scan_freshness(latest, now))
+    except Exception:  # unknown freshness reads as null, never as stale
+        pass
+    return out
+
+
 def _movers(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [{"ticker": m["ticker"], "pct": _num(m.get("pct")), "last": _num(m.get("last")),
              "score": m.get("score")} for m in rows]
@@ -229,7 +277,7 @@ def build_today(now: dt.datetime, entitlements: Dict[str, bool]) -> Dict[str, An
         "after_close": lambda: after_close(now, pro),
         "recap": lambda: recap(now),
     }
-    out: Dict[str, Any] = {"as_of": now.isoformat(), "market": {"phase": market_phase(now)}, "errors": []}
+    out: Dict[str, Any] = {"as_of": now.isoformat(), "market": market_status(now), "errors": []}
     for name, fn in sections.items():
         try:
             out[name] = fn()

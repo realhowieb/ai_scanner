@@ -107,6 +107,17 @@ class TodayBuilderTests(unittest.TestCase):
         self.assertEqual(out["after_close"]["scan_at"], "2026-09-29T21:35:00+00:00")
         self.assertIsNone(out["before_open"])
 
+    def test_market_status_flags_a_missed_scan_in_session(self):
+        out = self.build(TUE_NOON_ET, PRO)  # Tuesday's 9:35 ET scan is missing from the fixtures
+        self.assertEqual(out["market"]["latest_scan_at"], "2026-09-28T19:35:00+00:00")
+        self.assertTrue(out["market"]["stale"])
+        self.assertEqual(out["market"]["expected_scan_at"], "2026-09-29T13:35:00+00:00")
+
+    def test_market_status_before_the_open_is_fresh(self):
+        out = self.build(TUE_840_ET, PRO)  # last night's final scan is still the newest due
+        self.assertFalse(out["market"]["stale"])
+        self.assertIsNone(out["market"]["expected_scan_at"])
+
     def test_top_setups_and_redaction(self):
         out = self.build(SAT, PRO)
         self.assertEqual(out["market"]["phase"], "closed")
@@ -235,3 +246,48 @@ class RefreshStorePostgresTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScanFreshnessTests(unittest.TestCase):
+    """P1-61/62: stale only when a scheduled full-market scan slot was missed."""
+
+    def fresh(self, latest, now):
+        from api.today import scan_freshness
+
+        return scan_freshness(latest, now)
+
+    def t(self, s):
+        return dt.datetime.fromisoformat(s).replace(tzinfo=UTC)
+
+    def test_weekend_after_fridays_last_scan_is_fresh(self):
+        self.assertFalse(self.fresh(self.t("2026-10-02T19:38"), self.t("2026-10-03T16:00"))["stale"])
+
+    def test_monday_before_the_open_is_fresh(self):
+        self.assertFalse(self.fresh(self.t("2026-10-02T19:38"), self.t("2026-10-05T12:00"))["stale"])
+
+    def test_missed_midday_slot_is_stale(self):
+        out = self.fresh(self.t("2026-10-06T13:38"), self.t("2026-10-06T18:30"))
+        self.assertTrue(out["stale"])
+        self.assertEqual(out["expected_scan_at"], "2026-10-06T16:35:00+00:00")
+
+    def test_late_scan_within_grace_is_fresh(self):
+        self.assertFalse(self.fresh(self.t("2026-10-06T13:38"), self.t("2026-10-06T17:10"))["stale"])
+
+    def test_scan_saved_a_little_before_the_slot_counts(self):
+        self.assertFalse(self.fresh(self.t("2026-10-06T16:30"), self.t("2026-10-06T18:30"))["stale"])
+
+    def test_holiday_is_fresh(self):  # Thanksgiving 2026
+        self.assertFalse(self.fresh(self.t("2026-11-25T20:38"), self.t("2026-11-26T18:00"))["stale"])
+
+    def test_winter_slots_follow_eastern_time(self):
+        # EST: 13:35 UTC is pre-market, 20:35 UTC (3:35 PM ET) is the last full-market slot.
+        self.assertFalse(self.fresh(self.t("2026-12-01T19:38"), self.t("2026-12-01T21:00"))["stale"])
+        self.assertTrue(self.fresh(self.t("2026-12-01T19:38"), self.t("2026-12-01T21:30"))["stale"])
+        self.assertFalse(self.fresh(self.t("2026-11-30T20:38"), self.t("2026-12-01T15:00"))["stale"])
+
+    def test_no_scan_at_all_is_stale(self):
+        self.assertTrue(self.fresh(None, self.t("2026-10-06T18:30"))["stale"])
+
+    def test_naive_timestamps_read_as_utc(self):
+        naive = dt.datetime(2026, 10, 6, 16, 38)
+        self.assertFalse(self.fresh(naive, self.t("2026-10-06T18:30"))["stale"])

@@ -10,7 +10,7 @@ import datetime as dt
 import math
 from typing import Any, Dict, List, Optional
 
-from api.today import TTLCache, _cached, _iso, _num, market_runs, run_df
+from api.today import TTLCache, _cached, _iso, _num, market_runs, run_df, scan_freshness
 
 SCAN_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
 SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob")
@@ -82,6 +82,7 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     visible = opps[:cap]
     return {"scan_at": _iso(runs[0]["created_at"]), "total": len(opps), "max_results": cap,
             "limited": len(opps) > cap,
+            "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
             "setups": [_scan_row(o) for o in visible[offset:offset + limit]]}
 
 

@@ -1600,6 +1600,11 @@ export interface components {
              */
             setups: components["schemas"]["ScanSetup"][];
             /**
+             * Stale
+             * @description A scheduled full-market scan was missed (see Market.stale)
+             */
+            stale?: boolean | null;
+            /**
              * Total
              * @description Setups matching the filters, before the plan cap
              */
@@ -1657,10 +1662,25 @@ export interface components {
         /** Market */
         Market: {
             /**
+             * Expected Scan At
+             * @description When stale: the missed scan slot (ISO)
+             */
+            expected_scan_at?: string | null;
+            /**
+             * Latest Scan At
+             * @description Latest full-market scan (ISO); null when none
+             */
+            latest_scan_at?: string | null;
+            /**
              * Phase
              * @enum {string}
              */
             phase: "premarket" | "open" | "afterhours" | "closed";
+            /**
+             * Stale
+             * @description True when a scheduled full-market scan was missed, so the data is older than the schedule promises; null when unknown. Overnight, weekends and holidays alone are never stale.
+             */
+            stale?: boolean | null;
         };
         /** Me */
         Me: {
@@ -1831,6 +1851,11 @@ export interface components {
              */
             database: "ok";
             /**
+             * Expected Scan At
+             * @description When stale: the missed scan slot (ISO)
+             */
+            expected_scan_at?: string | null;
+            /**
              * Latest Scan At
              * @description Latest market scan (ISO); null when none
              */
@@ -1839,6 +1864,11 @@ export interface components {
             ok: boolean;
             /** Scan Age Minutes */
             scan_age_minutes?: number | null;
+            /**
+             * Stale
+             * @description A scheduled full-market scan was missed (see Market.stale)
+             */
+            stale?: boolean | null;
         };
         /** Recap */
         Recap: {
@@ -2735,7 +2765,10 @@ export interface operations {
     };
     readyz_readyz_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Answer 503 when a scheduled full-market scan was missed, so an outside uptime monitor alerts on stale data as well as on a database outage */
+                strict?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2751,7 +2784,16 @@ export interface operations {
                     "application/json": components["schemas"]["Ready"];
                 };
             };
-            /** @description Database unavailable */
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Database unavailable, or (strict=true) a scheduled scan was missed */
             503: {
                 headers: {
                     [name: string]: unknown;

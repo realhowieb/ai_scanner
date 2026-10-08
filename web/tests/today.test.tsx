@@ -43,6 +43,16 @@ describe("Today", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/may be out of date/);
   });
 
+  it("trusts the API's schedule over the age rule", () => {
+    const old = new Date(Date.now() - 18 * 3600_000).toISOString();
+    const { rerender } = render(<TodayView data={{ ...base, market: { phase: "premarket", stale: false, latest_scan_at: old }, top_setups: { ...base.top_setups!, scan_at: old } }} />);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();  // last night's final scan, nothing missed
+    expect(screen.queryByText(/Stale/)).not.toBeInTheDocument();
+    const missed = new Date(Date.now() - 2 * 3600_000).toISOString();
+    rerender(<TodayView data={{ ...base, market: { phase: "open", stale: true, latest_scan_at: old, expected_scan_at: missed }, top_setups: { ...base.top_setups!, scan_at: old } }} />);
+    expect(screen.getByRole("status")).toHaveTextContent(/Market data is delayed.*hasn't arrived yet/);
+  });
+
   it("doesn't call last evening's after-hours scan stale", () => {
     const evening = new Date(Date.now() - 15 * 3600_000).toISOString();
     render(<TodayView data={{ ...base, after_close: { scan_at: evening, locked: false, movers: [] } }} />);

@@ -364,6 +364,27 @@ class ReliabilityTests(DataApiBase):
         self.assertEqual(r.json()["database"], "ok")
         self.assertAlmostEqual(r.json()["scan_age_minutes"], 30, delta=1)
 
+    def test_readyz_strict_is_503_when_a_scan_was_missed(self):
+        now = dt.datetime.now(UTC)
+        old = now - dt.timedelta(days=5)  # any weekday window holds a missed full-market slot
+        with mock.patch("api.store.ping"), \
+                mock.patch("api.today.market_runs", return_value=[{"id": 1, "created_at": old}]):
+            loose = self.client.get("/readyz")
+            strict = self.client.get("/readyz?strict=true")
+        self.assertEqual(loose.status_code, 200)
+        self.assertTrue(loose.json()["stale"])
+        self.assertEqual(strict.status_code, 503)
+        self.assertFalse(strict.json()["ok"])
+        self.assertIsNotNone(strict.json()["expected_scan_at"])
+
+    def test_readyz_strict_is_200_when_fresh(self):
+        with mock.patch("api.store.ping"), \
+                mock.patch("api.today.market_runs",
+                           return_value=[{"id": 1, "created_at": dt.datetime.now(UTC)}]):
+            r = self.client.get("/readyz?strict=true")
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.json()["stale"])
+
     def test_readyz_503_when_database_down(self):
         from api.store import DatabaseUnavailable
 
