@@ -317,6 +317,33 @@ def list_recent_events(user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
     return out
 
 
+def list_events_filtered(user_id: str, limit: int = 20, *, ticker: Optional[str] = None,
+                         after: Any = None, before: Any = None) -> List[Dict[str, Any]]:
+    """The user's fired alert events, newest first, optionally for one ticker and a
+    time window (`before` inclusive; the API drops its cursor row itself)."""
+    where, args = ["user_id = %s"], [user_id]
+    if ticker:
+        where.append("ticker = %s")
+        args.append(ticker)
+    if after is not None:
+        where.append("fired_at >= %s")
+        args.append(after)
+    if before is not None:
+        where.append("fired_at <= %s")
+        args.append(before)
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT id, alert_id, ticker, message, fired_at FROM alert_events WHERE {' AND '.join(where)} "
+        "ORDER BY fired_at DESC, id DESC LIMIT %s",
+        (*args, int(limit)),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    keys = ("id", "alert_id", "ticker", "message", "fired_at")
+    return [{k: (r.get(k) if isinstance(r, dict) else r[i]) for i, k in enumerate(keys)} for r in rows]
+
+
 def recent_fire_counts_for_user(user_id: str, days: int = 30) -> Dict[int, int]:
     """{alert_id: number of fires in the last `days`}, including not-yet-scored
     ones — lets the UI show a 'scoring pending' hint for young alerts instead of
