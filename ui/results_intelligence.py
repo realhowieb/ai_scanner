@@ -23,6 +23,7 @@ momentum = PctChange (GapPct fallback). Missing fields contribute nothing.
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Callable, Dict, List, Optional
 
 # Documented signal-derivation thresholds (transparent, conservative).
@@ -61,6 +62,7 @@ def _row_to_signal_fields(row: Dict[str, Any]) -> Dict[str, Any]:
     gap = _num(_col(row, "GapPct", "Gap %"))
     chg = _num(_col(row, "PctChange", "Chg %", "chg_pct"))
     prob = _num(_col(row, "PreBreakoutProb%", "PreBreakoutProb"))
+    prob_raw = _num(_col(row, "PreBreakoutProbRaw"))
     bscore = _num(_col(row, "BreakoutScore"))
     ema = _col(row, "EMACross")
     signals = set()
@@ -77,12 +79,32 @@ def _row_to_signal_fields(row: Dict[str, Any]) -> Dict[str, Any]:
     fading = chg is not None and chg <= FADING_SIGNAL_MAX
     return {
         "signals": signals, "fading": fading,
-        "breakout_score": bscore, "prob": prob,
+        "breakout_score": bscore, "prob": prob, "prob_raw": prob_raw,
         "chg_pct": chg if chg is not None else gap,
         "gap_pct": gap,
         "last": _num(_col(row, "Last", "last", "Price")),
         "rvol": _num(_col(row, "VolRel20")),
     }
+
+
+def _add_prob_rank(opps: List[Dict[str, Any]]) -> None:
+    """Set prob_rank: where each name's raw PreBreakout model score sits in this scan.
+
+    Isotonic calibration gives low-signal names one shared % (the ~13.1% floor),
+    so the calibrated value alone can't tell them apart. The raw model score
+    still differs per ticker. prob_rank is the "top X%" of this scan's scored
+    setups (1 = the model's strongest names); None when unscored. Display only:
+    scores and ordering don't use it.
+    """
+    scored = sorted((o["prob_raw"] for o in opps if o.get("prob_raw") is not None), reverse=True)
+    n = len(scored)
+    for o in opps:
+        raw = o.get("prob_raw")
+        if raw is None or not n:
+            o["prob_rank"] = None
+            continue
+        better = sum(1 for v in scored if v > raw)   # ties share the better rank
+        o["prob_rank"] = max(1, math.ceil(100 * (better + 1) / n))
 
 
 def _ticker_of(row: Dict[str, Any]) -> str:
@@ -123,7 +145,7 @@ def consolidate_scanner_results(
             # Merge duplicates: union signals; prefer non-None / stronger values.
             cur["signals"] |= f["signals"]
             cur["fading"] = cur["fading"] or f["fading"]
-            for k in ("breakout_score", "prob"):
+            for k in ("breakout_score", "prob", "prob_raw"):
                 if f[k] is not None and (cur[k] is None or f[k] > cur[k]):
                     cur[k] = f[k]
             for k in ("chg_pct", "gap_pct", "last", "rvol"):
@@ -147,10 +169,12 @@ def consolidate_scanner_results(
             "n_signals": len(pos), "signals": pos, "fading": s["fading"],
             "status": _status(score, s["fading"]),
             "breakout_score": s["breakout_score"], "prob": s["prob"],
+            "prob_raw": s["prob_raw"],
             "chg_pct": s["chg_pct"], "gap_pct": s["gap_pct"],
             "last": s.get("last"), "rvol": s.get("rvol"),
         })
 
+    _add_prob_rank(opps)
     # Deterministic ranking: score, status strength, signal count, model, ticker.
     _rank = {"STRONG": 3, "WATCH": 2, "CAUTION": 1}
     opps.sort(key=lambda o: (

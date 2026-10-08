@@ -177,6 +177,19 @@ class FingerprintTests(unittest.TestCase):
         self.assertEqual(ri._df_signature(self.pd.DataFrame()), "empty")
         self.assertEqual(ri._df_signature(None), "empty")
 
+    def test_prob_rank_separates_names_on_the_calibrated_floor(self):
+        rows = [
+            {"Ticker": t, "PreBreakoutProb%": 13.1, "PreBreakoutProbRaw": raw}
+            for t, raw in (("AAA", 0.30), ("BBB", 0.10), ("CCC", 0.05), ("DDD", 0.10))
+        ] + [{"Ticker": "EEE", "GapPct": 10.0, "PctChange": 5.0}]
+        by = {o["ticker"]: o for o in ri.consolidate_scanner_results(rows)}
+        self.assertEqual(by["AAA"]["prob_rank"], 25)
+        self.assertEqual(by["BBB"]["prob_rank"], by["DDD"]["prob_rank"])  # ties share the better rank
+        self.assertEqual(by["BBB"]["prob_rank"], 50)
+        self.assertEqual(by["CCC"]["prob_rank"], 100)
+        self.assertIsNone(by["EEE"]["prob_rank"])
+        self.assertEqual({o["prob"] for t, o in by.items() if t != "EEE"}, {13.1})
+
 
 if __name__ == "__main__":
     unittest.main()
