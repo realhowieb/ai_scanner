@@ -8,7 +8,7 @@ import { REFRESH_COOKIE } from "@/server/cookies";
 export function proxy(req: NextRequest) {
   const signedIn = !!req.cookies.get(REFRESH_COOKIE)?.value;
   const { pathname, search } = req.nextUrl;
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/signup") {
     return signedIn ? NextResponse.redirect(new URL("/today", req.url)) : NextResponse.next();
   }
   if (!signedIn) {
@@ -21,5 +21,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/today/:path*", "/scanner/:path*", "/stocks/:path*", "/watchlists/:path*", "/alerts/:path*", "/account/:path*", "/track-record/:path*", "/brief/:path*"],
+  matcher: ["/", "/login", "/signup", "/today/:path*", "/scanner/:path*", "/stocks/:path*", "/watchlists/:path*", "/alerts/:path*", "/account/:path*", "/track-record/:path*", "/brief/:path*", "/journal/:path*", "/day-trader/:path*"],
 };

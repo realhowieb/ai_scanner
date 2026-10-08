@@ -11,7 +11,7 @@ const NAV = [
   { href: "/today", label: "Today" },
   { href: "/brief", label: "Brief" },
   { href: "/scanner", label: "Scanner" },
-  { href: "/scanner/custom", label: "Custom scan" },
+  { href: "/day-trader", label: "Day Trader" },
   { href: "/watchlists", label: "Watchlists" },
   { href: "/alerts", label: "Alerts" },
   { href: "/track-record", label: "Track record" },
@@ -26,7 +26,7 @@ export const usePreviousPage = () => useContext(PreviousPage);
 const SECTIONS: [string, string][] = [
   ["/today", "Today"], ["/scanner/custom", "Custom scan"], ["/scanner/history", "Scan history"], ["/scanner", "Scanner"],
   ["/watchlists", "Watchlists"], ["/alerts", "Alerts"], ["/track-record", "Track record"], ["/brief", "Market Brief"],
-  ["/account", "Account"], ["/stocks", "the previous stock"],
+  ["/account", "Account"], ["/journal", "Journal"], ["/day-trader", "Day Trader"], ["/stocks", "the previous stock"],
 ];
 
 /** "Back to Watchlists" for /watchlists?id=3; null when there is no previous page here. */
@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/today" className="brand">HSFinest<span>.AI</span></Link>
           <nav aria-label="Main" className="nav">
             {NAV.map((n) => {
-              const active = n.href === "/scanner" ? path === "/scanner" || path.startsWith("/scanner/history") : path.startsWith(n.href);
+              const active = path === n.href || path.startsWith(`${n.href}/`);
               return (
                 <Link key={n.href} href={n.href} className="navlink" aria-current={active ? "page" : undefined}>{n.label}</Link>
               );
@@ -94,7 +94,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="menu" role="menu">
                 {me && <p className="cap menu-email">{me.email}</p>}
                 <Link role="menuitem" href="/account" className="menu-item" onClick={() => setMenu(false)}>Account &amp; billing</Link>
-                <a role="menuitem" href={CLASSIC} className="menu-item">Open classic app</a>
+                <Link role="menuitem" href="/journal" className="menu-item" onClick={() => setMenu(false)}>Journal</Link>
+                <a role="menuitem" href={CLASSIC} className="menu-item">Classic app (paper trading)</a>
                 <button role="menuitem" type="button" className="menu-item" onClick={() => void signOut()}>Sign out</button>
               </div>
             )}
