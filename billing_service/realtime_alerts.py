@@ -1,4 +1,4 @@
-"""Real-time price-alert worker — runs inside the always-on Render billing service.
+"""Real-time price-alert worker — runs inside hsf-api (api/main.py) or the billing service.
 
 The scheduled cron checks alerts a few times a day; day traders need price
 alerts in seconds-to-minutes. This worker polls Alpaca snapshots for all
@@ -11,8 +11,8 @@ Coordination with the cron is via user_alerts.last_fired_at — both paths mark
 it, so the shared per-alert throttle prevents double-firing.
 
 Enable with REALTIME_ALERTS_ENABLED=1 plus DATABASE_URL, ALPACA_API_KEY_ID,
-ALPACA_API_SECRET_KEY, and SMTP_* in the Render environment (a separate secret
-store from Streamlit Cloud and GitHub Actions).
+ALPACA_API_SECRET_KEY, and SMTP_* in the Render environment of the ONE service
+that should run it (hsf-api since it moved to an always-on plan).
 """
 from __future__ import annotations
 
