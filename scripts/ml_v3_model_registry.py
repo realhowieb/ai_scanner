@@ -26,7 +26,7 @@ def _q(cur, sql):
     try:
         cur.execute(sql)
         cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        return [dict(r) if isinstance(r, dict) else dict(zip(cols, r)) for r in cur.fetchall()]
     except Exception as e:  # report, keep going
         cur.connection.rollback()
         return [{"error": f"{type(e).__name__}: {e}"}]
@@ -84,10 +84,12 @@ def main() -> int:
                      "FROM research_dataset_versions ORDER BY created_at"):
         print(json.dumps(r, default=str))
     print("=== benchmark coverage (opportunity rows) ===")
-    for r in _q(cur, "SELECT COUNT(*) AS n, COUNT(return_5d) AS ret5, COUNT(benchmark_return_5d) AS bench5, "
-                     "COUNT(benchmark_return_1d) AS bench1, MIN(fired_at) AS first, MAX(fired_at) AS last "
+    for r in _q(cur, "SELECT COUNT(*) AS n, COUNT(return_5d) AS ret5, MIN(fired_at) AS first, MAX(fired_at) AS last "
                      "FROM signal_outcomes WHERE source = 'opportunity'"):
         print(json.dumps(r, default=str))
+    for r in _q(cur, "SELECT column_name FROM information_schema.columns WHERE table_name = 'signal_outcomes' "
+                     "AND column_name LIKE 'benchmark%' ORDER BY column_name"):
+        print("signal_outcomes column:", json.dumps(r, default=str))
     cur.close()
     conn.close()
     return 0
