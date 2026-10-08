@@ -22,7 +22,7 @@ ACCOUNT_TABLES: Tuple[Tuple[str, str], ...] = (
     ("user_alerts", "user_id"), ("alert_events", "user_id"), ("alert_outcomes", "user_id"),
     ("user_trades", "user_id"), ("alpaca_paper_accounts", "user_id"), ("alpaca_paper_order_events", "user_id"),
     ("user_settings", "user_id"), ("hsf_email_prefs", "user_id"), ("hsf_alert_prefs", "user_id"),
-    ("hsf_intelligence_alerts", "user_id"),
+    ("hsf_intelligence_alerts", "user_id"), ("hsf_alert_rule_events", "user_id"),
     ("email_verifications", "username"), ("password_reset_tokens", "username"), ("ai_usage", "username"),
     ("login_attempts", "username"), ("runs", "username"), ("scan_errors", "username"),
     ("auth_sessions", "username"), ("hsf_auth_tokens", "username"),
@@ -65,7 +65,8 @@ def delete_account(conn, username: str) -> Dict[str, int]:
             raise DeletionBlocked(why)
 
         counts: Dict[str, int] = {}
-        existing = _existing_tables(cur, ["watchlists", "watchlist_items", *[t for t, _ in ACCOUNT_TABLES]])
+        existing = _existing_tables(cur, ["watchlists", "watchlist_items", "hsf_alert_rules", "hsf_alert_rule_state",
+                                           *[t for t, _ in ACCOUNT_TABLES]])
         if "watchlists" in existing:
             if "watchlist_items" in existing:
                 cur.execute("DELETE FROM watchlist_items WHERE watchlist_id IN "
@@ -73,6 +74,13 @@ def delete_account(conn, username: str) -> Dict[str, int]:
                 counts["watchlist_items"] = cur.rowcount or 0
             cur.execute("DELETE FROM watchlists WHERE lower(user_id) = %s", (user,))
             counts["watchlists"] = cur.rowcount or 0
+        if "hsf_alert_rules" in existing:  # rule state is keyed by rule, not by user
+            if "hsf_alert_rule_state" in existing:
+                cur.execute("DELETE FROM hsf_alert_rule_state WHERE rule_id IN "
+                            "(SELECT id FROM hsf_alert_rules WHERE lower(user_id) = %s)", (user,))
+                counts["hsf_alert_rule_state"] = cur.rowcount or 0
+            cur.execute("DELETE FROM hsf_alert_rules WHERE lower(user_id) = %s", (user,))
+            counts["hsf_alert_rules"] = cur.rowcount or 0
         for table, column in ACCOUNT_TABLES:
             if table not in existing:
                 continue

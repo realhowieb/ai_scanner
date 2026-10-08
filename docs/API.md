@@ -54,10 +54,17 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET / PATCH / DELETE | `/v1/watchlists/{id}` | Bearer | Items with notes; rename / make default `{"name"?,"make_default"?}`; delete (204). 404 when not yours. |
 | POST | `/v1/watchlists/{id}/tickers` | Bearer | `{"tickers":[...]}` (≤200) → `added`, `already_present`, `invalid`. |
 | PATCH / DELETE | `/v1/watchlists/{id}/tickers/{ticker}` | Bearer | Set the note `{"note"}`; remove the ticker (204). |
+| POST / DELETE | `/v1/watchlists/{id}/symbols`, `/v1/watchlists/{id}/symbols/{ticker}` | Bearer | Same as `/tickers` (add; remove). |
+| GET | `/v1/watchlists/{id}/intelligence` | Bearer | Every symbol's HSF Score, rank and their change since the previous scan, setup, signals, PreBreakout (Premium), price, RVOL, EMA cross, freshness and active alert count, from the latest saved market scan. See [WATCHLIST_INTELLIGENCE_API.md](WATCHLIST_INTELLIGENCE_API.md). |
+| GET | `/v1/watchlists/{id}/changes` | Bearer | The canonical HSF changes between the two latest scans for the list's symbols, with rank moves, plus your rule alerts on them since the previous scan. |
 | GET / POST | `/v1/alerts` | Bearer | Your alerts with `limit`, `used`, `email_enabled`; create `{"type","ticker"?,"threshold"?,"direction"?,"watchlist_only"?}`. Same types and input rules as the web app; Free 1 alert, Pro 5, Premium 25 (403 at the limit, 409 duplicate, 422 bad input). |
 | PATCH / DELETE | `/v1/alerts/{id}` | Bearer | `{"enabled"}`; delete (204). |
 | GET | `/v1/alerts/types` | Bearer | Alert types and their input rules (ticker needed, threshold min/exclusive/max/default, allowed directions), the same rules `POST /v1/alerts` validates, for building forms. |
-| GET | `/v1/alerts/events` | Bearer | Your recent fired alerts (`limit` ≤100), newest first. |
+| GET | `/v1/alerts/events` | Bearer | Your fired alerts, ticker alerts and alert rules together, newest first (`limit` ≤100). Filters `ticker`, `rule_id`, `watchlist_id`, `triggered_after`, `triggered_before`, `source`; page with each event's `cursor`. |
+| GET / POST | `/v1/alerts/rules` | Bearer | Your alert rules with `limit`, `used` and plan `capabilities`; create `{"rule_type","ticker"|"watchlist_id","threshold"?,"value"?,"delivery_channels"?,"cooldown_seconds"?,"enabled"?}` (201; 403 plan limit/type/channel; 404 watchlist not yours; 409 duplicate; 422 bad input). Rules share the plan's alert limit with ticker alerts. |
+| GET | `/v1/alerts/rules/types` | Bearer | Rule types, thresholds, default cooldowns and whether your plan includes each. |
+| GET / PATCH / DELETE | `/v1/alerts/rules/{id}` | Bearer | One rule; change `threshold`, `value`, `enabled`, `delivery_channels`, `cooldown_seconds`; delete (204, its events stay). |
+| GET | `/v1/me/capabilities` | Bearer | Your plan's watchlist and alert limits, rule types and delivery channels. |
 
 Every route declares a response model, so `/openapi.json` describes each payload
 and clients can be generated from it. Web v2's client is generated from the committed
@@ -211,7 +218,9 @@ sent. Use dedicated test accounts only.
 
 `tests/test_api_v1.py` (sign-in, tokens, refresh rotation and reuse, /me),
 `tests/test_api_v1_data.py` (scans, stock detail, watchlists, alerts; plan caps,
-ownership, readiness, request ids), `tests/test_alerts_atomic_create.py` and
+ownership, readiness, request ids), `tests/test_api_watchlist_intelligence.py` and
+`tests/test_alert_rules_engine.py` (watchlist intelligence, alert rules, the evaluator;
+the engine tests also run on Postgres when `HSF_TEST_PG_URL` is set), `tests/test_alerts_atomic_create.py` and
 `tests/test_api_db_sessions.py` (concurrency limits, no idle-in-transaction
 connections, no leaked connections; the Postgres parts need `HSF_TEST_PG_URL`)
 and `tests/test_api_today_and_store.py` (Today builder on saved-run fixtures; refresh

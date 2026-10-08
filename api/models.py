@@ -349,11 +349,169 @@ class AlertType(BaseModel):
 
 
 class AlertEvent(BaseModel):
-    id: int
+    id: int = Field(description="Row id within its source; use event_id as a unique key")
+    event_id: str = Field(description="Unique across sources: 'alert:<id>' or 'rule:<id>'")
+    source: Literal["alert", "rule"] = Field(description="alert: a ticker alert (/v1/alerts); rule: an alert rule")
     alert_id: Optional[int] = None
     ticker: Optional[str] = None
     message: str
-    fired_at: Optional[str] = None
+    fired_at: Optional[str] = Field(default=None, description="When it triggered (same as triggered_at)")
+    triggered_at: Optional[str] = None
+    rule_id: Optional[int] = None
+    watchlist_id: Optional[int] = None
+    rule_type: Optional[str] = None
+    operator: Optional[str] = None
+    threshold: Optional[float] = None
+    trigger_value: Optional[float] = Field(default=None, description="The value that met the condition")
+    previous_value: Optional[float] = Field(default=None, description="The rule's last seen value (transitions)")
+    hsf_score: Optional[float] = None
+    setup: Optional[str] = None
+    market_data_as_of: Optional[str] = Field(default=None, description="Time of the market scan it was evaluated on")
+    delivery: Dict[str, str] = Field(default={}, description=(
+        "Per channel: delivered (in_app), sent, pending, failed (retried), skipped"))
+    cursor: str = Field(description="Pass as ?cursor= to get the events after this one")
+
+
+# ---- watchlist intelligence and alert rules ---------------------------------------------------------
+class WatchlistIntelItem(BaseModel):
+    ticker: str
+    added_at: Optional[str] = None
+    note: Optional[str] = None
+    company_name: Optional[str] = Field(default=None, description="Not available from the scans yet (always null)")
+    price: Optional[float] = Field(default=None, description="Last price in the latest market scan")
+    price_change: Optional[float] = Field(default=None, description="Not available from the scans yet (always null)")
+    price_change_pct: Optional[float] = None
+    hsf_score: Optional[float] = Field(default=None, description="Null when the ticker isn't a ranked HSF setup")
+    previous_hsf_score: Optional[float] = Field(default=None, description="In the previous market scan")
+    score_change: Optional[float] = None
+    rank: Optional[int] = Field(default=None, description="Position in the latest scan's ranked setups (1 = top)")
+    previous_rank: Optional[int] = None
+    rank_change: Optional[int] = Field(default=None, description="Places moved up since the previous scan (negative = down)")
+    status: Optional[str] = None
+    setup: Optional[str] = None
+    signals: List[str] = []
+    fading: Optional[bool] = None
+    ranked: bool = Field(default=False, description="A ranked HSF setup in the latest scan")
+    prebreakout: Optional[bool] = Field(default=None, description="Premium: the PreBreakout signal is on; null below Premium")
+    prebreakout_score: Optional[float] = Field(default=None, description="Premium: PreBreakout probability %")
+    prebreakout_rank_pct: Optional[float] = Field(default=None, description="Premium: 'top N%' of the model's scores")
+    breakout_score: Optional[float] = None
+    rvol: Optional[float] = Field(default=None, description="Volume vs 20-day average, from the scan")
+    rsi: Optional[float] = Field(default=None, description="Not computed by the scans yet (always null)")
+    ema_cross: Optional[Literal["golden", "death"]] = Field(default=None, description="EMA 9/21 cross state in the scan")
+    in_latest_scan: bool
+    freshness: Literal["fresh", "stale", "missing", "unavailable"] = Field(description=(
+        "fresh: in the latest scan, which is on schedule; stale: a scheduled scan was missed; "
+        "missing: not in the latest scan; unavailable: scan data couldn't be read"))
+    active_alert_count: Optional[int] = Field(default=None, description=(
+        "Enabled alert rules on this ticker or this watchlist, plus enabled ticker alerts"))
+
+
+class Coverage(BaseModel):
+    symbols: int
+    enriched: int
+    missing: int
+
+
+class WatchlistIntelligence(BaseModel):
+    watchlist_id: int
+    name: str
+    market_session: Literal["premarket", "open", "afterhours", "closed"]
+    scan_available: bool
+    last_scan_at: Optional[str] = None
+    previous_scan_at: Optional[str] = None
+    market_data_as_of: Optional[str] = Field(default=None, description="Prices and scores are as of this scan")
+    stale: Optional[bool] = None
+    scan_total: Optional[int] = None
+    prebreakout_locked: bool
+    coverage: Coverage
+    unavailable_fields: List[str] = Field(description="Fields always null because no canonical source exists yet")
+    items: List[WatchlistIntelItem] = []
+
+
+class WatchlistChange(BaseModel):
+    ticker: str
+    event_type: str = Field(description="NEW_OPPORTUNITY, DROPPED, RISING, FALLING, STATUS_UPGRADE, STATUS_DOWNGRADE, "
+                                        "FADING, SIGNAL_ADDED, SIGNAL_REMOVED")
+    severity: Optional[str] = None
+    previous_score: Optional[float] = None
+    current_score: Optional[float] = None
+    score_delta: Optional[float] = None
+    previous_status: Optional[str] = None
+    current_status: Optional[str] = None
+    setup: Optional[str] = None
+    signal: Optional[str] = Field(default=None, description="SIGNAL_ADDED/REMOVED: which signal (e.g. prebreakout)")
+    previous_rank: Optional[int] = None
+    rank: Optional[int] = None
+    rank_change: Optional[int] = None
+
+
+class WatchlistHeadline(BaseModel):
+    ticker: str
+    event_type: str
+
+
+class WatchlistChanges(BaseModel):
+    watchlist_id: int
+    name: str
+    last_scan_at: Optional[str] = None
+    previous_scan_at: Optional[str] = None
+    has_baseline: bool = Field(description="False until two market scans exist")
+    changes: List[WatchlistChange] = []
+    headline: List[WatchlistHeadline] = Field(default=[], description="The strongest change per ticker")
+    alerts: List[AlertEvent] = Field(default=[], description="Your rule alerts on these tickers since the previous scan")
+
+
+class AlertRule(BaseModel):
+    id: int
+    watchlist_id: Optional[int] = None
+    ticker: Optional[str] = None
+    rule_type: str
+    operator: str
+    threshold: Optional[float] = None
+    value: Optional[str] = None
+    enabled: bool
+    delivery_channels: List[str]
+    cooldown_seconds: int
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    last_evaluated_at: Optional[str] = None
+    last_triggered_at: Optional[str] = None
+
+
+class Capabilities(BaseModel):
+    tier: str
+    max_watchlists: int
+    max_symbols_per_watchlist: Optional[int] = Field(default=None, description="Null: no plan limit is defined")
+    max_symbols_per_request: int
+    max_active_alerts: int = Field(description="Enabled alert rules plus enabled ticker alerts")
+    alert_rule_types: List[str]
+    delivery_channels: List[str]
+
+
+class AlertRules(BaseModel):
+    limit: int = Field(description="Active alerts this plan may have; rules and ticker alerts share it")
+    used: int = Field(description="Enabled rules plus enabled ticker alerts")
+    capabilities: Capabilities
+    rules: List[AlertRule] = []
+
+
+class RuleThreshold(BaseModel):
+    min: float
+    max: float
+    default: Optional[float] = None
+
+
+class AlertRuleType(BaseModel):
+    type: str
+    label: str
+    description: str
+    operator: str
+    kind: Literal["level", "transition"]
+    threshold: Optional[RuleThreshold] = None
+    takes_value: bool = Field(description="SETUP_APPEARED: optional setup name, e.g. Breakout")
+    default_cooldown_seconds: int
+    available: bool = Field(description="False when the plan doesn't include it")
 
 
 # ---- account step: sign-up, verification, passwords, preferences, billing -----------------------

@@ -147,6 +147,45 @@ describe("Watchlists", () => {
   });
 });
 
+describe("Watchlist Intelligence", () => {
+  it("shows the server's changes, PreBreakout, RVOL and alert counts; adds and deletes a list alert", async () => {
+    api = fakeApi({ scanState: true, rules: true, scan: [{ ticker: "NVDA", score: 90, last: 120 }, { ticker: "AAPL", score: 81, last: 201.5 }],
+      intel: { NVDA: { score_change: 6, rank_change: 3, prebreakout: true, rvol: 3.14 }, AAPL: { score_change: -2, rank_change: -1, rvol: null } } });
+    const w = api.seedList("Main", ["AAPL", "NVDA"]);
+    const u = user();
+    wrap(<WatchlistsView />, "premium");
+    expect(await screen.findByText("▲6")).toBeInTheDocument();
+    expect(screen.getByText("Up 3 places")).toBeInTheDocument();
+    expect(screen.getByText("▼2")).toBeInTheDocument();
+    expect(screen.getByText("Down 1 place")).toBeInTheDocument();
+    expect(screen.getByText("PreBreakout")).toBeInTheDocument();
+    expect(screen.getByText("RVOL 3.1x")).toBeInTheDocument();
+
+    const card = await screen.findByRole("heading", { name: "Alerts on this list" });
+    expect(card).toBeInTheDocument();
+    const select = screen.getByLabelText("Alert me when any ticker");
+    expect(within(select).queryByRole("option", { name: "Becomes PreBreakout" })).not.toBeInTheDocument(); // not on this plan
+    await u.click(screen.getByRole("button", { name: "Add alert" }));
+    await waitFor(() => expect(api.rules).toHaveLength(1));
+    const posted = api.calls.find((c) => c.method === "POST" && c.path === "/v1/alerts/rules")!.body;
+    expect(posted).toEqual({ rule_type: "HSF_SCORE_CROSS_ABOVE", watchlist_id: w.id, enabled: true, threshold: 80 });
+    expect(await screen.findByText("HSF Score crosses above 80")).toBeInTheDocument();
+    expect(await screen.findAllByText("1 alert")).toHaveLength(2);      // counts come back from the server
+    await u.click(screen.getByRole("button", { name: "Delete alert HSF Score crosses above" }));
+    await waitFor(() => expect(api.rules).toHaveLength(0));
+  });
+
+  it("an API without intelligence or rules leaves the page as it was", async () => {
+    api = fakeApi({ scanState: true, scan: [{ ticker: "AAPL", score: 81, last: 201.5 }] });
+    api.seedList("Main", ["AAPL"]);
+    wrap(<WatchlistsView />);
+    expect(await screen.findByLabelText("HSF Score 81")).toBeInTheDocument();
+    await waitFor(() => expect(api.count("GET", /\/intelligence$/)).toBe(1));
+    expect(screen.queryByRole("heading", { name: "Alerts on this list" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/RVOL/)).not.toBeInTheDocument();
+  });
+});
+
 describe("Save to watchlist", () => {
   it("from a Scanner row: add, then 'already in it', and create-and-save", async () => {
     api.seedList("Main", ["MSFT"]);

@@ -98,7 +98,7 @@ export function AlertsView() {
               {events.error ? <ErrorLine error={events.error} /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> :
                 events.data.length === 0 ? <Empty title="Nothing has fired yet.">When an alert&apos;s condition is met it shows here.</Empty> : (
                   <ul className="timeline">
-                    {events.data.map((e) => <li key={e.id}><span className="cap">{etTime(e.fired_at)}</span> {e.ticker && <span className="mono strong">{e.ticker}</span>} {e.message}</li>)}
+                    {events.data.map((e) => <li key={e.event_id ?? e.id}><span className="cap">{etTime(e.fired_at)}</span> {e.ticker && <span className="mono strong">{e.ticker}</span>} {e.message}</li>)}
                   </ul>
                 )}
             </Card>
