@@ -18,27 +18,62 @@ CACHE_MAX_ENTRIES = 32  # run lists + a handful of runs; old runs drop out
 class TTLCache:
     """Scans change a few times a day; one read per minute is plenty. Expired
     entries are dropped on every write and the cache never exceeds max_entries,
-    so a long-running instance doesn't grow."""
+    so a long-running instance doesn't grow.
+
+    stale_s > 0 serves an expired value for up to stale_s more seconds while one
+    background thread reloads it, so slow builders (the Brief, Day Trader movers)
+    never make a visitor wait once warm. Concurrent misses on one key share a
+    single load instead of each building it."""
 
     def __init__(self, max_entries: int):
         self.max_entries = max_entries
-        self._items: Dict[Any, tuple[float, Any]] = {}  # key -> (expires at, value)
+        self._items: Dict[Any, tuple[float, float, Any]] = {}  # key -> (expires at, stale until, value)
         self._lock = threading.Lock()
+        self._loading: Dict[Any, threading.Lock] = {}  # key -> held while that key loads
+        self._refreshing: set = set()
 
-    def get(self, key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S) -> Any:
+    def get(self, key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S, stale_s: float = 0) -> Any:
         now = time.monotonic()
         with self._lock:
             hit = self._items.get(key)
             if hit and now < hit[0]:
-                return hit[1]
-        value = loader()
+                return hit[2]
+            if hit and now < hit[1]:
+                if key not in self._refreshing:
+                    self._refreshing.add(key)
+                    threading.Thread(target=self._refresh, args=(key, loader, ttl_s, stale_s),
+                                     name="cache-refresh", daemon=True).start()
+                return hit[2]
+            gate = self._loading.setdefault(key, threading.Lock())
+        with gate:  # one load per key; later callers take its result
+            with self._lock:
+                hit = self._items.get(key)
+                if hit and time.monotonic() < hit[0]:
+                    return hit[2]
+            value = loader()
+            self._put(key, value, ttl_s, stale_s)
         with self._lock:
-            for k in [k for k, (expires, _) in self._items.items() if now >= expires]:
-                del self._items[k]
-            self._items[key] = (now + ttl_s, value)
-            while len(self._items) > self.max_entries:
-                del self._items[min(self._items, key=lambda k: self._items[k][0])]
+            if self._loading.get(key) is gate and not gate.locked():
+                del self._loading[key]
         return value
+
+    def _refresh(self, key: Any, loader: Callable[[], Any], ttl_s: float, stale_s: float) -> None:
+        try:
+            self._put(key, loader(), ttl_s, stale_s)
+        except Exception:  # keep serving the stale value; the next request past stale_s loads in the foreground
+            pass
+        finally:
+            with self._lock:
+                self._refreshing.discard(key)
+
+    def _put(self, key: Any, value: Any, ttl_s: float, stale_s: float) -> None:
+        now = time.monotonic()
+        with self._lock:
+            for k in [k for k, (_, stale_until, _) in self._items.items() if now >= stale_until]:
+                del self._items[k]
+            self._items[key] = (now + ttl_s, now + ttl_s + max(0.0, stale_s), value)
+            while len(self._items) > self.max_entries:
+                del self._items[min(self._items, key=lambda k: self._items[k][1])]
 
     def clear_key(self, key: Any) -> None:
         with self._lock:
@@ -56,8 +91,8 @@ class TTLCache:
 _cache = TTLCache(CACHE_MAX_ENTRIES)
 
 
-def _cached(key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S) -> Any:
-    return _cache.get(key, loader, ttl_s)
+def _cached(key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S, stale_s: float = 0) -> Any:
+    return _cache.get(key, loader, ttl_s, stale_s)
 
 
 def _runs_or_outage(runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

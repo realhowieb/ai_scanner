@@ -71,7 +71,22 @@ def get_run(username: str, run_id: int, *, early_breakout: bool, max_results: in
             "setups": [_scan_row(o) for o in opps[:max_results]]}
 
 
+# Track-record rows are computed once a day by the scheduler; one summary query per
+# horizon x ranking is too slow to run on every visit.
+TRACK_RECORD_TTL_S = 600
+TRACK_RECORD_STALE_S = 6 * 3600
+
+
 def track_record() -> Dict[str, Any]:
+    from api.today import _cache, _cached
+
+    out = _cached("track_record", _track_record, ttl_s=TRACK_RECORD_TTL_S, stale_s=TRACK_RECORD_STALE_S)
+    if not out.get("summaries"):  # nothing (or a database blip): don't keep the empty answer
+        _cache.clear_key("track_record")
+    return out
+
+
+def _track_record() -> Dict[str, Any]:
     from db.track_record import load_latest_track_record
 
     rows: List[Dict[str, Any]] = []
@@ -95,6 +110,17 @@ def track_record() -> Dict[str, Any]:
 
 
 def track_record_daily(ranking: str, horizon: int, days: int) -> List[Dict[str, Any]]:
+    from api.today import _cache, _cached
+
+    key = ("track_record_daily", ranking, int(horizon), int(days))
+    out = _cached(key, lambda: _track_record_daily(ranking, horizon, days),
+                  ttl_s=TRACK_RECORD_TTL_S, stale_s=TRACK_RECORD_STALE_S)
+    if not out:
+        _cache.clear_key(key)
+    return out
+
+
+def _track_record_daily(ranking: str, horizon: int, days: int) -> List[Dict[str, Any]]:
     from db.track_record import load_daily_excess
 
     out = []

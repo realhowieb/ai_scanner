@@ -19,6 +19,10 @@ BAR_LIMIT = 120
 # Stock pages get their own cache so a client paging through many tickers can't
 # push the scan runs out of the shared one.
 stock_cache = TTLCache(max_entries=128)
+# Stock pages are built from the latest scan (no live quote), so a page is reused for
+# two minutes and, past that, served while one background rebuild runs.
+STOCK_TTL_S = 120
+STOCK_STALE_S = 1800
 
 
 def json_safe(value: Any) -> Any:
@@ -187,7 +191,7 @@ def _stock_core(ticker: str) -> Dict[str, Any]:
         return {"intel": intel, "scan_at": _iso(run["created_at"]) if run else None,
                 "in_latest_scan": bool(rows), "quote": quote}
 
-    return stock_cache.get(ticker, load)
+    return stock_cache.get(ticker, load, ttl_s=STOCK_TTL_S, stale_s=STOCK_STALE_S)
 
 
 def stock_detail(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
