@@ -23,8 +23,10 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("sign-up and account recovery pages", () => {
   it("sign-up: needs matching passwords and the agreement, shows the API's rule, then opens Today", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ detail: "Password must be at least 10 characters." }, 400))
-      .mockResolvedValueOnce(jsonResponse({ ok: true, email: "a@b.co", verification_sent: true }, 201));
+    const answers = [jsonResponse({ detail: "Password must be at least 10 characters." }, 400),
+      jsonResponse({ ok: true, email: "a@b.co", verification_sent: true }, 201)];
+    fetchMock.mockImplementation(async (url: string) => (url.endsWith("/v1/events") ? new Response(null, { status: 202 }) : answers.shift()!));
+    localStorage.setItem("hsf-attribution", JSON.stringify({ at: Date.now(), attribution: { utm_source: "reddit" } }));
     const u = userEvent.setup();
     render(<SignupForm />);
     await u.type(screen.getByLabelText("Email"), "a@b.co");
@@ -42,7 +44,12 @@ describe("sign-up and account recovery pages", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("at least 10 characters");
     await u.click(go);
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/today"));
-    expect(bodies()[1]).toEqual(["/api/auth/signup", { email: "a@b.co", username: "ann", password: "short", accept_terms: true }]);
+    const signups = bodies().filter(([url]) => url === "/api/auth/signup");
+    expect(signups[1]).toEqual(["/api/auth/signup", { email: "a@b.co", username: "ann", password: "short", accept_terms: true,
+      attribution: { utm_source: "reddit" } }]);
+    // Each attempt also records "sign-up started" with the first visit's tags.
+    expect(bodies().filter(([url]) => url === "/api/public/v1/events").map(([, b]) => b.event)).toEqual(["signup_started", "signup_started"]);
+    localStorage.clear();
   });
 
   it("forgot password: same answer either way", async () => {

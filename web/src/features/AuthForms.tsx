@@ -11,6 +11,7 @@ import type { FormEvent, ReactNode } from "react";
 
 import { messageFrom, newRequestId } from "@/api/client";
 import { WAKING_UP, useSlow } from "@/components/ui";
+import { captureAttribution, track } from "@/lib/funnel";
 
 type Outcome = { ok: boolean; status: number; body: Record<string, unknown> | null; requestId: string | null };
 
@@ -56,7 +57,9 @@ export function SignupForm() {
     if (pw !== pw2) return;
     setBusy(true);
     setError(null);
-    const o = await postAuth("signup", { email, username, password: pw, accept_terms: agree });
+    const attribution = captureAttribution();
+    track("signup_started", "signup_form");
+    const o = await postAuth("signup", { email, username, password: pw, accept_terms: agree, attribution });
     if (o.ok) {
       // A full page load: the new session's cookies are already set.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination

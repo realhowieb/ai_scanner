@@ -41,7 +41,7 @@ describe("navigation", () => {
     render(<SessionProvider initialMe={me("pro")}><AppShell><p>body</p></AppShell></SessionProvider>);
     const nav = screen.getByRole("navigation", { name: "Main" });
     const links = within(nav).getAllByRole("link");
-    expect(links.map((l) => l.textContent)).toEqual(["Today", "Brief", "Scanner", "Day Trader", "Watchlists", "Alerts", "Track record"]);
+    expect(links.map((l) => l.textContent)).toEqual(["Today", "Brief", "Scanner", "Stock Intelligence", "Day Trader", "Watchlists", "Alerts", "Track record"]);
     for (const l of links) expect(routeExists(l.getAttribute("href")!)).toBe(true);
     expect(within(nav).getByRole("link", { name: "Scanner" })).toHaveAttribute("aria-current", "page");
     await u.click(screen.getByRole("button", { name: /Account/ }));
@@ -55,7 +55,7 @@ describe("navigation", () => {
 
   it("the sign-in guard covers every signed-in page", () => {
     const guard = readFileSync(join(__dirname, "..", "src", "proxy.ts"), "utf8");
-    for (const p of ["today", "brief", "scanner", "day-trader", "watchlists", "alerts", "track-record", "journal", "account", "stocks"]) {
+    for (const p of ["today", "brief", "scanner", "day-trader", "watchlists", "alerts", "track-record", "journal", "account", "stocks", "paper"]) {
       expect(guard).toContain(`"/${p}/:path*"`);
     }
   });

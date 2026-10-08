@@ -634,3 +634,30 @@ class PaperOrder(BaseModel):
     ticker: str
     qty: int
     filled_avg_price: Optional[Any] = None
+
+
+class PlanTier(BaseModel):
+    id: Literal["basic", "pro", "premium"]
+    name: str
+    price: str = Field(description='Display price, e.g. "$25/mo" or "Free"')
+    yearly_price: Optional[str] = None
+    tagline: str
+    alert_limit: int
+    highlights: List[str] = Field(description="What this plan adds over the one below it")
+
+
+class PlanRow(BaseModel):
+    label: str
+    basic: Any = Field(description="true/false, or the alert limit for the alerts row")
+    pro: Any
+    premium: Any
+
+
+class Plans(BaseModel):
+    tiers: List[PlanTier]
+    rows: List[PlanRow] = Field(description="The comparison table, derived from the real entitlement map")
+
+
+class UnsubscribeState(BaseModel):
+    email: str = Field(description="Masked, e.g. sa***@gmail.com")
+    prefs: EmailPrefs

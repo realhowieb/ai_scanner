@@ -163,12 +163,16 @@ def track_event(
     username: object | None = None,
     plan: object | None = None,
     metadata: Mapping[str, object] | None = None,
+    attribution: Mapping[str, object] | None = None,
 ) -> bool:
-    """Record an acquisition event. Returns True only when persisted."""
+    """Record an acquisition event. Returns True only when persisted.
+
+    `attribution` (from attribution_from_params) is for callers without a Streamlit
+    session, such as the API recording events for the web app."""
     name = str(event_name or "").strip()
     if name not in ALLOWED_EVENTS:
         return False
-    attr = current_attribution()
+    attr = dict(attribution) if attribution is not None else current_attribution()
     clean_meta = {
         _clean(k, max_len=60): _clean(v, max_len=160)
         for k, v in dict(metadata or {}).items()

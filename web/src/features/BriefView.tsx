@@ -8,6 +8,7 @@ import { useState } from "react";
 
 import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
+import { AIText } from "@/components/AIText";
 import { Card, Disclaimer, Empty, ErrorLine, ErrorState, Locked, Pill, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
@@ -68,7 +69,7 @@ function Narrative() {
   const [text, setText] = useState<Schemas["AIText"] | null>(null);
   return (
     <Card title="AI market narrative" id="ai">
-      {text?.text ? <div className="ai-text body-sm">{text.text}</div> : text ? <p className="cap">Nothing to summarize yet today.</p>
+      {text?.text ? <AIText text={text.text} /> : text ? <p className="cap">Nothing to summarize yet today.</p>
         : <p className="cap">A short read of today&apos;s brief, written by Claude from the data on this page.</p>}
       <ErrorLine error={act.error} />
       <div className="row-actions">

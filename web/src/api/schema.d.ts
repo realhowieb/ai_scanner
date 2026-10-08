@@ -466,6 +466,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/email-preferences/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Email settings behind an unsubscribe link
+         * @description Which emails the link's account gets. Changes nothing (email scanners open links).
+         */
+        get: operations["unsubscribe_state_v1_email_preferences_unsubscribe_get"];
+        put?: never;
+        /**
+         * Unsubscribe with an emailed link
+         * @description Turns off one kind of email, or all of them, for the link's account. Account emails
+         *     (verification, password reset) still go out.
+         */
+        post: operations["unsubscribe_v1_email_preferences_unsubscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a signed-out funnel event
+         * @description Landing visit, call-to-action click or sign-up started, with the visitor's utm tags.
+         *     Stores no email, name or IP. Best effort: always accepted.
+         */
+        post: operations["funnel_event_v1_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/journal": {
         parameters: {
             query?: never;
@@ -712,6 +758,27 @@ export interface paths {
          *     your journal. Show the user what will be sent and send confirm=true only after they confirm.
          */
         post: operations["paper_order_v1_paper_orders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plans and pricing (public)
+         * @description The plan comparison the landing and pricing pages show, from the same source as
+         *     the Billing page (ui.pricing), so copy can't drift from what each plan gets.
+         */
+        get: operations["plans_v1_plans_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1548,6 +1615,26 @@ export interface components {
             /** Evening */
             evening?: boolean | null;
         };
+        /** FunnelEvent */
+        FunnelEvent: {
+            /**
+             * Attribution
+             * @description utm_* tags and referrer from the visitor's first page
+             */
+            attribution?: {
+                [key: string]: string;
+            };
+            /**
+             * Event
+             * @enum {string}
+             */
+            event: "landing_visit" | "primary_cta_click" | "signup_started";
+            /**
+             * Surface
+             * @description Which button or page
+             */
+            surface?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1918,6 +2005,56 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /** PlanRow */
+        PlanRow: {
+            /**
+             * Basic
+             * @description true/false, or the alert limit for the alerts row
+             */
+            basic: unknown;
+            /** Label */
+            label: string;
+            /** Premium */
+            premium: unknown;
+            /** Pro */
+            pro: unknown;
+        };
+        /** PlanTier */
+        PlanTier: {
+            /** Alert Limit */
+            alert_limit: number;
+            /**
+             * Highlights
+             * @description What this plan adds over the one below it
+             */
+            highlights: string[];
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "basic" | "pro" | "premium";
+            /** Name */
+            name: string;
+            /**
+             * Price
+             * @description Display price, e.g. "$25/mo" or "Free"
+             */
+            price: string;
+            /** Tagline */
+            tagline: string;
+            /** Yearly Price */
+            yearly_price?: string | null;
+        };
+        /** Plans */
+        Plans: {
+            /**
+             * Rows
+             * @description The comparison table, derived from the real entitlement map
+             */
+            rows: components["schemas"]["PlanRow"][];
+            /** Tiers */
+            tiers: components["schemas"]["PlanTier"][];
         };
         /** PortalBody */
         PortalBody: {
@@ -2417,6 +2554,13 @@ export interface components {
              * @description The usage agreement checkbox on the web sign-up form
              */
             accept_terms: boolean;
+            /**
+             * Attribution
+             * @description Web sign-ups: first-visit utm_* tags and referrer, for the acquisition funnel
+             */
+            attribution?: {
+                [key: string]: string;
+            } | null;
             /** Client */
             client?: string | null;
             /** Email */
@@ -2858,6 +3002,25 @@ export interface components {
             targets: number[];
             /** Ticker */
             ticker: string;
+        };
+        /** UnsubscribeBody */
+        UnsubscribeBody: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "digest" | "evening" | "alerts" | "all";
+            /** Token */
+            token: string;
+        };
+        /** UnsubscribeState */
+        UnsubscribeState: {
+            /**
+             * Email
+             * @description Masked, e.g. sa***@gmail.com
+             */
+            email: string;
+            prefs: components["schemas"]["EmailPrefs"];
         };
         /** ValidationError */
         ValidationError: {
@@ -4213,6 +4376,145 @@ export interface operations {
             };
         };
     };
+    unsubscribe_state_v1_email_preferences_unsubscribe_get: {
+        parameters: {
+            query: {
+                t: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnsubscribeState"];
+                };
+            };
+            /** @description Invalid link */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too many attempts */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unsubscribe_v1_email_preferences_unsubscribe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnsubscribeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnsubscribeState"];
+                };
+            };
+            /** @description Invalid link */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too many attempts */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Couldn't save */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    funnel_event_v1_events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FunnelEvent"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too many events from this address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     journal_v1_journal_get: {
         parameters: {
             query?: never;
@@ -5023,6 +5325,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    plans_v1_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plans"];
+                };
             };
         };
     };
