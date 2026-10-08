@@ -411,7 +411,7 @@ def label_audit_md(res: Mapping[str, Any]) -> str:
                           f"{_f(r.get('logistic_regression_mean_auc'))} / {_f(r.get('logistic_regression_pooled_auc'))}",
                           f"{_f(r.get('xgb_leakage_safe_subset_mean_auc'))} / {_f(r.get('xgb_leakage_safe_subset_pooled_auc'))}",
                           r["description"]] for r in res["label_audit"]]))
-    lines.append("\nLabels C, D and E need SPY benchmark returns; with no benchmark coverage they have N = 0. "
+    lines.append("\nLabels C, D and E need SPY benchmark returns, so they are evaluated only on rows that have one (smaller N). "
                  "No label was chosen using the holdout.\n")
     return "\n".join(lines) + "\n"
 
