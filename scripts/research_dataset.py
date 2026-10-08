@@ -121,10 +121,19 @@ def report(start: dt.date, end: dt.date) -> dict:
     print("contexts:", dict(Counter(v["context"] for v in views)))
     by_day = defaultdict(Counter)
     for r in records:
-        by_day[(r["observation"]["observed_at"] or "")[:10]][r["features"].join.get("status")] += 1
-    print(_table(["DAY", "MATCHED", "ONLY_LATER_SCANS", "NO_SCAN_RECORD", "NO_SCAN_WITHIN_LAG"],
-                 [[d, c.get(rd.JOIN_MATCHED, 0), c.get(rd.JOIN_FUTURE_ONLY, 0), c.get(rd.JOIN_MISSING, 0),
-                   c.get(rd.JOIN_STALE, 0)] for d, c in sorted(by_day.items())]))
+        day = by_day[(r["observation"]["observed_at"] or "")[:10]]
+        day[r["features"].join.get("status")] += 1
+        day["5d:" + str(r["outcome"].maturity.get("5d"))] += 1
+        day["snapshots"] += 0
+    snaps = defaultdict(set)
+    for r in records:
+        snaps[(r["observation"]["observed_at"] or "")[:10]].add(r["observation"]["observed_at"])
+    print(_table(["DAY", "SNAPSHOTS", "MATCHED", "ONLY_LATER_SCANS", "NO_SCAN_RECORD", "NO_SCAN_WITHIN_LAG",
+                  "5D MATURED", "5D UNAVAILABLE", "5D PENDING"],
+                 [[d, len(snaps[d]), c.get(rd.JOIN_MATCHED, 0), c.get(rd.JOIN_FUTURE_ONLY, 0),
+                   c.get(rd.JOIN_MISSING, 0), c.get(rd.JOIN_STALE, 0), c.get("5d:" + rd.MATURED, 0),
+                   c.get("5d:" + rd.UNAVAILABLE, 0), c.get("5d:" + rd.PENDING, 0)]
+                  for d, c in sorted(by_day.items())]))
     # For refused joins: how far after observed_at was the nearest record written?
     idx = rd.index_scan_records(w["scans"])
     gaps = []
