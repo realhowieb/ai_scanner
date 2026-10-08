@@ -361,5 +361,14 @@ class TodayEndpointTests(ApiTestCase):
         self.assertEqual(self.client.get("/v1/today").status_code, 401)
 
 
+    def test_market_tape(self):
+        token = self.login().json()["access_token"]
+        quotes = [{"symbol": "SPY", "last": 777.3, "chg_pct": -0.23}, {"symbol": "DIA", "last": 511.0, "chg_pct": None}]
+        with mock.patch("api.today.tape_quotes", return_value=quotes):
+            r = self.client.get("/v1/market/tape", headers=self.auth(token))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"quotes": quotes})
+        self.assertEqual(self.client.get("/v1/market/tape").status_code, 401)
+
 if __name__ == "__main__":
     unittest.main()

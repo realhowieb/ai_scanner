@@ -109,6 +109,47 @@ class SectionError(BaseModel):
     error: str = Field(description="Error type only, never details")
 
 
+class SystemStatus(BaseModel):
+    level: Literal["ok", "limited", "issue", "unknown"]
+    label: str = Field(description="Operational, Limited, Service issue or Status unavailable")
+
+
+class IndexQuote(BaseModel):
+    symbol: str = Field(description="SPY or QQQ")
+    label: str
+    last: float
+    chg_pct: Optional[float] = Field(default=None, description="Percent vs the previous close")
+
+
+class ScanLeader(BaseModel):
+    ticker: str
+    chg_pct: Optional[float] = Field(default=None, description="Percent vs the previous close, from the scan")
+    last: Optional[float] = None
+    volume: Optional[float] = Field(default=None, description="Shares traded in the session, from the scan")
+
+
+class TapeQuote(BaseModel):
+    symbol: str
+    last: float
+    chg_pct: Optional[float] = Field(default=None, description="Percent vs the previous close")
+
+
+class Tape(BaseModel):
+    """The scrolling price strip: market ETFs and a few large caps."""
+    quotes: List[TapeQuote] = Field(default=[], description="In display order; empty when no quote is available")
+
+
+class Snapshot(BaseModel):
+    """The status strip and market snapshot (the Streamlit app's trust banner and
+    "Today's Market Snapshot"). Each field is null when its source isn't available."""
+    universe_symbols: Optional[int] = Field(default=None, description="Tradable U.S. stocks in the scan universe")
+    ranked_count: Optional[int] = Field(default=None, description="Results in the latest full-market scan")
+    status: SystemStatus
+    indices: List[IndexQuote] = Field(default=[], description="SPY and QQQ; empty when no quote is available")
+    top_gainer: Optional[ScanLeader] = Field(default=None, description="Biggest gain in the latest full-market scan")
+    most_active: Optional[ScanLeader] = Field(default=None, description="Most shares traded in the latest full-market scan")
+
+
 class Today(BaseModel):
     as_of: str
     market: Market
@@ -116,6 +157,7 @@ class Today(BaseModel):
     top_setups: Optional[TopSetups] = None
     after_close: Optional[SessionCard] = None
     recap: Optional[Recap] = None
+    snapshot: Optional[Snapshot] = None
     errors: List[SectionError] = []
 
 
