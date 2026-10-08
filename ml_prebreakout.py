@@ -3717,6 +3717,56 @@ def load_prebreakout_model(model_path: str = MODEL_PATH):
         return None
 
 
+LIVE_CONTEXT_DAYS = 60
+_BENCHMARK_CACHE: dict = {}
+_BENCHMARK_CACHE_TTL_S = 1800
+
+
+def _live_benchmark_context() -> dict:
+    """SPY/QQQ daily context for live scoring, cached for 30 minutes."""
+    import time as _time
+
+    cached = _BENCHMARK_CACHE.get("context")
+    if cached and (_time.time() - cached[0]) < _BENCHMARK_CACHE_TTL_S:
+        return cached[1]
+    context = load_benchmark_regime_context(LIVE_CONTEXT_DAYS)
+    if any(not frame.empty for frame in context.values()):
+        _BENCHMARK_CACHE["context"] = (_time.time(), context)
+    return context
+
+
+def _live_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Build live model inputs the way training builds them.
+
+    Training rows carry their scan time, the prior completed daily OHLCV bar
+    (add_historical_ohlcv_context) and SPY/QQQ context. Live scan frames carry
+    none of these, so without this step most features came out zero and the
+    live model scored close to chance (serving_skew_audit, AUC 0.52 live vs
+    0.70 with training inputs). Each enrichment is best-effort: on a provider
+    failure the frame is scored with what it has, as before.
+    Set PREBREAKOUT_LIVE_ENRICH=0 to turn the enrichment off.
+    """
+    import os
+
+    # Positional: score_prebreakout assigns scores back by row position.
+    out = df.copy().reset_index(drop=True)
+    if "Symbol" not in out.columns and "Ticker" in out.columns:
+        out["Symbol"] = out["Ticker"]
+    if "Timestamp" not in out.columns:
+        out["Timestamp"] = _utc_now()
+    context = None
+    if os.environ.get("PREBREAKOUT_LIVE_ENRICH", "1") != "0":
+        try:
+            out = add_historical_ohlcv_context(out, days_back=LIVE_CONTEXT_DAYS).sort_index()
+        except Exception as e:
+            print(f"[ml_prebreakout] live OHLCV enrichment failed: {e}")
+        try:
+            context = _live_benchmark_context()
+        except Exception as e:
+            print(f"[ml_prebreakout] live benchmark context failed: {e}")
+    return add_prebreakout_features(out, benchmark_context=context)
+
+
 def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.DataFrame:
     """
     Add PreBreakoutProb and PreBreakoutProb% columns using trained XGBoost model.
@@ -3733,7 +3783,7 @@ def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.Data
     model = bundle["model"]
     feature_cols = bundle["features"]
 
-    X = add_prebreakout_features(df.copy())
+    X = _live_feature_frame(df)
     for col in feature_cols:
         if col not in X.columns:
             X[col] = 0.0
