@@ -191,25 +191,33 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         return JSONResponse({"detail": "Billing is temporarily unavailable. Please try again in a minute."},
                             status_code=502)
 
-    @app.get("/readyz", response_model=models.Ready, responses={503: {"description": "Database unavailable"}})
-    def readyz() -> Dict[str, Any]:
+    @app.get("/readyz", response_model=models.Ready,
+             responses={503: {"description": "Database unavailable, or (strict=true) a scheduled scan was missed"}})
+    def readyz(strict: bool = Query(False, description=(
+            "Answer 503 when a scheduled full-market scan was missed, so an outside uptime "
+            "monitor alerts on stale data as well as on a database outage"))) -> Any:
         """Readiness: the database answers, plus the latest market scan's age for
         freshness monitoring. /healthz stays the liveness check."""
         store.ping()
-        latest, age = None, None
+        now = dt.datetime.now(dt.timezone.utc)
+        latest, age, fresh = None, None, {"stale": None, "expected_scan_at": None}
         try:
-            from api.today import market_runs
+            from api.today import market_runs, scan_freshness
 
             runs = market_runs()
-            if runs:
-                created = runs[0]["created_at"]
+            created = runs[0]["created_at"] if runs else None
+            if created is not None:
                 latest = json_safe(created)
-                age = round((dt.datetime.now(dt.timezone.utc) - created).total_seconds() / 60.0, 1)
+                age = round((now - created).total_seconds() / 60.0, 1)
+            fresh = scan_freshness(created, now)
         except store.DatabaseUnavailable:
             raise
         except Exception:  # scan freshness is informational
             pass
-        return {"ok": True, "database": "ok", "latest_scan_at": latest, "scan_age_minutes": age}
+        body = {"ok": True, "database": "ok", "latest_scan_at": latest, "scan_age_minutes": age, **fresh}
+        if strict and fresh["stale"]:
+            return JSONResponse({**body, "ok": False}, status_code=503)
+        return body
 
     _routes(app)
     _data_routes(app)

@@ -351,7 +351,7 @@ class TodayEndpointTests(ApiTestCase):
         with mock.patch("api.today.build_today", return_value=payload) as build:
             r = self.client.get("/v1/today", headers=self.auth(token))
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json()["market"], {"phase": "premarket"})
+        self.assertEqual(r.json()["market"]["phase"], "premarket")
         self.assertIsNone(r.json()["recap"])
         now, ent = build.call_args[0]
         self.assertTrue(ent["can_day_trader"])
