@@ -51,6 +51,19 @@ def _ensure_schema(conn) -> None:
         "CREATE INDEX IF NOT EXISTS idx_signal_outcomes_ticker_fired "
         "ON signal_outcomes (ticker, fired_at DESC)"
     )
+    # Outcome Intelligence: SPY over the same 1/3/5-day window, scored by the same
+    # analytics.signal_outcomes.score_signal as the stock (first bar on/after the
+    # fire date, close to close). Outcome-side columns only; the frozen signal-time
+    # columns above are never rewritten. NULL = not computed yet (never zero).
+    cur.execute("ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS benchmark_return_1d DOUBLE PRECISION")
+    cur.execute("ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS benchmark_return_3d DOUBLE PRECISION")
+    cur.execute("ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS benchmark_return_5d DOUBLE PRECISION")
+    cur.execute("ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS benchmark_symbol TEXT")
+    cur.execute("ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS benchmark_computed_at TIMESTAMPTZ")
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_signal_outcomes_source_fired "
+        "ON signal_outcomes (source, fired_at)"
+    )
     conn.commit()
     cur.close()
 
@@ -512,3 +525,119 @@ def save_outcome(
     cur.close()
     conn.close()
     return True
+
+
+def save_benchmark(*, signal_id: int, symbol: str, return_1d: Optional[float],
+                   return_3d: Optional[float], return_5d: Optional[float]) -> bool:
+    """Record the benchmark's return over the row's own 1/3/5-day window. Only
+    fills a row whose benchmark is still empty (first write wins)."""
+    conn = get_neon_conn()
+    if conn is None:
+        return False
+    _ensure_schema(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE signal_outcomes
+        SET benchmark_symbol = %s,
+            benchmark_return_1d = %s,
+            benchmark_return_3d = %s,
+            benchmark_return_5d = %s,
+            benchmark_computed_at = NOW()
+        WHERE id = %s AND benchmark_computed_at IS NULL
+        """,
+        (symbol, return_1d, return_3d, return_5d, int(signal_id)),
+    )
+    wrote = cur.rowcount == 1
+    conn.commit()
+    cur.close()
+    conn.close()
+    return wrote
+
+
+def list_benchmark_backfill(limit: int = 2000) -> List[Dict[str, Any]]:
+    """Matured rows with a stock outcome but no benchmark yet, oldest first."""
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    _ensure_schema(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, fired_at FROM signal_outcomes
+        WHERE outcome_computed_at IS NOT NULL
+          AND benchmark_computed_at IS NULL
+          AND return_1d IS NOT NULL
+        ORDER BY fired_at ASC
+        LIMIT %s
+        """,
+        (int(limit),),
+    )
+    rows = cur.fetchall() or []
+    cur.close()
+    conn.close()
+    return [dict(r) if isinstance(r, dict) else {"id": r[0], "fired_at": r[1]} for r in rows]
+
+
+# The Outcome Intelligence read: frozen signal-time payload plus the outcome-side
+# columns, oldest first. Literal SQL (no string building) for both shapes.
+_OUTCOME_SELECT = (
+    "SELECT id, ticker, fired_at, setup_score, prebreakout_prob, indicators, raw_signal, "
+    "return_1d, return_3d, return_5d, mfe_5d, mae_5d, outcome_computed_at, "
+    "benchmark_symbol, benchmark_return_1d, benchmark_return_3d, benchmark_return_5d "
+    "FROM signal_outcomes WHERE source = 'opportunity' "
+)
+_OUTCOME_ALL_SQL = _OUTCOME_SELECT + "ORDER BY fired_at ASC, id ASC LIMIT %s"
+_OUTCOME_TICKER_SQL = _OUTCOME_SELECT + "AND UPPER(ticker) = %s ORDER BY fired_at ASC, id ASC LIMIT %s"
+
+
+def fetch_outcome_rows(*, ticker: Optional[str] = None, limit: int = 100000) -> List[Dict[str, Any]]:
+    """Every frozen HSF opportunity (source='opportunity') with its outcome
+    columns, oldest first, matured or not. The caller decides maturity.
+
+    RAISES on a database error so the API can tell an outage from an empty
+    dataset; returns [] only when there is no database configured."""
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        if ticker:
+            cur.execute(_OUTCOME_TICKER_SQL, (str(ticker).strip().upper(), int(limit)))
+        else:
+            cur.execute(_OUTCOME_ALL_SQL, (int(limit),))
+        rows = cur.fetchall() or []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        cur.close()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return [dict(r) if isinstance(r, dict) else dict(zip(cols, r)) for r in rows]
+
+
+def outcome_dataset_stamp() -> Optional[tuple]:
+    """Cheap change marker for the outcome dataset: (rows, latest outcome write,
+    latest benchmark write). Changes whenever a row is frozen or matures, so
+    cached aggregates can be refreshed. Raises on a database error."""
+    conn = get_neon_conn()
+    if conn is None:
+        return None
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*), MAX(outcome_computed_at), MAX(benchmark_computed_at) "
+            "FROM signal_outcomes WHERE source = 'opportunity'"
+        )
+        row = cur.fetchone()
+        cur.close()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    vals = list(row.values()) if isinstance(row, dict) else list(row or ())
+    return tuple(str(v) for v in vals)

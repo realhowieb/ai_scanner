@@ -14,6 +14,8 @@ import { useApi } from "@/hooks/useApi";
 import { etDate, etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
+import { OutcomeEvidence } from "./OutcomeEvidence";
+
 type Ranking = "breakout" | "prebreakout";
 type Day = Schemas["TrackRecordDay"];
 
@@ -137,7 +139,7 @@ function Research() {
         <Card><Empty title="No track record computed for this ranking yet.">It&apos;s computed once a day from saved scans whose outcomes have matured.</Empty></Card>
       ) : (
         <>
-          <Card title={`${rk.label} picks vs ${meta?.benchmark ?? "SPY"}`} id="summary"
+          <Card title={`Ranking study: top ${rk.label} picks vs ${meta?.benchmark ?? "SPY"}`} id="summary"
             aside={meta?.computed_at ? `Computed ${etTime(meta.computed_at)}` : undefined}>
             <p className="cap">
               {rk.note}{meta?.top_n ? ` (top ${meta.top_n} per scan)` : ""}, held for each horizon. Returns are excess returns over {meta?.benchmark ?? "SPY"} for the same days.
@@ -177,10 +179,19 @@ export function TrackRecordView() {
       <section className="page-head">
         <div>
           <h1 className="h1">Track record</h1>
-          <p className="cap">Historical research on saved scans: how ranked picks did against the market afterwards.</p>
+          <p className="cap">How every HSF signal did afterwards, against SPY over the same days, with sample sizes.</p>
         </div>
       </section>
-      {can("can_track_record") ? <Research /> : (
+      {can("can_track_record") ? (
+        <>
+          <OutcomeEvidence />
+          <section className="stack" aria-label="Ranking study">
+            <h2 className="h2">Ranking study</h2>
+            <p className="cap">A separate, narrower study: only each saved scan&apos;s top names under one ranking. It is not the full HSF record above.</p>
+            <Research />
+          </section>
+        </>
+      ) : (
         <Card><Locked title="Historical research is part of Pro" plan="pro">How saved scan picks did against SPY over 1 to 20 trading days, with sample sizes.</Locked></Card>
       )}
     </div>

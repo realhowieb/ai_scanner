@@ -1,0 +1,976 @@
+{
+ "summary": {
+  "filters": {
+   "ticker": null,
+   "setup": null,
+   "signal": null,
+   "min_score": null,
+   "max_score": null,
+   "score_bucket": null,
+   "score_version": null,
+   "start_date": null,
+   "end_date": null,
+   "certified_only": false,
+   "matured_only": false
+  },
+  "unit": "signal_day",
+  "horizon": 5,
+  "raw_observations": 7,
+  "date_range": {
+   "start": "2026-09-01T13:00:00+00:00",
+   "end": "2026-09-20T14:00:00+00:00"
+  },
+  "score_versions": {
+   "1.0": 6
+  },
+  "warnings": [],
+  "evidence_thresholds": {
+   "STRONG": 100,
+   "MODERATE": 30,
+   "LIMITED": 10
+  },
+  "disclaimer": "Historical evidence from matured HSF signals. Returns are close-to-close with no costs or slippage, and are descriptive, not a forecast. Past outcomes do not guarantee future results.",
+  "total_observations": 6,
+  "matured_observations": 4,
+  "pending_observations": 1,
+  "unavailable_observations": 1,
+  "certified_observations": 4,
+  "metrics": {
+   "horizon": 5,
+   "sample_size": 6,
+   "matured_count": 4,
+   "pending_count": 1,
+   "unavailable_count": 1,
+   "invalid_count": 0,
+   "distinct_days": 4,
+   "evidence_quality": "INSUFFICIENT",
+   "average_return": 0.02,
+   "median_return": 0.03,
+   "average_return_ci95": null,
+   "win_count": 3,
+   "win_rate": 0.75,
+   "win_rate_ci95": {
+    "low": 0.300642,
+    "high": 0.954413
+   },
+   "benchmark_count": 3,
+   "average_benchmark_return": 0.02,
+   "median_benchmark_return": 0.02,
+   "average_excess_return": 0.0,
+   "median_excess_return": 0.02,
+   "benchmark_beat_count": 2,
+   "benchmark_beat_rate": 0.6667,
+   "benchmark_beat_rate_ci95": {
+    "low": 0.20766,
+    "high": 0.938508
+   },
+   "mfe_count": 3,
+   "average_mfe": 0.033333,
+   "median_mfe": 0.03,
+   "mae_count": 3,
+   "average_mae": -0.026667,
+   "median_mae": -0.02
+  },
+  "coverage": {
+   "matured": 4,
+   "missing_benchmark": 1,
+   "benchmark_coverage": 0.75,
+   "mfe_mae_available_for_horizon": true,
+   "missing_mfe_mae": 1,
+   "mfe_mae_coverage": 0.75
+  },
+  "dataset": {
+   "rows_loaded": 7,
+   "truncated": false,
+   "loaded_at": "2026-10-08T12:00:00+00:00",
+   "stale": false,
+   "source": "signal_outcomes (HSF opportunities)"
+  },
+  "generated_at": "2026-10-08T12:00:00+00:00"
+ },
+ "scores": {
+  "filters": {
+   "ticker": null,
+   "setup": null,
+   "signal": null,
+   "min_score": null,
+   "max_score": null,
+   "score_bucket": null,
+   "score_version": null,
+   "start_date": null,
+   "end_date": null,
+   "certified_only": false,
+   "matured_only": false
+  },
+  "unit": "signal_day",
+  "horizon": 5,
+  "raw_observations": 7,
+  "date_range": {
+   "start": "2026-09-01T13:00:00+00:00",
+   "end": "2026-09-20T14:00:00+00:00"
+  },
+  "score_versions": {
+   "1.0": 6
+  },
+  "warnings": [],
+  "evidence_thresholds": {
+   "STRONG": 100,
+   "MODERATE": 30,
+   "LIMITED": 10
+  },
+  "disclaimer": "Historical evidence from matured HSF signals. Returns are close-to-close with no costs or slippage, and are descriptive, not a forecast. Past outcomes do not guarantee future results.",
+  "buckets": [
+   {
+    "bucket": "0-49",
+    "min_score": 0,
+    "max_score": 49,
+    "horizon": 5,
+    "sample_size": 1,
+    "matured_count": 0,
+    "pending_count": 0,
+    "unavailable_count": 1,
+    "invalid_count": 0,
+    "distinct_days": 0,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": null,
+    "median_return": null,
+    "average_return_ci95": null,
+    "win_count": 0,
+    "win_rate": null,
+    "win_rate_ci95": null,
+    "benchmark_count": 0,
+    "average_benchmark_return": null,
+    "median_benchmark_return": null,
+    "average_excess_return": null,
+    "median_excess_return": null,
+    "benchmark_beat_count": 0,
+    "benchmark_beat_rate": null,
+    "benchmark_beat_rate_ci95": null,
+    "mfe_count": 0,
+    "average_mfe": null,
+    "median_mfe": null,
+    "mae_count": 0,
+    "average_mae": null,
+    "median_mae": null
+   },
+   {
+    "bucket": "50-59",
+    "min_score": 50,
+    "max_score": 59,
+    "horizon": 5,
+    "sample_size": 1,
+    "matured_count": 1,
+    "pending_count": 0,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 1,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.02,
+    "median_return": 0.02,
+    "average_return_ci95": null,
+    "win_count": 1,
+    "win_rate": 1.0,
+    "win_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "benchmark_count": 0,
+    "average_benchmark_return": null,
+    "median_benchmark_return": null,
+    "average_excess_return": null,
+    "median_excess_return": null,
+    "benchmark_beat_count": 0,
+    "benchmark_beat_rate": null,
+    "benchmark_beat_rate_ci95": null,
+    "mfe_count": 1,
+    "average_mfe": 0.03,
+    "median_mfe": 0.03,
+    "mae_count": 1,
+    "average_mae": -0.01,
+    "median_mae": -0.01
+   },
+   {
+    "bucket": "60-69",
+    "min_score": 60,
+    "max_score": 69,
+    "horizon": 5,
+    "sample_size": 1,
+    "matured_count": 1,
+    "pending_count": 0,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 1,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": -0.03,
+    "median_return": -0.03,
+    "average_return_ci95": null,
+    "win_count": 0,
+    "win_rate": 0.0,
+    "win_rate_ci95": {
+     "low": 0.0,
+     "high": 0.793451
+    },
+    "benchmark_count": 1,
+    "average_benchmark_return": 0.02,
+    "median_benchmark_return": 0.02,
+    "average_excess_return": -0.05,
+    "median_excess_return": -0.05,
+    "benchmark_beat_count": 0,
+    "benchmark_beat_rate": 0.0,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.0,
+     "high": 0.793451
+    },
+    "mfe_count": 1,
+    "average_mfe": 0.01,
+    "median_mfe": 0.01,
+    "mae_count": 1,
+    "average_mae": -0.05,
+    "median_mae": -0.05
+   },
+   {
+    "bucket": "70-79",
+    "min_score": 70,
+    "max_score": 79,
+    "horizon": 5,
+    "sample_size": 1,
+    "matured_count": 1,
+    "pending_count": 0,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 1,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.05,
+    "median_return": 0.05,
+    "average_return_ci95": null,
+    "win_count": 1,
+    "win_rate": 1.0,
+    "win_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "benchmark_count": 1,
+    "average_benchmark_return": 0.03,
+    "median_benchmark_return": 0.03,
+    "average_excess_return": 0.02,
+    "median_excess_return": 0.02,
+    "benchmark_beat_count": 1,
+    "benchmark_beat_rate": 1.0,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "mfe_count": 0,
+    "average_mfe": null,
+    "median_mfe": null,
+    "mae_count": 0,
+    "average_mae": null,
+    "median_mae": null
+   },
+   {
+    "bucket": "80-89",
+    "min_score": 80,
+    "max_score": 89,
+    "horizon": 5,
+    "sample_size": 2,
+    "matured_count": 1,
+    "pending_count": 1,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 1,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.04,
+    "median_return": 0.04,
+    "average_return_ci95": null,
+    "win_count": 1,
+    "win_rate": 1.0,
+    "win_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "benchmark_count": 1,
+    "average_benchmark_return": 0.01,
+    "median_benchmark_return": 0.01,
+    "average_excess_return": 0.03,
+    "median_excess_return": 0.03,
+    "benchmark_beat_count": 1,
+    "benchmark_beat_rate": 1.0,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "mfe_count": 1,
+    "average_mfe": 0.06,
+    "median_mfe": 0.06,
+    "mae_count": 1,
+    "average_mae": -0.02,
+    "median_mae": -0.02
+   },
+   {
+    "bucket": "90-100",
+    "min_score": 90,
+    "max_score": 100,
+    "horizon": 5,
+    "sample_size": 0,
+    "matured_count": 0,
+    "pending_count": 0,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 0,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": null,
+    "median_return": null,
+    "average_return_ci95": null,
+    "win_count": 0,
+    "win_rate": null,
+    "win_rate_ci95": null,
+    "benchmark_count": 0,
+    "average_benchmark_return": null,
+    "median_benchmark_return": null,
+    "average_excess_return": null,
+    "median_excess_return": null,
+    "benchmark_beat_count": 0,
+    "benchmark_beat_rate": null,
+    "benchmark_beat_rate_ci95": null,
+    "mfe_count": 0,
+    "average_mfe": null,
+    "median_mfe": null,
+    "mae_count": 0,
+    "average_mae": null,
+    "median_mae": null
+   }
+  ],
+  "unbucketed_count": 0,
+  "calibration": {
+   "min_matured_per_bucket": 10,
+   "metrics": {
+    "win_rate": {
+     "buckets_compared": [],
+     "monotonic": null,
+     "inversions": []
+    },
+    "median_return": {
+     "buckets_compared": [],
+     "monotonic": null,
+     "inversions": []
+    },
+    "median_excess_return": {
+     "buckets_compared": [],
+     "monotonic": null,
+     "inversions": []
+    },
+    "benchmark_beat_rate": {
+     "buckets_compared": [],
+     "monotonic": null,
+     "inversions": []
+    },
+    "median_mfe": {
+     "buckets_compared": [],
+     "monotonic": null,
+     "inversions": []
+    }
+   }
+  },
+  "dataset": {
+   "rows_loaded": 7,
+   "truncated": false,
+   "loaded_at": "2026-10-08T12:00:00+00:00",
+   "stale": false,
+   "source": "signal_outcomes (HSF opportunities)"
+  },
+  "generated_at": "2026-10-08T12:00:00+00:00"
+ },
+ "horizons": {
+  "filters": {
+   "ticker": null,
+   "setup": null,
+   "signal": null,
+   "min_score": null,
+   "max_score": null,
+   "score_bucket": null,
+   "score_version": null,
+   "start_date": null,
+   "end_date": null,
+   "certified_only": false,
+   "matured_only": false
+  },
+  "unit": "signal_day",
+  "horizon": null,
+  "raw_observations": 7,
+  "date_range": {
+   "start": "2026-09-01T13:00:00+00:00",
+   "end": "2026-09-20T14:00:00+00:00"
+  },
+  "score_versions": {
+   "1.0": 6
+  },
+  "warnings": [],
+  "evidence_thresholds": {
+   "STRONG": 100,
+   "MODERATE": 30,
+   "LIMITED": 10
+  },
+  "disclaimer": "Historical evidence from matured HSF signals. Returns are close-to-close with no costs or slippage, and are descriptive, not a forecast. Past outcomes do not guarantee future results.",
+  "horizons": [
+   {
+    "horizon": 1,
+    "sample_size": 6,
+    "matured_count": 4,
+    "pending_count": 1,
+    "unavailable_count": 1,
+    "invalid_count": 0,
+    "distinct_days": 4,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.005,
+    "median_return": 0.005,
+    "average_return_ci95": null,
+    "win_count": 2,
+    "win_rate": 0.5,
+    "win_rate_ci95": {
+     "low": 0.150039,
+     "high": 0.849961
+    },
+    "benchmark_count": 3,
+    "average_benchmark_return": 0.003333,
+    "median_benchmark_return": 0.0,
+    "average_excess_return": 0.003333,
+    "median_excess_return": 0.01,
+    "benchmark_beat_count": 2,
+    "benchmark_beat_rate": 0.6667,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.20766,
+     "high": 0.938508
+    },
+    "mfe_count": 0,
+    "average_mfe": null,
+    "median_mfe": null,
+    "mae_count": 0,
+    "average_mae": null,
+    "median_mae": null,
+    "coverage": {
+     "matured": 4,
+     "missing_benchmark": 1,
+     "benchmark_coverage": 0.75,
+     "mfe_mae_available_for_horizon": false,
+     "missing_mfe_mae": 4,
+     "mfe_mae_coverage": 0.0
+    }
+   },
+   {
+    "horizon": 3,
+    "sample_size": 6,
+    "matured_count": 4,
+    "pending_count": 1,
+    "unavailable_count": 1,
+    "invalid_count": 0,
+    "distinct_days": 4,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.01,
+    "median_return": 0.015,
+    "average_return_ci95": null,
+    "win_count": 3,
+    "win_rate": 0.75,
+    "win_rate_ci95": {
+     "low": 0.300642,
+     "high": 0.954413
+    },
+    "benchmark_count": 3,
+    "average_benchmark_return": 0.01,
+    "median_benchmark_return": 0.01,
+    "average_excess_return": -0.0,
+    "median_excess_return": 0.01,
+    "benchmark_beat_count": 2,
+    "benchmark_beat_rate": 0.6667,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.20766,
+     "high": 0.938508
+    },
+    "mfe_count": 0,
+    "average_mfe": null,
+    "median_mfe": null,
+    "mae_count": 0,
+    "average_mae": null,
+    "median_mae": null,
+    "coverage": {
+     "matured": 4,
+     "missing_benchmark": 1,
+     "benchmark_coverage": 0.75,
+     "mfe_mae_available_for_horizon": false,
+     "missing_mfe_mae": 4,
+     "mfe_mae_coverage": 0.0
+    }
+   },
+   {
+    "horizon": 5,
+    "sample_size": 6,
+    "matured_count": 4,
+    "pending_count": 1,
+    "unavailable_count": 1,
+    "invalid_count": 0,
+    "distinct_days": 4,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.02,
+    "median_return": 0.03,
+    "average_return_ci95": null,
+    "win_count": 3,
+    "win_rate": 0.75,
+    "win_rate_ci95": {
+     "low": 0.300642,
+     "high": 0.954413
+    },
+    "benchmark_count": 3,
+    "average_benchmark_return": 0.02,
+    "median_benchmark_return": 0.02,
+    "average_excess_return": 0.0,
+    "median_excess_return": 0.02,
+    "benchmark_beat_count": 2,
+    "benchmark_beat_rate": 0.6667,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.20766,
+     "high": 0.938508
+    },
+    "mfe_count": 3,
+    "average_mfe": 0.033333,
+    "median_mfe": 0.03,
+    "mae_count": 3,
+    "average_mae": -0.026667,
+    "median_mae": -0.02,
+    "coverage": {
+     "matured": 4,
+     "missing_benchmark": 1,
+     "benchmark_coverage": 0.75,
+     "mfe_mae_available_for_horizon": true,
+     "missing_mfe_mae": 1,
+     "mfe_mae_coverage": 0.75
+    }
+   }
+  ],
+  "dataset": {
+   "rows_loaded": 7,
+   "truncated": false,
+   "loaded_at": "2026-10-08T12:00:00+00:00",
+   "stale": false,
+   "source": "signal_outcomes (HSF opportunities)"
+  },
+  "generated_at": "2026-10-08T12:00:00+00:00"
+ },
+ "setups": {
+  "filters": {
+   "ticker": null,
+   "setup": null,
+   "signal": null,
+   "min_score": null,
+   "max_score": null,
+   "score_bucket": null,
+   "score_version": null,
+   "start_date": null,
+   "end_date": null,
+   "certified_only": false,
+   "matured_only": false
+  },
+  "unit": "signal_day",
+  "horizon": 5,
+  "raw_observations": 7,
+  "date_range": {
+   "start": "2026-09-01T13:00:00+00:00",
+   "end": "2026-09-20T14:00:00+00:00"
+  },
+  "score_versions": {
+   "1.0": 6
+  },
+  "warnings": [],
+  "evidence_thresholds": {
+   "STRONG": 100,
+   "MODERATE": 30,
+   "LIMITED": 10
+  },
+  "disclaimer": "Historical evidence from matured HSF signals. Returns are close-to-close with no costs or slippage, and are descriptive, not a forecast. Past outcomes do not guarantee future results.",
+  "group_by": "setup",
+  "groups_overlap": false,
+  "groups": [
+   {
+    "name": "breakout",
+    "horizon": 5,
+    "sample_size": 4,
+    "matured_count": 2,
+    "pending_count": 1,
+    "unavailable_count": 1,
+    "invalid_count": 0,
+    "distinct_days": 2,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.045,
+    "median_return": 0.045,
+    "average_return_ci95": null,
+    "win_count": 2,
+    "win_rate": 1.0,
+    "win_rate_ci95": {
+     "low": 0.34238,
+     "high": 1.0
+    },
+    "benchmark_count": 2,
+    "average_benchmark_return": 0.02,
+    "median_benchmark_return": 0.02,
+    "average_excess_return": 0.025,
+    "median_excess_return": 0.025,
+    "benchmark_beat_count": 2,
+    "benchmark_beat_rate": 1.0,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.34238,
+     "high": 1.0
+    },
+    "mfe_count": 1,
+    "average_mfe": 0.06,
+    "median_mfe": 0.06,
+    "mae_count": 1,
+    "average_mae": -0.02,
+    "median_mae": -0.02,
+    "score_distribution": {
+     "scored": 4,
+     "unscored": 0,
+     "min": 45.0,
+     "max": 88.0,
+     "median": 77.0,
+     "bucket_counts": {
+      "0-49": 1,
+      "50-59": 0,
+      "60-69": 0,
+      "70-79": 1,
+      "80-89": 2,
+      "90-100": 0
+     }
+    },
+    "supported_horizons": [
+     1,
+     3,
+     5
+    ]
+   },
+   {
+    "name": "gapper",
+    "horizon": 5,
+    "sample_size": 1,
+    "matured_count": 1,
+    "pending_count": 0,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 1,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": -0.03,
+    "median_return": -0.03,
+    "average_return_ci95": null,
+    "win_count": 0,
+    "win_rate": 0.0,
+    "win_rate_ci95": {
+     "low": 0.0,
+     "high": 0.793451
+    },
+    "benchmark_count": 1,
+    "average_benchmark_return": 0.02,
+    "median_benchmark_return": 0.02,
+    "average_excess_return": -0.05,
+    "median_excess_return": -0.05,
+    "benchmark_beat_count": 0,
+    "benchmark_beat_rate": 0.0,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.0,
+     "high": 0.793451
+    },
+    "mfe_count": 1,
+    "average_mfe": 0.01,
+    "median_mfe": 0.01,
+    "mae_count": 1,
+    "average_mae": -0.05,
+    "median_mae": -0.05,
+    "score_distribution": {
+     "scored": 1,
+     "unscored": 0,
+     "min": 65.0,
+     "max": 65.0,
+     "median": 65.0,
+     "bucket_counts": {
+      "0-49": 0,
+      "50-59": 0,
+      "60-69": 1,
+      "70-79": 0,
+      "80-89": 0,
+      "90-100": 0
+     }
+    },
+    "supported_horizons": [
+     1,
+     3,
+     5
+    ]
+   },
+   {
+    "name": "prebreakout",
+    "horizon": 5,
+    "sample_size": 1,
+    "matured_count": 1,
+    "pending_count": 0,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 1,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.02,
+    "median_return": 0.02,
+    "average_return_ci95": null,
+    "win_count": 1,
+    "win_rate": 1.0,
+    "win_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "benchmark_count": 0,
+    "average_benchmark_return": null,
+    "median_benchmark_return": null,
+    "average_excess_return": null,
+    "median_excess_return": null,
+    "benchmark_beat_count": 0,
+    "benchmark_beat_rate": null,
+    "benchmark_beat_rate_ci95": null,
+    "mfe_count": 1,
+    "average_mfe": 0.03,
+    "median_mfe": 0.03,
+    "mae_count": 1,
+    "average_mae": -0.01,
+    "median_mae": -0.01,
+    "score_distribution": {
+     "scored": 1,
+     "unscored": 0,
+     "min": 55.0,
+     "max": 55.0,
+     "median": 55.0,
+     "bucket_counts": {
+      "0-49": 0,
+      "50-59": 1,
+      "60-69": 0,
+      "70-79": 0,
+      "80-89": 0,
+      "90-100": 0
+     }
+    },
+    "supported_horizons": [
+     1,
+     3,
+     5
+    ]
+   }
+  ],
+  "dataset": {
+   "rows_loaded": 7,
+   "truncated": false,
+   "loaded_at": "2026-10-08T12:00:00+00:00",
+   "stale": false,
+   "source": "signal_outcomes (HSF opportunities)"
+  },
+  "generated_at": "2026-10-08T12:00:00+00:00"
+ },
+ "symbol": {
+  "filters": {
+   "ticker": "AAA",
+   "setup": null,
+   "signal": null,
+   "min_score": null,
+   "max_score": null,
+   "score_bucket": null,
+   "score_version": null,
+   "start_date": null,
+   "end_date": null,
+   "certified_only": false,
+   "matured_only": false
+  },
+  "unit": "signal_day",
+  "horizon": null,
+  "raw_observations": 2,
+  "date_range": {
+   "start": "2026-09-01T13:00:00+00:00",
+   "end": "2026-09-01T13:00:00+00:00"
+  },
+  "score_versions": {
+   "1.0": 1
+  },
+  "warnings": [],
+  "evidence_thresholds": {
+   "STRONG": 100,
+   "MODERATE": 30,
+   "LIMITED": 10
+  },
+  "disclaimer": "Historical evidence from matured HSF signals. Returns are close-to-close with no costs or slippage, and are descriptive, not a forecast. Past outcomes do not guarantee future results.",
+  "ticker": "AAA",
+  "horizons": [
+   {
+    "horizon": 1,
+    "sample_size": 1,
+    "matured_count": 1,
+    "pending_count": 0,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 1,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.01,
+    "median_return": 0.01,
+    "average_return_ci95": null,
+    "win_count": 1,
+    "win_rate": 1.0,
+    "win_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "benchmark_count": 1,
+    "average_benchmark_return": 0.0,
+    "median_benchmark_return": 0.0,
+    "average_excess_return": 0.01,
+    "median_excess_return": 0.01,
+    "benchmark_beat_count": 1,
+    "benchmark_beat_rate": 1.0,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "mfe_count": 0,
+    "average_mfe": null,
+    "median_mfe": null,
+    "mae_count": 0,
+    "average_mae": null,
+    "median_mae": null
+   },
+   {
+    "horizon": 3,
+    "sample_size": 1,
+    "matured_count": 1,
+    "pending_count": 0,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 1,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.02,
+    "median_return": 0.02,
+    "average_return_ci95": null,
+    "win_count": 1,
+    "win_rate": 1.0,
+    "win_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "benchmark_count": 1,
+    "average_benchmark_return": 0.01,
+    "median_benchmark_return": 0.01,
+    "average_excess_return": 0.01,
+    "median_excess_return": 0.01,
+    "benchmark_beat_count": 1,
+    "benchmark_beat_rate": 1.0,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "mfe_count": 0,
+    "average_mfe": null,
+    "median_mfe": null,
+    "mae_count": 0,
+    "average_mae": null,
+    "median_mae": null
+   },
+   {
+    "horizon": 5,
+    "sample_size": 1,
+    "matured_count": 1,
+    "pending_count": 0,
+    "unavailable_count": 0,
+    "invalid_count": 0,
+    "distinct_days": 1,
+    "evidence_quality": "INSUFFICIENT",
+    "average_return": 0.04,
+    "median_return": 0.04,
+    "average_return_ci95": null,
+    "win_count": 1,
+    "win_rate": 1.0,
+    "win_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "benchmark_count": 1,
+    "average_benchmark_return": 0.01,
+    "median_benchmark_return": 0.01,
+    "average_excess_return": 0.03,
+    "median_excess_return": 0.03,
+    "benchmark_beat_count": 1,
+    "benchmark_beat_rate": 1.0,
+    "benchmark_beat_rate_ci95": {
+     "low": 0.206549,
+     "high": 1.0
+    },
+    "mfe_count": 1,
+    "average_mfe": 0.06,
+    "median_mfe": 0.06,
+    "mae_count": 1,
+    "average_mae": -0.02,
+    "median_mae": -0.02
+   }
+  ],
+  "observations": {
+   "page": 1,
+   "page_size": 1,
+   "total": 1,
+   "items": [
+    {
+     "observation_id": "1",
+     "ticker": "AAA",
+     "observed_at": "2026-09-01T13:00:00+00:00",
+     "entry_day": "2026-09-01",
+     "hsf_score": 82.0,
+     "score_bucket": "80-89",
+     "score_version": "1.0",
+     "setup": "breakout",
+     "signals": [
+      "breakout"
+     ],
+     "status": "STRONG",
+     "prebreakout_prob": 20.0,
+     "certified": true,
+     "benchmark_symbol": "SPY",
+     "entry_price": null,
+     "outcome_price": null,
+     "observations_that_day": 2,
+     "outcomes": [
+      {
+       "horizon": 1,
+       "status": "matured",
+       "raw_return": 0.01,
+       "benchmark_return": 0.0,
+       "excess_return": 0.01,
+       "mfe": null,
+       "mae": null
+      },
+      {
+       "horizon": 3,
+       "status": "matured",
+       "raw_return": 0.02,
+       "benchmark_return": 0.01,
+       "excess_return": 0.01,
+       "mfe": null,
+       "mae": null
+      },
+      {
+       "horizon": 5,
+       "status": "matured",
+       "raw_return": 0.04,
+       "benchmark_return": 0.01,
+       "excess_return": 0.03,
+       "mfe": 0.06,
+       "mae": -0.02
+      }
+     ]
+    }
+   ]
+  },
+  "dataset": {
+   "rows_loaded": 7,
+   "truncated": false,
+   "loaded_at": "2026-10-08T12:00:00+00:00",
+   "stale": false,
+   "source": "signal_outcomes (HSF opportunities)"
+  },
+  "generated_at": "2026-10-08T12:00:00+00:00"
+ }
+}

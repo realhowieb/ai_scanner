@@ -1143,6 +1143,18 @@ def main():
         print(f"[cron] signal outcome scoring failed: {e}")
         _capture(e)
 
+    # Outcome Intelligence: SPY over the same window for rows matured before the
+    # benchmark columns existed (bounded; a no-op once caught up).
+    try:
+        from analytics.signal_outcomes import backfill_benchmark_returns
+
+        filled = backfill_benchmark_returns()
+        if filled:
+            print(f"[signal_outcomes] benchmark filled for {filled} matured signal(s)")
+    except Exception as e:
+        print(f"[cron] benchmark backfill failed: {e}")
+        _capture(e)
+
     # Postmarket slots additionally send the evening wrap (throttled once/day).
     if session == "postmarket":
         try:

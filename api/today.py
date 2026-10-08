@@ -116,6 +116,9 @@ def clear_cache() -> None:
     from api import scans  # stock pages have their own cache (api.scans)
 
     scans.stock_cache.clear()
+    from api import outcomes  # Outcome Intelligence keeps its own cache too
+
+    outcomes.clear_cache()
 
 
 def _num(v: Any) -> Optional[float]:
