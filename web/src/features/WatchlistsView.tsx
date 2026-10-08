@@ -5,20 +5,22 @@
 // Scores and prices come from the latest market scan, labelled with its time: the API
 // attaches each ticker's scan row (items[].latest); an older API without it falls back to
 // matching the plan's ranked rows. Tickers that aren't ranked setups show no score
-// rather than a made-up quote.
+// rather than a made-up quote. GET /v1/watchlists/{id}/intelligence adds what changed since
+// the previous scan (score, rank), PreBreakout (Premium), RVOL and alert counts; all of it
+// is computed by the API, and an API without that route just leaves those facts out.
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
 import { api, unwrap } from "@/api/client";
-import { parseTickers, watchlists } from "@/api/userData";
-import type { WatchlistDetail } from "@/api/userData";
+import { alertRules, parseTickers, watchlists } from "@/api/userData";
+import type { WatchlistDetail, WatchlistIntelItem } from "@/api/userData";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
-import { pct, price, setupLabel, shortDate } from "@/lib/format";
+import { num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
 const NOTE_MAX = 500;
 
@@ -132,8 +134,84 @@ function AddTickers({ wl, onAdded }: { wl: number; onAdded: () => void }) {
   );
 }
 
+/** What the server's Watchlist Intelligence adds to a ticker row. */
+function IntelFacts({ x }: { x: WatchlistIntelItem }) {
+  const sc = x.score_change ?? 0;
+  const rc = x.rank_change ?? 0;
+  const alerts = x.active_alert_count ?? 0;
+  return (
+    <>
+      {sc !== 0 && <span className={`mono ${sc > 0 ? "up" : "down"}`} title="HSF Score change since the previous scan">{sc > 0 ? "▲" : "▼"}{Math.abs(sc)}</span>}
+      {rc !== 0 && <span>{rc > 0 ? "Up" : "Down"} {Math.abs(rc)} place{Math.abs(rc) === 1 ? "" : "s"}</span>}
+      {x.prebreakout && <Pill tone="gold">PreBreakout</Pill>}
+      {x.rvol != null && <span>RVOL {num(x.rvol)}x</span>}
+      {alerts > 0 && <span>{alerts} alert{alerts === 1 ? "" : "s"}</span>}
+    </>
+  );
+}
+
+/** Alert rules on this watchlist: the server evaluates them after each market scan. */
+function WatchlistRules({ wl, onChanged }: { wl: number; onChanged: () => void }) {
+  const rules = useApi("alert-rules", (signal) => alertRules.list(signal));
+  const types = useApi("alert-rule-types", (signal) => alertRules.types(signal));
+  const [type, setType] = useState("");
+  const [threshold, setThreshold] = useState("");
+  const add = useAction();
+  const rm = useAction();
+  if (rules.error || types.error || !rules.data || !types.data) return null; // an API without rules: no card
+  const available = types.data.filter((t) => t.available);
+  const spec = available.find((t) => t.type === type) ?? available[0];
+  if (!spec) return null;
+  const mine = rules.data.rules.filter((r) => r.watchlist_id === wl);
+  const label = (t: string) => types.data?.find((x) => x.type === t)?.label ?? t;
+  const changed = () => { rules.reload(); onChanged(); };
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const value = spec.threshold ? Number(threshold || spec.threshold.default) : undefined;
+    const ok = await add.run(async () => {
+      await alertRules.create({ rule_type: spec.type, watchlist_id: wl, enabled: true, ...(value !== undefined ? { threshold: value } : {}) });
+      return true;
+    });
+    if (ok) { setThreshold(""); changed(); }
+  };
+  return (
+    <Card title="Alerts on this list" id="wl-rules" aside={`${rules.data.used} of ${rules.data.limit} alerts in use`}>
+      {mine.length > 0 && (
+        <ul className="stack-sm">
+          {mine.map((r) => (
+            <li key={r.id} className="row-actions">
+              <span>{label(r.rule_type)}{r.threshold != null ? ` ${r.threshold}` : ""}</span>
+              {!r.enabled && <Pill tone="warn">Off</Pill>}
+              <button type="button" className="link-btn" disabled={rm.busy} aria-label={`Delete alert ${label(r.rule_type)}`}
+                onClick={() => void rm.run(async () => { await alertRules.remove(r.id); changed(); return true; })}>Delete</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form className="inline-form" onSubmit={submit}>
+        <label className="field"><span>Alert me when any ticker</span>
+          <select value={spec.type} onChange={(e) => { setType(e.target.value); setThreshold(""); }}>
+            {available.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
+          </select>
+        </label>
+        {spec.threshold && (
+          <label className="field"><span>Value</span>
+            <input type="number" inputMode="decimal" min={spec.threshold.min} max={spec.threshold.max} step="any"
+              placeholder={String(spec.threshold.default ?? "")} value={threshold} onChange={(e) => setThreshold(e.target.value)} />
+          </label>
+        )}
+        <button type="submit" className="btn" disabled={add.busy}>{add.busy ? "Adding…" : "Add alert"}</button>
+      </form>
+      <ErrorLine error={add.error ?? rm.error} />
+      <p className="cap">{spec.description} Checked after each market scan; fired alerts show on <Link href="/alerts">Alerts</Link>.</p>
+    </Card>
+  );
+}
+
 function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => void; onDeleted: () => void }) {
   const detail = useApi(`wl:${id}`, (signal) => watchlists.get(id, signal));
+  const intel = useApi(`wl-intel:${id}`, (signal) => watchlists.intelligence(id, signal));
+  const intelBy = useMemo(() => new Map((intel.data?.items ?? []).map((i) => [i.ticker, i])), [intel.data]);
   // Only an API that predates items[].latest (no scan_at key at all) needs the ranked rows.
   const legacy = !!detail.data && detail.data.scan_at === undefined;
   const scan = useApi(legacy ? "wl-scan" : null, (signal) => unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: 200 } }, signal })));
@@ -145,7 +223,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const ren = useAction();
   const del = useAction();
   const rm = useAction();
-  const reload = () => { detail.reload(); onChanged(); };
+  const reload = () => { detail.reload(); intel.reload(); onChanged(); };
 
   const scores = useMemo(() => {
     if (!legacy) return new Map((detail.data?.items ?? []).filter((i) => i.latest).map((i) => [i.ticker, i.latest!]));
@@ -216,6 +294,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                         {rank && <span>#{rank}{w.scan_total ? ` of ${w.scan_total}` : ""}</span>}
                       </>
                     )}
+                    {intelBy.get(it.ticker) && <IntelFacts x={intelBy.get(it.ticker)!} />}
                     {it.added_at && <span>Added {shortDate(it.added_at)}{it.price_when_added ? ` at ${price(it.price_when_added)}` : ""}</span>}
                   </div>
                   <NoteEditor wl={w.id} ticker={it.ticker} note={it.note} onSaved={detail.reload} />
@@ -228,11 +307,13 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
         {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? "Score, setup, price and change are from that scan, not live quotes. The rank is the ticker's place among the scan's ranked setups." : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
       </Card>
 
+      <WatchlistRules wl={w.id} onChanged={intel.reload} />
+
       <NameDialog open={renaming} title="Rename watchlist" initial={w.name} submitLabel="Rename" onClose={() => setRenaming(false)}
         error={<ErrorLine error={ren.error} />}
         onSubmit={async (name) => !!(await ren.run(async () => { await watchlists.rename(w.id, name); reload(); return true; }))} />
       <ConfirmDialog open={deleting} title={`Delete "${w.name}"?`} confirmLabel="Delete watchlist" busy={del.busy}
-        body={<p>This removes the list and its {w.symbol_count} ticker{w.symbol_count === 1 ? "" : "s"} and notes. Alerts aren&apos;t affected. This can&apos;t be undone.</p>}
+        body={<p>This removes the list and its {w.symbol_count} ticker{w.symbol_count === 1 ? "" : "s"} and notes. Its list alerts are switched off; ticker alerts aren&apos;t affected. This can&apos;t be undone.</p>}
         error={<ErrorLine error={del.error} />} onClose={() => { del.clear(); setDeleting(false); }}
         onConfirm={() => void del.run(async () => { await watchlists.remove(w.id); setDeleting(false); onDeleted(); return true; })} />
       <ConfirmDialog open={removing !== null} title={`Remove ${removing ?? ""}?`} confirmLabel="Remove" busy={rm.busy}

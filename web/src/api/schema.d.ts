@@ -158,7 +158,7 @@ export interface paths {
         };
         /**
          * Alert Events
-         * @description Your most recent fired alerts, newest first.
+         * @description Your fired alerts (ticker alerts and alert rules), newest first. Page with `cursor`.
          */
         get: operations["alert_events_v1_alerts_events_get"];
         put?: never;
@@ -167,6 +167,78 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/alerts/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your alert rules
+         * @description Your alert rules, the plan's active-alert limit (shared with ticker alerts) and
+         *     what the plan allows.
+         */
+        get: operations["alert_rules_list_v1_alerts_rules_get"];
+        put?: never;
+        /**
+         * Create an alert rule
+         * @description Set exactly one of `ticker` or `watchlist_id`. Rules count toward the plan's alert
+         *     limit together with ticker alerts.
+         */
+        post: operations["alert_rule_create_v1_alerts_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alerts/rules/types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Alert rule types
+         * @description The rule types, their thresholds and whether your plan includes each.
+         */
+        get: operations["alert_rule_types_v1_alerts_rules_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alerts/rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One alert rule */
+        get: operations["alert_rule_get_v1_alerts_rules__rule_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an alert rule
+         * @description Its past events stay in /v1/alerts/events.
+         */
+        delete: operations["alert_rule_delete_v1_alerts_rules__rule_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change an alert rule
+         * @description Threshold, value, enabled, channels, cooldown. A new threshold or value starts the
+         *     rule from a fresh baseline.
+         */
+        patch: operations["alert_rule_update_v1_alerts_rules__rule_id__patch"];
         trace?: never;
     };
     "/v1/alerts/types": {
@@ -610,6 +682,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your plan's watchlist and alert limits */
+        get: operations["my_capabilities_v1_me_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/devices": {
         parameters: {
             query?: never;
@@ -1039,12 +1128,94 @@ export interface paths {
         get: operations["watchlist_get_v1_watchlists__watchlist_id__get"];
         put?: never;
         post?: never;
-        /** Watchlist Delete */
+        /**
+         * Watchlist Delete
+         * @description Alert rules on this watchlist are switched off (kept, so you can see why).
+         */
         delete: operations["watchlist_delete_v1_watchlists__watchlist_id__delete"];
         options?: never;
         head?: never;
         /** Watchlist Update */
         patch: operations["watchlist_update_v1_watchlists__watchlist_id__patch"];
+        trace?: never;
+    };
+    "/v1/watchlists/{watchlist_id}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What changed on a watchlist since the previous scan
+         * @description The canonical HSF changes (new, dropped, rising/falling, status, fading, signals
+         *     incl. PreBreakout) between the two latest market scans for this list's symbols, with
+         *     rank moves, plus your rule alerts on them since the previous scan.
+         */
+        get: operations["watchlist_changes_v1_watchlists__watchlist_id__changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/watchlists/{watchlist_id}/intelligence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * HSF intelligence for every symbol on a watchlist
+         * @description Score, rank and their change since the previous scan, setup, signals, PreBreakout
+         *     (Premium), price, RVOL, EMA cross, freshness and active alert count for each symbol,
+         *     from the latest saved market scan (no live quote calls). Fields with no canonical
+         *     source are null and listed in `unavailable_fields`.
+         */
+        get: operations["watchlist_intelligence_v1_watchlists__watchlist_id__intelligence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/watchlists/{watchlist_id}/symbols": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add symbols (same as /tickers) */
+        post: operations["watchlist_add_symbols_v1_watchlists__watchlist_id__symbols_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/watchlists/{watchlist_id}/symbols/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a symbol (same as /tickers/{ticker}) */
+        delete: operations["watchlist_remove_symbol_v1_watchlists__watchlist_id__symbols__ticker__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/watchlists/{watchlist_id}/tickers": {
@@ -1181,14 +1352,207 @@ export interface components {
         AlertEvent: {
             /** Alert Id */
             alert_id?: number | null;
-            /** Fired At */
+            /**
+             * Cursor
+             * @description Pass as ?cursor= to get the events after this one
+             */
+            cursor: string;
+            /**
+             * Delivery
+             * @description Per channel: delivered (in_app), sent, pending, failed (retried), skipped
+             * @default {}
+             */
+            delivery: {
+                [key: string]: string;
+            };
+            /**
+             * Event Id
+             * @description Unique across sources: 'alert:<id>' or 'rule:<id>'
+             */
+            event_id: string;
+            /**
+             * Fired At
+             * @description When it triggered (same as triggered_at)
+             */
             fired_at?: string | null;
-            /** Id */
+            /** Hsf Score */
+            hsf_score?: number | null;
+            /**
+             * Id
+             * @description Row id within its source; use event_id as a unique key
+             */
             id: number;
+            /**
+             * Market Data As Of
+             * @description Time of the market scan it was evaluated on
+             */
+            market_data_as_of?: string | null;
             /** Message */
             message: string;
+            /** Operator */
+            operator?: string | null;
+            /**
+             * Previous Value
+             * @description The rule's last seen value (transitions)
+             */
+            previous_value?: number | null;
+            /** Rule Id */
+            rule_id?: number | null;
+            /** Rule Type */
+            rule_type?: string | null;
+            /** Setup */
+            setup?: string | null;
+            /**
+             * Source
+             * @description alert: a ticker alert (/v1/alerts); rule: an alert rule
+             * @enum {string}
+             */
+            source: "alert" | "rule";
+            /** Threshold */
+            threshold?: number | null;
             /** Ticker */
             ticker?: string | null;
+            /**
+             * Trigger Value
+             * @description The value that met the condition
+             */
+            trigger_value?: number | null;
+            /** Triggered At */
+            triggered_at?: string | null;
+            /** Watchlist Id */
+            watchlist_id?: number | null;
+        };
+        /** AlertRule */
+        AlertRule: {
+            /** Cooldown Seconds */
+            cooldown_seconds: number;
+            /** Created At */
+            created_at?: string | null;
+            /** Delivery Channels */
+            delivery_channels: string[];
+            /** Enabled */
+            enabled: boolean;
+            /** Id */
+            id: number;
+            /** Last Evaluated At */
+            last_evaluated_at?: string | null;
+            /** Last Triggered At */
+            last_triggered_at?: string | null;
+            /** Operator */
+            operator: string;
+            /** Rule Type */
+            rule_type: string;
+            /** Threshold */
+            threshold?: number | null;
+            /** Ticker */
+            ticker?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Value */
+            value?: string | null;
+            /** Watchlist Id */
+            watchlist_id?: number | null;
+        };
+        /** AlertRuleCreate */
+        AlertRuleCreate: {
+            /**
+             * Cooldown Seconds
+             * @description Default 1 day for level rules, 1 hour for transitions
+             */
+            cooldown_seconds?: number | null;
+            /**
+             * Delivery Channels
+             * @description Default in_app; email is Pro+
+             */
+            delivery_channels?: ("in_app" | "email")[] | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Rule Type
+             * @description See GET /v1/alerts/rules/types, e.g. HSF_SCORE_CROSS_ABOVE
+             */
+            rule_type: string;
+            /** Threshold */
+            threshold?: number | null;
+            /**
+             * Ticker
+             * @description One ticker, or set watchlist_id
+             */
+            ticker?: string | null;
+            /**
+             * Value
+             * @description SETUP_APPEARED: only this setup (optional)
+             */
+            value?: string | null;
+            /**
+             * Watchlist Id
+             * @description Every symbol on this watchlist
+             */
+            watchlist_id?: number | null;
+        };
+        /** AlertRuleType */
+        AlertRuleType: {
+            /**
+             * Available
+             * @description False when the plan doesn't include it
+             */
+            available: boolean;
+            /** Default Cooldown Seconds */
+            default_cooldown_seconds: number;
+            /** Description */
+            description: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "level" | "transition";
+            /** Label */
+            label: string;
+            /** Operator */
+            operator: string;
+            /**
+             * Takes Value
+             * @description SETUP_APPEARED: optional setup name, e.g. Breakout
+             */
+            takes_value: boolean;
+            threshold?: components["schemas"]["RuleThreshold"] | null;
+            /** Type */
+            type: string;
+        };
+        /** AlertRuleUpdate */
+        AlertRuleUpdate: {
+            /** Cooldown Seconds */
+            cooldown_seconds?: number | null;
+            /** Delivery Channels */
+            delivery_channels?: ("in_app" | "email")[] | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Threshold */
+            threshold?: number | null;
+            /** Value */
+            value?: string | null;
+        };
+        /** AlertRules */
+        AlertRules: {
+            capabilities: components["schemas"]["Capabilities"];
+            /**
+             * Limit
+             * @description Active alerts this plan may have; rules and ticker alerts share it
+             */
+            limit: number;
+            /**
+             * Rules
+             * @default []
+             */
+            rules: components["schemas"]["AlertRule"][];
+            /**
+             * Used
+             * @description Enabled rules plus enabled ticker alerts
+             */
+            used: number;
         };
         /** AlertThreshold */
         AlertThreshold: {
@@ -1422,6 +1786,29 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** Capabilities */
+        Capabilities: {
+            /** Alert Rule Types */
+            alert_rule_types: string[];
+            /** Delivery Channels */
+            delivery_channels: string[];
+            /**
+             * Max Active Alerts
+             * @description Enabled alert rules plus enabled ticker alerts
+             */
+            max_active_alerts: number;
+            /** Max Symbols Per Request */
+            max_symbols_per_request: number;
+            /**
+             * Max Symbols Per Watchlist
+             * @description Null: no plan limit is defined
+             */
+            max_symbols_per_watchlist?: number | null;
+            /** Max Watchlists */
+            max_watchlists: number;
+            /** Tier */
+            tier: string;
+        };
         /** ChatTurn */
         ChatTurn: {
             /** Content */
@@ -1441,6 +1828,15 @@ export interface components {
             interval: string;
             /** Plan */
             plan: string;
+        };
+        /** Coverage */
+        Coverage: {
+            /** Enriched */
+            enriched: number;
+            /** Missing */
+            missing: number;
+            /** Symbols */
+            symbols: number;
         };
         /** DayTrader */
         DayTrader: {
@@ -2143,6 +2539,15 @@ export interface components {
             new_password: string;
             /** Token */
             token: string;
+        };
+        /** RuleThreshold */
+        RuleThreshold: {
+            /** Default */
+            default?: number | null;
+            /** Max */
+            max: number;
+            /** Min */
+            min: number;
         };
         /** RunDetail */
         RunDetail: {
@@ -3046,6 +3451,74 @@ export interface components {
             /** Symbol Count */
             symbol_count: number;
         };
+        /** WatchlistChange */
+        WatchlistChange: {
+            /** Current Score */
+            current_score?: number | null;
+            /** Current Status */
+            current_status?: string | null;
+            /**
+             * Event Type
+             * @description NEW_OPPORTUNITY, DROPPED, RISING, FALLING, STATUS_UPGRADE, STATUS_DOWNGRADE, FADING, SIGNAL_ADDED, SIGNAL_REMOVED
+             */
+            event_type: string;
+            /** Previous Rank */
+            previous_rank?: number | null;
+            /** Previous Score */
+            previous_score?: number | null;
+            /** Previous Status */
+            previous_status?: string | null;
+            /** Rank */
+            rank?: number | null;
+            /** Rank Change */
+            rank_change?: number | null;
+            /** Score Delta */
+            score_delta?: number | null;
+            /** Setup */
+            setup?: string | null;
+            /** Severity */
+            severity?: string | null;
+            /**
+             * Signal
+             * @description SIGNAL_ADDED/REMOVED: which signal (e.g. prebreakout)
+             */
+            signal?: string | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /** WatchlistChanges */
+        WatchlistChanges: {
+            /**
+             * Alerts
+             * @description Your rule alerts on these tickers since the previous scan
+             * @default []
+             */
+            alerts: components["schemas"]["AlertEvent"][];
+            /**
+             * Changes
+             * @default []
+             */
+            changes: components["schemas"]["WatchlistChange"][];
+            /**
+             * Has Baseline
+             * @description False until two market scans exist
+             */
+            has_baseline: boolean;
+            /**
+             * Headline
+             * @description The strongest change per ticker
+             * @default []
+             */
+            headline: components["schemas"]["WatchlistHeadline"][];
+            /** Last Scan At */
+            last_scan_at?: string | null;
+            /** Name */
+            name: string;
+            /** Previous Scan At */
+            previous_scan_at?: string | null;
+            /** Watchlist Id */
+            watchlist_id: number;
+        };
         /** WatchlistCounts */
         WatchlistCounts: {
             /** Fading */
@@ -3097,6 +3570,165 @@ export interface components {
             stale?: boolean | null;
             /** Symbol Count */
             symbol_count: number;
+        };
+        /** WatchlistHeadline */
+        WatchlistHeadline: {
+            /** Event Type */
+            event_type: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** WatchlistIntelItem */
+        WatchlistIntelItem: {
+            /**
+             * Active Alert Count
+             * @description Enabled alert rules on this ticker or this watchlist, plus enabled ticker alerts
+             */
+            active_alert_count?: number | null;
+            /** Added At */
+            added_at?: string | null;
+            /** Breakout Score */
+            breakout_score?: number | null;
+            /**
+             * Company Name
+             * @description Not available from the scans yet (always null)
+             */
+            company_name?: string | null;
+            /**
+             * Ema Cross
+             * @description EMA 9/21 cross state in the scan
+             */
+            ema_cross?: ("golden" | "death") | null;
+            /** Fading */
+            fading?: boolean | null;
+            /**
+             * Freshness
+             * @description fresh: in the latest scan, which is on schedule; stale: a scheduled scan was missed; missing: not in the latest scan; unavailable: scan data couldn't be read
+             * @enum {string}
+             */
+            freshness: "fresh" | "stale" | "missing" | "unavailable";
+            /**
+             * Hsf Score
+             * @description Null when the ticker isn't a ranked HSF setup
+             */
+            hsf_score?: number | null;
+            /** In Latest Scan */
+            in_latest_scan: boolean;
+            /** Note */
+            note?: string | null;
+            /**
+             * Prebreakout
+             * @description Premium: the PreBreakout signal is on; null below Premium
+             */
+            prebreakout?: boolean | null;
+            /**
+             * Prebreakout Rank Pct
+             * @description Premium: 'top N%' of the model's scores
+             */
+            prebreakout_rank_pct?: number | null;
+            /**
+             * Prebreakout Score
+             * @description Premium: PreBreakout probability %
+             */
+            prebreakout_score?: number | null;
+            /**
+             * Previous Hsf Score
+             * @description In the previous market scan
+             */
+            previous_hsf_score?: number | null;
+            /** Previous Rank */
+            previous_rank?: number | null;
+            /**
+             * Price
+             * @description Last price in the latest market scan
+             */
+            price?: number | null;
+            /**
+             * Price Change
+             * @description Not available from the scans yet (always null)
+             */
+            price_change?: number | null;
+            /** Price Change Pct */
+            price_change_pct?: number | null;
+            /**
+             * Rank
+             * @description Position in the latest scan's ranked setups (1 = top)
+             */
+            rank?: number | null;
+            /**
+             * Rank Change
+             * @description Places moved up since the previous scan (negative = down)
+             */
+            rank_change?: number | null;
+            /**
+             * Ranked
+             * @description A ranked HSF setup in the latest scan
+             * @default false
+             */
+            ranked: boolean;
+            /**
+             * Rsi
+             * @description Not computed by the scans yet (always null)
+             */
+            rsi?: number | null;
+            /**
+             * Rvol
+             * @description Volume vs 20-day average, from the scan
+             */
+            rvol?: number | null;
+            /** Score Change */
+            score_change?: number | null;
+            /** Setup */
+            setup?: string | null;
+            /**
+             * Signals
+             * @default []
+             */
+            signals: string[];
+            /** Status */
+            status?: string | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /** WatchlistIntelligence */
+        WatchlistIntelligence: {
+            coverage: components["schemas"]["Coverage"];
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["WatchlistIntelItem"][];
+            /** Last Scan At */
+            last_scan_at?: string | null;
+            /**
+             * Market Data As Of
+             * @description Prices and scores are as of this scan
+             */
+            market_data_as_of?: string | null;
+            /**
+             * Market Session
+             * @enum {string}
+             */
+            market_session: "premarket" | "open" | "afterhours" | "closed";
+            /** Name */
+            name: string;
+            /** Prebreakout Locked */
+            prebreakout_locked: boolean;
+            /** Previous Scan At */
+            previous_scan_at?: string | null;
+            /** Scan Available */
+            scan_available: boolean;
+            /** Scan Total */
+            scan_total?: number | null;
+            /** Stale */
+            stale?: boolean | null;
+            /**
+             * Unavailable Fields
+             * @description Fields always null because no canonical source exists yet
+             */
+            unavailable_fields: string[];
+            /** Watchlist Id */
+            watchlist_id: number;
         };
         /** WatchlistItemDetail */
         WatchlistItemDetail: {
@@ -3641,6 +4273,17 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                ticker?: string | null;
+                /** @description Only this rule's events */
+                rule_id?: number | null;
+                /** @description Only rule events from this watchlist */
+                watchlist_id?: number | null;
+                triggered_after?: string | null;
+                triggered_before?: string | null;
+                /** @description alert: ticker alerts; rule: alert rules */
+                source?: ("alert" | "rule") | null;
+                /** @description The last event's cursor, for the next page */
+                cursor?: string | null;
             };
             header?: never;
             path?: never;
@@ -3664,6 +4307,162 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Invalid cursor or filter */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    alert_rules_list_v1_alerts_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRules"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    alert_rule_create_v1_alerts_rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan limit, rule type or channel not on your plan */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Watchlist not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description You already have this rule */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    alert_rule_types_v1_alerts_rules_types_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRuleType"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    alert_rule_get_v1_alerts_rules__rule_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3672,6 +4471,103 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    alert_rule_delete_v1_alerts_rules__rule_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alert_rule_update_v1_alerts_rules__rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan limit or channel not on your plan */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid change */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -4804,6 +5700,33 @@ export interface operations {
             };
             /** @description Too many attempts */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    my_capabilities_v1_me_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Capabilities"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6146,6 +7069,190 @@ export interface operations {
             };
             /** @description A watchlist with that name exists */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlist_changes_v1_watchlists__watchlist_id__changes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistChanges"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlist_intelligence_v1_watchlists__watchlist_id__intelligence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistIntelligence"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlist_add_symbols_v1_watchlists__watchlist_id__symbols_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TickersBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TickersResult"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlist_remove_symbol_v1_watchlists__watchlist_id__symbols__ticker__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+                /** @description Ticker symbol, e.g. AAPL or BRK.B */
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

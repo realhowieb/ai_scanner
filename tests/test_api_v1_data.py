@@ -134,6 +134,10 @@ class FakeAlerts:
         return [{"id": 7, "alert_id": 1, "ticker": "NVDA", "message": "NVDA moved +5.2%",
                  "fired_at": dt.datetime(2026, 10, 5, 14, 0, tzinfo=UTC)}][:limit]
 
+    def list_events_filtered(self, user, limit=20, *, ticker=None, after=None, before=None):
+        return [e for e in self.list_recent_events(user, limit) if (not ticker or e["ticker"] == ticker)
+                and (after is None or e["fired_at"] >= after) and (before is None or e["fired_at"] <= before)]
+
 
 class DataApiBase(ApiTestCase):
     def setUp(self):
@@ -143,8 +147,10 @@ class DataApiBase(ApiTestCase):
                      "delete_watchlist", "get_watchlist_items", "get_watchlist_tickers",
                      "add_tickers_to_watchlist", "remove_from_watchlist", "update_watchlist_item_note"):
             mock.patch(f"db.watchlists.{name}", side_effect=getattr(self.wl, name)).start()
-        for name in ("list_alerts", "create_alert", "set_alert_enabled", "delete_alert", "list_recent_events"):
+        for name in ("list_alerts", "create_alert", "set_alert_enabled", "delete_alert", "list_recent_events",
+                     "list_events_filtered"):
             mock.patch(f"db.alerts.{name}", side_effect=getattr(self.al, name)).start()
+        mock.patch("db.alert_rules.list_events", return_value=[]).start()  # alert rules: see test_api_watchlist_intelligence
         self.h = self.auth(self.login().json()["access_token"])
         self.accounts["free@example.com"] = {**self.accounts["pro@example.com"], "username": "free@example.com",
                                              "tier": "basic"}

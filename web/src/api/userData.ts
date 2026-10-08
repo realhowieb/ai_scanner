@@ -7,6 +7,11 @@ export type WatchlistDetail = Schemas["WatchlistDetail"];
 export type Alert = Schemas["Alert"];
 export type AlertType = Schemas["AlertType"];
 export type AlertCreate = Omit<Schemas["AlertCreate"], "watchlist_only"> & { watchlist_only?: boolean };
+export type WatchlistIntelligence = Schemas["WatchlistIntelligence"];
+export type WatchlistIntelItem = Schemas["WatchlistIntelItem"];
+export type AlertRule = Schemas["AlertRule"];
+export type AlertRuleType = Schemas["AlertRuleType"];
+export type AlertRuleCreate = Schemas["AlertRuleCreate"];
 
 const wid = (id: number) => ({ params: { path: { watchlist_id: id } } });
 
@@ -24,6 +29,8 @@ export const watchlists = {
     unwrap(api.POST("/v1/watchlists/{watchlist_id}/tickers", { ...wid(id), body: { tickers } })),
   removeTicker: (id: number, ticker: string) =>
     unwrap(api.DELETE("/v1/watchlists/{watchlist_id}/tickers/{ticker}", { params: { path: { watchlist_id: id, ticker } } })),
+  intelligence: (id: number, signal?: AbortSignal) =>
+    unwrap(api.GET("/v1/watchlists/{watchlist_id}/intelligence", { ...wid(id), signal })),
   setNote: (id: number, ticker: string, note: string) =>
     unwrap(api.PATCH("/v1/watchlists/{watchlist_id}/tickers/{ticker}", {
       params: { path: { watchlist_id: id, ticker } }, body: { note: note.trim() ? note : null },
@@ -38,6 +45,14 @@ export const alerts = {
   setEnabled: (id: number, enabled: boolean) =>
     unwrap(api.PATCH("/v1/alerts/{alert_id}", { params: { path: { alert_id: id } }, body: { enabled } })),
   remove: (id: number) => unwrap(api.DELETE("/v1/alerts/{alert_id}", { params: { path: { alert_id: id } } })),
+};
+
+// Alert rules: conditions on HSF intelligence, evaluated by the server (never here).
+export const alertRules = {
+  list: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/rules", { signal })),
+  types: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/rules/types", { signal })),
+  create: (body: AlertRuleCreate) => unwrap(api.POST("/v1/alerts/rules", { body })),
+  remove: (id: number) => unwrap(api.DELETE("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } } })),
 };
 
 export const emailPrefs = {

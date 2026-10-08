@@ -291,6 +291,25 @@
       ],
       "title": "Alert Id"
      },
+     "cursor": {
+      "description": "Pass as ?cursor= to get the events after this one",
+      "title": "Cursor",
+      "type": "string"
+     },
+     "delivery": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "default": {},
+      "description": "Per channel: delivered (in_app), sent, pending, failed (retried), skipped",
+      "title": "Delivery",
+      "type": "object"
+     },
+     "event_id": {
+      "description": "Unique across sources: 'alert:<id>' or 'rule:<id>'",
+      "title": "Event Id",
+      "type": "string"
+     },
      "fired_at": {
       "anyOf": [
        {
@@ -300,15 +319,116 @@
         "type": "null"
        }
       ],
+      "description": "When it triggered (same as triggered_at)",
       "title": "Fired At"
      },
+     "hsf_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hsf Score"
+     },
      "id": {
+      "description": "Row id within its source; use event_id as a unique key",
       "title": "Id",
       "type": "integer"
+     },
+     "market_data_as_of": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Time of the market scan it was evaluated on",
+      "title": "Market Data As Of"
      },
      "message": {
       "title": "Message",
       "type": "string"
+     },
+     "operator": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Operator"
+     },
+     "previous_value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The rule's last seen value (transitions)",
+      "title": "Previous Value"
+     },
+     "rule_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rule Id"
+     },
+     "rule_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rule Type"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "source": {
+      "description": "alert: a ticker alert (/v1/alerts); rule: an alert rule",
+      "enum": [
+       "alert",
+       "rule"
+      ],
+      "title": "Source",
+      "type": "string"
+     },
+     "threshold": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Threshold"
      },
      "ticker": {
       "anyOf": [
@@ -320,13 +440,451 @@
        }
       ],
       "title": "Ticker"
+     },
+     "trigger_value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The value that met the condition",
+      "title": "Trigger Value"
+     },
+     "triggered_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Triggered At"
+     },
+     "watchlist_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Watchlist Id"
      }
     },
     "required": [
      "id",
-     "message"
+     "event_id",
+     "source",
+     "message",
+     "cursor"
     ],
     "title": "AlertEvent",
+    "type": "object"
+   },
+   "AlertRule": {
+    "properties": {
+     "cooldown_seconds": {
+      "title": "Cooldown Seconds",
+      "type": "integer"
+     },
+     "created_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Created At"
+     },
+     "delivery_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Delivery Channels",
+      "type": "array"
+     },
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "last_evaluated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Evaluated At"
+     },
+     "last_triggered_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Triggered At"
+     },
+     "operator": {
+      "title": "Operator",
+      "type": "string"
+     },
+     "rule_type": {
+      "title": "Rule Type",
+      "type": "string"
+     },
+     "threshold": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Threshold"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ticker"
+     },
+     "updated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Updated At"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "watchlist_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Watchlist Id"
+     }
+    },
+    "required": [
+     "id",
+     "rule_type",
+     "operator",
+     "enabled",
+     "delivery_channels",
+     "cooldown_seconds"
+    ],
+    "title": "AlertRule",
+    "type": "object"
+   },
+   "AlertRuleCreate": {
+    "properties": {
+     "cooldown_seconds": {
+      "anyOf": [
+       {
+        "maximum": 604800.0,
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Default 1 day for level rules, 1 hour for transitions",
+      "title": "Cooldown Seconds"
+     },
+     "delivery_channels": {
+      "anyOf": [
+       {
+        "items": {
+         "enum": [
+          "in_app",
+          "email"
+         ],
+         "type": "string"
+        },
+        "maxItems": 2,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Default in_app; email is Pro+",
+      "title": "Delivery Channels"
+     },
+     "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "rule_type": {
+      "description": "See GET /v1/alerts/rules/types, e.g. HSF_SCORE_CROSS_ABOVE",
+      "title": "Rule Type",
+      "type": "string"
+     },
+     "threshold": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Threshold"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "maxLength": 12,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "One ticker, or set watchlist_id",
+      "title": "Ticker"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "maxLength": 40,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "SETUP_APPEARED: only this setup (optional)",
+      "title": "Value"
+     },
+     "watchlist_id": {
+      "anyOf": [
+       {
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Every symbol on this watchlist",
+      "title": "Watchlist Id"
+     }
+    },
+    "required": [
+     "rule_type"
+    ],
+    "title": "AlertRuleCreate",
+    "type": "object"
+   },
+   "AlertRuleType": {
+    "properties": {
+     "available": {
+      "description": "False when the plan doesn't include it",
+      "title": "Available",
+      "type": "boolean"
+     },
+     "default_cooldown_seconds": {
+      "title": "Default Cooldown Seconds",
+      "type": "integer"
+     },
+     "description": {
+      "title": "Description",
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "level",
+       "transition"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "operator": {
+      "title": "Operator",
+      "type": "string"
+     },
+     "takes_value": {
+      "description": "SETUP_APPEARED: optional setup name, e.g. Breakout",
+      "title": "Takes Value",
+      "type": "boolean"
+     },
+     "threshold": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RuleThreshold"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "type": {
+      "title": "Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "label",
+     "description",
+     "operator",
+     "kind",
+     "takes_value",
+     "default_cooldown_seconds",
+     "available"
+    ],
+    "title": "AlertRuleType",
+    "type": "object"
+   },
+   "AlertRuleUpdate": {
+    "properties": {
+     "cooldown_seconds": {
+      "anyOf": [
+       {
+        "maximum": 604800.0,
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cooldown Seconds"
+     },
+     "delivery_channels": {
+      "anyOf": [
+       {
+        "items": {
+         "enum": [
+          "in_app",
+          "email"
+         ],
+         "type": "string"
+        },
+        "maxItems": 2,
+        "minItems": 1,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Delivery Channels"
+     },
+     "enabled": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Enabled"
+     },
+     "threshold": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Threshold"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "maxLength": 40,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     }
+    },
+    "title": "AlertRuleUpdate",
+    "type": "object"
+   },
+   "AlertRules": {
+    "properties": {
+     "capabilities": {
+      "$ref": "#/components/schemas/Capabilities"
+     },
+     "limit": {
+      "description": "Active alerts this plan may have; rules and ticker alerts share it",
+      "title": "Limit",
+      "type": "integer"
+     },
+     "rules": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/AlertRule"
+      },
+      "title": "Rules",
+      "type": "array"
+     },
+     "used": {
+      "description": "Enabled rules plus enabled ticker alerts",
+      "title": "Used",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "limit",
+     "used",
+     "capabilities"
+    ],
+    "title": "AlertRules",
     "type": "object"
    },
    "AlertThreshold": {
@@ -865,6 +1423,63 @@
     "title": "BriefPick",
     "type": "object"
    },
+   "Capabilities": {
+    "properties": {
+     "alert_rule_types": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Alert Rule Types",
+      "type": "array"
+     },
+     "delivery_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Delivery Channels",
+      "type": "array"
+     },
+     "max_active_alerts": {
+      "description": "Enabled alert rules plus enabled ticker alerts",
+      "title": "Max Active Alerts",
+      "type": "integer"
+     },
+     "max_symbols_per_request": {
+      "title": "Max Symbols Per Request",
+      "type": "integer"
+     },
+     "max_symbols_per_watchlist": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Null: no plan limit is defined",
+      "title": "Max Symbols Per Watchlist"
+     },
+     "max_watchlists": {
+      "title": "Max Watchlists",
+      "type": "integer"
+     },
+     "tier": {
+      "title": "Tier",
+      "type": "string"
+     }
+    },
+    "required": [
+     "tier",
+     "max_watchlists",
+     "max_symbols_per_request",
+     "max_active_alerts",
+     "alert_rule_types",
+     "delivery_channels"
+    ],
+    "title": "Capabilities",
+    "type": "object"
+   },
    "ChatTurn": {
     "properties": {
      "content": {
@@ -907,6 +1522,29 @@
      "plan"
     ],
     "title": "CheckoutBody",
+    "type": "object"
+   },
+   "Coverage": {
+    "properties": {
+     "enriched": {
+      "title": "Enriched",
+      "type": "integer"
+     },
+     "missing": {
+      "title": "Missing",
+      "type": "integer"
+     },
+     "symbols": {
+      "title": "Symbols",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "symbols",
+     "enriched",
+     "missing"
+    ],
+    "title": "Coverage",
     "type": "object"
    },
    "DayTrader": {
@@ -2657,6 +3295,35 @@
      "new_password"
     ],
     "title": "ResetConfirmBody",
+    "type": "object"
+   },
+   "RuleThreshold": {
+    "properties": {
+     "default": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Default"
+     },
+     "max": {
+      "title": "Max",
+      "type": "number"
+     },
+     "min": {
+      "title": "Min",
+      "type": "number"
+     }
+    },
+    "required": [
+     "min",
+     "max"
+    ],
+    "title": "RuleThreshold",
     "type": "object"
    },
    "RunDetail": {
@@ -4920,6 +5587,219 @@
     "title": "Watchlist",
     "type": "object"
    },
+   "WatchlistChange": {
+    "properties": {
+     "current_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Current Score"
+     },
+     "current_status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Current Status"
+     },
+     "event_type": {
+      "description": "NEW_OPPORTUNITY, DROPPED, RISING, FALLING, STATUS_UPGRADE, STATUS_DOWNGRADE, FADING, SIGNAL_ADDED, SIGNAL_REMOVED",
+      "title": "Event Type",
+      "type": "string"
+     },
+     "previous_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Rank"
+     },
+     "previous_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Score"
+     },
+     "previous_status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Status"
+     },
+     "rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rank"
+     },
+     "rank_change": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rank Change"
+     },
+     "score_delta": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Delta"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "severity": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Severity"
+     },
+     "signal": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "SIGNAL_ADDED/REMOVED: which signal (e.g. prebreakout)",
+      "title": "Signal"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "event_type"
+    ],
+    "title": "WatchlistChange",
+    "type": "object"
+   },
+   "WatchlistChanges": {
+    "properties": {
+     "alerts": {
+      "default": [],
+      "description": "Your rule alerts on these tickers since the previous scan",
+      "items": {
+       "$ref": "#/components/schemas/AlertEvent"
+      },
+      "title": "Alerts",
+      "type": "array"
+     },
+     "changes": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/WatchlistChange"
+      },
+      "title": "Changes",
+      "type": "array"
+     },
+     "has_baseline": {
+      "description": "False until two market scans exist",
+      "title": "Has Baseline",
+      "type": "boolean"
+     },
+     "headline": {
+      "default": [],
+      "description": "The strongest change per ticker",
+      "items": {
+       "$ref": "#/components/schemas/WatchlistHeadline"
+      },
+      "title": "Headline",
+      "type": "array"
+     },
+     "last_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Scan At"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "previous_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Scan At"
+     },
+     "watchlist_id": {
+      "title": "Watchlist Id",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "watchlist_id",
+     "name",
+     "has_baseline"
+    ],
+    "title": "WatchlistChanges",
+    "type": "object"
+   },
    "WatchlistCounts": {
     "properties": {
      "fading": {
@@ -5038,6 +5918,455 @@
      "symbol_count"
     ],
     "title": "WatchlistDetail",
+    "type": "object"
+   },
+   "WatchlistHeadline": {
+    "properties": {
+     "event_type": {
+      "title": "Event Type",
+      "type": "string"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "event_type"
+    ],
+    "title": "WatchlistHeadline",
+    "type": "object"
+   },
+   "WatchlistIntelItem": {
+    "properties": {
+     "active_alert_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Enabled alert rules on this ticker or this watchlist, plus enabled ticker alerts",
+      "title": "Active Alert Count"
+     },
+     "added_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Added At"
+     },
+     "breakout_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Breakout Score"
+     },
+     "company_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Not available from the scans yet (always null)",
+      "title": "Company Name"
+     },
+     "ema_cross": {
+      "anyOf": [
+       {
+        "enum": [
+         "golden",
+         "death"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "EMA 9/21 cross state in the scan",
+      "title": "Ema Cross"
+     },
+     "fading": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fading"
+     },
+     "freshness": {
+      "description": "fresh: in the latest scan, which is on schedule; stale: a scheduled scan was missed; missing: not in the latest scan; unavailable: scan data couldn't be read",
+      "enum": [
+       "fresh",
+       "stale",
+       "missing",
+       "unavailable"
+      ],
+      "title": "Freshness",
+      "type": "string"
+     },
+     "hsf_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Null when the ticker isn't a ranked HSF setup",
+      "title": "Hsf Score"
+     },
+     "in_latest_scan": {
+      "title": "In Latest Scan",
+      "type": "boolean"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     },
+     "prebreakout": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Premium: the PreBreakout signal is on; null below Premium",
+      "title": "Prebreakout"
+     },
+     "prebreakout_rank_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Premium: 'top N%' of the model's scores",
+      "title": "Prebreakout Rank Pct"
+     },
+     "prebreakout_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Premium: PreBreakout probability %",
+      "title": "Prebreakout Score"
+     },
+     "previous_hsf_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "In the previous market scan",
+      "title": "Previous Hsf Score"
+     },
+     "previous_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Rank"
+     },
+     "price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Last price in the latest market scan",
+      "title": "Price"
+     },
+     "price_change": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Not available from the scans yet (always null)",
+      "title": "Price Change"
+     },
+     "price_change_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price Change Pct"
+     },
+     "rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Position in the latest scan's ranked setups (1 = top)",
+      "title": "Rank"
+     },
+     "rank_change": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Places moved up since the previous scan (negative = down)",
+      "title": "Rank Change"
+     },
+     "ranked": {
+      "default": false,
+      "description": "A ranked HSF setup in the latest scan",
+      "title": "Ranked",
+      "type": "boolean"
+     },
+     "rsi": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Not computed by the scans yet (always null)",
+      "title": "Rsi"
+     },
+     "rvol": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Volume vs 20-day average, from the scan",
+      "title": "Rvol"
+     },
+     "score_change": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Change"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "signals": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "in_latest_scan",
+     "freshness"
+    ],
+    "title": "WatchlistIntelItem",
+    "type": "object"
+   },
+   "WatchlistIntelligence": {
+    "properties": {
+     "coverage": {
+      "$ref": "#/components/schemas/Coverage"
+     },
+     "items": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/WatchlistIntelItem"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "last_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Scan At"
+     },
+     "market_data_as_of": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Prices and scores are as of this scan",
+      "title": "Market Data As Of"
+     },
+     "market_session": {
+      "enum": [
+       "premarket",
+       "open",
+       "afterhours",
+       "closed"
+      ],
+      "title": "Market Session",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "prebreakout_locked": {
+      "title": "Prebreakout Locked",
+      "type": "boolean"
+     },
+     "previous_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Scan At"
+     },
+     "scan_available": {
+      "title": "Scan Available",
+      "type": "boolean"
+     },
+     "scan_total": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan Total"
+     },
+     "stale": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stale"
+     },
+     "unavailable_fields": {
+      "description": "Fields always null because no canonical source exists yet",
+      "items": {
+       "type": "string"
+      },
+      "title": "Unavailable Fields",
+      "type": "array"
+     },
+     "watchlist_id": {
+      "title": "Watchlist Id",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "watchlist_id",
+     "name",
+     "market_session",
+     "scan_available",
+     "prebreakout_locked",
+     "coverage",
+     "unavailable_fields"
+    ],
+    "title": "WatchlistIntelligence",
     "type": "object"
    },
    "WatchlistItemDetail": {
@@ -5732,7 +7061,7 @@
   },
   "/v1/alerts/events": {
    "get": {
-    "description": "Your most recent fired alerts, newest first.",
+    "description": "Your fired alerts (ticker alerts and alert rules), newest first. Page with `cursor`.",
     "operationId": "alert_events_v1_alerts_events_get",
     "parameters": [
      {
@@ -5745,6 +7074,136 @@
        "minimum": 1,
        "title": "Limit",
        "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "ticker",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Ticker"
+      }
+     },
+     {
+      "description": "Only this rule's events",
+      "in": "query",
+      "name": "rule_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "minimum": 1,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Only this rule's events",
+       "title": "Rule Id"
+      }
+     },
+     {
+      "description": "Only rule events from this watchlist",
+      "in": "query",
+      "name": "watchlist_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "minimum": 1,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Only rule events from this watchlist",
+       "title": "Watchlist Id"
+      }
+     },
+     {
+      "in": "query",
+      "name": "triggered_after",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date-time",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Triggered After"
+      }
+     },
+     {
+      "in": "query",
+      "name": "triggered_before",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date-time",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Triggered Before"
+      }
+     },
+     {
+      "description": "alert: ticker alerts; rule: alert rules",
+      "in": "query",
+      "name": "source",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "alert",
+          "rule"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "alert: ticker alerts; rule: alert rules",
+       "title": "Source"
+      }
+     },
+     {
+      "description": "The last event's cursor, for the next page",
+      "in": "query",
+      "name": "cursor",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 200,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "The last event's cursor, for the next page",
+       "title": "Cursor"
       }
      }
     ],
@@ -5767,6 +7226,149 @@
       "description": "Not signed in"
      },
      "422": {
+      "description": "Invalid cursor or filter"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Alert Events"
+   }
+  },
+  "/v1/alerts/rules": {
+   "get": {
+    "description": "Your alert rules, the plan's active-alert limit (shared with ticker alerts) and\nwhat the plan allows.",
+    "operationId": "alert_rules_list_v1_alerts_rules_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AlertRules"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Your alert rules"
+   },
+   "post": {
+    "description": "Set exactly one of `ticker` or `watchlist_id`. Rules count toward the plan's alert\nlimit together with ticker alerts.",
+    "operationId": "alert_rule_create_v1_alerts_rules_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AlertRuleCreate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AlertRule"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Plan limit, rule type or channel not on your plan"
+     },
+     "404": {
+      "description": "Watchlist not found (or not yours)"
+     },
+     "409": {
+      "description": "You already have this rule"
+     },
+     "422": {
+      "description": "Invalid rule"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Create an alert rule"
+   }
+  },
+  "/v1/alerts/rules/types": {
+   "get": {
+    "description": "The rule types, their thresholds and whether your plan includes each.",
+    "operationId": "alert_rule_types_v1_alerts_rules_types_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/AlertRuleType"
+         },
+         "title": "Response Alert Rule Types V1 Alerts Rules Types Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Alert rule types"
+   }
+  },
+  "/v1/alerts/rules/{rule_id}": {
+   "delete": {
+    "description": "Its past events stay in /v1/alerts/events.",
+    "operationId": "alert_rule_delete_v1_alerts_rules__rule_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "rule_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Rule Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
       "content": {
        "application/json": {
         "schema": {
@@ -5782,7 +7384,112 @@
       "HTTPBearer": []
      }
     ],
-    "summary": "Alert Events"
+    "summary": "Delete an alert rule"
+   },
+   "get": {
+    "operationId": "alert_rule_get_v1_alerts_rules__rule_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "rule_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Rule Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AlertRule"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "One alert rule"
+   },
+   "patch": {
+    "description": "Threshold, value, enabled, channels, cooldown. A new threshold or value starts the\nrule from a fresh baseline.",
+    "operationId": "alert_rule_update_v1_alerts_rules__rule_id__patch",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "rule_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Rule Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AlertRuleUpdate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AlertRule"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Plan limit or channel not on your plan"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "description": "Invalid change"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Change an alert rule"
    }
   },
   "/v1/alerts/types": {
@@ -7042,6 +8749,32 @@
      }
     ],
     "summary": "Me"
+   }
+  },
+  "/v1/me/capabilities": {
+   "get": {
+    "operationId": "my_capabilities_v1_me_capabilities_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Capabilities"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Your plan's watchlist and alert limits"
    }
   },
   "/v1/me/devices": {
@@ -8424,6 +10157,7 @@
   },
   "/v1/watchlists/{watchlist_id}": {
    "delete": {
+    "description": "Alert rules on this watchlist are switched off (kept, so you can see why).",
     "operationId": "watchlist_delete_v1_watchlists__watchlist_id__delete",
     "parameters": [
      {
@@ -8573,6 +10307,223 @@
      }
     ],
     "summary": "Watchlist Update"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}/changes": {
+   "get": {
+    "description": "The canonical HSF changes (new, dropped, rising/falling, status, fading, signals\nincl. PreBreakout) between the two latest market scans for this list's symbols, with\nrank moves, plus your rule alerts on them since the previous scan.",
+    "operationId": "watchlist_changes_v1_watchlists__watchlist_id__changes_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WatchlistChanges"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "What changed on a watchlist since the previous scan"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}/intelligence": {
+   "get": {
+    "description": "Score, rank and their change since the previous scan, setup, signals, PreBreakout\n(Premium), price, RVOL, EMA cross, freshness and active alert count for each symbol,\nfrom the latest saved market scan (no live quote calls). Fields with no canonical\nsource are null and listed in `unavailable_fields`.",
+    "operationId": "watchlist_intelligence_v1_watchlists__watchlist_id__intelligence_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WatchlistIntelligence"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "HSF intelligence for every symbol on a watchlist"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}/symbols": {
+   "post": {
+    "operationId": "watchlist_add_symbols_v1_watchlists__watchlist_id__symbols_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TickersBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TickersResult"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Add symbols (same as /tickers)"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}/symbols/{ticker}": {
+   "delete": {
+    "operationId": "watchlist_remove_symbol_v1_watchlists__watchlist_id__symbols__ticker__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Remove a symbol (same as /tickers/{ticker})"
    }
   },
   "/v1/watchlists/{watchlist_id}/tickers": {

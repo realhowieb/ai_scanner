@@ -327,6 +327,36 @@ def entitlements_for(account: Dict[str, Any]) -> Dict[str, Any]:
             "alert_limit": ALERT_LIMIT_BY_TIER.get(tier, 1)}
 
 
+def _capabilities(ent: Dict[str, Any]) -> Dict[str, Any]:
+    from api.alert_rules import capabilities
+
+    return capabilities(ent, watchlist_max=user_data.MAX_WATCHLISTS,
+                        tickers_per_request=user_data.MAX_TICKERS_PER_REQUEST)
+
+
+def _aware(value: Optional[dt.datetime]) -> Optional[dt.datetime]:
+    """Query datetimes without a zone are UTC."""
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
+
+
+class _rule_errors:
+    """Map rule validation to 422 and plan gates to 403 inside a route."""
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        from api import alert_rules
+
+        if exc_type is not None and issubclass(exc_type, alert_rules.RuleForbidden):
+            raise HTTPException(403, str(exc)) from exc
+        if exc_type is not None and issubclass(exc_type, alert_rules.RuleError):
+            raise HTTPException(422, str(exc)) from exc
+        return False
+
+
 def _routes(app: FastAPI) -> None:
     @app.post("/v1/auth/login", response_model=models.TokenPair,
               responses={401: {"description": "Wrong email or password"}, 429: {"description": "Rate limited"},
@@ -419,6 +449,27 @@ class AlertCreate(BaseModel):
     threshold: Optional[float] = None
     direction: Optional[str] = Field(default=None, max_length=12)
     watchlist_only: bool = False
+
+
+class AlertRuleCreate(BaseModel):
+    rule_type: str = Field(description="See GET /v1/alerts/rules/types, e.g. HSF_SCORE_CROSS_ABOVE")
+    ticker: Optional[str] = Field(default=None, max_length=12, description="One ticker, or set watchlist_id")
+    watchlist_id: Optional[int] = Field(default=None, ge=1, description="Every symbol on this watchlist")
+    threshold: Optional[float] = None
+    value: Optional[str] = Field(default=None, max_length=40, description="SETUP_APPEARED: only this setup (optional)")
+    delivery_channels: Optional[List[Literal["in_app", "email"]]] = Field(
+        default=None, max_length=2, description="Default in_app; email is Pro+")
+    cooldown_seconds: Optional[int] = Field(default=None, ge=0, le=7 * 86400,
+                                            description="Default 1 day for level rules, 1 hour for transitions")
+    enabled: bool = True
+
+
+class AlertRuleUpdate(BaseModel):
+    threshold: Optional[float] = None
+    value: Optional[str] = Field(default=None, max_length=40)
+    enabled: Optional[bool] = None
+    delivery_channels: Optional[List[Literal["in_app", "email"]]] = Field(default=None, min_length=1, max_length=2)
+    cooldown_seconds: Optional[int] = Field(default=None, ge=0, le=7 * 86400)
 
 
 class AlertUpdate(BaseModel):
@@ -514,16 +565,61 @@ def _data_routes(app: FastAPI) -> None:
 
     @app.delete("/v1/watchlists/{watchlist_id}", status_code=204, responses=_OWNED)
     def watchlist_delete(watchlist_id: int, account: Dict[str, Any] = Depends(current_account)) -> None:
+        """Alert rules on this watchlist are switched off (kept, so you can see why)."""
+        from api import alert_rules
+        from db import alert_rules as rule_store
+
         user_data.delete_watchlist(_user(account), watchlist_id)
+        try:  # best effort: the evaluator skips rules whose watchlist is gone either way
+            alert_rules._db(rule_store.disable_rules_for_watchlist, _user(account), watchlist_id)
+        except Exception as e:
+            log.warning(json.dumps({"event": "watchlist_rules_disable_failed", "error": type(e).__name__}))
+
+    @app.get("/v1/watchlists/{watchlist_id}/intelligence", response_model=models.WatchlistIntelligence,
+             responses=_OWNED, summary="HSF intelligence for every symbol on a watchlist")
+    def watchlist_intelligence(watchlist_id: int, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Score, rank and their change since the previous scan, setup, signals, PreBreakout
+        (Premium), price, RVOL, EMA cross, freshness and active alert count for each symbol,
+        from the latest saved market scan (no live quote calls). Fields with no canonical
+        source are null and listed in `unavailable_fields`."""
+        from api import watchlist_intel
+
+        user = _user(account)
+        wl = user_data.get_watchlist(user, watchlist_id)
+        return json_safe(watchlist_intel.intelligence(user, wl, entitlements_for(account)["entitlements"]))
+
+    @app.get("/v1/watchlists/{watchlist_id}/changes", response_model=models.WatchlistChanges,
+             responses=_OWNED, summary="What changed on a watchlist since the previous scan")
+    def watchlist_changes(watchlist_id: int, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The canonical HSF changes (new, dropped, rising/falling, status, fading, signals
+        incl. PreBreakout) between the two latest market scans for this list's symbols, with
+        rank moves, plus your rule alerts on them since the previous scan."""
+        from api import watchlist_intel
+
+        user = _user(account)
+        wl = user_data.get_watchlist(user, watchlist_id)
+        return json_safe(watchlist_intel.changes(user, wl, entitlements_for(account)["entitlements"]))
 
     @app.post("/v1/watchlists/{watchlist_id}/tickers", response_model=models.TickersResult, responses=_OWNED)
     def watchlist_add(watchlist_id: int, body: TickersBody,
                       account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         return user_data.add_tickers(_user(account), watchlist_id, body.tickers)
 
+    @app.post("/v1/watchlists/{watchlist_id}/symbols", response_model=models.TickersResult, responses=_OWNED,
+              summary="Add symbols (same as /tickers)")
+    def watchlist_add_symbols(watchlist_id: int, body: TickersBody,
+                              account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        return user_data.add_tickers(_user(account), watchlist_id, body.tickers)
+
     @app.delete("/v1/watchlists/{watchlist_id}/tickers/{ticker}", status_code=204, responses=_OWNED)
     def watchlist_remove(watchlist_id: int, ticker: str = TICKER,
                          account: Dict[str, Any] = Depends(current_account)) -> None:
+        user_data.remove_ticker(_user(account), watchlist_id, ticker.upper())
+
+    @app.delete("/v1/watchlists/{watchlist_id}/symbols/{ticker}", status_code=204, responses=_OWNED,
+                summary="Remove a symbol (same as /tickers/{ticker})")
+    def watchlist_remove_symbol(watchlist_id: int, ticker: str = TICKER,
+                                account: Dict[str, Any] = Depends(current_account)) -> None:
         user_data.remove_ticker(_user(account), watchlist_id, ticker.upper())
 
     @app.patch("/v1/watchlists/{watchlist_id}/tickers/{ticker}", status_code=204, responses=_OWNED)
@@ -569,11 +665,92 @@ def _data_routes(app: FastAPI) -> None:
         """The alert types and their input rules (what POST /v1/alerts validates), for building forms."""
         return user_data.alert_types()
 
-    @app.get("/v1/alerts/events", response_model=List[models.AlertEvent], responses=_AUTH)
+    @app.get("/v1/alerts/events", response_model=List[models.AlertEvent],
+             responses={**_AUTH, 422: {"description": "Invalid cursor or filter"}})
     def alert_events(account: Dict[str, Any] = Depends(current_account),
-                     limit: int = Query(20, ge=1, le=100)) -> List[Dict[str, Any]]:
-        """Your most recent fired alerts, newest first."""
-        return json_safe(user_data.alert_events(_user(account), limit))
+                     limit: int = Query(20, ge=1, le=100),
+                     ticker: Optional[str] = Query(None, pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,9}$"),
+                     rule_id: Optional[int] = Query(None, ge=1, description="Only this rule's events"),
+                     watchlist_id: Optional[int] = Query(None, ge=1, description="Only rule events from this watchlist"),
+                     triggered_after: Optional[dt.datetime] = Query(None),
+                     triggered_before: Optional[dt.datetime] = Query(None),
+                     source: Optional[Literal["alert", "rule"]] = Query(None, description="alert: ticker alerts; rule: alert rules"),
+                     cursor: Optional[str] = Query(None, max_length=200, description="The last event's cursor, for the next page")
+                     ) -> List[Dict[str, Any]]:
+        """Your fired alerts (ticker alerts and alert rules), newest first. Page with `cursor`."""
+        from api import alert_rules
+
+        try:
+            return json_safe(alert_rules.list_events(
+                _user(account), limit=limit, ticker=ticker.upper() if ticker else None, rule_id=rule_id,
+                watchlist_id=watchlist_id, triggered_after=_aware(triggered_after),
+                triggered_before=_aware(triggered_before), cursor=cursor, source=source))
+        except alert_rules.RuleError as e:
+            raise HTTPException(422, str(e)) from e
+
+    # ---- alert rules (server-evaluated conditions on HSF intelligence) ----
+    @app.get("/v1/alerts/rules", response_model=models.AlertRules, responses=_AUTH, summary="Your alert rules")
+    def alert_rules_list(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Your alert rules, the plan's active-alert limit (shared with ticker alerts) and
+        what the plan allows."""
+        from api import alert_rules
+
+        ent = entitlements_for(account)
+        user = _user(account)
+        return json_safe({"limit": ent["alert_limit"], "used": alert_rules.count_active(user),
+                          "capabilities": _capabilities(ent), "rules": alert_rules.list_rules(user)})
+
+    @app.get("/v1/alerts/rules/types", response_model=List[models.AlertRuleType], responses=_AUTH,
+             summary="Alert rule types")
+    def alert_rule_types(account: Dict[str, Any] = Depends(current_account)) -> List[Dict[str, Any]]:
+        """The rule types, their thresholds and whether your plan includes each."""
+        from api import alert_rules
+
+        return alert_rules.rule_types(entitlements_for(account)["entitlements"])
+
+    @app.post("/v1/alerts/rules", response_model=models.AlertRule, status_code=201, summary="Create an alert rule",
+              responses={**_AUTH, 403: {"description": "Plan limit, rule type or channel not on your plan"},
+                         404: {"description": "Watchlist not found (or not yours)"},
+                         409: {"description": "You already have this rule"},
+                         422: {"description": "Invalid rule"}})
+    def alert_rule_create(body: AlertRuleCreate, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Set exactly one of `ticker` or `watchlist_id`. Rules count toward the plan's alert
+        limit together with ticker alerts."""
+        from api import alert_rules
+
+        with _rule_errors():
+            return json_safe(alert_rules.create_rule(_user(account), entitlements_for(account), body.model_dump()))
+
+    @app.get("/v1/alerts/rules/{rule_id}", response_model=models.AlertRule, responses=_OWNED, summary="One alert rule")
+    def alert_rule_get(rule_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        from api import alert_rules
+
+        return json_safe(alert_rules.get_rule(_user(account), rule_id))
+
+    @app.patch("/v1/alerts/rules/{rule_id}", response_model=models.AlertRule, summary="Change an alert rule",
+               responses={**_OWNED, 403: {"description": "Plan limit or channel not on your plan"},
+                          422: {"description": "Invalid change"}})
+    def alert_rule_update(body: AlertRuleUpdate, rule_id: int = Path(ge=1),
+                          account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Threshold, value, enabled, channels, cooldown. A new threshold or value starts the
+        rule from a fresh baseline."""
+        from api import alert_rules
+
+        with _rule_errors():
+            return json_safe(alert_rules.update_rule(_user(account), entitlements_for(account), rule_id,
+                                                     body.model_dump(exclude_unset=True)))
+
+    @app.delete("/v1/alerts/rules/{rule_id}", status_code=204, responses=_OWNED, summary="Delete an alert rule")
+    def alert_rule_delete(rule_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> None:
+        """Its past events stay in /v1/alerts/events."""
+        from api import alert_rules
+
+        alert_rules.delete_rule(_user(account), rule_id)
+
+    @app.get("/v1/me/capabilities", response_model=models.Capabilities, responses=_AUTH,
+             summary="Your plan's watchlist and alert limits")
+    def my_capabilities(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        return _capabilities(entitlements_for(account))
 
 
 class SignupBody(BaseModel):
@@ -1284,10 +1461,13 @@ def _warm_caches() -> None:
 def _start_realtime_alerts() -> None:
     """P1-60: run the real-time price-alert worker here, now that hsf-api is on an
     always-on plan. No-op unless REALTIME_ALERTS_ENABLED=1 (leave it off on the
-    billing service; the shared last_fired_at throttle covers any overlap)."""
+    billing service; the shared last_fired_at throttle covers any overlap). The same loop
+    evaluates alert rules (api.alert_rules)."""
     try:
-        from billing_service.realtime_alerts import start_background_worker
+        from api.alert_rules import worker_pass
+        from billing_service.realtime_alerts import register_pass_hook, start_background_worker
 
+        register_pass_hook(worker_pass)  # alert rules ride the same loop (HSF_ALERT_RULES_ENABLED=0 stops them)
         start_background_worker()
     except Exception as e:  # alerts are best effort; the API serves regardless
         log.warning("realtime alerts worker failed to start: %s", str(e)[:120])

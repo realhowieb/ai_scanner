@@ -13,7 +13,11 @@ const TICKER = /^[A-Z0-9][A-Z0-9.-]{0,9}$/;
 
 export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; scan?: { ticker: string; score: number; last: number }[];
   /** The current API: GET /v1/watchlists/{id} carries scan_at and items[].latest. Off = an API that predates them. */
-  scanState?: boolean } = {}) {
+  scanState?: boolean;
+  /** Serve GET /v1/watchlists/{id}/intelligence with these per-ticker facts (else 404, like an older API). */
+  intel?: Record<string, Record<string, unknown>>;
+  /** Serve the alert-rule routes (an in-memory rule list). */
+  rules?: boolean } = {}) {
   let nextId = 1;
   const lists: WL[] = [];
   const alertRows: AlertRow[] = [];
@@ -21,6 +25,15 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
   const calls: { method: string; path: string; body: unknown }[] = [];
   const failures: { method: string; re: RegExp; status: number; body: unknown; headers?: Record<string, string> }[] = [];
   const limit = opts.alertLimit ?? 5;
+  const rules: { id: number; watchlist_id: number | null; rule_type: string; threshold: number | null; [k: string]: unknown }[] = [];
+  const ruleTypes = [
+    { type: "HSF_SCORE_CROSS_ABOVE", label: "HSF Score crosses above", description: "Fires once when the HSF Score moves above your value.",
+      operator: "crosses_above", kind: "transition", threshold: { min: 0, max: 100, default: 80 }, takes_value: false, default_cooldown_seconds: 3600, available: true },
+    { type: "SETUP_APPEARED", label: "New HSF setup", description: "Fires when the ticker becomes a ranked HSF setup.",
+      operator: "appears", kind: "transition", threshold: null, takes_value: true, default_cooldown_seconds: 3600, available: true },
+    { type: "PREBREAKOUT_ACTIVE", label: "Becomes PreBreakout", description: "Premium.", operator: "becomes_true", kind: "transition",
+      threshold: null, takes_value: false, default_cooldown_seconds: 3600, available: false },
+  ];
   const scanAt = new Date().toISOString();
 
   const summary = (w: WL) => ({ id: w.id, name: w.name, is_default: w.is_default, symbol_count: w.items.length });
@@ -44,6 +57,34 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
       return jsonResponse({ scan_at: scanAt, total: (opts.scan ?? []).length, max_results: 100, limited: false,
         setups: (opts.scan ?? []).map((s) => ({ ticker: s.ticker, score: s.score, last: s.last, primary_setup: "breakout", status: "STRONG",
           n_signals: 1, chg_pct: 1, gap_pct: null, rvol: null, prob: null, signals: [], fading: false, breakout_score: null })) });
+    }
+    if (opts.intel && (m = path.match(/^\/v1\/watchlists\/(\d+)\/intelligence$/))) {
+      const w = lists.find((x) => x.id === Number(m![1]));
+      if (!w) return err(404, "No such watchlist.");
+      return jsonResponse({ watchlist_id: w.id, name: w.name, market_session: "open", scan_available: true, last_scan_at: scanAt,
+        previous_scan_at: scanAt, market_data_as_of: scanAt, stale: false, scan_total: 2, prebreakout_locked: false,
+        coverage: { symbols: w.items.length, enriched: w.items.length, missing: 0 }, unavailable_fields: ["company_name", "price_change", "rsi"],
+        items: w.items.map((i) => ({ ticker: i.ticker, signals: [], ranked: true, in_latest_scan: true, freshness: "fresh",
+          active_alert_count: rules.filter((r) => r.watchlist_id === w.id).length, ...(opts.intel![i.ticker] ?? {}) })) });
+    }
+    if (opts.rules && path === "/v1/alerts/rules/types") return jsonResponse(ruleTypes);
+    if (opts.rules && path === "/v1/alerts/rules" && method === "GET") return jsonResponse({ limit, used: rules.length + alertRows.length,
+      capabilities: { tier: "pro", max_watchlists: 50, max_symbols_per_watchlist: null, max_symbols_per_request: 200, max_active_alerts: limit,
+        alert_rule_types: ruleTypes.filter((t) => t.available).map((t) => t.type), delivery_channels: ["in_app", "email"] }, rules });
+    if (opts.rules && path === "/v1/alerts/rules" && method === "POST") {
+      if (rules.length + alertRows.length >= limit) return err(403, `You've reached the maximum of ${limit} active alerts on your plan.`);
+      const spec = ruleTypes.find((t) => t.type === body.rule_type)!;
+      const r = { id: nextId++, watchlist_id: body.watchlist_id ?? null, ticker: body.ticker ?? null, rule_type: body.rule_type,
+        operator: spec.operator, threshold: body.threshold ?? null, value: null, enabled: true, delivery_channels: ["in_app"],
+        cooldown_seconds: spec.default_cooldown_seconds, created_at: scanAt, updated_at: scanAt, last_evaluated_at: null, last_triggered_at: null };
+      rules.push(r);
+      return jsonResponse(r, 201);
+    }
+    if (opts.rules && (m = path.match(/^\/v1\/alerts\/rules\/(\d+)$/)) && method === "DELETE") {
+      const i = rules.findIndex((r) => r.id === Number(m![1]));
+      if (i < 0) return err(404, "No such alert rule.");
+      rules.splice(i, 1);
+      return new Response(null, { status: 204 });
     }
     if (path === "/v1/watchlists" && method === "GET") return jsonResponse(lists.map(summary));
     if (path === "/v1/watchlists" && method === "POST") {
@@ -123,7 +164,7 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
   }
 
   return {
-    lists, alertRows, calls, prefs,
+    lists, alertRows, rules, calls, prefs,
     fetch: (input: Request | string, init?: RequestInit) => handle(typeof input === "string" ? new Request(new URL(input, "http://localhost"), init) : input),
     fail: (method: string, re: RegExp, status: number, body: unknown = { detail: "The HSF service is unavailable right now." }, headers?: Record<string, string>) =>
       failures.push({ method, re, status, body, headers }),

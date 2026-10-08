@@ -407,15 +407,35 @@ def check_once() -> int:
             pass
 
 
+# Extra work run once per loop by the host process. hsf-api registers its alert-rule
+# evaluator here (api.alert_rules.worker_pass), which needs the scanner code the
+# billing service doesn't have; the billing service registers nothing.
+_pass_hooks: List[Any] = []
+
+
+def register_pass_hook(fn: Any) -> None:
+    if fn not in _pass_hooks:
+        _pass_hooks.append(fn)
+
+
+def run_hooks() -> None:
+    for fn in list(_pass_hooks):
+        try:
+            fn()
+        except Exception as e:
+            _log(f"pass hook failed: {type(e).__name__}")
+
+
 def run_loop() -> None:
     """Poll forever (daemon thread). Errors are logged, never fatal."""
-    _log(f"worker started (poll={POLL_SECONDS}s, throttle={THROTTLE_HOURS}h)")
+    _log(f"worker started (poll={POLL_SECONDS}s, throttle={THROTTLE_HOURS}h, hooks={len(_pass_hooks)})")
     while True:
         try:
             if market_session_open():
                 check_once()
         except Exception as e:
             _log(f"pass failed: {type(e).__name__}: {e}")
+        run_hooks()  # each hook decides its own schedule (alert rules: extended hours)
         time.sleep(POLL_SECONDS)
 
 
@@ -432,6 +452,7 @@ def worker_status() -> Dict[str, Any]:
         "market_open_now": market_session_open(),
         "alpaca_env": bool(os.getenv("ALPACA_API_KEY_ID", "").strip()),
         "smtp_env": bool(os.getenv("SMTP_HOST", "").strip()),
+        "pass_hooks": len(_pass_hooks),
     }
 
 
