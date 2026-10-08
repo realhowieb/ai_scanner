@@ -6,9 +6,15 @@ from __future__ import annotations
 
 import datetime as dt
 import random
+import unittest
+
+try:
+    import pytest
+    import sklearn  # noqa: F401
+except ImportError:  # the core smoke job runs unittest without pytest or the ML libs
+    raise unittest.SkipTest("needs pytest and scikit-learn")
 
 import numpy as np
-import pytest
 from research_fixtures import opp, scan
 
 from analytics import market_calendar as mc
