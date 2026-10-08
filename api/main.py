@@ -1250,24 +1250,35 @@ def _failing_app(message: str):
     return app
 
 
-def _warm_brief() -> None:
-    """Build the Market Brief once in the background after a (re)start, so the first
-    visitor after a deploy or a free-plan wake-up doesn't wait 20-50 s for it."""
+def _warm_caches() -> None:
+    """Build the Market Brief, then the Day Trader "Top movers" table (the page's default
+    source), once in the background after a (re)start, so the first visitor after a deploy
+    or a free-plan wake-up doesn't wait 20-50 s for either. One after the other on one
+    thread to keep the start-up memory peak low. HSF_WARM_BRIEF=0 / HSF_WARM_DAY_TRADER=0
+    turn each off."""
     import os
     import threading
 
-    if os.environ.get("RENDER", "").strip().lower() != "true" or os.environ.get("HSF_WARM_BRIEF", "1").strip() == "0":
+    if os.environ.get("RENDER", "").strip().lower() != "true":
+        return
+    jobs = []
+    if os.environ.get("HSF_WARM_BRIEF", "1").strip() != "0":
+        jobs.append(("brief", lambda m: m._brief_core()))
+    if os.environ.get("HSF_WARM_DAY_TRADER", "1").strip() != "0":
+        jobs.append(("day trader", lambda m: m.day_trader("movers")))
+    if not jobs:
         return
 
     def run() -> None:
-        try:
-            from api import market
+        from api import market
 
-            market._brief_core()
-        except Exception as e:  # warming is best effort; the first visitor builds it instead
-            log.warning("brief warm-up failed: %s", str(e)[:120])
+        for name, job in jobs:
+            try:
+                job(market)
+            except Exception as e:  # warming is best effort; the first visitor builds it instead
+                log.warning("%s warm-up failed: %s", name, str(e)[:120])
 
-    threading.Thread(target=run, name="brief-warmup", daemon=True).start()
+    threading.Thread(target=run, name="cache-warmup", daemon=True).start()
 
 
 def _start_realtime_alerts() -> None:
@@ -1290,7 +1301,7 @@ def _module_app():
     except RuntimeError as e:
         log.error("HSF API not started: %s", e)
         return _failing_app(f"HSF API not started: {e}")
-    _warm_brief()
+    _warm_caches()
     _start_realtime_alerts()
     return app
 
