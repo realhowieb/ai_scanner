@@ -11,6 +11,7 @@ import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
 type Today = Schemas["Today"];
 type SessionCard = Schemas["SessionCard"];
 type Setup = Schemas["Setup"];
+type Mine = Schemas["TodayPersonal"];
 
 const PHASES: Record<string, { label: string; note: string; tone: string }> = {
   premarket: { label: "Pre-market", note: "Opens 9:30 AM ET", tone: "amber" },
@@ -68,6 +69,55 @@ function Movers({ card, title, caption, id }: { card: SessionCard; title: string
   );
 }
 
+function NewSince({ data }: { data: Schemas["NewSince"] }) {
+  return (
+    <Card title="New since your last visit" id="new" aside={data.baseline_scan_at ? `Compared with the scan from ${etTime(data.baseline_scan_at)}` : undefined}>
+      {data.tickers.length === 0 ? (
+        <p className="cap">Nothing new since you last looked, or this is your first visit on this browser.</p>
+      ) : (
+        <>
+          <p className="body-sm"><b>{data.total}</b> name{data.total === 1 ? "" : "s"} in the latest scan weren&apos;t in the one you saw last, strongest first.</p>
+          <TickerChips items={data.tickers.map((t) => (t.score !== null && t.score !== undefined ? `${t.ticker} (${t.score})` : t.ticker))} />
+        </>
+      )}
+    </Card>
+  );
+}
+
+const MISSING_LIMIT = 20;
+
+function YourWatchlist({ data }: { data: Schemas["WatchlistToday"] }) {
+  const s = data.summary;
+  return (
+    <Card title="Your watchlist" id="wl" aside={data.watchlist_id ? <Link href="/watchlists">{data.name}</Link> : undefined}>
+      {!data.watchlist_id || (data.in_scan.length === 0 && data.missing.length === 0) ? (
+        <Empty title="Your watchlist is empty.">Add names from the Scanner or a stock page.</Empty>
+      ) : (
+        <>
+          {s && <p className="cap">{s.tracked} watched · {s.needs_attention} need attention · {s.strengthening} strengthening · {s.fading} fading</p>}
+          {data.in_scan.length > 0 ? (
+            <ul className="rows">
+              {data.in_scan.map((r) => (
+                <li key={r.ticker} className="row">
+                  <TickerLink ticker={r.ticker} />
+                  <span className="cap grow">In the latest scan</span>
+                  <span className="cap">HSF</span><ScoreBadge score={r.score} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="cap">None of your watched names are in the latest scan.</p>
+          )}
+          {data.missing.length > 0 && (
+            <p className="cap">Not in the latest scan: {data.missing.slice(0, MISSING_LIMIT).join(", ")}
+              {data.missing.length > MISSING_LIMIT ? ` and ${data.missing.length - MISSING_LIMIT} more` : ""}</p>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
   return (
     <tr className={muted ? "row-muted" : undefined}>
@@ -80,8 +130,10 @@ function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
   );
 }
 
-export function TodayView({ data }: { data: Today }) {
+/** `mine` is the signed-in sections (GET /v1/today/me); they load separately and never hold up the page. */
+export function TodayView({ data, mine, mineFailed = false }: { data: Today; mine?: Mine | null; mineFailed?: boolean }) {
   const failed = new Set(data.errors.map((e) => e.section));
+  const mineErr = new Set(mine?.errors.map((e) => e.section) ?? (mineFailed ? ["new_since", "watchlist"] : []));
   const phase = PHASES[data.market.phase] ?? PHASES.closed!;
   const top = data.top_setups;
   const strongMin = top?.threshold ?? 75;
@@ -167,6 +219,9 @@ export function TodayView({ data }: { data: Today }) {
               <Link href="/scanner">Open the Scanner →</Link>
             </div>
           </Card>
+
+          {mineErr.has("new_since") ? <SectionFailed name="New since your last visit" /> : mine?.new_since && <NewSince data={mine.new_since} />}
+          {mineErr.has("watchlist") ? <SectionFailed name="Your watchlist" /> : mine?.watchlist && <YourWatchlist data={mine.watchlist} />}
         </div>
 
         <aside className="col-side">
