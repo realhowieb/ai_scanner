@@ -2114,6 +2114,50 @@
     "title": "Mover",
     "type": "object"
    },
+   "NewSince": {
+    "properties": {
+     "baseline_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The scan the latest one was compared with; null on a first visit",
+      "title": "Baseline Scan At"
+     },
+     "marker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Store this and send it back as seen:baseline on the next visit",
+      "title": "Marker"
+     },
+     "tickers": {
+      "default": [],
+      "description": "Names new in the latest market scan, strongest first (at most 50)",
+      "items": {
+       "$ref": "#/components/schemas/ScoredTicker"
+      },
+      "title": "Tickers",
+      "type": "array"
+     },
+     "total": {
+      "default": 0,
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "title": "NewSince",
+    "type": "object"
+   },
    "NoteBody": {
     "properties": {
      "note": {
@@ -3481,6 +3525,31 @@
     "title": "ScanSetup",
     "type": "object"
    },
+   "ScoredTicker": {
+    "properties": {
+     "score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "HSF Score in the latest market scan; null when it doesn't qualify",
+      "title": "Score"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "ScoredTicker",
+    "type": "object"
+   },
    "SectionError": {
     "properties": {
      "error": {
@@ -4363,6 +4432,40 @@
     "title": "Today",
     "type": "object"
    },
+   "TodayPersonal": {
+    "properties": {
+     "errors": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/SectionError"
+      },
+      "title": "Errors",
+      "type": "array"
+     },
+     "new_since": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/NewSince"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "watchlist": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/WatchlistToday"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "title": "TodayPersonal",
+    "type": "object"
+   },
    "TokenBody": {
     "properties": {
      "token": {
@@ -4817,6 +4920,34 @@
     "title": "Watchlist",
     "type": "object"
    },
+   "WatchlistCounts": {
+    "properties": {
+     "fading": {
+      "title": "Fading",
+      "type": "integer"
+     },
+     "needs_attention": {
+      "title": "Needs Attention",
+      "type": "integer"
+     },
+     "strengthening": {
+      "title": "Strengthening",
+      "type": "integer"
+     },
+     "tracked": {
+      "title": "Tracked",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "tracked",
+     "needs_attention",
+     "strengthening",
+     "fading"
+    ],
+    "title": "WatchlistCounts",
+    "type": "object"
+   },
    "WatchlistCreate": {
     "properties": {
      "make_default": {
@@ -5132,6 +5263,64 @@
      "rank"
     ],
     "title": "WatchlistScanState",
+    "type": "object"
+   },
+   "WatchlistToday": {
+    "properties": {
+     "in_scan": {
+      "default": [],
+      "description": "Watched names in the latest market scan, strongest first",
+      "items": {
+       "$ref": "#/components/schemas/ScoredTicker"
+      },
+      "title": "In Scan",
+      "type": "array"
+     },
+     "missing": {
+      "default": [],
+      "description": "Watched names not in the latest market scan",
+      "items": {
+       "type": "string"
+      },
+      "title": "Missing",
+      "type": "array"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "summary": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/WatchlistCounts"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Across all the user's watchlists, as in the Streamlit app"
+     },
+     "watchlist_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The default watchlist; null when the user has none",
+      "title": "Watchlist Id"
+     }
+    },
+    "title": "WatchlistToday",
     "type": "object"
    },
    "WatchlistUpdate": {
@@ -7961,6 +8150,83 @@
      }
     ],
     "summary": "Today"
+   }
+  },
+  "/v1/today/me": {
+   "get": {
+    "description": "New since your last visit and your watchlist against the latest market scan.",
+    "operationId": "today_personal_v1_today_me_get",
+    "parameters": [
+     {
+      "description": "Market run this browser last saw (from `marker`)",
+      "in": "query",
+      "name": "seen",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "minimum": 1,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Market run this browser last saw (from `marker`)",
+       "title": "Seen"
+      }
+     },
+     {
+      "description": "Its baseline run (from `marker`)",
+      "in": "query",
+      "name": "baseline",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "minimum": 1,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Its baseline run (from `marker`)",
+       "title": "Baseline"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TodayPersonal"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Today: your sections"
    }
   },
   "/v1/track-record": {

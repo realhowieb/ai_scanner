@@ -150,6 +150,39 @@ class Snapshot(BaseModel):
     most_active: Optional[ScanLeader] = Field(default=None, description="Most shares traded in the latest full-market scan")
 
 
+class ScoredTicker(BaseModel):
+    ticker: str
+    score: Optional[int] = Field(default=None, description="HSF Score in the latest market scan; null when it doesn't qualify")
+
+
+class NewSince(BaseModel):
+    marker: Optional[str] = Field(default=None, description="Store this and send it back as seen:baseline on the next visit")
+    baseline_scan_at: Optional[str] = Field(default=None, description="The scan the latest one was compared with; null on a first visit")
+    tickers: List[ScoredTicker] = Field(default=[], description="Names new in the latest market scan, strongest first (at most 50)")
+    total: int = 0
+
+
+class WatchlistCounts(BaseModel):
+    tracked: int
+    needs_attention: int
+    strengthening: int
+    fading: int
+
+
+class WatchlistToday(BaseModel):
+    watchlist_id: Optional[int] = Field(default=None, description="The default watchlist; null when the user has none")
+    name: Optional[str] = None
+    summary: Optional[WatchlistCounts] = Field(default=None, description="Across all the user's watchlists, as in the Streamlit app")
+    in_scan: List[ScoredTicker] = Field(default=[], description="Watched names in the latest market scan, strongest first")
+    missing: List[str] = Field(default=[], description="Watched names not in the latest market scan")
+
+
+class TodayPersonal(BaseModel):
+    new_since: Optional[NewSince] = None
+    watchlist: Optional[WatchlistToday] = None
+    errors: List[SectionError] = []
+
+
 class Today(BaseModel):
     as_of: str
     market: Market

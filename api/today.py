@@ -376,6 +376,95 @@ def snapshot(now: dt.datetime) -> Dict[str, Any]:
     return out
 
 
+# ---- signed-in sections: new since your last visit, your watchlist ------------------------------
+NEW_SHOWN_MAX = 50
+
+
+def _run_scores(run_id: int) -> Dict[str, int]:
+    """Ticker -> HSF Score for a saved market run (qualifying names only)."""
+    def load():
+        from ui.headline_score import hsf_scores_by_ticker
+
+        df = run_df(run_id)
+        return {} if df is None else hsf_scores_by_ticker(df.to_dict(orient="records"))
+
+    return _cached(("scores", int(run_id)), load)
+
+
+def new_since_visit(seen: Optional[int], baseline: Optional[int]) -> Dict[str, Any]:
+    """The Streamlit "new since your last visit" rule (ui.last_visit) with the marker kept
+    by the browser: it sends the run it last saw and its baseline, gets back the marker to
+    store and the names in the latest market scan that weren't in the baseline scan. Only
+    scheduled market runs count, so a run id can't read anyone's own scans."""
+    from ui.last_visit import new_tickers, next_marker
+
+    runs = market_runs()
+    ids = {int(r["id"]) for r in runs}
+    latest = int(runs[0]["id"]) if runs else None
+    raw = f"{seen if seen in ids else ''}:{baseline if baseline in ids else ''}"
+    base, marker = next_marker(raw if raw != ":" else None, latest)
+    out: Dict[str, Any] = {"marker": marker or None, "baseline_scan_at": None, "tickers": [], "total": 0}
+    if latest is None or base is None or base == latest or base not in ids:
+        return out
+    new = sorted(new_tickers(run_df(latest), run_df(base)))
+    scores = _run_scores(latest)
+    new.sort(key=lambda t: (-(scores.get(t) or -1), t))
+    out.update(baseline_scan_at=_iso(next(r["created_at"] for r in runs if int(r["id"]) == base)),
+               tickers=[{"ticker": t, "score": scores.get(t)} for t in new[:NEW_SHOWN_MAX]], total=len(new))
+    return out
+
+
+def watchlist_today(user: str) -> Dict[str, Any]:
+    """The default watchlist against the latest market scan, like the Streamlit Today
+    section (ui.today._section_watchlist): names in the scan with their HSF Score, names
+    not in it, and the watchlist-intelligence counts."""
+    from api import user_data
+
+    lists = user_data.list_watchlists(user)
+    wl = next((w for w in lists if w["is_default"]), lists[0] if lists else None)
+    out: Dict[str, Any] = {"watchlist_id": None, "name": None, "summary": None, "in_scan": [], "missing": []}
+    if wl is None:
+        return out
+    tickers = [str(i["ticker"]).strip().upper() for i in user_data.get_watchlist(user, wl["id"])["items"]]
+    out.update(watchlist_id=wl["id"], name=wl["name"])
+    try:
+        from analytics.watchlist_intelligence import build_watchlist_intelligence
+
+        summ = _cached(("wl_summary", user), lambda: dict((build_watchlist_intelligence(user) or {}).get("summary") or {}))
+        if int(summ.get("tracked") or 0):
+            out["summary"] = {k: int(summ.get(k) or 0) for k in ("tracked", "needs_attention", "strengthening", "fading")}
+    except Exception:  # the counts are optional; the list still answers
+        pass
+    runs = market_runs()
+    if not runs:
+        out["missing"] = tickers
+        return out
+    from ui.market_scans import tickers_of
+
+    in_scan = set(tickers_of(run_df(int(runs[0]["id"]))))
+    scores = _run_scores(int(runs[0]["id"]))
+    out["in_scan"] = sorted(({"ticker": t, "score": scores.get(t)} for t in tickers if t in in_scan),
+                            key=lambda r: (-(r["score"] if r["score"] is not None else -1), r["ticker"]))
+    out["missing"] = [t for t in tickers if t not in in_scan]
+    return out
+
+
+def build_personal(user: str, seen: Optional[int], baseline: Optional[int]) -> Dict[str, Any]:
+    """Each section fails on its own, as in build_today."""
+    sections: Dict[str, Callable[[], Any]] = {
+        "new_since": lambda: new_since_visit(seen, baseline),
+        "watchlist": lambda: watchlist_today(user),
+    }
+    out: Dict[str, Any] = {"errors": []}
+    for name, fn in sections.items():
+        try:
+            out[name] = fn()
+        except Exception as e:
+            out[name] = None
+            out["errors"].append({"section": name, "error": type(e).__name__})
+    return out
+
+
 def build_today(now: dt.datetime, entitlements: Dict[str, bool]) -> Dict[str, Any]:
     """Each section fails on its own: one bad read never blanks the whole page."""
     pro = bool(entitlements.get("can_day_trader"))

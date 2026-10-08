@@ -950,6 +950,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/today/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Today: your sections
+         * @description New since your last visit and your watchlist against the latest market scan.
+         */
+        get: operations["today_personal_v1_today_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/track-record": {
         parameters: {
             query?: never;
@@ -1870,6 +1890,30 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** NewSince */
+        NewSince: {
+            /**
+             * Baseline Scan At
+             * @description The scan the latest one was compared with; null on a first visit
+             */
+            baseline_scan_at?: string | null;
+            /**
+             * Marker
+             * @description Store this and send it back as seen:baseline on the next visit
+             */
+            marker?: string | null;
+            /**
+             * Tickers
+             * @description Names new in the latest market scan, strongest first (at most 50)
+             * @default []
+             */
+            tickers: components["schemas"]["ScoredTicker"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
         /** NoteBody */
         NoteBody: {
             /** Note */
@@ -2438,6 +2482,16 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** ScoredTicker */
+        ScoredTicker: {
+            /**
+             * Score
+             * @description HSF Score in the latest market scan; null when it doesn't qualify
+             */
+            score?: number | null;
+            /** Ticker */
+            ticker: string;
+        };
         /** SectionError */
         SectionError: {
             /**
@@ -2802,6 +2856,16 @@ export interface components {
             snapshot?: components["schemas"]["Snapshot"] | null;
             top_setups?: components["schemas"]["TopSetups"] | null;
         };
+        /** TodayPersonal */
+        TodayPersonal: {
+            /**
+             * Errors
+             * @default []
+             */
+            errors: components["schemas"]["SectionError"][];
+            new_since?: components["schemas"]["NewSince"] | null;
+            watchlist?: components["schemas"]["WatchlistToday"] | null;
+        };
         /** TokenBody */
         TokenBody: {
             /** Token */
@@ -2982,6 +3046,17 @@ export interface components {
             /** Symbol Count */
             symbol_count: number;
         };
+        /** WatchlistCounts */
+        WatchlistCounts: {
+            /** Fading */
+            fading: number;
+            /** Needs Attention */
+            needs_attention: number;
+            /** Strengthening */
+            strengthening: number;
+            /** Tracked */
+            tracked: number;
+        };
         /** WatchlistCreate */
         WatchlistCreate: {
             /**
@@ -3093,6 +3168,30 @@ export interface components {
             status?: string | null;
             /** Ticker */
             ticker: string;
+        };
+        /** WatchlistToday */
+        WatchlistToday: {
+            /**
+             * In Scan
+             * @description Watched names in the latest market scan, strongest first
+             * @default []
+             */
+            in_scan: components["schemas"]["ScoredTicker"][];
+            /**
+             * Missing
+             * @description Watched names not in the latest market scan
+             * @default []
+             */
+            missing: string[];
+            /** Name */
+            name?: string | null;
+            /** @description Across all the user's watchlists, as in the Streamlit app */
+            summary?: components["schemas"]["WatchlistCounts"] | null;
+            /**
+             * Watchlist Id
+             * @description The default watchlist; null when the user has none
+             */
+            watchlist_id?: number | null;
         };
         /** WatchlistUpdate */
         WatchlistUpdate: {
@@ -5712,6 +5811,47 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    today_personal_v1_today_me_get: {
+        parameters: {
+            query?: {
+                /** @description Market run this browser last saw (from `marker`) */
+                seen?: number | null;
+                /** @description Its baseline run (from `marker`) */
+                baseline?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TodayPersonal"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

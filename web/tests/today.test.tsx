@@ -126,3 +126,41 @@ describe("Today market snapshot", () => {
     expect(screen.getByRole("region", { name: "Market data status" })).toHaveTextContent("Latest market scan unavailable");
   });
 });
+
+describe("Today signed-in sections", () => {
+  const mine: Schemas["TodayPersonal"] = {
+    errors: [],
+    new_since: { marker: "11:10", baseline_scan_at: now, tickers: [{ ticker: "TER", score: 76 }, { ticker: "ZZZ", score: null }], total: 2 },
+    watchlist: { watchlist_id: 1, name: "Main", summary: { tracked: 40, needs_attention: 1, strengthening: 2, fading: 0 },
+      in_scan: [{ ticker: "GNRC", score: 52 }, { ticker: "MPC", score: 17 }], missing: ["AEMD", "NVDA"] },
+  };
+
+  it("lists new names and the watchlist against the latest scan", () => {
+    render(<TodayView data={base} mine={mine} />);
+    expect(screen.getByRole("heading", { name: "New since your last visit" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "TER, HSF 76" })).toHaveAttribute("href", "/stocks/TER");
+    expect(screen.getByRole("link", { name: "ZZZ" })).toBeInTheDocument();
+    expect(screen.getByText("40 watched · 1 need attention · 2 strengthening · 0 fading")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "GNRC" })).toHaveAttribute("href", "/stocks/GNRC");
+    expect(screen.getByLabelText("HSF Score 17")).toHaveClass("score-weak");
+    expect(screen.getByText("Not in the latest scan: AEMD, NVDA")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Main" })).toHaveAttribute("href", "/watchlists");
+  });
+
+  it("explains a first visit and an empty watchlist", () => {
+    render(<TodayView data={base} mine={{ errors: [], new_since: { marker: "11:", tickers: [], total: 0 },
+      watchlist: { watchlist_id: null, in_scan: [], missing: [] } }} />);
+    expect(screen.getByText(/Nothing new since you last looked/)).toBeInTheDocument();
+    expect(screen.getByText("Your watchlist is empty.")).toBeInTheDocument();
+  });
+
+  it("shows a notice when the signed-in sections fail, and nothing while they load", () => {
+    const { rerender } = render(<TodayView data={base} />);
+    expect(screen.queryByRole("heading", { name: "Your watchlist" })).not.toBeInTheDocument();
+    rerender(<TodayView data={{ ...base, recap: null }} mineFailed />);
+    expect(screen.getAllByRole("alert").map((a) => a.textContent)).toEqual([
+      "New since your last visit couldn't load right now. The rest of the page is current.",
+      "Your watchlist couldn't load right now. The rest of the page is current.",
+    ]);
+  });
+});
