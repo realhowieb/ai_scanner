@@ -5,6 +5,7 @@ No network, no Postgres. Market observations are built by hand in the shape
 api.watchlist_intel.market_observation returns.
 """
 import datetime as dt
+import importlib.util
 import os
 import sqlite3
 import unittest
@@ -179,6 +180,7 @@ class Store:
         self.conn.close()
 
 
+@unittest.skipUnless(importlib.util.find_spec("fastapi"), "needs fastapi (entitlements_for lives in api.main)")
 class EvaluatorTests(unittest.TestCase):
     def setUp(self):
         from api import alert_rules
