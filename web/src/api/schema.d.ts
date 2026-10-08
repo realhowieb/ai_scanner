@@ -965,7 +965,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Watchlist Get */
+        /**
+         * Watchlist Get
+         * @description The list with each ticker's row in the latest market scan (`items[].latest`).
+         */
         get: operations["watchlist_get_v1_watchlists__watchlist_id__get"];
         put?: never;
         post?: never;
@@ -2911,16 +2914,33 @@ export interface components {
              * Items
              * @default []
              */
-            items: components["schemas"]["WatchlistItem"][];
+            items: components["schemas"]["WatchlistItemDetail"][];
             /** Name */
             name: string;
+            /**
+             * Scan At
+             * @description GET only: the market scan behind items[].latest
+             */
+            scan_at?: string | null;
+            /**
+             * Scan Total
+             * @description GET only: ranked setups in that scan
+             */
+            scan_total?: number | null;
+            /**
+             * Stale
+             * @description GET only: a scheduled scan was missed (see Market.stale)
+             */
+            stale?: boolean | null;
             /** Symbol Count */
             symbol_count: number;
         };
-        /** WatchlistItem */
-        WatchlistItem: {
+        /** WatchlistItemDetail */
+        WatchlistItemDetail: {
             /** Added At */
             added_at?: string | null;
+            /** @description GET /v1/watchlists/{id} only: the ticker's row in the latest market scan; null when it isn't a ranked setup there (or the scan couldn't be read) */
+            latest?: components["schemas"]["WatchlistScanState"] | null;
             /** Note */
             note?: string | null;
             /** Price When Added */
@@ -2934,6 +2954,57 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+        };
+        /**
+         * WatchlistScanState
+         * @description The ticker's row in the latest market scan's ranked setups.
+         */
+        WatchlistScanState: {
+            /** Breakout Score */
+            breakout_score?: number | null;
+            /** Chg Pct */
+            chg_pct?: number | null;
+            /**
+             * Fading
+             * @default false
+             */
+            fading: boolean;
+            /** Gap Pct */
+            gap_pct?: number | null;
+            /** Last */
+            last?: number | null;
+            /** N Signals */
+            n_signals?: number | null;
+            /** Primary Setup */
+            primary_setup?: string | null;
+            /**
+             * Prob
+             * @description PreBreakout model output; null below Premium
+             */
+            prob?: number | null;
+            /**
+             * Prob Rank
+             * @description Premium. Where the raw PreBreakout model score sits among this scan's setups, as 'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob.
+             */
+            prob_rank?: number | null;
+            /**
+             * Rank
+             * @description Position in that scan's ranked setups (1 = top)
+             */
+            rank: number;
+            /** Rvol */
+            rvol?: number | null;
+            /** Score */
+            score: number;
+            /**
+             * Signals
+             * @default []
+             */
+            signals: string[];
+            /** Status */
+            status?: string | null;
+            /** Ticker */
+            ticker: string;
         };
         /** WatchlistToday */
         WatchlistToday: {
@@ -5173,6 +5244,8 @@ export interface operations {
                 min_score?: number;
                 /** @description Only setups with this signal */
                 signal?: string | null;
+                /** @description Order of the rows the plan sees (descending); the plan's rows are always its top HSF-ranked setups */
+                sort?: "score" | "chg_pct" | "gap_pct" | "rvol" | "prob";
             };
             header?: never;
             path?: never;

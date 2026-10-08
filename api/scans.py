@@ -66,7 +66,7 @@ def _scan_row(o: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset: int,
-                min_score: int = 0, signal: Optional[str] = None) -> Dict[str, Any]:
+                min_score: int = 0, signal: Optional[str] = None, sort: str = "score") -> Dict[str, Any]:
     from ui.entitlement_view import redact_prebreakout_rows
 
     cap = max_results_for(tier)
@@ -80,10 +80,42 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     if signal:
         opps = [o for o in opps if signal in (o.get("signals") or [])]
     visible = opps[:cap]
+    if sort != "score":
+        # Re-orders only the rows the plan already sees (its top HSF-ranked setups); missing values last.
+        def key(o: Dict[str, Any]) -> Any:
+            v = _num(o.get(sort))
+            return (v is None, -(v or 0.0))
+        visible = sorted(visible, key=key)
     return {"scan_at": _iso(runs[0]["created_at"]), "total": len(opps), "max_results": cap,
             "limited": len(opps) > cap,
             "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
             "setups": [_scan_row(o) for o in visible[offset:offset + limit]]}
+
+
+def watchlist_scan_state(tickers: List[str], entitlements: Dict[str, bool]) -> Dict[str, Any]:
+    """Each ticker's row in the latest market scan's ranked setups (None when it isn't one),
+    with its rank in that scan. The same rows as /v1/scans/latest, without the plan's row
+    cap: these are the user's own tickers, as on the stock page. Never raises; an
+    unavailable scan reads as no state."""
+    from ui.entitlement_view import redact_prebreakout_rows
+
+    try:
+        runs = market_runs()
+        if not runs:
+            return {"scan_at": None, "stale": None, "rows": {}}
+        allowed = bool(entitlements.get("can_early_breakout"))
+        opps = redact_prebreakout_rows(run_opportunities(int(runs[0]["id"])), allowed=allowed)
+        wanted = {str(t).strip().upper() for t in tickers}
+        rows: Dict[str, Dict[str, Any]] = {}
+        for i, o in enumerate(opps):
+            t = str(o.get("ticker") or "").strip().upper()
+            if t in wanted and t not in rows:
+                rows[t] = {**_scan_row(o), "rank": i + 1}
+        return {"scan_at": _iso(runs[0]["created_at"]), "total": len(opps),
+                "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
+                "rows": rows}
+    except Exception:
+        return {"scan_at": None, "stale": None, "rows": {}}
 
 
 def _calibration_records() -> List[Dict[str, Any]]:
