@@ -152,6 +152,13 @@ class SigmoidCalibrationTests(unittest.TestCase):
         self.assertIn("sigmoid", report)
         self.assertIn("live_auc", report)
 
+    def test_live_report_retries_a_dropped_model_load(self):
+        loads = mock.Mock(side_effect=[None, None, None])
+        with mock.patch.object(m, "load_prebreakout_model", loads), mock.patch("time.sleep"):
+            report = m.live_calibration_report()
+        self.assertEqual(report, {"skipped": "no live model"})
+        self.assertEqual(loads.call_count, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

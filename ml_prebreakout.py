@@ -3459,7 +3459,18 @@ def live_calibration_report(days_back: int = 90, *, maturity_days: int = 10) -> 
     outcome label may not have resolved yet. Read only: nothing is saved.
     """
     _load_ml_libs()
-    bundle = load_prebreakout_model()
+    import time as _time
+
+    # Called at the end of a long training job, when Neon may have suspended
+    # and the first connection can drop; a failed load caches None, so clear
+    # the cache and retry a few times.
+    bundle = None
+    for attempt in range(3):
+        clear_model_cache()
+        bundle = load_prebreakout_model()
+        if bundle and bundle.get("model") is not None:
+            break
+        _time.sleep(5 * (attempt + 1))
     if not bundle or bundle.get("model") is None:
         return {"skipped": "no live model"}
     trained_at = pd.to_datetime(bundle.get("trained_at"), utc=True, errors="coerce")
