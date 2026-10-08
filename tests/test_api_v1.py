@@ -370,5 +370,15 @@ class TodayEndpointTests(ApiTestCase):
         self.assertEqual(r.json(), {"quotes": quotes})
         self.assertEqual(self.client.get("/v1/market/tape").status_code, 401)
 
+    def test_today_personal_passes_the_user_and_marker(self):
+        token = self.login().json()["access_token"]
+        payload = {"new_since": {"marker": "11:10", "tickers": [{"ticker": "TER", "score": 75}], "total": 1}, "errors": []}
+        with mock.patch("api.today.build_personal", return_value=payload) as build:
+            r = self.client.get("/v1/today/me?seen=11&baseline=10", headers=self.auth(token))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["new_since"]["tickers"], [{"ticker": "TER", "score": 75}])
+        self.assertEqual(build.call_args[0][1:], (11, 10))
+        self.assertEqual(self.client.get("/v1/today/me").status_code, 401)
+
 if __name__ == "__main__":
     unittest.main()

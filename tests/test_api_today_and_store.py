@@ -206,6 +206,42 @@ class TodayBuilderTests(unittest.TestCase):
         self.assertIsNone(snap["universe_symbols"])
         self.assertEqual(snap["top_gainer"]["ticker"], "CIEN")  # the scan still answers
 
+    def test_new_since_last_visit_follows_the_streamlit_marker(self):
+        RESULTS[10] = json.dumps([r for r in _scan_rows() if r["Ticker"] not in ("TER", "CIEN")], allow_nan=True)
+        self.addCleanup(RESULTS.__setitem__, 10, json.dumps(_scan_rows(), allow_nan=True))
+        self.now = SAT
+        t = self.today
+        first = t.new_since_visit(None, None)  # first visit: remember the latest scan, mark nothing
+        self.assertEqual((first["marker"], first["tickers"]), ("11:", []))
+        t.clear_cache()
+        out = t.new_since_visit(10, None)  # a newer scan since the last visit
+        self.assertEqual(out["marker"], "11:10")
+        self.assertEqual([x["ticker"] for x in out["tickers"]], ["CIEN", "TER"])  # strongest first, ties by name
+        self.assertEqual(out["total"], 2)
+        self.assertEqual(out["baseline_scan_at"], "2026-09-28T13:35:00+00:00")
+        self.assertEqual(t.new_since_visit(11, 10)["tickers"], out["tickers"])  # a refresh keeps the baseline
+        self.assertEqual(t.new_since_visit(11, 999)["tickers"], [])  # not a market run: ignored
+        self.assertEqual(t.new_since_visit(11, 999)["marker"], "11:")
+
+    def test_watchlist_against_the_latest_scan(self):
+        lists = [{"id": 1, "name": "Main", "is_default": True, "symbol_count": 3}]
+        items = {"items": [{"ticker": "aapl"}, {"ticker": "STM"}, {"ticker": "MXL"}]}
+        summary = {"summary": {"tracked": 3, "needs_attention": 1, "strengthening": 0, "fading": 2}}
+        with mock.patch("api.user_data.list_watchlists", return_value=lists), \
+                mock.patch("api.user_data.get_watchlist", return_value=items), \
+                mock.patch("analytics.watchlist_intelligence.build_watchlist_intelligence", return_value=summary):
+            out = self.today.build_personal("demo@example.com", None, None)
+        wl = out["watchlist"]
+        self.assertEqual(out["errors"], [])
+        self.assertEqual((wl["watchlist_id"], wl["name"]), (1, "Main"))
+        self.assertEqual([r["ticker"] for r in wl["in_scan"]], ["STM", "MXL"])
+        self.assertGreater(wl["in_scan"][0]["score"], wl["in_scan"][1]["score"])
+        self.assertEqual(wl["missing"], ["AAPL"])
+        self.assertEqual(wl["summary"], {"tracked": 3, "needs_attention": 1, "strengthening": 0, "fading": 2})
+        with mock.patch("api.user_data.list_watchlists", return_value=[]):
+            self.today.clear_cache()
+            self.assertIsNone(self.today.build_personal("x", None, None)["watchlist"]["watchlist_id"])
+
     def test_cache_drops_expired_entries_and_is_capped(self):
         t = self.today
         t.clear_cache()
