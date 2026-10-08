@@ -33,6 +33,8 @@ def _q(cur, sql):
 
 
 def _meta(m):
+    if isinstance(m, (bytes, memoryview)):
+        m = bytes(m).decode("utf-8", "replace")
     if isinstance(m, str):
         try:
             m = json.loads(m)
@@ -65,7 +67,14 @@ def main() -> int:
                 print(r)
                 continue
             fn = r.get("feature_names")
-            fn = json.loads(fn) if isinstance(fn, str) else (fn or [])
+            if isinstance(fn, (bytes, memoryview)):
+                fn = bytes(fn).decode("utf-8", "replace")
+            if isinstance(fn, str):
+                try:
+                    fn = json.loads(fn)
+                except ValueError:
+                    fn = [x.strip() for x in fn.strip("{}[]").split(",") if x.strip()]
+            fn = list(fn or [])
             print(json.dumps({"id": r["id"], "model_version": r["model_version"], "is_active": r["is_active"],
                               "trained_at": r["trained_at"], "created_at": r["created_at"],
                               "auc_column": r.get("auc"), "n_features": len(fn), "features": fn,
