@@ -1188,6 +1188,11 @@ def _ohlcv_context_from_bars(bars: pd.DataFrame) -> pd.DataFrame:
     return context.dropna(subset=["Timestamp"]).drop_duplicates(subset=["Timestamp"], keep="last")
 
 
+def _asof_timestamps(values) -> pd.Series:
+    """UTC timestamps at one resolution, so merge_asof keys always match (pandas 2 keeps us vs ns)."""
+    return pd.to_datetime(values, errors="coerce", utc=True).astype("datetime64[ns, UTC]")
+
+
 def _merge_symbol_ohlcv_asof(group: pd.DataFrame, context: pd.DataFrame) -> pd.DataFrame:
     if context.empty or group.empty:
         return group
@@ -1196,10 +1201,10 @@ def _merge_symbol_ohlcv_asof(group: pd.DataFrame, context: pd.DataFrame) -> pd.D
     left = group.copy()
     left[order_col] = np.arange(len(left))
     left[index_col] = left.index
-    left["Timestamp"] = pd.to_datetime(left["Timestamp"], errors="coerce", utc=True)
+    left["Timestamp"] = _asof_timestamps(left["Timestamp"])
     left_sorted = left.sort_values("Timestamp", kind="mergesort")
     right_sorted = context.copy()
-    right_sorted["Timestamp"] = pd.to_datetime(right_sorted["Timestamp"], errors="coerce", utc=True)
+    right_sorted["Timestamp"] = _asof_timestamps(right_sorted["Timestamp"])
     right_sorted = right_sorted.dropna(subset=["Timestamp"]).sort_values("Timestamp", kind="mergesort")
     merged = pd.merge_asof(left_sorted, right_sorted, on="Timestamp", direction="backward")
     restored = merged.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
@@ -1264,10 +1269,10 @@ def _merge_benchmark_asof(out: pd.DataFrame, benchmark: pd.DataFrame) -> pd.Data
     left = out.copy()
     left[order_col] = np.arange(len(left))
     left[index_col] = left.index
-    left["Timestamp"] = pd.to_datetime(left["Timestamp"], errors="coerce", utc=True)
+    left["Timestamp"] = _asof_timestamps(left["Timestamp"])
     left_sorted = left.sort_values("Timestamp", kind="mergesort")
     right_sorted = benchmark.copy()
-    right_sorted["Timestamp"] = pd.to_datetime(right_sorted["Timestamp"], errors="coerce", utc=True)
+    right_sorted["Timestamp"] = _asof_timestamps(right_sorted["Timestamp"])
     right_sorted = right_sorted.dropna(subset=["Timestamp"]).sort_values("Timestamp", kind="mergesort")
     merged = pd.merge_asof(left_sorted, right_sorted, on="Timestamp", direction="backward")
     restored = merged.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
@@ -3764,7 +3769,12 @@ def _live_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
             context = _live_benchmark_context()
         except Exception as e:
             print(f"[ml_prebreakout] live benchmark context failed: {e}")
-    return add_prebreakout_features(out, benchmark_context=context)
+    try:
+        return add_prebreakout_features(out, benchmark_context=context)
+    except Exception as e:
+        # Never let enrichment cost the scan its scores: fall back to the plain frame.
+        print(f"[ml_prebreakout] live feature enrichment failed, scoring scan alone: {e}")
+        return add_prebreakout_features(df.copy().reset_index(drop=True))
 
 
 def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.DataFrame:

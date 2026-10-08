@@ -82,7 +82,9 @@ class TopSetups(BaseModel):
     state: Literal["qualifying", "no_qualifying", "empty_scan"]
     threshold: Optional[int] = None
     scan_at: Optional[str] = None
-    setups: List[Setup] = []
+    setups: List[Setup] = Field(default=[], description="Strong setups, HSF `threshold`+")
+    ranked_floor: Optional[int] = Field(default=None, description="HSF floor of `also_ranked` (the ranked list, 40)")
+    also_ranked: List[Setup] = Field(default=[], description="Next ranked names filling the card to 5 when fewer are strong")
 
 
 class Standout(BaseModel):

@@ -2563,10 +2563,22 @@ export interface components {
         };
         /** TopSetups */
         TopSetups: {
+            /**
+             * Also Ranked
+             * @description Next ranked names filling the card to 5 when fewer are strong
+             * @default []
+             */
+            also_ranked: components["schemas"]["Setup"][];
+            /**
+             * Ranked Floor
+             * @description HSF floor of `also_ranked` (the ranked list, 40)
+             */
+            ranked_floor?: number | null;
             /** Scan At */
             scan_at?: string | null;
             /**
              * Setups
+             * @description Strong setups, HSF `threshold`+
              * @default []
              */
             setups: components["schemas"]["Setup"][];

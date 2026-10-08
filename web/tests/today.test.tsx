@@ -8,7 +8,7 @@ const now = new Date().toISOString();
 const base: Schemas["Today"] = {
   as_of: now, market: { phase: "premarket" }, errors: [],
   before_open: { scan_at: now, locked: false, movers: [{ ticker: "AAA", pct: 4.2, last: 10, score: 70 }] },
-  top_setups: { state: "qualifying", threshold: 75, scan_at: now, setups: [{ ticker: "BBB", score: 81, primary_setup: "breakout", status: "STRONG", n_signals: 2, last: 20, chg_pct: 1, gap_pct: null, rvol: 2, prob: null }] },
+  top_setups: { state: "qualifying", threshold: 75, scan_at: now, setups: [{ ticker: "BBB", score: 81, primary_setup: "breakout", status: "STRONG", n_signals: 2, last: 20, chg_pct: 1, gap_pct: null, rvol: 2, prob: null }], also_ranked: [] },
   after_close: null,
   recap: { day: "2026-10-05", title: "Monday", scans: 3, premarket_scans: 1, postmarket_scans: 2, entered: ["CCC (65)"], left: [], standouts: [] },
 };
@@ -31,9 +31,9 @@ describe("Today", () => {
   });
 
   it("explains an empty scan and a scan with no qualifying setups", () => {
-    const { rerender } = render(<TodayView data={{ ...base, top_setups: { state: "empty_scan", threshold: null, scan_at: null, setups: [] } }} />);
+    const { rerender } = render(<TodayView data={{ ...base, top_setups: { state: "empty_scan", threshold: null, scan_at: null, setups: [], also_ranked: [] } }} />);
     expect(screen.getByText("No scan results yet.")).toBeInTheDocument();
-    rerender(<TodayView data={{ ...base, top_setups: { state: "no_qualifying", threshold: 75, scan_at: now, setups: [] } }} />);
+    rerender(<TodayView data={{ ...base, top_setups: { state: "no_qualifying", threshold: 75, scan_at: now, setups: [], also_ranked: [] } }} />);
     expect(screen.getByText("No setup reached HSF 75 in the latest scan.")).toBeInTheDocument();
   });
 
@@ -57,6 +57,33 @@ describe("Today", () => {
     const evening = new Date(Date.now() - 15 * 3600_000).toISOString();
     render(<TodayView data={{ ...base, after_close: { scan_at: evening, locked: false, movers: [] } }} />);
     expect(screen.getByText(/Updated 15h ago/)).not.toHaveTextContent("Stale");
+  });
+
+  it("fills Top setups with also-ranked names below the strong cutoff", () => {
+    const also = { ...base.top_setups!.setups[0]!, ticker: "DDD", score: 53 };
+    const { rerender } = render(<TodayView data={{ ...base, top_setups: { ...base.top_setups!, ranked_floor: 40, also_ranked: [also] } }} />);
+    expect(screen.getByText("Also ranked")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "DDD" }).closest("tr")).toHaveClass("row-muted");
+    expect(screen.getByText("Strong setups score HSF 75+. Also ranked: HSF 40 to 74.")).toBeInTheDocument();
+    rerender(<TodayView data={{ ...base, top_setups: { state: "no_qualifying", threshold: 75, scan_at: now, setups: [], ranked_floor: 40, also_ranked: [also] } }} />);
+    expect(screen.getByText(/No setup reached HSF 75 in the latest scan. These are the highest ranked names./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "DDD" })).toBeInTheDocument();
+  });
+
+  it("mutes HSF badges below the ranked list", () => {
+    render(<TodayView data={{ ...base, after_close: { scan_at: now, locked: false, movers: [{ ticker: "LEVI", pct: 7.4, last: 20.96, score: 3 }, { ticker: "EEE", pct: 5, last: 9, score: 62 }] } }} />);
+    expect(screen.getByLabelText("HSF Score 3")).toHaveClass("score-weak");
+    expect(screen.getByLabelText("HSF Score 62")).not.toHaveClass("score-weak");
+  });
+
+  it("links recap chips to the stock and shows standouts not already on Top setups", () => {
+    render(<TodayView data={{ ...base, recap: { ...base.recap!, left: ["MYRG (65)"], standouts: [{ ticker: "BBB", score: 81, setup: null }, { ticker: "FFF", score: 77, setup: null }] } }} />);
+    expect(screen.getByRole("link", { name: "CCC, HSF 65" })).toHaveAttribute("href", "/stocks/CCC");
+    expect(screen.getByRole("link", { name: "MYRG, HSF 65" })).toHaveAttribute("href", "/stocks/MYRG");
+    expect(screen.getByText("Left the ranked list, with their score from the day's first scan")).toBeInTheDocument();
+    expect(screen.getByText("Strongest in the last scan")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "FFF, HSF 77" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /^BBB/ })).toHaveLength(1);  // already in Top setups
   });
 
   it("hides sessions the API leaves out (outside their window)", () => {

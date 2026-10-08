@@ -4013,6 +4013,27 @@
    },
    "TopSetups": {
     "properties": {
+     "also_ranked": {
+      "default": [],
+      "description": "Next ranked names filling the card to 5 when fewer are strong",
+      "items": {
+       "$ref": "#/components/schemas/Setup"
+      },
+      "title": "Also Ranked",
+      "type": "array"
+     },
+     "ranked_floor": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "HSF floor of `also_ranked` (the ranked list, 40)",
+      "title": "Ranked Floor"
+     },
      "scan_at": {
       "anyOf": [
        {
@@ -4026,6 +4047,7 @@
      },
      "setups": {
       "default": [],
+      "description": "Strong setups, HSF `threshold`+",
       "items": {
        "$ref": "#/components/schemas/Setup"
       },

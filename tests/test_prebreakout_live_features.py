@@ -6,6 +6,7 @@ features were zero. score_prebreakout now enriches the frame first.
 """
 import os
 import unittest
+from datetime import datetime, timezone
 from unittest import mock
 
 import numpy as np
@@ -73,6 +74,60 @@ class LiveFeatureTests(unittest.TestCase):
         self._score()
         _, _, b, _ = self._score()
         b.assert_not_called()
+
+
+class LiveFeatureRealMergeTests(unittest.TestCase):
+    """No feature mocks: only the price download and the model are stubbed.
+
+    Regression: a scan stamped with a python datetime (us) merged against
+    daily bars (ns) raised MergeError, the scan swallowed it, and every row
+    showed no PreBreakout score.
+    """
+
+    def setUp(self):
+        m._BENCHMARK_CACHE.clear()
+
+    def test_scan_time_merges_with_daily_bars_and_spy_qqq(self):
+        idx = pd.date_range("2026-07-01", periods=90, freq="B", tz="America/New_York")
+
+        def download(symbols, **_):
+            close = np.linspace(100.0, 130.0, len(idx))
+            bars = pd.DataFrame(
+                {"Open": close, "High": close + 1, "Low": close - 1, "Close": close, "Volume": 1e6}, index=idx
+            )
+            return {s: bars for s in symbols}
+
+        scan = pd.DataFrame({"Ticker": ["AAA", "BBB"], "Last": [10.0, 20.0], "Trend10D%": [1.0, 2.0]}, index=[4, 9])
+        bundle = {"model": _Model(), "features": ["F1"], "calibration_map": None}
+        with mock.patch("data.price_alpaca.download_multi_alpaca", side_effect=download), \
+                mock.patch.object(m, "_utc_now", return_value=datetime(2026, 11, 20, 15, 0, tzinfo=timezone.utc)), \
+                mock.patch.object(m, "load_prebreakout_model", return_value=bundle), \
+                mock.patch.dict(os.environ, {"PREBREAKOUT_LIVE_ENRICH": "1"}):
+            X = m._live_feature_frame(scan)
+            out = m.score_prebreakout(scan.copy())
+        self.assertTrue((X["Close"] == 130.0).all())  # last completed bar
+        self.assertTrue(X["SPYTrend10D"].notna().all())
+        self.assertTrue(out["PreBreakoutProbRaw"].notna().all())
+        self.assertEqual(list(out.index), [4, 9])
+
+    def test_enriched_feature_failure_still_scores(self):
+        calls = []
+
+        def features(df, benchmark_context=None, **_):
+            calls.append(benchmark_context)
+            if benchmark_context is not None:
+                raise ValueError("incompatible merge keys")
+            return df.assign(F1=df["Last"])
+
+        bundle = {"model": _Model(), "features": ["F1"], "calibration_map": None}
+        scan = pd.DataFrame({"Symbol": ["AAA"], "Last": [1.0]})
+        with mock.patch.object(m, "load_prebreakout_model", return_value=bundle), \
+                mock.patch.object(m, "add_historical_ohlcv_context", side_effect=lambda df, **_: df), \
+                mock.patch.object(m, "load_benchmark_regime_context", return_value={"SPY": pd.DataFrame({"x": [1]})}), \
+                mock.patch.object(m, "add_prebreakout_features", side_effect=features):
+            out = m.score_prebreakout(scan)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(np.isclose(out["PreBreakoutProbRaw"].iloc[0], 1 / (1 + np.exp(-1.0))))
 
 
 if __name__ == "__main__":

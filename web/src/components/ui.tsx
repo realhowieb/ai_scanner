@@ -22,8 +22,12 @@ export function Card({ title, aside, children, id, className = "" }: { title?: R
   );
 }
 
+/** The ranked list's floor: names below it aren't ranked setups, so their score is shown muted. */
+export const RANKED_MIN = 40;
+
 export function ScoreBadge({ score }: { score: number | null | undefined }) {
-  return <span className="score" aria-label={`HSF Score ${score ?? "unavailable"}`}>{score ?? "--"}</span>;
+  const weak = score === null || score === undefined || score < RANKED_MIN;
+  return <span className={`score${weak ? " score-weak" : ""}`} aria-label={`HSF Score ${score ?? "unavailable"}`}>{score ?? "--"}</span>;
 }
 
 export function ScoreBar({ score }: { score: number | null | undefined }) {
