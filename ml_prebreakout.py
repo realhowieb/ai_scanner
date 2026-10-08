@@ -3505,6 +3505,122 @@ def live_calibration_report(days_back: int = 90, *, maturity_days: int = 10) -> 
     return {**meta, **report}
 
 
+def _bundle_raw_scores(bundle: dict, features: pd.DataFrame) -> np.ndarray:
+    """The champion's raw probability for already-built feature rows (the model
+    half of ``score_prebreakout``): same missing-column fill and preprocessing."""
+    X = features.copy()
+    feature_cols = list(bundle["features"])
+    for col in feature_cols:
+        if col not in X.columns:
+            X[col] = 0.0
+    X, feature_cols = _apply_preprocessing_plan(X, feature_cols, bundle.get("preprocessing"))
+    return bundle["model"].predict_proba(X[feature_cols].fillna(0.0))[:, 1]
+
+
+def serving_skew_audit(days_back: int = 90, *, maturity_days: int = 10) -> dict:
+    """Why does the live model score worse live than in training CV?
+
+    On matured candidate setups seen since the champion was trained, compare
+    AUC for the same model under four feature pipelines:
+      stored        - PreBreakoutProbRaw saved by the scan at the time (true live)
+      per_scan      - score_prebreakout on each scan alone (what live scans do now)
+      history       - score_prebreakout on the multi-scan history
+      training      - the training pipeline: OHLCV enrichment + benchmark context
+    and list the champion features whose values differ most between per_scan
+    and training (share of zeros, rank correlation). Read only.
+    """
+    _load_ml_libs()
+    import time as _time
+
+    bundle = None
+    for attempt in range(3):
+        clear_model_cache()
+        bundle = load_prebreakout_model()
+        if bundle and bundle.get("model") is not None:
+            break
+        _time.sleep(5 * (attempt + 1))
+    if not bundle or bundle.get("model") is None:
+        return {"skipped": "no live model"}
+    trained_at = pd.to_datetime(bundle.get("trained_at"), utc=True, errors="coerce")
+    df = load_run_history(days_back=days_back)
+    if df.empty:
+        return {"skipped": "no run history"}
+    labeled = add_prebreakout_target_label(df, lookback_days=days_back)
+    if labeled.empty:
+        return {"skipped": "no labeled candidate rows"}
+    ts = pd.to_datetime(labeled["Timestamp"], utc=True, errors="coerce")
+    keep = ts.notna() & (ts <= _utc_now() - timedelta(days=int(maturity_days)))
+    if pd.notna(trained_at):
+        keep &= ts > trained_at
+    rows = labeled.loc[keep].reset_index(drop=True)
+    if rows.empty:
+        return {"skipped": "no matured rows since the live model was trained"}
+    y = rows[PREBREAKOUT_TARGET_COLUMN].astype(int).to_numpy()
+    out = {
+        "model_version": bundle.get("model_version"),
+        "trained_at": str(bundle.get("trained_at")),
+        "cv_auc": bundle.get("auc"),
+        "rows": int(len(rows)),
+        "base_rate_pct": round(float(y.mean()) * 100.0, 2),
+        "feature_count": len(bundle.get("features") or []),
+    }
+
+    def auc(scores) -> float | None:
+        s = pd.Series(scores, dtype=float)
+        ok = s.notna().to_numpy()
+        if roc_auc_score is None or ok.sum() < 50 or len(set(y[ok])) < 2:
+            return None
+        return round(float(roc_auc_score(y[ok], s[ok])), 4)
+
+    aucs = {}
+    if "PreBreakoutProbRaw" in rows.columns:
+        stored = pd.to_numeric(rows["PreBreakoutProbRaw"], errors="coerce")
+        aucs["stored"] = auc(stored)
+        out["stored_coverage_pct"] = round(float(stored.notna().mean()) * 100.0, 1)
+
+    feature_cols = list(bundle["features"])
+    run_key = rows["run_time"].astype(str) if "run_time" in rows.columns else rows["Timestamp"].astype(str)
+    per_scan_scores = pd.Series(np.nan, index=rows.index)
+    per_scan_feats = []
+    for _, idx in rows.groupby(run_key, sort=False).groups.items():
+        part = rows.loc[idx].copy()
+        feats = add_prebreakout_features(part)
+        per_scan_scores.loc[idx] = _bundle_raw_scores(bundle, feats)
+        per_scan_feats.append(feats.reindex(columns=feature_cols))
+    aucs["per_scan"] = auc(per_scan_scores)
+    per_scan_X = pd.concat(per_scan_feats).reindex(rows.index)
+
+    hist_feats = add_prebreakout_features(rows.copy())
+    aucs["history"] = auc(_bundle_raw_scores(bundle, hist_feats))
+
+    benchmark_context = load_benchmark_regime_context(days_back)
+    enriched = add_historical_ohlcv_context(rows.copy(), days_back=days_back)
+    train_feats = add_prebreakout_features(enriched, benchmark_context=benchmark_context, include_market_features=True)
+    aucs["training"] = auc(_bundle_raw_scores(bundle, train_feats))
+    out["auc"] = aucs
+
+    train_X = train_feats.reindex(columns=feature_cols)
+    diffs = []
+    for col in feature_cols:
+        a = pd.to_numeric(per_scan_X[col], errors="coerce").fillna(0.0)
+        b = pd.to_numeric(train_X[col], errors="coerce").fillna(0.0)
+        corr = a.rank().corr(b.rank()) if a.nunique() > 1 and b.nunique() > 1 else None
+        diffs.append({
+            "feature": col,
+            "zero_pct_live": round(float((a == 0).mean()) * 100.0, 1),
+            "zero_pct_training": round(float((b == 0).mean()) * 100.0, 1),
+            "rank_corr": None if corr is None or pd.isna(corr) else round(float(corr), 3),
+        })
+    diffs.sort(key=lambda d: (d["rank_corr"] if d["rank_corr"] is not None else -2.0))
+    out["most_different_features"] = diffs[:15]
+    out["features_identical"] = sum(1 for d in diffs if d["rank_corr"] is not None and d["rank_corr"] >= 0.999)
+    importances = bundle.get("feature_importances")
+    if isinstance(importances, dict) and importances:
+        top = sorted(importances.items(), key=lambda kv: -float(kv[1] or 0))[:10]
+        out["top_importances"] = [[k, round(float(v), 4)] for k, v in top]
+    return out
+
+
 def recalibrate_active_champion() -> dict:
     """Attach an isotonic calibration map to the live champion, in place.
 

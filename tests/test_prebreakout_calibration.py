@@ -159,6 +159,39 @@ class SigmoidCalibrationTests(unittest.TestCase):
         self.assertEqual(report, {"skipped": "no live model"})
         self.assertEqual(loads.call_count, 3)
 
+    def test_serving_skew_audit_compares_pipelines(self):
+        n = 600
+        stamps = pd.date_range("2026-08-20", periods=n, freq="h", tz="UTC")
+        rows = pd.DataFrame({
+            "Symbol": [f"S{i % 40}" for i in range(n)], "Timestamp": stamps,
+            "run_time": stamps.floor("D"), "Last": 10 + self.raw[:n],
+            "PreBreakoutProbRaw": self.raw[:n], m.PREBREAKOUT_TARGET_COLUMN: self.y[:n],
+        })
+
+        class Model:
+            def predict_proba(self, X):
+                v = 1 / (1 + np.exp(-X["F1"].to_numpy()))
+                return np.column_stack([1 - v, v])
+
+        def feats(df, **_):
+            df = df.copy()
+            df["F1"] = df["PreBreakoutProbRaw"] * (2 if "OHLC" in df.columns else 1)
+            return df
+
+        bundle = {"model": Model(), "features": ["F1"], "trained_at": "2026-08-01T00:00:00Z", "auc": 0.68}
+        with mock.patch.object(m, "load_prebreakout_model", return_value=bundle), \
+                mock.patch.object(m, "load_run_history", return_value=rows), \
+                mock.patch.object(m, "add_prebreakout_target_label", return_value=rows), \
+                mock.patch.object(m, "add_prebreakout_features", side_effect=feats), \
+                mock.patch.object(m, "load_benchmark_regime_context", return_value={}), \
+                mock.patch.object(m, "add_historical_ohlcv_context", side_effect=lambda df, **_: df.assign(OHLC=1)), \
+                mock.patch.object(m, "_utc_now", return_value=pd.Timestamp("2026-10-08", tz="UTC").to_pydatetime()):
+            report = m.serving_skew_audit()
+        self.assertEqual(report["rows"], n)
+        self.assertEqual(set(report["auc"]), {"stored", "per_scan", "history", "training"})
+        self.assertEqual(report["auc"]["stored"], report["auc"]["per_scan"])
+        self.assertEqual(report["most_different_features"][0]["feature"], "F1")
+
 
 if __name__ == "__main__":
     unittest.main()

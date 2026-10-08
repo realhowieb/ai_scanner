@@ -11,6 +11,10 @@ on:
         description: "Optional debug artifact name for the local .pkl"
         required: true
         default: "prebreakout-model-debug"
+      mode:
+        description: "train = Run #17 training report; audit = live-vs-training feature audit only (read only)"
+        required: false
+        default: "train"
 
 permissions:
   contents: read
@@ -60,7 +64,30 @@ jobs:
             exit 1
           fi
 
+      - name: Audit live vs training features (read only)
+        if: inputs.mode == 'audit'
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          DAYS_BACK: ${{ inputs.days_back }}
+        run: |
+          python -u - <<'PY'
+          import json
+          import os
+
+          from ml_prebreakout import serving_skew_audit
+
+          report = serving_skew_audit(days_back=int(os.environ["DAYS_BACK"]))
+          print("=== PREBREAKOUT SERVING SKEW AUDIT ===")
+          print(json.dumps(report, indent=1, sort_keys=True, default=str))
+          PY
+
       - name: Train and save PreBreakout model
+        if: inputs.mode != 'audit'
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
