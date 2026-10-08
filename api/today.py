@@ -227,23 +227,39 @@ def after_close(now: dt.datetime, entitled: bool) -> Optional[Dict[str, Any]]:
     return out
 
 
+TOP_N = 5
 _SETUP_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
 _SETUP_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "prob")
 
 
 def top_setups(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     from ui.entitlement_view import redact_prebreakout_rows
+    from ui.market_scans import top_setups as ranked_setups
+    from ui.recap import RECAP_MIN_SCORE
     from ui.today import today_top_setups
 
     runs = market_runs()
     if not runs:
         return {"state": "empty_scan", "threshold": None, "scan_at": None, "setups": []}
-    result = today_top_setups(run_df(int(runs[0]["id"])), n=5)
-    rows = redact_prebreakout_rows(result["setups"], allowed=bool(entitlements.get("can_early_breakout")))
-    setups = [{**{k: r.get(k) for k in _SETUP_FIELDS}, **{k: _num(r.get(k)) for k in _SETUP_NUMBERS}}
-              for r in rows]
+    df = run_df(int(runs[0]["id"]))
+    result = today_top_setups(df, n=TOP_N)
+    allowed = bool(entitlements.get("can_early_breakout"))
+
+    def shape(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [{**{k: r.get(k) for k in _SETUP_FIELDS}, **{k: _num(r.get(k)) for k in _SETUP_NUMBERS}}
+                for r in redact_prebreakout_rows(rows, allowed=allowed)]
+
+    # Fewer than TOP_N strong names: fill the card with the next ranked names (HSF 40+, the
+    # recap's "ranked list" floor) so a quiet day doesn't read as an empty page.
+    also: List[Dict[str, Any]] = []
+    room = TOP_N - len(result["setups"])
+    if room > 0 and result["state"] != "empty_scan":
+        strong = {r.get("ticker") for r in result["setups"]}
+        pool = ranked_setups(df, n=TOP_N * 2, minimum_score=RECAP_MIN_SCORE)
+        also = [r for r in pool if r.get("ticker") not in strong][:room]
     return {"state": result["state"], "threshold": result["threshold"],
-            "scan_at": _iso(runs[0]["created_at"]), "setups": setups}
+            "scan_at": _iso(runs[0]["created_at"]), "setups": shape(result["setups"]),
+            "ranked_floor": RECAP_MIN_SCORE if also else None, "also_ranked": shape(also)}
 
 
 def recap(now: dt.datetime) -> Optional[Dict[str, Any]]:
