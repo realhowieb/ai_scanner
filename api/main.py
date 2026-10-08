@@ -1281,6 +1281,18 @@ def _warm_caches() -> None:
     threading.Thread(target=run, name="cache-warmup", daemon=True).start()
 
 
+def _start_realtime_alerts() -> None:
+    """P1-60: run the real-time price-alert worker here, now that hsf-api is on an
+    always-on plan. No-op unless REALTIME_ALERTS_ENABLED=1 (leave it off on the
+    billing service; the shared last_fired_at throttle covers any overlap)."""
+    try:
+        from billing_service.realtime_alerts import start_background_worker
+
+        start_background_worker()
+    except Exception as e:  # alerts are best effort; the API serves regardless
+        log.warning("realtime alerts worker failed to start: %s", str(e)[:120])
+
+
 def _module_app():
     """Module-level app for `uvicorn api.main:app` (settings from the environment).
     Importing never raises, so tests can import create_app without the secret."""
@@ -1290,6 +1302,7 @@ def _module_app():
         log.error("HSF API not started: %s", e)
         return _failing_app(f"HSF API not started: {e}")
     _warm_caches()
+    _start_realtime_alerts()
     return app
 
 
