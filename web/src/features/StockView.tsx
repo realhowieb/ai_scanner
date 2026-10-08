@@ -16,6 +16,7 @@ import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, setupLabel } from "@/lib/format";
 
 import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
+import { SymbolEvidence } from "./OutcomeEvidence";
 import { PriceChart } from "./PriceChart";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 
@@ -41,10 +42,10 @@ function Historical({ s }: { s: Stock }) {
   const ctx = s.historical_context as { bucket?: string; positive_rate?: number; n?: number; confidence?: string; sufficient?: boolean } | null | undefined;
   const sum = s.history_summary as { observations?: number; matured?: number; positive?: number } | null | undefined;
   const coh = s.outcome_cohort as { status?: string; score_band?: string; horizon?: string; comparable?: number; follow_through_rate?: number | null; evidence_strength?: string } | null | undefined;
-  if (!ctx && !sum && !coh) return <p className="cap">No historical context for this ticker yet.</p>;
   return (
     <div className="stack-sm">
-      <p className="cap">Descriptive research on saved scans. Not a forecast and not evidence that a setup will work.</p>
+      <SymbolEvidence ticker={s.ticker} />
+      {!ctx && !sum && !coh ? null : <p className="cap">Descriptive research on saved scans. Not a forecast and not evidence that a setup will work.</p>}
       {ctx && (ctx.sufficient && ctx.positive_rate !== undefined ? (
         <p className="body-sm">HSF {ctx.bucket}: {Math.round(ctx.positive_rate * 100)}% of past readings reached +4% within 5 days (n={ctx.n}, {String(ctx.confidence || "").toLowerCase()} confidence).</p>
       ) : (

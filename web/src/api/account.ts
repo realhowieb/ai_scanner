@@ -44,3 +44,21 @@ export const research = {
   daily: (ranking: "breakout" | "prebreakout", horizon: number, days = 120, signal?: AbortSignal) =>
     unwrap(api.GET("/v1/track-record/daily", { params: { query: { ranking, horizon, days } }, signal })),
 };
+
+// Outcome Intelligence (/v1/outcomes/*, Pro). Every call sends only the filters it
+// names; defaults are the complete dataset.
+export type OutcomeSummary = Schemas["OutcomeSummary"];
+export type OutcomeScores = Schemas["OutcomeScores"];
+export type OutcomeHorizons = Schemas["OutcomeHorizons"];
+export type OutcomeGroups = Schemas["OutcomeGroups"];
+export type OutcomeSymbol = Schemas["OutcomeSymbol"];
+export type OutcomeMetrics = Schemas["OutcomeMetrics"];
+
+export const outcomes = {
+  summary: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/summary", { signal })),
+  scores: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/scores", { signal })),
+  horizons: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/horizons", { signal })),
+  setups: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/setups", { signal })),
+  symbol: (ticker: string, signal?: AbortSignal) =>
+    unwrap(api.GET("/v1/outcomes/symbols/{ticker}", { params: { path: { ticker }, query: { page_size: 1 } }, signal })),
+};

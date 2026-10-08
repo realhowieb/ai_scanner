@@ -93,6 +93,7 @@ button, input, select { font: inherit; color: inherit; }
 .row-muted .tk { color: var(--text-2); }
 .row-muted .fill { background: var(--muted); }
 .row-muted .scorebar .mono { color: var(--text-2); }
+.table .row-muted td { color: var(--text-2); }
 .table tr.sub-head th { font-size: 12px; font-weight: 500; color: var(--muted); text-align: left; padding-top: 14px; }
 .chip-score { color: var(--muted); }
 .scorebar { display: flex; align-items: center; gap: 12px; min-width: 120px; }

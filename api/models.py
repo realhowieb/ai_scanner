@@ -819,3 +819,233 @@ class Plans(BaseModel):
 class UnsubscribeState(BaseModel):
     email: str = Field(description="Masked, e.g. sa***@gmail.com")
     prefs: EmailPrefs
+
+
+# --- Outcome Intelligence (/v1/outcomes/*) -----------------------------------------
+# Returns are fractions (0.012 = +1.2%). Every aggregate carries its own counts; rates
+# use the count named beside them. Nothing is zero-filled: missing data is null.
+
+class OutcomeFilters(BaseModel):
+    """The filters that produced this answer. All null/false = the complete dataset."""
+    ticker: Optional[str] = None
+    setup: Optional[str] = None
+    signal: Optional[str] = None
+    min_score: Optional[float] = None
+    max_score: Optional[float] = None
+    score_bucket: Optional[str] = None
+    score_version: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    certified_only: bool = False
+    matured_only: bool = False
+
+
+class OutcomeInterval(BaseModel):
+    low: float
+    high: float
+
+
+class OutcomeDateRange(BaseModel):
+    start: Optional[str] = None
+    end: Optional[str] = None
+
+
+class OutcomeDataset(BaseModel):
+    rows_loaded: int
+    truncated: bool = Field(description="True when the row cap was hit (then the answer is not the full history)")
+    loaded_at: str
+    stale: bool = Field(description="True when the database could not be reached and the last good dataset was used")
+    source: str
+
+
+class OutcomeMetrics(BaseModel):
+    horizon: int = Field(description="Trading days (1, 3 or 5)")
+    sample_size: int = Field(description="Records in the group, any maturity")
+    matured_count: int
+    pending_count: int
+    unavailable_count: int = Field(description="Outcome computed but no price was available; excluded")
+    invalid_count: int = Field(description="Outcome timestamp at/before the observation; excluded")
+    distinct_days: int = Field(description="Distinct entry days among matured records (observations on one day are correlated)")
+    evidence_quality: Literal["INSUFFICIENT", "LIMITED", "MODERATE", "STRONG"]
+    average_return: Optional[float] = None
+    median_return: Optional[float] = None
+    average_return_ci95: Optional[OutcomeInterval] = Field(default=None, description="Normal approximation; from 30 matured; assumes independence")
+    win_count: int
+    win_rate: Optional[float] = Field(default=None, description="Share of matured with return > 0")
+    win_rate_ci95: Optional[OutcomeInterval] = Field(default=None, description="Wilson interval; assumes independence")
+    benchmark_count: int = Field(description="Matured records with a benchmark return")
+    average_benchmark_return: Optional[float] = None
+    median_benchmark_return: Optional[float] = None
+    average_excess_return: Optional[float] = None
+    median_excess_return: Optional[float] = None
+    benchmark_beat_count: int
+    benchmark_beat_rate: Optional[float] = Field(default=None, description="Share of benchmark_count with excess > 0")
+    benchmark_beat_rate_ci95: Optional[OutcomeInterval] = None
+    mfe_count: int
+    average_mfe: Optional[float] = None
+    median_mfe: Optional[float] = None
+    mae_count: int
+    average_mae: Optional[float] = None
+    median_mae: Optional[float] = None
+
+
+class OutcomeCoverage(BaseModel):
+    matured: int
+    missing_benchmark: int
+    benchmark_coverage: Optional[float] = None
+    mfe_mae_available_for_horizon: bool
+    missing_mfe_mae: int
+    mfe_mae_coverage: Optional[float] = None
+
+
+class _OutcomeEnvelope(BaseModel):
+    filters: OutcomeFilters
+    unit: Literal["signal_day", "observation"] = Field(
+        description="signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row")
+    horizon: Optional[int] = None
+    raw_observations: int = Field(description="Frozen rows matching the filters before collapsing to the unit")
+    date_range: OutcomeDateRange
+    score_versions: Dict[str, int]
+    warnings: List[str] = []
+    evidence_thresholds: Dict[str, int] = Field(description="Minimum matured count per evidence label")
+    disclaimer: str
+    dataset: OutcomeDataset
+    generated_at: str
+
+
+class OutcomeSummary(_OutcomeEnvelope):
+    total_observations: int
+    matured_observations: int
+    pending_observations: int
+    unavailable_observations: int
+    certified_observations: int
+    metrics: OutcomeMetrics
+    coverage: OutcomeCoverage
+
+
+class OutcomeBucket(OutcomeMetrics):
+    bucket: str
+    min_score: int
+    max_score: int
+
+
+class OutcomeInversion(BaseModel):
+    lower_bucket: str
+    higher_bucket: str
+    lower_value: float
+    higher_value: float
+
+
+class OutcomeMonotonicity(BaseModel):
+    buckets_compared: List[str]
+    monotonic: Optional[bool] = Field(default=None, description="null when fewer than two buckets have enough evidence")
+    inversions: List[OutcomeInversion] = []
+
+
+class OutcomeCalibration(BaseModel):
+    min_matured_per_bucket: int
+    metrics: Dict[str, OutcomeMonotonicity]
+
+
+class OutcomeScores(_OutcomeEnvelope):
+    buckets: List[OutcomeBucket]
+    unbucketed_count: int
+    calibration: OutcomeCalibration
+
+
+class OutcomeHorizonRow(OutcomeMetrics):
+    coverage: OutcomeCoverage
+
+
+class OutcomeHorizons(_OutcomeEnvelope):
+    horizons: List[OutcomeHorizonRow]
+
+
+class OutcomeScoreDistribution(BaseModel):
+    scored: int
+    unscored: int
+    min: Optional[float] = None
+    max: Optional[float] = None
+    median: Optional[float] = None
+    bucket_counts: Dict[str, int]
+
+
+class OutcomeGroup(OutcomeMetrics):
+    name: str
+    score_distribution: OutcomeScoreDistribution
+    supported_horizons: List[int]
+
+
+class OutcomeGroups(_OutcomeEnvelope):
+    group_by: Literal["setup", "signal"]
+    groups_overlap: bool = Field(description="True for signals: one record can carry several")
+    groups: List[OutcomeGroup]
+
+
+class OutcomePoint(BaseModel):
+    period_start: str
+    observation_count: int
+    matured_count: int
+    pending_count: int
+    evidence_quality: str
+    average_return: Optional[float] = None
+    median_return: Optional[float] = None
+    average_excess_return: Optional[float] = None
+    median_excess_return: Optional[float] = None
+    win_rate: Optional[float] = None
+    benchmark_beat_rate: Optional[float] = None
+    benchmark_count: int
+
+
+class OutcomeTimeseries(_OutcomeEnvelope):
+    period: Literal["day", "week", "month"]
+    points: List[OutcomePoint]
+
+
+class OutcomeHorizonResult(BaseModel):
+    horizon: int
+    status: Literal["pending", "matured", "unavailable", "invalid"]
+    raw_return: Optional[float] = None
+    benchmark_return: Optional[float] = None
+    excess_return: Optional[float] = None
+    mfe: Optional[float] = None
+    mae: Optional[float] = None
+
+
+class OutcomeObservation(BaseModel):
+    observation_id: Optional[str] = None
+    ticker: str
+    observed_at: Optional[str] = None
+    entry_day: Optional[str] = None
+    hsf_score: Optional[float] = Field(default=None, description="As frozen at signal time")
+    score_bucket: Optional[str] = None
+    score_version: Optional[str] = None
+    setup: Optional[str] = None
+    signals: List[str] = []
+    status: Optional[str] = None
+    prebreakout_prob: Optional[float] = None
+    certified: bool
+    benchmark_symbol: Optional[str] = None
+    entry_price: Optional[float] = Field(default=None, description="Not stored by the outcome engine yet (always null)")
+    outcome_price: Optional[float] = Field(default=None, description="Not stored by the outcome engine yet (always null)")
+    observations_that_day: Optional[int] = Field(default=None, description="Frozen rows for this ticker on this entry day (they share one outcome)")
+    outcomes: List[OutcomeHorizonResult]
+
+
+class OutcomePage(BaseModel):
+    page: int
+    page_size: int
+    total: int
+    items: List[OutcomeObservation]
+
+
+class OutcomeQuery(_OutcomeEnvelope):
+    metrics: OutcomeMetrics
+    coverage: OutcomeCoverage
+    observations: OutcomePage
+
+
+class OutcomeSymbol(_OutcomeEnvelope):
+    ticker: str
+    horizons: List[OutcomeMetrics]
+    observations: OutcomePage

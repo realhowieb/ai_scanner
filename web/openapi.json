@@ -2814,6 +2814,2534 @@
     "title": "NoteBody",
     "type": "object"
    },
+   "OutcomeBucket": {
+    "properties": {
+     "average_benchmark_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Benchmark Return"
+     },
+     "average_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Excess Return"
+     },
+     "average_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mae"
+     },
+     "average_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mfe"
+     },
+     "average_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Return"
+     },
+     "average_return_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Normal approximation; from 30 matured; assumes independence"
+     },
+     "benchmark_beat_count": {
+      "title": "Benchmark Beat Count",
+      "type": "integer"
+     },
+     "benchmark_beat_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of benchmark_count with excess > 0",
+      "title": "Benchmark Beat Rate"
+     },
+     "benchmark_beat_rate_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "benchmark_count": {
+      "description": "Matured records with a benchmark return",
+      "title": "Benchmark Count",
+      "type": "integer"
+     },
+     "bucket": {
+      "title": "Bucket",
+      "type": "string"
+     },
+     "distinct_days": {
+      "description": "Distinct entry days among matured records (observations on one day are correlated)",
+      "title": "Distinct Days",
+      "type": "integer"
+     },
+     "evidence_quality": {
+      "enum": [
+       "INSUFFICIENT",
+       "LIMITED",
+       "MODERATE",
+       "STRONG"
+      ],
+      "title": "Evidence Quality",
+      "type": "string"
+     },
+     "horizon": {
+      "description": "Trading days (1, 3 or 5)",
+      "title": "Horizon",
+      "type": "integer"
+     },
+     "invalid_count": {
+      "description": "Outcome timestamp at/before the observation; excluded",
+      "title": "Invalid Count",
+      "type": "integer"
+     },
+     "mae_count": {
+      "title": "Mae Count",
+      "type": "integer"
+     },
+     "matured_count": {
+      "title": "Matured Count",
+      "type": "integer"
+     },
+     "max_score": {
+      "title": "Max Score",
+      "type": "integer"
+     },
+     "median_benchmark_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Benchmark Return"
+     },
+     "median_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Excess Return"
+     },
+     "median_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Mae"
+     },
+     "median_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Mfe"
+     },
+     "median_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Return"
+     },
+     "mfe_count": {
+      "title": "Mfe Count",
+      "type": "integer"
+     },
+     "min_score": {
+      "title": "Min Score",
+      "type": "integer"
+     },
+     "pending_count": {
+      "title": "Pending Count",
+      "type": "integer"
+     },
+     "sample_size": {
+      "description": "Records in the group, any maturity",
+      "title": "Sample Size",
+      "type": "integer"
+     },
+     "unavailable_count": {
+      "description": "Outcome computed but no price was available; excluded",
+      "title": "Unavailable Count",
+      "type": "integer"
+     },
+     "win_count": {
+      "title": "Win Count",
+      "type": "integer"
+     },
+     "win_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of matured with return > 0",
+      "title": "Win Rate"
+     },
+     "win_rate_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Wilson interval; assumes independence"
+     }
+    },
+    "required": [
+     "horizon",
+     "sample_size",
+     "matured_count",
+     "pending_count",
+     "unavailable_count",
+     "invalid_count",
+     "distinct_days",
+     "evidence_quality",
+     "win_count",
+     "benchmark_count",
+     "benchmark_beat_count",
+     "mfe_count",
+     "mae_count",
+     "bucket",
+     "min_score",
+     "max_score"
+    ],
+    "title": "OutcomeBucket",
+    "type": "object"
+   },
+   "OutcomeCalibration": {
+    "properties": {
+     "metrics": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/OutcomeMonotonicity"
+      },
+      "title": "Metrics",
+      "type": "object"
+     },
+     "min_matured_per_bucket": {
+      "title": "Min Matured Per Bucket",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "min_matured_per_bucket",
+     "metrics"
+    ],
+    "title": "OutcomeCalibration",
+    "type": "object"
+   },
+   "OutcomeCoverage": {
+    "properties": {
+     "benchmark_coverage": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Benchmark Coverage"
+     },
+     "matured": {
+      "title": "Matured",
+      "type": "integer"
+     },
+     "mfe_mae_available_for_horizon": {
+      "title": "Mfe Mae Available For Horizon",
+      "type": "boolean"
+     },
+     "mfe_mae_coverage": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mfe Mae Coverage"
+     },
+     "missing_benchmark": {
+      "title": "Missing Benchmark",
+      "type": "integer"
+     },
+     "missing_mfe_mae": {
+      "title": "Missing Mfe Mae",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "matured",
+     "missing_benchmark",
+     "mfe_mae_available_for_horizon",
+     "missing_mfe_mae"
+    ],
+    "title": "OutcomeCoverage",
+    "type": "object"
+   },
+   "OutcomeDataset": {
+    "properties": {
+     "loaded_at": {
+      "title": "Loaded At",
+      "type": "string"
+     },
+     "rows_loaded": {
+      "title": "Rows Loaded",
+      "type": "integer"
+     },
+     "source": {
+      "title": "Source",
+      "type": "string"
+     },
+     "stale": {
+      "description": "True when the database could not be reached and the last good dataset was used",
+      "title": "Stale",
+      "type": "boolean"
+     },
+     "truncated": {
+      "description": "True when the row cap was hit (then the answer is not the full history)",
+      "title": "Truncated",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "rows_loaded",
+     "truncated",
+     "loaded_at",
+     "stale",
+     "source"
+    ],
+    "title": "OutcomeDataset",
+    "type": "object"
+   },
+   "OutcomeDateRange": {
+    "properties": {
+     "end": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "End"
+     },
+     "start": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Start"
+     }
+    },
+    "title": "OutcomeDateRange",
+    "type": "object"
+   },
+   "OutcomeFilters": {
+    "description": "The filters that produced this answer. All null/false = the complete dataset.",
+    "properties": {
+     "certified_only": {
+      "default": false,
+      "title": "Certified Only",
+      "type": "boolean"
+     },
+     "end_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "End Date"
+     },
+     "matured_only": {
+      "default": false,
+      "title": "Matured Only",
+      "type": "boolean"
+     },
+     "max_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Score"
+     },
+     "min_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Score"
+     },
+     "score_bucket": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Bucket"
+     },
+     "score_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Version"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "signal": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Signal"
+     },
+     "start_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Start Date"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ticker"
+     }
+    },
+    "title": "OutcomeFilters",
+    "type": "object"
+   },
+   "OutcomeGroup": {
+    "properties": {
+     "average_benchmark_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Benchmark Return"
+     },
+     "average_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Excess Return"
+     },
+     "average_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mae"
+     },
+     "average_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mfe"
+     },
+     "average_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Return"
+     },
+     "average_return_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Normal approximation; from 30 matured; assumes independence"
+     },
+     "benchmark_beat_count": {
+      "title": "Benchmark Beat Count",
+      "type": "integer"
+     },
+     "benchmark_beat_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of benchmark_count with excess > 0",
+      "title": "Benchmark Beat Rate"
+     },
+     "benchmark_beat_rate_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "benchmark_count": {
+      "description": "Matured records with a benchmark return",
+      "title": "Benchmark Count",
+      "type": "integer"
+     },
+     "distinct_days": {
+      "description": "Distinct entry days among matured records (observations on one day are correlated)",
+      "title": "Distinct Days",
+      "type": "integer"
+     },
+     "evidence_quality": {
+      "enum": [
+       "INSUFFICIENT",
+       "LIMITED",
+       "MODERATE",
+       "STRONG"
+      ],
+      "title": "Evidence Quality",
+      "type": "string"
+     },
+     "horizon": {
+      "description": "Trading days (1, 3 or 5)",
+      "title": "Horizon",
+      "type": "integer"
+     },
+     "invalid_count": {
+      "description": "Outcome timestamp at/before the observation; excluded",
+      "title": "Invalid Count",
+      "type": "integer"
+     },
+     "mae_count": {
+      "title": "Mae Count",
+      "type": "integer"
+     },
+     "matured_count": {
+      "title": "Matured Count",
+      "type": "integer"
+     },
+     "median_benchmark_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Benchmark Return"
+     },
+     "median_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Excess Return"
+     },
+     "median_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Mae"
+     },
+     "median_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Mfe"
+     },
+     "median_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Return"
+     },
+     "mfe_count": {
+      "title": "Mfe Count",
+      "type": "integer"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "pending_count": {
+      "title": "Pending Count",
+      "type": "integer"
+     },
+     "sample_size": {
+      "description": "Records in the group, any maturity",
+      "title": "Sample Size",
+      "type": "integer"
+     },
+     "score_distribution": {
+      "$ref": "#/components/schemas/OutcomeScoreDistribution"
+     },
+     "supported_horizons": {
+      "items": {
+       "type": "integer"
+      },
+      "title": "Supported Horizons",
+      "type": "array"
+     },
+     "unavailable_count": {
+      "description": "Outcome computed but no price was available; excluded",
+      "title": "Unavailable Count",
+      "type": "integer"
+     },
+     "win_count": {
+      "title": "Win Count",
+      "type": "integer"
+     },
+     "win_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of matured with return > 0",
+      "title": "Win Rate"
+     },
+     "win_rate_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Wilson interval; assumes independence"
+     }
+    },
+    "required": [
+     "horizon",
+     "sample_size",
+     "matured_count",
+     "pending_count",
+     "unavailable_count",
+     "invalid_count",
+     "distinct_days",
+     "evidence_quality",
+     "win_count",
+     "benchmark_count",
+     "benchmark_beat_count",
+     "mfe_count",
+     "mae_count",
+     "name",
+     "score_distribution",
+     "supported_horizons"
+    ],
+    "title": "OutcomeGroup",
+    "type": "object"
+   },
+   "OutcomeGroups": {
+    "properties": {
+     "dataset": {
+      "$ref": "#/components/schemas/OutcomeDataset"
+     },
+     "date_range": {
+      "$ref": "#/components/schemas/OutcomeDateRange"
+     },
+     "disclaimer": {
+      "title": "Disclaimer",
+      "type": "string"
+     },
+     "evidence_thresholds": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "Minimum matured count per evidence label",
+      "title": "Evidence Thresholds",
+      "type": "object"
+     },
+     "filters": {
+      "$ref": "#/components/schemas/OutcomeFilters"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     },
+     "group_by": {
+      "enum": [
+       "setup",
+       "signal"
+      ],
+      "title": "Group By",
+      "type": "string"
+     },
+     "groups": {
+      "items": {
+       "$ref": "#/components/schemas/OutcomeGroup"
+      },
+      "title": "Groups",
+      "type": "array"
+     },
+     "groups_overlap": {
+      "description": "True for signals: one record can carry several",
+      "title": "Groups Overlap",
+      "type": "boolean"
+     },
+     "horizon": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horizon"
+     },
+     "raw_observations": {
+      "description": "Frozen rows matching the filters before collapsing to the unit",
+      "title": "Raw Observations",
+      "type": "integer"
+     },
+     "score_versions": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Score Versions",
+      "type": "object"
+     },
+     "unit": {
+      "description": "signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row",
+      "enum": [
+       "signal_day",
+       "observation"
+      ],
+      "title": "Unit",
+      "type": "string"
+     },
+     "warnings": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+     }
+    },
+    "required": [
+     "filters",
+     "unit",
+     "raw_observations",
+     "date_range",
+     "score_versions",
+     "evidence_thresholds",
+     "disclaimer",
+     "dataset",
+     "generated_at",
+     "group_by",
+     "groups_overlap",
+     "groups"
+    ],
+    "title": "OutcomeGroups",
+    "type": "object"
+   },
+   "OutcomeHorizonResult": {
+    "properties": {
+     "benchmark_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Benchmark Return"
+     },
+     "excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Excess Return"
+     },
+     "horizon": {
+      "title": "Horizon",
+      "type": "integer"
+     },
+     "mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mae"
+     },
+     "mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mfe"
+     },
+     "raw_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Raw Return"
+     },
+     "status": {
+      "enum": [
+       "pending",
+       "matured",
+       "unavailable",
+       "invalid"
+      ],
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "horizon",
+     "status"
+    ],
+    "title": "OutcomeHorizonResult",
+    "type": "object"
+   },
+   "OutcomeHorizonRow": {
+    "properties": {
+     "average_benchmark_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Benchmark Return"
+     },
+     "average_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Excess Return"
+     },
+     "average_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mae"
+     },
+     "average_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mfe"
+     },
+     "average_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Return"
+     },
+     "average_return_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Normal approximation; from 30 matured; assumes independence"
+     },
+     "benchmark_beat_count": {
+      "title": "Benchmark Beat Count",
+      "type": "integer"
+     },
+     "benchmark_beat_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of benchmark_count with excess > 0",
+      "title": "Benchmark Beat Rate"
+     },
+     "benchmark_beat_rate_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "benchmark_count": {
+      "description": "Matured records with a benchmark return",
+      "title": "Benchmark Count",
+      "type": "integer"
+     },
+     "coverage": {
+      "$ref": "#/components/schemas/OutcomeCoverage"
+     },
+     "distinct_days": {
+      "description": "Distinct entry days among matured records (observations on one day are correlated)",
+      "title": "Distinct Days",
+      "type": "integer"
+     },
+     "evidence_quality": {
+      "enum": [
+       "INSUFFICIENT",
+       "LIMITED",
+       "MODERATE",
+       "STRONG"
+      ],
+      "title": "Evidence Quality",
+      "type": "string"
+     },
+     "horizon": {
+      "description": "Trading days (1, 3 or 5)",
+      "title": "Horizon",
+      "type": "integer"
+     },
+     "invalid_count": {
+      "description": "Outcome timestamp at/before the observation; excluded",
+      "title": "Invalid Count",
+      "type": "integer"
+     },
+     "mae_count": {
+      "title": "Mae Count",
+      "type": "integer"
+     },
+     "matured_count": {
+      "title": "Matured Count",
+      "type": "integer"
+     },
+     "median_benchmark_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Benchmark Return"
+     },
+     "median_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Excess Return"
+     },
+     "median_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Mae"
+     },
+     "median_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Mfe"
+     },
+     "median_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Return"
+     },
+     "mfe_count": {
+      "title": "Mfe Count",
+      "type": "integer"
+     },
+     "pending_count": {
+      "title": "Pending Count",
+      "type": "integer"
+     },
+     "sample_size": {
+      "description": "Records in the group, any maturity",
+      "title": "Sample Size",
+      "type": "integer"
+     },
+     "unavailable_count": {
+      "description": "Outcome computed but no price was available; excluded",
+      "title": "Unavailable Count",
+      "type": "integer"
+     },
+     "win_count": {
+      "title": "Win Count",
+      "type": "integer"
+     },
+     "win_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of matured with return > 0",
+      "title": "Win Rate"
+     },
+     "win_rate_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Wilson interval; assumes independence"
+     }
+    },
+    "required": [
+     "horizon",
+     "sample_size",
+     "matured_count",
+     "pending_count",
+     "unavailable_count",
+     "invalid_count",
+     "distinct_days",
+     "evidence_quality",
+     "win_count",
+     "benchmark_count",
+     "benchmark_beat_count",
+     "mfe_count",
+     "mae_count",
+     "coverage"
+    ],
+    "title": "OutcomeHorizonRow",
+    "type": "object"
+   },
+   "OutcomeHorizons": {
+    "properties": {
+     "dataset": {
+      "$ref": "#/components/schemas/OutcomeDataset"
+     },
+     "date_range": {
+      "$ref": "#/components/schemas/OutcomeDateRange"
+     },
+     "disclaimer": {
+      "title": "Disclaimer",
+      "type": "string"
+     },
+     "evidence_thresholds": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "Minimum matured count per evidence label",
+      "title": "Evidence Thresholds",
+      "type": "object"
+     },
+     "filters": {
+      "$ref": "#/components/schemas/OutcomeFilters"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     },
+     "horizon": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horizon"
+     },
+     "horizons": {
+      "items": {
+       "$ref": "#/components/schemas/OutcomeHorizonRow"
+      },
+      "title": "Horizons",
+      "type": "array"
+     },
+     "raw_observations": {
+      "description": "Frozen rows matching the filters before collapsing to the unit",
+      "title": "Raw Observations",
+      "type": "integer"
+     },
+     "score_versions": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Score Versions",
+      "type": "object"
+     },
+     "unit": {
+      "description": "signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row",
+      "enum": [
+       "signal_day",
+       "observation"
+      ],
+      "title": "Unit",
+      "type": "string"
+     },
+     "warnings": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+     }
+    },
+    "required": [
+     "filters",
+     "unit",
+     "raw_observations",
+     "date_range",
+     "score_versions",
+     "evidence_thresholds",
+     "disclaimer",
+     "dataset",
+     "generated_at",
+     "horizons"
+    ],
+    "title": "OutcomeHorizons",
+    "type": "object"
+   },
+   "OutcomeInterval": {
+    "properties": {
+     "high": {
+      "title": "High",
+      "type": "number"
+     },
+     "low": {
+      "title": "Low",
+      "type": "number"
+     }
+    },
+    "required": [
+     "low",
+     "high"
+    ],
+    "title": "OutcomeInterval",
+    "type": "object"
+   },
+   "OutcomeInversion": {
+    "properties": {
+     "higher_bucket": {
+      "title": "Higher Bucket",
+      "type": "string"
+     },
+     "higher_value": {
+      "title": "Higher Value",
+      "type": "number"
+     },
+     "lower_bucket": {
+      "title": "Lower Bucket",
+      "type": "string"
+     },
+     "lower_value": {
+      "title": "Lower Value",
+      "type": "number"
+     }
+    },
+    "required": [
+     "lower_bucket",
+     "higher_bucket",
+     "lower_value",
+     "higher_value"
+    ],
+    "title": "OutcomeInversion",
+    "type": "object"
+   },
+   "OutcomeMetrics": {
+    "properties": {
+     "average_benchmark_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Benchmark Return"
+     },
+     "average_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Excess Return"
+     },
+     "average_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mae"
+     },
+     "average_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mfe"
+     },
+     "average_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Return"
+     },
+     "average_return_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Normal approximation; from 30 matured; assumes independence"
+     },
+     "benchmark_beat_count": {
+      "title": "Benchmark Beat Count",
+      "type": "integer"
+     },
+     "benchmark_beat_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of benchmark_count with excess > 0",
+      "title": "Benchmark Beat Rate"
+     },
+     "benchmark_beat_rate_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "benchmark_count": {
+      "description": "Matured records with a benchmark return",
+      "title": "Benchmark Count",
+      "type": "integer"
+     },
+     "distinct_days": {
+      "description": "Distinct entry days among matured records (observations on one day are correlated)",
+      "title": "Distinct Days",
+      "type": "integer"
+     },
+     "evidence_quality": {
+      "enum": [
+       "INSUFFICIENT",
+       "LIMITED",
+       "MODERATE",
+       "STRONG"
+      ],
+      "title": "Evidence Quality",
+      "type": "string"
+     },
+     "horizon": {
+      "description": "Trading days (1, 3 or 5)",
+      "title": "Horizon",
+      "type": "integer"
+     },
+     "invalid_count": {
+      "description": "Outcome timestamp at/before the observation; excluded",
+      "title": "Invalid Count",
+      "type": "integer"
+     },
+     "mae_count": {
+      "title": "Mae Count",
+      "type": "integer"
+     },
+     "matured_count": {
+      "title": "Matured Count",
+      "type": "integer"
+     },
+     "median_benchmark_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Benchmark Return"
+     },
+     "median_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Excess Return"
+     },
+     "median_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Mae"
+     },
+     "median_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Mfe"
+     },
+     "median_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Return"
+     },
+     "mfe_count": {
+      "title": "Mfe Count",
+      "type": "integer"
+     },
+     "pending_count": {
+      "title": "Pending Count",
+      "type": "integer"
+     },
+     "sample_size": {
+      "description": "Records in the group, any maturity",
+      "title": "Sample Size",
+      "type": "integer"
+     },
+     "unavailable_count": {
+      "description": "Outcome computed but no price was available; excluded",
+      "title": "Unavailable Count",
+      "type": "integer"
+     },
+     "win_count": {
+      "title": "Win Count",
+      "type": "integer"
+     },
+     "win_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of matured with return > 0",
+      "title": "Win Rate"
+     },
+     "win_rate_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Wilson interval; assumes independence"
+     }
+    },
+    "required": [
+     "horizon",
+     "sample_size",
+     "matured_count",
+     "pending_count",
+     "unavailable_count",
+     "invalid_count",
+     "distinct_days",
+     "evidence_quality",
+     "win_count",
+     "benchmark_count",
+     "benchmark_beat_count",
+     "mfe_count",
+     "mae_count"
+    ],
+    "title": "OutcomeMetrics",
+    "type": "object"
+   },
+   "OutcomeMonotonicity": {
+    "properties": {
+     "buckets_compared": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Buckets Compared",
+      "type": "array"
+     },
+     "inversions": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/OutcomeInversion"
+      },
+      "title": "Inversions",
+      "type": "array"
+     },
+     "monotonic": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "null when fewer than two buckets have enough evidence",
+      "title": "Monotonic"
+     }
+    },
+    "required": [
+     "buckets_compared"
+    ],
+    "title": "OutcomeMonotonicity",
+    "type": "object"
+   },
+   "OutcomeObservation": {
+    "properties": {
+     "benchmark_symbol": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Benchmark Symbol"
+     },
+     "certified": {
+      "title": "Certified",
+      "type": "boolean"
+     },
+     "entry_day": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Entry Day"
+     },
+     "entry_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Not stored by the outcome engine yet (always null)",
+      "title": "Entry Price"
+     },
+     "hsf_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "As frozen at signal time",
+      "title": "Hsf Score"
+     },
+     "observation_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Observation Id"
+     },
+     "observations_that_day": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Frozen rows for this ticker on this entry day (they share one outcome)",
+      "title": "Observations That Day"
+     },
+     "observed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Observed At"
+     },
+     "outcome_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Not stored by the outcome engine yet (always null)",
+      "title": "Outcome Price"
+     },
+     "outcomes": {
+      "items": {
+       "$ref": "#/components/schemas/OutcomeHorizonResult"
+      },
+      "title": "Outcomes",
+      "type": "array"
+     },
+     "prebreakout_prob": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prebreakout Prob"
+     },
+     "score_bucket": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Bucket"
+     },
+     "score_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Version"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "signals": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "certified",
+     "outcomes"
+    ],
+    "title": "OutcomeObservation",
+    "type": "object"
+   },
+   "OutcomePage": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/OutcomeObservation"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "page": {
+      "title": "Page",
+      "type": "integer"
+     },
+     "page_size": {
+      "title": "Page Size",
+      "type": "integer"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "page",
+     "page_size",
+     "total",
+     "items"
+    ],
+    "title": "OutcomePage",
+    "type": "object"
+   },
+   "OutcomePoint": {
+    "properties": {
+     "average_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Excess Return"
+     },
+     "average_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Return"
+     },
+     "benchmark_beat_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Benchmark Beat Rate"
+     },
+     "benchmark_count": {
+      "title": "Benchmark Count",
+      "type": "integer"
+     },
+     "evidence_quality": {
+      "title": "Evidence Quality",
+      "type": "string"
+     },
+     "matured_count": {
+      "title": "Matured Count",
+      "type": "integer"
+     },
+     "median_excess_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Excess Return"
+     },
+     "median_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Return"
+     },
+     "observation_count": {
+      "title": "Observation Count",
+      "type": "integer"
+     },
+     "pending_count": {
+      "title": "Pending Count",
+      "type": "integer"
+     },
+     "period_start": {
+      "title": "Period Start",
+      "type": "string"
+     },
+     "win_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Win Rate"
+     }
+    },
+    "required": [
+     "period_start",
+     "observation_count",
+     "matured_count",
+     "pending_count",
+     "evidence_quality",
+     "benchmark_count"
+    ],
+    "title": "OutcomePoint",
+    "type": "object"
+   },
+   "OutcomeQuery": {
+    "properties": {
+     "coverage": {
+      "$ref": "#/components/schemas/OutcomeCoverage"
+     },
+     "dataset": {
+      "$ref": "#/components/schemas/OutcomeDataset"
+     },
+     "date_range": {
+      "$ref": "#/components/schemas/OutcomeDateRange"
+     },
+     "disclaimer": {
+      "title": "Disclaimer",
+      "type": "string"
+     },
+     "evidence_thresholds": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "Minimum matured count per evidence label",
+      "title": "Evidence Thresholds",
+      "type": "object"
+     },
+     "filters": {
+      "$ref": "#/components/schemas/OutcomeFilters"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     },
+     "horizon": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horizon"
+     },
+     "metrics": {
+      "$ref": "#/components/schemas/OutcomeMetrics"
+     },
+     "observations": {
+      "$ref": "#/components/schemas/OutcomePage"
+     },
+     "raw_observations": {
+      "description": "Frozen rows matching the filters before collapsing to the unit",
+      "title": "Raw Observations",
+      "type": "integer"
+     },
+     "score_versions": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Score Versions",
+      "type": "object"
+     },
+     "unit": {
+      "description": "signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row",
+      "enum": [
+       "signal_day",
+       "observation"
+      ],
+      "title": "Unit",
+      "type": "string"
+     },
+     "warnings": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+     }
+    },
+    "required": [
+     "filters",
+     "unit",
+     "raw_observations",
+     "date_range",
+     "score_versions",
+     "evidence_thresholds",
+     "disclaimer",
+     "dataset",
+     "generated_at",
+     "metrics",
+     "coverage",
+     "observations"
+    ],
+    "title": "OutcomeQuery",
+    "type": "object"
+   },
+   "OutcomeScoreDistribution": {
+    "properties": {
+     "bucket_counts": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Bucket Counts",
+      "type": "object"
+     },
+     "max": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max"
+     },
+     "median": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median"
+     },
+     "min": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min"
+     },
+     "scored": {
+      "title": "Scored",
+      "type": "integer"
+     },
+     "unscored": {
+      "title": "Unscored",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "scored",
+     "unscored",
+     "bucket_counts"
+    ],
+    "title": "OutcomeScoreDistribution",
+    "type": "object"
+   },
+   "OutcomeScores": {
+    "properties": {
+     "buckets": {
+      "items": {
+       "$ref": "#/components/schemas/OutcomeBucket"
+      },
+      "title": "Buckets",
+      "type": "array"
+     },
+     "calibration": {
+      "$ref": "#/components/schemas/OutcomeCalibration"
+     },
+     "dataset": {
+      "$ref": "#/components/schemas/OutcomeDataset"
+     },
+     "date_range": {
+      "$ref": "#/components/schemas/OutcomeDateRange"
+     },
+     "disclaimer": {
+      "title": "Disclaimer",
+      "type": "string"
+     },
+     "evidence_thresholds": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "Minimum matured count per evidence label",
+      "title": "Evidence Thresholds",
+      "type": "object"
+     },
+     "filters": {
+      "$ref": "#/components/schemas/OutcomeFilters"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     },
+     "horizon": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horizon"
+     },
+     "raw_observations": {
+      "description": "Frozen rows matching the filters before collapsing to the unit",
+      "title": "Raw Observations",
+      "type": "integer"
+     },
+     "score_versions": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Score Versions",
+      "type": "object"
+     },
+     "unbucketed_count": {
+      "title": "Unbucketed Count",
+      "type": "integer"
+     },
+     "unit": {
+      "description": "signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row",
+      "enum": [
+       "signal_day",
+       "observation"
+      ],
+      "title": "Unit",
+      "type": "string"
+     },
+     "warnings": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+     }
+    },
+    "required": [
+     "filters",
+     "unit",
+     "raw_observations",
+     "date_range",
+     "score_versions",
+     "evidence_thresholds",
+     "disclaimer",
+     "dataset",
+     "generated_at",
+     "buckets",
+     "unbucketed_count",
+     "calibration"
+    ],
+    "title": "OutcomeScores",
+    "type": "object"
+   },
+   "OutcomeSummary": {
+    "properties": {
+     "certified_observations": {
+      "title": "Certified Observations",
+      "type": "integer"
+     },
+     "coverage": {
+      "$ref": "#/components/schemas/OutcomeCoverage"
+     },
+     "dataset": {
+      "$ref": "#/components/schemas/OutcomeDataset"
+     },
+     "date_range": {
+      "$ref": "#/components/schemas/OutcomeDateRange"
+     },
+     "disclaimer": {
+      "title": "Disclaimer",
+      "type": "string"
+     },
+     "evidence_thresholds": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "Minimum matured count per evidence label",
+      "title": "Evidence Thresholds",
+      "type": "object"
+     },
+     "filters": {
+      "$ref": "#/components/schemas/OutcomeFilters"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     },
+     "horizon": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horizon"
+     },
+     "matured_observations": {
+      "title": "Matured Observations",
+      "type": "integer"
+     },
+     "metrics": {
+      "$ref": "#/components/schemas/OutcomeMetrics"
+     },
+     "pending_observations": {
+      "title": "Pending Observations",
+      "type": "integer"
+     },
+     "raw_observations": {
+      "description": "Frozen rows matching the filters before collapsing to the unit",
+      "title": "Raw Observations",
+      "type": "integer"
+     },
+     "score_versions": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Score Versions",
+      "type": "object"
+     },
+     "total_observations": {
+      "title": "Total Observations",
+      "type": "integer"
+     },
+     "unavailable_observations": {
+      "title": "Unavailable Observations",
+      "type": "integer"
+     },
+     "unit": {
+      "description": "signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row",
+      "enum": [
+       "signal_day",
+       "observation"
+      ],
+      "title": "Unit",
+      "type": "string"
+     },
+     "warnings": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+     }
+    },
+    "required": [
+     "filters",
+     "unit",
+     "raw_observations",
+     "date_range",
+     "score_versions",
+     "evidence_thresholds",
+     "disclaimer",
+     "dataset",
+     "generated_at",
+     "total_observations",
+     "matured_observations",
+     "pending_observations",
+     "unavailable_observations",
+     "certified_observations",
+     "metrics",
+     "coverage"
+    ],
+    "title": "OutcomeSummary",
+    "type": "object"
+   },
+   "OutcomeSymbol": {
+    "properties": {
+     "dataset": {
+      "$ref": "#/components/schemas/OutcomeDataset"
+     },
+     "date_range": {
+      "$ref": "#/components/schemas/OutcomeDateRange"
+     },
+     "disclaimer": {
+      "title": "Disclaimer",
+      "type": "string"
+     },
+     "evidence_thresholds": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "Minimum matured count per evidence label",
+      "title": "Evidence Thresholds",
+      "type": "object"
+     },
+     "filters": {
+      "$ref": "#/components/schemas/OutcomeFilters"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     },
+     "horizon": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horizon"
+     },
+     "horizons": {
+      "items": {
+       "$ref": "#/components/schemas/OutcomeMetrics"
+      },
+      "title": "Horizons",
+      "type": "array"
+     },
+     "observations": {
+      "$ref": "#/components/schemas/OutcomePage"
+     },
+     "raw_observations": {
+      "description": "Frozen rows matching the filters before collapsing to the unit",
+      "title": "Raw Observations",
+      "type": "integer"
+     },
+     "score_versions": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Score Versions",
+      "type": "object"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "unit": {
+      "description": "signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row",
+      "enum": [
+       "signal_day",
+       "observation"
+      ],
+      "title": "Unit",
+      "type": "string"
+     },
+     "warnings": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+     }
+    },
+    "required": [
+     "filters",
+     "unit",
+     "raw_observations",
+     "date_range",
+     "score_versions",
+     "evidence_thresholds",
+     "disclaimer",
+     "dataset",
+     "generated_at",
+     "ticker",
+     "horizons",
+     "observations"
+    ],
+    "title": "OutcomeSymbol",
+    "type": "object"
+   },
+   "OutcomeTimeseries": {
+    "properties": {
+     "dataset": {
+      "$ref": "#/components/schemas/OutcomeDataset"
+     },
+     "date_range": {
+      "$ref": "#/components/schemas/OutcomeDateRange"
+     },
+     "disclaimer": {
+      "title": "Disclaimer",
+      "type": "string"
+     },
+     "evidence_thresholds": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "Minimum matured count per evidence label",
+      "title": "Evidence Thresholds",
+      "type": "object"
+     },
+     "filters": {
+      "$ref": "#/components/schemas/OutcomeFilters"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     },
+     "horizon": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horizon"
+     },
+     "period": {
+      "enum": [
+       "day",
+       "week",
+       "month"
+      ],
+      "title": "Period",
+      "type": "string"
+     },
+     "points": {
+      "items": {
+       "$ref": "#/components/schemas/OutcomePoint"
+      },
+      "title": "Points",
+      "type": "array"
+     },
+     "raw_observations": {
+      "description": "Frozen rows matching the filters before collapsing to the unit",
+      "title": "Raw Observations",
+      "type": "integer"
+     },
+     "score_versions": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Score Versions",
+      "type": "object"
+     },
+     "unit": {
+      "description": "signal_day = one record per ticker per entry day (the day's first observation); observation = every frozen row",
+      "enum": [
+       "signal_day",
+       "observation"
+      ],
+      "title": "Unit",
+      "type": "string"
+     },
+     "warnings": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+     }
+    },
+    "required": [
+     "filters",
+     "unit",
+     "raw_observations",
+     "date_range",
+     "score_versions",
+     "evidence_thresholds",
+     "disclaimer",
+     "dataset",
+     "generated_at",
+     "period",
+     "points"
+    ],
+    "title": "OutcomeTimeseries",
+    "type": "object"
+   },
    "PaperActivity": {
     "properties": {
      "connected": {
@@ -9043,6 +11571,1806 @@
      }
     ],
     "summary": "Resend Verification"
+   }
+  },
+  "/v1/outcomes/horizons": {
+   "get": {
+    "description": "The same metrics for 1, 3 and 5 trading days. No horizon is singled out.",
+    "operationId": "outcomes_horizons_v1_outcomes_horizons_get",
+    "parameters": [
+     {
+      "description": "Canonical setup (primary_setup), e.g. breakout",
+      "in": "query",
+      "name": "setup",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Canonical setup (primary_setup), e.g. breakout",
+       "title": "Setup"
+      }
+     },
+     {
+      "description": "Signal label, e.g. golden_cross",
+      "in": "query",
+      "name": "signal",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Signal label, e.g. golden_cross",
+       "title": "Signal"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Min Score"
+      }
+     },
+     {
+      "in": "query",
+      "name": "max_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Max Score"
+      }
+     },
+     {
+      "description": "e.g. 80-89",
+      "in": "query",
+      "name": "score_bucket",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^\\d{1,3}-\\d{1,3}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "e.g. 80-89",
+       "title": "Score Bucket"
+      }
+     },
+     {
+      "description": "HSF score version as frozen",
+      "in": "query",
+      "name": "score_version",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 20,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "HSF score version as frozen",
+       "title": "Score Version"
+      }
+     },
+     {
+      "description": "Observed on/after (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "start_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/after (YYYY-MM-DD, UTC)",
+       "title": "Start Date"
+      }
+     },
+     {
+      "description": "Observed on/before (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "end_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/before (YYYY-MM-DD, UTC)",
+       "title": "End Date"
+      }
+     },
+     {
+      "description": "Only matured rows passing the canonical eligibility rule",
+      "in": "query",
+      "name": "certified_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only matured rows passing the canonical eligibility rule",
+       "title": "Certified Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "Only records matured at the horizon (counts drop pending)",
+      "in": "query",
+      "name": "matured_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only records matured at the horizon (counts drop pending)",
+       "title": "Matured Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+      "in": "query",
+      "name": "unit",
+      "required": false,
+      "schema": {
+       "default": "signal_day",
+       "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+       "enum": [
+        "signal_day",
+        "observation"
+       ],
+       "title": "Unit",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OutcomeHorizons"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "description": "Invalid filter"
+     },
+     "503": {
+      "description": "Database unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Outcome Intelligence: by horizon (Pro)"
+   }
+  },
+  "/v1/outcomes/query": {
+   "get": {
+    "description": "Any combination of the explicit filters, one horizon: metrics plus paged records.",
+    "operationId": "outcomes_query_v1_outcomes_query_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "ticker",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Ticker"
+      }
+     },
+     {
+      "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+      "in": "query",
+      "name": "horizon",
+      "required": false,
+      "schema": {
+       "default": 5,
+       "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+       "title": "Horizon",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page",
+      "required": false,
+      "schema": {
+       "default": 1,
+       "maximum": 10000,
+       "minimum": 1,
+       "title": "Page",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page_size",
+      "required": false,
+      "schema": {
+       "default": 50,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Page Size",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Canonical setup (primary_setup), e.g. breakout",
+      "in": "query",
+      "name": "setup",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Canonical setup (primary_setup), e.g. breakout",
+       "title": "Setup"
+      }
+     },
+     {
+      "description": "Signal label, e.g. golden_cross",
+      "in": "query",
+      "name": "signal",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Signal label, e.g. golden_cross",
+       "title": "Signal"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Min Score"
+      }
+     },
+     {
+      "in": "query",
+      "name": "max_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Max Score"
+      }
+     },
+     {
+      "description": "e.g. 80-89",
+      "in": "query",
+      "name": "score_bucket",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^\\d{1,3}-\\d{1,3}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "e.g. 80-89",
+       "title": "Score Bucket"
+      }
+     },
+     {
+      "description": "HSF score version as frozen",
+      "in": "query",
+      "name": "score_version",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 20,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "HSF score version as frozen",
+       "title": "Score Version"
+      }
+     },
+     {
+      "description": "Observed on/after (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "start_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/after (YYYY-MM-DD, UTC)",
+       "title": "Start Date"
+      }
+     },
+     {
+      "description": "Observed on/before (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "end_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/before (YYYY-MM-DD, UTC)",
+       "title": "End Date"
+      }
+     },
+     {
+      "description": "Only matured rows passing the canonical eligibility rule",
+      "in": "query",
+      "name": "certified_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only matured rows passing the canonical eligibility rule",
+       "title": "Certified Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "Only records matured at the horizon (counts drop pending)",
+      "in": "query",
+      "name": "matured_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only records matured at the horizon (counts drop pending)",
+       "title": "Matured Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+      "in": "query",
+      "name": "unit",
+      "required": false,
+      "schema": {
+       "default": "signal_day",
+       "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+       "enum": [
+        "signal_day",
+        "observation"
+       ],
+       "title": "Unit",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OutcomeQuery"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "description": "Invalid filter"
+     },
+     "503": {
+      "description": "Database unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Outcome Intelligence: filtered evidence with records (Pro)"
+   }
+  },
+  "/v1/outcomes/scores": {
+   "get": {
+    "description": "Every bucket in score order, weak ones included, plus a monotonicity check\nthat lists each inversion (a lower bucket beating a higher one).",
+    "operationId": "outcomes_scores_v1_outcomes_scores_get",
+    "parameters": [
+     {
+      "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+      "in": "query",
+      "name": "horizon",
+      "required": false,
+      "schema": {
+       "default": 5,
+       "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+       "title": "Horizon",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "e.g. 40-49,50-59,60-69 (default: canonical HSF buckets)",
+      "in": "query",
+      "name": "buckets",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 120,
+         "pattern": "^[0-9,\\- ]+$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "e.g. 40-49,50-59,60-69 (default: canonical HSF buckets)",
+       "title": "Buckets"
+      }
+     },
+     {
+      "description": "Canonical setup (primary_setup), e.g. breakout",
+      "in": "query",
+      "name": "setup",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Canonical setup (primary_setup), e.g. breakout",
+       "title": "Setup"
+      }
+     },
+     {
+      "description": "Signal label, e.g. golden_cross",
+      "in": "query",
+      "name": "signal",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Signal label, e.g. golden_cross",
+       "title": "Signal"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Min Score"
+      }
+     },
+     {
+      "in": "query",
+      "name": "max_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Max Score"
+      }
+     },
+     {
+      "description": "e.g. 80-89",
+      "in": "query",
+      "name": "score_bucket",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^\\d{1,3}-\\d{1,3}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "e.g. 80-89",
+       "title": "Score Bucket"
+      }
+     },
+     {
+      "description": "HSF score version as frozen",
+      "in": "query",
+      "name": "score_version",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 20,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "HSF score version as frozen",
+       "title": "Score Version"
+      }
+     },
+     {
+      "description": "Observed on/after (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "start_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/after (YYYY-MM-DD, UTC)",
+       "title": "Start Date"
+      }
+     },
+     {
+      "description": "Observed on/before (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "end_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/before (YYYY-MM-DD, UTC)",
+       "title": "End Date"
+      }
+     },
+     {
+      "description": "Only matured rows passing the canonical eligibility rule",
+      "in": "query",
+      "name": "certified_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only matured rows passing the canonical eligibility rule",
+       "title": "Certified Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "Only records matured at the horizon (counts drop pending)",
+      "in": "query",
+      "name": "matured_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only records matured at the horizon (counts drop pending)",
+       "title": "Matured Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+      "in": "query",
+      "name": "unit",
+      "required": false,
+      "schema": {
+       "default": "signal_day",
+       "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+       "enum": [
+        "signal_day",
+        "observation"
+       ],
+       "title": "Unit",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OutcomeScores"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "description": "Invalid filter"
+     },
+     "503": {
+      "description": "Database unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Outcome Intelligence: by HSF score bucket (Pro)"
+   }
+  },
+  "/v1/outcomes/setups": {
+   "get": {
+    "description": "Groups ordered by sample size (never by performance), each with its counts.",
+    "operationId": "outcomes_setups_v1_outcomes_setups_get",
+    "parameters": [
+     {
+      "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+      "in": "query",
+      "name": "horizon",
+      "required": false,
+      "schema": {
+       "default": 5,
+       "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+       "title": "Horizon",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "group_by",
+      "required": false,
+      "schema": {
+       "default": "setup",
+       "enum": [
+        "setup",
+        "signal"
+       ],
+       "title": "Group By",
+       "type": "string"
+      }
+     },
+     {
+      "description": "Canonical setup (primary_setup), e.g. breakout",
+      "in": "query",
+      "name": "setup",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Canonical setup (primary_setup), e.g. breakout",
+       "title": "Setup"
+      }
+     },
+     {
+      "description": "Signal label, e.g. golden_cross",
+      "in": "query",
+      "name": "signal",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Signal label, e.g. golden_cross",
+       "title": "Signal"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Min Score"
+      }
+     },
+     {
+      "in": "query",
+      "name": "max_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Max Score"
+      }
+     },
+     {
+      "description": "e.g. 80-89",
+      "in": "query",
+      "name": "score_bucket",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^\\d{1,3}-\\d{1,3}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "e.g. 80-89",
+       "title": "Score Bucket"
+      }
+     },
+     {
+      "description": "HSF score version as frozen",
+      "in": "query",
+      "name": "score_version",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 20,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "HSF score version as frozen",
+       "title": "Score Version"
+      }
+     },
+     {
+      "description": "Observed on/after (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "start_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/after (YYYY-MM-DD, UTC)",
+       "title": "Start Date"
+      }
+     },
+     {
+      "description": "Observed on/before (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "end_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/before (YYYY-MM-DD, UTC)",
+       "title": "End Date"
+      }
+     },
+     {
+      "description": "Only matured rows passing the canonical eligibility rule",
+      "in": "query",
+      "name": "certified_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only matured rows passing the canonical eligibility rule",
+       "title": "Certified Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "Only records matured at the horizon (counts drop pending)",
+      "in": "query",
+      "name": "matured_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only records matured at the horizon (counts drop pending)",
+       "title": "Matured Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+      "in": "query",
+      "name": "unit",
+      "required": false,
+      "schema": {
+       "default": "signal_day",
+       "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+       "enum": [
+        "signal_day",
+        "observation"
+       ],
+       "title": "Unit",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OutcomeGroups"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "description": "Invalid filter"
+     },
+     "503": {
+      "description": "Database unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Outcome Intelligence: by setup or signal (Pro)"
+   }
+  },
+  "/v1/outcomes/summary": {
+   "get": {
+    "description": "Every eligible HSF signal unless filters are given: counts, date range, raw and\nSPY-relative returns, win and beat rates, MFE/MAE, with sample sizes.",
+    "operationId": "outcomes_summary_v1_outcomes_summary_get",
+    "parameters": [
+     {
+      "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+      "in": "query",
+      "name": "horizon",
+      "required": false,
+      "schema": {
+       "default": 5,
+       "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+       "title": "Horizon",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Canonical setup (primary_setup), e.g. breakout",
+      "in": "query",
+      "name": "setup",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Canonical setup (primary_setup), e.g. breakout",
+       "title": "Setup"
+      }
+     },
+     {
+      "description": "Signal label, e.g. golden_cross",
+      "in": "query",
+      "name": "signal",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Signal label, e.g. golden_cross",
+       "title": "Signal"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Min Score"
+      }
+     },
+     {
+      "in": "query",
+      "name": "max_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Max Score"
+      }
+     },
+     {
+      "description": "e.g. 80-89",
+      "in": "query",
+      "name": "score_bucket",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^\\d{1,3}-\\d{1,3}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "e.g. 80-89",
+       "title": "Score Bucket"
+      }
+     },
+     {
+      "description": "HSF score version as frozen",
+      "in": "query",
+      "name": "score_version",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 20,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "HSF score version as frozen",
+       "title": "Score Version"
+      }
+     },
+     {
+      "description": "Observed on/after (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "start_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/after (YYYY-MM-DD, UTC)",
+       "title": "Start Date"
+      }
+     },
+     {
+      "description": "Observed on/before (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "end_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/before (YYYY-MM-DD, UTC)",
+       "title": "End Date"
+      }
+     },
+     {
+      "description": "Only matured rows passing the canonical eligibility rule",
+      "in": "query",
+      "name": "certified_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only matured rows passing the canonical eligibility rule",
+       "title": "Certified Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "Only records matured at the horizon (counts drop pending)",
+      "in": "query",
+      "name": "matured_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only records matured at the horizon (counts drop pending)",
+       "title": "Matured Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+      "in": "query",
+      "name": "unit",
+      "required": false,
+      "schema": {
+       "default": "signal_day",
+       "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+       "enum": [
+        "signal_day",
+        "observation"
+       ],
+       "title": "Unit",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OutcomeSummary"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "description": "Invalid filter"
+     },
+     "503": {
+      "description": "Database unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Outcome Intelligence: overall evidence (Pro)"
+   }
+  },
+  "/v1/outcomes/symbols/{ticker}": {
+   "get": {
+    "description": "Aggregate evidence per horizon plus the observation-level records, newest first.",
+    "operationId": "outcomes_symbol_v1_outcomes_symbols__ticker__get",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     },
+     {
+      "description": "1, 3 or 5; omit for all three",
+      "in": "query",
+      "name": "horizon",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "1, 3 or 5; omit for all three",
+       "title": "Horizon"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page",
+      "required": false,
+      "schema": {
+       "default": 1,
+       "maximum": 10000,
+       "minimum": 1,
+       "title": "Page",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page_size",
+      "required": false,
+      "schema": {
+       "default": 50,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Page Size",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Canonical setup (primary_setup), e.g. breakout",
+      "in": "query",
+      "name": "setup",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Canonical setup (primary_setup), e.g. breakout",
+       "title": "Setup"
+      }
+     },
+     {
+      "description": "Signal label, e.g. golden_cross",
+      "in": "query",
+      "name": "signal",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Signal label, e.g. golden_cross",
+       "title": "Signal"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Min Score"
+      }
+     },
+     {
+      "in": "query",
+      "name": "max_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Max Score"
+      }
+     },
+     {
+      "description": "e.g. 80-89",
+      "in": "query",
+      "name": "score_bucket",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^\\d{1,3}-\\d{1,3}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "e.g. 80-89",
+       "title": "Score Bucket"
+      }
+     },
+     {
+      "description": "HSF score version as frozen",
+      "in": "query",
+      "name": "score_version",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 20,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "HSF score version as frozen",
+       "title": "Score Version"
+      }
+     },
+     {
+      "description": "Observed on/after (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "start_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/after (YYYY-MM-DD, UTC)",
+       "title": "Start Date"
+      }
+     },
+     {
+      "description": "Observed on/before (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "end_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/before (YYYY-MM-DD, UTC)",
+       "title": "End Date"
+      }
+     },
+     {
+      "description": "Only matured rows passing the canonical eligibility rule",
+      "in": "query",
+      "name": "certified_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only matured rows passing the canonical eligibility rule",
+       "title": "Certified Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "Only records matured at the horizon (counts drop pending)",
+      "in": "query",
+      "name": "matured_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only records matured at the horizon (counts drop pending)",
+       "title": "Matured Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+      "in": "query",
+      "name": "unit",
+      "required": false,
+      "schema": {
+       "default": "signal_day",
+       "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+       "enum": [
+        "signal_day",
+        "observation"
+       ],
+       "title": "Unit",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OutcomeSymbol"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "description": "Invalid filter"
+     },
+     "503": {
+      "description": "Database unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Outcome Intelligence: one ticker's HSF history (Pro)"
+   }
+  },
+  "/v1/outcomes/timeseries": {
+   "get": {
+    "description": "Per observation period (grouped by when the signal was observed).",
+    "operationId": "outcomes_timeseries_v1_outcomes_timeseries_get",
+    "parameters": [
+     {
+      "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+      "in": "query",
+      "name": "horizon",
+      "required": false,
+      "schema": {
+       "default": 5,
+       "description": "Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one",
+       "title": "Horizon",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "period",
+      "required": false,
+      "schema": {
+       "default": "week",
+       "enum": [
+        "day",
+        "week",
+        "month"
+       ],
+       "title": "Period",
+       "type": "string"
+      }
+     },
+     {
+      "description": "Canonical setup (primary_setup), e.g. breakout",
+      "in": "query",
+      "name": "setup",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Canonical setup (primary_setup), e.g. breakout",
+       "title": "Setup"
+      }
+     },
+     {
+      "description": "Signal label, e.g. golden_cross",
+      "in": "query",
+      "name": "signal",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Signal label, e.g. golden_cross",
+       "title": "Signal"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Min Score"
+      }
+     },
+     {
+      "in": "query",
+      "name": "max_score",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Max Score"
+      }
+     },
+     {
+      "description": "e.g. 80-89",
+      "in": "query",
+      "name": "score_bucket",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^\\d{1,3}-\\d{1,3}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "e.g. 80-89",
+       "title": "Score Bucket"
+      }
+     },
+     {
+      "description": "HSF score version as frozen",
+      "in": "query",
+      "name": "score_version",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 20,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "HSF score version as frozen",
+       "title": "Score Version"
+      }
+     },
+     {
+      "description": "Observed on/after (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "start_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/after (YYYY-MM-DD, UTC)",
+       "title": "Start Date"
+      }
+     },
+     {
+      "description": "Observed on/before (YYYY-MM-DD, UTC)",
+      "in": "query",
+      "name": "end_date",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Observed on/before (YYYY-MM-DD, UTC)",
+       "title": "End Date"
+      }
+     },
+     {
+      "description": "Only matured rows passing the canonical eligibility rule",
+      "in": "query",
+      "name": "certified_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only matured rows passing the canonical eligibility rule",
+       "title": "Certified Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "Only records matured at the horizon (counts drop pending)",
+      "in": "query",
+      "name": "matured_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only records matured at the horizon (counts drop pending)",
+       "title": "Matured Only",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+      "in": "query",
+      "name": "unit",
+      "required": false,
+      "schema": {
+       "default": "signal_day",
+       "description": "signal_day: one record per ticker per entry day (default); observation: every frozen row",
+       "enum": [
+        "signal_day",
+        "observation"
+       ],
+       "title": "Unit",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OutcomeTimeseries"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "description": "Invalid filter"
+     },
+     "503": {
+      "description": "Database unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Outcome Intelligence: through time (Pro)"
    }
   },
   "/v1/paper/account": {
