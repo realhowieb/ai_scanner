@@ -124,7 +124,15 @@ class TodayBuilderTests(unittest.TestCase):
         top = out["top_setups"]
         self.assertEqual(top["scan_at"], "2026-09-28T19:35:00+00:00")
         self.assertIn(top["state"], ("qualifying", "no_qualifying"))
-        for s in top["setups"]:
+        self.assertLessEqual(len(top["setups"]) + len(top["also_ranked"]), 5)
+        if top["also_ranked"]:
+            self.assertEqual(top["ranked_floor"], 40)
+        strong = {s["ticker"] for s in top["setups"]}
+        for s in top["also_ranked"]:
+            self.assertNotIn(s["ticker"], strong)
+            self.assertGreaterEqual(s["score"], 40)
+            self.assertLess(s["score"], top["threshold"])
+        for s in top["setups"] + top["also_ranked"]:
             self.assertEqual(set(s), {"ticker", "score", "primary_setup", "status", "n_signals",
                                       "last", "chg_pct", "gap_pct", "rvol", "prob"})
             self.assertIsNone(s["prob"])  # Premium model output redacted below Premium
