@@ -9,6 +9,7 @@ import { useSession } from "@/session/SessionProvider";
 
 const NAV = [
   { href: "/today", label: "Today" },
+  { href: "/brief", label: "Brief" },
   { href: "/scanner", label: "Scanner" },
   { href: "/scanner/custom", label: "Custom scan" },
   { href: "/watchlists", label: "Watchlists" },
@@ -71,7 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/today" className="brand">HSFinest<span>.AI</span></Link>
           <nav aria-label="Main" className="nav">
             {NAV.map((n) => {
-              const active = n.href === "/scanner" ? path === "/scanner" : path.startsWith(n.href);
+              const active = n.href === "/scanner" ? path === "/scanner" || path.startsWith("/scanner/history") : path.startsWith(n.href);
               return (
                 <Link key={n.href} href={n.href} className="navlink" aria-current={active ? "page" : undefined}>{n.label}</Link>
               );
@@ -102,7 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <main id="main" className="main"><PreviousPage.Provider value={trail.prev}>{children}</PreviousPage.Provider></main>
       <footer className="foot">
-        <p className="cap">Educational research only, not financial advice.</p>
+        <p className="cap">Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link></p>
         <p className="cap">Data: scheduled HSF scans · Alpaca. Setup prices come from the latest scan; SPY, QQQ and the price strip are quotes refreshed every few minutes.</p>
       </footer>
     </div>

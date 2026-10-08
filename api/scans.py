@@ -66,7 +66,7 @@ def _scan_row(o: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset: int,
-                min_score: int = 0, signal: Optional[str] = None) -> Dict[str, Any]:
+                min_score: int = 0, signal: Optional[str] = None, sort: str = "score") -> Dict[str, Any]:
     from ui.entitlement_view import redact_prebreakout_rows
 
     cap = max_results_for(tier)
@@ -80,6 +80,12 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     if signal:
         opps = [o for o in opps if signal in (o.get("signals") or [])]
     visible = opps[:cap]
+    if sort != "score":
+        # Re-orders only the rows the plan already sees (its top HSF-ranked setups); missing values last.
+        def key(o: Dict[str, Any]) -> Any:
+            v = _num(o.get(sort))
+            return (v is None, -(v or 0.0))
+        visible = sorted(visible, key=key)
     return {"scan_at": _iso(runs[0]["created_at"]), "total": len(opps), "max_results": cap,
             "limited": len(opps) > cap,
             "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],

@@ -310,3 +310,8 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 .chart .bar-down { fill: var(--down); }
 .ai-text { white-space: pre-wrap; }
 .sort-toggle { align-self: flex-start; }
+.index-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.index-tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.sector { min-width: 140px; font-size: 14px; }
+.doc { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
+.doc-section { margin-top: 12px; }

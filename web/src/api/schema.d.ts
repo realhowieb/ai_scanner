@@ -5145,6 +5145,8 @@ export interface operations {
                 min_score?: number;
                 /** @description Only setups with this signal */
                 signal?: string | null;
+                /** @description Order of the rows the plan sees (descending); the plan's rows are always its top HSF-ranked setups */
+                sort?: "score" | "chg_pct" | "gap_pct" | "rvol" | "prob";
             };
             header?: never;
             path?: never;

@@ -308,6 +308,17 @@ class ScanAndStockApiTests(DataApiBase):
             capped = self.client.get("/v1/scans/latest", headers=self.h).json()
         self.assertEqual((len(capped["setups"]), capped["limited"]), (2, True))
 
+    def test_latest_scan_sort_reorders_only_the_plans_rows(self):
+        ranked = self.client.get("/v1/scans/latest", headers=self.h).json()["setups"]
+        with mock.patch("api.scans.max_results_for", return_value=3):
+            r = self.client.get("/v1/scans/latest?sort=chg_pct", headers=self.h).json()
+        self.assertEqual({s["ticker"] for s in r["setups"]}, {s["ticker"] for s in ranked[:3]})
+        chg = [s["chg_pct"] for s in r["setups"]]
+        known = [c for c in chg if c is not None]
+        self.assertEqual(known, sorted(known, reverse=True))
+        self.assertEqual(chg[:len(known)], known)                  # missing values last
+        self.assertEqual(self.client.get("/v1/scans/latest?sort=ticker", headers=self.h).status_code, 422)
+
     def test_premium_sees_model_output(self):
         self.accounts["prem@example.com"] = {**self.accounts["pro@example.com"], "username": "prem@example.com",
                                              "tier": "premium"}
