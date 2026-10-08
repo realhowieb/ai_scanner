@@ -113,6 +113,35 @@ def report(start: dt.date, end: dt.date) -> dict:
                   if r["features"].join.get("status") == rd.JOIN_MATCHED)
     if lags:
         print(f"matched lag seconds: min={lags[0]} median={lags[len(lags) // 2]} max={lags[-1]}")
+    views = [rd.scan_record_view(s) for s in w["scans"]]
+    st = sorted(v["scan_timestamp"] for v in views if v["scan_timestamp"])
+    print(f"scan records fetched: {len(views)}; scan_timestamp range: "
+          f"{st[0].isoformat() if st else None} .. {st[-1].isoformat() if st else None}")
+    from collections import Counter, defaultdict
+    print("contexts:", dict(Counter(v["context"] for v in views)))
+    by_day = defaultdict(Counter)
+    for r in records:
+        by_day[(r["observation"]["observed_at"] or "")[:10]][r["features"].join.get("status")] += 1
+    print(_table(["DAY", "MATCHED", "ONLY_LATER_SCANS", "NO_SCAN_RECORD", "NO_SCAN_WITHIN_LAG"],
+                 [[d, c.get(rd.JOIN_MATCHED, 0), c.get(rd.JOIN_FUTURE_ONLY, 0), c.get(rd.JOIN_MISSING, 0),
+                   c.get(rd.JOIN_STALE, 0)] for d, c in sorted(by_day.items())]))
+    # For refused joins: how far after observed_at was the nearest record written?
+    idx = rd.index_scan_records(w["scans"])
+    gaps = []
+    for r in records:
+        if r["features"].join.get("status") != rd.JOIN_FUTURE_ONLY:
+            continue
+        obs = rd.to_dt(r["observation"]["observed_at"])
+        c = [v for v in idx.get(r["observation"]["ticker"], []) if v["scan_timestamp"] <= obs]
+        if c:
+            best = max(c, key=lambda v: v["scan_timestamp"])
+            gaps.append(((best["known_at"] - obs).total_seconds() if best["known_at"] else None,
+                         (obs - best["scan_timestamp"]).total_seconds()))
+    print(f"ONLY_LATER_SCANS with a scan started before observed_at: {len(gaps)}")
+    if gaps:
+        w_after = sorted(g[0] for g in gaps if g[0] is not None)
+        print(f"  written after observed_at by (s): min={w_after[0]} median={w_after[len(w_after)//2]} "
+              f"max={w_after[-1]}")
     unverified = sum(1 for r in records if r["features"].join.get("known_at_verified") is False)
     print(f"matched without a write time (known_at unverified): {unverified}")
 
