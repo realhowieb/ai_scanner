@@ -106,7 +106,7 @@ Real PostgreSQL 17 checks cover psycopg3/psycopg2 execute/fetch/default fetchman
 
 Workflow validation parses all YAML, resolves wrapped modules, preserves arguments/status on failure and checks scheduling/concurrency conditions. Existing tests that asserted literal old CLI commands were updated for the wrapper. These checks do not claim that a post-change production workflow has run; executing a live workflow would be a deployment/production job action beyond this audit.
 
-Validation results are recorded in the PR after the final checks. The environment uses Python 3.12; CI uses Python 3.13 and repository dependency constraints. Local installed dependency versions were not a fully locked production environment. CI remains the authoritative parity check.
+Final validation: **2,945 tests passed, 24 skipped, and 324 subtests passed** in 147.37 seconds with `HSF_TEST_POSTGRES=1`, including the disposable PostgreSQL checks. Repository-wide `ruff check .` and `git diff --check` passed. The final focused workflow/telemetry/maturation/BTC check passed all 53 tests. The environment uses Python 3.12; CI uses Python 3.13 and repository dependency constraints. Local installed dependency versions were not a fully locked production environment. CI remains the authoritative parity check.
 
 ## Illustrative monthly model, not a production forecast
 
