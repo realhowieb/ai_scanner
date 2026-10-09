@@ -1,0 +1,25 @@
+experiment,model,groups_removed,skipped_groups_absent,mean_auc,pooled_auc,pooled_pr_auc,pooled_brier,delta_mean_auc,delta_pooled_auc,delta_pr_auc,delta_brier,top_tercile_median_excess,delta_median_excess,top_tercile_beat_rate,delta_beat_rate,top_tercile_median_mfe,delta_median_mfe,top_tercile_median_mae,delta_median_mae
+production_features (all schema features),xgb_leakage_safe_subset,,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+production_features (all schema features),logistic_regression,,"rsi,market_regime",0.4933,0.4933,0.6087,0.3015,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.05784,0.0
+minus hsf_score,xgb_leakage_safe_subset,hsf_score,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus hsf_score,logistic_regression,hsf_score,"rsi,market_regime",0.4733,0.4733,0.5856,0.2955,-0.02,-0.02,-0.0231,-0.006,,,,,0.111641,0.0,-0.05784,0.0
+minus momentum,xgb_leakage_safe_subset,momentum,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus momentum,logistic_regression,momentum,"rsi,market_regime",0.44,0.44,0.549,0.2996,-0.0533,-0.0533,-0.0597,-0.0019,,,,,0.111641,0.0,-0.071941,-0.0141
+minus volume,xgb_leakage_safe_subset,volume,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus volume,logistic_regression,volume,"rsi,market_regime",0.4933,0.4933,0.6087,0.3015,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.05784,0.0
+minus ema_trend,xgb_leakage_safe_subset,ema_trend,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus ema_trend,logistic_regression,ema_trend,"rsi,market_regime",0.4933,0.4933,0.6087,0.3015,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.05784,0.0
+minus volatility_gap,xgb_leakage_safe_subset,volatility_gap,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus volatility_gap,logistic_regression,volatility_gap,"rsi,market_regime",0.48,0.48,0.5923,0.3041,-0.0133,-0.0133,-0.0164,0.0026,,,,,0.111641,0.0,-0.05784,0.0
+minus prebreakout,xgb_leakage_safe_subset,prebreakout,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus prebreakout,logistic_regression,prebreakout,"rsi,market_regime",0.4667,0.4667,0.6274,0.2969,-0.0266,-0.0266,0.0187,-0.0046,,,,,0.111641,0.0,-0.071941,-0.0141
+minus setup_metadata,xgb_leakage_safe_subset,setup_metadata,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus setup_metadata,logistic_regression,setup_metadata,"rsi,market_regime",0.41,0.41,0.5389,0.3069,-0.0833,-0.0833,-0.0698,0.0054,,,,,0.131303,0.0197,-0.055622,0.0022
+minus rank,xgb_leakage_safe_subset,rank,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus rank,logistic_regression,rank,"rsi,market_regime",0.54,0.54,0.6771,0.2861,0.0467,0.0467,0.0684,-0.0154,,,,,0.122482,0.0108,-0.045001,0.0128
+minus market_context,xgb_leakage_safe_subset,market_context,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus market_context,logistic_regression,market_context,"rsi,market_regime",0.4933,0.4933,0.6087,0.3015,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.05784,0.0
+minus price_level,xgb_leakage_safe_subset,price_level,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+minus price_level,logistic_regression,price_level,"rsi,market_regime",0.4933,0.4933,0.6087,0.3015,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.05784,0.0
+core_technical_only,xgb_leakage_safe_subset,all but core technical,"rsi,market_regime",0.5,0.5,0.6,0.2405,0.0,0.0,0.0,0.0,,,,,0.111641,0.0,-0.017045,0.0
+core_technical_only,logistic_regression,all but core technical,"rsi,market_regime",0.68,0.68,0.7503,0.2339,0.1867,0.1867,0.1416,-0.0676,,,,,0.10485,-0.0068,-0.022038,0.0358

@@ -11573,6 +11573,43 @@
     "summary": "Resend Verification"
    }
   },
+  "/v1/ml/readiness": {
+   "get": {
+    "description": "Whether HSF has collected enough trustworthy, matured point-in-time observations to start ML v4\ndevelopment: status (NOT_READY / COLLECTING / NEAR_READY / READY), every readiness gate with its\nthreshold and reason, coverage, maturation diagnostics and a growth projection. Aggregates only;\ncomputed from persisted rows (cached 30 minutes). Never trains, scores or changes anything.",
+    "operationId": "ml_readiness_status_v1_ml_readiness_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Readiness Status V1 Ml Readiness Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin \u00b7 research-only] ML v4 data readiness: gates, coverage, maturation",
+    "tags": [
+     "ml (internal, admin only)"
+    ],
+    "x-audience": "admin research-only",
+    "x-internal": true
+   }
+  },
   "/v1/outcomes/horizons": {
    "get": {
     "description": "The same metrics for 1, 3 and 5 trading days. No horizon is singled out.",

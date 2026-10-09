@@ -1,0 +1,10 @@
+model,granularity,period,n,sufficient,roc_auc,pr_auc,brier,win_rate,median_excess_return,benchmark_beat_rate,verdict
+hsf_score_heuristic,fold,fold 1 2026-09-28..2026-09-30,25,,0.5067,0.6212,0.2434,,,,INSUFFICIENT (fewer than 3 evaluable periods)
+hsf_score_heuristic,week,2026-W40,25,True,0.5067,0.6212,0.2434,0.6,0.01323,0.5,
+logistic_regression,fold,fold 1 2026-09-28..2026-09-30,25,,0.4933,0.6087,0.3015,,,,INSUFFICIENT (fewer than 3 evaluable periods)
+logistic_regression,week,2026-W40,25,True,0.4933,0.6087,0.3015,0.6,0.01323,0.5,
+xgb_leakage_safe_subset,fold,fold 1 2026-09-28..2026-09-30,25,,0.5,0.6,0.2405,,,,INSUFFICIENT (fewer than 3 evaluable periods)
+xgb_leakage_safe_subset,week,2026-W40,25,True,0.5,0.6,0.2405,0.6,0.01323,0.5,
+xgb_retrained_production_features,fold,fold 1 2026-09-28..2026-09-30,25,,0.5,0.6,0.2402,,,,INSUFFICIENT (fewer than 3 evaluable periods)
+xgb_retrained_production_features,week,2026-W40,25,True,0.5,0.6,0.2402,0.6,0.01323,0.5,
+prebreakout_production_as_served,fold,fold 1 2026-09-28..2026-09-30,0,,,,,,,,INSUFFICIENT (fewer than 3 evaluable periods)

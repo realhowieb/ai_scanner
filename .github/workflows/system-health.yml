@@ -52,6 +52,17 @@ jobs:
         run: |
           python -m scripts.system_health --out artifacts/health --persist
           cat artifacts/health/system_health.md >> "$GITHUB_STEP_SUMMARY"
+      - name: ML v4 data readiness monitor (read-only)
+        # Slim reads of the opportunity dataset; alerts print as warnings and
+        # never fail the health run. See scripts/ml_readiness.py.
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+        run: |
+          python scripts/ml_readiness.py --monitor --out artifacts/health
+          cat artifacts/health/ml_readiness_monitor.md >> "$GITHUB_STEP_SUMMARY"
       - name: Surface human action (no automatic action)
         if: steps.health.outputs.human_action == 'HUMAN_ACTION_REQUIRED'
         run: echo "::warning title=HSF needs attention::System health reports HUMAN_ACTION_REQUIRED — see the step summary."
@@ -63,4 +74,6 @@ jobs:
           path: |
             artifacts/health/system_health.json
             artifacts/health/system_health.md
+            artifacts/health/ml_readiness_monitor.json
+            artifacts/health/ml_readiness_monitor.md
           if-no-files-found: warn

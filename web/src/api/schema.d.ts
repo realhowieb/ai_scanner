@@ -793,6 +793,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ml/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * [Internal · admin · research-only] ML v4 data readiness: gates, coverage, maturation
+         * @description Whether HSF has collected enough trustworthy, matured point-in-time observations to start ML v4
+         *     development: status (NOT_READY / COLLECTING / NEAR_READY / READY), every readiness gate with its
+         *     threshold and reason, coverage, maturation diagnostics and a growth projection. Aggregates only;
+         *     computed from persisted rows (cached 30 minutes). Never trains, scores or changes anything.
+         */
+        get: operations["ml_readiness_status_v1_ml_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/outcomes/horizons": {
         parameters: {
             query?: never;
@@ -7160,6 +7183,42 @@ export interface operations {
             };
             /** @description Not signed in */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ml_readiness_status_v1_ml_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,0 +1,55 @@
+name: Re-score Outcomes
+
+# Manual-only. Re-scores opportunity outcomes that the outcome cron wrote empty
+# before their 5-day window had closed (PREMATURE_LABEL_WRITE, see
+# scripts/rescore_premature_outcomes.py and analytics/ml_readiness.py).
+# Dry run by default; mode=apply writes signal_outcomes labels and the SPY
+# benchmark, only for rows whose 1/3/5-day returns are all still NULL (never
+# overwrites a real label). Features, scans and models are never touched.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run counts only; apply writes labels (production write, owner's go only)"
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+
+concurrency:
+  group: rescore-outcomes
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rescore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Re-score premature outcomes (${{ inputs.mode }})
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            python scripts/rescore_premature_outcomes.py --apply
+          else
+            python scripts/rescore_premature_outcomes.py
+          fi

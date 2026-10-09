@@ -313,6 +313,39 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 .ai-text { white-space: pre-wrap; }
 .sort-toggle { align-self: flex-start; }
 .index-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+/* Brief columns are independent stacks: supporting card heights cannot leave
+   holes between the primary intelligence panels. DOM order prioritizes phones. */
+.brief-dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.brief-center, .brief-left, .brief-right { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.brief-dashboard .card { min-width: 0; overflow-wrap: anywhere; }
+.brief-pulse { border-top: 3px solid var(--accent); gap: 10px; }
+.brief-pulse .h3 { font-size: 14px; margin: 6px 0; }
+.brief-pulse .index-tile { border: 0; border-radius: 0; padding: 4px 0; background: transparent; }
+.brief-indexes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }
+.brief-breadth, .brief-counts > div { display: flex; justify-content: space-between; gap: 12px; }
+.brief-breadth-bar { height: 8px; background: var(--down, #de6571); margin-top: 8px; }
+.brief-breadth-bar span { display: block; height: 100%; background: var(--up, #49b990); }
+.brief-counts { margin: 0; }
+.brief-counts dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+.brief-sector-context { display: grid; gap: 8px; }
+.brief-radar { list-style: none; padding: 0; margin: 12px 0; }
+.brief-radar li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.brief-radar-identity, .brief-radar-setup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.brief-radar-setup { grid-column: 1 / -1; font-size: 13px; }
+.brief-right summary { cursor: pointer; padding: 12px 0; }
+.brief-dashboard .row { flex-wrap: wrap; }
+@media (min-width: 768px) and (max-width: 1199px) {
+  .brief-dashboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brief-center { grid-column: 1 / -1; }
+  .brief-indexes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1200px) {
+  .brief-indexes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .brief-dashboard { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.15fr); align-items: start; }
+  .brief-left { grid-column: 1; grid-row: 1; }
+  .brief-center { grid-column: 2; grid-row: 1; }
+  .brief-right { grid-column: 3; grid-row: 1; }
+}
 .index-tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
 .sector { min-width: 140px; font-size: 14px; }
 .doc { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
