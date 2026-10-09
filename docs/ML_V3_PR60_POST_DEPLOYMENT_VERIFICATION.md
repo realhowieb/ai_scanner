@@ -1,5 +1,42 @@
 # PR #60 Post-Deployment Provenance Verification
 
+## Post-scan update: PARTIAL
+
+Successful production scanner run **37969482226** executed merge SHA
+`61dc0526ca8d66803e8d8d55dd5f114688bb9243`, from 17:53:47Z to last update
+18:00:05Z on 2026-10-09. Read-only Diagnostics **37970363522** completed
+successfully; audit timestamp 18:01:59Z. Raw sanitized aggregates are in
+`ml/reports/pr60_post_scan_production_audit.json`. The earlier waiting result
+below is retained as the initial checkpoint, superseded by this update.
+
+- Saved run 3229 plus updated daily snapshot 3227: 200 representations,
+  **100 unique inference events**, zero conflicting identities, 1,010,408 bytes
+  total stored JSON. All 200 captured representations passed probability,
+  artifact/schema/calibration hash, numeric and mask checks.
+- Five newly inserted freezes (11277-11281): **5/5 exact identity matches and
+  5/5 identical provenance hashes**. All have captured PreBreakout evidence;
+  all keep displayed PreBreakout probability absent, as before. This verifies
+  forwarding beyond selected displayed PreBreakout picks without score changes.
+- Canonical capture logs: 100 attempts, **0 inserted, 100 duplicates, 0 write
+  failures**. Hour-bucketed identities (`analytics/observation_capture.py:35`)
+  and first-write DO NOTHING (`db/hsf_observations.py:139`) preserve the earlier
+  run's records. No exact canonical link to this new inference can be claimed.
+- 109 new cohort records: 100 CONTROL plus 9 NEAR_MISS. Both model roles absent
+  as expected; scheduled AI-confidence is not invoked. No extra inference added.
+- Input timestamp, target version and training/calibration boundaries remain
+  unavailable in all captured records. No substitute timestamps were used.
+- Scan logs report 261.8 seconds scanner runtime, 100 candidates, zero provider
+  errors/timeouts and successful automation publication with zero warnings.
+  This is total scanner runtime, not measured provenance overhead.
+
+**Forwarding/freezing: PASS for this run. Overall: PARTIAL.** Production
+customer-facing API/table/CSV inspection and Brief recalculation linkage remain
+unverified; controlled fixtures cover them. Canonical first-write deduplication
+limits per-inference preservation within one hourly bucket and was not changed.
+Evaluation remains NOT READY due to original-target/boundary evidence gaps.
+Follow-up scoped verifier tests: **14 passed** in 1.01 seconds. No production
+mutations, backfills or model/scoring changes were made by verification.
+
 ## Result
 
 **WAITING_FOR_PROSPECTIVE_RUN**, checked 2026-10-09 17:50 UTC.
