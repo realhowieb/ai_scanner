@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "status": "PARTIAL",
+  "executed_sha": "61dc0526ca8d66803e8d8d55dd5f114688bb9243",
+  "latest_scanner_run_id": "37969482226",
+  "prior_read_only_audit_run_id": "37970363522",
+  "scanner_runs_reviewed": 5,
+  "new_bucket_status": "WAITING_FOR_NEW_BUCKET",
+  "new_bucket_capture_counts": null,
+  "new_bucket_exact_linkage": null,
+  "prior_frozen_linkage": {"matched": 5, "identical": 5},
+  "privacy": {
+    "automation": {"status": "PASS", "candidate_count": 100, "latest_bytes": 72571, "history_bytes": 72571, "status_bytes": 363, "internal_fields_found": [], "public_model_metadata_intentional": true},
+    "brief_all_tiers": "UNVERIFIED_NO_AUTHORIZED_LIVE_SESSION",
+    "scanner_stock_intelligence": "UNVERIFIED_NO_AUTHORIZED_LIVE_SESSION",
+    "tables_csv": "UNVERIFIED_NO_AUTHORIZED_LIVE_SESSION"
+  },
+  "brief_recalculation_linkage": "UNVERIFIED_NO_INDEPENDENT_RECALCULATION_EVENT_ARCHIVE",
+  "immutability": "PRIOR_DEDUP_LOGS_AND_FIXTURES_ONLY_NO_NEW_BEFORE_AFTER_DIGESTS",
+  "provenance_overhead_seconds": null,
+  "tests": {"collected": 42, "passed": 42, "failed": 0, "skipped": 0, "warnings": 0, "seconds": 2.02},
+  "collection_readiness": "PARTIAL_AWAITING_LIVE_CHECKS",
+  "evaluation_ready": false,
+  "production_mutations": false,
+  "scan_triggered": false
+}

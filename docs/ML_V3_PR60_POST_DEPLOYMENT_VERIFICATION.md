@@ -1,5 +1,54 @@
 # PR #60 Post-Deployment Provenance Verification
 
+## Remaining-gap review
+
+Latest five scanner executions still end with 37969482226 at 17:53 UTC.
+**Canonical capture: WAITING_FOR_NEW_BUCKET**; no scan was triggered.
+No additional production database inspection was necessary in the absence
+of a suitable new execution. Earlier first-write evidence is not presented
+as new per-inference canonical linkage.
+
+The actual `scanner-automation-snapshot` artifact from 37969482226 was downloaded
+read-only and parsed with strict JSON handling. `latest_scan.json` and its
+historical copy are 72,571 bytes each, with 100 candidates; `status.json` is
+363 bytes. Recursive field inspection found no internal `ModelProvenance`,
+`SourceScanId`, feature names/values, default masks, calibration snapshots or
+per-inference source IDs. The public top-level `models` object is intentional:
+artifact, version, training time, feature count/schema version and availability
+warning only. It is not the internal per-candidate provenance object.
+
+| Surface | Live verification | Supporting evidence |
+| --- | --- | --- |
+| Automation latest/history/status | PASS | Actual published artifact inspection |
+| Brief picks/opportunities, every tier | UNVERIFIED | Controlled redaction fixtures pass |
+| Scanner/Stock Intelligence | UNVERIFIED | Source/controlled serialization coverage only |
+| Customer tables and CSV | UNVERIFIED | Controlled serialization coverage only |
+
+No authorized deployed account-tier session was established for this review.
+No account was impersonated, subscription modified or inference-capable page
+opened. Fixture results do not certify live customer responses.
+
+Brief recalculation production linkage remains **UNVERIFIED**. The inspected
+five freezes contain saved-source predictions, not independently identified
+recalculation events. The existing call path computes picks in memory and
+persists evidence only when applicable opportunities freeze; there is no
+independent archive of every Brief recalculation. Controlled tests verify
+actual inference timestamps, role-specific replacement and ambiguity behavior,
+but cannot prove production recalculation linkage for unobserved events.
+
+Historical row immutability is supported by previous duplicate logs and
+first-write fixtures, not a new before/after production digest comparison.
+Production provenance-specific overhead is not measured. No inference,
+mutations, backfills, target changes or model performance calculations occurred.
+
+Final focused suite: **42 collected, 42 passed, 0 failed, 0 skipped, 0 warnings**
+in 2.02 seconds. Ruff and syntax checks pass for verifier and test modules.
+Overall status remains **PARTIAL**; collection readiness is pending remaining
+live checks, evaluation readiness is **NOT READY**. Next: a new-bucket scan
+followed by read-only linkage verification and authorized customer-surface
+inspection. No observation identity or certified behavior should change just
+to eliminate expected deduplication.
+
 ## Post-scan update: PARTIAL
 
 Successful production scanner run **37969482226** executed merge SHA
