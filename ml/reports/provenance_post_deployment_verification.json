@@ -1,0 +1,87 @@
+{
+  "audit_workflow_run_id": "37962355033",
+  "canonical": {
+    "ai_confidence": {
+      "counts": {},
+      "invalid": {},
+      "missing": {},
+      "unavailable_reasons": {}
+    },
+    "prebreakout": {
+      "counts": {},
+      "invalid": {},
+      "missing": {},
+      "unavailable_reasons": {}
+    }
+  },
+  "canonical_count": 0,
+  "checked_at": "2026-10-09T16:54:17.642782+00:00",
+  "deployment_evidence": {
+    "audit_script_sha": "a87851c7727150119faf373a1be2dfc0d99ea2ae",
+    "deployed_app_sha": null,
+    "latest_successful_scan_created_at": "2026-10-09T16:35:13Z",
+    "latest_successful_scan_run_id": 37960183886,
+    "latest_successful_scan_sha": "4866e642ff4f06fba731ff5ce71c3652cc1c54b1",
+    "merge_sha": "e62b229500ccb4873fab1c26d4f08d2bd2e328c1",
+    "post_merge_scan_verified": false
+  },
+  "evaluation_ready": false,
+  "exact_links": {},
+  "frozen": {
+    "ai_confidence": {
+      "counts": {},
+      "invalid": {},
+      "missing": {},
+      "unavailable_reasons": {}
+    },
+    "prebreakout": {
+      "counts": {},
+      "invalid": {},
+      "missing": {},
+      "unavailable_reasons": {}
+    }
+  },
+  "frozen_count": 0,
+  "oversized_skipped": 0,
+  "prospective_collection_ready": false,
+  "read_only_enforced": true,
+  "readiness_reasons": [
+    "waiting_for_post_merge_scan",
+    "precision_and_customer_boundary_fixes_not_deployed",
+    "scheduled_engine_bypasses_ai_confidence",
+    "original_target_evidence_and_training_boundaries_incomplete"
+  ],
+  "saved": {
+    "ai_confidence": {
+      "counts": {},
+      "invalid": {},
+      "missing": {},
+      "unavailable_reasons": {}
+    },
+    "prebreakout": {
+      "counts": {},
+      "invalid": {},
+      "missing": {},
+      "unavailable_reasons": {}
+    }
+  },
+  "saved_candidate_count": 0,
+  "saved_payload_bytes": 0,
+  "saved_run_count": 0,
+  "since": "2026-10-09T16:48:29+00:00",
+  "source_findings": {
+    "branch_fixes": "lossless_json_string_and_presentation_redaction",
+    "customer_rendering": "internal_fields_exposed",
+    "main_serialization": "calibration_hash_precision_defect",
+    "scheduled_ai_inference": "bypassed_by_existing_engine_path"
+  },
+  "status": "WAITING_FOR_PROSPECTIVE_RUN",
+  "synthetic_size_measurement": {
+    "added_bytes_per_row": 4262.0,
+    "baseline_bytes": 3301,
+    "features": 75,
+    "note": "Synthetic local fixture, not production throughput or payload measurement",
+    "rows": 100,
+    "with_provenance_bytes": 429501
+  }
+}
