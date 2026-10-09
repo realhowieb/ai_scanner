@@ -96,6 +96,9 @@ def render_results(
         st.caption("Run a scan to see results.")
         return
 
+    from analytics.prediction_provenance import customer_frame
+    df = customer_frame(df)
+
     # Centralized entitlements (preferred). If present, they override passed flags.
     ent = st.session_state.get("entitlements") or {}
     if ent:

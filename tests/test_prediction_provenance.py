@@ -66,7 +66,7 @@ class PredictionProvenanceTests(unittest.TestCase):
         self.assertEqual(models_from_row({COLUMN: "invalid"}), {})
         frame = pd.DataFrame({"Ticker": ["ABC"]})
         attach(frame, "prebreakout", pd.DataFrame({"f": [float("nan")]}), pd.DataFrame({"f": [True]}), [0.1], [0.1], {})
-        p = frame.iloc[0][COLUMN]["prebreakout"]
+        p = models_from_row(frame.iloc[0])["prebreakout"]
         self.assertIsNone(p["loaded_artifact"])
         self.assertIsNone(p["input_timestamp"])
         self.assertEqual(p["feature_values"], [None])
@@ -82,7 +82,7 @@ class PredictionProvenanceTests(unittest.TestCase):
         with patch.object(ml, "load_prebreakout_model", return_value={"model": model, "features": ["a", "b"]}), patch.object(ml, "_live_feature_frame", return_value=pd.DataFrame({"a": [np.nan]})):
             result = ml.score_prebreakout(frame)
         model.predict_proba.assert_called_once()
-        p = result.iloc[0][COLUMN]["prebreakout"]
+        p = models_from_row(result.iloc[0])["prebreakout"]
         self.assertEqual(p["feature_values"], [0.0, 0.0])
         self.assertEqual(p["default_mask"], [True, True])
         self.assertEqual(result.iloc[0]["PreBreakoutProb%"], 20)
@@ -97,5 +97,5 @@ class PredictionProvenanceTests(unittest.TestCase):
             result = score_ai_confidence(pd.DataFrame({"Ticker": ["LOW", "HIGH"], "f": [1, 2]}))
         model.predict_proba.assert_called_once()
         self.assertEqual(result.iloc[0]["Ticker"], "HIGH")
-        self.assertEqual(result.iloc[0][COLUMN]["ai_confidence"]["feature_values"], [2])
-        self.assertEqual(result.iloc[0][COLUMN]["ai_confidence"]["raw_probability"], 0.9)
+        self.assertEqual(models_from_row(result.iloc[0])["ai_confidence"]["feature_values"], [2])
+        self.assertEqual(models_from_row(result.iloc[0])["ai_confidence"]["raw_probability"], 0.9)

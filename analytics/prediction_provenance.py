@@ -72,7 +72,7 @@ def unavailable(frame, role, reason):
         models[role] = {"schema_version": "prediction-provenance-1.0", "status": "unavailable",
                         "reason": reason, "raw_probability": None, "calibrated_probability": None}
         records.append(models)
-    frame[COLUMN] = records
+    frame[COLUMN] = [json.dumps(record, sort_keys=True, separators=(",", ":"), allow_nan=False) for record in records]
     return frame
 
 
@@ -114,5 +114,12 @@ def attach(frame, role, inputs, default_mask, raw, calibrated, metadata, *, avai
                         "raw_probability": clean(float(raw[i])),
                         "calibrated_probability": clean(float(calibrated[i]))}
         records.append(models)
-    frame[COLUMN] = records
+    # pandas.to_json rounds nested floats; a string preserves exact inputs and
+    # calibration snapshots until models_from_row decodes at storage boundaries.
+    frame[COLUMN] = [json.dumps(record, sort_keys=True, separators=(",", ":"), allow_nan=False) for record in records]
     return frame
+
+
+def customer_frame(frame):
+    """Remove internal prediction evidence from the presentation copy only."""
+    return frame.drop(columns=[COLUMN, "SourceScanId"], errors="ignore")
