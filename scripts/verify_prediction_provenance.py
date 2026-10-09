@@ -66,18 +66,21 @@ def main():
         if conn.execute("SHOW transaction_read_only").fetchone()["transaction_read_only"] != "on":
             raise RuntimeError("Read-only enforcement failed")
         conn.execute("SET LOCAL statement_timeout='30s'")
-        runs = conn.execute("""SELECT id,created_at,octet_length(results_json) AS bytes,
+        runs = conn.execute("""SELECT id,created_at,label,is_snapshot,octet_length(results_json) AS bytes,
             CASE WHEN octet_length(results_json)<=4000000 THEN results_json ELSE NULL END AS payload
             FROM runs WHERE username='cron' AND created_at >= %s
             ORDER BY created_at,id LIMIT 51""", (SINCE,)).fetchall()
         if len(runs) > 50 or sum(r["bytes"] or 0 for r in runs) > 32000000:
             raise RuntimeError("Read cap exceeded")
-        observations = conn.execute("""SELECT symbol,record->'models' AS models,
+        observations = conn.execute("""SELECT symbol,context,created_at,record->'models' AS models,
+            record->>'research_cohort' AS cohort,
+            record->>'selection_reason' AS selection_reason,
             record#>>'{market_context,scan_id}' AS scan_id
             FROM hsf_observations WHERE timestamp >= %s::timestamptz - interval '1 hour'
             AND (record->>'scan_timestamp')::timestamptz >= %s AND context LIKE 'scheduled:%%'
             ORDER BY timestamp LIMIT 5001""", (SINCE, SINCE)).fetchall()
-        freezes = conn.execute("""SELECT ticker AS symbol,raw_signal->'models' AS models
+        freezes = conn.execute("""SELECT id,ticker AS symbol,fired_at,created_at,
+            prebreakout_prob,raw_signal->'models' AS models
             FROM signal_outcomes WHERE source='opportunity'
             AND fired_at >= %s::timestamptz - interval '1 day'
             AND (fired_at >= %s OR (raw_signal#>>'{models,prebreakout,inferred_at}')::timestamptz >= %s)
@@ -120,8 +123,50 @@ def main():
               "canonical_count": len(observations), "frozen_count": len(freezes),
               "saved": inventory(saved), "canonical": inventory([r["models"] or {} for r in observations]),
               "frozen": inventory([r["models"] or {} for r in freezes]), "exact_links": links,
+              "coverage_reconciliation": reconcile(runs, observations, freezes),
               "evaluation_ready": False}
     print("PROVENANCE_VERIFICATION_JSON=" + json.dumps(result, sort_keys=True, allow_nan=False))
+
+
+def reconcile(runs, observations, freezes):
+    """Separate storage representations, inference events and applicability."""
+    events, groups, headers, source_tickers = {}, {}, [], {}
+    for run in runs:
+        rows = json.loads(run.get("payload") or "[]")
+        headers.append({"id": run["id"], "universe": run.get("label"),
+                        "snapshot": run.get("is_snapshot"), "rows": len(rows),
+                        "created_at": str(run["created_at"])})
+        for row in rows:
+            symbol = row.get("Ticker") or row.get("Symbol")
+            for role, p in models_from_row(row).items():
+                if p.get("status") != "captured":
+                    continue
+                key = (p.get("source_scan_id"), symbol, role, p.get("inferred_at"))
+                if all(key):
+                    events.setdefault(key, set()).add(digest(p))
+                    source_tickers.setdefault(symbol, set()).add(p["source_scan_id"])
+    for row in observations:
+        cohort = row.get("cohort") or "LEGACY_UNKNOWN"
+        key = str(row.get("context")) + ":" + cohort
+        group = groups.setdefault(key, Counter())
+        group["rows"] += 1
+        models = row.get("models") or {}
+        for role in ("prebreakout", "ai_confidence"):
+            if role in models:
+                group[role + "_present"] += 1
+            elif role == "ai_confidence" or cohort in ("NEAR_MISS", "CONTROL"):
+                group[role + "_expected_not_invoked"] += 1
+            else:
+                group[role + "_unexpected_or_unverified_absence"] += 1
+    return {"saved_runs": headers, "unique_linkable_inferences": len(events),
+            "conflicting_duplicate_identities": sum(len(v) > 1 for v in events.values()),
+            "cohort_coverage": {k: dict(v) for k, v in groups.items()},
+            "frozen_records": [{"id": r["id"], "ticker": r["symbol"],
+                                "fired_at": str(r["fired_at"]), "created_at": str(r["created_at"]),
+                                "models_present": sorted((r.get("models") or {}).keys()),
+                                "displayed_prebreakout_present": r.get("prebreakout_prob") is not None,
+                                "same_ticker_saved_source_candidates": len(source_tickers.get(r["symbol"], set())),
+                                "link_note": "ticker presence is NOT exact inference linkage"} for r in freezes]}
 
 
 if __name__ == "__main__":
