@@ -125,6 +125,10 @@ GATES: Tuple[Gate, ...] = (
     Gate("top10_symbol_share", "SYMBOL_DIVERSITY", ACCUMULATING, "matured_top10_share_5d", "<=", 0.30,
          "ML v3: top-10 tickers were 33.6% of rows and excluding them left 13 validation rows. At <= 30% a "
          "concentration-excluded re-run still has most of every fold."),
+    Gate("max_entry_day_share", "TIME_COVERAGE", ACCUMULATING, "matured_max_day_share_5d", "<=", 0.10,
+         "No single entry day may hold more than 10% of matured signal-days (ML v3: 14.2%). Spread evenly over "
+         "30+ days a day holds ~3%; 10% allows 3x that. It also stops a one-day burst (e.g. the 2026-09-12 "
+         "weekend freeze, ~200 signal-days on one entry day) from passing the volume gate on its own."),
     Gate("class_balance", "CLASS_BALANCE", ACCUMULATING, "minority_class_share_5d", ">=", 0.20,
          "Primary label return_5d > 0. Below 20% minority, a 30-row validation fold has < 6 minority rows, "
          "under the fold spec's min_val_class = 5 margin, and AUC is unstable."),
@@ -227,9 +231,10 @@ def maturation_stage(row: Mapping[str, Any], now: _dt.datetime, *, certified: Op
                      price_probe: Optional[Mapping[str, bool]] = None) -> Dict[str, Any]:
     """Classify one frozen opportunity row on the observation -> label lifecycle.
 
-    `price_probe` (optional, from a caller that can ask the provider) maps a
-    ticker to whether daily bars exist for it now; it only splits
-    MISSING_PRICE_DATA from DATA_PROVIDER_FAILURE."""
+    `price_probe` (optional, from a caller that can ask the provider) maps an
+    observation id to whether the canonical scorer can label it from today's
+    bars; it only splits MISSING_PRICE_DATA (still unscorable) from
+    DATA_PROVIDER_FAILURE (scorable now: the provider failed at write time)."""
     ticker = str(row.get("ticker") or "").strip().upper()
     score = _num(_json(row.get("raw_signal")).get("hsf_score"))
     t = maturation_timing(row.get("fired_at"))
@@ -257,8 +262,9 @@ def maturation_stage(row: Mapping[str, Any], now: _dt.datetime, *, certified: Op
             return out(PREMATURE_LABEL_WRITE)
         if not SYMBOL_RE.match(ticker):
             return out(INVALID_SYMBOL)
-        if price_probe is not None and ticker in price_probe:
-            return out(DATA_PROVIDER_FAILURE if price_probe[ticker] else MISSING_PRICE_DATA)
+        oid = row.get("id")
+        if price_probe is not None and oid is not None and int(oid) in price_probe:
+            return out(DATA_PROVIDER_FAILURE if price_probe[int(oid)] else MISSING_PRICE_DATA)
         return out(MISSING_PRICE_DATA)
     if r1 is None or r3 is None or r5 is None:
         return out(LABEL_WRITE_FAILURE)
@@ -679,6 +685,8 @@ def build_report(raw_rows: Sequence[Mapping[str, Any]], scan_rows: Iterable[Mapp
         "matured_entry_weeks_5d": len({tuple(r.entry_day.isocalendar()[:2]) for r in mat5}),
         "matured_unique_symbols_5d": h5["unique_symbols"],
         "matured_top10_share_5d": conc["top10_share"],
+        "matured_max_day_share_5d": _rate(max(Counter(r.entry_day for r in mat5).values()), len(mat5))
+        if mat5 else None,
         "minority_class_share_5d": h5["minority_class_share"],
         "usable_walk_forward_folds_5d": folds["5d"]["usable_folds"],
         "final_holdout_valid_5d": 1 if folds["5d"]["final_holdout"].get("valid") else 0,

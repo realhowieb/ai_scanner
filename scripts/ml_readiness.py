@@ -84,9 +84,9 @@ def spy_closes(days: int) -> Optional[Dict[dt.date, float]]:
 
 
 def price_probe(rows: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
-    """For rows whose label came back empty after their window closed (and for
-    premature writes), ask whether bars exist now and whether the canonical
-    scorer would produce a label today. Read-only."""
+    """For rows whose label came back empty (or never came), ask whether the
+    canonical scorer would produce a label from today's bars. Returns
+    {observation id: scorable now}. Read-only."""
     from analytics import ml_readiness as mr
     from analytics.signal_outcomes import complete_session_bars, score_signal
 
@@ -109,12 +109,11 @@ def price_probe(rows: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
         return {"probe": None, "recoverable": {}, "checked": 0}
     probe, recoverable = {}, defaultdict(int)
     for r, cat in targets:
-        t = str(r["ticker"]).upper()
-        b = bars.get(t)
+        b = bars.get(str(r["ticker"]).upper())
         b = complete_session_bars(b, now) if b is not None else None
-        ok = b is not None and not b.empty
-        probe[t] = probe.get(t, False) or ok
-        if ok and score_signal(b, r["fired_at"]) is not None:
+        ok = b is not None and not b.empty and score_signal(b, r["fired_at"]) is not None
+        probe[int(r["id"])] = ok
+        if ok:
             recoverable[cat] += 1
     return {"probe": probe, "recoverable": dict(recoverable), "checked": len(targets), "tickers": len(tickers)}
 
