@@ -348,6 +348,58 @@ def render_research_evidence(data: Mapping[str, Any]) -> None:
         c2.metric("Scan runs", f"{metrics.get('scan_runs_collected', '—')} / "
                   f"{metrics.get('scan_runs_preferred', '—')}")
         c3.metric("Formal evaluation", metrics.get("formal_evaluation") or "UNKNOWN")
+    render_ml_readiness()
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def load_ml_readiness_cached() -> dict[str, Any]:
+    """The /v1/ml/readiness view, from the same slim reads (30 min cache: Neon egress)."""
+    from analytics import ml_readiness as mr
+    from analytics import research_dataset as rd
+    from db.research_datasets import fetch_readiness_rows, fetch_scan_index
+
+    now = dt.datetime.now(dt.timezone.utc)
+    s = mr.DATASET_START
+    lo = dt.datetime(s.year, s.month, s.day, tzinfo=dt.timezone.utc)
+    hi = now + dt.timedelta(minutes=1)
+    rows = fetch_readiness_rows(lo, hi)
+    scans = fetch_scan_index({r.get("ticker") for r in rows}, lo - rd.MAX_SCAN_LAG - dt.timedelta(hours=1), hi)
+    return mr.api_view(mr.build_report(rows, scans, now=now))
+
+
+_READINESS_LABEL = {"NOT_READY": "NOT READY", "COLLECTING": "COLLECTING", "NEAR_READY": "NEAR READY",
+                    "READY": "READY"}
+
+
+def render_ml_readiness() -> None:
+    """Compact ML v4 readiness panel: status, headline coverage, gate progress."""
+    st.markdown("#### ML v4 Readiness")
+    try:
+        view = load_ml_readiness_cached()
+    except Exception:
+        st.info("ML readiness is temporarily unavailable.")
+        return
+    obs, cov, val = view["observations"], view["coverage"], view["validation"]
+    st.write(f"**{_READINESS_LABEL.get(view['status'], view['status'])}** · {view['recommendation']}")
+    st.caption(f"Computed {_display_time(view['generated_at'])} · unit: matured, certified 5-day signal-days")
+    c = st.columns(5)
+    c[0].metric("Matured observations", f"{obs['matured_signal_days']:,}", help=f"{obs['matured']:,} raw rows")
+    c[1].metric("Trading-day coverage", f"{cov['matured_trading_days']:,}")
+    c[2].metric("Unique symbols", f"{cov['matured_symbols']:,}")
+    c[3].metric("Outcome coverage", _pct(cov["outcome_coverage_recent"]), help="Last 20 trading days of due labels")
+    c[4].metric("Walk-forward folds", f"{val['usable_walk_forward_folds']}")
+    rows = [{"Gate": g["gate"], "Kind": g["kind"].title(), "Value": g["value"],
+             "Needs": f"{g['operator']} {g['threshold']}", "Status": g["status"],
+             "Progress": round(float(g["progress"] or 0) * 100, 1)} for g in view["gates"]]
+    st.dataframe(arrow_safe(pd.DataFrame(rows)), width="stretch", hide_index=True,
+                 column_config={"Progress": st.column_config.ProgressColumn("Progress", min_value=0,
+                                                                             max_value=100, format="%.0f%%")})
+    if view["blocking_reasons"]:
+        st.caption("Unsatisfied: " + "; ".join(view["blocking_reasons"]))
+    est = (view.get("projection") or {}).get("estimate_trading_days_to_accumulating_targets")
+    if est is not None:
+        st.caption(f"Volume targets reachable in roughly {est} trading days at the recent rate "
+                   "(an estimate; structural gates need fixes first).")
 
 
 def render_operations(data: Mapping[str, Any], *, render_system_health_panel: Any) -> None:

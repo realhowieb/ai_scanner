@@ -5,6 +5,12 @@ from typing import Any, Dict, List, Optional
 
 # Benchmark for Outcome Intelligence: the same SPY the track record uses.
 BENCHMARK = "SPY"
+# A row whose 5-day window is still open is left pending (retried next run).
+# Only after this many days without any usable bars is it written as an empty
+# (unavailable) label: by then the provider is not going to produce them.
+GIVE_UP_AFTER_DAYS = 21
+# A daily bar for today is final only after the close (plus provider settle time).
+SESSION_SETTLE_MIN = 20
 
 
 def _entry_position(bars, fire_date) -> Optional[int]:
@@ -17,6 +23,56 @@ def _entry_position(bars, fire_date) -> Optional[int]:
     except Exception:
         pass
     return None
+
+
+def complete_session_bars(bars, now=None):
+    """Drop any daily bar that is not a finished session yet: today's bar
+    before the close (+ SESSION_SETTLE_MIN) is an intraday price, and a future
+    date is never valid. Same date convention as score_signal (bar index date)."""
+    if bars is None:
+        return None
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        from analytics import market_calendar as mc
+
+        now = now or datetime.now(timezone.utc)
+        today = now.astimezone(mc.ET).date()
+        today_final = (not mc.is_trading_day(today)
+                       or now >= mc.session_bounds_utc(today)[1] + timedelta(minutes=SESSION_SETTLE_MIN))
+        keep = []
+        for ts in bars.index:
+            d = ts.date() if hasattr(ts, "date") else ts
+            keep.append(d < today or (d == today and today_final))
+        return bars[keep]
+    except Exception:
+        return bars
+
+
+def window_complete(bars, fired_at, horizon: int = 5) -> bool:
+    """True when the bars hold the entry bar and `horizon` sessions after it."""
+    try:
+        fire_date = fired_at.date() if hasattr(fired_at, "date") else fired_at
+        pos = _entry_position(bars, fire_date)
+        return pos is not None and pos + horizon < len(bars["Close"].dropna())
+    except Exception:
+        return False
+
+
+def should_write_empty(bars, fired_at, now=None) -> bool:
+    """An empty (unavailable) label is final, so write one only when waiting
+    can't help: the window is complete and still unscorable, or the row is
+    older than GIVE_UP_AFTER_DAYS. An open window stays pending."""
+    if bars is not None and window_complete(bars, fired_at):
+        return True
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        now = now or datetime.now(timezone.utc)
+        fired = fired_at if getattr(fired_at, "tzinfo", None) else fired_at.replace(tzinfo=timezone.utc)
+        return now - fired > timedelta(days=GIVE_UP_AFTER_DAYS)
+    except Exception:
+        return False
 
 
 def score_signal(bars, fired_at) -> Optional[Dict[str, Any]]:
@@ -77,6 +133,7 @@ def score_pending_signal_outcomes(max_signals: int = 1000) -> int:
         return 0
 
     saved = 0
+    bars_by_symbol = {k: complete_session_bars(v) for k, v in bars_by_symbol.items()}
     for signal in signals:
         sym = str(signal.get("ticker") or "").upper()
         bars = bars_by_symbol.get(sym)
@@ -84,6 +141,8 @@ def score_pending_signal_outcomes(max_signals: int = 1000) -> int:
             bars = bars_by_symbol.get(sym.replace("-", "."))
         outcome = score_signal(bars, signal["fired_at"]) if bars is not None else None
         if outcome is None:
+            if not should_write_empty(bars, signal["fired_at"]):
+                continue  # window still open (or bars not in yet): stays pending, retried next run
             outcome = {
                 "return_1d": None,
                 "return_3d": None,
