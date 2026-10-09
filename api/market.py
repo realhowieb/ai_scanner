@@ -94,7 +94,9 @@ def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     d = core["data"]
     early = bool(entitlements.get("can_early_breakout"))
     picks = []
+    from analytics.prediction_provenance import customer_opportunity
     for p in (d.get("picks") or []) if early else []:
+        p = customer_opportunity(p)
         ticker, edays = _split_flag(p.get("symbol"))
         picks.append({**{k: v for k, v in p.items() if k != "symbol"}, "ticker": ticker, "earnings_days": edays})
     gappers = []

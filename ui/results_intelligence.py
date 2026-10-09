@@ -130,6 +130,8 @@ def consolidate_scanner_results(
     )
 
     _POSITIVE = ["golden_cross", "breakout", "prebreakout", "gapper", "gainer"]
+    from analytics.prediction_provenance import models_by_ticker
+    source_models = models_by_ticker(rows or [])
     acc: Dict[str, Dict[str, Any]] = {}
     for raw in (rows or []):
         if not isinstance(raw, dict):
@@ -170,6 +172,7 @@ def consolidate_scanner_results(
             "status": _status(score, s["fading"]),
             "breakout_score": s["breakout_score"], "prob": s["prob"],
             "prob_raw": s["prob_raw"],
+            "models": source_models.get(s["ticker"], {}),
             "chg_pct": s["chg_pct"], "gap_pct": s["gap_pct"],
             "last": s.get("last"), "rvol": s.get("rvol"),
         })

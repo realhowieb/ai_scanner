@@ -16,7 +16,8 @@ def can(entitlements: Any, capability: str) -> bool:
 
 def redact_prebreakout_opportunity(value: Dict[str, Any], *, allowed: bool) -> Dict[str, Any]:
     """Return a display copy without Premium PreBreakout evidence when blocked."""
-    out = dict(value or {})
+    from analytics.prediction_provenance import customer_opportunity
+    out = customer_opportunity(value or {})
     if allowed:
         return out
     signals = [s for s in (out.get("signals") or []) if str(s).lower() != "prebreakout"]

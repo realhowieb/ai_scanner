@@ -64,6 +64,9 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
     if df is None:
         return None
 
+    from analytics.prediction_provenance import models_by_ticker
+    source_models = models_by_ticker(df.to_dict("records")) if hasattr(df, "to_dict") else {}
+
     gappers = _market_gappers(df) or []
     try:
         _flag_earnings_rows(gappers, _earnings_days_map([g.get("ticker") for g in gappers]))
@@ -118,6 +121,7 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
         "breadth": breadth,
         "sectors": _sector_leaders(),
         "snapshot_time": _snapshot_time(),
+        "source_models": source_models,
     }
 
 

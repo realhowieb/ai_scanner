@@ -109,6 +109,8 @@ def attach(frame, role, inputs, default_mask, raw, calibrated, metadata, *, avai
         models[role] = {**common, "source_scan_id": clean(row.get("SourceScanId")),
                         "input_timestamp": clean(row.get("Timestamp")),
                         "input_timestamp_status": "supplied" if clean(row.get("Timestamp")) is not None else "unavailable",
+                        "input_timestamp_unavailable_reason": "prediction_input_timestamp_not_supplied" if clean(row.get("Timestamp")) is None else None,
+                        "source_scan_id_unavailable_reason": "caller_did_not_supply_scan_identity" if clean(row.get("SourceScanId")) is None else None,
                         "feature_values": clean(inputs.iloc[i].tolist()),
                         "default_mask": clean(default_mask.iloc[i].tolist()),
                         "raw_probability": clean(float(raw[i])),
@@ -123,3 +125,26 @@ def attach(frame, role, inputs, default_mask, raw, calibrated, metadata, *, avai
 def customer_frame(frame):
     """Remove internal prediction evidence from the presentation copy only."""
     return frame.drop(columns=[COLUMN, "SourceScanId"], errors="ignore")
+
+
+def customer_opportunity(value):
+    """Public display/API copy; internal evidence is never a tier entitlement."""
+    return {k: v for k, v in value.items() if k not in ("models", "models_context", COLUMN, "SourceScanId")}
+
+
+def models_by_ticker(rows):
+    """Forward only unambiguous, existing inference evidence; never rescore."""
+    grouped = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        ticker = str(clean(row.get("Ticker")) or clean(row.get("Symbol")) or "").strip().upper()
+        if not ticker:
+            continue
+        for role, model in models_from_row(row).items():
+            if not isinstance(model, dict):
+                continue
+            grouped.setdefault(ticker, {}).setdefault(role, {})[digest(model)] = model
+    return {ticker: {role: next(iter(values.values())) if len(values) == 1 else
+                     {"status": "unavailable", "reason": "ambiguous_multiple_inference_events"}
+                     for role, values in roles.items()} for ticker, roles in grouped.items()}
