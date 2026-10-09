@@ -9,6 +9,9 @@ See the frozen-prediction audit at commit
 
 `ModelProvenance` is a serializable per-row object with `prebreakout` and
 `ai_confidence` roles. Existing displayed percentages remain unchanged.
+The post-deployment verification branch encodes this object as a lossless JSON
+string in DataFrames; readers accept either strings or legacy objects. This
+avoids pandas rounding embedded model inputs and calibration hash snapshots.
 Each role includes schema version, UTC inference time, supplied input timestamp
 and scan ID, optional build SHA, verified loaded artifact identity, ordered final
 input names/values, schema hash, default mask, preprocessing identity/snapshot,

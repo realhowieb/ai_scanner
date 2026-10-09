@@ -2,6 +2,7 @@
 import json
 import math
 import os
+import re
 import sys
 from collections import Counter
 from datetime import datetime, timezone
@@ -34,6 +35,8 @@ def inventory(records):
             missing.update(f for f in FIELDS if p.get(f) is None)
             identity = p.get("loaded_artifact") or {}
             missing.update("artifact_" + f for f in ("registry_id", "version", "sha256") if identity.get(f) is None)
+            if identity.get("sha256") is not None:
+                invalid["artifact_hash_format"] += int(re.fullmatch(r"[0-9a-f]{64}", str(identity["sha256"])) is None)
             names, values, mask = (p.get(f) for f in ("feature_names", "feature_values", "default_mask"))
             if not all(isinstance(v, list) for v in (names, values, mask)) or not len(names) == len(values) == len(mask):
                 invalid["matrix_lengths"] += 1
@@ -74,9 +77,11 @@ def main():
             FROM hsf_observations WHERE timestamp >= %s::timestamptz - interval '1 hour'
             AND (record->>'scan_timestamp')::timestamptz >= %s AND context LIKE 'scheduled:%%'
             ORDER BY timestamp LIMIT 5001""", (SINCE, SINCE)).fetchall()
-        freezes = conn.execute("""SELECT raw_signal->'models' AS models
-            FROM signal_outcomes WHERE source='opportunity' AND fired_at >= %s
-            ORDER BY fired_at,id LIMIT 1001""", (SINCE,)).fetchall()
+        freezes = conn.execute("""SELECT ticker AS symbol,raw_signal->'models' AS models
+            FROM signal_outcomes WHERE source='opportunity'
+            AND fired_at >= %s::timestamptz - interval '1 day'
+            AND (fired_at >= %s OR (raw_signal#>>'{models,prebreakout,inferred_at}')::timestamptz >= %s)
+            ORDER BY fired_at,id LIMIT 1001""", (SINCE, SINCE, SINCE)).fetchall()
         if len(observations) > 5000 or len(freezes) > 1000:
             raise RuntimeError("Read cap exceeded")
         conn.execute("ROLLBACK")
@@ -93,28 +98,35 @@ def main():
                 if isinstance(p, dict) and p.get("source_scan_id") and p.get("inferred_at"):
                     key = (p["source_scan_id"], row.get("Ticker") or row.get("Symbol"), role, p["inferred_at"])
                     exact[key] = digest(p)
-    links = Counter()
-    for row in observations:
-        for role, p in (row["models"] or {}).items():
-            if not isinstance(p, dict):
-                continue
-            key = (p.get("source_scan_id"), row["symbol"], role, p.get("inferred_at"))
-            if all(key) and key in exact:
-                links["matched"] += 1
-                links["identical"] += int(exact[key] == digest(p))
-            else:
-                links["unlinked"] += 1
+    links = {}
+    for stage, records in (("canonical", observations), ("frozen", freezes)):
+        counts = Counter()
+        for row in records:
+            for role, p in (row["models"] or {}).items():
+                if not isinstance(p, dict):
+                    continue
+                key = (p.get("source_scan_id"), row["symbol"], role, p.get("inferred_at"))
+                if all(key) and key in exact:
+                    counts["matched"] += 1
+                    counts["identical"] += int(exact[key] == digest(p))
+                else:
+                    counts["unlinked"] += 1
+        links[stage] = dict(counts)
     result = {"checked_at": datetime.now(timezone.utc).isoformat(), "since": SINCE,
               "audit_workflow_run_id": os.getenv("GITHUB_RUN_ID"),
-              "read_only_enforced": True, "status": "PARTIAL" if saved else "WAITING_FOR_PROSPECTIVE_RUN",
+              "read_only_enforced": True, "status": "PARTIAL" if runs or observations or freezes else "WAITING_FOR_PROSPECTIVE_RUN",
               "saved_run_count": len(runs), "saved_candidate_count": len(saved),
               "saved_payload_bytes": sum(r["bytes"] or 0 for r in runs), "oversized_skipped": oversized,
               "canonical_count": len(observations), "frozen_count": len(freezes),
               "saved": inventory(saved), "canonical": inventory([r["models"] or {} for r in observations]),
-              "frozen": inventory([r["models"] or {} for r in freezes]), "exact_links": dict(links),
+              "frozen": inventory([r["models"] or {} for r in freezes]), "exact_links": links,
               "evaluation_ready": False}
     print("PROVENANCE_VERIFICATION_JSON=" + json.dumps(result, sort_keys=True, allow_nan=False))
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        # Never emit connection details or a provider/record payload on failure.
+        raise SystemExit("Read-only verification failed: " + type(exc).__name__) from None

@@ -6,6 +6,7 @@ from typing import Callable, Optional
 import pandas as pd
 import streamlit as st
 
+from analytics.prediction_provenance import customer_frame
 from scan import ai_confidence as aic
 from ui.headline_score import breakout_score_help, hsf_metric_text, model_details_view
 from ui.pricing import upgrade_message
@@ -96,9 +97,6 @@ def render_results(
         st.caption("Run a scan to see results.")
         return
 
-    from analytics.prediction_provenance import customer_frame
-    df = customer_frame(df)
-
     # Centralized entitlements (preferred). If present, they override passed flags.
     ent = st.session_state.get("entitlements") or {}
     if ent:
@@ -178,7 +176,7 @@ def render_results(
         render_score_map(df, key=key_prefix)
     except Exception:
         pass
-    df = apply_watchlist_result_view(df, key_prefix=key_prefix)
+    df = apply_watchlist_result_view(customer_frame(df), key_prefix=key_prefix)
     st.caption(
         f"Showing {len(df)} results. Increase 'Top N Results' in the sidebar to see more, "
         "or relax filters (Min Gap %, price range, Unusual Volume Filter). "
