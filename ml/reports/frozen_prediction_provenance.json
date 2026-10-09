@@ -1,0 +1,1936 @@
+{
+  "rows": 1041,
+  "coverage": {
+    "identity": {
+      "count": 1041,
+      "percent": 100.0
+    },
+    "prebreakout_prediction": {
+      "count": 592,
+      "percent": 56.87
+    },
+    "ai_prediction": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "benchmark_5d": {
+      "count": 882,
+      "percent": 84.73
+    },
+    "model_version": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "artifact_sha256": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "feature_schema_version": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "feature_values": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "calibration_version": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "training_data_end": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "target_name": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "target_version": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "target_value": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "prediction_raw": {
+      "count": 0,
+      "percent": 0.0
+    },
+    "prediction_timestamp": {
+      "count": 0,
+      "percent": 0.0
+    }
+  },
+  "by_entry_date": {
+    "2026-09-14": {
+      "rows": 635,
+      "coverage": {
+        "identity": {
+          "count": 635,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 586,
+          "percent": 92.28
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 630,
+          "percent": 99.21
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {
+        "13.3": 5,
+        "13.1": 529,
+        "15.7": 5,
+        "15.2": 5,
+        "14.1": 5,
+        "19.4": 5,
+        "16.1": 5,
+        "17.3": 5,
+        "13.2": 5,
+        "3.2000000477": 2,
+        "0.8999999762": 2,
+        "0.5": 4,
+        "0.200000003": 2,
+        "2.0999999046": 2,
+        "0.1000000015": 2,
+        "25.0": 3
+      }
+    },
+    "2026-09-15": {
+      "rows": 25,
+      "coverage": {
+        "identity": {
+          "count": 25,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 2,
+          "percent": 8.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 20,
+          "percent": 80.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {
+        "21.5": 1,
+        "20.4": 1
+      }
+    },
+    "2026-09-16": {
+      "rows": 30,
+      "coverage": {
+        "identity": {
+          "count": 30,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 3,
+          "percent": 10.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 25,
+          "percent": 83.33
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {
+        "15.4": 1,
+        "21.6": 1,
+        "21.5": 1
+      }
+    },
+    "2026-09-17": {
+      "rows": 35,
+      "coverage": {
+        "identity": {
+          "count": 35,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 34,
+          "percent": 97.14
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-09-18": {
+      "rows": 35,
+      "coverage": {
+        "identity": {
+          "count": 35,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 35,
+          "percent": 100.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-09-21": {
+      "rows": 20,
+      "coverage": {
+        "identity": {
+          "count": 20,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 20,
+          "percent": 100.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-09-22": {
+      "rows": 45,
+      "coverage": {
+        "identity": {
+          "count": 45,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 45,
+          "percent": 100.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-09-23": {
+      "rows": 40,
+      "coverage": {
+        "identity": {
+          "count": 40,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 40,
+          "percent": 100.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-09-24": {
+      "rows": 20,
+      "coverage": {
+        "identity": {
+          "count": 20,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 20,
+          "percent": 100.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-09-25": {
+      "rows": 15,
+      "coverage": {
+        "identity": {
+          "count": 15,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-09-28": {
+      "rows": 32,
+      "coverage": {
+        "identity": {
+          "count": 32,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 5,
+          "percent": 15.62
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-09-29": {
+      "rows": 16,
+      "coverage": {
+        "identity": {
+          "count": 16,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-09-30": {
+      "rows": 18,
+      "coverage": {
+        "identity": {
+          "count": 18,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 8,
+          "percent": 44.44
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-10-01": {
+      "rows": 15,
+      "coverage": {
+        "identity": {
+          "count": 15,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-10-02": {
+      "rows": 10,
+      "coverage": {
+        "identity": {
+          "count": 10,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-10-05": {
+      "rows": 10,
+      "coverage": {
+        "identity": {
+          "count": 10,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-10-06": {
+      "rows": 24,
+      "coverage": {
+        "identity": {
+          "count": 24,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 1,
+          "percent": 4.17
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {
+        "23.1": 1
+      }
+    },
+    "2026-10-07": {
+      "rows": 10,
+      "coverage": {
+        "identity": {
+          "count": 10,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    },
+    "2026-10-08": {
+      "rows": 6,
+      "coverage": {
+        "identity": {
+          "count": 6,
+          "percent": 100.0
+        },
+        "prebreakout_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "ai_prediction": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "benchmark_5d": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "model_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "artifact_sha256": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_schema_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "feature_values": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "calibration_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "training_data_end": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_name": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_version": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "target_value": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_raw": {
+          "count": 0,
+          "percent": 0.0
+        },
+        "prediction_timestamp": {
+          "count": 0,
+          "percent": 0.0
+        }
+      },
+      "probability_counts": {}
+    }
+  },
+  "by_source": {
+    "opportunity": {
+      "identity": {
+        "count": 1041,
+        "percent": 100.0
+      },
+      "prebreakout_prediction": {
+        "count": 592,
+        "percent": 56.87
+      },
+      "ai_prediction": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "benchmark_5d": {
+        "count": 882,
+        "percent": 84.73
+      },
+      "model_version": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "artifact_sha256": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "feature_schema_version": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "feature_values": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "calibration_version": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "training_data_end": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "target_name": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "target_version": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "target_value": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "prediction_raw": {
+        "count": 0,
+        "percent": 0.0
+      },
+      "prediction_timestamp": {
+        "count": 0,
+        "percent": 0.0
+      }
+    }
+  },
+  "prior_audit_funnel": {
+    "rows": 1041,
+    "first_ticker_entry_day": 371,
+    "after_conservative_gap": 104,
+    "with_5d_return": 56,
+    "with_prediction": 0
+  },
+  "probability_counts": {
+    "13.3": 5,
+    "13.1": 529,
+    "15.7": 5,
+    "15.2": 5,
+    "14.1": 5,
+    "19.4": 5,
+    "16.1": 5,
+    "17.3": 5,
+    "13.2": 5,
+    "3.2000000477": 2,
+    "0.8999999762": 2,
+    "0.5": 4,
+    "0.200000003": 2,
+    "2.0999999046": 2,
+    "0.1000000015": 2,
+    "25.0": 3,
+    "21.5": 2,
+    "20.4": 1,
+    "15.4": 1,
+    "21.6": 1,
+    "23.1": 1
+  },
+  "blocker_counts": {
+    "MISSING_PREDICTION": 449,
+    "MISSING_MODEL_VERSION": 1041,
+    "MISSING_ARTIFACT_SHA256": 1041,
+    "MISSING_FEATURE_SCHEMA_VERSION": 1041,
+    "MISSING_FEATURE_VALUES": 1041,
+    "MISSING_CALIBRATION_VERSION": 1041,
+    "MISSING_TRAINING_DATA_END": 1041,
+    "MISSING_TARGET_NAME": 1041,
+    "MISSING_TARGET_VERSION": 1041,
+    "MISSING_TARGET_VALUE": 1041,
+    "MISSING_PREDICTION_RAW": 1041,
+    "MISSING_PREDICTION_TIMESTAMP": 1041,
+    "TARGET_IDENTITY_UNVERIFIED": 1041,
+    "TRAINING_BOUNDARY_UNVERIFIED_OR_OVERLAPPING": 1041,
+    "PROVENANCE_CHAIN_REQUIRES_VERIFICATION": 1041
+  },
+  "classification": {
+    "VERIFIED_EVALUABLE": 0,
+    "RECONSTRUCTABLE_WITH_LIMITATIONS": 0,
+    "NOT_EVALUABLE": 1041
+  },
+  "classification_note": "No provenance chain verified; availability does not establish historical reconstruction.",
+  "raw_signal_keys": [
+    "primary_setup",
+    "score_version",
+    "score_components",
+    "hsf_score",
+    "status"
+  ],
+  "active_registry": [
+    {
+      "id": 13,
+      "model_version": "prebreakout-xgb-v9",
+      "trained_at": "2026-09-10 16:46:21.140042+00:00",
+      "calibration_map": {
+        "n": 7232,
+        "x": [
+          0.03425020499116203,
+          0.1431181611347429,
+          0.24523769615732166,
+          0.34649572365167663,
+          0.44468662973480355,
+          0.5484784301662944,
+          0.6451338359287807,
+          0.9223525428771973
+        ],
+        "y": [
+          0.13126323218066338,
+          0.23306948109058928,
+          0.277526395173454,
+          0.3113342898134864,
+          0.3113342898134864,
+          0.3403141361256545,
+          0.34812286689419797,
+          0.34812286689419797
+        ],
+        "method": "isotonic_from_buckets"
+      },
+      "training_data_end": null,
+      "train_end": null,
+      "training_end": null,
+      "feature_names": [
+        "Trend10D%",
+        "Trend20D%",
+        "VolRel20",
+        "DollarVol20",
+        "BreakoutScore",
+        "GapPct",
+        "PriceReturn1D",
+        "PriceSlope1D",
+        "PriceReturn3D",
+        "PriceSlope3D",
+        "PriceReturn5D",
+        "PriceSlope5D",
+        "BreakoutScoreDelta1D",
+        "BreakoutScoreSlope1D",
+        "BreakoutScoreDelta3D",
+        "BreakoutScoreSlope3D",
+        "BreakoutScoreDelta5D",
+        "BreakoutScoreSlope5D",
+        "Trend10DDelta1D",
+        "Trend10DSlope1D",
+        "Trend10DDelta3D",
+        "Trend10DSlope3D",
+        "Trend10DDelta5D",
+        "Trend10DSlope5D",
+        "Trend20DDelta1D",
+        "Trend20DSlope1D",
+        "Trend20DDelta3D",
+        "Trend20DSlope3D",
+        "Trend20DDelta5D",
+        "Trend20DSlope5D",
+        "VolRel20Delta1D",
+        "VolRel20Slope1D",
+        "VolRel20Delta3D",
+        "VolRel20Slope3D",
+        "VolRel20Delta5D",
+        "VolRel20Slope5D",
+        "GapPctDelta1D",
+        "GapPctSlope1D",
+        "GapPctDelta3D",
+        "GapPctSlope3D",
+        "GapPctDelta5D",
+        "GapPctSlope5D",
+        "BreakoutPos20DDelta1D",
+        "BreakoutPos20DSlope1D",
+        "BreakoutPos20DDelta3D",
+        "BreakoutPos20DSlope3D",
+        "BreakoutPos20DDelta5D",
+        "BreakoutPos20DSlope5D",
+        "RSvsSPY10D",
+        "RSvsSPY20D",
+        "RSvsQQQ10D",
+        "RSvsQQQ20D",
+        "RVOLChange1D",
+        "RVOLChange3D",
+        "RVOLSlope3D",
+        "RVOLSlope5D",
+        "Volatility20DChange3D",
+        "RangePct",
+        "RangeCompression5D",
+        "RangeCompression10D",
+        "RangeCompression20D",
+        "HigherLowCount10D",
+        "HigherLowCount20D",
+        "LowSlope10D",
+        "LowSlope20D",
+        "HigherHighCount10D",
+        "HigherHighCount20D",
+        "HigherLowRatio5D",
+        "HigherLowRatio10D",
+        "LowSlope5D",
+        "LowSlope5DPct",
+        "LowSlope10DPct",
+        "LowSlope20DPct",
+        "LowSlopeAcceleration",
+        "LowConsistency10D"
+      ]
+    }
+  ],
+  "indicator_keys": [
+    "primary_setup",
+    "signals",
+    "n_signals",
+    "gap_pct",
+    "chg_pct",
+    "fading",
+    "status"
+  ],
+  "workflow_run_id": "37892504220",
+  "scheduled_history": {
+    "runs": 51,
+    "counts": {
+      "scan_rows": 5100,
+      "candidate_and_setup_source_fields": 5100,
+      "complete_current_schema_source_rows": 0,
+      "PreBreakoutProbRaw": 400,
+      "PreBreakoutProb%": 400,
+      "raw_display_pairs": 400,
+      "display_13_1_with_raw": 84,
+      "display_13_1_raw_below_current_endpoint": 84,
+      "pairs_match_current_calibration": 400
+    },
+    "by_entry_date": {
+      "2026-09-22": {
+        "scan_rows": 600
+      },
+      "2026-09-23": {
+        "scan_rows": 900
+      },
+      "2026-09-24": {
+        "scan_rows": 400
+      },
+      "2026-09-25": {
+        "scan_rows": 400
+      },
+      "2026-09-28": {
+        "scan_rows": 500
+      },
+      "2026-09-29": {
+        "scan_rows": 300
+      },
+      "2026-09-30": {
+        "scan_rows": 300
+      },
+      "2026-10-01": {
+        "scan_rows": 300
+      },
+      "2026-10-02": {
+        "scan_rows": 300
+      },
+      "2026-10-05": {
+        "scan_rows": 200
+      },
+      "2026-10-06": {
+        "scan_rows": 300
+      },
+      "2026-10-07": {
+        "scan_rows": 300,
+        "PreBreakoutProbRaw": 100,
+        "PreBreakoutProb%": 100
+      },
+      "2026-10-08": {
+        "scan_rows": 300,
+        "PreBreakoutProbRaw": 300,
+        "PreBreakoutProb%": 300
+      }
+    },
+    "distinct_current_schema_source_signatures": 4880,
+    "largest_source_signature_cluster": 9,
+    "missing_current_schema_source_fields": {
+      "PriceReturn1D": 5100,
+      "PriceSlope1D": 5100,
+      "PriceReturn3D": 5100,
+      "PriceSlope3D": 5100,
+      "PriceReturn5D": 5100,
+      "PriceSlope5D": 5100,
+      "BreakoutScoreDelta1D": 5100,
+      "BreakoutScoreSlope1D": 5100,
+      "BreakoutScoreDelta3D": 5100,
+      "BreakoutScoreSlope3D": 5100,
+      "BreakoutScoreDelta5D": 5100,
+      "BreakoutScoreSlope5D": 5100,
+      "Trend10DDelta1D": 5100,
+      "Trend10DSlope1D": 5100,
+      "Trend10DDelta3D": 5100,
+      "Trend10DSlope3D": 5100,
+      "Trend10DDelta5D": 5100,
+      "Trend10DSlope5D": 5100,
+      "Trend20DDelta1D": 5100,
+      "Trend20DSlope1D": 5100,
+      "Trend20DDelta3D": 5100,
+      "Trend20DSlope3D": 5100,
+      "Trend20DDelta5D": 5100,
+      "Trend20DSlope5D": 5100,
+      "VolRel20Delta1D": 5100,
+      "VolRel20Slope1D": 5100,
+      "VolRel20Delta3D": 5100,
+      "VolRel20Slope3D": 5100,
+      "VolRel20Delta5D": 5100,
+      "VolRel20Slope5D": 5100,
+      "GapPctDelta1D": 5100,
+      "GapPctSlope1D": 5100,
+      "GapPctDelta3D": 5100,
+      "GapPctSlope3D": 5100,
+      "GapPctDelta5D": 5100,
+      "GapPctSlope5D": 5100,
+      "BreakoutPos20DDelta1D": 5100,
+      "BreakoutPos20DSlope1D": 5100,
+      "BreakoutPos20DDelta3D": 5100,
+      "BreakoutPos20DSlope3D": 5100,
+      "BreakoutPos20DDelta5D": 5100,
+      "BreakoutPos20DSlope5D": 5100,
+      "RSvsSPY10D": 5100,
+      "RSvsSPY20D": 5100,
+      "RSvsQQQ10D": 5100,
+      "RSvsQQQ20D": 5100,
+      "RVOLChange1D": 5100,
+      "RVOLChange3D": 5100,
+      "RVOLSlope3D": 5100,
+      "RVOLSlope5D": 5100,
+      "Volatility20DChange3D": 5100,
+      "RangePct": 5100,
+      "RangeCompression5D": 5100,
+      "RangeCompression10D": 5100,
+      "RangeCompression20D": 5100,
+      "HigherLowCount10D": 5100,
+      "HigherLowCount20D": 5100,
+      "LowSlope10D": 5100,
+      "LowSlope20D": 5100,
+      "HigherHighCount10D": 5100,
+      "HigherHighCount20D": 5100,
+      "HigherLowRatio5D": 5100,
+      "HigherLowRatio10D": 5100,
+      "LowSlope5D": 5100,
+      "LowSlope5DPct": 5100,
+      "LowSlope10DPct": 5100,
+      "LowSlope20DPct": 5100,
+      "LowSlopeAcceleration": 5100,
+      "LowConsistency10D": 5100,
+      "Trend10D%": 2,
+      "Trend20D%": 2,
+      "VolRel20": 2
+    },
+    "floor_raw_summary": {
+      "n": 84,
+      "unique_values": 84,
+      "min": 0.0030624762,
+      "max": 0.0330848135
+    },
+    "observations_with_ticker_entry_day_candidate": 255,
+    "observations_with_exact_run_timestamp_candidate": 0,
+    "warning": "Candidate joins and current-map agreement do not establish historical artifact or calibration identity; source signatures are not served feature vectors."
+  },
+  "canonical_research_store": {
+    "status": "READ",
+    "groups": [
+      {
+        "utc_date": "2026-09-22",
+        "context": "scheduled:us_market",
+        "rows": 420,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 420,
+        "observation_schema_tags": 0,
+        "scanner_commit_tags": 0,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 0,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-09-23",
+        "context": "scheduled:us_market",
+        "rows": 1813,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 1813,
+        "observation_schema_tags": 0,
+        "scanner_commit_tags": 0,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 0,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-09-24",
+        "context": "scheduled:us_market",
+        "rows": 1000,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 1000,
+        "observation_schema_tags": 0,
+        "scanner_commit_tags": 0,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 0,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-09-25",
+        "context": "scheduled:us_market",
+        "rows": 1000,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 1000,
+        "observation_schema_tags": 0,
+        "scanner_commit_tags": 0,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 0,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-09-28",
+        "context": "scheduled:us_market",
+        "rows": 970,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 970,
+        "observation_schema_tags": 970,
+        "scanner_commit_tags": 970,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 470,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-09-29",
+        "context": "scheduled:us_market",
+        "rows": 750,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 750,
+        "observation_schema_tags": 750,
+        "scanner_commit_tags": 750,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 450,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-09-30",
+        "context": "scheduled:us_market",
+        "rows": 750,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 750,
+        "observation_schema_tags": 750,
+        "scanner_commit_tags": 750,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 450,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-10-01",
+        "context": "scheduled:us_market",
+        "rows": 750,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 750,
+        "observation_schema_tags": 750,
+        "scanner_commit_tags": 750,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 450,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-10-02",
+        "context": "scheduled:us_market",
+        "rows": 750,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 750,
+        "observation_schema_tags": 750,
+        "scanner_commit_tags": 750,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 450,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-10-05",
+        "context": "scheduled:us_market",
+        "rows": 500,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 500,
+        "observation_schema_tags": 500,
+        "scanner_commit_tags": 500,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 300,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-10-06",
+        "context": "scheduled:us_market",
+        "rows": 750,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 750,
+        "observation_schema_tags": 750,
+        "scanner_commit_tags": 750,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 450,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-10-07",
+        "context": "scheduled:us_market",
+        "rows": 750,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 750,
+        "observation_schema_tags": 750,
+        "scanner_commit_tags": 750,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 450,
+        "high_low_source": 0
+      },
+      {
+        "utc_date": "2026-10-08",
+        "context": "scheduled:us_market",
+        "rows": 750,
+        "prebreakout_predictions": 0,
+        "ai_predictions": 0,
+        "code_model_version_tags": 750,
+        "observation_schema_tags": 750,
+        "scanner_commit_tags": 750,
+        "artifact_hashes": 0,
+        "calibration_identity": 0,
+        "target_identity": 0,
+        "resistance_source": 450,
+        "high_low_source": 0
+      }
+    ]
+  }
+}
