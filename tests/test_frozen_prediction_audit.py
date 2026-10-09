@@ -1,6 +1,7 @@
+import json
 from unittest.mock import MagicMock
 
-from scripts.frozen_prediction_audit import blockers, inventory, read_rows, summarize
+from scripts.frozen_prediction_audit import blockers, inventory, read_rows, scan_inventory, summarize
 
 
 def row(**kwargs):
@@ -41,3 +42,21 @@ def test_database_enforced_read_only_first():
     assert commands[0] == "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
     assert "statement_timeout" in commands[1]
     assert "LIMIT 10001" in commands[2]
+
+
+def test_different_raw_predictions_can_share_calibrated_floor():
+    records = [{"Ticker": "ABC", "F": 1, "PreBreakoutProbRaw": .01, "PreBreakoutProb%": 13.1},
+               {"Ticker": "XYZ", "F": 2, "PreBreakoutProbRaw": .02, "PreBreakoutProb%": 13.1}]
+    report = scan_inventory([{"created_at": "2026-09-28T15:00:00Z", "results_json": json.dumps(records)}],
+                            ["F"], {"x": [.034, .14], "y": [.13126, .23]}, [row()])
+    assert report["counts"]["pairs_match_current_calibration"] == 2
+    assert report["distinct_current_schema_source_signatures"] == 2
+    assert report["observations_with_exact_run_timestamp_candidate"] == 1
+    assert "do not establish" in report["warning"]
+
+
+def test_history_missing_source_fields_not_filled():
+    report = scan_inventory([{"created_at": "2026-09-28", "results_json": '[{"Ticker":"ABC"}]'}],
+                            ["F"], None, [])
+    assert report["counts"]["complete_current_schema_source_rows"] == 0
+    assert report["counts"].get("raw_display_pairs", 0) == 0

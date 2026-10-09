@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import hashlib
 import json
 import math
 import os
@@ -116,6 +117,81 @@ def read_rows(conn):
     return rows
 
 
+def scan_inventory(runs, features, calibration_map, observations):
+    """Inspect canonical scheduled payloads without exporting individual rows.
+
+    Source-field signatures are not final inference vectors. Candidate joins
+    are counted only; ticker/day or run timestamps do not certify linkage.
+    """
+    import numpy as np
+
+    required = ("IsBreakout", "BreakoutScore", "BreakoutPos20D", "Last")
+    counts = Counter()
+    date_counts = defaultdict(Counter)
+    signatures = Counter()
+    ticker_dates = Counter()
+    run_times = Counter()
+    for run in runs:
+        run_times[str(rd.to_dt(run["created_at"]))] += 1
+        day = str(rd.entry_day(run["created_at"]))
+        if (run.get("payload_bytes") or 0) > 2_000_000:
+            counts["oversized_payloads_skipped"] += 1
+            continue
+        payload = run.get("results_json") or "[]"
+        if len(payload.encode()) > 2_000_000:
+            counts["oversized_payloads_skipped"] += 1
+            continue
+        try:
+            records = json.loads(payload)
+        except (TypeError, ValueError):
+            counts["invalid_payloads"] += 1
+            continue
+        if not isinstance(records, list):
+            counts["non_list_payloads"] += 1
+            continue
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            counts["scan_rows"] += 1
+            date_counts[day]["scan_rows"] += 1
+            symbol = record.get("Symbol") or record.get("Ticker")
+            if isinstance(symbol, str):
+                ticker_dates[(symbol.upper(), day)] += 1
+            for field in ("PreBreakoutProbRaw", "PreBreakoutProb%", "AI Confidence",
+                          "FutureQualitySetupHit", "ForwardReturnHit", "Return_5D"):
+                if finite(record.get(field)):
+                    counts[field] += 1
+                    date_counts[day][field] += 1
+            if all(field in record and record[field] is not None for field in required):
+                counts["candidate_and_setup_source_fields"] += 1
+            available = [field for field in features if finite(record.get(field))]
+            counts["complete_current_schema_source_rows"] += int(len(available) == len(features) and bool(features))
+            # Only numeric source values enter a signature; missingness preserved.
+            vector = [float(record[field]) if field in available else None for field in features]
+            signature = hashlib.sha256(json.dumps(vector, allow_nan=False).encode()).hexdigest()
+            signatures[signature] += 1
+            raw = record.get("PreBreakoutProbRaw")
+            displayed = record.get("PreBreakoutProb%")
+            if finite(raw) and finite(displayed):
+                counts["raw_display_pairs"] += 1
+                if abs(float(displayed) - 13.1) < 1e-6:
+                    counts["display_13_1_with_raw"] += 1
+                    if calibration_map and calibration_map.get("x"):
+                        counts["display_13_1_raw_below_current_endpoint"] += int(float(raw) <= calibration_map["x"][0])
+                if calibration_map and calibration_map.get("x") and calibration_map.get("y"):
+                    mapped = round(float(np.interp(float(raw), calibration_map["x"], calibration_map["y"])) * 100, 1)
+                    counts["pairs_match_current_calibration"] += int(abs(mapped - float(displayed)) < 1e-6)
+    return {
+        "runs": len(runs), "counts": dict(counts),
+        "by_entry_date": {k: dict(v) for k, v in sorted(date_counts.items())},
+        "distinct_current_schema_source_signatures": len(signatures),
+        "largest_source_signature_cluster": max(signatures.values(), default=0),
+        "observations_with_ticker_entry_day_candidate": sum(ticker_dates[(r["ticker"], str(rd.entry_day(r["fired_at"])))] > 0 for r in observations),
+        "observations_with_exact_run_timestamp_candidate": sum(run_times[str(rd.to_dt(r["fired_at"]))] > 0 for r in observations),
+        "warning": "Candidate joins and current-map agreement do not establish historical artifact or calibration identity; source signatures are not served feature vectors.",
+    }
+
+
 def main():
     import psycopg
     from psycopg.rows import dict_row
@@ -134,11 +210,21 @@ def main():
             metadata->'calibration_map' AS calibration_map,
             metadata->'training_data_end' AS training_data_end,
             metadata->'train_end' AS train_end,
-            metadata->'training_end' AS training_end
+            metadata->'training_end' AS training_end, feature_names
             FROM prebreakout_models WHERE is_active=true LIMIT 5""").fetchall()
+        runs = conn.execute("""SELECT id, created_at,
+            CASE WHEN octet_length(results_json) <= 2000000 THEN results_json ELSE NULL END AS results_json,
+            octet_length(results_json) AS payload_bytes
+            FROM runs WHERE username='cron' AND label='US_MARKET'
+            AND created_at >= '2026-09-01' AND created_at < '2026-10-09 05:12:00+00'
+            ORDER BY created_at,id LIMIT 2001""").fetchall()
+        if len(runs) > 2000 or sum(r["payload_bytes"] or 0 for r in runs) > 64_000_000:
+            raise SystemExit("Scheduled history audit cap exceeded")
     result = summarize(rows)
     result.update(raw_signal_keys=[r["key"] for r in keys], active_registry=registry,
                   workflow_run_id=os.getenv("GITHUB_RUN_ID"))
+    active = registry[0] if len(registry) == 1 else {}
+    result["scheduled_history"] = scan_inventory(runs, active.get("feature_names") or [], active.get("calibration_map"), rows)
     payload = json.dumps(result, default=str, allow_nan=False).encode()
     print("=== PROVENANCE_BUNDLE ===")
     print(base64.b64encode(gzip.compress(payload)).decode())
