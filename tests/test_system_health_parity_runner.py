@@ -117,6 +117,25 @@ class MarkRunnerlessTests(unittest.TestCase):
         self.assertNotIn("no_runner", runs[3])
         self.assertEqual(session.get.call_count, 2)
 
+    def test_checks_every_slot_the_scanner_rule_judges(self):
+        # Production 2026-10-08 23:45 UTC: the 2026-10-05 19:35/20:35 runner-less
+        # runs were still inside the scanner's 3 ET-day window but older than a
+        # rolling 72 h, so they stayed FAILED_SCAN.
+        from scripts import system_health as script
+        now = dt.datetime(2026, 10, 8, 23, 45, 25, tzinfo=UTC)
+        session = mock.Mock()
+        session.get.return_value = _Resp({"jobs": [{"runner_id": 0, "runner_name": "", "steps": []}]})
+        runs = [r for r in _slot_runs(now) if not r["created_at"].startswith("2026-10-05T19")
+                and not r["created_at"].startswith("2026-10-05T20")]
+        runs += [{"id": 696, "created_at": "2026-10-05T19:35:11+00:00", "updated_at": "2026-10-05T19:50:15+00:00",
+                  "conclusion": "failure", "status": "completed", "event": "workflow_dispatch"},
+                 {"id": 697, "created_at": "2026-10-05T20:35:11+00:00", "updated_at": "2026-10-05T20:50:21+00:00",
+                  "conclusion": "failure", "status": "completed", "event": "workflow_dispatch"}]
+        script.mark_runnerless(session, "o/r", runs, now)
+        codes = _codes(sh.eval_scanner(runs, [], now))
+        self.assertNotIn("FAILED_SCAN", codes)
+        self.assertEqual(len(codes["SCAN_NO_RUNNER"]["evidence"]), 2)
+
     def test_jobs_lookup_failure_leaves_run_unflagged(self):
         from scripts import system_health as script
         session = mock.Mock()
