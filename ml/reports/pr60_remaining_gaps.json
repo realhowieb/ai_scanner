@@ -1,5 +1,9 @@
 {
   "schema_version": "1.0",
+  "new_bucket_checked_at_utc": "2026-10-09T18:50:31Z",
+  "new_bucket_checkpoint": "WAITING_FOR_NEW_BUCKET",
+  "prior_capture_bucket_utc": "2026-10-09T17:00:00+00:00",
+  "new_production_inspection_performed": false,
   "status": "PARTIAL",
   "executed_sha": "61dc0526ca8d66803e8d8d55dd5f114688bb9243",
   "latest_scanner_run_id": "37969482226",
@@ -18,7 +22,7 @@
   "brief_recalculation_linkage": "UNVERIFIED_NO_INDEPENDENT_RECALCULATION_EVENT_ARCHIVE",
   "immutability": "PRIOR_DEDUP_LOGS_AND_FIXTURES_ONLY_NO_NEW_BEFORE_AFTER_DIGESTS",
   "provenance_overhead_seconds": null,
-  "tests": {"collected": 42, "passed": 42, "failed": 0, "skipped": 0, "warnings": 0, "seconds": 2.02},
+  "tests": {"collected": 42, "passed": 42, "failed": 0, "skipped": 0, "warnings": 0, "seconds": 1.98},
   "collection_readiness": "PARTIAL_AWAITING_LIVE_CHECKS",
   "evaluation_ready": false,
   "production_mutations": false,

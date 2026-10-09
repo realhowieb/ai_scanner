@@ -1,5 +1,27 @@
 # PR #60 Post-Deployment Provenance Verification
 
+## New-bucket checkpoint: 2026-10-09 18:50 UTC
+
+**WAITING_FOR_NEW_BUCKET.** Latest main and verification branch were fetched;
+PR #61 remains open. The latest five scanner workflow executions still end
+with successful 37969482226 (executed SHA `61dc0526ca8d66803e8d8d55dd5f114688bb9243`).
+No later successful execution exists in the reviewed list. Production inspection
+stopped at this gate: no scan, diagnostic, inference or mutation was triggered.
+
+`analytics/observation_capture.py:35` floors the supplied scan timestamp to its
+UTC hour. Both prior scans fall in the 17:00 UTC bucket; workflow completion
+at 18:00 does not establish a new capture bucket. The earlier run's logs already
+confirmed 100 duplicates, zero new candidate inserts and zero failures.
+New-bucket insertion counts, linkage coverage and hashes remain **unknown**.
+
+Focused tests rerun: **42 passed, 0 failed/skipped/warnings**, 1.98 seconds;
+Ruff and syntax checks pass. No production privacy or Brief recalculation
+claim has been upgraded from fixture coverage. Overall collection status
+remains PARTIAL; this checkpoint is WAITING. Evaluation remains NOT READY.
+Next: inspect an actual successful scan with a distinct supplied UTC scan-hour
+and then scope the read-only audit to its identity. Do not treat elapsed time
+or completion time as evidence that a suitable scan ran.
+
 ## Remaining-gap review
 
 Latest five scanner executions still end with 37969482226 at 17:53 UTC.
