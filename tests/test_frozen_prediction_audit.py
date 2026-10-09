@@ -11,6 +11,7 @@ def row(**kwargs):
 def test_missing_provenance_never_certified():
     assert "MISSING_ARTIFACT_SHA256" in blockers(row())
     assert summarize([row()])["classification"]["VERIFIED_EVALUABLE"] == 0
+    assert inventory([row(provenance=None)])["model_version"]["count"] == 0
 
 
 def test_boundary_equal_excluded():

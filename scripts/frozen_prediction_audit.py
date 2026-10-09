@@ -36,7 +36,7 @@ def inventory(rows):
         "ai_prediction": lambda r: finite(r.get("ai_confidence")),
         "benchmark_5d": lambda r: finite(r.get("benchmark_return_5d")),
     }
-    checks.update({key: lambda r, k=key: r.get("provenance", {}).get(k) is not None for key in FIELDS})
+    checks.update({key: lambda r, k=key: (r.get("provenance") or {}).get(k) is not None for key in FIELDS})
     return {key: {"count": sum(bool(check(r)) for r in rows),
                   "percent": round(100 * sum(bool(check(r)) for r in rows) / n, 2) if n else None}
             for key, check in checks.items()}
@@ -232,12 +232,34 @@ def main():
             ORDER BY created_at,id LIMIT 2001""").fetchall()
         if len(runs) > 2000 or sum(r["payload_bytes"] or 0 for r in runs) > 64_000_000:
             raise SystemExit("Scheduled history audit cap exceeded")
+        canonical = {"status": "TABLE_UNAVAILABLE"}
+        if conn.execute("SELECT to_regclass('hsf_observations') AS name").fetchone()["name"]:
+            canonical = {"status": "READ", "groups": conn.execute("""
+                SELECT timestamp::date AS utc_date, context, COUNT(*) AS rows,
+                  COUNT(*) FILTER (WHERE record#>>'{models,prebreakout,probability}' IS NOT NULL) AS prebreakout_predictions,
+                  COUNT(*) FILTER (WHERE record#>>'{models,ai_confidence,confidence}' IS NOT NULL) AS ai_predictions,
+                  COUNT(*) FILTER (WHERE record#>>'{versions,prebreakout_model}' IS NOT NULL) AS code_model_version_tags,
+                  COUNT(*) FILTER (WHERE record#>>'{research_metadata,feature_schema_version}' IS NOT NULL) AS observation_schema_tags,
+                  COUNT(*) FILTER (WHERE record#>>'{research_metadata,scanner_commit_sha}' IS NOT NULL) AS scanner_commit_tags,
+                  COUNT(*) FILTER (WHERE record#>>'{models,prebreakout,artifact_sha256}' IS NOT NULL) AS artifact_hashes,
+                  COUNT(*) FILTER (WHERE record#>>'{models,prebreakout,calibration_version}' IS NOT NULL) AS calibration_identity,
+                  COUNT(*) FILTER (WHERE record#>>'{models,prebreakout,target_name}' IS NOT NULL) AS target_identity,
+                  COUNT(*) FILTER (WHERE record#>>'{research_metadata,row_features,breakout_pos_20d}' IS NOT NULL) AS resistance_source,
+                  COUNT(*) FILTER (WHERE record#>>'{market,high}' IS NOT NULL AND record#>>'{market,low}' IS NOT NULL) AS high_low_source
+                FROM hsf_observations
+                WHERE timestamp >= '2026-09-01' AND timestamp < '2026-10-09 05:12:00+00'
+                  AND context LIKE 'scheduled:%%'
+                GROUP BY timestamp::date,context ORDER BY timestamp::date,context LIMIT 501
+            """).fetchall()}
+            if len(canonical["groups"]) > 500:
+                raise SystemExit("Canonical inventory group cap exceeded")
     result = summarize(rows)
     result.update(raw_signal_keys=[r["key"] for r in keys], active_registry=registry,
                   indicator_keys=[r["key"] for r in indicator_keys],
                   workflow_run_id=os.getenv("GITHUB_RUN_ID"))
     active = registry[0] if len(registry) == 1 else {}
     result["scheduled_history"] = scan_inventory(runs, active.get("feature_names") or [], active.get("calibration_map"), rows)
+    result["canonical_research_store"] = canonical
     payload = json.dumps(result, default=str, allow_nan=False).encode()
     print("=== PROVENANCE_BUNDLE ===")
     print(base64.b64encode(gzip.compress(payload)).decode())
