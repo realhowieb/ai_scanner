@@ -1,5 +1,43 @@
 # PR #60 Post-Deployment Provenance Verification
 
+## New-bucket production verification: canonical PASS, overall PARTIAL
+
+Scanner **37976348510** successfully executed production SHA
+`61dc0526ca8d66803e8d8d55dd5f114688bb9243`, started 2026-10-09T18:52:54Z,
+completed by 18:59:11Z. This scan occupies the distinct **18:00 UTC bucket**.
+Read-only Diagnostics **37977289730**, verifier commit `bd63ab6`, audited at
+19:01:31Z. Evidence: `ml/reports/pr60_new_bucket_production_audit.json`.
+
+- Capture logs: **100 attempted, 100 inserted, 0 duplicates, 0 failures**.
+- Saved run 3230 and updated snapshot 3227: 200 representations, **100 unique
+  inference identities**, no conflicting duplicates; 1,010,406 bytes total.
+- Canonical CANDIDATE: **100/100 captured, exactly linked and hash-identical**
+  to saved provenance using source scan identity, ticker, role and inference time.
+- Newly frozen opportunities 11282-11286: **5/5 captured, exactly linked and
+  hash-identical**. Displayed PreBreakout values remain absent for these rows.
+- CONTROL 100 and NEAR_MISS 50: expected non-invocation, not lost predictions.
+  AI-confidence is absent on this scheduled path as expected.
+- Artifact/schema/calibration hashes, feature/mask lengths, finite inputs,
+  probability ranges and mask types pass at saved, canonical and frozen stages.
+- Actual input timestamps, target versions, training and calibration boundaries
+  remain unavailable. No scan/render timestamp substituted for market-data time.
+
+The scoped window returned one inference source represented in two saved records;
+no mixed-run denominator was observed. Earlier frozen records were excluded by
+the window; this does not constitute a new before/after immutability comparison.
+Brief recalculations and authorized live tier/API/table/CSV privacy remain
+UNVERIFIED for the previously documented reasons. Existing artifact privacy
+verification is not generalized to those surfaces.
+
+**Canonical preservation: PASS. Frozen preservation: PASS. Overall: PARTIAL.**
+Scheduled PreBreakout storage collection is demonstrated; complete collection
+verification remains limited by the outstanding live checks. Evaluation remains
+NOT READY due to original-target evidence and metadata/boundary gaps. No model
+performance was calculated and no production data was changed by the audit.
+Scoped tests: **14 passed** in 0.97 seconds; verifier Ruff check passes.
+Next: close authorized live privacy/recalculation checks and address evaluation
+evidence separately, without changing scoring or certified capture identities.
+
 ## New-bucket checkpoint: 2026-10-09 18:50 UTC
 
 **WAITING_FOR_NEW_BUCKET.** Latest main and verification branch were fetched;

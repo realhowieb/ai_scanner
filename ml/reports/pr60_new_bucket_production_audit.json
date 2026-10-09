@@ -1,0 +1,217 @@
+{
+  "audit_workflow_run_id": "37977289730",
+  "canonical": {
+    "ai_confidence": {
+      "counts": {
+        "absent": 250
+      },
+      "invalid": {},
+      "missing": {},
+      "unavailable_reasons": {}
+    },
+    "prebreakout": {
+      "counts": {
+        "absent": 150,
+        "captured": 100
+      },
+      "invalid": {
+        "artifact_hash_format": 0,
+        "calibrated_probability": 0,
+        "calibration_hash": 0,
+        "feature_schema_hash": 0,
+        "mask_types": 0,
+        "non_finite_inputs": 0,
+        "raw_probability": 0
+      },
+      "missing": {
+        "calibration_data_end": 100,
+        "input_timestamp": 100,
+        "target_version": 100,
+        "training_data_end": 100
+      },
+      "unavailable_reasons": {}
+    }
+  },
+  "canonical_count": 250,
+  "checked_at": "2026-10-09T19:01:31.959434+00:00",
+  "coverage_reconciliation": {
+    "cohort_coverage": {
+      "scheduled:us_market:CANDIDATE": {
+        "ai_confidence_expected_not_invoked": 100,
+        "prebreakout_present": 100,
+        "rows": 100
+      },
+      "scheduled:us_market:CONTROL": {
+        "ai_confidence_expected_not_invoked": 100,
+        "prebreakout_expected_not_invoked": 100,
+        "rows": 100
+      },
+      "scheduled:us_market:NEAR_MISS": {
+        "ai_confidence_expected_not_invoked": 50,
+        "prebreakout_expected_not_invoked": 50,
+        "rows": 50
+      }
+    },
+    "conflicting_duplicate_identities": 0,
+    "frozen_records": [
+      {
+        "created_at": "2026-10-09 18:59:03.520604+00:00",
+        "displayed_prebreakout_present": false,
+        "fired_at": "2026-10-09 18:58:54.790260+00:00",
+        "id": 11282,
+        "link_note": "ticker presence is NOT exact inference linkage",
+        "models_present": [
+          "prebreakout"
+        ],
+        "same_ticker_saved_source_candidates": 1,
+        "ticker": "HUM"
+      },
+      {
+        "created_at": "2026-10-09 18:59:03.580264+00:00",
+        "displayed_prebreakout_present": false,
+        "fired_at": "2026-10-09 18:58:54.790260+00:00",
+        "id": 11283,
+        "link_note": "ticker presence is NOT exact inference linkage",
+        "models_present": [
+          "prebreakout"
+        ],
+        "same_ticker_saved_source_candidates": 1,
+        "ticker": "NVAX"
+      },
+      {
+        "created_at": "2026-10-09 18:59:03.639793+00:00",
+        "displayed_prebreakout_present": false,
+        "fired_at": "2026-10-09 18:58:54.790260+00:00",
+        "id": 11284,
+        "link_note": "ticker presence is NOT exact inference linkage",
+        "models_present": [
+          "prebreakout"
+        ],
+        "same_ticker_saved_source_candidates": 1,
+        "ticker": "XP"
+      },
+      {
+        "created_at": "2026-10-09 18:59:03.699065+00:00",
+        "displayed_prebreakout_present": false,
+        "fired_at": "2026-10-09 18:58:54.790260+00:00",
+        "id": 11285,
+        "link_note": "ticker presence is NOT exact inference linkage",
+        "models_present": [
+          "prebreakout"
+        ],
+        "same_ticker_saved_source_candidates": 1,
+        "ticker": "KOD"
+      },
+      {
+        "created_at": "2026-10-09 18:59:03.757951+00:00",
+        "displayed_prebreakout_present": false,
+        "fired_at": "2026-10-09 18:58:54.790260+00:00",
+        "id": 11286,
+        "link_note": "ticker presence is NOT exact inference linkage",
+        "models_present": [
+          "prebreakout"
+        ],
+        "same_ticker_saved_source_candidates": 1,
+        "ticker": "INTR"
+      }
+    ],
+    "saved_runs": [
+      {
+        "created_at": "2026-10-09 18:58:49.034302",
+        "id": 3230,
+        "rows": 100,
+        "snapshot": false,
+        "universe": "US_MARKET"
+      },
+      {
+        "created_at": "2026-10-09 18:58:54.790260",
+        "id": 3227,
+        "rows": 100,
+        "snapshot": true,
+        "universe": "daily_snapshot"
+      }
+    ],
+    "unique_linkable_inferences": 100
+  },
+  "evaluation_ready": false,
+  "exact_links": {
+    "canonical": {
+      "identical": 100,
+      "matched": 100
+    },
+    "frozen": {
+      "identical": 5,
+      "matched": 5
+    }
+  },
+  "frozen": {
+    "ai_confidence": {
+      "counts": {
+        "absent": 5
+      },
+      "invalid": {},
+      "missing": {},
+      "unavailable_reasons": {}
+    },
+    "prebreakout": {
+      "counts": {
+        "captured": 5
+      },
+      "invalid": {
+        "artifact_hash_format": 0,
+        "calibrated_probability": 0,
+        "calibration_hash": 0,
+        "feature_schema_hash": 0,
+        "mask_types": 0,
+        "non_finite_inputs": 0,
+        "raw_probability": 0
+      },
+      "missing": {
+        "calibration_data_end": 5,
+        "input_timestamp": 5,
+        "target_version": 5,
+        "training_data_end": 5
+      },
+      "unavailable_reasons": {}
+    }
+  },
+  "frozen_count": 5,
+  "oversized_skipped": 0,
+  "read_only_enforced": true,
+  "saved": {
+    "ai_confidence": {
+      "counts": {
+        "absent": 200
+      },
+      "invalid": {},
+      "missing": {},
+      "unavailable_reasons": {}
+    },
+    "prebreakout": {
+      "counts": {
+        "captured": 200
+      },
+      "invalid": {
+        "artifact_hash_format": 0,
+        "calibrated_probability": 0,
+        "calibration_hash": 0,
+        "feature_schema_hash": 0,
+        "mask_types": 0,
+        "non_finite_inputs": 0,
+        "raw_probability": 0
+      },
+      "missing": {
+        "calibration_data_end": 200,
+        "input_timestamp": 200,
+        "target_version": 200,
+        "training_data_end": 200
+      },
+      "unavailable_reasons": {}
+    }
+  },
+  "saved_candidate_count": 200,
+  "saved_payload_bytes": 1010406,
+  "saved_run_count": 2,
+  "since": "2026-10-09T18:52:54+00:00",
+  "status": "PARTIAL"
+}
