@@ -126,8 +126,10 @@ def _symbol_column(df) -> Optional[str]:
 def _prebreakout_picks(df, limit: int = 3) -> List[Dict[str, Any]]:
     """Top PreBreakout candidates [{symbol, prob}] from the snapshot (best first)."""
     try:
+        from analytics.prediction_provenance import mark_recalculation, models_by_ticker
         from ml_prebreakout import score_prebreakout
 
+        source_models = models_by_ticker(df.to_dict("records")) if hasattr(df, "to_dict") else {}
         scored = score_prebreakout(df)
         if scored is None or len(scored) == 0 or "PreBreakoutProb%" not in scored.columns:
             return []
@@ -149,7 +151,10 @@ def _prebreakout_picks(df, limit: int = 3) -> List[Dict[str, Any]]:
                 continue
             pick = {"symbol": str(r.get(sym_col)).upper(), "prob": round(prob, 1)}
             from analytics.prediction_provenance import models_from_row
-            pick["models"] = models_from_row(r)
+            pick["models"] = mark_recalculation(
+                models_from_row(r), source_models.get(pick["symbol"], {}),
+                role="prebreakout", context="brief_pick_recalculation",
+            )
             if price_col is not None:
                 try:
                     pick["last"] = round(float(r.get(price_col)), 2)

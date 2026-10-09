@@ -99,6 +99,11 @@ def attach(frame, role, inputs, default_mask, raw, calibrated, metadata, *, avai
         "trained_at": clean(metadata.get("trained_at")),
         "training_data_end": clean(metadata.get("training_data_end")),
         "calibration_data_end": clean(metadata.get("calibration_data_end")),
+        "metadata_availability": {
+            field: {"status": "supplied" if clean(metadata.get(field)) is not None else "unavailable",
+                    "reason": None if clean(metadata.get(field)) is not None else "loaded_metadata_does_not_supply_field"}
+            for field in ("target_version", "training_data_end", "calibration_data_end")
+        },
         "enrichment_availability": clean(availability),
         "preprocessing_identity": "prebreakout_bundle_plan_then_fillna_zero" if role == "prebreakout" else "numeric_coercion_then_fillna_zero",
         "target_evidence": {"status": "unavailable", "reason": "original_target_not_matured; top_n_absence_is_not_negative"},
@@ -120,6 +125,29 @@ def attach(frame, role, inputs, default_mask, raw, calibrated, metadata, *, avai
     # calibration snapshots until models_from_row decodes at storage boundaries.
     frame[COLUMN] = [json.dumps(record, sort_keys=True, separators=(",", ":"), allow_nan=False) for record in records]
     return frame
+
+
+def mark_recalculation(models, previous_models, *, role, context):
+    """Link a real recalculation to existing evidence without changing its time.
+
+    The source scan remains input lineage, not the identity/time of this inference.
+    A parent hash identifies evidence, not a prediction reconstructed afterward.
+    """
+    out = dict(models)
+    current = out.get(role)
+    if not isinstance(current, dict):
+        return out
+    previous = (previous_models or {}).get(role)
+    parent = None
+    if isinstance(previous, dict) and previous.get("status") == "captured":
+        parent = {"inferred_at": previous.get("inferred_at"),
+                  "source_scan_id": previous.get("source_scan_id"),
+                  "provenance_hash": digest(previous)}
+    out[role] = {**current, "inference_context": context,
+                 "source_scan_id_semantics": "input_scan_lineage_not_recalculation_time",
+                 "parent_prediction": parent,
+                 "parent_unavailable_reason": None if parent else "no_captured_parent_in_source_row"}
+    return out
 
 
 def customer_frame(frame):
