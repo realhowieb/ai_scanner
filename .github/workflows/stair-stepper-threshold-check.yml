@@ -26,6 +26,13 @@ on:
         options: ["45", "10", "15", "20", "30", "60"]
         default: "45"
 
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
+
 permissions:
   contents: read
 
@@ -64,7 +71,7 @@ jobs:
           ARGS=(--top "$TOP" --window "$WINDOW")
           if [ -n "$SESSION_DATE" ]; then ARGS+=(--date "$SESSION_DATE"); fi
           if [ -n "$SYMBOLS" ]; then ARGS+=(--symbols "$SYMBOLS"); fi
-          python scripts/stair_stepper_threshold_check.py "${ARGS[@]}"
+          python -m scripts.db_traffic_job scripts.stair_stepper_threshold_check "${ARGS[@]}"
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v7
@@ -73,3 +80,12 @@ jobs:
           path: artifacts/automation/stair_stepper/
           if-no-files-found: ignore
           retention-days: 30
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

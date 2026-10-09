@@ -57,13 +57,25 @@ def get_conn():
     # Prefer psycopg (v3)
     try:
         import psycopg  # type: ignore
-        return psycopg.connect(dsn)
-    except Exception:
+
+        from db.traffic import connect_options, count
+
+        conn = psycopg.connect(dsn, connect_timeout=10, **connect_options())
+        count(connections_opened=1)
+        return conn
+    except ImportError:
         pass
+    except Exception:
+        raise RuntimeError("Unable to connect to Postgres") from None
 
     # Fallback to psycopg2
     try:
         import psycopg2  # type: ignore
-        return psycopg2.connect(dsn)
-    except Exception as e:
-        raise RuntimeError(f"Unable to connect to Postgres: {e}")
+
+        from db.traffic import connect_options, count
+
+        conn = psycopg2.connect(dsn, connect_timeout=10, **connect_options("psycopg2"))
+        count(connections_opened=1)
+        return conn
+    except Exception:
+        raise RuntimeError("Unable to connect to Postgres") from None

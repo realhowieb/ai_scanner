@@ -18,6 +18,7 @@ from io import StringIO
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 from db.engine import get_neon_conn, schema_once
+from db.traffic import cache
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -122,6 +123,7 @@ def get_price_data_snapshot(
         if df is not None and not df.empty:
             cached[orig_by_key.get(key, key)] = df
     stale = set(orig_by_key.values()) - set(cached.keys())
+    cache("neon_price_frames", hits=len(cached), misses=len(stale))
     return cached, stale
 
 

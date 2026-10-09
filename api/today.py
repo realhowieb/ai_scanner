@@ -35,12 +35,16 @@ class TTLCache:
         self._refreshing: set = set()
 
     def get(self, key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S, stale_s: float = 0) -> Any:
+        from db.traffic import cache
+
         now = time.monotonic()
         with self._lock:
             hit = self._items.get(key)
             if hit and now < hit[0]:
+                cache("api_results", hits=1)
                 return hit[2]
             if hit and now < hit[1]:
+                cache("api_results", stale_hits=1)
                 if key not in self._refreshing:
                     self._refreshing.add(key)
                     threading.Thread(target=self._refresh, args=(key, loader, ttl_s, stale_s),
@@ -51,7 +55,9 @@ class TTLCache:
             with self._lock:
                 hit = self._items.get(key)
                 if hit and time.monotonic() < hit[0]:
+                    cache("api_results", hits=1)
                     return hit[2]
+            cache("api_results", misses=1)
             value = loader()
             self._put(key, value, ttl_s, stale_s)
         with self._lock:
@@ -61,7 +67,10 @@ class TTLCache:
 
     def _refresh(self, key: Any, loader: Callable[[], Any], ttl_s: float, stale_s: float) -> None:
         try:
-            self._put(key, loader(), ttl_s, stale_s)
+            from db.traffic import scope
+
+            with scope("api.cache_refresh"):
+                self._put(key, loader(), ttl_s, stale_s)
         except Exception:  # keep serving the stale value; the next request past stale_s loads in the foreground
             pass
         finally:

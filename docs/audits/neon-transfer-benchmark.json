@@ -1,0 +1,54 @@
+{
+  "retry": {
+    "kind": "synthetic_payload_estimate",
+    "fixture_rows": 10000,
+    "scenario": "first scan-index read fails after successful observation download",
+    "outputs_equal": true,
+    "before": {
+      "calls": 4,
+      "errors": 1,
+      "rows_returned": 0,
+      "rows_fetched": 30000,
+      "db_to_client_payload_bytes": 2947780,
+      "client_to_db_payload_bytes": 0,
+      "execute_ms": 0,
+      "fetch_ms": 0,
+      "connections_opened": 0,
+      "connections_reused": 0,
+      "cache_hits": 0,
+      "cache_misses": 0,
+      "cache_stale_hits": 0,
+      "cache_activity": {}
+    },
+    "after": {
+      "calls": 3,
+      "errors": 1,
+      "rows_returned": 0,
+      "rows_fetched": 20000,
+      "db_to_client_payload_bytes": 1628890,
+      "client_to_db_payload_bytes": 0,
+      "execute_ms": 0,
+      "fetch_ms": 0,
+      "connections_opened": 0,
+      "connections_reused": 0,
+      "cache_hits": 0,
+      "cache_misses": 0,
+      "cache_stale_hits": 0,
+      "cache_activity": {}
+    },
+    "excluded": "query text/parameters, TLS/protocol framing, provider accounting and timing comparison"
+  },
+  "price_upload": {
+    "kind": "synthetic_serialized_payload_model",
+    "scenario": "all requested frames are fresh Neon cache hits",
+    "symbols": 8000,
+    "bars_per_symbol": 250,
+    "bytes_per_frame": 14619,
+    "before_client_to_db_payload_bytes": 117000000,
+    "after_client_to_db_payload_bytes": 0,
+    "before_upsert_rows": 8000,
+    "after_upsert_rows": 0,
+    "db_to_client_savings_claimed": false,
+    "excluded": "SQL bytes, prepared/batched protocol, command acknowledgements and TLS"
+  }
+}

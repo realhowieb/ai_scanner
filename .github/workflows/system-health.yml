@@ -16,6 +16,13 @@ on:
   # (after the last maturation and the readiness monitor), Mon-Fri. GitHub's
   # cron ran these 3-4 hours late.
 
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
+
 permissions:
   contents: read
   actions: read
@@ -50,7 +57,7 @@ jobs:
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
           ALPACA_FEED: ${{ secrets.ALPACA_FEED }}
         run: |
-          python -m scripts.system_health --out artifacts/health --persist
+          python -m scripts.db_traffic_job scripts.system_health --out artifacts/health --persist
           cat artifacts/health/system_health.md >> "$GITHUB_STEP_SUMMARY"
       - name: ML v4 data readiness monitor (read-only)
         # Slim reads of the opportunity dataset; alerts print as warnings and
@@ -61,7 +68,7 @@ jobs:
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           AI_SCANNER_SQLITE_FALLBACK: "false"
         run: |
-          python scripts/ml_readiness.py --monitor --out artifacts/health
+          python -m scripts.db_traffic_job scripts.ml_readiness --monitor --out artifacts/health
           cat artifacts/health/ml_readiness_monitor.md >> "$GITHUB_STEP_SUMMARY"
       - name: Surface human action (no automatic action)
         if: steps.health.outputs.human_action == 'HUMAN_ACTION_REQUIRED'
@@ -77,3 +84,12 @@ jobs:
             artifacts/health/ml_readiness_monitor.json
             artifacts/health/ml_readiness_monitor.md
           if-no-files-found: warn
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

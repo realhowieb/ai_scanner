@@ -32,6 +32,13 @@ concurrency:
   group: mature-observations
   cancel-in-progress: false
 
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
+
 permissions:
   contents: read
 
@@ -64,7 +71,7 @@ jobs:
         run: |
           DRY=""
           if [ "$DRY_RUN" = "true" ]; then DRY="--dry-run"; fi
-          python -m scripts.mature_observations --slack-min "$SLACK_MIN" $DRY --out artifacts/automation
+          python -m scripts.db_traffic_job scripts.mature_observations --slack-min "$SLACK_MIN" $DRY --out artifacts/automation
           echo "### Outcome maturation" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat artifacts/automation/maturation_report.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
@@ -84,7 +91,7 @@ jobs:
             echo "Stair-stepper analysis skipped (runs after 22:30 UTC; stair_stepper=always to force)." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          python -m scripts.analyze_stair_stepper --out artifacts/automation/stair_stepper
+          python -m scripts.db_traffic_job scripts.analyze_stair_stepper --out artifacts/automation/stair_stepper
           cat artifacts/automation/stair_stepper/stair_stepper_validation.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload maturation report
         if: always()
@@ -95,3 +102,12 @@ jobs:
             artifacts/automation/maturation_report.json
             artifacts/automation/stair_stepper/*
           if-no-files-found: warn
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

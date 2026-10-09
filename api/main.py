@@ -88,14 +88,18 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         request.state.request_id = rid
         t0 = time.perf_counter()
         status = 500
+        from db.traffic import scope
+
         try:
-            response = await call_next(request)
-            status = response.status_code
+            with scope("api.request") as db_metrics:
+                response = await call_next(request)
+                status = response.status_code
         finally:
             route = request.scope.get("route")
             access_log.info(json.dumps({
                 "request_id": rid, "method": request.method,
                 "route": getattr(route, "path", None) or "unmatched", "status": status,
+                "db_traffic": db_metrics.snapshot(),
                 "ms": round((time.perf_counter() - t0) * 1000, 1)}))
         response.headers["X-Request-ID"] = rid
         return response
