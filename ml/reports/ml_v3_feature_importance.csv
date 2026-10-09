@@ -1,0 +1,36 @@
+horizon,feature,group,folds,gain_mean,permutation_auc_drop_mean,permutation_auc_drop_std,permutation_positive_fold_share,shap_mean_abs,classification,leakage_status
+5,breakout_pos_20d,ema_trend,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,breakout_score,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,chg_pct,momentum,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,dollar_vol_20,volume,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,fading,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,gap_pct,volatility_gap,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,hsf_fading_penalty,hsf_score,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,hsf_momentum_component,hsf_score,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,hsf_score,hsf_score,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,hsf_signals_component,hsf_score,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,hsf_status=CAUTION,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,hsf_status=WATCH,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,is_breakout,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,n_signals,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,price,price_level,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,primary_setup=Breakout,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,primary_setup=Gapper,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,rs_vs_spy,market_context,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,rvol_20,volume,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,scan_chg_pct,momentum,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,scan_gap_pct,volatility_gap,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,scanner_breakout_score,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,scanner_rank,rank,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,signal__breakout,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,derived (one-hot / signal flag)
+5,signal__gainer,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,derived (one-hot / signal flag)
+5,signal__gapper,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,derived (one-hot / signal flag)
+5,signal__golden_cross,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,derived (one-hot / signal flag)
+5,signal__loser,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,derived (one-hot / signal flag)
+5,signal__prebreakout,setup_metadata,1,0.0,0.0,,0.0,0.0,LOW VALUE,derived (one-hot / signal flag)
+5,snapshot_rank,rank,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,snapshot_size,rank,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_STORED
+5,trend_10d_pct,momentum,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,trend_20d_pct,momentum,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,volatility_20d_pct,volatility_gap,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN
+5,volume,volume,1,0.0,0.0,,0.0,0.0,LOW VALUE,SAFE_ASOF_JOIN

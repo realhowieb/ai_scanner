@@ -1,0 +1,191 @@
+{
+ "as_of_rule": "outcomes computed after dataset_created_at are treated as pending and benchmarks computed after it as absent, so reruns see the labels exactly as frozen",
+ "audit_slice_fingerprint": "sha256:5afdb61396903bd9f70b1a3bfec69d0c415d3f6dd9c898e7a238c0382503d065",
+ "audit_version": "hsf-ml-v3-audit-1",
+ "benchmark_coverage": {
+  "1d": {
+   "of_scored": 966,
+   "present": 209,
+   "rate": 0.2164
+  },
+  "3d": {
+   "of_scored": 966,
+   "present": 209,
+   "rate": 0.2164
+  },
+  "5d": {
+   "of_scored": 966,
+   "present": 209,
+   "rate": 0.2164
+  }
+ },
+ "certified_count": 337,
+ "dataset_created_at": "2026-10-08 21:04:21.949709+00:00",
+ "dataset_created_in_this_run": false,
+ "dataset_fingerprint": "sha256:527bbd62ae511db111679f77949be0acd9bbed06ca1ac0a83196c1ad1e7886cc",
+ "dataset_version": "hsf-ml-2026-10-08-v1",
+ "earliest_observation": "2026-09-12T06:54:40.603984+00:00",
+ "excess_coverage": {
+  "1d": {
+   "of_scored": 966,
+   "present": 209,
+   "rate": 0.2164
+  },
+  "3d": {
+   "of_scored": 966,
+   "present": 209,
+   "rate": 0.2164
+  },
+  "5d": {
+   "of_scored": 966,
+   "present": 209,
+   "rate": 0.2164
+  }
+ },
+ "feature_coverage": {
+  "breakout_pos_20d": 0.123,
+  "breakout_score": 0.9702,
+  "chg_pct": 0.8156,
+  "dollar_vol_20": 0.123,
+  "ema_cross": 0.0077,
+  "fading": 1.0,
+  "gap_pct": 0.7214,
+  "hsf_fading_penalty": 1.0,
+  "hsf_model_component": 1.0,
+  "hsf_momentum_component": 1.0,
+  "hsf_score": 1.0,
+  "hsf_score_version": 1.0,
+  "hsf_signals_component": 1.0,
+  "hsf_status": 1.0,
+  "is_breakout": 0.2238,
+  "n_signals": 1.0,
+  "pattern_tag": 0.123,
+  "prebreakout_prob": 0.5687,
+  "price": 0.2238,
+  "primary_setup": 1.0,
+  "rs_vs_spy": 0.123,
+  "rvol_20": 0.2238,
+  "scan_chg_pct": 0.2238,
+  "scan_gap_pct": 0.2238,
+  "scanner_breakout_score": 0.2238,
+  "scanner_rank": 0.123,
+  "signals": 0.6916,
+  "snapshot_rank": 1.0,
+  "snapshot_size": 1.0,
+  "trend_10d_pct": 0.123,
+  "trend_20d_pct": 0.123,
+  "volatility_20d_pct": 0.2238,
+  "volume": 0.2238
+ },
+ "feature_schema_version": 1,
+ "filters": {
+  "certified_only": false,
+  "end_date": "2026-10-08",
+  "horizon": null,
+  "matured_only": false,
+  "max_score": null,
+  "min_score": null,
+  "model_version": null,
+  "scoring_version": null,
+  "setup": null,
+  "start_date": "2025-01-01",
+  "ticker": null
+ },
+ "fingerprint_as_of_freeze": "sha256:527bbd62ae511db111679f77949be0acd9bbed06ca1ac0a83196c1ad1e7886cc",
+ "fingerprint_rebuilt_now": "sha256:527bbd62ae511db111679f77949be0acd9bbed06ca1ac0a83196c1ad1e7886cc",
+ "fingerprint_reproducible_now": true,
+ "git_revision": "63f3dbebc8c349dceeecfeb463692e738e1b1fbf",
+ "label_schema_version": 1,
+ "latest_observation": "2026-10-08T13:40:31.703738+00:00",
+ "mae_coverage": {
+  "of_scored": 966,
+  "present": 337,
+  "rate": 0.3489
+ },
+ "matured_count": 337,
+ "mfe_coverage": {
+  "of_scored": 966,
+  "present": 337,
+  "rate": 0.3489
+ },
+ "model_versions_represented": {
+  "UNKNOWN": 1041
+ },
+ "observation_count": 1041,
+ "outcome_coverage": {
+  "1d": {
+   "of_scored": 966,
+   "present": 337,
+   "rate": 0.3489
+  },
+  "3d": {
+   "of_scored": 966,
+   "present": 337,
+   "rate": 0.3489
+  },
+  "5d": {
+   "of_scored": 966,
+   "present": 337,
+   "rate": 0.3489
+  }
+ },
+ "pending_count": 75,
+ "registry_metadata_counts": {
+  "certified_count": 337,
+  "matured_count": 337,
+  "observation_count": 1041
+ },
+ "scan_feature_join_rate": 0.2238,
+ "scoring_versions_represented": {
+  "1.0": 1041
+ },
+ "unavailable_count": 629,
+ "unavailable_features": [
+  {
+   "classification": "MISSING",
+   "coverage": 0.0,
+   "name": "rsi_14"
+  },
+  {
+   "classification": "MISSING",
+   "coverage": 0.0,
+   "name": "ema9 / ema21 values"
+  },
+  {
+   "classification": "MISSING",
+   "coverage": 0.0,
+   "name": "adx / vwap / supertrend / ewo / day_trader_tier"
+  },
+  {
+   "classification": "SAFE_STORED",
+   "coverage": 0.0,
+   "name": "prev_close / vol_avg_20 / high_20 / spark_10d"
+  },
+  {
+   "classification": "UNKNOWN",
+   "coverage": 0.0,
+   "name": "prebreakout_model_version (served)"
+  },
+  {
+   "classification": "UNSAFE_CURRENT_VALUE",
+   "coverage": 0.0,
+   "name": "sector / industry / market_cap / fundamentals"
+  },
+  {
+   "classification": "MISSING",
+   "coverage": 0.0,
+   "name": "market_regime / breadth"
+  },
+  {
+   "classification": "UNSAFE_CURRENT_VALUE",
+   "coverage": 0.0,
+   "name": "universe membership list"
+  }
+ ],
+ "unsupported_horizons": {
+  "10_bar": null,
+  "15_bar": null,
+  "20_bar": null,
+  "note": "No 10/15/20-bar outcomes exist for HSF observations; not fabricated."
+ }
+}
