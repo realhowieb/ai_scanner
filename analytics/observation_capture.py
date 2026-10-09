@@ -130,6 +130,7 @@ def build_scan_observations(
     context = f"scheduled:{str(universe).lower()}"
     out: List[Dict[str, Any]] = []
     for row in result_rows or []:
+        from analytics.prediction_provenance import models_from_row
         sym = row.get("Ticker") or row.get("Symbol")
         if not sym:
             continue
@@ -142,6 +143,7 @@ def build_scan_observations(
             market=_row_get(row, _MARKET_MAP),
             indicators=_row_get(row, _INDICATOR_MAP),
             scanners=derive_scanner_triggers(row),
+            models=models_from_row(row),
             market_context={"source": "scheduled", "scan_id": scan_id,
                             "coverage_health": coverage_health,
                             "market_regime": market_regime},

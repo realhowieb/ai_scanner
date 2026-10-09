@@ -182,6 +182,7 @@ def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any]) -> bool:
         "hsf_score": opp.get("score"),
         "score_version": opp.get("score_version"),
         "score_components": comps,
+        "models": opp.get("models") or {},
         "primary_setup": opp.get("primary_setup"),
         "status": opp.get("status"),
     }
