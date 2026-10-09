@@ -235,7 +235,7 @@ def main():
         canonical = {"status": "TABLE_UNAVAILABLE"}
         if conn.execute("SELECT to_regclass('hsf_observations') AS name").fetchone()["name"]:
             canonical = {"status": "READ", "groups": conn.execute("""
-                SELECT timestamp::date AS utc_date, context, COUNT(*) AS rows,
+                SELECT (timestamp AT TIME ZONE 'UTC')::date AS utc_date, context, COUNT(*) AS rows,
                   COUNT(*) FILTER (WHERE record#>>'{models,prebreakout,probability}' IS NOT NULL) AS prebreakout_predictions,
                   COUNT(*) FILTER (WHERE record#>>'{models,ai_confidence,confidence}' IS NOT NULL) AS ai_predictions,
                   COUNT(*) FILTER (WHERE record#>>'{versions,prebreakout_model}' IS NOT NULL) AS code_model_version_tags,
@@ -248,8 +248,9 @@ def main():
                   COUNT(*) FILTER (WHERE record#>>'{market,high}' IS NOT NULL AND record#>>'{market,low}' IS NOT NULL) AS high_low_source
                 FROM hsf_observations
                 WHERE timestamp >= '2026-09-01' AND timestamp < '2026-10-09 05:12:00+00'
-                  AND context LIKE 'scheduled:%%'
-                GROUP BY timestamp::date,context ORDER BY timestamp::date,context LIMIT 501
+                  AND context LIKE 'scheduled:%'
+                GROUP BY (timestamp AT TIME ZONE 'UTC')::date,context
+                ORDER BY (timestamp AT TIME ZONE 'UTC')::date,context LIMIT 501
             """).fetchall()}
             if len(canonical["groups"]) > 500:
                 raise SystemExit("Canonical inventory group cap exceeded")

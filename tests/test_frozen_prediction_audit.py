@@ -23,6 +23,12 @@ def test_proxy_not_target():
     assert "TARGET_IDENTITY_UNVERIFIED" in blockers(row(provenance={"target_name": "return_5d"}))
 
 
+def test_code_version_tag_cannot_certify_served_artifact():
+    sample = row(provenance={"model_version": "prebreakout-xgb-v16"})
+    assert "MISSING_ARTIFACT_SHA256" in blockers(sample)
+    assert summarize([sample])["classification"]["VERIFIED_EVALUABLE"] == 0
+
+
 def test_zero_prediction_is_present_nan_is_missing():
     assert inventory([row(prebreakout_prob=0)])["prebreakout_prediction"]["count"] == 1
     assert inventory([row(prebreakout_prob=float("nan"))])["prebreakout_prediction"]["count"] == 0
