@@ -85,8 +85,15 @@ def _never_got_runner(jobs: List[Dict[str, Any]]) -> bool:
 
 
 def mark_runnerless(session, repo: str, runs: List[Dict[str, Any]], now: _dt.datetime) -> List[Dict[str, Any]]:
-    """Flag recent unsuccessful runs whose jobs never got a runner (bounded: last RECENT_DAYS)."""
-    since = now - _dt.timedelta(days=RECENT_DAYS)
+    """Flag unsuccessful runs whose jobs never got a runner.
+
+    Bounded by the scanner rule's own window (sh.expected_slots: whole ET days,
+    SCAN_LOOKBACK_DAYS back), so every slot it judges is checked; a rolling
+    72 h cutoff missed early slots of the oldest day."""
+    slots = sh.expected_slots(now)
+    if not slots:
+        return runs
+    since = min(slots) - sh.SLOT_EARLY
     for r in runs:
         created = sh._parse(r.get("created_at"))
         if r.get("status") != "completed" or r.get("conclusion") == "success" or created is None or created < since:
