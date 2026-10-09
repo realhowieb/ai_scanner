@@ -545,6 +545,7 @@ def run_and_save(
                 error=f"SkippedSave: {msg}",
             )
 
+        results["SourceScanId"] = scan_started_at.isoformat()
         results = _score_prebreakout(results)
         results_json = _results_to_json(results)
         save_run(

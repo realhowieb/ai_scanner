@@ -148,6 +148,8 @@ def _prebreakout_picks(df, limit: int = 3) -> List[Dict[str, Any]]:
             if prob <= 0:
                 continue
             pick = {"symbol": str(r.get(sym_col)).upper(), "prob": round(prob, 1)}
+            from analytics.prediction_provenance import models_from_row
+            pick["models"] = models_from_row(r)
             if price_col is not None:
                 try:
                     pick["last"] = round(float(r.get(price_col)), 2)

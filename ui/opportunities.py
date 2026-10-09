@@ -126,6 +126,7 @@ def build_opportunities(
         if s is not None:
             s["signals"].add("prebreakout")
             s["prob"] = _to_float(p.get("prob"))
+            s["models"] = p.get("models") or {}
 
     for pair in (data.get("gainers") or []):
         try:
@@ -182,6 +183,7 @@ def build_opportunities(
             "status": _status(score, fading),
             "breakout_score": s["breakout_score"],
             "prob": s["prob"],
+            "models": s.get("models") or {},
             "chg_pct": s["chg_pct"],
             "gap_pct": s["gap_pct"],
         })

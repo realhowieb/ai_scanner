@@ -124,12 +124,14 @@ def _load_ai_confidence_bundle_uncached(
         return None, metadata, db_warning or "AI confidence model is not available."
 
     try:
-        model = joblib.load(model_path)
+        from analytics.prediction_provenance import load_local
+        model, identity = load_local(joblib, model_path)
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         return None, metadata, f"AI confidence model could not be loaded: {type(exc).__name__}."
 
     metadata = dict(metadata)
     metadata.setdefault("source", "local")
+    metadata["loaded_artifact"] = identity
     return model, metadata, db_warning
 
 
@@ -231,6 +233,7 @@ def score_ai_confidence(
         return df
 
     frame = df.copy()
+    from analytics.prediction_provenance import unavailable
     model, metadata, load_warning = load_ai_confidence_bundle(
         model_path=model_path,
         metadata_path=metadata_path,
@@ -239,20 +242,25 @@ def score_ai_confidence(
     trained_at = str(trained_at) if trained_at else None
 
     if model is None:
+        unavailable(frame, "ai_confidence", "model_unavailable")
         return _warn(frame, load_warning or "AI confidence model is not available.", trained_at=trained_at)
 
     features = _feature_names(model, metadata)
     if not features:
+        unavailable(frame, "ai_confidence", "feature_schema_unavailable")
         return _warn(frame, "AI confidence feature metadata is missing.", trained_at=trained_at)
 
     missing = [name for name in features if name not in frame.columns]
     if missing:
+        unavailable(frame, "ai_confidence", "required_feature_columns_missing")
         preview = ", ".join(missing[:5])
         suffix = "..." if len(missing) > 5 else ""
         return _warn(frame, f"AI confidence skipped; missing feature columns: {preview}{suffix}.", trained_at=trained_at)
 
     try:
-        features_df = frame.loc[:, features].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+        from analytics.prediction_provenance import attach
+        numeric = frame.loc[:, features].apply(pd.to_numeric, errors="coerce")
+        features_df = numeric.fillna(0.0)
         proba = model.predict_proba(features_df)
         # Isotonic calibration (fit on OOF validation) makes the displayed
         # confidence honest — a shown 45% actually hits ~45% — instead of the
@@ -260,6 +268,7 @@ def score_ai_confidence(
         # No-ops on models trained before calibration was attached.
         calibrated = _apply_calibration_map(proba[:, 1], metadata.get("calibration_map"))
         frame[CONFIDENCE_COL] = (calibrated * 100.0).round(1)
+        attach(frame, "ai_confidence", features_df, numeric.isna(), proba[:, 1], calibrated, metadata)
         if trained_at:
             frame.attrs[TRAINED_AT_ATTR] = trained_at
         if metadata.get("source"):
@@ -270,4 +279,5 @@ def score_ai_confidence(
             frame.attrs[TARGET_RULE_ATTR] = metadata.get("target_rule") or metadata.get("target")
         return frame.sort_values(CONFIDENCE_COL, ascending=False).reset_index(drop=True)
     except (AttributeError, IndexError, RuntimeError, TypeError, ValueError) as exc:
+        unavailable(frame, "ai_confidence", "inference_failed")
         return _warn(frame, f"AI confidence scoring failed: {type(exc).__name__}.", trained_at=trained_at)
