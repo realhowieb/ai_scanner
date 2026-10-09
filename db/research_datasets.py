@@ -181,6 +181,96 @@ def fetch_scan_records(tickers: Iterable[str], start: _dt.datetime, end: _dt.dat
             _close(c)
 
 
+# --------------------------------------------------------------------------- ML readiness (slim reads)
+# ML readiness needs identity, timing, the HSF status fields and the outcome
+# columns, not the full frozen payload. These projections keep the scheduled
+# readiness checks light on Neon egress (about a fifth of the full rows).
+_READINESS_RAW_PG = (
+    "jsonb_build_object('hsf_score', raw_signal->'hsf_score', 'score_version', raw_signal->'score_version', "
+    "'primary_setup', raw_signal->'primary_setup', 'status', raw_signal->'status', "
+    "'prebreakout_model_version', raw_signal->'prebreakout_model_version', "
+    "'model_version', raw_signal->'model_version')"
+)
+_READINESS_IND_PG = (
+    "jsonb_build_object('signals', indicators->'signals', 'status', indicators->'status', "
+    "'primary_setup', indicators->'primary_setup')"
+)
+_READINESS_COLUMNS = ("id", "ticker", "fired_at", "created_at", "ai_confidence", "return_1d", "return_3d",
+                      "return_5d", "outcome_computed_at")
+
+
+def fetch_readiness_rows(start: _dt.datetime, end: _dt.datetime, *, conn=None) -> List[Dict[str, Any]]:
+    """Slim opportunity rows with fired_at in [start, end) for ML readiness:
+    identity, timing, HSF status fields, AI Confidence, 1/3/5-day returns and
+    the 5-day benchmark. Raises ResearchDataUnavailable on any failure."""
+    c = conn or _neon()
+    try:
+        cur = c.cursor()
+        bench = [x for x in _present_optional_columns(cur) if x.endswith("_5d")]
+        cols = list(_READINESS_COLUMNS) + bench + [f"{_READINESS_RAW_PG} AS raw_signal",
+                                                   f"{_READINESS_IND_PG} AS indicators"]
+        cur.execute(f"SELECT {', '.join(cols)} FROM signal_outcomes "  # nosec B608
+                    "WHERE source = 'opportunity' AND fired_at >= %s AND fired_at < %s "
+                    "ORDER BY fired_at ASC, id ASC", (start, end))
+        out = _rows(cur)
+        cur.close()
+        for r in out:
+            for k in ("raw_signal", "indicators"):
+                if isinstance(r.get(k), str):
+                    try:
+                        r[k] = json.loads(r[k])
+                    except json.JSONDecodeError:
+                        r[k] = {}
+        return out
+    except ResearchDataUnavailable:
+        raise
+    except Exception as e:
+        raise ResearchDataUnavailable(f"readiness read failed: {type(e).__name__}") from e
+    finally:
+        if conn is None:
+            _close(c)
+
+
+def fetch_scan_index(tickers: Iterable[str], start: _dt.datetime, end: _dt.datetime, *,
+                     conn=None) -> List[Dict[str, Any]]:
+    """Only what the backward join needs (symbol, context, scan time, write
+    time) for scheduled-scan records of `tickers` in [start, end]. The record
+    payload is reduced to its scan_timestamp, so a readiness check never pulls
+    feature JSON. SQLite (tests, local) falls back to fetch_scan_records."""
+    from db.hsf_observations import _resolve_conn
+
+    syms = sorted({str(t).upper() for t in tickers if t})
+    if not syms:
+        return []
+    c, opened, is_sqlite = _resolve_conn(conn)
+    if c is None:
+        raise ResearchDataUnavailable("database unavailable")
+    if is_sqlite:
+        if opened:
+            _close(c)
+        return fetch_scan_records(syms, start, end, conn=conn)
+    try:
+        cur = c.cursor()
+        cur.execute("SELECT observation_id, symbol, context, timestamp, created_at, "
+                    "jsonb_build_object('scan_timestamp', record->'scan_timestamp') AS record "
+                    "FROM hsf_observations WHERE context LIKE 'scheduled:%%' AND symbol = ANY(%s) "
+                    "AND timestamp >= %s AND timestamp <= %s", (syms, start, end))
+        out = _rows(cur)
+        cur.close()
+        for r in out:
+            if isinstance(r.get("record"), str):
+                try:
+                    r["record"] = json.loads(r["record"])
+                except json.JSONDecodeError:
+                    r["record"] = {}
+        return out
+    except Exception as e:
+        raise ResearchDataUnavailable(f"scan index read failed: {type(e).__name__}") from e
+    finally:
+        if opened:
+            _close(c)
+
+
 # --------------------------------------------------------------------------- registry
 @schema_once
 def _ensure_registry(conn) -> None:

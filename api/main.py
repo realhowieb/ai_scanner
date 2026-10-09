@@ -231,6 +231,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     _trading_routes(app)
     _public_routes(app)
     _research_routes(app)
+    _ml_routes(app)
     _delete_account_route(app)
     return app
 
@@ -1622,6 +1623,21 @@ def _research_routes(app: FastAPI) -> None:
         if out is None:
             raise HTTPException(404, "No such observation.")
         return json_safe(out)
+
+
+def _ml_routes(app: FastAPI) -> None:
+    """Internal, admin-only, read-only ML v4 data readiness."""
+    from api import ml_readiness
+
+    @app.get("/v1/ml/readiness", tags=["ml (internal, admin only)"], openapi_extra=_RESEARCH_EXTRA, responses=_ADMIN,
+             summary="[Internal · admin · research-only] ML v4 data readiness: gates, coverage, maturation")
+    def ml_readiness_status(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Whether HSF has collected enough trustworthy, matured point-in-time observations to start ML v4
+        development: status (NOT_READY / COLLECTING / NEAR_READY / READY), every readiness gate with its
+        threshold and reason, coverage, maturation diagnostics and a growth projection. Aggregates only;
+        computed from persisted rows (cached 30 minutes). Never trains, scores or changes anything."""
+        require_admin(account)
+        return json_safe(ml_readiness.readiness())
 
 
 class DeleteAccountBody(BaseModel):
