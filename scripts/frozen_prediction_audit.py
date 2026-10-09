@@ -129,6 +129,8 @@ def scan_inventory(runs, features, calibration_map, observations):
     counts = Counter()
     date_counts = defaultdict(Counter)
     signatures = Counter()
+    missing_fields = Counter()
+    floor_raw = Counter()
     ticker_dates = Counter()
     run_times = Counter()
     for run in runs:
@@ -165,6 +167,7 @@ def scan_inventory(runs, features, calibration_map, observations):
             if all(field in record and record[field] is not None for field in required):
                 counts["candidate_and_setup_source_fields"] += 1
             available = [field for field in features if finite(record.get(field))]
+            missing_fields.update(field for field in features if field not in available)
             counts["complete_current_schema_source_rows"] += int(len(available) == len(features) and bool(features))
             # Only numeric source values enter a signature; missingness preserved.
             vector = [float(record[field]) if field in available else None for field in features]
@@ -175,6 +178,7 @@ def scan_inventory(runs, features, calibration_map, observations):
             if finite(raw) and finite(displayed):
                 counts["raw_display_pairs"] += 1
                 if abs(float(displayed) - 13.1) < 1e-6:
+                    floor_raw[str(float(raw))] += 1
                     counts["display_13_1_with_raw"] += 1
                     if calibration_map and calibration_map.get("x"):
                         counts["display_13_1_raw_below_current_endpoint"] += int(float(raw) <= calibration_map["x"][0])
@@ -186,6 +190,10 @@ def scan_inventory(runs, features, calibration_map, observations):
         "by_entry_date": {k: dict(v) for k, v in sorted(date_counts.items())},
         "distinct_current_schema_source_signatures": len(signatures),
         "largest_source_signature_cluster": max(signatures.values(), default=0),
+        "missing_current_schema_source_fields": dict(missing_fields),
+        "floor_raw_summary": {"n": sum(floor_raw.values()), "unique_values": len(floor_raw),
+                             "min": min((float(v) for v in floor_raw), default=None),
+                             "max": max((float(v) for v in floor_raw), default=None)},
         "observations_with_ticker_entry_day_candidate": sum(ticker_dates[(r["ticker"], str(rd.entry_day(r["fired_at"])))] > 0 for r in observations),
         "observations_with_exact_run_timestamp_candidate": sum(run_times[str(rd.to_dt(r["fired_at"]))] > 0 for r in observations),
         "warning": "Candidate joins and current-map agreement do not establish historical artifact or calibration identity; source signatures are not served feature vectors.",
@@ -206,6 +214,10 @@ def main():
             FROM signal_outcomes WHERE source='opportunity'
             AND fired_at >= '2026-09-01' AND fired_at < '2026-10-09 05:12:00+00'
             LIMIT 100""").fetchall()
+        indicator_keys = conn.execute("""SELECT DISTINCT jsonb_object_keys(indicators) AS key
+            FROM signal_outcomes WHERE source='opportunity'
+            AND fired_at >= '2026-09-01' AND fired_at < '2026-10-09 05:12:00+00'
+            LIMIT 100""").fetchall()
         registry = conn.execute("""SELECT id, model_version, trained_at,
             metadata->'calibration_map' AS calibration_map,
             metadata->'training_data_end' AS training_data_end,
@@ -222,6 +234,7 @@ def main():
             raise SystemExit("Scheduled history audit cap exceeded")
     result = summarize(rows)
     result.update(raw_signal_keys=[r["key"] for r in keys], active_registry=registry,
+                  indicator_keys=[r["key"] for r in indicator_keys],
                   workflow_run_id=os.getenv("GITHUB_RUN_ID"))
     active = registry[0] if len(registry) == 1 else {}
     result["scheduled_history"] = scan_inventory(runs, active.get("feature_names") or [], active.get("calibration_map"), rows)

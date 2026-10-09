@@ -50,6 +50,7 @@ def test_different_raw_predictions_can_share_calibrated_floor():
     report = scan_inventory([{"created_at": "2026-09-28T15:00:00Z", "results_json": json.dumps(records)}],
                             ["F"], {"x": [.034, .14], "y": [.13126, .23]}, [row()])
     assert report["counts"]["pairs_match_current_calibration"] == 2
+    assert report["floor_raw_summary"]["unique_values"] == 2
     assert report["distinct_current_schema_source_signatures"] == 2
     assert report["observations_with_exact_run_timestamp_candidate"] == 1
     assert "do not establish" in report["warning"]
