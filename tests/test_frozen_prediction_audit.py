@@ -1,6 +1,8 @@
 import json
 from unittest.mock import MagicMock
 
+import pytest
+
 from scripts.frozen_prediction_audit import blockers, inventory, read_rows, scan_inventory, summarize
 
 
@@ -44,11 +46,21 @@ def test_selection_before_outcomes_and_order_independent():
 def test_database_enforced_read_only_first():
     conn = MagicMock()
     conn.execute.return_value.fetchall.return_value = []
+    conn.execute.return_value.fetchone.return_value = {"transaction_read_only": "on"}
     assert read_rows(conn) == []
     commands = [call.args[0] for call in conn.execute.call_args_list]
     assert commands[0] == "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-    assert "statement_timeout" in commands[1]
-    assert "LIMIT 10001" in commands[2]
+    assert commands[1] == "SHOW transaction_read_only"
+    assert "statement_timeout" in commands[2]
+    assert "LIMIT 10001" in commands[3]
+
+
+def test_refuses_read_when_database_is_not_read_only():
+    conn = MagicMock()
+    conn.execute.return_value.fetchone.return_value = {"transaction_read_only": "off"}
+    with pytest.raises(RuntimeError, match="read-only mode"):
+        read_rows(conn)
+    assert len(conn.execute.call_args_list) == 2
 
 
 def test_different_raw_predictions_can_share_calibrated_floor():

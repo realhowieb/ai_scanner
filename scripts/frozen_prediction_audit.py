@@ -91,6 +91,8 @@ def summarize(rows):
 
 def read_rows(conn):
     conn.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+    if conn.execute("SHOW transaction_read_only").fetchone()["transaction_read_only"] != "on":
+        raise RuntimeError("Database did not enforce read-only mode")
     conn.execute("SET LOCAL statement_timeout = '30s'")
     rows = conn.execute("""
         SELECT id, ticker, source, fired_at, prebreakout_prob, ai_confidence,
@@ -207,7 +209,7 @@ def main():
     url = os.getenv("NEON_DATABASE_URL") or os.getenv("DATABASE_URL")
     if not url:
         raise SystemExit("Database configuration unavailable; no fallback")
-    with psycopg.connect(url, row_factory=dict_row, connect_timeout=15) as conn:
+    with psycopg.connect(url, row_factory=dict_row, connect_timeout=15, autocommit=True) as conn:
         rows = read_rows(conn)
         # Only safe aggregate key names/metadata are exported, never raw payloads.
         keys = conn.execute("""SELECT DISTINCT jsonb_object_keys(raw_signal) AS key
