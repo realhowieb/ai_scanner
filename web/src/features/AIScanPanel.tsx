@@ -106,6 +106,7 @@ export function AIScanPanel({ runId }: { runId?: number }) {
   return (
     <Card title="AI research" id="ai" aside="Premium">
       <ResearchNotice compact />
+      <p className="cap">Claude uses only this scan&apos;s data. HSF Score controls ranking; AI commentary does not recommend trades.</p>
       <Summary runId={runId} />
       <div className="divider" role="separator" />
       <p className="strong">Ask about this scan</p>

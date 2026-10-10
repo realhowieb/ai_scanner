@@ -164,6 +164,36 @@ function TodayPriority({
   );
 }
 
+function FirstRunGuide({ top }: { top: Today["top_setups"] }) {
+  const leader = top?.setups[0] ?? top?.also_ranked?.[0];
+  return (
+    <Card title="Choose your workflow" id="first-run" aside="First run">
+      <p className="body-sm">Start with the path that matches how you want to use HSF today. You can change this anytime.</p>
+      <div className="workflow-grid" role="list" aria-label="First run workflows">
+        <div className="workflow-item" role="listitem">
+          <p className="strong">Find market-wide setups</p>
+          <p className="cap">Open the ranked board, review the strongest setup, then save names worth tracking.</p>
+          <div className="row-actions">
+            <Link href="/scanner" className="btn btn-primary">Open Scanner</Link>
+            {leader && <Link href={`/stocks/${encodeURIComponent(leader.ticker)}`} className="btn">Review {leader.ticker}</Link>}
+          </div>
+        </div>
+        <div className="workflow-item" role="listitem">
+          <p className="strong">Track my watchlist</p>
+          <p className="cap">Add a few tickers so HSF can surface names that need attention first.</p>
+          <Link href="/watchlists" className="btn">Add tickers</Link>
+        </div>
+        <div className="workflow-item" role="listitem">
+          <p className="strong">Monitor intraday structure</p>
+          <p className="cap">Use the Day Trader view for trend, VWAP, relative volume, and momentum context.</p>
+          <Link href="/day-trader" className="btn">Open Day Trader</Link>
+        </div>
+      </div>
+      <p className="cap">A good first setup: review one ticker, save it to a watchlist, then create one alert from the stock page.</p>
+    </Card>
+  );
+}
+
 /** `mine` is the signed-in sections (GET /v1/today/me); they load separately and never hold up the page. */
 export function TodayView({ data, mine, mineFailed = false, side }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode }) {
   const failed = new Set(data.errors.map((e) => e.section));
@@ -180,6 +210,10 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
   // the age rule is only a fallback for an API that predates market.stale.
   const scanAt = data.market.latest_scan_at ?? top?.scan_at;
   const stale = data.market.stale ?? (top?.scan_at ? freshness(top.scan_at).stale : false);
+  const watchlist = mine?.watchlist;
+  const hasWatchlist = Boolean(watchlist?.watchlist_id && ((watchlist.in_scan?.length ?? 0) > 0 || (watchlist.missing?.length ?? 0) > 0));
+  const hasVisitMarker = Boolean(mine?.new_since?.marker);
+  const showFirstRun = Boolean(mine && !mineFailed && !hasWatchlist && !hasVisitMarker);
 
   return (
     <div className="stack">
@@ -255,6 +289,8 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
               <Link href="/scanner">Open the Scanner →</Link>
             </div>
           </Card>
+
+          {showFirstRun && <FirstRunGuide top={top} />}
 
           {mineErr.has("new_since") ? <SectionFailed name="New since your last visit" /> : mine?.new_since && <NewSince data={mine.new_since} />}
           {mineErr.has("watchlist") ? <SectionFailed name="Your watchlist" /> : mine?.watchlist && <YourWatchlist data={mine.watchlist} />}

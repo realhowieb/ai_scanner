@@ -136,6 +136,9 @@ a.tk:hover { color: var(--accent); }
 .filter-panel[open] summary { border-bottom: 1px solid var(--line-soft); }
 .filter-panel[open] summary::after { content: "Close"; }
 .filter-panel .filters { padding: 14px 16px 16px; }
+.workflow-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.workflow-item { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--bg-2); }
+.workflow-item .btn { align-self: flex-start; }
 .locked { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
 .locked-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--gold); }
 .locked-head .strong { color: var(--text); }
@@ -312,6 +315,7 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .filters .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; width: 100%; }
   .priority-panel { align-items: stretch; flex-direction: column; }
   .priority-steps { justify-content: flex-start; }
+  .workflow-grid { grid-template-columns: minmax(0, 1fr); }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tile-value { font-size: 24px; }
   .status-level { margin-left: 0; }

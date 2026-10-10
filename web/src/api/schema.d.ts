@@ -135,7 +135,7 @@ export interface paths {
         put?: never;
         /**
          * AI scan summary (Premium)
-         * @description Claude explains the top results in HSF Score order (the web's AI Scan Summary).
+         * @description Claude summarizes the top results in HSF Score order (the web's AI Scan Summary).
          *     Research commentary, not investment advice.
          */
         post: operations["ai_summary_v1_ai_summary_post"];
