@@ -365,13 +365,22 @@ def audit_cohorts(observations: List[Dict[str, Any]],
     }
 
 
-def _load_live(limit: int = 100000) -> tuple:
+def _load_live(limit: int = 100000, *, selected_outcomes_only: bool = False) -> tuple:
     """Load observations + full outcome records from the live store, read-only.
-    Returns ([], {}) when the DB is unavailable (non-fatal)."""
+    Returns ([], {}) when the DB is unavailable (non-fatal).
+
+    The default retains ALL outcomes: shared effectiveness/readiness callers use
+    unmatched rows as orphan evidence. Only the standalone cohort report may opt
+    into selected outcomes; audit_cohorts never examines unmatched outcome IDs.
+    No checkpoint or persistent cache: late/mutable outcomes are reread each run.
+    """
     from db.engine import get_neon_conn, get_sqlite_conn
     from db.hsf_observations import _loads, load_recent_observations
     obs = load_recent_observations(limit=limit) or []
     outcomes: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    ids = sorted({str(o.get("observation_id") or "") for o in obs}) if selected_outcomes_only else []
+    if selected_outcomes_only and not ids:
+        return obs, outcomes
     conn = get_neon_conn()
     if conn is None:
         try:
@@ -381,7 +390,18 @@ def _load_live(limit: int = 100000) -> tuple:
     if conn is not None:
         try:
             cur = conn.cursor()
-            cur.execute("SELECT observation_id, record FROM hsf_observation_outcomes")
+            if selected_outcomes_only:
+                import sqlite3
+                if isinstance(conn, sqlite3.Connection):
+                    # One bound JSON argument avoids SQLite's parameter ceiling.
+                    cur.execute("SELECT observation_id, record FROM hsf_observation_outcomes "
+                                "WHERE observation_id IN (SELECT value FROM json_each(?))", (json.dumps(ids),))
+                else:
+                    # One array parameter avoids PostgreSQL's bind-count ceiling.
+                    cur.execute("SELECT observation_id, record FROM hsf_observation_outcomes "
+                                "WHERE observation_id = ANY(%s)", (ids,))
+            else:
+                cur.execute("SELECT observation_id, record FROM hsf_observation_outcomes")
             for r in cur.fetchall() or []:
                 vals = list(r.values()) if isinstance(r, dict) else r
                 outcomes[str(vals[0])].append(_loads(vals[1]))
@@ -415,7 +435,9 @@ def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "artifacts" / "automation"))
     args = ap.parse_args()
 
-    obs, outcomes = _load_live()
+    # This report checks selected observations, not global orphan outcomes.
+    # Keep the shared loader's default full-history semantics for other audits.
+    obs, outcomes = _load_live(selected_outcomes_only=True)
     report = audit_cohorts(obs, outcomes)
     out_dir = Path(args.out)
     try:

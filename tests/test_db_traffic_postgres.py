@@ -91,3 +91,64 @@ def test_postgres_recent_horizons_and_slim_records_preserve_outputs():
         conn.execute(sql.SQL('DROP SCHEMA IF EXISTS {} CASCADE').format(sql.Identifier(schema)))
         conn.commit()
         conn.close()
+
+
+def test_cohort_selected_outcomes_reduce_payload_without_changing_report():
+    from unittest import mock
+
+    import psycopg
+    from psycopg import sql
+    from psycopg.rows import dict_row
+
+    from db import hsf_observations as store
+    from scripts import audit_research_cohorts as audit
+    from tests.test_maturation_parity import dataset
+
+    conn = psycopg.connect('postgresql://postgres@127.0.0.1:55432/postgres', row_factory=dict_row,
+                           **traffic.connect_options())
+    schema = 'cohort_transfer_' + uuid.uuid4().hex
+    try:
+        conn.execute(sql.SQL('CREATE SCHEMA {}').format(sql.Identifier(schema)))
+        conn.execute(sql.SQL('SET search_path TO {}').format(sql.Identifier(schema)))
+        # schema_once caches by database, not search_path; this test owns a new
+        # schema in the same database as earlier tests and must initialize it.
+        store._ensure_schema.__wrapped__(conn, False)
+        observations, by_id = dataset(runs=2)
+        outcomes = [row for rows in by_id.values() for row in rows]
+        for record in observations:
+            assert store.save_observation(record, conn=conn)
+        for record in outcomes:
+            assert store.save_outcome(record, conn=conn)
+        assert store.save_outcome({'observation_id': 'true-orphan', 'horizon': '+5m', 'raw_return': .03}, conn=conn)
+        # Selected matched records exercise real outcome retrieval; all history
+        # outside this window must remain available to default diagnostic callers.
+        selected = [row for row in observations if row['observation_id'] in by_id][:10]
+        with mock.patch.object(store, 'load_recent_observations', return_value=selected), \
+             mock.patch('db.engine.get_neon_conn', return_value=conn):
+            with traffic.scope('test.cohort.before') as before:
+                old_obs, all_outcomes = audit._load_live()
+            with traffic.scope('test.cohort.after') as after:
+                new_obs, selected_outcomes = audit._load_live(selected_outcomes_only=True)
+        old_report = audit.audit_cohorts(old_obs, all_outcomes)
+        new_report = audit.audit_cohorts(new_obs, selected_outcomes)
+        old_report.pop('generated_at')
+        new_report.pop('generated_at')
+        assert old_report == new_report
+        assert 'true-orphan' in all_outcomes and 'true-orphan' not in selected_outcomes
+        assert set(selected_outcomes) == {row['observation_id'] for row in selected}
+        assert before.calls == after.calls == 1
+        assert before.rows_fetched == len(outcomes) + 1
+        assert after.rows_fetched == sum(len(by_id[row['observation_id']]) for row in selected)
+        assert after.db_to_client_payload_bytes < before.db_to_client_payload_bytes
+        counts = {'observations': conn.execute('SELECT count(*) AS n FROM hsf_observations').fetchone()['n'],
+                  'outcomes': conn.execute('SELECT count(*) AS n FROM hsf_observation_outcomes').fetchone()['n']}
+        assert counts == {'observations': len(observations), 'outcomes': len(outcomes) + 1}
+        print('COHORT_TRANSFER_BENCHMARK=' + json.dumps({'measurement': 'local_synthetic_application_payload_estimate',
+              'selected_observations': len(selected), 'history_counts_unchanged': counts,
+              'reports_equal_excluding_generated_at': True, 'default_retains_orphan_evidence': True,
+              'before': before.snapshot(), 'after': after.snapshot()}))
+    finally:
+        conn.rollback()
+        conn.execute(sql.SQL('DROP SCHEMA IF EXISTS {} CASCADE').format(sql.Identifier(schema)))
+        conn.commit()
+        conn.close()
