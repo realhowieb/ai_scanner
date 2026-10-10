@@ -543,12 +543,15 @@ def set_delivery(event_id: int, delivery: Dict[str, str], *, attempts_inc: int =
         _close(conn, is_sqlite)
 
 
+EVENT_READ_COLUMNS = "id, " + ", ".join(EVENT_FIELDS) + ", delivery_attempts, last_delivery_error"
+
+
 def events_to_retry(*, since_iso: str, before_iso: str, max_attempts: int, limit: int = 50) -> List[Dict[str, Any]]:
     """Events with a failed email delivery, triggered in [since, before) and under the attempt cap."""
     conn, is_sqlite = _connect()
     try:
         cur = conn.cursor()
-        cur.execute(_sql("SELECT * FROM hsf_alert_rule_events WHERE triggered_at >= %s AND triggered_at < %s "
+        cur.execute(_sql(f"SELECT {EVENT_READ_COLUMNS} FROM hsf_alert_rule_events WHERE triggered_at >= %s AND triggered_at < %s "
                          "AND delivery_attempts < %s AND delivery LIKE %s ORDER BY triggered_at ASC LIMIT %s",
                          is_sqlite), (since_iso, before_iso, int(max_attempts), '%"failed"%', int(limit)))
         rows = _rows(cur)
@@ -597,7 +600,7 @@ def list_events(user_id: str, *, limit: int, ticker: Optional[str] = None, rule_
     conn, is_sqlite = _connect()
     try:
         cur = conn.cursor()
-        cur.execute(_sql(f"SELECT * FROM hsf_alert_rule_events WHERE {' AND '.join(where)} "
+        cur.execute(_sql(f"SELECT {EVENT_READ_COLUMNS} FROM hsf_alert_rule_events WHERE {' AND '.join(where)} "
                          "ORDER BY triggered_at DESC, id DESC LIMIT %s", is_sqlite), (*args, int(limit)))
         rows = _rows(cur)
         cur.close()

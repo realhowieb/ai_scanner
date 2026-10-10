@@ -16,6 +16,13 @@ on:
   schedule:
     - cron: "15 23 * * 1-5"
 
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
+
 permissions:
   contents: read
   actions: read
@@ -64,7 +71,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          python -m scripts.forward_evidence_readiness --out artifacts/research \
+          python -m scripts.db_traffic_job scripts.forward_evidence_readiness --out artifacts/research \
             --maturation-report artifacts/maturation/maturation_report.json
           cat artifacts/research/forward_evidence_readiness.md >> "$GITHUB_STEP_SUMMARY"
       - name: Research metadata completeness audit (Run 57, read-only)
@@ -73,7 +80,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          python -m scripts.audit_research_metadata --out artifacts/research
+          python -m scripts.db_traffic_job scripts.audit_research_metadata --out artifacts/research
           cat artifacts/research/research_metadata_audit.md >> "$GITHUB_STEP_SUMMARY"
       - name: Surface rerun recommendation (no automatic action)
         if: steps.monitor.outputs.RUN55_RERUN_RECOMMENDED == 'true'
@@ -91,3 +98,12 @@ jobs:
             artifacts/research/research_metadata_audit.json
             artifacts/research/research_metadata_audit.md
           if-no-files-found: warn
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

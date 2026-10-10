@@ -13,6 +13,13 @@ concurrency:
   group: research-integrity-audit
   cancel-in-progress: false
 
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
+
 permissions:
   contents: read
 
@@ -37,7 +44,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          python -m scripts.audit_research_cohorts --out artifacts/automation
+          python -m scripts.db_traffic_job scripts.audit_research_cohorts --out artifacts/automation
           echo "### Research cohort integrity audit" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat artifacts/automation/cohort_audit.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
@@ -49,3 +56,12 @@ jobs:
           name: cohort-audit
           path: artifacts/automation/cohort_audit.json
           if-no-files-found: warn
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

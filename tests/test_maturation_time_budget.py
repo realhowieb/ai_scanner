@@ -223,7 +223,7 @@ class WiringTests(unittest.TestCase):
         self.assertIn('ap.add_argument("--time-budget-min", type=float, default=TIME_BUDGET_MIN', src)
         wf = (ROOT / ".github" / "workflows" / "mature-observations.yml").read_text()
         self.assertIn("timeout-minutes: 30", wf)
-        self.assertIn("python -m scripts.mature_observations", wf)
+        self.assertIn("python -m scripts.db_traffic_job scripts.mature_observations", wf)
 
 
 if __name__ == "__main__":

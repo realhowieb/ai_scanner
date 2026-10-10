@@ -74,7 +74,14 @@ def _conn():
     url = os.getenv("DATABASE_URL", "").strip()
     if not url:
         return None
-    return psycopg2.connect(url)
+    try:
+        from db.traffic import connect_options, count
+    except ImportError:  # standalone Render billing root has no scanner package
+        return psycopg2.connect(url, connect_timeout=8)
+
+    conn = psycopg2.connect(url, connect_timeout=8, **connect_options("psycopg2"))
+    count(connections_opened=1)
+    return conn
 
 
 def _email_prefs_ready(conn) -> bool:

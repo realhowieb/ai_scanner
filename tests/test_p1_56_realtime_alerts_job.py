@@ -58,7 +58,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotRegex(self.SRC, r"(?m)^\s+schedule:")  # comments may mention it
         self.assertIn("group: realtime-alerts", self.SRC)
         self.assertIn("timeout-minutes: 4", self.SRC)
-        self.assertIn("python scripts/realtime_alerts_once.py", self.SRC)
+        self.assertIn("python -m scripts.db_traffic_job scripts.realtime_alerts_once", self.SRC)
 
     def test_secrets_match_scheduled_scans(self):
         scans = Path(".github/workflows/scheduled-scans.yml").read_text()

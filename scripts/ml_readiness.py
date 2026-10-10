@@ -31,6 +31,7 @@ import base64
 import datetime as dt
 import gzip
 import json
+import random
 import statistics
 import sys
 import time
@@ -58,14 +59,18 @@ def load(now: dt.datetime) -> Dict[str, Any]:
     s = mr.DATASET_START
     lo = dt.datetime(s.year, s.month, s.day, tzinfo=dt.timezone.utc)
     hi = now + dt.timedelta(minutes=1)
+    rows = None
     for attempt in range(3):  # Neon can drop an idle SSL connection; retry the read
         try:
-            rows = fetch_readiness_rows(lo, hi)
+            if rows is None:
+                rows = fetch_readiness_rows(lo, hi)
             scans = fetch_scan_index({r.get("ticker") for r in rows}, lo - rd.MAX_SCAN_LAG - dt.timedelta(hours=1), hi)
             return {"rows": rows, "scans": scans}
         except Exception as e:  # noqa: BLE001
             _log(f"read failed ({type(e).__name__}); retry {attempt + 1}/3")
-            time.sleep(5 * (attempt + 1))
+            if attempt < 2:
+                delay = min(20, 5 * 2 ** attempt)
+                time.sleep(random.uniform(delay / 2, delay))
     raise SystemExit("database unavailable")
 
 

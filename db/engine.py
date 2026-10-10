@@ -3,6 +3,8 @@ import os
 import sqlite3
 from pathlib import Path
 
+from db.traffic import connect_options, count
+
 try:
     import streamlit as st
 except Exception:  # pragma: no cover - depends on optional UI dependency
@@ -93,6 +95,7 @@ def _checkout_warm(url: str):
     if conn is not None:
         try:
             conn.rollback()
+            count(connections_reused=1)
             return _WarmConn(conn)
         except Exception:
             try:
@@ -100,7 +103,8 @@ def _checkout_warm(url: str):
             except Exception:
                 pass
             _pool_local.conn = None
-    real = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_connect_timeout())
+    real = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_connect_timeout(), **connect_options())
+    count(connections_opened=1)
     _pool_local.conn = real
     return _WarmConn(real)
 
@@ -227,7 +231,8 @@ def get_neon_conn():
 
         # Bounded connect timeout so a network stall never hangs a page render
         # indefinitely (libpq connect_timeout, overridable via env). Run 30 P1.
-        conn = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_connect_timeout())
+        conn = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_connect_timeout(), **connect_options())
+        count(connections_opened=1)
         return conn
     except ImportError:
         # Never echo the exception (could include the DSN / connection string).
