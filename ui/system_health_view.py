@@ -17,17 +17,32 @@ _HUMAN = {"NO_ACTION": "None", "WATCH": "Watch", "AUTOMATIC_RECOVERY_CANDIDATE":
 
 def _load() -> Optional[Dict[str, Any]]:
     try:
-        from db.system_health import load_latest
-        return load_latest()
+        from api.operations import load_snapshot
+        return load_snapshot()['report']
     except Exception:
         return None
 
 
 def render_system_health(report: Optional[Dict[str, Any]] = None) -> None:
-    from analytics import system_health as sh
+    if not bool(st.session_state.get('is_admin')):
+        st.info('Processing health is available to administrators.')
+        return
+    import datetime as dt
 
-    report = report or _load()
+    from analytics import system_health as sh
+    from analytics.operations import summary
+    from ui.operations_panel import render_operations_panel
+
+    refresh_failed = False
+    if report is None:
+        from api.operations import load_snapshot
+        snapshot = load_snapshot()
+        report, refresh_failed = snapshot['report'], snapshot['refresh_failed']
     st.markdown("### 🩺 System Health")
+    rendered = summary(report, now=dt.datetime.now(dt.timezone.utc))
+    rendered['refresh_failed'] = refresh_failed
+    rendered['stale'] = rendered['stale'] or refresh_failed
+    render_operations_panel(rendered)
     if not report:
         st.info(
             "No health snapshot yet. Confirm the external scheduler dispatched System Health, "

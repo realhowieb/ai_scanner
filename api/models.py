@@ -41,7 +41,22 @@ class Me(BaseModel):
     entitlements: Dict[str, bool] = Field(description="Feature flags, e.g. can_day_trader, can_ai_notes")
 
 
+class DataFreshness(BaseModel):
+    state: Literal["fresh", "stale", "partial", "unavailable"]
+    scan_state: Literal["fresh", "stale", "partial", "unavailable"]
+    market_data_state: Literal["fresh", "stale", "partial", "unavailable"]
+    last_successful_scan_at: Optional[str] = None
+    scan_completed_at: Optional[str] = None
+    market_data_at: Optional[str] = None
+    expected_scan_at: Optional[str] = None
+    calendar_covered: bool
+    checked_at: str
+    timestamp_basis: Literal["saved_scan"]
+    market_data_note: Optional[str] = None
+
+
 class Market(BaseModel):
+    freshness: Optional[DataFreshness] = Field(default=None, description='Scan and underlying-data freshness; missing source times stay null')
     phase: Literal["premarket", "open", "afterhours", "closed"]
     latest_scan_at: Optional[str] = Field(default=None, description="Latest full-market scan (ISO); null when none")
     stale: Optional[bool] = Field(default=None, description=(
@@ -205,6 +220,7 @@ class ScanSetup(Setup):
 
 
 class LatestScan(BaseModel):
+    freshness: Optional[DataFreshness] = None
     scan_at: Optional[str] = Field(default=None, description="ISO time of the market scan; null when none exists")
     total: int = Field(description="Setups matching the filters, before the plan cap")
     max_results: int = Field(description="Rows this plan sees (Free 25, Pro 100, Premium 200)")
@@ -675,6 +691,7 @@ class BriefPick(BaseModel):
 
 
 class Brief(BaseModel):
+    freshness: Optional[DataFreshness] = None
     available: bool = Field(description="False until the day's first scan snapshot exists")
     snapshot_time: Optional[str] = None
     phase: Optional[str] = Field(default=None, description="premarket / regular / afterhours / closed")

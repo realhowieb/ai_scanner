@@ -185,6 +185,8 @@ def build_trust_info(runs: Optional[Sequence[Mapping[str, Any]]], health: Option
         info["last_scan_age"] = _fmt_age(ts, now)
         rc = scan.get("row_count")
         info["result_count"] = int(rc) if isinstance(rc, (int, float)) and rc > 0 else None
+    from analytics.data_freshness import describe
+    info['freshness'] = describe(info['last_scan_at'], now=now)
     if health:
         generated = _parse_ts(health.get("generated_at"))
         uni = ((health.get("subsystems") or {}).get("universe") or {}).get("metrics") or {}
@@ -205,6 +207,11 @@ def banner_parts(info: Mapping[str, Any]) -> list:
         parts.append(f"Universe {info['universe_symbols']:,} tradable stocks")
     if info.get("result_count"):
         parts.append(f"{info['result_count']} ranked setups")
+    if info.get('freshness'):
+        from analytics.data_freshness import display_lines
+        # The existing Last scan segment already shows the saved-scan timestamp.
+        lines = display_lines(info['freshness'])
+        parts.extend([lines[0], lines[3]])
     parts.append(info.get("session") or "")
     return [p for p in parts if p]
 
@@ -246,9 +253,10 @@ if st is not None:
 
     @st.cache_data(ttl=300, show_spinner=False)
     def _load_health() -> Optional[dict]:
-        from db.system_health import load_latest
+        from api.operations import load_snapshot
 
-        return load_latest()
+        snapshot = load_snapshot()
+        return snapshot['report'] if not snapshot['refresh_failed'] else None
 else:  # pragma: no cover
     def _load_runs() -> list:
         return []

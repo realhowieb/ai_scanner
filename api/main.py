@@ -236,6 +236,13 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     _public_routes(app)
     _research_routes(app)
     _ml_routes(app)
+    @app.get('/v1/admin/operations', tags=['operations (admin only)'],
+             responses={401: {'description': 'Not signed in'}, 403: {'description': 'Admins only'}},
+             openapi_extra={'x-internal': True})
+    def operations_health(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        require_admin(account)
+        from api.operations import get_summary
+        return get_summary()
     _delete_account_route(app)
     return app
 

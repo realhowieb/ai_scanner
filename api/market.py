@@ -86,11 +86,12 @@ def _split_flag(label: Any) -> tuple:
 
 
 def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
+    from analytics.data_freshness import describe
     from ui.entitlement_view import redact_prebreakout_rows
 
     core = _brief_core()
     if not core:
-        return {"available": False, "snapshot_time": None}
+        return {"available": False, "snapshot_time": None, 'freshness': describe(None)}
     d = core["data"]
     early = bool(entitlements.get("can_early_breakout"))
     picks = []
@@ -108,6 +109,7 @@ def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     return {
         "available": True,
         "snapshot_time": d.get("snapshot_time"),
+        'freshness': describe(d.get('snapshot_time'), market_data_at=d.get('market_data_at')),
         "phase": core["phase"],
         "market": [{"label": lbl, "last": last, "chg_pct": chg} for lbl, last, chg in d.get("market_close") or []],
         "breadth": {"advancers": breadth[0], "decliners": breadth[1]} if breadth else None,

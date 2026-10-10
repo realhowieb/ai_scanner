@@ -45,6 +45,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operations Health */
+        get: operations["operations_health_v1_admin_operations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ai/brief-narrative": {
         parameters: {
             query?: never;
@@ -1955,6 +1972,7 @@ export interface components {
              * @default []
              */
             earnings_today: string[];
+            freshness?: components["schemas"]["DataFreshness"] | null;
             /**
              * Gainers
              * @default []
@@ -2120,6 +2138,43 @@ export interface components {
             missing: number;
             /** Symbols */
             symbols: number;
+        };
+        /** DataFreshness */
+        DataFreshness: {
+            /** Calendar Covered */
+            calendar_covered: boolean;
+            /** Checked At */
+            checked_at: string;
+            /** Expected Scan At */
+            expected_scan_at?: string | null;
+            /** Last Successful Scan At */
+            last_successful_scan_at?: string | null;
+            /** Market Data At */
+            market_data_at?: string | null;
+            /** Market Data Note */
+            market_data_note?: string | null;
+            /**
+             * Market Data State
+             * @enum {string}
+             */
+            market_data_state: "fresh" | "stale" | "partial" | "unavailable";
+            /** Scan Completed At */
+            scan_completed_at?: string | null;
+            /**
+             * Scan State
+             * @enum {string}
+             */
+            scan_state: "fresh" | "stale" | "partial" | "unavailable";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "fresh" | "stale" | "partial" | "unavailable";
+            /**
+             * Timestamp Basis
+             * @constant
+             */
+            timestamp_basis: "saved_scan";
         };
         /** DayTrader */
         DayTrader: {
@@ -2405,6 +2460,7 @@ export interface components {
         };
         /** LatestScan */
         LatestScan: {
+            freshness?: components["schemas"]["DataFreshness"] | null;
             /**
              * Limited
              * @description True when the plan cap hides some matching setups
@@ -2492,6 +2548,8 @@ export interface components {
              * @description When stale: the missed scan slot (ISO)
              */
             expected_scan_at?: string | null;
+            /** @description Scan and underlying-data freshness; missing source times stay null */
+            freshness?: components["schemas"]["DataFreshness"] | null;
             /**
              * Latest Scan At
              * @description Latest full-market scan (ISO); null when none
@@ -5095,6 +5153,42 @@ export interface operations {
             };
             /** @description Database unavailable, or (strict=true) a scheduled scan was missed */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    operations_health_v1_admin_operations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
