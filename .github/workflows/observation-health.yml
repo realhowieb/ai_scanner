@@ -16,6 +16,13 @@ concurrency:
   group: observation-health
   cancel-in-progress: false
 
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
+
 permissions:
   contents: read
 
@@ -40,7 +47,7 @@ jobs:
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           LIMIT: ${{ inputs.limit || '50000' }}
         run: |
-          python -m scripts.observation_health --limit "$LIMIT" --out artifacts/automation
+          python -m scripts.db_traffic_job scripts.observation_health --limit "$LIMIT" --out artifacts/automation
           echo "### Observation dataset health" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat artifacts/automation/observation_health.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
@@ -52,3 +59,12 @@ jobs:
           name: observation-health
           path: artifacts/automation/observation_health.json
           if-no-files-found: warn
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

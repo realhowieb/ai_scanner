@@ -441,7 +441,7 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
             params = (int(limit),) if context is None else (str(context), int(limit))
             cur.execute(
                 f"SELECT observation_id, record FROM hsf_observations {where}"
-                f"ORDER BY timestamp DESC LIMIT {ph}",
+                f"ORDER BY timestamp DESC, observation_id DESC LIMIT {ph}",
                 params,
             )
             rows = cur.fetchall() or []
@@ -458,22 +458,26 @@ def load_recent_observations(*, limit: int = 100, context: Optional[str] = None,
                 )
                 outcome_rows = cur.fetchall() or []
         elif attach_outcomes:
-            select = (f"SELECT {_record_select('o.', fields, is_sqlite)}, oc.horizons "
-                      f"FROM hsf_observations o "
-                      f"LEFT JOIN (SELECT observation_id, {agg} AS horizons "
-                      f"FROM hsf_observation_outcomes GROUP BY observation_id) oc "
-                      f"ON o.observation_id = oc.observation_id")
-            where = "" if context is None else f"WHERE o.context = {ph} "
-            order = f"ORDER BY o.timestamp DESC LIMIT {ph}"
+            # Limit observations before aggregating outcomes: historical rows
+            # outside this read cannot affect its horizon set.
+            where = "" if context is None else f"WHERE context = {ph} "
             params = (int(limit),) if context is None else (str(context), int(limit))
-            cur.execute(f"{select} {where}{order}", params)
+            cur.execute(
+                f"WITH selected AS (SELECT observation_id, timestamp, record "
+                f"FROM hsf_observations {where}ORDER BY timestamp DESC, observation_id DESC LIMIT {ph}) "
+                f"SELECT {_record_select('o.', fields, is_sqlite)}, oc.horizons "
+                f"FROM selected o LEFT JOIN (SELECT observation_id, {agg} AS horizons "
+                f"FROM hsf_observation_outcomes "
+                f"WHERE observation_id IN (SELECT observation_id FROM selected) "
+                f"GROUP BY observation_id) oc ON o.observation_id = oc.observation_id "
+                f"ORDER BY o.timestamp DESC, o.observation_id DESC", params)
         elif context is None:
             cur.execute(f"SELECT {_record_select('', fields, is_sqlite)} FROM hsf_observations "
-                        f"ORDER BY timestamp DESC LIMIT {ph}", (int(limit),))
+                        f"ORDER BY timestamp DESC, observation_id DESC LIMIT {ph}", (int(limit),))
         else:
             cur.execute(f"SELECT {_record_select('', fields, is_sqlite)} FROM hsf_observations "
                         f"WHERE context = {ph} "
-                        f"ORDER BY timestamp DESC LIMIT {ph}", (str(context), int(limit)))
+                        f"ORDER BY timestamp DESC, observation_id DESC LIMIT {ph}", (str(context), int(limit)))
         if not full_outcomes:
             rows = cur.fetchall() or []
         cur.close()

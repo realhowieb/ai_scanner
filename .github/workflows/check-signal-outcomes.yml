@@ -5,6 +5,13 @@ name: Check Signal Outcomes
 on:
   workflow_dispatch:
 
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
+
 permissions:
   contents: read
 
@@ -43,4 +50,13 @@ jobs:
           fi
 
       - name: Report signal_outcomes health
-        run: python scripts/check_signal_outcomes.py
+        run: python -m scripts.db_traffic_job scripts.check_signal_outcomes
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

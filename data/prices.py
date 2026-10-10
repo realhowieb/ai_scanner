@@ -621,6 +621,9 @@ def fetch_price_data_parallel(
             else:
                 remaining.append(sym)
 
+        from db.traffic import cache
+
+        cache("market_frames", hits=cache_hits, misses=len(remaining))
         if cache_hits:
             _log(logger, f"[prices] Cache hits: {cache_hits} symbols")
 

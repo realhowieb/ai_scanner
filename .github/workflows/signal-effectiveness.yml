@@ -5,7 +5,7 @@ name: Signal Effectiveness Analysis
 # scans, or scanners, and never changes scoring/ranking/tiers. Manual only
 # (workflow_dispatch). Uploads the JSON/Markdown report plus the exact input
 # snapshot so the verdict can be replayed offline:
-#   python -m scripts.analyze_signal_effectiveness --input run55_input_snapshot.json
+#   python -m scripts.db_traffic_job scripts.analyze_signal_effectiveness --input run55_input_snapshot.json
 
 on:
   workflow_dispatch:
@@ -13,6 +13,13 @@ on:
 concurrency:
   group: signal-effectiveness
   cancel-in-progress: false
+
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
 
 permissions:
   contents: read
@@ -38,7 +45,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          python -m scripts.analyze_signal_effectiveness --out artifacts/research --snapshot
+          python -m scripts.db_traffic_job scripts.analyze_signal_effectiveness --out artifacts/research --snapshot
           cat artifacts/research/run55_signal_effectiveness.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload report
         if: always()
@@ -47,3 +54,12 @@ jobs:
           name: signal-effectiveness
           path: artifacts/research/
           if-no-files-found: warn
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

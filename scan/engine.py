@@ -466,6 +466,7 @@ def run_breakout_scan(
 
     # ✅ ALWAYS initialize so later `if not price_data:` checks are safe.
     price_data: dict[str, pd.DataFrame] = {}
+    fetched_price_data: dict[str, pd.DataFrame] = {}
 
     # --- DB-first pricing path (admin only, full-universe) ---
     # This is independent of the file-based snapshot_id hooks.
@@ -543,6 +544,7 @@ def run_breakout_scan(
                     provider_skipped.extend(_skipped or [])
                     if chunk_data:
                         price_data.update(chunk_data)
+                        fetched_price_data.update(chunk_data)
                 except _ENGINE_BOUNDARY_ERRORS as e:
                     # Swallow chunk failures; we still want the scan to proceed.
                     _diag_exception(
@@ -571,10 +573,10 @@ def run_breakout_scan(
             else:
                 print("chunked fetch_price_data_batch failed:", batch_error)
             _log_scan_error(e, context="chunked_fetch_price_data_batch", tickers=tickers_to_fetch)
-            price_data = {}
+            # Keep any cache/snapshot frames already obtained.
 
     # --- Fast path: parallel fetch for smaller scans ---
-    if not price_data and tickers_to_fetch:
+    if tickers_to_fetch and not (large_scan and show_progress and fetched_price_data):
         try:
             from data.prices import fetch_price_data_parallel  # type: ignore
 
@@ -585,7 +587,8 @@ def run_breakout_scan(
             provider_skipped.extend(_skipped or [])
             if price_data_new:
                 price_data.update(price_data_new)
-            if not price_data:
+                fetched_price_data.update(price_data_new)
+            if not price_data_new:
                 raise RuntimeError("parallel price fetch returned no data")
         except _ENGINE_BOUNDARY_ERRORS as e:
             import traceback
@@ -599,10 +602,10 @@ def run_breakout_scan(
                     print("fetch_price_data_parallel failed:", parallel_error)
             else:
                 print("fetch_price_data_parallel failed:", parallel_error)
-            price_data = {}
+            # Keep any cache/snapshot frames already obtained.
 
     # --- Fallback: single-shot batch fetch ---
-    if not price_data and tickers_to_fetch:
+    if not fetched_price_data and tickers_to_fetch:
         try:
             from data.prices import fetch_price_data_batch  # type: ignore
 
@@ -610,6 +613,7 @@ def run_breakout_scan(
             provider_skipped.extend(_skipped or [])
             if price_data_new:
                 price_data.update(price_data_new)
+                fetched_price_data.update(price_data_new)
             if not price_data:
                 raise RuntimeError("batch price fetch returned no data")
         except _ENGINE_BOUNDARY_ERRORS as e:
@@ -624,7 +628,7 @@ def run_breakout_scan(
                     print("fetch_price_data_batch failed:", batch_error)
             else:
                 print("fetch_price_data_batch failed:", batch_error)
-            price_data = {}
+            # Keep any cache/snapshot frames already obtained.
 
     if tickers_to_fetch and provider_skipped:
         try:
@@ -670,11 +674,12 @@ def run_breakout_scan(
             # Snapshot persistence should never break a scan.
             _diag_exception(diagnostics, f"Snapshot save skipped for {snapshot_id}", e)
 
-    # Persist DB cache for admin full-universe runs so subsequent runs reuse data.
+    # Persist fetched frames only. Rewriting cache hits uploads their full history
+    # again and advances updated_at without obtaining fresher provider data.
     # This must never block scans.
     if use_db_cache and price_data:
         try:
-            _db_save_price_cache(price_data, diagnostics=diagnostics)
+            _db_save_price_cache(fetched_price_data, diagnostics=diagnostics)
         except _ENGINE_BOUNDARY_ERRORS as e:
             _diag_exception(diagnostics, "DB cache save wrapper skipped", e)
 

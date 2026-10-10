@@ -7,6 +7,13 @@ name: Recalibrate AI Confidence Model
 on:
   workflow_dispatch:
 
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
+
 permissions:
   contents: read
 
@@ -47,8 +54,17 @@ jobs:
           fi
 
       - name: Recalibrate active AI Confidence model in place
-        run: python scripts/recalibrate_ai_confidence_model.py
+        run: python -m scripts.db_traffic_job scripts.recalibrate_ai_confidence_model
 
       - name: Verify calibration map is live
         run: |
           python -c "from scan.ai_confidence import load_ai_confidence_bundle; m, md, w = load_ai_confidence_bundle(); cm = md.get('calibration_map') or {}; print({'source': md.get('source'), 'has_map': bool(cm.get('x')), 'method': cm.get('method'), 'points': len(cm.get('x') or [])}); raise SystemExit(0 if cm.get('x') else 1)"
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

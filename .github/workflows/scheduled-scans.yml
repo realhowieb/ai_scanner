@@ -24,6 +24,17 @@ on:
   # cron fired hours late (e.g. the 21:10 UTC slot at 00:27 UTC) and duplicated
   # those slots; a late run after UTC midnight sent the morning digest at night.
 
+concurrency:
+  group: scheduled-scans
+  cancel-in-progress: false
+
+env:
+  DB_TRAFFIC_WARN_BYTES: ${{ vars.DB_TRAFFIC_WARN_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_UPLOAD_BYTES: ${{ vars.DB_TRAFFIC_WARN_UPLOAD_BYTES || '100000000' }}
+  DB_TRAFFIC_WARN_CALLS: ${{ vars.DB_TRAFFIC_WARN_CALLS || '10000' }}
+  DB_QUERY_WARN_MS: ${{ vars.DB_QUERY_WARN_MS || '2000' }}
+  DB_JOB_WARN_MS: ${{ vars.DB_JOB_WARN_MS || '900000' }}
+
 permissions:
   contents: read
 
@@ -121,7 +132,7 @@ jobs:
           # Manual runs also bypass the per-alert cooldown so alerts can be
           # tested on demand; scheduled runs keep the normal 12h throttle.
           ALERT_THROTTLE_HOURS: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '0' || '12' }}
-        run: python -m scheduler.cron_runner
+        run: python -m scripts.db_traffic_job scheduler.cron_runner
 
       # Saved even when the scan fails, so the perf history keeps the failed run.
       # The universe file is only rewritten on a successful live fetch, so a
@@ -155,3 +166,12 @@ jobs:
             artifacts/automation/perf_history.jsonl
             artifacts/automation/history/**/*.json
           if-no-files-found: warn
+
+      - name: Upload aggregate database traffic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: db-traffic-${{ github.job }}
+          path: artifacts/db_traffic/*.json
+          retention-days: 14
+          if-no-files-found: ignore

@@ -265,6 +265,9 @@ def _finish(job_id: str, status: str, progress: Dict[str, Any], *,
 # ---- running --------------------------------------------------------------------------------------
 def submit(job_id: str, work: Callable[[Callable[[Dict[str, Any]], None]], Dict[str, Any]]) -> None:
     """Run `work(report)` on the scan pool; it returns the result payload."""
+    from db.traffic import scope
+
+    @scope("api.scan_job")
     def run() -> None:
         started = time.perf_counter()
         try:

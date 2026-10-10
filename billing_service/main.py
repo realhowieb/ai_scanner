@@ -279,7 +279,14 @@ def _set_user_plan_by_email(
 def _db_conn():
     if not DATABASE_URL:
         raise RuntimeError("Missing DATABASE_URL env var")
-    return psycopg2.connect(_normalize_db_url(DATABASE_URL), connect_timeout=8)
+    try:
+        from db.traffic import connect_options, count
+    except ImportError:  # standalone Render billing root has no scanner package
+        return psycopg2.connect(_normalize_db_url(DATABASE_URL), connect_timeout=8)
+
+    conn = psycopg2.connect(_normalize_db_url(DATABASE_URL), connect_timeout=8, **connect_options("psycopg2"))
+    count(connections_opened=1)
+    return conn
 
 
 def _get_user_by_email(email: str) -> dict:
