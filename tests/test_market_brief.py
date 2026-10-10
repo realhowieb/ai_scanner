@@ -158,14 +158,14 @@ class SummaryAndPositionsTests(unittest.TestCase):
         closed = mb._freshness_label(
             dt.datetime(2026, 9, 11, 20, 5, tzinfo=dt.timezone.utc), "closed"
         )
-        self.assertIn("Last session", closed)
-        self.assertIn("ET", closed)
+        self.assertIn("Last successful scan", closed)
+        self.assertIn("EDT", closed)
         self.assertNotIn("Live", closed)  # never fake live when closed
         live = mb._freshness_label(
             dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=12), "open"
         )
-        self.assertIn("Live", live)
-        self.assertIn("ago", live)
+        self.assertNotIn("Live", live)
+        self.assertIn("Market data as of: Unavailable", live)
         self.assertIsNone(mb._freshness_label(None, "closed"))
 
     def test_breadth_interpretation(self):

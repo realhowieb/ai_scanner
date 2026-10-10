@@ -6,6 +6,7 @@
 // /v1/earnings and /v1/ai/brief-narrative; sections the API leaves empty say so.
 import { useState } from "react";
 
+import { DataFreshness } from "@/features/DataFreshness";
 import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { AIText } from "@/components/AIText";
@@ -142,6 +143,7 @@ export function BriefView() {
           </p>
         </div>
       </section>
+      <DataFreshness info={b?.freshness} />
       {brief.error && b && <ErrorLine error={brief.error} />}
       {brief.error && !b ? <ErrorState error={brief.error} onRetry={brief.reload} what="the Market Brief" />
         : !b ? <div className="brief-center"><Card title="Market Pulse" id="pulse"><Skeleton rows={6} label="Loading Market Pulse" /></Card><Card title="HSF Opportunity Radar" id="opps"><Skeleton rows={6} label="Loading Opportunity Radar" /></Card></div>

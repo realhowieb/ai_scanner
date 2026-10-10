@@ -1,0 +1,47 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+    <title>HSF freshness and processing health preview</title>
+    <style>body{background:#101821;color:#e4edf4;font:16px system-ui;margin:0;padding:32px}
+    main{max-width:1080px;margin:auto}h1{font-size:28px}h3{font-size:22px}p{line-height:1.6}
+    small{color:#a6b4c4}section{background:#182430;border:1px solid #304253;border-radius:12px;padding:24px;margin-top:28px;overflow:auto}
+    table{border-collapse:collapse;width:100%;font-size:13px}td,th{text-align:left;padding:12px 10px;border-bottom:1px solid #304253}
+    th{color:#a8bdd1}h4{margin-top:28px}.hsf-trust{background:#182430;margin-bottom:14px!important;padding:16px!important}
+    .demo{color:#a6b4c4}@media(max-width:640px){body{padding:16px}section{padding:16px}}</style>
+    <main><h1>HSF · Data freshness & processing health</h1>
+    <p class="demo">UI preview · synthetic examples, not production metrics.<br>Public freshness banner states, followed by the admin-only processing panel.</p>
+    
+<style>
+.hsf-trust{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;
+  padding:8px 12px;margin:4px 0 10px;border:1px solid rgba(128,128,128,.28);
+  border-radius:8px;font-size:.86rem;line-height:1.4}
+.hsf-trust .hsf-trust-scope{font-weight:700;letter-spacing:.06em;font-size:.74rem;text-transform:uppercase;opacity:.85}
+.hsf-trust .hsf-trust-part{white-space:normal}
+.hsf-trust .hsf-trust-status{font-weight:600;margin-left:auto;white-space:nowrap}
+.hsf-trust .hsf-lvl-ok{color:#3aa76d}.hsf-trust .hsf-lvl-limited{color:#d19a2a}
+.hsf-trust .hsf-lvl-issue{color:#e0625c}.hsf-trust .hsf-lvl-unknown{opacity:.75}
+@media (max-width:640px){.hsf-trust .hsf-trust-status{margin-left:0}}
+</style>
+<div class="hsf-trust" role="status" aria-label="Market data status"><span class="hsf-trust-scope">Full U.S. market</span><span class="hsf-trust-part">Last scan 5:00 PM ET (just now)</span><span class="hsf-trust-part">100 ranked setups</span><span class="hsf-trust-part">Data freshness: Partially available</span><span class="hsf-trust-part">Market data as of: Unavailable</span><span class="hsf-trust-part">After hours</span><span class="hsf-trust-status hsf-lvl-ok"><span aria-hidden="true">●</span> System: Operational</span></div>
+<style>
+.hsf-trust{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;
+  padding:8px 12px;margin:4px 0 10px;border:1px solid rgba(128,128,128,.28);
+  border-radius:8px;font-size:.86rem;line-height:1.4}
+.hsf-trust .hsf-trust-scope{font-weight:700;letter-spacing:.06em;font-size:.74rem;text-transform:uppercase;opacity:.85}
+.hsf-trust .hsf-trust-part{white-space:normal}
+.hsf-trust .hsf-trust-status{font-weight:600;margin-left:auto;white-space:nowrap}
+.hsf-trust .hsf-lvl-ok{color:#3aa76d}.hsf-trust .hsf-lvl-limited{color:#d19a2a}
+.hsf-trust .hsf-lvl-issue{color:#e0625c}.hsf-trust .hsf-lvl-unknown{opacity:.75}
+@media (max-width:640px){.hsf-trust .hsf-trust-status{margin-left:0}}
+</style>
+<div class="hsf-trust" role="status" aria-label="Market data status"><span class="hsf-trust-scope">Full U.S. market</span><span class="hsf-trust-part">Last scan Thu Oct 8, 5:00 PM ET (24 h ago)</span><span class="hsf-trust-part">100 ranked setups</span><span class="hsf-trust-part">Data freshness: Stale</span><span class="hsf-trust-part">Market data as of: Unavailable</span><span class="hsf-trust-part">After hours</span><span class="hsf-trust-status hsf-lvl-ok"><span aria-hidden="true">●</span> System: Operational</span></div>
+<style>
+.hsf-trust{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;
+  padding:8px 12px;margin:4px 0 10px;border:1px solid rgba(128,128,128,.28);
+  border-radius:8px;font-size:.86rem;line-height:1.4}
+.hsf-trust .hsf-trust-scope{font-weight:700;letter-spacing:.06em;font-size:.74rem;text-transform:uppercase;opacity:.85}
+.hsf-trust .hsf-trust-part{white-space:normal}
+.hsf-trust .hsf-trust-status{font-weight:600;margin-left:auto;white-space:nowrap}
+.hsf-trust .hsf-lvl-ok{color:#3aa76d}.hsf-trust .hsf-lvl-limited{color:#d19a2a}
+.hsf-trust .hsf-lvl-issue{color:#e0625c}.hsf-trust .hsf-lvl-unknown{opacity:.75}
+@media (max-width:640px){.hsf-trust .hsf-trust-status{margin-left:0}}
+</style>
+<div class="hsf-trust" role="status" aria-label="Market data status"><span class="hsf-trust-scope">Full U.S. market</span><span class="hsf-trust-part">Latest market scan unavailable</span><span class="hsf-trust-part">Data freshness: Unavailable</span><span class="hsf-trust-part">Market data as of: Unavailable</span><span class="hsf-trust-part">After hours</span><span class="hsf-trust-status hsf-lvl-ok"><span aria-hidden="true">●</span> System: Operational</span></div><section class="hsf-operations" aria-label="Processing health"><h3>Processing health</h3><p>Current snapshot · 2026-10-09T21:00:00+00:00</p><p>Last successful maturation: 2026-10-09T21:00:00+00:00<br>Pending ready observations: 12 · Oldest pending age: 35 minutes</p><p><small>ready observations in latest maturation report selection; not all pending or global backlog</small></p><table><thead><tr><th>Workflow</th><th>Status</th><th>Last success</th><th>Last failure</th><th>Consecutive failures</th></tr></thead><tbody><tr><td>Scheduled market scan</td><td>HEALTHY</td><td>2026-10-09T21:00:00+00:00</td><td>Unavailable</td><td>0</td></tr></tbody></table><h4>Estimated database traffic</h4><p>Application payload estimates, not Neon billed usage.</p><p>Sample total · database → client: 13520963 bytes · client → database: 2146392 bytes</p><p><small>latest completed instrumented run per workflow; not a time-window total</small></p><table><thead><tr><th>Workflow</th><th>Database → client bytes</th><th>Client → database bytes</th><th>Calls</th></tr></thead><tbody><tr><td>scheduled-scans.yml</td><td>13520963</td><td>2146392</td><td>1631</td></tr></tbody></table><p></p><p>Neon provider usage: Unavailable</p></section></main></html>

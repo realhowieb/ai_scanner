@@ -39,6 +39,10 @@ def render_admin_analytics(
         "Research Evidence", "Observation Explorer", "System Health",
     )
     section = st.radio("Admin view", sections, horizontal=True, key="admin_analytics_view")
+    if section == 'System Health':
+        # Operational snapshots do not require product/research history queries.
+        render_system_health_panel()
+        return {'available': True, 'source': 'cached_system_health_snapshot'}
     period_label = st.selectbox(
         "Analytics period",
         list(DATE_WINDOWS),

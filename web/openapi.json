@@ -1152,6 +1152,16 @@
       "title": "Earnings Today",
       "type": "array"
      },
+     "freshness": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/DataFreshness"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "gainers": {
       "default": [],
       "items": {
@@ -1545,6 +1555,118 @@
      "missing"
     ],
     "title": "Coverage",
+    "type": "object"
+   },
+   "DataFreshness": {
+    "properties": {
+     "calendar_covered": {
+      "title": "Calendar Covered",
+      "type": "boolean"
+     },
+     "checked_at": {
+      "title": "Checked At",
+      "type": "string"
+     },
+     "expected_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Scan At"
+     },
+     "last_successful_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Successful Scan At"
+     },
+     "market_data_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Market Data At"
+     },
+     "market_data_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Market Data Note"
+     },
+     "market_data_state": {
+      "enum": [
+       "fresh",
+       "stale",
+       "partial",
+       "unavailable"
+      ],
+      "title": "Market Data State",
+      "type": "string"
+     },
+     "scan_completed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan Completed At"
+     },
+     "scan_state": {
+      "enum": [
+       "fresh",
+       "stale",
+       "partial",
+       "unavailable"
+      ],
+      "title": "Scan State",
+      "type": "string"
+     },
+     "state": {
+      "enum": [
+       "fresh",
+       "stale",
+       "partial",
+       "unavailable"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "timestamp_basis": {
+      "const": "saved_scan",
+      "title": "Timestamp Basis",
+      "type": "string"
+     }
+    },
+    "required": [
+     "state",
+     "scan_state",
+     "market_data_state",
+     "calendar_covered",
+     "checked_at",
+     "timestamp_basis"
+    ],
+    "title": "DataFreshness",
     "type": "object"
    },
    "DayTrader": {
@@ -2351,6 +2473,16 @@
    },
    "LatestScan": {
     "properties": {
+     "freshness": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/DataFreshness"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "limited": {
       "description": "True when the plan cap hides some matching setups",
       "title": "Limited",
@@ -2578,6 +2710,17 @@
       ],
       "description": "When stale: the missed scan slot (ISO)",
       "title": "Expected Scan At"
+     },
+     "freshness": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/DataFreshness"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Scan and underlying-data freshness; missing source times stay null"
      },
      "latest_scan_at": {
       "anyOf": [
@@ -9283,6 +9426,41 @@
      }
     },
     "summary": "Readyz"
+   }
+  },
+  "/v1/admin/operations": {
+   "get": {
+    "operationId": "operations_health_v1_admin_operations_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Operations Health V1 Admin Operations Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Operations Health",
+    "tags": [
+     "operations (admin only)"
+    ],
+    "x-internal": true
    }
   },
   "/v1/ai/brief-narrative": {

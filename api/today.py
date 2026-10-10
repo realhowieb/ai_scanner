@@ -124,6 +124,8 @@ def cache_size() -> int:
 
 
 def clear_cache() -> None:
+    from api import operations
+    operations._last_good = None
     _cache.clear()
     _run_cache.clear()
     from api import scans  # stock pages have their own cache (api.scans)
@@ -232,35 +234,26 @@ def _is_market_slot(slot: dt.datetime) -> bool:
 
 
 def last_due_market_scan(now: dt.datetime, days: int = 10) -> Optional[dt.datetime]:
-    """The most recent full-market scan slot that should have produced a scan by now."""
-    today = now.astimezone(mc.ET).date()
-    for i in range(days):
-        slots = [s for s in mc.expected_scan_slots(today - dt.timedelta(days=i))
-                 if _is_market_slot(s) and s + SCAN_SLOT_GRACE <= now]
-        if slots:
-            return max(slots)
-    return None
+    from analytics.data_freshness import last_due_market_scan as shared
+    return shared(now, days)
 
 
 def scan_freshness(latest: Optional[dt.datetime], now: dt.datetime) -> Dict[str, Any]:
-    """stale = a scheduled full-market scan was missed, so the latest scan is older
-    than the schedule promises. Overnight, weekends and holidays are never stale
-    on their own (the last scan of the session is current until the next one is due)."""
-    due = last_due_market_scan(now)
-    if latest is not None and latest.tzinfo is None:
-        latest = latest.replace(tzinfo=dt.timezone.utc)
-    stale = due is not None and (latest is None or latest < due - SCAN_SLOT_EARLY)
-    return {"stale": stale, "expected_scan_at": _iso(due) if stale else None}
+    from analytics.data_freshness import scan_freshness as shared
+    return shared(latest, now)
 
 
 def market_status(now: dt.datetime) -> Dict[str, Any]:
     """Phase plus scan freshness for the Today page; freshness fails on its own."""
     out: Dict[str, Any] = {"phase": market_phase(now), "latest_scan_at": None, "stale": None,
                            "expected_scan_at": None}
+    from analytics.data_freshness import describe
+    out["freshness"] = describe(None, now=now)
     try:
         runs = market_runs()
         latest = runs[0]["created_at"] if runs else None
         out.update(latest_scan_at=_iso(latest), **scan_freshness(latest, now))
+        out["freshness"] = describe(latest, now=now)
     except Exception:  # unknown freshness reads as null, never as stale
         pass
     return out
@@ -396,10 +389,11 @@ def _index_quotes() -> List[Dict[str, Any]]:
 def _system_status(now: dt.datetime) -> Dict[str, Any]:
     """User-facing status and universe size from the latest health snapshot, read the
     same way as the Streamlit trust banner (ui.trust_banner.build_trust_info)."""
-    from db.system_health import load_latest
+    from api.operations import load_snapshot
     from ui.trust_banner import build_trust_info
 
-    health = _cached("system_health", load_latest, ttl_s=QUOTE_TTL_S)
+    snapshot = load_snapshot()
+    health = snapshot['report'] if not snapshot['refresh_failed'] else None
     info = build_trust_info([], health, now)
     return {"status": info["status"], "universe_symbols": info["universe_symbols"]}
 
