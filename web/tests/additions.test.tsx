@@ -4,6 +4,7 @@ import type { ImgHTMLAttributes } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AIScanPanel } from "@/features/AIScanPanel";
+import { DemoPage } from "@/features/Demo";
 import { Landing, PricingPage } from "@/features/Landing";
 import { PaperView } from "@/features/PaperView";
 import { StairSteppers } from "@/features/StairSteppers";
@@ -105,6 +106,17 @@ describe("landing and pricing", () => {
     fail = false;
     await u.click(screen.getByRole("button", { name: /Try again/ }));
     expect((await screen.findAllByText("$40/mo")).length).toBeGreaterThan(0);
+  });
+
+  it("offers a frontend-only demo with sample product state", () => {
+    render(<DemoPage />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("See HSF with polished sample data.");
+    expect(screen.getByRole("status")).toHaveTextContent("fixed sample data");
+    expect(screen.getByRole("table", { name: "Demo ranked setups" })).toHaveTextContent("NVDA");
+    expect(screen.getByRole("heading", { name: "Stock detail" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Watchlist intelligence" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Alerts and AI research" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create a free account" })).toHaveAttribute("href", "/signup");
   });
 });
 

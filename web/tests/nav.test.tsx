@@ -51,6 +51,7 @@ describe("navigation", () => {
     }
     expect(within(menu).getByRole("menuitem", { name: "Account & billing" })).toHaveAttribute("href", "/account");
     expect(routeExists("/how-hsf-works")).toBe(true);
+    expect(routeExists("/demo")).toBe(true);
   });
 
   it("the sign-in guard covers every signed-in page", () => {
