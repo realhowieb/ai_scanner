@@ -126,7 +126,8 @@ describe("Stock Intelligence", () => {
     const u = userEvent.setup();
     render(<SessionProvider initialMe={me("basic")}><StockSearchView /></SessionProvider>);
     expect(await screen.findByRole("link", { name: "AAA" })).toHaveAttribute("href", "/stocks/AAA");
-    expect(screen.getByRole("heading", { name: "Review queue" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Top setups to review" })).toBeInTheDocument();
+    expect(screen.getByText(/Each review opens the score/)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Review" })[0]).toHaveAttribute("href", "/stocks/AAA");
     expect(screen.getAllByText("STRONG · 2 confirming signals").length).toBeGreaterThan(0);
     expect(calls[0]!.query.get("limit")).toBe("12");

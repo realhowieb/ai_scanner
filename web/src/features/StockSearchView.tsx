@@ -34,10 +34,37 @@ export function StockSearchView() {
       <section className="page-head">
         <div>
           <h1 className="h1">Stock Intelligence</h1>
-          <p className="cap">Start with a ranked setup from the latest scan, or open any ticker directly.</p>
+          <p className="cap">Start with the names HSF already ranked, then open one ticker for the deeper read.</p>
         </div>
       </section>
-      <Card title="Open a ticker" id="open-stock" className="stock-open-card">
+      <Card title="Top setups to review" id="top" aside={scan.data?.scan_at ? <Freshness at={scan.data.scan_at} /> : undefined}>
+        {scan.error && !scan.data ? <ErrorState error={scan.error} onRetry={scan.reload} what="the latest scan" />
+          : !scan.data ? <Skeleton rows={6} label="Loading the latest scan" />
+          : scan.data.setups.length === 0 ? <Empty title="No ranked setups in the latest scan." />
+          : (
+            <div className="stack-sm">
+              <p className="cap">Each review opens the score, reasons, risks, watch items, chart and your lists or alerts for that ticker.</p>
+              <ul className="rows review-queue">
+                {scan.data.setups.map((s) => (
+                  <li key={s.ticker} className="row">
+                    <div className="stack-xs grow">
+                      <div className="rc-top">
+                        <TickerLink ticker={s.ticker} />
+                        <ScoreBadge score={s.score} />
+                        {s.primary_setup && <Pill>{setupLabel(s.primary_setup)}</Pill>}
+                      </div>
+                      <p className="cap">{s.status || "Ranked setup"} · {s.n_signals} confirming signal{s.n_signals === 1 ? "" : "s"}</p>
+                    </div>
+                    <span className="grow" />
+                    <span className={`mono cap ${s.chg_pct == null ? "" : s.chg_pct >= 0 ? "up" : "down"}`}>{pct(s.chg_pct)}</span>
+                    <Link href={`/stocks/${encodeURIComponent(s.ticker)}`} className="btn btn-sm">Review</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+      </Card>
+      <Card title="Open another ticker" id="open-stock" className="stock-open-card">
         <form className="row-actions" onSubmit={open} noValidate>
           <label className="field grow"><span>Ticker</span>
             <input value={q} maxLength={10} autoComplete="off" placeholder="e.g. NVDA" autoCapitalize="characters"
@@ -48,30 +75,6 @@ export function StockSearchView() {
         </form>
         {bad && <p id="stock-q-err" className="form-error" role="alert">Enter a ticker symbol like AAPL.</p>}
         <p className="cap">Any U.S. ticker opens. Scores and setups appear for names in the latest scan.</p>
-      </Card>
-      <Card title="Review queue" id="top" aside={scan.data?.scan_at ? <Freshness at={scan.data.scan_at} /> : undefined}>
-        {scan.error && !scan.data ? <ErrorState error={scan.error} onRetry={scan.reload} what="the latest scan" />
-          : !scan.data ? <Skeleton rows={6} label="Loading the latest scan" />
-          : scan.data.setups.length === 0 ? <Empty title="No ranked setups in the latest scan." />
-          : (
-            <ul className="rows review-queue">
-              {scan.data.setups.map((s) => (
-                <li key={s.ticker} className="row">
-                  <div className="stack-xs grow">
-                    <div className="rc-top">
-                      <TickerLink ticker={s.ticker} />
-                      <ScoreBadge score={s.score} />
-                      {s.primary_setup && <Pill>{setupLabel(s.primary_setup)}</Pill>}
-                    </div>
-                    <p className="cap">{s.status || "Ranked setup"} · {s.n_signals} confirming signal{s.n_signals === 1 ? "" : "s"}</p>
-                  </div>
-                  <span className="grow" />
-                  <span className={`mono cap ${s.chg_pct == null ? "" : s.chg_pct >= 0 ? "up" : "down"}`}>{pct(s.chg_pct)}</span>
-                  <Link href={`/stocks/${encodeURIComponent(s.ticker)}`} className="btn btn-sm">Review</Link>
-                </li>
-              ))}
-            </ul>
-          )}
       </Card>
     </div>
   );
