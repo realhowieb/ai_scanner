@@ -219,6 +219,9 @@ select, .field input { min-height: 40px; border-radius: 8px; background: var(--b
 .trend { position: relative; height: 54px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line-soft); margin-bottom: 4px; }
 .trend::before { content: ""; position: absolute; left: 12px; right: 12px; top: 50%; border-top: 1px solid var(--line-soft); }
 .trend-dot { --x: 0; --y: 50%; position: absolute; top: calc(var(--y) - 4px); left: calc(12px + (100% - 24px) * var(--x)); width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(87, 166, 255, .16); }
+.stock-open-card .row-actions { align-items: flex-end; }
+.review-queue .row { gap: 14px; }
+.review-queue .btn { flex: 0 0 auto; }
 .comps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .comps li { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr 44px; align-items: center; gap: 10px; }
 .comps .mono { text-align: right; font-size: 13px; }
@@ -336,6 +339,9 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .stock-split .risks-card, .stock-split .watch-card { order: 1; }
   .stock-split .price-card { order: 2; }
   .snapshot-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .review-queue .row { align-items: flex-start; }
+  .review-queue .row > .mono { margin-left: 0; }
+  .review-queue .btn { flex: 1 1 100%; }
   .filters .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; width: 100%; }
   .priority-panel { align-items: stretch; flex-direction: column; }
   .priority-steps { justify-content: flex-start; }

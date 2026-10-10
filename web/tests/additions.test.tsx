@@ -126,6 +126,9 @@ describe("Stock Intelligence", () => {
     const u = userEvent.setup();
     render(<SessionProvider initialMe={me("basic")}><StockSearchView /></SessionProvider>);
     expect(await screen.findByRole("link", { name: "AAA" })).toHaveAttribute("href", "/stocks/AAA");
+    expect(screen.getByRole("heading", { name: "Review queue" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Review" })[0]).toHaveAttribute("href", "/stocks/AAA");
+    expect(screen.getAllByText("STRONG · 2 confirming signals").length).toBeGreaterThan(0);
     expect(calls[0]!.query.get("limit")).toBe("12");
     await u.type(screen.getByLabelText("Ticker"), "not a ticker");
     await u.click(screen.getByRole("button", { name: "Open" }));
