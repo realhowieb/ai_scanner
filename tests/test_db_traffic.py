@@ -5,7 +5,11 @@ import json
 import sqlite3
 from unittest import mock
 
-import pytest
+try:
+    import pytest
+except ImportError:
+    from unittest import SkipTest
+    raise SkipTest('requires pytest; run with requirements-dev.txt')
 
 from db import traffic
 

@@ -7,7 +7,11 @@ import json
 import os
 import uuid
 
-import pytest
+try:
+    import pytest
+except ImportError:
+    from unittest import SkipTest
+    raise SkipTest('requires pytest; run with requirements-dev.txt')
 
 from db import traffic
 
