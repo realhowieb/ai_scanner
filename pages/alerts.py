@@ -27,12 +27,14 @@ if not _username:
 
 from ui.alerts_page import render_alerts_body  # noqa: E402
 from ui.alerts_page import session_watch_tickers as _session_watch_tickers  # noqa: E402
+from ui.product_copy import LAUNCH_DISCLOSURE  # noqa: E402
 
 try:
     from ui.header import render_page_logo
 
     render_page_logo()
     render_page_header("Alerts", "Meaningful intelligence changes for watched stocks.")
+    st.caption(LAUNCH_DISCLOSURE)
 except Exception as e:
     from ui.safe_errors import show_error
 

@@ -1,8 +1,11 @@
 import streamlit as st
 
+from ui.product_copy import LAUNCH_DISCLOSURE
+
 
 def render_footer():
     st.divider()
+    st.caption(LAUNCH_DISCLOSURE)
     st.caption(
         "⚠️ **HSFinest.AI is for informational and educational purposes only and is "
         "not financial, investment, or trading advice.** Breakout scores and alerts "

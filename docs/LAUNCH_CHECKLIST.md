@@ -5,7 +5,7 @@
 - [x] Live US_MARKET scan HEALTHY (98.4%, source=live) with snapshot promotion
 - [x] Secrets ignored (.env/keys/secrets.toml) — none committed
 - [x] User data Neon-durable (watchlists/observations/outcomes/runs/alerts)
-- [ ] Add explicit disclosure: "educational; not investment advice; predictive
+- [x] Add explicit disclosure: "educational; not investment advice; predictive
       effectiveness UNVALIDATED" on scanner/brief/alerts
 - [ ] Confirm production Neon + Alpaca secrets set in all three stores
       (Streamlit Cloud, GitHub Actions, host) — see three-secret-stores memory

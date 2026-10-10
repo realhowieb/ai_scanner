@@ -229,6 +229,7 @@ try:
     from ui.headline_score import add_hsf_score_column, rank_hsf_opportunities
     from ui.market_default import default_results, render_back_to_market
     from ui.prebreakout_tab import render_prebreakout_tab
+    from ui.product_copy import LAUNCH_DISCLOSURE
     from ui.result_explain import add_why_column
     from ui.results import get_results_df, render_results
     from ui.results_tabs import render_results_tabs
@@ -270,6 +271,7 @@ except Exception as _e:
     prepare_results_with_earnings = _missing  # type: ignore
     render_earnings_controls = _missing  # type: ignore
     render_footer = lambda *a, **k: None  # type: ignore
+    LAUNCH_DISCLOSURE = "Educational research only; not investment advice. Predictive effectiveness is unvalidated."
     render_watchlists_panel = _missing  # type: ignore
     render_alerts_panel = lambda *a, **k: None  # type: ignore
     render_day_trader_panel = lambda *a, **k: None  # type: ignore
@@ -595,6 +597,7 @@ def main():
     render_market_snapshot(results_df=_snapshot_df)
 
     st.markdown("## Scanner")  # P0-6/Run 83B: results render FIRST, before watchlists
+    st.caption(LAUNCH_DISCLOSURE)
     track_scanner_view_once(username, plan=tier_key)
     if st.session_state.pop("hsf_new_signup_scanner_hint", False):
         st.info("You're in. The latest full-market ranking is shown below, so you can start with the current short list before running a custom scan (Custom Scan in the menu).")

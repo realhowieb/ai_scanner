@@ -25,9 +25,11 @@ try:
     from ui.design_system import render_page_header
     from ui.header import render_page_logo
     from ui.market_brief import render_market_brief
+    from ui.product_copy import LAUNCH_DISCLOSURE
 
     render_page_logo()
     render_page_header("Market Brief", "What matters in the market right now.")
+    st.caption(LAUNCH_DISCLOSURE)
     from ui.trust_banner import render_trust_banner
 
     render_trust_banner()
