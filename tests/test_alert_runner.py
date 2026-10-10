@@ -32,6 +32,7 @@ class EvaluateTest(unittest.TestCase):
 
     def test_breakout_lines_strongest_first(self):
         import pandas as pd
+
         from scheduler.alert_runner import _evaluate
 
         df = pd.DataFrame([
