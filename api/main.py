@@ -1295,7 +1295,7 @@ def _ai_routes(app: FastAPI) -> None:
 
     @app.post("/v1/ai/summary", response_model=models.AIText, responses=_AI, summary="AI scan summary (Premium)")
     def ai_summary(body: AISummaryBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        """Claude explains the top results in HSF Score order (the web's AI Scan Summary).
+        """Claude summarizes the top results in HSF Score order (the web's AI Scan Summary).
         Research commentary, not investment advice."""
         user = _premium(account)
         out = ai.summary(user, body.run_id, shared=body.run_id is None)
