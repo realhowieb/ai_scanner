@@ -1756,10 +1756,68 @@
       ],
       "title": "Chg Pct"
      },
+     "close_today": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Regular-session close (today's bar)",
+      "title": "Close Today"
+     },
      "day_trade_score": {
-      "description": "Intraday momentum score (move, VWAP alignment, gap, volume)",
-      "title": "Day Trade Score",
-      "type": "number"
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "DT score 0-100: setup strength and signal agreement (null with too little evidence). Off hours it scores the completed session.",
+      "title": "Day Trade Score"
+     },
+     "dt_conflicts": {
+      "default": [],
+      "description": "Signals that lower the score",
+      "items": {
+       "type": "string"
+      },
+      "title": "Dt Conflicts",
+      "type": "array"
+     },
+     "dt_direction": {
+      "default": "neutral",
+      "enum": [
+       "bullish",
+       "bearish",
+       "neutral"
+      ],
+      "title": "Dt Direction",
+      "type": "string"
+     },
+     "dt_quality": {
+      "default": "insufficient",
+      "enum": [
+       "strong",
+       "developing",
+       "weak",
+       "insufficient"
+      ],
+      "title": "Dt Quality",
+      "type": "string"
+     },
+     "dt_reasons": {
+      "default": [],
+      "description": "Signals behind the score",
+      "items": {
+       "type": "string"
+      },
+      "title": "Dt Reasons",
+      "type": "array"
      },
      "ewo": {
       "anyOf": [
@@ -1771,6 +1829,18 @@
        }
       ],
       "title": "Ewo"
+     },
+     "ext_chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "After hours / closed: last trade vs the close",
+      "title": "Ext Chg Pct"
      },
      "gap_pct": {
       "anyOf": [
@@ -1805,6 +1875,26 @@
       ],
       "title": "Open"
      },
+     "previous_close": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Close"
+     },
+     "quote_flags": {
+      "default": [],
+      "description": "Why the quote may be wrong: Extreme move, Far from VWAP, Stale quote. Flagged rows rank last.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Quote Flags",
+      "type": "array"
+     },
      "rvol": {
       "anyOf": [
        {
@@ -1815,6 +1905,18 @@
        }
       ],
       "title": "Rvol"
+     },
+     "session_chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "After hours / closed: regular-session change (close vs previous close)",
+      "title": "Session Chg Pct"
      },
      "supertrend": {
       "anyOf": [
@@ -1875,10 +1977,37 @@
      }
     },
     "required": [
-     "ticker",
-     "day_trade_score"
+     "ticker"
     ],
     "title": "DayTraderRow",
+    "type": "object"
+   },
+   "DayTraderSparklines": {
+    "properties": {
+     "checked": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Checked",
+      "type": "array"
+     },
+     "series": {
+      "additionalProperties": {
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "default": {},
+      "description": "Latest-session 1-minute closes, oldest first",
+      "title": "Series",
+      "type": "object"
+     }
+    },
+    "required": [
+     "checked"
+    ],
+    "title": "DayTraderSparklines",
     "type": "object"
    },
    "DeleteAccountBody": {
@@ -10855,6 +10984,60 @@
      }
     ],
     "summary": "Live Day Trader monitor (Pro)"
+   }
+  },
+  "/v1/day-trader/sparklines": {
+   "get": {
+    "description": "The web's Day Trader row sparklines: the latest session's 1-minute closes.",
+    "operationId": "day_trader_sparklines_v1_day_trader_sparklines_get",
+    "parameters": [
+     {
+      "description": "Comma-separated; the first 40 are returned",
+      "in": "query",
+      "name": "symbols",
+      "required": true,
+      "schema": {
+       "description": "Comma-separated; the first 40 are returned",
+       "maxLength": 2000,
+       "title": "Symbols",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DayTraderSparklines"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Intraday sparklines (Pro)"
    }
   },
   "/v1/day-trader/stair-steppers": {

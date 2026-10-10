@@ -1238,6 +1238,16 @@ def _market_routes(app: FastAPI) -> None:
                 watch = [i["ticker"] for i in user_data.get_watchlist(user, int(wid))["items"]]   # 404 if not yours
         return json_safe(market.day_trader(source, (symbols or "").split(","), watch))
 
+    @app.get("/v1/day-trader/sparklines", response_model=models.DayTraderSparklines, responses=_DT,
+             summary="Intraday sparklines (Pro)")
+    def day_trader_sparklines(account: Dict[str, Any] = Depends(current_account),
+                              symbols: str = Query(..., max_length=2000,
+                                                   description="Comma-separated; the first 40 are returned")
+                              ) -> Dict[str, Any]:
+        """The web's Day Trader row sparklines: the latest session's 1-minute closes."""
+        require_feature(account, "can_day_trader")
+        return json_safe(market.day_trader_sparklines(symbols.split(",")))
+
     @app.get("/v1/day-trader/stair-steppers", response_model=models.StairSteppers, responses=_DT,
              summary="Smooth 1-minute trends (Pro)")
     def stair_steppers(account: Dict[str, Any] = Depends(current_account),

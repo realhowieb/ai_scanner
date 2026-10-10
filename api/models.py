@@ -726,7 +726,20 @@ class DayTraderRow(BaseModel):
     supertrend: Optional[float] = None
     supertrend_direction: Optional[Any] = None
     ewo: Optional[float] = None
-    day_trade_score: float = Field(description="Intraday momentum score (move, VWAP alignment, gap, volume)")
+    previous_close: Optional[float] = None
+    close_today: Optional[float] = Field(default=None, description="Regular-session close (today's bar)")
+    session_chg_pct: Optional[float] = Field(default=None, description="After hours / closed: regular-session "
+                                             "change (close vs previous close)")
+    ext_chg_pct: Optional[float] = Field(default=None, description="After hours / closed: last trade vs the close")
+    day_trade_score: Optional[float] = Field(default=None, description="DT score 0-100: setup strength and signal "
+                                             "agreement (null with too little evidence). Off hours it scores the "
+                                             "completed session.")
+    dt_quality: Literal["strong", "developing", "weak", "insufficient"] = "insufficient"
+    dt_direction: Literal["bullish", "bearish", "neutral"] = "neutral"
+    dt_reasons: List[str] = Field(default=[], description="Signals behind the score")
+    dt_conflicts: List[str] = Field(default=[], description="Signals that lower the score")
+    quote_flags: List[str] = Field(default=[], description="Why the quote may be wrong: Extreme move, Far from "
+                                   "VWAP, Stale quote. Flagged rows rank last.")
 
     model_config = {"extra": "allow"}   # extra live fields (EMA cross, ranges, data source) pass through
 
@@ -738,6 +751,11 @@ class DayTrader(BaseModel):
     missing: int = Field(description="Symbols with no live quote")
     as_of: str
     rows: List[DayTraderRow] = []
+
+
+class DayTraderSparklines(BaseModel):
+    checked: List[str]
+    series: Dict[str, List[float]] = Field(default={}, description="Latest-session 1-minute closes, oldest first")
 
 
 class StairSteppers(BaseModel):

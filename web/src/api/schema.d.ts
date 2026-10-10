@@ -514,6 +514,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/day-trader/sparklines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Intraday sparklines (Pro)
+         * @description The web's Day Trader row sparklines: the latest session's 1-minute closes.
+         */
+        get: operations["day_trader_sparklines_v1_day_trader_sparklines_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/day-trader/stair-steppers": {
         parameters: {
             query?: never;
@@ -2209,20 +2229,67 @@ export interface components {
             /** Chg Pct */
             chg_pct?: number | null;
             /**
-             * Day Trade Score
-             * @description Intraday momentum score (move, VWAP alignment, gap, volume)
+             * Close Today
+             * @description Regular-session close (today's bar)
              */
-            day_trade_score: number;
+            close_today?: number | null;
+            /**
+             * Day Trade Score
+             * @description DT score 0-100: setup strength and signal agreement (null with too little evidence). Off hours it scores the completed session.
+             */
+            day_trade_score?: number | null;
+            /**
+             * Dt Conflicts
+             * @description Signals that lower the score
+             * @default []
+             */
+            dt_conflicts: string[];
+            /**
+             * Dt Direction
+             * @default neutral
+             * @enum {string}
+             */
+            dt_direction: "bullish" | "bearish" | "neutral";
+            /**
+             * Dt Quality
+             * @default insufficient
+             * @enum {string}
+             */
+            dt_quality: "strong" | "developing" | "weak" | "insufficient";
+            /**
+             * Dt Reasons
+             * @description Signals behind the score
+             * @default []
+             */
+            dt_reasons: string[];
             /** Ewo */
             ewo?: number | null;
+            /**
+             * Ext Chg Pct
+             * @description After hours / closed: last trade vs the close
+             */
+            ext_chg_pct?: number | null;
             /** Gap Pct */
             gap_pct?: number | null;
             /** Last */
             last?: number | null;
             /** Open */
             open?: number | null;
+            /** Previous Close */
+            previous_close?: number | null;
+            /**
+             * Quote Flags
+             * @description Why the quote may be wrong: Extreme move, Far from VWAP, Stale quote. Flagged rows rank last.
+             * @default []
+             */
+            quote_flags: string[];
             /** Rvol */
             rvol?: number | null;
+            /**
+             * Session Chg Pct
+             * @description After hours / closed: regular-session change (close vs previous close)
+             */
+            session_chg_pct?: number | null;
             /** Supertrend */
             supertrend?: number | null;
             /** Supertrend Direction */
@@ -2237,6 +2304,19 @@ export interface components {
             vwap?: number | null;
         } & {
             [key: string]: unknown;
+        };
+        /** DayTraderSparklines */
+        DayTraderSparklines: {
+            /** Checked */
+            checked: string[];
+            /**
+             * Series
+             * @description Latest-session 1-minute closes, oldest first
+             * @default {}
+             */
+            series: {
+                [key: string]: number[];
+            };
         };
         /** DeleteAccountBody */
         DeleteAccountBody: {
@@ -6438,6 +6518,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DayTrader"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    day_trader_sparklines_v1_day_trader_sparklines_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated; the first 40 are returned */
+                symbols: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayTraderSparklines"];
                 };
             };
             /** @description Not signed in */
