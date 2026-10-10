@@ -71,12 +71,14 @@ def _scan_row(o: Dict[str, Any]) -> Dict[str, Any]:
 
 def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset: int,
                 min_score: int = 0, signal: Optional[str] = None, sort: str = "score") -> Dict[str, Any]:
+    from analytics.data_freshness import describe
     from ui.entitlement_view import redact_prebreakout_rows
 
     cap = max_results_for(tier)
     runs = market_runs()
     if not runs:
-        return {"scan_at": None, "total": 0, "max_results": cap, "limited": False, "setups": []}
+        return {"scan_at": None, "total": 0, "max_results": cap, "limited": False, "setups": [],
+                'freshness': describe(None)}
     allowed = bool(entitlements.get("can_early_breakout"))
     opps = redact_prebreakout_rows(run_opportunities(int(runs[0]["id"])), allowed=allowed)
     if min_score:
@@ -93,6 +95,7 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     return {"scan_at": _iso(runs[0]["created_at"]), "total": len(opps), "max_results": cap,
             "limited": len(opps) > cap,
             "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
+            'freshness': describe(runs[0]['created_at']),
             "setups": [_scan_row(o) for o in visible[offset:offset + limit]]}
 
 

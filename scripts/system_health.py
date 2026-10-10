@@ -148,6 +148,38 @@ def latest_maturation_report() -> Optional[Dict[str, Any]]:
     return None
 
 
+def latest_database_traffic(workflows):
+    """Bounded artifact reads in the existing health job, never in API requests.
+
+    One latest completed run for each instrumented health-plane workflow.
+    This is sampled per-workflow telemetry, not a daily or monthly sum.
+    """
+    from analytics.operations import traffic_report
+    if not workflows:
+        return []
+    specs = {'scheduled-scans.yml': ('run-scans', 'scheduler_cron_runner.json'),
+             'mature-observations.yml': ('mature', 'scripts_mature_observations.json'),
+             'forward-evidence-readiness.yml': ('readiness', 'scripts_forward_evidence_readiness.json'),
+             'system-health.yml': ('health', 'scripts_system_health.json')}
+    session, repo = _gh()
+    result = []
+    for workflow, (job, filename) in specs.items():
+        runs = [r for r in workflows.get(workflow) or [] if r.get('conclusion') and r.get('id')]
+        if not runs:
+            continue
+        run = max(runs, key=lambda r: r.get('created_at') or '')
+        try:
+            raw = _run_artifact_json(session, repo, run['id'], 'db-traffic-' + job, filename)
+            safe = traffic_report(raw)
+            if safe is not None:
+                result.append({'workflow': workflow, 'observed_at': run.get('updated_at') or run.get('created_at'),
+                               'metrics': {'measurement': 'application_payload_estimate', **safe}})
+        except Exception:
+            # Missing/expired artifacts are unavailable, never fabricated zero.
+            continue
+    return result
+
+
 # ---- Database ----------------------------------------------------------------------------
 def _conn():
     from db.engine import get_neon_conn
@@ -392,6 +424,7 @@ def collect(now: _dt.datetime) -> Dict[str, Any]:
         "artifacts": artifacts,
         "collection_errors": errors,
         "collection_timings_sec": timings,
+        'database_traffic': T('database_traffic', lambda: latest_database_traffic(workflows)),
     }
 
 
@@ -407,6 +440,7 @@ def main() -> int:
     report = sh.evaluate(inputs)
     report["collection_timings_sec"] = inputs.get("collection_timings_sec")
     report["generation_seconds"] = round(time.perf_counter() - t0, 2)
+    report['database_traffic'] = inputs.get('database_traffic') or []
     if args.persist:
         from db.system_health import save_snapshot
         report["persisted"] = save_snapshot(report)

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { DataFreshness } from "@/features/DataFreshness";
 import { api, unwrap } from "@/api/client";
 import { Card, Disclaimer, Empty, ErrorState, Freshness, Locked, Skeleton, UpgradeButton } from "@/components/ui";
 import { AIScanPanel } from "@/features/AIScanPanel";
@@ -83,6 +84,7 @@ export function ScannerView() {
 
   return (
     <div className="stack">
+      <DataFreshness info={data?.freshness} />
       <section className="page-head">
         <div>
           <h1 className="h1">Scanner</h1>

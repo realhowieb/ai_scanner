@@ -25,9 +25,9 @@ except Exception:  # pragma: no cover
 
 def _snapshot_time():
     try:
-        from db.runs import list_snapshot_runs
+        from ui.market_scans import safe_recent_runs
 
-        runs = list_snapshot_runs(days=3, limit=5) or []
+        runs = safe_recent_runs() or []
         return runs[0].get("created_at") if runs else None
     except Exception:
         return None
@@ -41,7 +41,11 @@ def _brief_scan_df():
     from ui.market_scans import safe_recent_runs, safe_run_df
 
     runs = safe_recent_runs()
-    return safe_run_df(runs[0]["id"]) if runs else None
+    df = safe_run_df(runs[0]['id']) if runs else None
+    if df is not None:
+        df = df.copy(deep=False)
+        df.attrs['hsf_scan_saved_at'] = runs[0].get('created_at')
+    return df
 
 
 def _compute_brief() -> Optional[Dict[str, Any]]:
@@ -120,7 +124,7 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
         "losers": losers,
         "breadth": breadth,
         "sectors": _sector_leaders(),
-        "snapshot_time": _snapshot_time(),
+        "snapshot_time": getattr(df, 'attrs', {}).get('hsf_scan_saved_at') or _snapshot_time(),
         "source_models": source_models,
     }
 
@@ -755,33 +759,11 @@ def _et_stamp(ts: Any) -> Optional[str]:
 
 
 def _freshness_label(ts: Any, phase: Optional[str]) -> Optional[str]:
-    """User-friendly freshness derived from real snapshot time + market phase.
-
-    Never fakes live status: 'Live' only when the market is actually open/
-    premarket; otherwise 'Last session'. Shows ET, not raw UTC.
-    """
+    """A saved snapshot is not a live quote, regardless of market phase."""
     if ts is None:
         return None
-    import datetime as _dt
-
-    ts_utc = ts if getattr(ts, "tzinfo", None) else (ts.replace(tzinfo=_dt.timezone.utc) if hasattr(ts, "replace") else None)
-    if ts_utc is None:
-        return None
-    stamp = None
-    try:
-        from zoneinfo import ZoneInfo
-
-        et = ts_utc.astimezone(ZoneInfo("America/New_York"))
-        stamp = et.strftime("%-I:%M %p ET")
-    except Exception:
-        stamp = None
-    if phase in ("open", "premarket"):
-        try:
-            secs = int((_dt.datetime.now(_dt.timezone.utc) - ts_utc).total_seconds())
-            return f"🟢 Live · updated {_ago(secs)}"
-        except Exception:
-            return "🟢 Live" + (f" · {stamp}" if stamp else "")
-    return "⚪ Last session" + (f" · updated {stamp}" if stamp else "")
+    from analytics.data_freshness import describe, display_lines
+    return " · ".join(display_lines(describe(ts)))
 
 
 def render_market_header(data: Dict[str, Any], phase: Optional[str]) -> None:
@@ -826,8 +808,7 @@ def render_market_header(data: Dict[str, Any], phase: Optional[str]) -> None:
     if interp:
         st.caption(interp)
     fresh = _freshness_label(data.get("snapshot_time"), phase)
-    if fresh:
-        st.caption(fresh)
+    st.caption(fresh or "Data freshness: Unavailable · No successful scan snapshot")
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("SPY", f"{spy_last:,.2f}" if spy_last is not None else "—",
