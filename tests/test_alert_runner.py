@@ -30,6 +30,19 @@ class EvaluateTest(unittest.TestCase):
         self.assertIn("NVDA", joined)
         self.assertNotIn("MSFT", joined)  # 4.0 < 8.0
 
+    def test_breakout_lines_strongest_first(self):
+        import pandas as pd
+        from scheduler.alert_runner import _evaluate
+
+        df = pd.DataFrame([
+            {"Ticker": "KOD", "BreakoutScore": 50.2},
+            {"Ticker": "XP", "BreakoutScore": 121.6},
+            {"Ticker": "VICR", "BreakoutScore": 41.6},
+            {"Ticker": "PTC", "BreakoutScore": 129.0},
+        ])
+        lines = _evaluate({"alert_type": "breakout", "threshold": 30.0}, df, set())
+        self.assertEqual([ln.split(":", 1)[0] for ln in lines], ["PTC", "XP", "KOD", "VICR"])
+
     def test_breakout_watchlist_only(self):
         from scheduler.alert_runner import _evaluate
 

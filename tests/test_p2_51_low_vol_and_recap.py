@@ -25,7 +25,7 @@ class AlertTests(unittest.TestCase):
     def test_low_volatility_names_skip_market_wide_breakout_alerts(self):
         self.assertEqual(MIN_ALERT_VOLATILITY_PCT, 1.0)
         got = tickers(_evaluate({"alert_type": "breakout", "threshold": 30}, DF, set()))
-        self.assertEqual(got, ["IOVA", "AIG", "NEW"])        # missing volatility is kept
+        self.assertEqual(got, ["IOVA", "NEW", "AIG"])        # missing volatility is kept; strongest first
 
     def test_watchlist_only_alert_keeps_what_the_user_watches(self):
         got = tickers(_evaluate({"alert_type": "breakout", "threshold": 30, "watchlist_only": True},
