@@ -3712,9 +3712,11 @@ def load_prebreakout_model(model_path: str = MODEL_PATH):
         except Exception as e:
             print(f"[ml_prebreakout] DB model load failed: {e}")
     try:
-        bundle = joblib.load(model_path)
+        from analytics.prediction_provenance import load_local
+        bundle, identity = load_local(joblib, model_path)
         if isinstance(bundle, dict):
             bundle.setdefault("source", "local")
+            bundle["loaded_artifact"] = identity
         _MODEL_CACHE["prebreakout"] = (_time.time(), bundle)
         return bundle
     except Exception:
@@ -3760,21 +3762,30 @@ def _live_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     if "Timestamp" not in out.columns:
         out["Timestamp"] = _utc_now()
     context = None
+    availability = {"ohlcv": "disabled", "benchmark": "disabled", "fallback": False}
     if os.environ.get("PREBREAKOUT_LIVE_ENRICH", "1") != "0":
         try:
             out = add_historical_ohlcv_context(out, days_back=LIVE_CONTEXT_DAYS).sort_index()
+            availability["ohlcv"] = "completed_best_effort"
         except Exception as e:
+            availability["ohlcv"] = "failed"
             print(f"[ml_prebreakout] live OHLCV enrichment failed: {e}")
         try:
             context = _live_benchmark_context()
+            availability["benchmark"] = "completed_best_effort"
         except Exception as e:
+            availability["benchmark"] = "failed"
             print(f"[ml_prebreakout] live benchmark context failed: {e}")
     try:
-        return add_prebreakout_features(out, benchmark_context=context)
+        features = add_prebreakout_features(out, benchmark_context=context)
+        features.attrs["provenance_availability"] = availability
+        return features
     except Exception as e:
         # Never let enrichment cost the scan its scores: fall back to the plain frame.
         print(f"[ml_prebreakout] live feature enrichment failed, scoring scan alone: {e}")
-        return add_prebreakout_features(df.copy().reset_index(drop=True))
+        features = add_prebreakout_features(df.copy().reset_index(drop=True))
+        features.attrs["provenance_availability"] = {**availability, "fallback": True}
+        return features
 
 
 def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.DataFrame:
@@ -3788,16 +3799,25 @@ def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.Data
     if not bundle:
         df["PreBreakoutProb"] = 0.0
         df["PreBreakoutProb%"] = 0.0
+        from analytics.prediction_provenance import unavailable
+        unavailable(df, "prebreakout", "model_unavailable; legacy_display_zero_is_not_prediction")
         return df
 
     model = bundle["model"]
     feature_cols = bundle["features"]
 
+    from analytics.prediction_provenance import attach
     X = _live_feature_frame(df)
+    availability = X.attrs.get("provenance_availability")
+    absent = [col for col in feature_cols if col not in X.columns]
     for col in feature_cols:
         if col not in X.columns:
             X[col] = 0.0
     X, feature_cols = _apply_preprocessing_plan(X, feature_cols, bundle.get("preprocessing"))
+    mask = X[feature_cols].isna()
+    for col in absent:
+        if col in mask.columns:
+            mask[col] = True
     X = X[feature_cols].fillna(0.0)
 
     proba = model.predict_proba(X)[:, 1]
@@ -3808,6 +3828,7 @@ def score_prebreakout(df: pd.DataFrame, model_path: str = MODEL_PATH) -> pd.Data
     df["PreBreakoutProbRaw"] = proba
     df["PreBreakoutProb"] = calibrated
     df["PreBreakoutProb%"] = (calibrated * 100.0).round(1)
+    attach(df, "prebreakout", X, mask, proba, calibrated, bundle, availability=availability)
     return df
 
 

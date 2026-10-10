@@ -277,4 +277,9 @@ def load_latest_prebreakout_model_bundle(joblib_module: Any) -> dict[str, Any] |
         bundle["features"] = feature_names
         bundle["feature_names"] = feature_names
         bundle["source"] = "database"
+    from analytics.prediction_provenance import artifact_identity
+    bundle["loaded_artifact"] = artifact_identity(
+        _coerce_model_bytes(_row_get(row, "model_bytes", 2)),
+        registry_id=_row_get(row, "id", 0), version=_row_get(row, "model_version", 1),
+    )
     return bundle

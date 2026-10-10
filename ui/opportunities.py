@@ -93,7 +93,8 @@ def build_opportunities(
         return acc.setdefault(
             t,
             {"ticker": t, "signals": set(), "breakout_score": None,
-             "prob": None, "chg_pct": None, "gap_pct": None},
+             "prob": None, "chg_pct": None, "gap_pct": None,
+             "models": dict((data.get("source_models") or {}).get(t) or {})},
         )
 
     for g in (data.get("gappers") or []):
@@ -126,6 +127,8 @@ def build_opportunities(
         if s is not None:
             s["signals"].add("prebreakout")
             s["prob"] = _to_float(p.get("prob"))
+            # Replace only roles actually recalculated by this pick.
+            s["models"].update(p.get("models") or {})
 
     for pair in (data.get("gainers") or []):
         try:
@@ -182,6 +185,7 @@ def build_opportunities(
             "status": _status(score, fading),
             "breakout_score": s["breakout_score"],
             "prob": s["prob"],
+            "models": s.get("models") or {},
             "chg_pct": s["chg_pct"],
             "gap_pct": s["gap_pct"],
         })

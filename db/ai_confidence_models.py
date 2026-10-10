@@ -182,6 +182,11 @@ def load_latest_ai_confidence_model_bundle(joblib_module: Any) -> dict[str, Any]
     metadata["trained_at"] = trained_at
     metadata["model_version"] = _row_get(row, "model_version", 1)
     metadata["source"] = "database"
+    from analytics.prediction_provenance import artifact_identity
+    metadata["loaded_artifact"] = artifact_identity(
+        _coerce_bytes(_row_get(row, "model_bytes", 2)),
+        registry_id=_row_get(row, "id", 0), version=_row_get(row, "model_version", 1),
+    )
     return {
         "model": model,
         "metadata": metadata,
