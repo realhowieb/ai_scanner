@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from analytics.prediction_provenance import digest, models_from_row  # noqa: E402
 
-SINCE = "2026-10-09T16:48:29+00:00"
+SINCE = "2026-10-09T18:52:54+00:00"
 FIELDS = ("inferred_at", "build_sha", "source_scan_id", "input_timestamp", "feature_names",
           "feature_values", "feature_schema_hash", "default_mask", "preprocessing_identity",
           "calibration_snapshot", "calibration_hash", "target", "target_version",

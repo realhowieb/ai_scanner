@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "checked_at_utc": "2026-10-09T17:50:15Z",
+  "status": "WAITING_FOR_PROSPECTIVE_RUN",
+  "merge_sha": "61dc0526ca8d66803e8d8d55dd5f114688bb9243",
+  "workflow": "Scheduled Market Scans",
+  "workflow_runs_inspected": 10,
+  "post_merge_execution": null,
+  "latest_successful_execution": {
+    "run_id": "37964124080",
+    "sha": "62b7d09a439f5ee313e80e3d46079f50a9778966",
+    "created_at_utc": "2026-10-09T17:08:17Z",
+    "updated_at_utc": "2026-10-09T17:18:47Z",
+    "includes_pr60": false
+  },
+  "post_merge_records_inspected": 0,
+  "exact_linkage_coverage": null,
+  "production_forwarding": "UNVERIFIED",
+  "production_privacy": "UNVERIFIED",
+  "production_payload_bytes": null,
+  "production_runtime_seconds": null,
+  "controlled_tests": {"passed": 42, "failed": 0, "skipped": 0, "warnings": 0},
+  "collection_readiness": "IMPLEMENTED_AWAITING_PRODUCTION_VERIFICATION",
+  "evaluation_ready": false,
+  "remaining_evidence_gaps": ["actual_input_timestamps", "target_versions", "training_boundaries", "calibration_boundaries", "complete_original_target_evidence"],
+  "production_mutations_triggered": false,
+  "production_scan_triggered": false
+}
