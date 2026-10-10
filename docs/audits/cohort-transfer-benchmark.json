@@ -1,0 +1,42 @@
+{
+  "measurement": "local_synthetic_application_payload_estimate",
+  "selected_observations": 10,
+  "history_counts_unchanged": {
+    "observations": 220,
+    "outcomes": 441
+  },
+  "reports_equal_excluding_generated_at": true,
+  "default_retains_orphan_evidence": true,
+  "before": {
+    "calls": 1,
+    "errors": 0,
+    "rows_returned": 441,
+    "rows_fetched": 441,
+    "db_to_client_payload_bytes": 81767,
+    "client_to_db_payload_bytes": 59,
+    "execute_ms": 1.34,
+    "fetch_ms": 3.128,
+    "connections_opened": 0,
+    "connections_reused": 0,
+    "cache_hits": 0,
+    "cache_misses": 0,
+    "cache_stale_hits": 0,
+    "cache_activity": {}
+  },
+  "after": {
+    "calls": 1,
+    "errors": 0,
+    "rows_returned": 40,
+    "rows_fetched": 40,
+    "db_to_client_payload_bytes": 7390,
+    "client_to_db_payload_bytes": 140,
+    "execute_ms": 1.295,
+    "fetch_ms": 0.286,
+    "connections_opened": 0,
+    "connections_reused": 0,
+    "cache_hits": 0,
+    "cache_misses": 0,
+    "cache_stale_hits": 0,
+    "cache_activity": {}
+  }
+}
