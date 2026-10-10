@@ -32,7 +32,7 @@ describe("data freshness", () => {
   it("preserves usable results when a manual refresh fails without polling", async () => {
     const load = vi.fn().mockResolvedValueOnce({ freshness: info, setups: ["AAA"] })
       .mockRejectedValueOnce(new Error("temporary failure"));
-    const { result } = renderHook(() => useApi("scan", load));
+    const { result } = renderHook(() => useApi<{ freshness: Schemas["DataFreshness"]; setups: string[] }>("scan", load));
     await waitFor(() => expect(result.current.data?.setups).toEqual(["AAA"]));
     act(() => result.current.reload());
     await waitFor(() => expect(result.current.error).not.toBeNull());
