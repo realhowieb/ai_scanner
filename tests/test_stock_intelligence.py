@@ -32,6 +32,8 @@ class BuilderTests(unittest.TestCase):
         self.assertTrue(intel["has_opportunity"])
         self.assertEqual(intel["score_version"], op.HSF_SCORE_VERSION)
         self.assertIn("confirming signals", " ".join(intel["reasons"]))
+        self.assertIn("HSF", intel["decision_snapshot"]["state"])
+        self.assertTrue(intel["why_now"].endswith("."))
         self.assertEqual(intel["market_regime"], "RISK-ON")
         self.assertIsNotNone(intel["score_components"])
 
@@ -40,6 +42,8 @@ class BuilderTests(unittest.TestCase):
         self.assertFalse(intel["has_opportunity"])
         self.assertIsNone(intel["hsf_score"])
         self.assertEqual(intel["lifecycle"], [])
+        self.assertEqual(intel["decision_snapshot"]["state"], "Not ranked")
+        self.assertIn("not ranking", intel["why_now"])
 
     def test_breakout_score_only_and_prebreakout_only(self):
         b = si.build_stock_intelligence("A", current_row={"Ticker": "A", "BreakoutScore": 60})
@@ -76,6 +80,12 @@ class BuilderTests(unittest.TestCase):
         intel = si.build_stock_intelligence("NVDA", current_row=_row())
         joined = " ".join(intel["watch_next"]).lower()
         for banned in ("buy", "sell", "$", "stop", "entry", "target"):
+            self.assertNotIn(banned, joined)
+
+    def test_decision_snapshot_has_no_execution_language(self):
+        intel = si.build_stock_intelligence("NVDA", current_row=_row(), history=_hist())
+        joined = " ".join(str(v) for v in intel["decision_snapshot"].values()).lower()
+        for banned in ("buy", "sell", "entry", "target", "position size"):
             self.assertNotIn(banned, joined)
 
 
@@ -135,6 +145,11 @@ class _Ctx:
 class _Col:
     def button(self, *a, **k):
         return False
+
+    def __getattr__(self, _name):
+        def _noop(*a, **k):
+            return None
+        return _noop
 
 
 class _FakeSt:

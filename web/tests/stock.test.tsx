@@ -85,6 +85,8 @@ describe("Stock detail: trade plan and AI note", () => {
   it("goes back to where the user came from", () => {
     render(<StockView s={stockDetail()} premium={false} />);
     expect(screen.getByRole("link", { name: "← Back to Scanner" })).toHaveAttribute("href", "/scanner");
+    expect(screen.getByRole("button", { name: "Watch AAA" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Alert near $12.50" })).toBeInTheDocument();
     expect(backLabel("/watchlists?id=3")).toBe("Back to Watchlists");
     expect(backLabel("/scanner/custom")).toBe("Back to Custom scan");
     expect(backLabel("/today")).toBe("Back to Today");

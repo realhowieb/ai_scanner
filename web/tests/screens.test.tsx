@@ -176,6 +176,9 @@ const stock = stockDetail;
 describe("Stock Intelligence", () => {
   it("labels the price as the scan's, not a live quote, and handles missing bars", () => {
     render(<StockView s={stock()} premium />);
+    expect(screen.getByRole("heading", { name: "Decision snapshot" })).toBeInTheDocument();
+    expect(screen.getByText("Strong · HSF 77 and rising")).toBeInTheDocument();
+    expect(screen.getByText(/Breaking out; its HSF Score is improving/)).toBeInTheDocument();
     expect(screen.getByText(/not a live quote/)).toBeInTheDocument();
     expect(screen.getByText("No price history cached for this ticker.")).toBeInTheDocument();
     expect(screen.getByText("13%")).toBeInTheDocument();
@@ -191,6 +194,8 @@ describe("Stock Intelligence", () => {
   it("shows a plain state when HSF has no score at all", () => {
     render(<StockView s={stock({ in_latest_scan: false, has_setup: false, hsf_score: null, status: null, price: null, signals: [], score_components: null })} premium={false} />);
     expect(screen.getByRole("status")).toHaveTextContent("HSF has no recorded score");
+    expect(screen.getAllByText("Not ranked").length).toBeGreaterThan(0);
+    expect(screen.getByText(/watch AAA, set a price alert/)).toBeInTheDocument();
     expect(screen.getByText("No HSF Score")).toBeInTheDocument();
   });
 

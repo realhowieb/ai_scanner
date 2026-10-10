@@ -231,7 +231,7 @@ describe("Stock Intelligence actions", () => {
     const u = user();
     wrap(<StockView s={stock({ watchlists: [{ id: main.id, name: "Main" }] })} premium={false} onChanged={onChanged} />);
     expect(screen.getByRole("link", { name: "Main" })).toHaveAttribute("href", `/watchlists?id=${main.id}`);
-    await u.click(screen.getByRole("button", { name: "Save to watchlist" }));
+    await u.click(screen.getByRole("button", { name: "Watch AAPL elsewhere" }));
     const dlg = screen.getByRole("dialog");
     expect(await within(dlg).findByRole("button", { name: /Main.*Already in it/ })).toBeDisabled();
     await u.click(within(dlg).getByRole("button", { name: /Other/ }));
@@ -243,7 +243,7 @@ describe("Stock Intelligence actions", () => {
     const onChanged = vi.fn();
     const u = user();
     wrap(<StockView s={stock()} premium={false} onChanged={onChanged} />);
-    await u.click(screen.getByRole("button", { name: "Set price alert" }));
+    await u.click(screen.getByRole("button", { name: "Alert near $201.50" }));
     const dlg = screen.getByRole("dialog", { name: "Price alert for AAPL" });
     expect(await within(dlg).findByText(/Last scan price \$201\.50 .*not a live quote/)).toBeInTheDocument();
     expect(within(dlg).queryByLabelText("Alert type")).not.toBeInTheDocument();
@@ -262,7 +262,7 @@ describe("Stock Intelligence actions", () => {
     api.alertRows.push({ id: 99, type: "watchlist", ticker: null, threshold: null, direction: null, watchlist_only: false, enabled: true, last_fired_at: null, created_at: "" });
     const u = user();
     wrap(<StockView s={stock()} premium={false} />, "basic");
-    await u.click(screen.getByRole("button", { name: "Set price alert" }));
+    await u.click(screen.getByRole("button", { name: "Alert near $201.50" }));
     expect(await screen.findByText("You're using all 1 alert on your plan.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create alert" })).not.toBeInTheDocument();
   });

@@ -24,4 +24,10 @@ describe("mobile CSS polish", () => {
     expect(css).toContain(".status-strip { align-items: flex-start; flex-direction: column; }");
     expect(css).toContain(".tiles { grid-template-columns: minmax(0, 1fr); }");
   });
+
+  it("orders Stock Intelligence for phone scanning", () => {
+    expect(css).toContain(".stock-split .score-card { order: -1; }");
+    expect(css).toContain(".stock-split .price-card { order: 2; }");
+    expect(css).toContain(".snapshot-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }");
+  });
 });
