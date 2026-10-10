@@ -8,7 +8,7 @@ import type { FormEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { AIText } from "@/components/AIText";
-import { Card, ErrorLine, Locked } from "@/components/ui";
+import { Card, ErrorLine, Locked, ResearchNotice } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useSession } from "@/session/SessionProvider";
 
@@ -29,7 +29,7 @@ function Summary({ runId }: { runId?: number }) {
     <div className="stack-sm">
       {text ? <AIText text={text} />
         : text === null ? <p className="cap">Nothing to summarize: this scan has no ranked results.</p>
-        : <p className="cap">Claude explains the leading setups in HSF Score order, from this scan&apos;s data only.</p>}
+        : <p className="cap">Claude summarizes the leading research signals in HSF Score order, from this scan&apos;s data only.</p>}
       <ErrorLine error={act.error} />
       <div className="row-actions">
         <button type="button" className="btn" onClick={run} disabled={act.busy}>
@@ -99,17 +99,18 @@ export function AIScanPanel({ runId }: { runId?: number }) {
   if (!can("can_ai_notes")) {
     return (
       <Card title="AI research" id="ai">
-        <Locked title="AI scan summaries and chat are part of Premium" plan="premium">Claude explains the top results and answers questions about this scan.</Locked>
+        <Locked title="AI scan summaries and chat are part of Premium" plan="premium">Claude summarizes the evidence behind top results and answers research questions about this scan.</Locked>
       </Card>
     );
   }
   return (
     <Card title="AI research" id="ai" aside="Premium">
+      <ResearchNotice compact />
       <Summary runId={runId} />
       <div className="divider" role="separator" />
       <p className="strong">Ask about this scan</p>
       <Chat runId={runId} />
-      <p className="cap">AI commentary can be wrong. Research only, not investment advice.</p>
+      <p className="cap">AI commentary can be wrong. Treat it as a starting point for research, not an instruction to trade.</p>
     </Card>
   );
 }

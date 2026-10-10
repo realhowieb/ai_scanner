@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import type { Schemas } from "@/api/client";
-import { Card, Disclaimer, Empty, Freshness, Locked, Pill, RANKED_MIN, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
+import { Card, Disclaimer, Empty, Freshness, Locked, Pill, RANKED_MIN, ResearchNotice, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
 import { etDate, etTime, freshness, greeting, pct, price, setupLabel } from "@/lib/format";
 
 import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
@@ -131,6 +131,39 @@ function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
   );
 }
 
+function TodayPriority({
+  top,
+  stale,
+  watchlist,
+}: {
+  top: Today["top_setups"];
+  stale: boolean;
+  watchlist?: Schemas["WatchlistToday"] | null;
+}) {
+  const leader = top?.setups[0] ?? top?.also_ranked?.[0];
+  const watched = watchlist?.summary;
+  return (
+    <section className="priority-panel" aria-labelledby="priority-title">
+      <div className="priority-copy">
+        <p className="cap">What matters now</p>
+        <h2 className="h2" id="priority-title">
+          {stale ? "Use the latest scan cautiously until fresh data arrives." : leader ? `${leader.ticker} is the strongest setup on the board.` : "No strong setup is leading the board right now."}
+        </h2>
+        <p className="body-sm">
+          {leader
+            ? `HSF ranks it at ${leader.score ?? "--"} with a ${setupLabel(leader.primary_setup)} setup. Open the ticker for evidence, cautions, and recent context.`
+            : "Quiet scans happen. Start with the full Scanner or your watchlist to see what is closest to the ranked list."}
+        </p>
+      </div>
+      <div className="priority-steps" aria-label="Suggested next steps">
+        <Link href="/scanner" className="btn btn-primary">Open Scanner</Link>
+        {leader && <Link href={`/stocks/${encodeURIComponent(leader.ticker)}`} className="btn">Review {leader.ticker}</Link>}
+        <Link href="/watchlists" className="btn">My Watchlists{watched ? ` · ${watched.needs_attention} attention` : ""}</Link>
+      </div>
+    </section>
+  );
+}
+
 /** `mine` is the signed-in sections (GET /v1/today/me); they load separately and never hold up the page. */
 export function TodayView({ data, mine, mineFailed = false, side }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode }) {
   const failed = new Set(data.errors.map((e) => e.section));
@@ -163,6 +196,8 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
       </section>
 
       <StatusStrip market={data.market} snapshot={data.snapshot} />
+
+      <TodayPriority top={top} stale={stale} watchlist={mine?.watchlist} />
 
       {stale && (
         <p className="banner" role="status">
@@ -216,7 +251,7 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
               </>
             )}
             <div className="card-foot">
-              <Disclaimer />
+              <ResearchNotice compact />
               <Link href="/scanner">Open the Scanner →</Link>
             </div>
           </Card>
@@ -255,6 +290,7 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
           {side}
         </aside>
       </div>
+      <Disclaimer />
     </div>
   );
 }

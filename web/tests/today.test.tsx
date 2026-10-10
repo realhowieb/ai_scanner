@@ -16,6 +16,8 @@ const base: Schemas["Today"] = {
 describe("Today", () => {
   it("shows every section that loaded and a notice for the one that failed", () => {
     render(<TodayView data={{ ...base, recap: null, errors: [{ section: "recap", error: "OperationalError" }] }} />);
+    expect(screen.getByRole("heading", { name: "BBB is the strongest setup on the board." })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review BBB" })).toHaveAttribute("href", "/stocks/BBB");
     expect(screen.getByText("Pre-market")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "AAA" })).toHaveAttribute("href", "/stocks/AAA");
     expect(screen.getByRole("link", { name: "BBB" })).toBeInTheDocument();

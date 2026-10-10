@@ -43,6 +43,8 @@ describe("Scanner", () => {
     fetchMock.mockResolvedValue(jsonResponse(latest()));
     render(<SessionProvider initialMe={me("basic")}><ScannerView /></SessionProvider>);
     expect(await screen.findAllByRole("link", { name: "AAA" })).not.toHaveLength(0);
+    expect(screen.getByRole("heading", { name: "AAA leads the latest HSF-ranked scan." })).toBeInTheDocument();
+    expect(screen.getByText("Refine results")).toBeInTheDocument();
     const note = screen.getByRole("note");
     expect(note).toHaveTextContent("top 25 of 140 setups");
     expect(within(note).getByRole("button", { name: "Upgrade to Pro" })).toBeInTheDocument();
