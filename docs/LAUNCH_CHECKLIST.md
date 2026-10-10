@@ -10,7 +10,10 @@
 - [ ] Confirm production Neon + Alpaca secrets set in all three stores
       (Streamlit Cloud, GitHub Actions, host) — see three-secret-stores memory
 - [ ] Confirm error monitoring (Sentry DSN) live for app + cron
-- [ ] Verify scheduled scan + maturation workflows enabled on default branch
+- [x] Verify scheduled scan + maturation workflows enabled on default branch
+      (GitHub default branch `main`; workflows active. Latest checked successful
+      `main` runs on 2026-10-10 UTC: Scheduled Market Scans
+      `38016239184`, Mature Observations `38015503624`.)
 
 ## Before PAID BETA
 - [ ] Trading-effectiveness: rerun Run 48 once evidence ≥ MODERATE; publish an
