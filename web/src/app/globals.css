@@ -111,6 +111,17 @@ a.tk:hover { color: var(--accent); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px 8px; }
 .chips-block { display: flex; flex-direction: column; gap: 8px; }
 .bullets { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--text-2); }
+.fired-list { list-style: none; margin: 0; padding: 0; }
+.fired { display: flex; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+.fired:first-child { border-top: 0; padding-top: 0; }
+.fired-time { flex: 0 0 140px; padding-top: 2px; }
+.fired-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.fired-chips { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fired-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 8px; border-radius: 6px; background: var(--raise); font-size: 13px; }
+.fired-chip a { color: var(--text); }
+.fired-chip a:hover { color: var(--accent); }
+.fired-val { color: var(--up); }
+.fired-warn { font-size: 12px; }
 .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
 
 /* states */
@@ -334,6 +345,8 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .dialog-foot { flex-wrap: wrap; }
   .dialog-foot .btn, .dialog-foot button { flex: 1 1 100%; }
   .alert-row .grow { flex: 1 0 100%; }
+  .fired { flex-direction: column; gap: 4px; }
+  .fired-time { flex-basis: auto; }
   .alert-row .btn { flex: 1 1 120px; }
   .kv > div { align-items: flex-start; flex-direction: column; gap: 4px; }
   .wrap { text-align: left; }

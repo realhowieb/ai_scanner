@@ -9,6 +9,8 @@ import { ConfirmDialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import { groupFired } from "@/lib/alertEvents";
+import type { FiredItem } from "@/lib/alertEvents";
 import { etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
@@ -37,6 +39,47 @@ function AlertRow({ a, onChanged }: { a: Alert; onChanged: () => void }) {
         body={<p>{label}. Its history stays in recent alerts. This can&apos;t be undone.</p>} error={<ErrorLine error={del.error} />}
         onClose={() => setConfirming(false)}
         onConfirm={() => void del.run(async () => { await alerts.remove(a.id); setConfirming(false); onChanged(); return true; })} />
+    </li>
+  );
+}
+
+const FIRED_SHOWN = 8;
+
+function FiredRowItem({ item }: { item: FiredItem }) {
+  const [open, setOpen] = useState(false);
+  const rows = open ? item.rows : item.rows.slice(0, FIRED_SHOWN);
+  const unlisted = item.total - item.rows.length;
+  const many = item.rows.length > 1 || item.total > 1;
+  const head = many ? `${item.title} · ${item.total} names` : item.ticker ? `${item.title} · ${item.ticker}` : item.title;
+  return (
+    <li className="fired">
+      <span className="cap fired-time">{etTime(item.firedAt)}</span>
+      <div className="stack-xs grow">
+        <div className="fired-head">
+          <span className="strong">{head}</span>
+          {item.tiers.length > 1 && item.tiers.map((t) => <Pill key={t.rule}>{`≥ ${t.rule}: ${t.count}`}</Pill>)}
+          {item.tiers.length === 1 && item.tiers[0]!.rule && <span className="cap">BreakoutScore ≥ {item.tiers[0]!.rule}</span>}
+        </div>
+        {rows.length > 0 && (
+          <ul className="fired-chips" aria-label={`${item.title} matches`}>
+            {rows.map((r) => (
+              <li key={r.ticker} className="fired-chip" title={r.earnings ? `${r.detail} · ${r.earnings}` : r.detail}>
+                <Link href={`/stocks/${encodeURIComponent(r.ticker)}`} className="mono strong">{r.ticker}</Link>
+                {r.value !== null ? <span className="mono fired-val">{r.value.toFixed(1)}</span> : r.detail && <span className="cap">{r.detail}</span>}
+                {r.earnings && <span className="fired-warn" aria-label={r.earnings}>⚠️</span>}
+              </li>
+            ))}
+            {item.rows.length > FIRED_SHOWN && (
+              <li><button type="button" className="link-btn cap" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+                {open ? "Show fewer" : `Show all ${item.rows.length}`}
+              </button></li>
+            )}
+          </ul>
+        )}
+        {open && unlisted > 0 && <span className="cap">…and {unlisted} more not listed in the alert.</span>}
+        {item.tiers.length > 1 && <span className="cap">Your ≥ {item.tiers.map((t) => t.rule).join(" and ≥ ")} breakout alerts fired on the same scan, shown together.</span>}
+        {item.text && <span className="body-sm">{item.text}</span>}
+      </div>
     </li>
   );
 }
@@ -97,8 +140,8 @@ export function AlertsView() {
             <Card title="Recently fired" id="events">
               {events.error ? <ErrorLine error={events.error} /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> :
                 events.data.length === 0 ? <Empty title="Nothing has fired yet.">When an alert&apos;s condition is met it shows here.</Empty> : (
-                  <ul className="timeline">
-                    {events.data.map((e) => <li key={e.event_id ?? e.id}><span className="cap">{etTime(e.fired_at)}</span> {e.ticker && <span className="mono strong">{e.ticker}</span>} {e.message}</li>)}
+                  <ul className="fired-list">
+                    {groupFired(events.data).map((item) => <FiredRowItem key={item.key} item={item} />)}
                   </ul>
                 )}
             </Card>
