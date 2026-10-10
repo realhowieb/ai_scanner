@@ -163,10 +163,9 @@ def _dt_symbols(source: str, custom: Sequence[str], watch: Sequence[str]) -> Lis
 def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = ()) -> Dict[str, Any]:
     """The web's Day Trader table: live Alpaca snapshot metrics for the source's
     symbols, with the day-trade score; plus the market state."""
+    from analytics.day_trade_display import enrich_row, rank_key
     from api.today import _cached
     from ui import day_trader as dtm
-
-    from analytics.day_trade_display import enrich_row, rank_key
 
     symbols = _dt_symbols(source, custom, watch)
     state = _cached("dt_state", lambda: dtm.market_state(clock_is_open=dtm._fetch_clock_is_open()), ttl_s=60,
