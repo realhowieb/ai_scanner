@@ -222,6 +222,8 @@ def test_all_fresh_price_cache_writes_no_payload_and_preserves_frames():
 
 def test_standalone_billing_connection_has_no_scanner_dependency(monkeypatch):
     import builtins
+    import sys
+    import types
 
     from billing_service import realtime_alerts
 
@@ -231,7 +233,10 @@ def test_standalone_billing_connection_has_no_scanner_dependency(monkeypatch):
             raise ImportError('standalone root')
         return original(name, *args, **kwargs)
     monkeypatch.setenv('DATABASE_URL', 'postgresql://synthetic')
-    with mock.patch('psycopg2.connect', return_value='connection') as connect, \
+    connect = mock.Mock(return_value='connection')
+    driver = types.ModuleType('psycopg2')
+    driver.connect = connect
+    with mock.patch.dict(sys.modules, {'psycopg2': driver}), \
          mock.patch('builtins.__import__', side_effect=without_scanner):
         assert realtime_alerts._conn() == 'connection'
     connect.assert_called_once_with('postgresql://synthetic', connect_timeout=8)
