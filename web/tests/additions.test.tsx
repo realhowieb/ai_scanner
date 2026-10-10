@@ -130,13 +130,14 @@ describe("Stock Intelligence", () => {
     expect(screen.getByText(/Each review opens the score/)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Review" })[0]).toHaveAttribute("href", "/stocks/AAA");
     expect(screen.getAllByText("STRONG · 2 confirming signals").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Open any ticker")).toBeInTheDocument();
     expect(calls[0]!.query.get("limit")).toBe("12");
-    await u.type(screen.getByLabelText("Ticker"), "not a ticker");
+    await u.type(screen.getByLabelText("Open any ticker"), "not a ticker");
     await u.click(screen.getByRole("button", { name: "Open" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Enter a ticker symbol");
     expect(push).not.toHaveBeenCalled();
-    await u.clear(screen.getByLabelText("Ticker"));
-    await u.type(screen.getByLabelText("Ticker"), "nvda");
+    await u.clear(screen.getByLabelText("Open any ticker"));
+    await u.type(screen.getByLabelText("Open any ticker"), "nvda");
     await u.click(screen.getByRole("button", { name: "Open" }));
     expect(push).toHaveBeenCalledWith("/stocks/NVDA");
   });
