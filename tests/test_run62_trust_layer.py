@@ -34,9 +34,20 @@ class ProductCopyTests(unittest.TestCase):
     def test_positioning_is_factual_and_claim_free(self):
         for text in (pc.TAGLINE, pc.POSITIONING_ONE_LINE, pc.POSITIONING_SHORT, pc.POSITIONING_LONG,
                      pc.PAGE_TITLE, pc.EMAIL_SIGNOFF, pc.DISCLAIMER, pc.HISTORICAL_RESEARCH_NOTE,
-                     *[d for _t, d in pc.PILLARS], *[d for _t, d in pc.TRUST_POINTS]):
+                     pc.LAUNCH_DISCLOSURE, *[d for _t, d in pc.PILLARS],
+                     *[d for _t, d in pc.TRUST_POINTS]):
             self.assertEqual(pc.find_prohibited_claims(text), [], text)
         self.assertIn("continuously scans the U.S. stock market", pc.POSITIONING_ONE_LINE)
+
+    def test_launch_disclosure_is_explicit_on_core_surfaces(self):
+        self.assertIn("Educational research only", pc.LAUNCH_DISCLOSURE)
+        self.assertIn("not investment advice", pc.LAUNCH_DISCLOSURE)
+        self.assertIn("Predictive effectiveness is unvalidated", pc.LAUNCH_DISCLOSURE)
+        for rel in ("app.py", "pages/brief.py", "pages/alerts.py"):
+            with self.subTest(path=rel):
+                src = (ROOT / rel).read_text()
+                self.assertIn("LAUNCH_DISCLOSURE", src)
+                self.assertIn("st.caption(LAUNCH_DISCLOSURE)", src)
 
     def test_guard_catches_promotional_claims(self):
         self.assertTrue(pc.find_prohibited_claims("Scan. Analyze. Trade. Win."))

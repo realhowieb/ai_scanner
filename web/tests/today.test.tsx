@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Schemas } from "@/api/client";
@@ -16,6 +16,8 @@ const base: Schemas["Today"] = {
 describe("Today", () => {
   it("shows every section that loaded and a notice for the one that failed", () => {
     render(<TodayView data={{ ...base, recap: null, errors: [{ section: "recap", error: "OperationalError" }] }} />);
+    expect(screen.getByRole("heading", { name: "BBB is the strongest setup on the board." })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review BBB" })).toHaveAttribute("href", "/stocks/BBB");
     expect(screen.getByText("Pre-market")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "AAA" })).toHaveAttribute("href", "/stocks/AAA");
     expect(screen.getByRole("link", { name: "BBB" })).toBeInTheDocument();
@@ -152,6 +154,19 @@ describe("Today signed-in sections", () => {
       watchlist: { watchlist_id: null, in_scan: [], missing: [] } }} />);
     expect(screen.getByText(/Nothing new since you last looked/)).toBeInTheDocument();
     expect(screen.getByText("Your watchlist is empty.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Choose your workflow" })).not.toBeInTheDocument();
+  });
+
+  it("guides a true first run toward one successful action", () => {
+    render(<TodayView data={base} mine={{ errors: [], new_since: { tickers: [], total: 0 },
+      watchlist: { watchlist_id: null, in_scan: [], missing: [] } }} />);
+    const guide = screen.getByRole("region", { name: "Choose your workflow" });
+    expect(guide).toBeInTheDocument();
+    expect(within(guide).getByRole("link", { name: "Open Scanner" })).toHaveAttribute("href", "/scanner");
+    expect(within(guide).getByRole("link", { name: "Review BBB" })).toHaveAttribute("href", "/stocks/BBB");
+    expect(within(guide).getByRole("link", { name: "Add tickers" })).toHaveAttribute("href", "/watchlists");
+    expect(within(guide).getByRole("link", { name: "Open Day Trader" })).toHaveAttribute("href", "/day-trader");
+    expect(within(guide).getByText(/review one ticker, save it to a watchlist, then create one alert/i)).toBeInTheDocument();
   });
 
   it("shows a notice when the signed-in sections fail, and nothing while they load", () => {

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-_CHAT_COLS = ["Ticker", "Symbol", "BreakoutScore", "GapPct", "Gap%", "Trend20D%", "VolRel20", "DollarVol20", "Volatility20D%"]
+_CHAT_COLS = ["Ticker", "Symbol", "HSF Score", "BreakoutScore", "GapPct", "Gap%", "Trend20D%", "VolRel20", "DollarVol20", "Volatility20D%"]
 _MAX_ROWS = 20
 _MAX_HISTORY = 8  # cap turns sent to control cost
 
@@ -11,9 +11,13 @@ _SYSTEM = (
     "You are a concise equity-scan analyst answering follow-up questions about "
     "a specific stock scan. The scan results are provided as CSV in the first "
     "user message. Answer using ONLY those results plus general technical "
-    "knowledge; reference specific numbers. If asked about a ticker not in the "
-    "scan, say it's not in these results. Keep answers under 120 words. "
-    "Educational technical commentary only — no financial advice or price targets."
+    "knowledge; reference specific numbers, including HSF Score when relevant. HSF "
+    "Score is HSF's own opportunity ranking and controls ordering; you do not rank, "
+    "score, pick, or recommend securities. If asked about a ticker not in the scan, "
+    "say it's not in these results. Do not infer institutional activity, future price "
+    "movement, or a user's risk tolerance. Never give buy, sell, hold, entry, exit, "
+    "position-size, stop-loss, or price-target language. Keep answers under 120 words. "
+    "Educational research commentary only — not investment advice."
 )
 
 

@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DataFreshness } from "@/features/DataFreshness";
 import { api, unwrap } from "@/api/client";
-import { Card, Disclaimer, Empty, ErrorState, Freshness, Locked, Skeleton, UpgradeButton } from "@/components/ui";
+import { Card, Disclaimer, Empty, ErrorState, Freshness, Locked, ResearchNotice, Skeleton, UpgradeButton } from "@/components/ui";
 import { AIScanPanel } from "@/features/AIScanPanel";
 import { useApi } from "@/hooks/useApi";
 import { etTime, freshness } from "@/lib/format";
@@ -81,6 +81,9 @@ export function ScannerView() {
 
   const visibleTotal = data ? Math.min(data.total, data.max_results) : 0;
   const pages = Math.max(1, Math.ceil(visibleTotal / f.size));
+  const filtersActive = Boolean(f.signal || f.minScore || f.size !== 25 || sort !== "score");
+  const leader = data?.setups[0];
+  const setupCountLabel = data ? `${data.total} setup${data.total === 1 ? "" : "s"} ranked` : "Loading the latest ranked setups";
 
   return (
     <div className="stack">
@@ -99,35 +102,56 @@ export function ScannerView() {
         </div>
       </section>
 
-      <section aria-label="Filters" className="filters">
-        <div className="chips" role="group" aria-label="Setup type">
-          {SIGNALS.map((s) => {
-            const locked = "feature" in s && !can(s.feature);
-            return (
-              <button key={s.id || "all"} type="button" className="chip" aria-pressed={f.signal === s.id}
-                onClick={() => set({ signal: s.id })}>
-                {s.label}{locked && <span className="chip-lock"> · Premium</span>}
-              </button>
-            );
-          })}
+      <section className="priority-panel scanner-priority" aria-labelledby="scanner-priority-title">
+        <div className="priority-copy">
+          <p className="cap">Best starting point</p>
+          <h2 className="h2" id="scanner-priority-title">
+            {leader ? `${leader.ticker} leads the latest HSF-ranked scan.` : setupCountLabel}
+          </h2>
+          <p className="body-sm">
+            {leader
+              ? `Review the score evidence first, then refine by setup type, score floor, or session context when you need a narrower list.`
+              : "Start with the ranked board, then narrow the list only when you know what kind of setup you want."}
+          </p>
         </div>
-        <span className="grow" />
-        <label className="inline-field">Min HSF Score
-          <select value={f.minScore} onChange={(e) => set({ min: Number(e.target.value) })}>
-            {MIN_SCORES.map((m) => <option key={m} value={m}>{m === 0 ? "Any" : m}</option>)}
-          </select>
-        </label>
-        <label className="inline-field">Sort by
-          <select value={sort} onChange={(e) => set({ sort: e.target.value })}>
-            {SORTS.filter((x) => !("feature" in x) || can(x.feature)).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-          </select>
-        </label>
-        <label className="inline-field">Rows
-          <select value={f.size} onChange={(e) => set({ size: Number(e.target.value) })}>
-            {PAGE_SIZES.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </label>
+        <ResearchNotice compact />
       </section>
+
+      <details className="filter-panel" open={filtersActive}>
+        <summary>
+          <span className="strong">Refine results</span>
+          <span className="cap">{filtersActive ? "Filters active" : "Setup type, score floor, sort, and rows"}</span>
+        </summary>
+        <section aria-label="Filters" className="filters">
+          <div className="chips" role="group" aria-label="Setup type">
+            {SIGNALS.map((s) => {
+              const locked = "feature" in s && !can(s.feature);
+              return (
+                <button key={s.id || "all"} type="button" className="chip" aria-pressed={f.signal === s.id}
+                  onClick={() => set({ signal: s.id })}>
+                  {s.label}{locked && <span className="chip-lock"> · Premium</span>}
+                </button>
+              );
+            })}
+          </div>
+          <span className="grow" />
+          <label className="inline-field">Min HSF Score
+            <select value={f.minScore} onChange={(e) => set({ min: Number(e.target.value) })}>
+              {MIN_SCORES.map((m) => <option key={m} value={m}>{m === 0 ? "Any" : m}</option>)}
+            </select>
+          </label>
+          <label className="inline-field">Sort by
+            <select value={sort} onChange={(e) => set({ sort: e.target.value })}>
+              {SORTS.filter((x) => !("feature" in x) || can(x.feature)).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+            </select>
+          </label>
+          <label className="inline-field">Rows
+            <select value={f.size} onChange={(e) => set({ size: Number(e.target.value) })}>
+              {PAGE_SIZES.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </label>
+        </section>
+      </details>
 
       {data?.scan_at && (data.stale ?? freshness(data.scan_at).stale) && (
         <p className="banner" role="status">Market data is delayed: a scheduled scan didn&apos;t arrive, so this is the scan from {etTime(data.scan_at)}. Scores and prices are from that scan.</p>

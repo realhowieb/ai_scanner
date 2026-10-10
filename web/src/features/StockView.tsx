@@ -35,6 +35,67 @@ function List({ items, empty }: { items: string[]; empty: string }) {
   return items.length ? <ul className="bullets">{items.map((r) => <li key={r}>{r}</li>)}</ul> : <p className="cap">{empty}</p>;
 }
 
+function movementText(s: Stock): string {
+  if (s.movement === "RISING" && s.score_change != null) return `Rising +${s.score_change} since the previous scan`;
+  if (s.movement === "FALLING" && s.score_change != null) return `Falling ${s.score_change} since the previous scan`;
+  if (s.movement) return MOVEMENT[s.movement] ?? s.movement;
+  return "No earlier HSF reading to compare";
+}
+
+function decisionState(s: Stock): string {
+  if (s.hsf_score === null || s.hsf_score === undefined) return "Not ranked";
+  const status = s.status ? `${s.status[0]}${s.status.slice(1).toLowerCase()}` : "Ranked";
+  const suffix = s.movement === "RISING" ? " and rising" : s.movement === "FALLING" ? " and fading" : "";
+  return `${status} · HSF ${s.hsf_score}${suffix}`;
+}
+
+function whyNow(s: Stock): string {
+  if (s.hsf_score === null || s.hsf_score === undefined) {
+    return "HSF is not ranking this ticker right now. You can still watch it, set an alert, or check back after the next market scan.";
+  }
+  const parts: string[] = [];
+  if (s.reasons[0]) parts.push(s.reasons[0].replace(/\.$/, ""));
+  else if (s.signals.length) parts.push(`${setupLabel(s.signals[0])} signal is active`);
+  if (s.movement === "RISING") parts.push("its HSF Score is improving");
+  if (s.movement === "FALLING") parts.push("its HSF Score is weakening");
+  if (s.risks[0]) parts.push(`main caution: ${s.risks[0].replace(/\.$/, "")}`);
+  else if (s.watch_next[0]) parts.push(`next check: ${s.watch_next[0].replace(/\.$/, "")}`);
+  return `${parts.length ? parts.join("; ") : "HSF has enough current evidence to rank it"}.`;
+}
+
+function DecisionSnapshot({ s }: { s: Stock }) {
+  const empty = s.hsf_score === null || s.hsf_score === undefined;
+  return (
+    <Card title="Decision snapshot" id="snapshot" className="snapshot-card">
+      <div className="tiles snapshot-tiles">
+        <div className="tile"><span className="cap">HSF state</span><p className="tile-value small">{decisionState(s)}</p></div>
+        <div className="tile"><span className="cap">Change</span><p className="tile-value small">{movementText(s)}</p></div>
+        <div className="tile"><span className="cap">Main reason</span><p className="body-sm">{s.reasons[0] ?? (empty ? "Not ranked in the latest scan." : "No reason recorded.")}</p></div>
+        <div className="tile"><span className="cap">Next check</span><p className="body-sm">{s.watch_next[0] ?? (s.risks[0] ? s.risks[0] : "Check after the next scheduled scan.")}</p></div>
+      </div>
+      <p className="notice">{whyNow(s)}</p>
+      {empty && <p className="cap">Useful next steps: watch {s.ticker}, set a price alert, or reopen this page after the next market scan.</p>}
+    </Card>
+  );
+}
+
+function ScoreTrend({ s }: { s: Stock }) {
+  const items = s.lifecycle.filter((e) => e.score !== null && e.score !== undefined).slice(-6);
+  if (items.length < 2) return null;
+  const max = Math.max(...items.map((e) => Number(e.score)));
+  const min = Math.min(...items.map((e) => Number(e.score)));
+  const span = Math.max(1, max - min);
+  return (
+    <div className="trend" aria-label={`Recent HSF Score trend for ${s.ticker}`}>
+      {items.map((e, i) => {
+        const score = Number(e.score);
+        const x = items.length <= 1 ? 0 : i / (items.length - 1);
+        return <span key={`${e.time}-${i}`} className="trend-dot" title={`${etTime(e.time)} · HSF ${score}`} style={{ ["--x" as string]: x, ["--y" as string]: `${100 - ((score - min) / span) * 100}%` }} />;
+      })}
+    </div>
+  );
+}
+
 function Historical({ s }: { s: Stock }) {
   if (s.historical_locked) {
     return <Locked title="Historical research is part of Pro" plan="pro">How past HSF readings in this score range played out, and this ticker&apos;s own record.</Locked>;
@@ -70,7 +131,7 @@ function PriceAlertButton({ s, onCreated }: { s: Stock; onCreated?: () => void }
   const close = () => { setOpen(false); setDone(null); };
   return (
     <>
-      <button type="button" className="btn" onClick={() => setOpen(true)}>Set price alert</button>
+      <button type="button" className="btn" onClick={() => setOpen(true)}>{s.price != null ? `Alert near ${price(s.price)}` : "Set price alert"}</button>
       <Dialog open={open} title={`Price alert for ${s.ticker}`} onClose={close}>
         {done ? (
           <div className="stack-sm">
@@ -195,7 +256,8 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
           ) : <p className="cap">No price from the scans.</p>}
         </div>
         <div className="row-actions">
-          <SaveToWatchlistButton ticker={s.ticker} inLists={s.watchlists.map((w) => w.id)} onSaved={onChanged} />
+          <SaveToWatchlistButton ticker={s.ticker} inLists={s.watchlists.map((w) => w.id)} onSaved={onChanged}
+            label={s.watchlists.length ? `Watch ${s.ticker} elsewhere` : `Watch ${s.ticker}`} />
           <PriceAlertButton s={s} onCreated={onChanged} />
         </div>
       </section>
@@ -208,17 +270,19 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
       )}
       {s.in_latest_scan && !s.has_setup && <p className="notice" role="status">Scanned, but it didn&apos;t qualify as an HSF setup in the latest scan.</p>}
 
+      <DecisionSnapshot s={s} />
+
       <div className="split stock-split">
         <div className="col-main">
-          <Card title="Price" id="price" aside={s.bars_as_of ? `Bars as of ${etTime(s.bars_as_of)}` : undefined}>
+          <Card title="Price" id="price" className="price-card" aside={s.bars_as_of ? `Bars as of ${etTime(s.bars_as_of)}` : undefined}>
             {s.bars.length >= 2 ? <PriceChart bars={s.bars} asOf={s.bars_as_of} /> : <Empty title="No price history cached for this ticker.">Charts appear once a scan has downloaded its daily bars.</Empty>}
           </Card>
-          <Card title="Why it ranks" id="why">
+          <Card title="Why it ranks" id="why" className="why-card">
             <List items={s.reasons} empty="No reasons recorded." />
           </Card>
           <div className="grid2">
-            <Card title="Risks" id="risks"><List items={s.risks} empty="No specific risks flagged." /></Card>
-            <Card title="What to watch" id="watch"><List items={s.watch_next} empty="Nothing specific to watch yet." /></Card>
+            <Card title="Risks" id="risks" className="risks-card"><List items={s.risks} empty="No specific risks flagged." /></Card>
+            <Card title="What to watch" id="watch" className="watch-card"><List items={s.watch_next} empty="Nothing specific to watch yet." /></Card>
           </div>
           <Card title="Historical context" id="hist"><Historical s={s} /></Card>
           {s.in_latest_scan && s.has_setup && (
@@ -275,6 +339,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
 
           {s.lifecycle.length > 0 && (
             <Card title="Recent history" id="life">
+              <ScoreTrend s={s} />
               <ul className="timeline">
                 {s.lifecycle.slice(-6).reverse().map((e, i) => (
                   <li key={`${e.time}-${i}`}><span className="cap">{etTime(e.time)}</span> <span className="mono">{e.score ?? "—"}</span> {e.label || e.status || ""}</li>

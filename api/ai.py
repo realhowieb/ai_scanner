@@ -100,7 +100,7 @@ def summary(username: str, run_id: Optional[int], *, shared: bool) -> Dict[str, 
 
 
 def ticker_note(username: str, ticker: str) -> Dict[str, Any]:
-    """The web's per-result setup note, for a ticker in the latest market scan."""
+    """Claude's per-result research note, for a ticker in the latest market scan."""
     from ui.ai_summary import _SUMMARY_COLUMNS, _TICKER_SYSTEM_PROMPT
 
     rid, df = scan_df(username, None)
@@ -142,7 +142,7 @@ def chat(username: str, run_id: Optional[int], messages: List[Dict[str, str]]) -
     turns = [{"role": m["role"], "content": str(m["content"])[:MAX_TURN_CHARS]} for m in messages][-MAX_CHAT_TURNS * 2:]
     while turns and turns[0]["role"] != "user":
         turns = turns[1:]
-    api_messages = [{"role": "user", "content": f"Here are the current scan results (CSV):\n\n{_table(df)}"},
+    api_messages = [{"role": "user", "content": f"Here are the current scan results in HSF Score order (CSV):\n\n{_table(df)}"},
                     {"role": "assistant", "content": "Got it — I have the scan results. Ask away."}, *turns]
     answer, err = ask_claude_chat(system=_SYSTEM, messages=api_messages, max_tokens=500,
                                   username=username, feature="results_chat")

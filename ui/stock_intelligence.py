@@ -147,6 +147,80 @@ def _watch_next(status: Optional[str], signals: List[str], movement: Optional[st
     return items[:5]
 
 
+def _movement_summary(movement: Optional[Dict[str, Any]]) -> str:
+    if not movement:
+        return "No prior HSF reading to compare"
+    state = movement.get("movement_state")
+    delta = movement.get("score_delta")
+    if state == "RISING" and delta is not None:
+        return f"Rising {delta:+d} since the prior HSF reading"
+    if state == "FALLING" and delta is not None:
+        return f"Falling {delta:+d} since the prior HSF reading"
+    if state == "UNCHANGED":
+        return "Little changed since the prior HSF reading"
+    if state == "NEW":
+        return "New to the ranked HSF list"
+    if state == "VERSION_CHANGED":
+        return "Score version changed since the prior reading"
+    return "No prior HSF reading to compare"
+
+
+def _plain_state(current: Optional[Dict[str, Any]], movement: Optional[Dict[str, Any]]) -> str:
+    if not current:
+        return "Not ranked"
+    status = str(current.get("status") or "Ranked").title()
+    score = current.get("score")
+    if score is None:
+        return status
+    mv = movement.get("movement_state") if movement else None
+    suffix = " and rising" if mv == "RISING" else " and fading" if mv == "FALLING" else ""
+    return f"{status} · HSF {score}{suffix}"
+
+
+def _why_now(current: Optional[Dict[str, Any]], reasons: List[str], risks: List[str],
+             watch_next: List[str], movement: Optional[Dict[str, Any]]) -> str:
+    if not current:
+        return ("HSF is not ranking this ticker right now. You can still watch it, "
+                "set an alert, or check back after the next market scan.")
+    parts: List[str] = []
+    if reasons:
+        parts.append(reasons[0].rstrip("."))
+    else:
+        signals = current.get("signals") or []
+        if signals:
+            parts.append("current signals are active")
+    mv = movement.get("movement_state") if movement else None
+    if mv == "RISING":
+        parts.append("its HSF Score is improving")
+    elif mv == "FALLING":
+        parts.append("its HSF Score is weakening")
+    if risks:
+        parts.append(f"main caution: {risks[0].rstrip('.')}")
+    elif watch_next:
+        parts.append(f"next check: {watch_next[0].rstrip('.')}")
+    if not parts:
+        parts.append("HSF has enough current evidence to rank it")
+    text = "; ".join(parts)
+    return text[0].upper() + text[1:] + "."
+
+
+def decision_snapshot(current: Optional[Dict[str, Any]], reasons: List[str], risks: List[str],
+                      watch_next: List[str], movement: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Top-of-page summary for a user deciding whether the ticker deserves attention.
+
+    Deterministic and descriptive only: it restates HSF state, movement, reasons,
+    cautions and watch items without buy/sell/entry/target language.
+    """
+    return {
+        "state": _plain_state(current, movement),
+        "change": _movement_summary(movement),
+        "main_reason": reasons[0] if reasons else None,
+        "main_caution": risks[0] if risks else None,
+        "next_check": watch_next[0] if watch_next else None,
+        "why_now": _why_now(current, reasons, risks, watch_next, movement),
+    }
+
+
 def build_stock_intelligence(
     ticker: str,
     *,
@@ -239,10 +313,13 @@ def build_stock_intelligence(
         current.get("status") if current else None, signals or [],
         movement.get("movement_state") if movement else None,
         bool(current.get("fading")) if current else False, earnings_days)
+    snapshot = decision_snapshot(current, reasons, risks, watch_next, movement)
 
     return {
         "ticker": ticker,
         "has_opportunity": current is not None,
+        "decision_snapshot": snapshot,
+        "why_now": snapshot["why_now"],
         "price": current.get("last") if current else None,
         "change_pct": current.get("chg_pct") if current else None,
         "hsf_score": current.get("score") if current else None,
@@ -362,6 +439,7 @@ def render_stock_intelligence(
     )
 
     _render_header(intel)
+    _render_decision_snapshot(intel)
     _render_why_and_risks(intel)
     _render_lifecycle(intel)
     _render_signals_and_model(intel)
@@ -408,6 +486,25 @@ def _render_header(intel: Dict[str, Any]) -> None:
             st.markdown(f"Primary setup: **{setup}** · {intel['n_signals']} confirming signals")
     if intel.get("market_regime"):
         st.caption(f"Market: {intel['market_regime']}")
+
+
+def _render_decision_snapshot(intel: Dict[str, Any]) -> None:
+    snap = intel.get("decision_snapshot") or {}
+    st.markdown("#### Decision snapshot")
+    c1, c2 = st.columns(2)
+    c1.metric("HSF state", snap.get("state") or "Unknown")
+    c2.metric("Change", snap.get("change") or "No comparison")
+    st.caption(snap.get("why_now") or "")
+    tiles = [
+        ("Main reason", snap.get("main_reason")),
+        ("Main caution", snap.get("main_caution") or "No specific HSF caution flagged"),
+        ("Next check", snap.get("next_check")),
+    ]
+    for label, value in tiles:
+        if value:
+            st.caption(f"**{label}:** {value}")
+    if not intel.get("has_opportunity"):
+        st.info("Not ranked right now. You can still add it to a watchlist, set an alert, or revisit after the next scheduled scan.")
 
 
 def _render_why_and_risks(intel: Dict[str, Any]) -> None:
@@ -482,6 +579,8 @@ def _render_lifecycle(intel: Dict[str, Any]) -> None:
     summary = timeline_summary(life)
     if summary:
         st.caption(summary)
+    if len(life) >= 2:
+        st.line_chart({"HSF Score": [ev.get("score") for ev in life if ev.get("score") is not None]})
     if len(life) == 1:
         st.caption("Only one recorded HSF observation so far — the timeline "
                    "appears as history accumulates.")
@@ -576,7 +675,8 @@ def _render_actions(intel: Dict[str, Any], render_chart_for_ticker) -> None:
             _add_to_watchlist(t)
         except Exception:
             st.caption("Watchlist unavailable.")
-    if a3.button("🔔 Alert", key=f"si_alert_{t}"):
+    alert_label = f"🔔 Alert near ${float(intel['price']):,.2f}" if intel.get("price") is not None else "🔔 Notify me if it moves"
+    if a3.button(alert_label, key=f"si_alert_{t}"):
         st.session_state["alert_price_tk"] = t
         if intel.get("price") is not None:
             try:

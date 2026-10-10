@@ -4,6 +4,7 @@ import type { ImgHTMLAttributes } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AIScanPanel } from "@/features/AIScanPanel";
+import { DemoPage } from "@/features/Demo";
 import { Landing, PricingPage } from "@/features/Landing";
 import { PaperView } from "@/features/PaperView";
 import { StairSteppers } from "@/features/StairSteppers";
@@ -106,6 +107,17 @@ describe("landing and pricing", () => {
     await u.click(screen.getByRole("button", { name: /Try again/ }));
     expect((await screen.findAllByText("$40/mo")).length).toBeGreaterThan(0);
   });
+
+  it("offers a frontend-only demo with sample product state", () => {
+    render(<DemoPage />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("See HSF with polished sample data.");
+    expect(screen.getByRole("status")).toHaveTextContent("fixed sample data");
+    expect(screen.getByRole("table", { name: "Demo ranked setups" })).toHaveTextContent("NVDA");
+    expect(screen.getByRole("heading", { name: "Stock detail" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Watchlist intelligence" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Alerts and AI research" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create a free account" })).toHaveAttribute("href", "/signup");
+  });
 });
 
 describe("Stock Intelligence", () => {
@@ -114,13 +126,18 @@ describe("Stock Intelligence", () => {
     const u = userEvent.setup();
     render(<SessionProvider initialMe={me("basic")}><StockSearchView /></SessionProvider>);
     expect(await screen.findByRole("link", { name: "AAA" })).toHaveAttribute("href", "/stocks/AAA");
+    expect(screen.getByRole("heading", { name: "Top setups to review" })).toBeInTheDocument();
+    expect(screen.getByText(/Each review opens the score/)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Review" })[0]).toHaveAttribute("href", "/stocks/AAA");
+    expect(screen.getAllByText("STRONG · 2 confirming signals").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Open any ticker")).toBeInTheDocument();
     expect(calls[0]!.query.get("limit")).toBe("12");
-    await u.type(screen.getByLabelText("Ticker"), "not a ticker");
+    await u.type(screen.getByLabelText("Open any ticker"), "not a ticker");
     await u.click(screen.getByRole("button", { name: "Open" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Enter a ticker symbol");
     expect(push).not.toHaveBeenCalled();
-    await u.clear(screen.getByLabelText("Ticker"));
-    await u.type(screen.getByLabelText("Ticker"), "nvda");
+    await u.clear(screen.getByLabelText("Open any ticker"));
+    await u.type(screen.getByLabelText("Open any ticker"), "nvda");
     await u.click(screen.getByRole("button", { name: "Open" }));
     expect(push).toHaveBeenCalledWith("/stocks/NVDA");
   });

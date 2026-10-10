@@ -89,8 +89,8 @@ export function SaveToWatchlistDialog({ ticker, open, onClose, onSaved, inLists 
 }
 
 /** A button that opens the dialog. */
-export function SaveToWatchlistButton({ ticker, compact = false, inLists, onSaved }: {
-  ticker: string; compact?: boolean; inLists?: number[]; onSaved?: () => void;
+export function SaveToWatchlistButton({ ticker, compact = false, inLists, onSaved, label }: {
+  ticker: string; compact?: boolean; inLists?: number[]; onSaved?: () => void; label?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -100,7 +100,7 @@ export function SaveToWatchlistButton({ ticker, compact = false, inLists, onSave
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
         </button>
       ) : (
-        <button type="button" className="btn" onClick={() => setOpen(true)}>Save to watchlist</button>
+        <button type="button" className="btn" onClick={() => setOpen(true)}>{label ?? "Save to watchlist"}</button>
       )}
       <SaveToWatchlistDialog ticker={ticker} open={open} onClose={() => setOpen(false)} inLists={inLists} onSaved={onSaved} />
     </>

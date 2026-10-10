@@ -54,6 +54,7 @@ export function PublicHeader() {
       <Link href="/" className="brand">HSFinest<span>.AI</span></Link>
       <nav aria-label="Site" className="pub-nav">
         <Link href="/how-hsf-works">How it works</Link>
+        <Link href="/demo">Demo</Link>
         <Link href="/pricing">Pricing</Link>
         <Link href="/login">Sign in</Link>
         <SignupLink surface="header" className="btn btn-primary btn-sm">Create free account</SignupLink>
@@ -66,7 +67,7 @@ export function PublicFooter() {
   return (
     <footer className="pub-foot">
       <p className="cap">{DISCLAIMER}</p>
-      <p className="cap"><Link href="/how-hsf-works">How HSF works</Link> · <Link href="/pricing">Pricing</Link> · <Link href="/login">Sign in</Link></p>
+      <p className="cap"><Link href="/how-hsf-works">How HSF works</Link> · <Link href="/demo">Demo</Link> · <Link href="/pricing">Pricing</Link> · <Link href="/login">Sign in</Link></p>
     </footer>
   );
 }
@@ -179,6 +180,7 @@ export function Landing() {
           <p className="hero-text">{POSITIONING}</p>
           <div className="row-actions">
             <SignupLink surface="hero">Create a free account</SignupLink>
+            <Link href="/demo" className="btn">View demo</Link>
             <Link href="/login" className="btn">Sign in</Link>
           </div>
           <p className="cap">Free plan, no card needed.</p>

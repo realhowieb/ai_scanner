@@ -177,8 +177,22 @@ class SummaryInputTests(unittest.TestCase):
         for prompt in (ai_summary._SYSTEM_PROMPT, ai_summary._TICKER_SYSTEM_PROMPT):
             low = prompt.lower()
             self.assertIn("hsf score", low)
+            self.assertIn("use only the scan data provided", low)
+            self.assertIn("not investment advice", low)
+            for phrase in ("buy, sell, hold", "entry, exit", "position-size", "price-target", "institutional activity"):
+                self.assertIn(phrase, low)
             self.assertNotIn("identify the 3-5 strongest", low)       # the model no longer picks winners
         self.assertIn("already ordered by hsf score", ai_summary._SYSTEM_PROMPT.lower())
+
+    def test_chat_context_includes_hsf_score_and_boundaries(self):
+        from ui import ai_chat
+
+        self.assertIn("HSF Score", ai_chat._CHAT_COLS)
+        low = ai_chat._SYSTEM.lower()
+        for phrase in ("including hsf score", "controls ordering", "do not rank",
+                       "buy, sell, hold", "entry, exit", "position-size", "price-target",
+                       "institutional activity", "not investment advice"):
+            self.assertIn(phrase, low)
 
 
 class LabellingTests(unittest.TestCase):
@@ -208,6 +222,10 @@ class LabellingTests(unittest.TestCase):
         chat = (ROOT / "ui" / "ai_chat.py").read_text()
         self.assertIn("not investment advice", chat)
         self.assertNotIn("least risky", chat)
+        panel = (ROOT / "web" / "src" / "features" / "AIScanPanel.tsx").read_text()
+        self.assertIn("Claude uses only this scan", panel)
+        self.assertIn("HSF Score controls ranking", panel)
+        self.assertIn("does not recommend trades", panel)
 
     def test_summary_failure_shows_the_error_not_template_text(self):
         summary = (ROOT / "ui" / "ai_summary.py").read_text()

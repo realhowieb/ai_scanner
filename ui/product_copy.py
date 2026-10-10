@@ -72,6 +72,12 @@ DISCLAIMER = (
     "It does not recommend buying or selling any security."
 )
 
+# Explicit launch disclosure used on scanner, market brief and alerts surfaces.
+LAUNCH_DISCLOSURE = (
+    "Educational research only; not investment advice. Predictive effectiveness "
+    "is unvalidated."
+)
+
 # Standard label and sentence for historical/experimental analytics.
 HISTORICAL_RESEARCH_LABEL = "Historical research"
 HISTORICAL_RESEARCH_NOTE = (

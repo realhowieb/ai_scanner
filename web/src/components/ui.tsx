@@ -150,6 +150,14 @@ export function Disclaimer() {
   return <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice.</p>;
 }
 
+export function ResearchNotice({ compact = false }: { compact?: boolean }) {
+  return (
+    <p className={compact ? "cap" : "notice"} role={compact ? undefined : "note"}>
+      HSF highlights research signals from the available scan data. It does not predict profit, recommend entries or exits, or replace your own risk review.
+    </p>
+  );
+}
+
 /** A failed action's message, with the support code when the server gave one. */
 export function ErrorLine({ error }: { error: ApiError | null }) {
   if (!error) return null;
