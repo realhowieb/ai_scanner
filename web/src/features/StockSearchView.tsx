@@ -52,8 +52,8 @@ export function StockSearchView() {
                         <TickerLink ticker={s.ticker} />
                         <ScoreBadge score={s.score} />
                         {s.primary_setup && <Pill>{setupLabel(s.primary_setup)}</Pill>}
+                        <span className="cap review-meta">{s.status || "Ranked setup"} · {s.n_signals} confirming signal{s.n_signals === 1 ? "" : "s"}</span>
                       </div>
-                      <p className="cap">{s.status || "Ranked setup"} · {s.n_signals} confirming signal{s.n_signals === 1 ? "" : "s"}</p>
                     </div>
                     <span className="grow" />
                     <span className={`mono cap ${s.chg_pct == null ? "" : s.chg_pct >= 0 ? "up" : "down"}`}>{pct(s.chg_pct)}</span>
