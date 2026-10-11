@@ -5,7 +5,7 @@
 import Link from "next/link";
 
 import { api, unwrap } from "@/api/client";
-import { Card, Disclaimer, Empty, ErrorState, Locked, Skeleton, UpgradeButton } from "@/components/ui";
+import { Card, Empty, ErrorState, Locked, Skeleton, UpgradeButton } from "@/components/ui";
 import { AIScanPanel } from "@/features/AIScanPanel";
 import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
@@ -86,7 +86,6 @@ export function SavedScanView({ id }: { id: number }) {
         </div>
       )}
       {r && r.setups.length > 0 && <AIScanPanel runId={r.id} />}
-      <Disclaimer />
     </div>
   );
 }

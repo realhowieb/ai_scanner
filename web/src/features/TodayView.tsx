@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import type { Schemas } from "@/api/client";
-import { Card, Disclaimer, Empty, Freshness, Locked, Pill, RANKED_MIN, ResearchNotice, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
+import { Card, Empty, Freshness, Locked, Pill, RANKED_MIN, ResearchNotice, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
 import { etDate, etTime, freshness, greeting, pct, price, setupLabel } from "@/lib/format";
 
 import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
@@ -131,36 +131,15 @@ function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
   );
 }
 
-function TodayPriority({
-  top,
-  stale,
-  watchlist,
-}: {
-  top: Today["top_setups"];
-  stale: boolean;
-  watchlist?: Schemas["WatchlistToday"] | null;
-}) {
+/** One line naming the board's leader, at the top of Top setups. */
+function Leader({ top }: { top: Today["top_setups"] }) {
   const leader = top?.setups[0] ?? top?.also_ranked?.[0];
-  const watched = watchlist?.summary;
+  if (!leader) return null;
   return (
-    <section className="priority-panel" aria-labelledby="priority-title">
-      <div className="priority-copy">
-        <p className="cap">What matters now</p>
-        <h2 className="h2" id="priority-title">
-          {stale ? "Use the latest scan cautiously until fresh data arrives." : leader ? `${leader.ticker} is the strongest setup on the board.` : "No strong setup is leading the board right now."}
-        </h2>
-        <p className="body-sm">
-          {leader
-            ? `HSF ranks it at ${leader.score ?? "--"} with a ${setupLabel(leader.primary_setup)} setup. Open the ticker for evidence, cautions, and recent context.`
-            : "Quiet scans happen. Start with the full Scanner or your watchlist to see what is closest to the ranked list."}
-        </p>
-      </div>
-      <div className="priority-steps" aria-label="Suggested next steps">
-        <Link href="/scanner" className="btn btn-primary">Open Scanner</Link>
-        {leader && <Link href={`/stocks/${encodeURIComponent(leader.ticker)}`} className="btn">Review {leader.ticker}</Link>}
-        <Link href="/watchlists" className="btn">My Watchlists{watched ? ` · ${watched.needs_attention} attention` : ""}</Link>
-      </div>
-    </section>
+    <div className="leader-line">
+      <p className="body-sm"><b className="mono">{leader.ticker}</b> leads the board at HSF {leader.score ?? "--"} with a {setupLabel(leader.primary_setup)} setup.</p>
+      <Link href={`/stocks/${encodeURIComponent(leader.ticker)}`} className="btn">Review {leader.ticker}</Link>
+    </div>
   );
 }
 
@@ -214,6 +193,14 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
   const hasWatchlist = Boolean(watchlist?.watchlist_id && ((watchlist.in_scan?.length ?? 0) > 0 || (watchlist.missing?.length ?? 0) > 0));
   const hasVisitMarker = Boolean(mine?.new_since?.marker);
   const showFirstRun = Boolean(mine && !mineFailed && !hasWatchlist && !hasVisitMarker);
+  // Returning users see their own sections first: atop the side column, and first of all on a phone.
+  const personalFirst = hasWatchlist || hasVisitMarker;
+  const personal = (
+    <div className="today-personal">
+      {mineErr.has("new_since") ? <SectionFailed name="New since your last visit" /> : mine?.new_since && <NewSince data={mine.new_since} />}
+      {mineErr.has("watchlist") ? <SectionFailed name="Your watchlist" /> : mine?.watchlist && <YourWatchlist data={mine.watchlist} />}
+    </div>
+  );
 
   return (
     <div className="stack">
@@ -230,8 +217,6 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
       </section>
 
       <StatusStrip market={data.market} snapshot={data.snapshot} />
-
-      <TodayPriority top={top} stale={stale} watchlist={mine?.watchlist} />
 
       {stale && (
         <p className="banner" role="status">
@@ -262,6 +247,7 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
               <Empty title={`No setup reached HSF ${strongMin} in the latest scan.`}>That happens on quiet days. The Scanner still lists every ranked name.</Empty>
             ) : (
               <>
+                <Leader top={top} />
                 {top.setups.length === 0 && <p className="cap">No setup reached HSF {strongMin} in the latest scan. These are the highest ranked names.</p>}
                 <div className="table-wrap">
                   <table className="table">
@@ -292,11 +278,11 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
 
           {showFirstRun && <FirstRunGuide top={top} />}
 
-          {mineErr.has("new_since") ? <SectionFailed name="New since your last visit" /> : mine?.new_since && <NewSince data={mine.new_since} />}
-          {mineErr.has("watchlist") ? <SectionFailed name="Your watchlist" /> : mine?.watchlist && <YourWatchlist data={mine.watchlist} />}
+          {!personalFirst && personal}
         </div>
 
         <aside className="col-side">
+          {personalFirst && personal}
           {failed.has("after_close") ? <SectionFailed name="After the close" /> : data.after_close && (
             <Movers card={data.after_close} id="atc" title="After the close" caption="After-hours scan vs today's close. After-hours prices keep moving." />
           )}
@@ -326,7 +312,6 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
           {side}
         </aside>
       </div>
-      <Disclaimer />
     </div>
   );
 }

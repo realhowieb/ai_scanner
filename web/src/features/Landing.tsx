@@ -106,7 +106,11 @@ function Showcase() {
           <p className="strong">{v.title}</p>
           <p className="body-sm">{v.text}</p>
         </figcaption>
-        <Image src={v.src} alt={v.alt} width={v.w} height={v.h} className="showcase-img" priority={v.id === "scanner"} unoptimized />
+        {/* Phones get a crop of the left of the shot, so its text stays readable at phone width. */}
+        <picture>
+          <source media="(max-width: 760px)" srcSet={v.src.replace(".webp", "-phone.webp")} />
+          <Image src={v.src} alt={v.alt} width={v.w} height={v.h} className="showcase-img" priority={v.id === "scanner"} unoptimized />
+        </picture>
       </figure>
     </section>
   );

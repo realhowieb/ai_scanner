@@ -2,21 +2,71 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useContext, useEffect, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import type { FormEvent, ReactNode, RefObject } from "react";
 
 import { useSession } from "@/session/SessionProvider";
 
+/** `top`: in the desktop bar (else under More); `mid`: moves under More on narrow desktops.
+ * `tab`: in the phone tab bar (else under its More). */
 const NAV = [
-  { href: "/today", label: "Today" },
-  { href: "/brief", label: "Brief" },
-  { href: "/scanner", label: "Scanner" },
-  { href: "/stocks", label: "Stock Intelligence" },
-  { href: "/day-trader", label: "Day Trader" },
-  { href: "/watchlists", label: "Watchlists" },
-  { href: "/alerts", label: "Alerts" },
-  { href: "/track-record", label: "Track record" },
+  { href: "/today", label: "Today", top: true, tab: true },
+  { href: "/brief", label: "Brief", top: true, mid: true, tab: false },
+  { href: "/scanner", label: "Scanner", top: true, tab: true },
+  { href: "/stocks", label: "Stocks", top: true, tab: false },
+  { href: "/day-trader", label: "Day Trader", top: true, mid: true, tab: false },
+  { href: "/watchlists", label: "Watchlists", top: true, tab: true },
+  { href: "/alerts", label: "Alerts", top: true, tab: true },
+  { href: "/track-record", label: "Track record", top: false, tab: false },
 ];
+
+const isActive = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
+
+/** Closes an open menu on Escape (focus back to its button), a click outside it, or a route change. */
+export function useDismiss(open: boolean, close: () => void, box: RefObject<HTMLElement | null>, path: string) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      close();
+      box.current?.querySelector<HTMLElement>("[aria-haspopup]")?.focus();
+    };
+    const onDown = (e: PointerEvent) => { if (box.current && !box.current.contains(e.target as Node)) close(); };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("pointerdown", onDown); };
+  }, [open, close, box]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- close on navigation only
+  useEffect(() => close(), [path]);
+}
+
+type NavItem = { href: string; label: string; mid?: boolean };
+
+function MoreMenu({ items, path, id, className }: { items: NavItem[]; path: string; id: string; className: string }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, box, path);
+  // A `mid` item is in the bar on wide screens, so it only marks More where it has moved under it.
+  const active = items.some((n) => !n.mid && isActive(path, n.href));
+  const activeMid = items.some((n) => n.mid && isActive(path, n.href));
+  return (
+    <div className={`more ${className}`} ref={box}>
+      <button type="button" className="navlink more-btn" aria-expanded={open} aria-haspopup="true" aria-controls={id}
+        data-active={active || undefined} data-active-mid={activeMid || undefined} onClick={() => setOpen((o) => !o)}>
+        More<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      {open && (
+        <div className="menu more-menu" role="menu" id={id}>
+          {items.map((n) => (
+            <Link key={n.href} role="menuitem" href={n.href} className={`menu-item${n.mid ? " more-mid" : ""}`} aria-current={isActive(path, n.href) ? "page" : undefined}
+              onClick={() => setOpen(false)}>{n.label}</Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 export const TICKER_RE = /^[A-Za-z0-9][A-Za-z0-9.-]{0,9}$/;
 const CLASSIC = process.env.NEXT_PUBLIC_STREAMLIT_URL || "https://hsfinestai.streamlit.app";
 
@@ -53,6 +103,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [q, setQ] = useState("");
   const [bad, setBad] = useState(false);
   const [menu, setMenu] = useState(false);
+  const accountBox = useRef<HTMLDivElement>(null);
+  const closeMenu = useCallback(() => setMenu(false), []);
+  useDismiss(menu, closeMenu, accountBox, path);
 
   const search = (e: FormEvent) => {
     e.preventDefault();
@@ -63,6 +116,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     setBad(false);
     setQ("");
+    setMenu(false);
+    (document.activeElement as HTMLElement | null)?.blur();
     router.push(`/stocks/${encodeURIComponent(t)}`);
   };
 
@@ -73,12 +128,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="topbar-in">
           <Link href="/today" className="brand">HSFinest<span>.AI</span></Link>
           <nav aria-label="Main" className="nav">
-            {NAV.map((n) => {
-              const active = path === n.href || path.startsWith(`${n.href}/`);
-              return (
-                <Link key={n.href} href={n.href} className="navlink" aria-current={active ? "page" : undefined}>{n.label}</Link>
-              );
-            })}
+            {NAV.filter((n) => n.top).map((n) => (
+              <Link key={n.href} href={n.href} className={`navlink${n.mid ? " nav-mid" : ""}`} aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}</Link>
+            ))}
+            <MoreMenu items={[...NAV.filter((n) => n.mid), ...NAV.filter((n) => !n.top)]} path={path} id="more-desk" className="" />
           </nav>
           <form role="search" onSubmit={search} className="search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
@@ -88,9 +141,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               onChange={(e) => { setQ(e.target.value); setBad(false); }} />
             {bad && <span id="ticker-search-err" className="sr-only">Enter a ticker symbol like AAPL</span>}
           </form>
-          <div className="account">
-            <button type="button" className="btn" aria-expanded={menu} aria-haspopup="true" onClick={() => setMenu((m) => !m)}>
-              {me ? `${me.plan_label} · Account` : "Account"}
+          <div className="account" ref={accountBox}>
+            <button type="button" className="btn" aria-expanded={menu} aria-haspopup="true"
+              aria-label={me ? `${me.plan_label} · Account` : undefined} onClick={() => setMenu((m) => !m)}>
+              {me ? <>{me.plan_label}<span className="hide-narrow">&nbsp;· Account</span></> : "Account"}
             </button>
             {menu && (
               <div className="menu" role="menu">
@@ -106,9 +160,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+      <nav aria-label="Sections" className="tabbar">
+        {NAV.filter((n) => n.tab).map((n) => (
+          <Link key={n.href} href={n.href} className="tab" aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}</Link>
+        ))}
+        <MoreMenu items={NAV.filter((n) => !n.tab).map(({ href, label }) => ({ href, label }))} path={path} id="more-tab" className="tab-more" />
+      </nav>
       <main id="main" className="main"><PreviousPage.Provider value={trail.prev}>{children}</PreviousPage.Provider></main>
       <footer className="foot">
-        <p className="cap">Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link></p>
+        <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link></p>
         <p className="cap">Data: scheduled HSF scans · Alpaca. Setup prices come from the latest scan; SPY, QQQ and the price strip are quotes refreshed every few minutes.</p>
       </footer>
     </div>
