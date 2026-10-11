@@ -62,7 +62,15 @@ def journal(username: str) -> Dict[str, Any]:
         pnl = (mark - entry) * shares if mark is not None and entry else None
         pct = (mark - entry) / entry * 100.0 if mark is not None and entry else None
         out.append({**t, "open": is_open, "mark": mark, "pnl": pnl, "pnl_pct": pct})
-    return {"trades": out, "stats": journal_stats(username)}
+    stats = journal_stats(username)
+    open_trades = [t for t in out if t.get("open")]
+    closed = [t for t in out if not t.get("open")]
+    return {"trades": out, "stats": stats,
+            "summary": {"open": len(open_trades), "closed": len(closed),
+                        "win_rate": (stats or {}).get("win_rate"),
+                        "avg_return_pct": (stats or {}).get("avg_return_pct"),
+                        "open_pnl": sum(float(t.get("pnl") or 0) for t in open_trades if t.get("pnl") is not None),
+                        "total_pnl": sum(float(t.get("pnl") or 0) for t in out if t.get("pnl") is not None)}}
 
 
 def _owned_trade(username: str, trade_id: int) -> Optional[Dict[str, Any]]:
@@ -182,7 +190,9 @@ def activity(username: str, limit: int = 25) -> Dict[str, Any]:
 
     acct = get_paper_account(username)
     if not acct:
-        return {"connected": False, "positions": [], "orders": list_events(username, limit)}
+        orders = list_events(username, limit)
+        return {"connected": False, "positions": [], "orders": orders,
+                "summary": {"positions": 0, "orders": len(orders), "market_value": None, "unrealized_pl": None}}
     _require_paper_endpoint()
     from data.alpaca_trading import get_orders, get_positions
 
@@ -193,8 +203,18 @@ def activity(username: str, limit: int = 25) -> Dict[str, Any]:
             sync_orders(username, orders)
         except Exception:
             pass
-    return {"connected": True, "positions": positions or [], "positions_available": positions is not None,
-            "orders": list_events(username, limit)}
+    pos = positions or []
+    orders_out = list_events(username, limit)
+    def n(v: Any) -> Optional[float]:
+        try:
+            return None if v in (None, "") else float(v)
+        except Exception:
+            return None
+    return {"connected": True, "positions": pos, "positions_available": positions is not None,
+            "orders": orders_out,
+            "summary": {"positions": len(pos), "orders": len(orders_out),
+                        "market_value": sum(n(p.get("market_value")) or 0 for p in pos) if pos else 0,
+                        "unrealized_pl": sum(n(p.get("unrealized_pl")) or 0 for p in pos) if pos else 0}}
 
 
 def order(username: str, ticker: str, qty: int) -> Dict[str, Any]:

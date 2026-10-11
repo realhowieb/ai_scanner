@@ -23,6 +23,7 @@ import { useApi } from "@/hooks/useApi";
 import { num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
 const NOTE_MAX = 500;
+const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 
 type NameProps = {
   title: string; initial?: string; withDefault?: boolean; submitLabel: string; error?: ReactNode;
@@ -208,6 +209,29 @@ function WatchlistRules({ wl, onChanged }: { wl: number; onChanged: () => void }
   );
 }
 
+function WatchlistChangesCard({ id }: { id: number }) {
+  const changes = useApi(`wl-changes:${id}`, (signal) => watchlists.changes(id, signal));
+  if (changes.error || !changes.data) return null;
+  const data = changes.data;
+  const s = data.summary ?? {};
+  return (
+    <Card title="Since last scan" id="wl-changes" aside={data.has_baseline ? undefined : "Waiting for a baseline"}>
+      <div className="metric-strip" aria-label="Watchlist changes summary">
+        <span><strong>{metric(s.total_changes, data.changes.length)}</strong> changes</span>
+        <span><strong>{metric(s.new, 0)}</strong> new</span>
+        <span><strong>{metric(s.rising, 0)}</strong> rising</span>
+        <span><strong>{metric(s.falling, 0)}</strong> falling</span>
+        <span><strong>{metric(s.alerts, data.alerts.length)}</strong> alerts</span>
+      </div>
+      {data.headline.length ? (
+        <div className="chips">
+          {data.headline.slice(0, 8).map((h) => <Pill key={`${h.ticker}-${h.event_type}`}>{h.ticker} {h.event_type.replace(/_/g, " ").toLowerCase()}</Pill>)}
+        </div>
+      ) : <p className="cap">{data.has_baseline ? "No major watchlist changes since the previous scan." : "Changes appear after two scans include this list."}</p>}
+    </Card>
+  );
+}
+
 function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => void; onDeleted: () => void }) {
   const detail = useApi(`wl:${id}`, (signal) => watchlists.get(id, signal));
   const intel = useApi(`wl-intel:${id}`, (signal) => watchlists.intelligence(id, signal));
@@ -236,12 +260,22 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const scanAt = legacy ? scan.data?.scan_at : w.scan_at;
   const stale = legacy ? scan.data?.stale : w.stale;
   const items = byScore ? [...w.items].sort((a, b) => (scores.get(b.ticker)?.score ?? -1) - (scores.get(a.ticker)?.score ?? -1)) : w.items;
+  const ranked = w.items.filter((i) => scores.has(i.ticker)).length;
+  const attention = w.items.filter((i) => scores.get(i.ticker)?.fading || (intelBy.get(i.ticker)?.score_change ?? 0) < 0).length;
+  const notes = w.items.filter((i) => i.note).length;
 
   return (
     <div className="stack">
       <Card title={<>{w.name} {w.is_default && <Pill>Default</Pill>}</>} id="wl-detail"
         aside={`${w.symbol_count} ticker${w.symbol_count === 1 ? "" : "s"}`}>
-        <div className="row-actions">
+        <div className="wl-summary" aria-label="Watchlist summary">
+          <span><strong>{w.symbol_count}</strong> tracked</span>
+          <span><strong>{ranked}</strong> ranked</span>
+          <span><strong>{attention}</strong> need attention</span>
+          <span><strong>{notes}</strong> with notes</span>
+        </div>
+        <AddTickers wl={w.id} onAdded={reload} />
+        <div className="row-actions wl-manage" aria-label="Watchlist management">
           <button type="button" className="btn" onClick={() => { ren.clear(); setRenaming(true); }}>Rename</button>
           <button type="button" className="btn" disabled={w.is_default || act.busy}
             onClick={() => void act.run(async () => { await watchlists.makeDefault(w.id); reload(); return true; })}>
@@ -250,8 +284,9 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           <button type="button" className="btn btn-danger-outline" onClick={() => setDeleting(true)}>Delete</button>
         </div>
         <ErrorLine error={act.error} />
-        <AddTickers wl={w.id} onAdded={reload} />
       </Card>
+
+      <WatchlistChangesCard id={w.id} />
 
       <Card title="Tickers" id="wl-items" aside={scanAt ? <Freshness at={scanAt} label="HSF Scores from the scan" stale={stale} /> : undefined}>
         {w.items.length > 1 && (
@@ -282,6 +317,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                       </>
                     ) : <span className="cap">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not ranked in the latest scan"}</span>}
                     <span className="grow" />
+                    <Link href={`/stocks/${encodeURIComponent(it.ticker)}`} className="btn btn-sm">Open</Link>
                     <button type="button" className="icon-btn" aria-label={`Remove ${it.ticker} from ${w.name}`} onClick={() => { rm.clear(); setRemoving(it.ticker); }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
                     </button>

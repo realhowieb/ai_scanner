@@ -122,6 +122,13 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
   const cap = useApi("cap", (signal) => unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: 1 } }, signal })));
   const maxRows = cap.data?.max_results ?? 25;
   const lists = useApi(universe === "watchlist" ? "watchlists" : null, (signal) => unwrap(api.GET("/v1/watchlists", { signal })));
+  const selectedList = lists.data?.find((w) => String(w.id) === watchlistId);
+  const scanEstimate = universe === "ticker" ? "1 ticker"
+    : universe === "watchlist" ? `${selectedList?.symbol_count ?? 0} ticker${selectedList?.symbol_count === 1 ? "" : "s"}`
+    : universe === "sp500" ? "S&P 500"
+    : universe === "nasdaq" ? (can("can_full_universe") ? "full NASDAQ list" : "plan-capped NASDAQ")
+    : universe === "combo" ? (can("can_full_universe") ? "full combined list" : "plan-capped combined list")
+    : "U.S. market list";
 
   const job = scan.job;
   const active = !!job && (job.status === "queued" || job.status === "running");
@@ -246,6 +253,11 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
             {gap && <label className="field"><span>Min gap (%)</span><input inputMode="decimal" value={minGap} onChange={(e) => setMinGap(e.target.value)} placeholder="Default" /></label>}
           </fieldset>
           {formErr && <p className="form-error" role="alert">{formErr}</p>}
+          <div className="metric-strip" aria-label="Scan preview">
+            <span><strong>{scanEstimate}</strong> source</span>
+            <span><strong>{Math.min(topN, maxRows)}</strong> max rows</span>
+            <span><strong>{session}</strong> session</span>
+          </div>
           <button type="submit" className="btn btn-primary btn-block" disabled={active || scan.starting || !!scan.retryInS}>
             {scan.starting ? "Starting…" : active ? "Scan running…" : scan.retryInS ? `Try again in ${scan.retryInS}s` : "Start scan"}
           </button>

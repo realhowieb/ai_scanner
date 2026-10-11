@@ -1024,6 +1024,13 @@
       "title": "Limit",
       "type": "integer"
      },
+     "summary": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "UI summary: active, paused, fired_recently, by_type and delivery availability",
+      "title": "Summary",
+      "type": "object"
+     },
      "used": {
       "title": "Used",
       "type": "integer"
@@ -1778,6 +1785,13 @@
       "title": "State",
       "type": "string"
      },
+     "summary": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "UI summary counts: strong, developing, flagged, missing, best long/short",
+      "title": "Summary",
+      "type": "object"
+     },
      "symbols": {
       "items": {
        "type": "string"
@@ -2498,6 +2512,13 @@
       ],
       "description": "{closed, wins, avg_return_pct}; null before any closed trade",
       "title": "Stats"
+     },
+     "summary": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "UI summary: open/closed counts, win rate, average return and open P/L",
+      "title": "Summary",
+      "type": "object"
      },
      "trades": {
       "default": [],
@@ -5720,6 +5741,13 @@
       "default": true,
       "title": "Positions Available",
       "type": "boolean"
+     },
+     "summary": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "UI summary: position/order counts, market value and unrealized P/L when available",
+      "title": "Summary",
+      "type": "object"
      }
     },
     "required": [
@@ -8144,6 +8172,13 @@
       },
       "title": "Summaries",
       "type": "array"
+     },
+     "summary": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "UI headline: best horizon, sample readiness and plain-language read",
+      "title": "Summary",
+      "type": "object"
      }
     },
     "required": [
@@ -8664,6 +8699,13 @@
        }
       ],
       "title": "Previous Scan At"
+     },
+     "summary": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "UI summary counts for changes and alerts since the previous scan",
+      "title": "Summary",
+      "type": "object"
      },
      "watchlist_id": {
       "title": "Watchlist Id",

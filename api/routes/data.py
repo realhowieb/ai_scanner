@@ -230,8 +230,19 @@ def register(app: FastAPI) -> None:
     def alerts(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         ent = entitlements_for(account)
         items = user_data.list_alerts(_user(account))
+        by_type: Dict[str, int] = {}
+        for a in items:
+            by_type[str(a.get("type") or "unknown")] = by_type.get(str(a.get("type") or "unknown"), 0) + 1
+        active = sum(1 for a in items if a.get("enabled"))
+        fired = sum(1 for a in items if a.get("last_fired_at"))
         return json_safe({"limit": ent["alert_limit"], "used": len(items),
-                          "email_enabled": bool(ent["entitlements"].get("can_email_alerts")), "alerts": items})
+                          "email_enabled": bool(ent["entitlements"].get("can_email_alerts")),
+                          "summary": {"active": active, "paused": len(items) - active, "fired_recently": fired,
+                                      "by_type": by_type,
+                                      "delivery": {"in_app": True,
+                                                   "email": bool(ent["entitlements"].get("can_email_alerts")),
+                                                   "browser_push": bool(ent["entitlements"].get("can_email_alerts"))}},
+                          "alerts": items})
 
     @app.post("/v1/alerts", response_model=models.Alert, status_code=201,
               responses={**_AUTH, 403: {"description": "Plan alert limit reached"},

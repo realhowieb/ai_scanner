@@ -107,7 +107,15 @@ def _track_record() -> Dict[str, Any]:
                          "runs_used": row.get("runs_used"), "top_n": row.get("top_n"),
                          "benchmark": row.get("benchmark") or "SPY", "computed_at": row.get("computed_at"),
                          "sufficient": int(row.get("sample_size") or 0) >= MIN_SAMPLE_SIZE})
-    return {"disclaimer": DISCLAIMER, "min_sample_size": MIN_SAMPLE_SIZE, "summaries": rows}
+    sufficient = [r for r in rows if r.get("sufficient") and r.get("avg_excess_return") is not None]
+    best = max(sufficient, key=lambda r: r.get("avg_excess_return") or -999) if sufficient else None
+    summary = {"best_ranking": best.get("ranking_label") if best else None,
+               "best_horizon_days": best.get("horizon_days") if best else None,
+               "best_avg_excess_return": best.get("avg_excess_return") if best else None,
+               "ready_horizons": len(sufficient), "total_horizons": len(rows),
+               "read": (f"Best matured slice is {best.get('ranking_label')} at {best.get('horizon_days')}d."
+                        if best else "Still building enough matured samples to call out a best slice.")}
+    return {"disclaimer": DISCLAIMER, "min_sample_size": MIN_SAMPLE_SIZE, "summary": summary, "summaries": rows}
 
 
 def track_record_daily(ranking: str, horizon: int, days: int) -> List[Dict[str, Any]]:

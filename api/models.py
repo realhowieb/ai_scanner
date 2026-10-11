@@ -343,6 +343,7 @@ class Alerts(BaseModel):
     limit: int = Field(description="Alerts this plan may have (Free 1, Pro 5, Premium 25)")
     used: int
     email_enabled: bool = Field(description="Pro+ get alert emails; everyone gets in-app alerts")
+    summary: Dict[str, Any] = Field(default={}, description="UI summary: active, paused, fired_recently, by_type and delivery availability")
     alerts: List[Alert] = []
 
 
@@ -476,6 +477,7 @@ class WatchlistChanges(BaseModel):
     changes: List[WatchlistChange] = []
     headline: List[WatchlistHeadline] = Field(default=[], description="The strongest change per ticker")
     alerts: List[AlertEvent] = Field(default=[], description="Your rule alerts on these tickers since the previous scan")
+    summary: Dict[str, Any] = Field(default={}, description="UI summary counts for changes and alerts since the previous scan")
 
 
 class AlertRule(BaseModel):
@@ -658,6 +660,7 @@ class TrackRecordSummary(BaseModel):
 class TrackRecord(BaseModel):
     disclaimer: str
     min_sample_size: int
+    summary: Dict[str, Any] = Field(default={}, description="UI headline: best horizon, sample readiness and plain-language read")
     summaries: List[TrackRecordSummary] = []
 
 
@@ -758,6 +761,7 @@ class DayTrader(BaseModel):
     symbols: List[str]
     missing: int = Field(description="Symbols with no live quote")
     as_of: str
+    summary: Dict[str, Any] = Field(default={}, description="UI summary counts: strong, developing, flagged, missing, best long/short")
     rows: List[DayTraderRow] = []
 
 
@@ -802,6 +806,7 @@ class JournalTrade(BaseModel):
 class Journal(BaseModel):
     trades: List[JournalTrade] = []
     stats: Optional[Dict[str, Any]] = Field(default=None, description="{closed, wins, avg_return_pct}; null before any closed trade")
+    summary: Dict[str, Any] = Field(default={}, description="UI summary: open/closed counts, win rate, average return and open P/L")
 
 
 class TradePlan(BaseModel):
@@ -827,6 +832,7 @@ class PaperActivity(BaseModel):
     positions: List[Dict[str, Any]] = []
     positions_available: bool = True
     orders: List[Dict[str, Any]] = []
+    summary: Dict[str, Any] = Field(default={}, description="UI summary: position/order counts, market value and unrealized P/L when available")
 
 
 class PaperOrder(BaseModel):

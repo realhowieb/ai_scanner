@@ -30,6 +30,7 @@ const SOURCES = [
 ] as const;
 type Source = (typeof SOURCES)[number]["id"];
 const STATE: Record<string, string> = { premarket: "Pre-market", open: "Market open", afterhours: "After hours", closed: "Market closed" };
+const metric = (v: unknown, fallback: string | number = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 export const DT_REFRESH_MS = 45_000;
 const SPARK_MAX = 40;
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
@@ -260,6 +261,15 @@ function Live() {
         {d && <span className="cap">{STATE[d.state] ?? d.state} · quotes {etTime(d.as_of)}{trading ? " · refreshes every 45s" : ""}</span>}
         <button type="button" className="btn btn-sm" onClick={() => setTick((n) => n + 1)} disabled={dt.loading}>Refresh</button>
       </section>
+      {d && all.length > 0 && (
+        <div className="metric-strip" aria-label="Day Trader summary">
+          <span><strong>{metric(d.summary?.strong, all.filter((r) => r.dt_quality === "strong").length)}</strong> strong</span>
+          <span><strong>{metric(d.summary?.developing, all.filter((r) => r.dt_quality === "developing").length)}</strong> developing</span>
+          <span><strong>{metric(d.summary?.flagged, all.filter((r) => (r.quote_flags ?? []).length).length)}</strong> flagged</span>
+          <span><strong>{metric(d.summary?.best_long, "—")}</strong> best long</span>
+          <span><strong>{metric(d.summary?.best_short, "—")}</strong> best short</span>
+        </div>
+      )}
       {d && all.length > 0 && <FilterBar f={filters} set={setFilters} shown={rows.length} total={all.length} />}
       {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: Chg % and DT score use the regular session; AH shows the move since the close.</p>}
       {dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />

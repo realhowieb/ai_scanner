@@ -248,7 +248,8 @@ def changes(user: str, watchlist: Dict[str, Any], entitlements: Dict[str, bool])
     base = {"watchlist_id": int(watchlist["id"]), "name": watchlist["name"],
             "last_scan_at": _iso(obs["scan_at"]) if obs else None,
             "previous_scan_at": _iso(obs["previous_scan_at"]) if obs else None,
-            "has_baseline": bool(obs and obs.get("previous_rows")), "changes": [], "alerts": []}
+            "has_baseline": bool(obs and obs.get("previous_rows")), "changes": [], "alerts": [],
+            "summary": {"new": 0, "dropped": 0, "rising": 0, "falling": 0, "alerts": 0, "total_changes": 0}}
     if not obs or not tickers:
         return base
     watch = set(tickers)
@@ -288,4 +289,9 @@ def changes(user: str, watchlist: Dict[str, Any], entitlements: Dict[str, bool])
                           if e.get("ticker") in watch]
     except Exception as e:
         log.warning(json.dumps({"event": "watchlist_changes_alerts_failed", "error": type(e).__name__}))
+    base["summary"] = {"new": sum(1 for e in out if e.get("event_type") == "NEW_OPPORTUNITY"),
+                       "dropped": sum(1 for e in out if e.get("event_type") == "DROPPED"),
+                       "rising": sum(1 for e in out if e.get("event_type") == "RISING"),
+                       "falling": sum(1 for e in out if e.get("event_type") == "FALLING"),
+                       "alerts": len(base["alerts"]), "total_changes": len(out)}
     return base
