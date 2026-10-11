@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -71,6 +72,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app = FastAPI(title="HSFinest.AI API", version="1.0.0")
     app.router.route_class = _ReleasingRoute
     app.state.settings = settings
+    # Scan, history and stock responses are large JSON; the web BFF's fetch() accepts
+    # gzip and unpacks it, so this only shrinks what crosses the network.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
     if settings.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
                            allow_methods=["GET", "POST", "PATCH", "DELETE"],
@@ -1693,11 +1697,30 @@ def _failing_app(message: str):
     return app
 
 
+def _market():
+    from api import market
+
+    return market
+
+
+def _scans():
+    from api import scans
+
+    return scans
+
+
+def _history():
+    from api import history as _h
+
+    return _h
+
+
 def _warm_caches() -> None:
     """Build the Market Brief, then the Day Trader "Top movers" table (the page's default
-    source), once in the background after a (re)start, so the first visitor after a deploy
-    or a free-plan wake-up doesn't wait 20-50 s for either. One after the other on one
-    thread to keep the start-up memory peak low. HSF_WARM_BRIEF=0 / HSF_WARM_DAY_TRADER=0
+    source), then what Stock Intelligence and Track record pages share, once in the
+    background after a (re)start, so the first visitor after a deploy doesn't wait for
+    them. One after the other on one thread to keep the start-up memory peak low.
+    HSF_WARM_BRIEF=0 / HSF_WARM_DAY_TRADER=0 / HSF_WARM_STOCK=0 / HSF_WARM_TRACK_RECORD=0
     turn each off."""
     import os
     import threading
@@ -1706,18 +1729,20 @@ def _warm_caches() -> None:
         return
     jobs = []
     if os.environ.get("HSF_WARM_BRIEF", "1").strip() != "0":
-        jobs.append(("brief", lambda m: m._brief_core()))
+        jobs.append(("brief", lambda: _market()._brief_core()))
     if os.environ.get("HSF_WARM_DAY_TRADER", "1").strip() != "0":
-        jobs.append(("day trader", lambda m: m.day_trader("movers")))
+        jobs.append(("day trader", lambda: _market().day_trader("movers")))
+    if os.environ.get("HSF_WARM_STOCK", "1").strip() != "0":
+        jobs.append(("stock pages", lambda: _scans().warm_stock_pages()))
+    if os.environ.get("HSF_WARM_TRACK_RECORD", "1").strip() != "0":
+        jobs.append(("track record", lambda: _history().track_record()))
     if not jobs:
         return
 
     def run() -> None:
-        from api import market
-
         for name, job in jobs:
             try:
-                job(market)
+                job()
             except Exception as e:  # warming is best effort; the first visitor builds it instead
                 log.warning("%s warm-up failed: %s", name, str(e)[:120])
 

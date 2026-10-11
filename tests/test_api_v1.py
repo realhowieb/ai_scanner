@@ -160,6 +160,16 @@ class HealthAndSettingsTests(ApiTestCase):
         self.assertEqual(parse_cors_origins(""), ())
 
 
+class CompressionTests(ApiTestCase):
+    def test_large_responses_are_gzipped_when_asked_and_small_ones_are_not(self):
+        big = self.client.get("/openapi.json", headers={"Accept-Encoding": "gzip"})
+        self.assertEqual(big.headers.get("content-encoding"), "gzip")
+        self.assertIn("paths", big.json())  # the client unpacks it transparently
+        small = self.client.get("/healthz", headers={"Accept-Encoding": "gzip"})
+        self.assertIsNone(small.headers.get("content-encoding"))
+        self.assertTrue(small.headers.get("x-request-id"))
+
+
 class DocsTests(ApiTestCase):
     def test_openapi_declares_bearer_auth_so_docs_show_authorize(self):
         spec = self.client.get("/openapi.json").json()

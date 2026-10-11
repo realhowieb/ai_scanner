@@ -65,8 +65,7 @@ class HistoryTests(PaidApiTestCase):
         rows = {(5, "breakout"): {"horizon_days": 5, "avg_return": 0.012, "median_return": 0.01, "win_rate": 0.55,
                                   "sample_size": 40, "runs_used": 20, "computed_at": None, "benchmark": "SPY",
                                   "top_n": 10, "ranking": "breakout"}}
-        with mock.patch("db.track_record.load_latest_track_record",
-                        side_effect=lambda h, ranking: rows.get((h, ranking))), \
+        with mock.patch("db.track_record.load_latest_track_records", return_value=list(rows.values())), \
                 mock.patch("db.track_record.load_daily_excess", return_value=[("2026-10-01", 0.004)]):
             tr = self.get("pro@example.com", "/v1/track-record").json()
             daily = self.get("pro@example.com", "/v1/track-record/daily?ranking=breakout&horizon=5").json()
@@ -323,7 +322,7 @@ class AITests(PaidApiTestCase):
         r = self.post("prem@example.com", "/v1/ai/chat", {"messages": msgs})
         self.assertEqual(r.json()["answer"], "AAA has the higher score.")
         sent = self.chat.call_args.kwargs["messages"]
-        self.assertIn("scan results (CSV)", sent[0]["content"])
+        self.assertIn("scan results in HSF Score order (CSV)", sent[0]["content"])
         self.assertEqual(sent[-1], {"role": "user", "content": "q14"})
         self.assertLessEqual(len(sent), 2 + 16)
         self.assertEqual(sent[2]["role"], "user")
