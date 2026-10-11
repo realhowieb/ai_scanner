@@ -355,6 +355,15 @@ describe("signed-out API routes", () => {
     expect(calls).toHaveLength(3);
   });
 
+  it("passes web crash reports through, same-origin only", async () => {
+    const { up, calls } = fakeUpstream(() => new Response(null, { status: 202 }));
+    const body = { message: "boom", kind: "boundary", path: "/today" };
+    expect((await publicApi(req("/api/public/v1/client-errors", { method: "POST", body }), ["v1", "client-errors"], up)).status).toBe(202);
+    expect(calls.map((c) => c.path)).toEqual(["/v1/client-errors"]);
+    expect((await publicApi(req("/api/public/v1/client-errors", { method: "POST", body, origin: "https://evil.example" }), ["v1", "client-errors"], up)).status).toBe(403);
+    expect((await publicApi(req("/api/public/v1/client-errors"), ["v1", "client-errors"], up)).status).toBe(405);
+  });
+
   it("refuses oversized bodies and says when the API is waking up", async () => {
     const { up } = fakeUpstream(() => new Response("bad gateway", { status: 502 }));
     const big = await publicApi(req("/api/public/v1/events", { method: "POST", body: { event: "landing_visit", pad: "x".repeat(5000) } }), ["v1", "events"], up);

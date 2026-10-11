@@ -4,6 +4,7 @@ The database is mocked at api.store's boundary and the Today builder at
 api.today, so these run without Postgres or network.
 """
 import datetime as dt
+import json
 import importlib.util
 import time
 import unittest
@@ -168,6 +169,31 @@ class CompressionTests(ApiTestCase):
         small = self.client.get("/healthz", headers={"Accept-Encoding": "gzip"})
         self.assertIsNone(small.headers.get("content-encoding"))
         self.assertTrue(small.headers.get("x-request-id"))
+
+
+class ClientErrorTests(ApiTestCase):
+    def test_web_crash_reports_are_logged_without_query_strings_and_rate_limited(self):
+        from api import ratelimit
+
+        ratelimit.reset()
+        with self.assertLogs("hsf_api", level="WARNING") as logs, \
+                mock.patch("api.monitoring.capture_client_error") as capture:
+            r = self.client.post("/v1/client-errors", json={"message": "boom", "kind": "boundary",
+                                                            "path": "/stocks/AAPL?x=secret", "digest": "d1"})
+        self.assertEqual(r.status_code, 202)
+        line = next(json.loads(m.split(":", 2)[2]) for m in logs.output if "web_client_error" in m)
+        self.assertEqual((line["message"], line["path"], line["digest"]), ("boom", "/stocks/AAPL", "d1"))
+        capture.assert_called_once()
+        self.assertEqual(self.client.post("/v1/client-errors", json={"message": ""}).status_code, 422)
+        for _ in range(40):
+            last = self.client.post("/v1/client-errors", json={"message": "again"})
+        self.assertEqual(last.status_code, 429)
+        ratelimit.reset()
+
+    def test_forwarding_is_a_no_op_without_sentry(self):
+        from api.monitoring import capture_client_error
+
+        capture_client_error({"kind": "window", "message": "x"}, "stack")  # must not raise
 
 
 class DocsTests(ApiTestCase):

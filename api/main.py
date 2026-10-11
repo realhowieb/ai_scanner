@@ -1466,6 +1466,15 @@ class FunnelEvent(BaseModel):
     surface: Optional[str] = Field(default=None, max_length=40, description="Which button or page")
 
 
+class ClientErrorReport(BaseModel):
+    message: str = Field(min_length=1, max_length=500)
+    kind: Literal["boundary", "global", "window", "promise"] = "boundary"
+    path: Optional[str] = Field(default=None, max_length=200, description="Page path, no query string")
+    digest: Optional[str] = Field(default=None, max_length=64, description="Next.js server error digest")
+    stack: Optional[str] = Field(default=None, max_length=2000)
+    request_id: Optional[str] = Field(default=None, max_length=64)
+
+
 class UnsubscribeBody(BaseModel):
     token: str = Field(min_length=10, max_length=64)
     kind: Literal["digest", "evening", "alerts", "all"]
@@ -1506,6 +1515,19 @@ def _public_routes(app: FastAPI) -> None:
         """Landing visit, call-to-action click or sign-up started, with the visitor's utm tags.
         Stores no email, name or IP. Best effort: always accepted."""
         _track(body.attribution, body.event, metadata={"surface": body.surface or "web", "app": "web"})
+
+    @app.post("/v1/client-errors", status_code=202, responses={429: {"description": "Too many reports from this address"}},
+              summary="Report a crash in the web app")
+    def client_error(body: ClientErrorReport, _l: None = Depends(ratelimit.limit("client_errors"))) -> None:
+        """A page the web app couldn't render. Logged as one JSON line and sent to Sentry
+        when SENTRY_DSN is set. Holds no account, token or query string; always accepted."""
+        report = {"event": "web_client_error", "kind": body.kind, "message": body.message,
+                  "path": (body.path or "").split("?")[0][:200] or None, "digest": body.digest,
+                  "request_id": body.request_id}
+        log.warning(json.dumps(report))
+        from api.monitoring import capture_client_error
+
+        capture_client_error(report, body.stack)
 
     def _unsub_user(token: str) -> str:
         from db.email_prefs import user_for_token
@@ -1772,6 +1794,9 @@ def _module_app():
     except RuntimeError as e:
         log.error("HSF API not started: %s", e)
         return _failing_app(f"HSF API not started: {e}")
+    from api.monitoring import init_api_monitoring
+
+    init_api_monitoring()
     _warm_caches()
     _start_realtime_alerts()
     return app
