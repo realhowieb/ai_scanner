@@ -6,10 +6,13 @@ import { EarningsCard } from "@/features/EarningsCard";
 import { PriceTape } from "@/features/PriceTape";
 import { TodayView } from "@/features/TodayView";
 import { useApi } from "@/hooks/useApi";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { readMarker, writeMarker } from "@/lib/lastVisit";
 
 export default function TodayPage() {
   const { data, error, loading, reload } = useApi("today", (signal) => unwrap(api.GET("/v1/today", { signal })));
+  // New scans land through the session; "new since your last visit" (today-me) stays as it was.
+  useAutoRefresh(reload);
   const mine = useApi("today-me", async (signal) => {
     const out = await unwrap(api.GET("/v1/today/me", { params: { query: readMarker() }, signal }));
     writeMarker(out.new_since?.marker);

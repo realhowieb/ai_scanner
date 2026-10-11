@@ -40,7 +40,10 @@ describe("Day Trader table", () => {
   it("ranks flagged quotes and unscored rows last, and shows the session split", async () => {
     render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
     await waitFor(() => expect(tickers()).toEqual(["VEEA", "TMUS", "ATEX", "WFF"]));
-    expect(within(screen.getAllByRole("row")[4]!).getByText("Check quote")).toBeInTheDocument();
+    const wff = screen.getAllByRole("row")[4]!;
+    expect(within(wff).getByText("Check quote")).toBeInTheDocument();
+    expect(within(wff).queryByText("Developing")).not.toBeInTheDocument();   // no tier on a flagged quote
+    expect(within(wff).getByText("92")).toHaveAttribute("title", "Check the quote before relying on this score");
     expect(within(screen.getAllByRole("row")[1]!).getByText("Strong")).toBeInTheDocument();
     expect(screen.getByText("AH +4.80%")).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: /VEEA today: up/ })).toBeInTheDocument();

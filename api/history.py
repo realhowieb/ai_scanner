@@ -71,8 +71,7 @@ def get_run(username: str, run_id: int, *, early_breakout: bool, max_results: in
             "setups": [_scan_row(o) for o in opps[:max_results]]}
 
 
-# Track-record rows are computed once a day by the scheduler; one summary query per
-# horizon x ranking is too slow to run on every visit.
+# Track-record rows are computed once a day by the scheduler, so they're cached here.
 TRACK_RECORD_TTL_S = 600
 TRACK_RECORD_STALE_S = 6 * 3600
 
@@ -87,15 +86,17 @@ def track_record() -> Dict[str, Any]:
 
 
 def _track_record() -> Dict[str, Any]:
-    from db.track_record import load_latest_track_record
+    from db.track_record import load_latest_track_records
 
+    try:
+        latest = {(int(r.get("horizon_days") or 0), r.get("ranking") or "breakout"): r
+                  for r in load_latest_track_records() or []}
+    except Exception:
+        latest = {}
     rows: List[Dict[str, Any]] = []
     for horizon in HORIZONS:
         for ranking, label in RANKINGS.items():
-            try:
-                row = load_latest_track_record(horizon, ranking=ranking)
-            except Exception:
-                row = None
+            row = latest.get((horizon, ranking))
             if not row:
                 continue
             row = dict(row)

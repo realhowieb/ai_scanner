@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
+import { ErrorReporter } from "@/components/ErrorReporter";
+
 import "./globals.css";
 
 // Self-hosted (latin subset, from Fontsource 5.3.0, SIL OFL 1.1: see fonts/LICENSE.md) so the
@@ -42,7 +44,10 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${sora.variable} ${plex.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <ErrorReporter />
+        {children}
+      </body>
     </html>
   );
 }

@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -71,6 +72,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app = FastAPI(title="HSFinest.AI API", version="1.0.0")
     app.router.route_class = _ReleasingRoute
     app.state.settings = settings
+    # Scan, history and stock responses are large JSON; the web BFF's fetch() accepts
+    # gzip and unpacks it, so this only shrinks what crosses the network.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
     if settings.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
                            allow_methods=["GET", "POST", "PATCH", "DELETE"],
@@ -417,15 +421,7 @@ def _routes(app: FastAPI) -> None:
 
     @app.get("/v1/me", response_model=models.Me, responses={401: {"description": "Not signed in"}})
     def me(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        from ui.plan_labels import plan_label
-
-        ent = entitlements_for(account)
-        return {"email": str(account["username"]).strip().lower(),
-                "name": account.get("full_name") or None,
-                "plan": ent["tier"], "plan_label": plan_label(ent["tier"]),
-                "is_admin": ent["is_admin"], "alert_limit": ent["alert_limit"],
-                "email_verified": acct.is_verified(str(account["username"]).strip().lower()),
-                "entitlements": ent["entitlements"]}
+        return _me_out(account)
 
     @app.get("/v1/today", response_model=models.Today, responses={401: {"description": "Not signed in"}})
     def today(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
@@ -488,6 +484,18 @@ class AlertRuleUpdate(BaseModel):
 
 class AlertUpdate(BaseModel):
     enabled: bool
+
+
+def _me_out(account: Dict[str, Any]) -> Dict[str, Any]:
+    from ui.plan_labels import plan_label
+
+    ent = entitlements_for(account)
+    return {"email": str(account["username"]).strip().lower(),
+            "name": account.get("full_name") or None,
+            "plan": ent["tier"], "plan_label": plan_label(ent["tier"]),
+            "is_admin": ent["is_admin"], "alert_limit": ent["alert_limit"],
+            "email_verified": acct.is_verified(str(account["username"]).strip().lower()),
+            "entitlements": ent["entitlements"]}
 
 
 def _user(account: Dict[str, Any]) -> str:
@@ -870,6 +878,21 @@ def _account_routes(app: FastAPI) -> None:
         forget_account(_user(account))
         return _token_pair(_user(account), _settings(request), None)
 
+    @app.get("/v1/me/export", responses={**_AUTH, 429: {"description": "Too many exports"}},
+             summary="Download your data")
+    def export_me(account: Dict[str, Any] = Depends(current_account)) -> JSONResponse:
+        """Your account, watchlists, alerts and alert rules (with recent alert events), journal,
+        email settings, devices and saved scans, as one JSON file. No passwords, tokens or
+        paper-trading keys. Sections that couldn't be read are null and listed in `unavailable`."""
+        from api.export import build_export
+
+        user = _user(account)
+        ratelimit.check("export", user)
+        body = json_safe(build_export(user, _me_out(account)))
+        day = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
+        return JSONResponse(body, headers={"Content-Disposition": f'attachment; filename="hsf-data-{day}.json"',
+                                           "Cache-Control": "no-store"})
+
     @app.get("/v1/me/email-preferences", response_model=models.EmailPrefs, responses=_AUTH)
     def email_prefs(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         return acct.get_email_prefs(_user(account))
@@ -902,6 +925,21 @@ class DeviceBody(BaseModel):
     app_version: Optional[str] = Field(default=None, max_length=40)
 
 
+class WebPushKeys(BaseModel):
+    p256dh: str = Field(min_length=80, max_length=100)
+    auth: str = Field(min_length=16, max_length=30)
+
+
+class WebPushSubscribe(BaseModel):
+    endpoint: str = Field(min_length=12, max_length=1000, description="PushSubscription.endpoint")
+    keys: WebPushKeys
+    device_name: Optional[str] = Field(default=None, max_length=80, description="e.g. Chrome on Mac")
+
+
+class WebPushUnsubscribe(BaseModel):
+    endpoint: str = Field(min_length=12, max_length=1000)
+
+
 def _device_out(d: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(d)
     for k in ("created_at", "last_seen_at"):
@@ -927,6 +965,36 @@ def _device_routes(app: FastAPI) -> None:
     @app.get("/v1/me/devices", response_model=List[models.Device], responses=_AUTH)
     def device_list(account: Dict[str, Any] = Depends(current_account)) -> List[Dict[str, Any]]:
         return [_device_out(d) for d in devices.list_devices(_user(account))]
+
+    @app.get("/v1/web-push/config", response_model=models.WebPushConfig, responses=_AUTH,
+             summary="Browser notifications: whether they're on and the server key")
+    def web_push_config(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        from api import webpush
+
+        return webpush.config()
+
+    @app.post("/v1/me/web-push", response_model=models.Device,
+              responses={**_AUTH, 400: {"description": "Not a push subscription"},
+                         503: {"description": "Browser notifications aren't set up on the server"}},
+              summary="Turn on alert notifications in this browser")
+    def web_push_subscribe(body: WebPushSubscribe, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Every alert that fires for you (price alerts and alert rules) is also pushed to this
+        browser. Pass the browser's PushSubscription (endpoint and keys)."""
+        from api import webpush
+
+        if not webpush.enabled():
+            raise HTTPException(503, "Browser notifications aren't available yet.")
+        try:
+            token = webpush.subscription_token(body.endpoint, body.keys.p256dh, body.keys.auth)
+        except webpush.InvalidSubscription as e:
+            raise HTTPException(400, str(e)) from e
+        return _device_out(devices.register(_user(account), token, webpush.PROVIDER, webpush.PLATFORM,
+                                            (body.device_name or "").strip() or None, None))
+
+    @app.delete("/v1/me/web-push", status_code=204, responses=_AUTH,
+                summary="Turn off alert notifications in this browser")
+    def web_push_unsubscribe(body: WebPushUnsubscribe, account: Dict[str, Any] = Depends(current_account)) -> None:
+        devices.remove_web_endpoint(_user(account), body.endpoint.strip())
 
     @app.delete("/v1/me/devices/{device_id}", status_code=204, responses=_OWNED)
     def device_remove(device_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> None:
@@ -1462,6 +1530,15 @@ class FunnelEvent(BaseModel):
     surface: Optional[str] = Field(default=None, max_length=40, description="Which button or page")
 
 
+class ClientErrorReport(BaseModel):
+    message: str = Field(min_length=1, max_length=500)
+    kind: Literal["boundary", "global", "window", "promise"] = "boundary"
+    path: Optional[str] = Field(default=None, max_length=200, description="Page path, no query string")
+    digest: Optional[str] = Field(default=None, max_length=64, description="Next.js server error digest")
+    stack: Optional[str] = Field(default=None, max_length=2000)
+    request_id: Optional[str] = Field(default=None, max_length=64)
+
+
 class UnsubscribeBody(BaseModel):
     token: str = Field(min_length=10, max_length=64)
     kind: Literal["digest", "evening", "alerts", "all"]
@@ -1502,6 +1579,19 @@ def _public_routes(app: FastAPI) -> None:
         """Landing visit, call-to-action click or sign-up started, with the visitor's utm tags.
         Stores no email, name or IP. Best effort: always accepted."""
         _track(body.attribution, body.event, metadata={"surface": body.surface or "web", "app": "web"})
+
+    @app.post("/v1/client-errors", status_code=202, responses={429: {"description": "Too many reports from this address"}},
+              summary="Report a crash in the web app")
+    def client_error(body: ClientErrorReport, _l: None = Depends(ratelimit.limit("client_errors"))) -> None:
+        """A page the web app couldn't render. Logged as one JSON line and sent to Sentry
+        when SENTRY_DSN is set. Holds no account, token or query string; always accepted."""
+        report = {"event": "web_client_error", "kind": body.kind, "message": body.message,
+                  "path": (body.path or "").split("?")[0][:200] or None, "digest": body.digest,
+                  "request_id": body.request_id}
+        log.warning(json.dumps(report))
+        from api.monitoring import capture_client_error
+
+        capture_client_error(report, body.stack)
 
     def _unsub_user(token: str) -> str:
         from db.email_prefs import user_for_token
@@ -1693,11 +1783,30 @@ def _failing_app(message: str):
     return app
 
 
+def _market():
+    from api import market
+
+    return market
+
+
+def _scans():
+    from api import scans
+
+    return scans
+
+
+def _history():
+    from api import history as _h
+
+    return _h
+
+
 def _warm_caches() -> None:
     """Build the Market Brief, then the Day Trader "Top movers" table (the page's default
-    source), once in the background after a (re)start, so the first visitor after a deploy
-    or a free-plan wake-up doesn't wait 20-50 s for either. One after the other on one
-    thread to keep the start-up memory peak low. HSF_WARM_BRIEF=0 / HSF_WARM_DAY_TRADER=0
+    source), then what Stock Intelligence and Track record pages share, once in the
+    background after a (re)start, so the first visitor after a deploy doesn't wait for
+    them. One after the other on one thread to keep the start-up memory peak low.
+    HSF_WARM_BRIEF=0 / HSF_WARM_DAY_TRADER=0 / HSF_WARM_STOCK=0 / HSF_WARM_TRACK_RECORD=0
     turn each off."""
     import os
     import threading
@@ -1706,18 +1815,20 @@ def _warm_caches() -> None:
         return
     jobs = []
     if os.environ.get("HSF_WARM_BRIEF", "1").strip() != "0":
-        jobs.append(("brief", lambda m: m._brief_core()))
+        jobs.append(("brief", lambda: _market()._brief_core()))
     if os.environ.get("HSF_WARM_DAY_TRADER", "1").strip() != "0":
-        jobs.append(("day trader", lambda m: m.day_trader("movers")))
+        jobs.append(("day trader", lambda: _market().day_trader("movers")))
+    if os.environ.get("HSF_WARM_STOCK", "1").strip() != "0":
+        jobs.append(("stock pages", lambda: _scans().warm_stock_pages()))
+    if os.environ.get("HSF_WARM_TRACK_RECORD", "1").strip() != "0":
+        jobs.append(("track record", lambda: _history().track_record()))
     if not jobs:
         return
 
     def run() -> None:
-        from api import market
-
         for name, job in jobs:
             try:
-                job(market)
+                job()
             except Exception as e:  # warming is best effort; the first visitor builds it instead
                 log.warning("%s warm-up failed: %s", name, str(e)[:120])
 
@@ -1731,9 +1842,11 @@ def _start_realtime_alerts() -> None:
     evaluates alert rules (api.alert_rules)."""
     try:
         from api.alert_rules import worker_pass
-        from billing_service.realtime_alerts import register_pass_hook, start_background_worker
+        from api.webpush import alert_fired
+        from billing_service.realtime_alerts import register_fire_hook, register_pass_hook, start_background_worker
 
         register_pass_hook(worker_pass)  # alert rules ride the same loop (HSF_ALERT_RULES_ENABLED=0 stops them)
+        register_fire_hook(alert_fired)  # browser notifications for price alerts (off until VAPID keys are set)
         start_background_worker()
     except Exception as e:  # alerts are best effort; the API serves regardless
         log.warning("realtime alerts worker failed to start: %s", str(e)[:120])
@@ -1747,6 +1860,9 @@ def _module_app():
     except RuntimeError as e:
         log.error("HSF API not started: %s", e)
         return _failing_app(f"HSF API not started: {e}")
+    from api.monitoring import init_api_monitoring
+
+    init_api_monitoring()
     _warm_caches()
     _start_realtime_alerts()
     return app

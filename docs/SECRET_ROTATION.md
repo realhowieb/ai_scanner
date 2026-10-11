@@ -41,7 +41,8 @@ into an issue.
 | `COOKIE_PASSWORD` | ✓ | | | | Encrypts the sign-in cookie. **See the warning below.** |
 | `APP_ENCRYPTION_KEY` | ✓ | | | | Encrypts users' saved Alpaca paper keys. **See the warning below.** |
 | `FMP_API_KEY`, `FINNHUB_API_KEY` | ✓ | ✓ | | | Earnings calendar. |
-| `SENTRY_DSN` | ✓ | ✓ | | | Low risk (it only lets someone send events), rotate if abused. |
+| `SENTRY_DSN` | ✓ | ✓ | ✓ | | Low risk (it only lets someone send events), rotate if abused. On Render, `hsf-api` only: it also forwards web app crash reports. |
+| `VAPID_PRIVATE_KEY` | | | ✓ | | `hsf-api` only. Signs browser notifications; make one with `python scripts/generate_vapid_keys.py` and set `VAPID_SUBJECT` (mailto:) beside it. Rotating it turns notifications off in every browser until each user turns them on again. |
 | GitHub token for dispatch | | | | ✓ | A fine-grained personal access token, limited to this repo and to Actions: read and write. |
 | `LOADTEST_DATABASE_URL` | | ✓ | | | Neon **branch** only (P1-44). Delete the branch and the secret when you're done. |
 
