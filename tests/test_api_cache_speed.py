@@ -94,7 +94,7 @@ class AccountCacheTests(unittest.TestCase):
             self.main._recent_account("a@example.com")
             self.main.forget_account("a@example.com")
             self.main._recent_account("a@example.com")
-            with mock.patch.object(self.main, "ACCOUNT_CACHE_S", 0):
+            with mock.patch("api.deps.ACCOUNT_CACHE_S", 0):  # the cache lives in api.deps
                 self.main._account_cache.clear()
                 self.main._recent_account("a@example.com")
                 self.main._recent_account("a@example.com")
