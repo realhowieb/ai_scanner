@@ -10,7 +10,7 @@ import { DataFreshness } from "@/features/DataFreshness";
 import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { AIText } from "@/components/AIText";
-import { Card, Disclaimer, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
 import { MarketPulse, OpportunityRadar } from "@/features/BriefIntelligence";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
@@ -150,7 +150,6 @@ export function BriefView() {
         : !b.available ? <Card><Empty title="Today's brief isn't ready yet.">It appears after the day&apos;s first scan snapshot.</Empty></Card>
         : <BriefBody b={b} />}
       <p className="cap">Snapshot data from HSF scans, not live quotes.</p>
-      <Disclaimer />
     </div>
   );
 }

@@ -146,10 +146,6 @@ export function TickerLink({ ticker }: { ticker: string }) {
   return <Link href={`/stocks/${encodeURIComponent(ticker)}`} className="tk">{ticker}</Link>;
 }
 
-export function Disclaimer() {
-  return <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice.</p>;
-}
-
 export function ResearchNotice({ compact = false }: { compact?: boolean }) {
   return (
     <p className={compact ? "cap" : "notice"} role={compact ? undefined : "note"}>

@@ -42,7 +42,44 @@ button, input, select { font: inherit; color: inherit; }
 .brand { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--text); margin: 0; }
 .brand span { color: var(--accent); }
 .brand-lg { font-size: 24px; }
-.nav { display: flex; gap: 4px; flex: 1 1 auto; overflow-x: auto; scrollbar-width: none; }
+.nav { display: flex; align-items: center; gap: 4px; flex: 1 0 auto; }
+.more { position: relative; }
+.more-btn { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; cursor: pointer; }
+.more-btn[data-active] { color: var(--text); background: var(--raise); }
+.more-menu { left: 0; right: auto; min-width: 180px; z-index: 6; }
+.menu-item[aria-current="page"] { background: var(--raise); }
+.tabbar { display: none; }
+/* Desktop: one row. Search gives up width first, then Brief and Day Trader move under More. */
+@media (min-width: 901px) {
+  .topbar-in { flex-wrap: nowrap; }
+  .search { flex: 0 1 240px; min-width: 120px; }
+  .account { flex: 0 0 auto; }
+}
+.more-mid { display: none; }
+@media (min-width: 901px) and (max-width: 1180px) {
+  .topbar-in { padding: 12px 20px; gap: 12px; }
+  .navlink { padding: 10px 8px; }
+  .nav .nav-mid { display: none; }
+  .nav .more-mid { display: block; }
+  .nav .more-btn[data-active-mid] { color: var(--text); background: var(--raise); }
+}
+@media (max-width: 900px) {
+  /* Phone: one slim header row (brand, search, account) and a tab bar at the bottom. */
+  .topbar-in { padding: 8px 16px; gap: 10px; flex-wrap: nowrap; }
+  .nav { display: none; }
+  .brand { flex: 0 0 auto; font-size: 18px; }
+  .search { flex: 1 1 auto; min-width: 0; height: 38px; padding: 0 10px; }
+  .account { flex: 0 0 auto; }
+  .account .btn { min-height: 38px; padding: 0 12px; }
+  .tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: var(--bg-2); border-top: 1px solid var(--line-soft);
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom)); justify-content: space-around; }
+  .tab, .tabbar .more-btn { flex: 1 1 0; display: flex; justify-content: center; align-items: center; min-height: 48px; padding: 0 4px; border-radius: 8px;
+    color: var(--muted); font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .tab[aria-current="page"], .tabbar .more-btn[data-active] { color: var(--text); background: var(--raise); }
+  .tab-more { flex: 1 1 0; display: flex; }
+  .tabbar .more-menu { left: auto; right: 0; top: auto; bottom: 56px; }
+  .shell { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+}
 .navlink { color: var(--muted); font-size: 14px; font-weight: 500; padding: 10px 12px; border-radius: 8px; white-space: nowrap; }
 .navlink:hover { color: var(--text); }
 .navlink[aria-current="page"] { color: var(--text); background: var(--raise); }
@@ -214,6 +251,15 @@ select, .field input { min-height: 40px; border-radius: 8px; background: var(--b
 .result-card:first-child { border-top: 0; }
 .rc-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rc-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.today-personal { display: flex; flex-direction: column; gap: 24px; }
+.leader-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 14px; padding: 10px 14px; margin-bottom: 8px; border: 1px solid #1f456b; border-radius: 10px; background: #0f1c2b; }
+.setup-card { gap: 8px; padding: 12px 14px; }
+.sc-top { display: flex; align-items: center; gap: 10px; }
+.sc-facts { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; }
+.sc-facts > div { display: flex; align-items: baseline; gap: 6px; }
+.sc-facts dt { font-size: 12px; color: var(--muted); }
+.sc-facts dd { margin: 0; font-size: 14px; }
+.table-note { padding: 10px 16px 12px; border-top: 1px solid var(--line-soft); }
 .rc-facts dt, .kv dt { font-size: 12px; color: var(--muted); }
 .rc-facts dd, .kv dd { margin: 0; font-size: 14px; }
 .kv { display: flex; flex-direction: column; margin: 0; }
@@ -327,12 +373,6 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 }
 
 @media (max-width: 760px) {
-  .topbar-in { padding: 10px 16px; gap: 10px; }
-  .nav { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; gap: 4px; padding-bottom: 2px; scroll-snap-type: x proximity; }
-  .navlink { padding: 8px 10px; font-size: 13.5px; scroll-snap-align: start; }
-  .brand { order: 0; }
-  .account { order: 1; margin-left: auto; }
-  .search { order: 2; flex: 1 0 100%; }
   .main { padding: 18px 14px 24px; }
   .foot { padding: 16px; }
   .card { padding: 16px; }
@@ -346,7 +386,7 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .rc-top .grow { flex-basis: 100%; height: 0; }
   .filters .grow { display: none; }
   .filter-panel summary { align-items: flex-start; }
-  .filter-panel summary .cap { flex: 1 1 100%; }
+  .filter-panel summary .cap { display: none; }
   .filter-panel .filters { align-items: stretch; }
   .inline-field { width: 100%; align-items: flex-start; flex-direction: column; gap: 6px; }
   .inline-field select { width: 100%; }
@@ -363,6 +403,10 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .stock-split { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
   .stock-split .col-main, .stock-split .col-side { display: contents; }
   .stock-split .score-card { order: -1; }
+  /* Today: a returning user's own sections come first on a phone. */
+  .today-split { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+  .today-split .col-main, .today-split .col-side { display: contents; }
+  .today-split .today-personal { order: -1; gap: 18px; }
   .stock-split .why-card { order: 0; }
   .stock-split .risks-card, .stock-split .watch-card { order: 1; }
   .stock-split .price-card { order: 2; }
@@ -373,7 +417,9 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .review-queue .row > .mono { margin-left: 0; }
   .review-queue .btn { flex: 1 1 100%; }
   .stock-inline-search { align-items: stretch; flex-direction: column; }
-  .filters .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; width: 100%; }
+  .filters .chips, .scanner-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; width: 100%; scrollbar-width: none; }
+  .scanner-chips .chip { flex: 0 0 auto; white-space: nowrap; }
+  .page-head .scanner-actions .btn { flex: 1 1 0; }
   .priority-panel { align-items: stretch; flex-direction: column; }
   .priority-steps { justify-content: flex-start; }
   .priority-steps .btn, .workflow-item .btn, .row-actions .btn-primary { flex: 1 1 100%; }

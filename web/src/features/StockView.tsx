@@ -8,7 +8,7 @@ import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { backLabel, usePreviousPage } from "@/components/AppShell";
 import { AIText } from "@/components/AIText";
-import { Card, Disclaimer, Empty, ErrorLine, ErrorState, Freshness, Locked, Pill, Skeleton } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Freshness, Locked, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, setupLabel } from "@/lib/format";
@@ -48,20 +48,6 @@ function decisionState(s: Stock): string {
   return `${status} · HSF ${s.hsf_score}${suffix}`;
 }
 
-function whyNow(s: Stock): string {
-  if (s.hsf_score === null || s.hsf_score === undefined) {
-    return "HSF is not ranking this ticker right now. You can still watch it, set an alert, or check back after the next market scan.";
-  }
-  const parts: string[] = [];
-  if (s.reasons[0]) parts.push(s.reasons[0].replace(/\.$/, ""));
-  else if (s.signals.length) parts.push(`${setupLabel(s.signals[0])} signal is active`);
-  if (s.movement === "RISING") parts.push("its HSF Score is improving");
-  if (s.movement === "FALLING") parts.push("its HSF Score is weakening");
-  if (s.risks[0]) parts.push(`main caution: ${s.risks[0].replace(/\.$/, "")}`);
-  else if (s.watch_next[0]) parts.push(`next check: ${s.watch_next[0].replace(/\.$/, "")}`);
-  return `${parts.length ? parts.join("; ") : "HSF has enough current evidence to rank it"}.`;
-}
-
 function DecisionSnapshot({ s }: { s: Stock }) {
   const empty = s.hsf_score === null || s.hsf_score === undefined;
   return (
@@ -72,7 +58,6 @@ function DecisionSnapshot({ s }: { s: Stock }) {
         <div className="tile"><span className="cap">Main reason</span><p className="body-sm">{s.reasons[0] ?? (empty ? "Not ranked in the latest scan." : "No reason recorded.")}</p></div>
         <div className="tile"><span className="cap">Next check</span><p className="body-sm">{s.watch_next[0] ?? (s.risks[0] ? s.risks[0] : "Check after the next scheduled scan.")}</p></div>
       </div>
-      <p className="notice">{whyNow(s)}</p>
       {empty && <p className="cap">Useful next steps: watch {s.ticker}, set a price alert, or reopen this page after the next market scan.</p>}
     </Card>
   );
@@ -243,9 +228,12 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
           <Card title="Price" id="price" className="price-card" aside={s.bars_as_of ? `Bars as of ${etTime(s.bars_as_of)}` : undefined}>
             {s.bars.length >= 2 ? <PriceChart bars={s.bars} asOf={s.bars_as_of} /> : <Empty title="No price history cached for this ticker.">Charts appear once a scan has downloaded its daily bars.</Empty>}
           </Card>
-          <Card title="Why it ranks" id="why" className="why-card">
-            <List items={s.reasons} empty="No reasons recorded." />
-          </Card>
+          {/* The first reason is already the snapshot's "Main reason". */}
+          {s.reasons.length > 1 && (
+            <Card title="Other reasons it ranks" id="why" className="why-card">
+              <List items={s.reasons.slice(1)} empty="" />
+            </Card>
+          )}
           <div className="grid2">
             <Card title="Risks" id="risks" className="risks-card"><List items={s.risks} empty="No specific risks flagged." /></Card>
             <Card title="What to watch" id="watch" className="watch-card"><List items={s.watch_next} empty="Nothing specific to watch yet." /></Card>
@@ -315,7 +303,6 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
           )}
         </aside>
       </div>
-      <Disclaimer />
     </div>
   );
 }
