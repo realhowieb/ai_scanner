@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DT_REFRESH_MS, DayTraderView, NO_FILTERS, applyFilters, diffRefresh, holdOrder, sortRows } from "@/features/DayTraderView";
+import { DT_REFRESH_MS, DT_RETRY_MS, DayTraderView, NO_FILTERS, applyFilters, diffRefresh, holdOrder, sortRows } from "@/features/DayTraderView";
 import { SessionProvider } from "@/session/SessionProvider";
 
 import { me } from "./fixtures";
@@ -145,6 +145,53 @@ describe("Day Trader live refresh", () => {
       expect(tickers()).toEqual(["AAA", "BBB"]);
       await u.click(screen.getByRole("button", { name: "Resume order" }));
       expect(tickers()).toEqual(["BBB", "AAA"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("backs off after a failed refresh instead of retrying nonstop, and keeps the last quotes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let n = 0;
+    fetchMock.mockImplementation(async (req: Request) => {
+      if (new URL(req.url).pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
+      n += 1;
+      if (n > 1) return jsonResponse({ detail: "down" }, 503);
+      return jsonResponse({ state: "open", source: "movers", symbols: ["AAA"], missing: 0, as_of: new Date().toISOString(),
+        rows: [row({ ticker: "AAA", day_trade_score: 80 })] });
+    });
+    try {
+      render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+      await waitFor(() => expect(tickers()).toEqual(["AAA"]));
+      await vi.advanceTimersByTimeAsync(DT_REFRESH_MS + 50);
+      await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/Couldn.t refresh, retrying/));
+      const failed = n;
+      await vi.advanceTimersByTimeAsync(DT_RETRY_MS - 1000);
+      expect(n).toBe(failed);
+      expect(tickers()).toEqual(["AAA"]);
+      await vi.advanceTimersByTimeAsync(2000);
+      await waitFor(() => expect(n).toBe(failed + 1));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("times refreshes from this device's clock, so a server as_of in the past doesn't refresh nonstop", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let n = 0;
+    fetchMock.mockImplementation(async (req: Request) => {
+      if (new URL(req.url).pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
+      n += 1;
+      return jsonResponse({ state: "open", source: "movers", symbols: ["AAA"], missing: 0, as_of: new Date(Date.now() - 60_000).toISOString(),
+        rows: [row({ ticker: "AAA", day_trade_score: 80 })] });
+    });
+    try {
+      render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+      await waitFor(() => expect(tickers()).toEqual(["AAA"]));
+      expect(screen.getByRole("status")).toHaveTextContent(/updated [0-2]s ago/);
+      await vi.advanceTimersByTimeAsync(DT_REFRESH_MS / 2);
+      expect(n).toBe(1);
+      await vi.advanceTimersByTimeAsync(DT_REFRESH_MS);
+      await waitFor(() => expect(n).toBe(2));
     } finally {
       vi.useRealTimers();
     }

@@ -34,4 +34,15 @@ describe("mobile CSS polish", () => {
     expect(css).toContain(".stock-split .price-card { order: 2; }");
     expect(css).toContain(".snapshot-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }");
   });
+  it("keeps phone fields from zooming and small links easy to tap", () => {
+    expect(css).toContain("input, select, textarea { font-size: 16px; }");
+    expect(css).toContain(".link-btn { padding: 8px 4px; margin: -8px -4px; }");
+    expect(css).toContain(".search input { background: transparent; border: 0; outline: none; color: var(--text); width: 100%; min-width: 0; align-self: stretch;");
+  });
+
+  it("lays out the phone review queue and market tiles compactly", () => {
+    expect(css).toContain(".review-queue .row { display: grid; grid-template-columns: minmax(0, 1fr) auto;");
+    expect(css).toContain(".tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }");
+    expect(css).toContain(".wl-act { display: inline-flex;");
+  });
 });

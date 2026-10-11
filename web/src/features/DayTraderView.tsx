@@ -34,6 +34,8 @@ type Source = (typeof SOURCES)[number]["id"];
 const STATE: Record<string, string> = { premarket: "Pre-market", open: "Market open", afterhours: "After hours", closed: "Market closed" };
 const metric = (v: unknown, fallback: string | number = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 export const DT_REFRESH_MS = 15_000;
+/** After a failed refresh, wait this long before trying again (no tight retry loop). */
+export const DT_RETRY_MS = 30_000;
 const SPARK_EVERY = 8;   // sparklines reload every 8th quote refresh (~2 min; 1-minute bars change slowly)
 const SPARK_MAX = 40;
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
@@ -190,18 +192,23 @@ function Actions({ r }: { r: Row }) {
   );
 }
 
-function FilterBar({ f, set, shown, total }: { f: Filters; set: (f: Filters) => void; shown: number; total: number }) {
+/** On a phone the side chips stay in view and the rest folds into "More filters", so the
+ * quotes start on the first screen instead of below five controls. */
+function FilterBar({ f, set, shown, total, narrow }: { f: Filters; set: (f: Filters) => void; shown: number; total: number; narrow: boolean }) {
   const band = PRICE_BANDS.find((b) => b.min === f.minPrice && b.max === f.maxPrice)?.id ?? "any";
   const active = JSON.stringify(f) !== JSON.stringify(NO_FILTERS);
-  return (
-    <section className="filters" aria-label="Filters">
-      <div className="chips" role="group" aria-label="Side">
-        {(["all", "long", "short"] as const).map((s) => (
-          <button key={s} type="button" className="chip" aria-pressed={f.side === s} onClick={() => set({ ...f, side: s })}>
-            {s === "all" ? "All" : s === "long" ? "Long setups" : "Short setups"}
-          </button>
-        ))}
-      </div>
+  const more = f.minPrice !== 0 || f.maxPrice !== 0 || f.minRvol !== 0 || f.minVolume !== 0 || f.hideFlagged;
+  const sides = (
+    <div className="chips" role="group" aria-label="Side">
+      {(["all", "long", "short"] as const).map((s) => (
+        <button key={s} type="button" className="chip" aria-pressed={f.side === s} onClick={() => set({ ...f, side: s })}>
+          {s === "all" ? "All" : s === "long" ? "Long setups" : "Short setups"}
+        </button>
+      ))}
+    </div>
+  );
+  const fields = (
+    <>
       <label className="inline-field">Price
         <select value={band} onChange={(e) => { const b = PRICE_BANDS.find((x) => x.id === e.target.value)!; set({ ...f, minPrice: b.min, maxPrice: b.max }); }}>
           {PRICE_BANDS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
@@ -218,10 +225,28 @@ function FilterBar({ f, set, shown, total }: { f: Filters; set: (f: Filters) => 
         </select>
       </label>
       <label className="inline-check"><input type="checkbox" checked={f.hideFlagged} onChange={(e) => set({ ...f, hideFlagged: e.target.checked })} /> Hide flagged quotes</label>
-      {active && <>
-        <span className="cap">Showing {shown} of {total}</span>
-        <button type="button" className="btn btn-sm" onClick={() => set(NO_FILTERS)}>Clear</button>
-      </>}
+    </>
+  );
+  const status = active && <>
+    <span className="cap">Showing {shown} of {total}</span>
+    <button type="button" className="btn btn-sm" onClick={() => set(NO_FILTERS)}>Clear</button>
+  </>;
+  if (narrow) {
+    return (
+      <section className="stack-sm" aria-label="Filters">
+        <div className="filters">{sides}{status}</div>
+        <details className="filter-panel">
+          <summary><span className="strong">More filters</span>{more && <span className="cap">Filters active</span>}</summary>
+          <div className="filters">{fields}</div>
+        </details>
+      </section>
+    );
+  }
+  return (
+    <section className="filters" aria-label="Filters">
+      {sides}
+      {fields}
+      {status}
     </section>
   );
 }
@@ -320,20 +345,25 @@ function Live() {
   const [held, setHeld] = useState<string[] | null>(null);
   const narrow = useNarrow();
   const visible = useVisible();
-  const dt = useApi(`dt:${source}:${tick}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: { source } }, signal })));
-  const trading = !!dt.data && dt.data.state !== "closed";
+  // `at` is when this device received the answer. Timing uses it rather than the server's
+  // as_of, so a phone whose clock runs ahead of the server doesn't refresh nonstop.
+  const dt = useApi(`dt:${source}:${tick}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: { source } }, signal }))
+    .then((data) => ({ data, at: Date.now() })));
+  const d = dt.data?.data ?? null;
+  const gotAt = dt.data?.at ?? 0;
+  const failed = !!dt.error && !!d;
+  const trading = !!d && d.state !== "closed";
   const live = trading && visible;
   // Next refresh one cycle after the last answer (at once when returning to a tab whose
   // quotes are already older than that); nothing is scheduled while a request is in flight.
-  const asOfMs = dt.data ? Date.parse(dt.data.as_of) : 0;
+  // A failed refresh keeps the last quotes on screen and retries after DT_RETRY_MS.
   useEffect(() => {
     if (!live || dt.loading) return;
-    const wait = Math.min(DT_REFRESH_MS, Math.max(0, DT_REFRESH_MS - (Date.now() - asOfMs)));
+    const wait = failed ? DT_RETRY_MS : Math.min(DT_REFRESH_MS, Math.max(0, DT_REFRESH_MS - (Date.now() - gotAt)));
     const t = setTimeout(() => setTick((n) => n + 1), wait);
     return () => clearTimeout(t);
-  }, [live, dt.loading, asOfMs]);
+  }, [live, dt.loading, gotAt, failed]);
   const now = useNow(live);
-  const d = dt.data;
   // The previous refresh, kept alongside the current one to show what moved.
   const [hist, setHist] = useState<{ cur: Data | null; prev: Data | null }>({ cur: null, prev: null });
   if (d !== hist.cur) setHist({ cur: d, prev: hist.cur });
@@ -357,7 +387,7 @@ function Live() {
     setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "ticker" }));
   };
   const togglePause = () => setHeld((h) => (h ? null : rows.map((r) => r.ticker)));
-  const ago = d ? Math.max(0, Math.round((now - Date.parse(d.as_of)) / 1000)) : 0;
+  const ago = gotAt ? Math.max(0, Math.round((now - gotAt) / 1000)) : 0;
   const toggle = (t: string) => setOpen((o) => (o === t ? null : t));
 
   return (
@@ -370,7 +400,9 @@ function Live() {
         </label>
         <span className="grow" />
         {d && (live
-          ? <span className="cap dt-live" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Live · updated {ago}s ago</span>
+          ? failed
+            ? <span className="cap dt-live dt-stale" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Couldn&apos;t refresh, retrying · quotes {etTime(d.as_of)}</span>
+            : <span className="cap dt-live" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Live · updated {ago}s ago</span>
           : <span className="cap">{STATE[d.state] ?? d.state} · quotes {etTime(d.as_of)}{trading ? " · paused while this tab is hidden" : ""}</span>)}
         {trading && <button type="button" className="btn btn-sm" aria-pressed={!!held} onClick={togglePause}
           title="Keep rows in place while you work; prices still update">{held ? "Resume order" : "Pause order"}</button>}
@@ -385,7 +417,7 @@ function Live() {
           <span><strong>{metric(d.summary?.best_short, "—")}</strong> best short</span>
         </div>
       )}
-      {d && all.length > 0 && <FilterBar f={filters} set={setFilters} shown={rows.length} total={all.length} />}
+      {d && all.length > 0 && <FilterBar f={filters} set={setFilters} shown={rows.length} total={all.length} narrow={narrow} />}
       {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: Chg % and DT score use the regular session; AH shows the move since the close.</p>}
       {dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />
         : !d ? <Skeleton rows={8} label="Loading live quotes" />
@@ -402,7 +434,7 @@ function Live() {
               ))}
             </div>
             {rows.map((r) => (
-              <article key={r.ticker} data-t={r.ticker} className="card dt-card">
+              <article key={r.ticker} data-t={r.ticker} className={`card dt-card${flagged(r) ? " row-muted" : ""}`}>
                 <div className="dt-card-head">
                   <TickerLink ticker={r.ticker} /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} />
                   <span className="grow" />

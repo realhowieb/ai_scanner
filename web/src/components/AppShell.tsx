@@ -136,7 +136,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <form role="search" onSubmit={search} className="search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
             <label htmlFor="ticker-search" className="sr-only">Search ticker</label>
-            <input id="ticker-search" type="search" placeholder="Search ticker" value={q} maxLength={10} autoComplete="off"
+            <input id="ticker-search" type="search" placeholder="Ticker" value={q} maxLength={10} autoComplete="off"
               aria-invalid={bad || undefined} aria-describedby={bad ? "ticker-search-err" : undefined}
               onChange={(e) => { setQ(e.target.value); setBad(false); }} />
             {bad && <span id="ticker-search-err" className="sr-only">Enter a ticker symbol like AAPL</span>}
