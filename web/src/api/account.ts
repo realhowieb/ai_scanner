@@ -14,6 +14,7 @@ export const account = {
   portal: (flow?: "cancel") => unwrap(api.POST("/v1/billing/portal", { body: flow ? { flow } : {} })),
   checkout: (plan: "pro" | "premium", interval: "month" | "year" = "month") =>
     unwrap(api.POST("/v1/billing/checkout", { body: { plan, interval } })),
+  exportData: () => unwrap(api.GET("/v1/me/export")),
   remove: (password: string) => unwrap(api.DELETE("/v1/me", { body: { password, confirm: "DELETE" } })),
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     let res: Response;

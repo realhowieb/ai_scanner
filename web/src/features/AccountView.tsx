@@ -193,6 +193,44 @@ function PasswordCard() {
   );
 }
 
+/** Hands the browser a file to save; the BFF doesn't pass Content-Disposition through. */
+export function saveJson(data: unknown, filename: string): void {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function DownloadData() {
+  const act = useAction();
+  const [partial, setPartial] = useState<string[] | null>(null);
+  const download = async () => {
+    setPartial(null);
+    const data = await act.run(() => account.exportData());
+    if (!data) return;
+    saveJson(data, `hsf-data-${new Date().toISOString().slice(0, 10)}.json`);
+    const missing = (data as { unavailable?: string[] }).unavailable ?? [];
+    setPartial(missing.length ? missing : []);
+  };
+  return (
+    <Card title="Your data" id="data">
+      <p className="body-sm">Download your watchlists, alerts, journal, saved scans and settings as one JSON file.</p>
+      <ErrorLine error={act.error} />
+      {partial && partial.length > 0 && (
+        <p className="notice" role="status">Downloaded, but these couldn&apos;t be read right now: {partial.join(", ").replaceAll("_", " ")}. Try again in a minute for a complete copy.</p>
+      )}
+      {partial && partial.length === 0 && <p className="notice" role="status">Downloaded.</p>}
+      <div className="row-actions">
+        <button type="button" className="btn" onClick={() => void download()} disabled={act.busy}>{act.busy ? "Preparing…" : "Download my data"}</button>
+      </div>
+    </Card>
+  );
+}
+
 function DeleteAccount() {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
@@ -250,6 +288,7 @@ export function AccountView() {
         <div className="col-side">
           <ProfileCard me={me} />
           <PasswordCard />
+          <DownloadData />
           <DeleteAccount />
         </div>
       </div>

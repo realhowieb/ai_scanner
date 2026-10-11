@@ -77,6 +77,36 @@ class HistoryTests(PaidApiTestCase):
         self.assertEqual(bad.status_code, 422)
 
 
+class ExportTests(PaidApiTestCase):
+    def test_export_has_every_section_no_secrets_and_names_what_failed(self):
+        from api import ratelimit
+
+        ratelimit.reset()
+        wl = {"id": 3, "name": "Main", "is_default": True, "items": [{"ticker": "AAPL", "note": "x"}]}
+        with mock.patch("api.user_data.list_watchlists", return_value=[{"id": 3, "name": "Main"}]), \
+                mock.patch("api.user_data.get_watchlist", return_value=wl), \
+                mock.patch("api.user_data.list_alerts", return_value=[{"id": 1, "ticker": "AAPL"}]), \
+                mock.patch("api.alert_rules.list_rules", return_value=[]), \
+                mock.patch("api.alert_rules.list_events", side_effect=RuntimeError("db down")), \
+                mock.patch("db.trades.list_trades", return_value=[{"id": 9, "ticker": "MSFT"}]), \
+                mock.patch("api.account.get_email_prefs", return_value={"digest": True}), \
+                mock.patch("api.devices.list_devices", return_value=[]), \
+                mock.patch("api.history.saved_runs", return_value=[]), \
+                mock.patch("api.account.is_verified", return_value=True):
+            r = self.get("pro@example.com", "/v1/me/export")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("attachment", r.headers["content-disposition"])
+        d = r.json()
+        self.assertEqual(d["account"]["email"], "pro@example.com")
+        self.assertEqual(d["watchlists"], [wl])
+        self.assertEqual(d["journal"], [{"id": 9, "ticker": "MSFT"}])
+        self.assertIsNone(d["alert_events"])
+        self.assertEqual(d["unavailable"], ["alert_events"])
+        self.assertNotIn("password", json.dumps(d))
+        self.assertEqual(self.client.get("/v1/me/export").status_code, 401)
+        ratelimit.reset()
+
+
 class StockHistoricalGateTests(PaidApiTestCase):
     def test_historical_research_is_pro(self):
         core = {"intel": {"has_opportunity": True, "hsf_score": 70, "history_summary": {"observations": 3},

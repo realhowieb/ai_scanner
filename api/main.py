@@ -421,15 +421,7 @@ def _routes(app: FastAPI) -> None:
 
     @app.get("/v1/me", response_model=models.Me, responses={401: {"description": "Not signed in"}})
     def me(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        from ui.plan_labels import plan_label
-
-        ent = entitlements_for(account)
-        return {"email": str(account["username"]).strip().lower(),
-                "name": account.get("full_name") or None,
-                "plan": ent["tier"], "plan_label": plan_label(ent["tier"]),
-                "is_admin": ent["is_admin"], "alert_limit": ent["alert_limit"],
-                "email_verified": acct.is_verified(str(account["username"]).strip().lower()),
-                "entitlements": ent["entitlements"]}
+        return _me_out(account)
 
     @app.get("/v1/today", response_model=models.Today, responses={401: {"description": "Not signed in"}})
     def today(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
@@ -492,6 +484,18 @@ class AlertRuleUpdate(BaseModel):
 
 class AlertUpdate(BaseModel):
     enabled: bool
+
+
+def _me_out(account: Dict[str, Any]) -> Dict[str, Any]:
+    from ui.plan_labels import plan_label
+
+    ent = entitlements_for(account)
+    return {"email": str(account["username"]).strip().lower(),
+            "name": account.get("full_name") or None,
+            "plan": ent["tier"], "plan_label": plan_label(ent["tier"]),
+            "is_admin": ent["is_admin"], "alert_limit": ent["alert_limit"],
+            "email_verified": acct.is_verified(str(account["username"]).strip().lower()),
+            "entitlements": ent["entitlements"]}
 
 
 def _user(account: Dict[str, Any]) -> str:
@@ -873,6 +877,21 @@ def _account_routes(app: FastAPI) -> None:
         acct.change_password(_fresh_account(account), body.current_password, body.new_password)
         forget_account(_user(account))
         return _token_pair(_user(account), _settings(request), None)
+
+    @app.get("/v1/me/export", responses={**_AUTH, 429: {"description": "Too many exports"}},
+             summary="Download your data")
+    def export_me(account: Dict[str, Any] = Depends(current_account)) -> JSONResponse:
+        """Your account, watchlists, alerts and alert rules (with recent alert events), journal,
+        email settings, devices and saved scans, as one JSON file. No passwords, tokens or
+        paper-trading keys. Sections that couldn't be read are null and listed in `unavailable`."""
+        from api.export import build_export
+
+        user = _user(account)
+        ratelimit.check("export", user)
+        body = json_safe(build_export(user, _me_out(account)))
+        day = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
+        return JSONResponse(body, headers={"Content-Disposition": f'attachment; filename="hsf-data-{day}.json"',
+                                           "Cache-Control": "no-store"})
 
     @app.get("/v1/me/email-preferences", response_model=models.EmailPrefs, responses=_AUTH)
     def email_prefs(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:

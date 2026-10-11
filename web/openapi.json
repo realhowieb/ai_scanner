@@ -1534,6 +1534,82 @@
     "title": "CheckoutBody",
     "type": "object"
    },
+   "ClientErrorReport": {
+    "properties": {
+     "digest": {
+      "anyOf": [
+       {
+        "maxLength": 64,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Next.js server error digest",
+      "title": "Digest"
+     },
+     "kind": {
+      "default": "boundary",
+      "enum": [
+       "boundary",
+       "global",
+       "window",
+       "promise"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "message": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+     },
+     "path": {
+      "anyOf": [
+       {
+        "maxLength": 200,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Page path, no query string",
+      "title": "Path"
+     },
+     "request_id": {
+      "anyOf": [
+       {
+        "maxLength": 64,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Request Id"
+     },
+     "stack": {
+      "anyOf": [
+       {
+        "maxLength": 2000,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stack"
+     }
+    },
+    "required": [
+     "message"
+    ],
+    "title": "ClientErrorReport",
+    "type": "object"
+   },
    "Coverage": {
     "properties": {
      "enriched": {
@@ -10885,6 +10961,46 @@
     "summary": "Market Brief"
    }
   },
+  "/v1/client-errors": {
+   "post": {
+    "description": "A page the web app couldn't render. Logged as one JSON line and sent to Sentry\nwhen SENTRY_DSN is set. Holds no account, token or query string; always accepted.",
+    "operationId": "client_error_v1_client_errors_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ClientErrorReport"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Too many reports from this address"
+     }
+    },
+    "summary": "Report a crash in the web app"
+   }
+  },
   "/v1/day-trader": {
    "get": {
     "description": "The web's Day Trader table: live quotes, gap, VWAP, relative volume and the day-trade\nscore for a symbol source. Quotes are shared for 30 s and movers screens for 2 min;\npoll every 30-60 s while the market is open.",
@@ -11855,6 +11971,34 @@
      }
     ],
     "summary": "Email Prefs Update"
+   }
+  },
+  "/v1/me/export": {
+   "get": {
+    "description": "Your account, watchlists, alerts and alert rules (with recent alert events), journal,\nemail settings, devices and saved scans, as one JSON file. No passwords, tokens or\npaper-trading keys. Sections that couldn't be read are null and listed in `unavailable`.",
+    "operationId": "export_me_v1_me_export_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "429": {
+      "description": "Too many exports"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Download your data"
    }
   },
   "/v1/me/password": {
