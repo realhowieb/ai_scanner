@@ -250,7 +250,8 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           <span><strong>{attention}</strong> need attention</span>
           <span><strong>{notes}</strong> with notes</span>
         </div>
-        <div className="row-actions">
+        <AddTickers wl={w.id} onAdded={reload} />
+        <div className="row-actions wl-manage" aria-label="Watchlist management">
           <button type="button" className="btn" onClick={() => { ren.clear(); setRenaming(true); }}>Rename</button>
           <button type="button" className="btn" disabled={w.is_default || act.busy}
             onClick={() => void act.run(async () => { await watchlists.makeDefault(w.id); reload(); return true; })}>
@@ -259,7 +260,6 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           <button type="button" className="btn btn-danger-outline" onClick={() => setDeleting(true)}>Delete</button>
         </div>
         <ErrorLine error={act.error} />
-        <AddTickers wl={w.id} onAdded={reload} />
       </Card>
 
       <Card title="Tickers" id="wl-items" aside={scanAt ? <Freshness at={scanAt} label="HSF Scores from the scan" stale={stale} /> : undefined}>
