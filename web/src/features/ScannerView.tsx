@@ -85,7 +85,16 @@ export function ScannerView() {
   const pages = Math.max(1, Math.ceil(visibleTotal / f.size));
   const moreActive = Boolean(f.minScore || f.size !== 25 || sort !== "score");
   const leader = data?.setups[0];
-  const setupCountLabel = data ? `${data.total} setup${data.total === 1 ? "" : "s"} ranked` : "Loading the latest ranked setups";
+  const plural = (n: number) => `${n} setup${n === 1 ? "" : "s"}`;
+  // total counts what the filters left; the headline counts the whole scan and names the filter's share.
+  const scanTotal = data ? (data.scan_total ?? data.total) : 0;
+  const filterName = f.signal ? SIGNALS.find((s) => s.id === f.signal)?.label : f.minScore ? `at HSF Score ${f.minScore}+` : "";
+  const filtered = Boolean(data && filterName && scanTotal !== data.total);
+  const countText = data ? `${plural(scanTotal)} ranked${filtered ? ` · ${data.total} ${filterName}` : ""}` : "";
+  const setupCountLabel = !data ? "Loading the latest ranked setups"
+    : !filtered ? `${plural(data.total)} ranked`
+    : f.signal ? `${data.total} ${filterName} ${data.total === 1 ? "setup" : "setups"} of ${scanTotal} ranked`
+    : `${plural(data.total)} ${filterName} of ${scanTotal} ranked`;
 
   return (
     <div className="stack">
@@ -94,7 +103,7 @@ export function ScannerView() {
           <h1 className="h1">Scanner</h1>
           <p className="cap">
             {data?.scan_at ? <Freshness at={data.scan_at} label="Latest full-market scan" stale={data.stale} /> : "Latest full-market scan"}
-            {data && ` · ${data.total} setup${data.total === 1 ? "" : "s"} ranked`}
+            {data && ` · ${countText}`}
           </p>
         </div>
         <div className="row-actions scanner-actions">

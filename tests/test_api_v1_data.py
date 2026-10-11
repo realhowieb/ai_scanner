@@ -314,6 +314,33 @@ class ScanAndStockApiTests(DataApiBase):
             capped = self.client.get("/v1/scans/latest", headers=self.h).json()
         self.assertEqual((len(capped["setups"]), capped["limited"]), (2, True))
 
+    def test_latest_scan_counts_the_whole_scan_beside_the_filtered_total(self):
+        whole = self.client.get("/v1/scans/latest", headers=self.h).json()
+        self.assertEqual(whole["scan_total"], whole["total"])
+        r = self.client.get("/v1/scans/latest?min_score=99", headers=self.h).json()
+        self.assertEqual((r["total"], r["scan_total"]), (0, whole["total"]))
+        # This fixture run has no start stamp, so its completion and market-data times stay unknown.
+        self.assertIsNone(r["freshness"]["scan_completed_at"])
+        self.assertIsNone(r["freshness"]["market_data_at"])
+
+    def test_run_freshness_uses_the_runs_own_start_and_duration(self):
+        import pandas as pd
+
+        from api import today
+
+        run = {"id": 7, "created_at": dt.datetime(2026, 10, 9, 18, 58, 49, tzinfo=UTC), "duration_sec": 289.6}
+        df = pd.DataFrame({"Ticker": ["A", "B"], "SourceScanId": ["2026-10-09T18:53:51+00:00"] * 2})
+        now = dt.datetime(2026, 10, 9, 19, 10, tzinfo=UTC)
+        with mock.patch("api.today.run_df", return_value=df):
+            info = today.run_freshness(run, now=now)
+        self.assertEqual(info["market_data_at"], "2026-10-09T18:53:51+00:00")
+        self.assertEqual(info["scan_completed_at"], "2026-10-09T18:58:40.600000+00:00")
+        self.assertEqual(info["last_successful_scan_at"], "2026-10-09T18:58:49+00:00")
+        with mock.patch("api.today.run_df", side_effect=RuntimeError("down")):
+            info = today.run_freshness(run, now=now)
+        self.assertEqual((info["market_data_at"], info["scan_completed_at"]), (None, None))
+        self.assertEqual(info["last_successful_scan_at"], "2026-10-09T18:58:49+00:00")
+
     def test_latest_scan_sort_reorders_only_the_plans_rows(self):
         ranked = self.client.get("/v1/scans/latest", headers=self.h).json()["setups"]
         with mock.patch("api.scans.max_results_for", return_value=3):
