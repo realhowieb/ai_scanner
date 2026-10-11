@@ -129,6 +129,10 @@ export function Sparkline({ points, ticker }: { points: number[] | undefined; ti
 
 function Score({ r }: { r: Row }) {
   if (r.day_trade_score == null) return <span className="cap" title="Too little evidence to score">—</span>;
+  // A flagged quote's score rests on numbers we already say not to trust: show it muted, with no tier.
+  if (flagged(r)) {
+    return <span className="dt-score"><span className="mono cap" title="Check the quote before relying on this score">{Math.round(r.day_trade_score)}</span></span>;
+  }
   const q = QUALITY[r.dt_quality];
   return (
     <span className="dt-score">
@@ -161,7 +165,9 @@ function Why({ r }: { r: Row }) {
   return (
     <div className="dt-why">
       <p className="cap">
-        {r.day_trade_score == null ? "Too little evidence to score this setup." : `${QUALITY[r.dt_quality]?.label ?? "Unrated"} ${r.dt_direction} setup.`}
+        {r.day_trade_score == null ? "Too little evidence to score this setup."
+          : flagged(r) ? "No tier while the quote is flagged: check it before relying on this score."
+          : `${QUALITY[r.dt_quality]?.label ?? "Unrated"} ${r.dt_direction} setup.`}
       </p>
       {reasons.length > 0 && <div className="chips">{reasons.map((x) => <Pill key={x}>{x}</Pill>)}</div>}
       {conflicts.length > 0 && <div className="chips">{conflicts.map((x) => <Pill key={x} tone="warn">{x}</Pill>)}</div>}
@@ -349,7 +355,7 @@ function Live() {
             <li>Most of the weight goes to how many signals agree on direction: VWAP side, SuperTrend, EWO, the day&apos;s move and a gap that supports it.</li>
             <li>Trend strength (ADX) and relative volume confirm the setup. Extremes are capped, so a 500% move can&apos;t outscore everything else.</li>
             <li>Conflicts such as a fading gap or losing VWAP take points off. <strong>Strong</strong> needs a high score, broad agreement and confirmation.</li>
-            <li>Quotes that look wrong (a 100%+ move, far from VWAP, or no recent trade) get a <em>Check quote</em> flag and rank last.</li>
+            <li>Quotes that look wrong (a 100%+ move, far from VWAP, or no recent trade) get a <em>Check quote</em> flag, show no tier and rank last.</li>
           </ul>
           <p className="cap">Click a score to see the signals behind it. Not financial advice.</p>
         </div>
