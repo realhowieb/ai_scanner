@@ -142,6 +142,21 @@ describe("Account", () => {
     expect(calls.some((c) => c.path === "/v1/me/password")).toBe(false);
   });
 
+  it("downloads your data as a JSON file and says which parts couldn't be read", async () => {
+    routes.unshift(on("GET", "/v1/me/export", () => jsonResponse({ format: "hsf-account-export", watchlists: [], alert_events: null, unavailable: ["alert_events"] })));
+    const blobs: Blob[] = [];
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: (b: Blob) => { blobs.push(b); return "blob:x"; }, revokeObjectURL: vi.fn() }));
+    const clicked = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    const u = user();
+    wrap(<AccountView />, me("basic"));
+    const card = screen.getByRole("region", { name: /Your data/ });
+    await u.click(within(card).getByRole("button", { name: "Download my data" }));
+    expect(await within(card).findByRole("status")).toHaveTextContent("couldn't be read right now: alert events");
+    expect(clicked).toHaveBeenCalledOnce();
+    expect(JSON.parse(await blobs[0]!.text()).format).toBe("hsf-account-export");
+    clicked.mockRestore();
+  });
+
   it("deletes the account only with the password and DELETE typed, and explains a refusal", async () => {
     let n = 0;
     routes.unshift(

@@ -1,8 +1,9 @@
 """Push-notification devices for the mobile app (P1-64).
 
 The app registers the push token its platform gives it (APNs on iOS, FCM on
-Android, or an Expo push token) against the signed-in account. Nothing sends
-pushes yet; the alert sender will read `devices_for_user()`.
+Android, or an Expo push token) against the signed-in account; the web app
+registers browser push subscriptions here too (provider "webpush", see
+api.webpush, which is the only sender so far). Senders read `devices_for_user()`.
 
 A token belongs to at most one account: registering it again (another sign-in
 on the same phone) moves it. Devices are removed when the app signs out with
@@ -166,6 +167,12 @@ def remove(username: str, device_id: int) -> bool:
 def remove_token(username: str, token: str) -> int:
     """Remove the device with this push token if it belongs to the account (sign-out)."""
     return _delete("DELETE FROM api_push_devices WHERE username = %s AND token = %s", (username, token))
+
+
+def remove_web_endpoint(username: str, endpoint: str) -> int:
+    """Remove this browser's push subscription (it turned notifications off or signed out)."""
+    return _delete("DELETE FROM api_push_devices WHERE username = %s AND provider = 'webpush' "
+                   "AND (token::jsonb ->> 'endpoint') = %s", (username, endpoint))
 
 
 def remove_all(username: str) -> int:

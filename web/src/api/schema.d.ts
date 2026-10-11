@@ -492,6 +492,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/client-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a crash in the web app
+         * @description A page the web app couldn't render. Logged as one JSON line and sent to Sentry
+         *     when SENTRY_DSN is set. Holds no account, token or query string; always accepted.
+         */
+        post: operations["client_error_v1_client_errors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/day-trader": {
         parameters: {
             query?: never;
@@ -789,6 +810,28 @@ export interface paths {
         patch: operations["email_prefs_update_v1_me_email_preferences_patch"];
         trace?: never;
     };
+    "/v1/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download your data
+         * @description Your account, watchlists, alerts and alert rules (with recent alert events), journal,
+         *     email settings, devices and saved scans, as one JSON file. No passwords, tokens or
+         *     paper-trading keys. Sections that couldn't be read are null and listed in `unavailable`.
+         */
+        get: operations["export_me_v1_me_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/password": {
         parameters: {
             query?: never;
@@ -825,6 +868,28 @@ export interface paths {
          */
         post: operations["resend_verification_v1_me_verify_email_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/web-push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn on alert notifications in this browser
+         * @description Every alert that fires for you (price alerts and alert rules) is also pushed to this
+         *     browser. Pass the browser's PushSubscription (endpoint and keys).
+         */
+        post: operations["web_push_subscribe_v1_me_web_push_post"];
+        /** Turn off alert notifications in this browser */
+        delete: operations["web_push_unsubscribe_v1_me_web_push_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1573,6 +1638,23 @@ export interface paths {
         patch: operations["watchlist_note_v1_watchlists__watchlist_id__tickers__ticker__patch"];
         trace?: never;
     };
+    "/v1/web-push/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browser notifications: whether they're on and the server key */
+        get: operations["web_push_config_v1_web_push_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2150,6 +2232,31 @@ export interface components {
             /** Plan */
             plan: string;
         };
+        /** ClientErrorReport */
+        ClientErrorReport: {
+            /**
+             * Digest
+             * @description Next.js server error digest
+             */
+            digest?: string | null;
+            /**
+             * Kind
+             * @default boundary
+             * @enum {string}
+             */
+            kind: "boundary" | "global" | "window" | "promise";
+            /** Message */
+            message: string;
+            /**
+             * Path
+             * @description Page path, no query string
+             */
+            path?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Stack */
+            stack?: string | null;
+        };
         /** Coverage */
         Coverage: {
             /** Enriched */
@@ -2348,12 +2455,12 @@ export interface components {
              * Platform
              * @enum {string}
              */
-            platform: "ios" | "android";
+            platform: "ios" | "android" | "web";
             /**
              * Provider
              * @enum {string}
              */
-            provider: "apns" | "fcm" | "expo";
+            provider: "apns" | "fcm" | "expo" | "webpush";
         };
         /** DeviceBody */
         DeviceBody: {
@@ -5172,6 +5279,45 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** WebPushConfig */
+        WebPushConfig: {
+            /**
+             * Enabled
+             * @description False until the server has VAPID keys
+             */
+            enabled: boolean;
+            /**
+             * Public Key
+             * @description VAPID application server key (base64url)
+             */
+            public_key?: string | null;
+        };
+        /** WebPushKeys */
+        WebPushKeys: {
+            /** Auth */
+            auth: string;
+            /** P256Dh */
+            p256dh: string;
+        };
+        /** WebPushSubscribe */
+        WebPushSubscribe: {
+            /**
+             * Device Name
+             * @description e.g. Chrome on Mac
+             */
+            device_name?: string | null;
+            /**
+             * Endpoint
+             * @description PushSubscription.endpoint
+             */
+            endpoint: string;
+            keys: components["schemas"]["WebPushKeys"];
+        };
+        /** WebPushUnsubscribe */
+        WebPushUnsubscribe: {
+            /** Endpoint */
+            endpoint: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -6496,6 +6642,46 @@ export interface operations {
             };
         };
     };
+    client_error_v1_client_errors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientErrorReport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too many reports from this address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     day_trader_v1_day_trader_get: {
         parameters: {
             query?: {
@@ -7336,6 +7522,40 @@ export interface operations {
             };
         };
     };
+    export_me_v1_me_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many exports */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     change_password_v1_me_password_post: {
         parameters: {
             query?: never;
@@ -7407,6 +7627,98 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    web_push_subscribe_v1_me_web_push_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebPushSubscribe"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            /** @description Not a push subscription */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Browser notifications aren't set up on the server */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    web_push_unsubscribe_v1_me_web_push_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebPushUnsubscribe"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
@@ -9689,6 +10001,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    web_push_config_v1_web_push_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebPushConfig"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -8,6 +8,7 @@ import { api, unwrap } from "@/api/client";
 import { Card, Disclaimer, Empty, ErrorState, Freshness, Locked, ResearchNotice, Skeleton, UpgradeButton } from "@/components/ui";
 import { AIScanPanel } from "@/features/AIScanPanel";
 import { useApi } from "@/hooks/useApi";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { etTime, freshness } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
@@ -67,6 +68,7 @@ export function ScannerView() {
       params: { query: { limit: f.size, offset, min_score: f.minScore, ...(f.signal ? { signal: f.signal } : {}), ...(sort !== "score" ? { sort } : {}) } },
       signal,
     })));
+  useAutoRefresh(reload, { enabled: key !== null });
 
   const set = (patch: Record<string, string | number>) => {
     const next = new URLSearchParams(sp.toString());

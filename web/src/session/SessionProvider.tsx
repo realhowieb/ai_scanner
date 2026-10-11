@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { api, unwrap } from "@/api/client";
 import type { ApiError, Schemas } from "@/api/client";
 import { useApi } from "@/hooks/useApi";
+import { disablePush } from "@/lib/webPush";
 
 import { clearCachedMe, readCachedMe, subscribeCachedMe, writeCachedMe } from "./meCache";
 
@@ -41,6 +42,8 @@ const SessionContext = createContext<Ctx | null>(null);
 
 export async function signOut(): Promise<void> {
   clearCachedMe();
+  // A signed-out browser must stop getting this account's alerts; never hold sign-out up for it.
+  await Promise.race([disablePush().catch(() => undefined), new Promise((r) => setTimeout(r, 1500))]);
   try {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
   } finally {

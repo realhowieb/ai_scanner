@@ -121,16 +121,20 @@ class WarmUpTests(unittest.TestCase):
         with mock.patch.dict("os.environ", env, clear=False), \
                 mock.patch("threading.Thread", _Thread), \
                 mock.patch("api.market._brief_core", side_effect=lambda: calls.append("brief")), \
-                mock.patch("api.market.day_trader", side_effect=lambda src: calls.append(("dt", src))):
+                mock.patch("api.market.day_trader", side_effect=lambda src: calls.append(("dt", src))), \
+                mock.patch("api.scans.warm_stock_pages", side_effect=lambda: calls.append("stock")), \
+                mock.patch("api.history.track_record", side_effect=lambda: calls.append("track")):
             main._warm_caches()
         return calls, started
 
-    def test_on_render_it_builds_the_brief_then_day_trader_movers(self):
-        calls, _ = self._run({"RENDER": "true", "HSF_WARM_BRIEF": "1", "HSF_WARM_DAY_TRADER": "1"})
-        self.assertEqual(calls, ["brief", ("dt", "movers")])
+    def test_on_render_it_builds_the_brief_day_trader_stock_pages_then_track_record(self):
+        calls, _ = self._run({"RENDER": "true", "HSF_WARM_BRIEF": "1", "HSF_WARM_DAY_TRADER": "1",
+                              "HSF_WARM_STOCK": "1", "HSF_WARM_TRACK_RECORD": "1"})
+        self.assertEqual(calls, ["brief", ("dt", "movers"), "stock", "track"])
 
     def test_each_has_a_kill_switch_and_nothing_runs_off_render(self):
-        calls, _ = self._run({"RENDER": "true", "HSF_WARM_BRIEF": "0", "HSF_WARM_DAY_TRADER": "1"})
+        calls, _ = self._run({"RENDER": "true", "HSF_WARM_BRIEF": "0", "HSF_WARM_DAY_TRADER": "1",
+                              "HSF_WARM_STOCK": "0", "HSF_WARM_TRACK_RECORD": "0"})
         self.assertEqual(calls, [("dt", "movers")])
         calls, started = self._run({"RENDER": "", "HSF_WARM_BRIEF": "1", "HSF_WARM_DAY_TRADER": "1"})
         self.assertEqual((calls, started), ([], []))
@@ -150,7 +154,8 @@ class WarmUpTests(unittest.TestCase):
             def start(self):
                 self.target()
 
-        with mock.patch.dict("os.environ", {"RENDER": "true", "HSF_WARM_BRIEF": "1", "HSF_WARM_DAY_TRADER": "1"}), \
+        with mock.patch.dict("os.environ", {"RENDER": "true", "HSF_WARM_BRIEF": "1", "HSF_WARM_DAY_TRADER": "1",
+                                            "HSF_WARM_STOCK": "0", "HSF_WARM_TRACK_RECORD": "0"}), \
                 mock.patch("threading.Thread", _Thread), mock.patch("api.market._brief_core", side_effect=boom), \
                 mock.patch("api.market.day_trader", side_effect=lambda src: calls.append(src)):
             main._warm_caches()

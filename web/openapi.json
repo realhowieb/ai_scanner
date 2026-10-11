@@ -1534,6 +1534,82 @@
     "title": "CheckoutBody",
     "type": "object"
    },
+   "ClientErrorReport": {
+    "properties": {
+     "digest": {
+      "anyOf": [
+       {
+        "maxLength": 64,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Next.js server error digest",
+      "title": "Digest"
+     },
+     "kind": {
+      "default": "boundary",
+      "enum": [
+       "boundary",
+       "global",
+       "window",
+       "promise"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "message": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+     },
+     "path": {
+      "anyOf": [
+       {
+        "maxLength": 200,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Page path, no query string",
+      "title": "Path"
+     },
+     "request_id": {
+      "anyOf": [
+       {
+        "maxLength": 64,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Request Id"
+     },
+     "stack": {
+      "anyOf": [
+       {
+        "maxLength": 2000,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stack"
+     }
+    },
+    "required": [
+     "message"
+    ],
+    "title": "ClientErrorReport",
+    "type": "object"
+   },
    "Coverage": {
     "properties": {
      "enriched": {
@@ -2086,7 +2162,8 @@
      "platform": {
       "enum": [
        "ios",
-       "android"
+       "android",
+       "web"
       ],
       "title": "Platform",
       "type": "string"
@@ -2095,7 +2172,8 @@
       "enum": [
        "apns",
        "fcm",
-       "expo"
+       "expo",
+       "webpush"
       ],
       "title": "Provider",
       "type": "string"
@@ -9476,6 +9554,102 @@
     },
     "title": "WatchlistUpdate",
     "type": "object"
+   },
+   "WebPushConfig": {
+    "properties": {
+     "enabled": {
+      "description": "False until the server has VAPID keys",
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "public_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "VAPID application server key (base64url)",
+      "title": "Public Key"
+     }
+    },
+    "required": [
+     "enabled"
+    ],
+    "title": "WebPushConfig",
+    "type": "object"
+   },
+   "WebPushKeys": {
+    "properties": {
+     "auth": {
+      "maxLength": 30,
+      "minLength": 16,
+      "title": "Auth",
+      "type": "string"
+     },
+     "p256dh": {
+      "maxLength": 100,
+      "minLength": 80,
+      "title": "P256Dh",
+      "type": "string"
+     }
+    },
+    "required": [
+     "p256dh",
+     "auth"
+    ],
+    "title": "WebPushKeys",
+    "type": "object"
+   },
+   "WebPushSubscribe": {
+    "properties": {
+     "device_name": {
+      "anyOf": [
+       {
+        "maxLength": 80,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "e.g. Chrome on Mac",
+      "title": "Device Name"
+     },
+     "endpoint": {
+      "description": "PushSubscription.endpoint",
+      "maxLength": 1000,
+      "minLength": 12,
+      "title": "Endpoint",
+      "type": "string"
+     },
+     "keys": {
+      "$ref": "#/components/schemas/WebPushKeys"
+     }
+    },
+    "required": [
+     "endpoint",
+     "keys"
+    ],
+    "title": "WebPushSubscribe",
+    "type": "object"
+   },
+   "WebPushUnsubscribe": {
+    "properties": {
+     "endpoint": {
+      "maxLength": 1000,
+      "minLength": 12,
+      "title": "Endpoint",
+      "type": "string"
+     }
+    },
+    "required": [
+     "endpoint"
+    ],
+    "title": "WebPushUnsubscribe",
+    "type": "object"
    }
   },
   "securitySchemes": {
@@ -10885,6 +11059,46 @@
     "summary": "Market Brief"
    }
   },
+  "/v1/client-errors": {
+   "post": {
+    "description": "A page the web app couldn't render. Logged as one JSON line and sent to Sentry\nwhen SENTRY_DSN is set. Holds no account, token or query string; always accepted.",
+    "operationId": "client_error_v1_client_errors_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ClientErrorReport"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "429": {
+      "description": "Too many reports from this address"
+     }
+    },
+    "summary": "Report a crash in the web app"
+   }
+  },
   "/v1/day-trader": {
    "get": {
     "description": "The web's Day Trader table: live quotes, gap, VWAP, relative volume and the day-trade\nscore for a symbol source. Quotes are shared for 30 s and movers screens for 2 min;\npoll every 30-60 s while the market is open.",
@@ -11857,6 +12071,34 @@
     "summary": "Email Prefs Update"
    }
   },
+  "/v1/me/export": {
+   "get": {
+    "description": "Your account, watchlists, alerts and alert rules (with recent alert events), journal,\nemail settings, devices and saved scans, as one JSON file. No passwords, tokens or\npaper-trading keys. Sections that couldn't be read are null and listed in `unavailable`.",
+    "operationId": "export_me_v1_me_export_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "429": {
+      "description": "Too many exports"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Download your data"
+   }
+  },
   "/v1/me/password": {
    "post": {
     "description": "Change the password. Every other session (web and app) is signed out; this\ndevice gets a new token pair.",
@@ -11932,6 +12174,96 @@
      }
     ],
     "summary": "Resend Verification"
+   }
+  },
+  "/v1/me/web-push": {
+   "delete": {
+    "operationId": "web_push_unsubscribe_v1_me_web_push_delete",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WebPushUnsubscribe"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Turn off alert notifications in this browser"
+   },
+   "post": {
+    "description": "Every alert that fires for you (price alerts and alert rules) is also pushed to this\nbrowser. Pass the browser's PushSubscription (endpoint and keys).",
+    "operationId": "web_push_subscribe_v1_me_web_push_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WebPushSubscribe"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Device"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Not a push subscription"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "503": {
+      "description": "Browser notifications aren't set up on the server"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Turn on alert notifications in this browser"
    }
   },
   "/v1/ml/readiness": {
@@ -16024,6 +16356,32 @@
      }
     ],
     "summary": "Watchlist Note"
+   }
+  },
+  "/v1/web-push/config": {
+   "get": {
+    "operationId": "web_push_config_v1_web_push_config_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WebPushConfig"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Browser notifications: whether they're on and the server key"
    }
   }
  }

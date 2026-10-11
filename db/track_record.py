@@ -6,7 +6,7 @@ cursor + commit + close pattern used elsewhere in db/.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from db.engine import get_neon_conn, schema_once
 
@@ -166,6 +166,39 @@ def save_track_record(
     cur.close()
     conn.close()
     return True
+
+
+_SUMMARY_COLS = ("horizon_days", "avg_return", "median_return", "win_rate", "sample_size",
+                 "runs_used", "computed_at", "benchmark", "top_n", "ranking")
+
+
+def load_latest_track_records() -> List[Dict[str, Any]]:
+    """The most recent summary for every horizon + ranking, in one query.
+
+    Same rule as load_latest_track_record: a NULL ranking (pre-A/B) counts as
+    'breakout'. The API's track record page used to run one query per pair.
+    """
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT ON (horizon_days, COALESCE(ranking, 'breakout'))
+                   horizon_days, avg_return, median_return, win_rate,
+                   sample_size, runs_used, computed_at, benchmark, top_n,
+                   COALESCE(ranking, 'breakout') AS ranking
+            FROM signal_track_record
+            ORDER BY horizon_days, COALESCE(ranking, 'breakout'), computed_at DESC
+            """
+        )
+        rows = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
+    return [dict(r) if isinstance(r, dict) else dict(zip(_SUMMARY_COLS, r)) for r in rows]
 
 
 def load_latest_track_record(

@@ -10,11 +10,12 @@ import datetime as dt
 import math
 from typing import Any, Dict, List, Optional
 
-from api.today import TTLCache, _cached, _iso, _num, market_runs, run_df, scan_freshness
+from api.today import RUN_TTL_S, TTLCache, _cached, _iso, _num, market_runs, run_df, scan_freshness
 
 SCAN_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
 SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob", "prob_rank")
 CALIBRATION_TTL_S = 1800  # matured outcomes change once a day; same as the web
+CALIBRATION_STALE_S = 6 * 3600  # past the TTL, served while one background rebuild runs
 BAR_LIMIT = 120
 # Stock pages get their own cache so a client paging through many tickers can't
 # push the scan runs out of the shared one.
@@ -51,7 +52,8 @@ def run_opportunities(run_id: int) -> List[Dict[str, Any]]:
         df = run_df(run_id)
         return top_setups(df, n=100_000) if df is not None else []
 
-    return _cached(("opps", int(run_id)), load)
+    # Ranking a whole run is CPU work: past the minute it's served while one rebuild runs.
+    return _cached(("opps", int(run_id)), load, stale_s=RUN_TTL_S)
 
 
 def max_results_for(tier: str) -> int:
@@ -131,7 +133,17 @@ def _calibration_records() -> List[Dict[str, Any]]:
 
         return build_calibration_dataset(days_back=180).get("records") or []
 
-    return _cached("calibration", load, ttl_s=CALIBRATION_TTL_S)
+    return _cached("calibration", load, ttl_s=CALIBRATION_TTL_S, stale_s=CALIBRATION_STALE_S)
+
+
+def warm_stock_pages() -> None:
+    """Load what every Stock Intelligence page shares (the latest scan, its ranked
+    opportunities and the calibration records) so the first stock visited after a
+    restart doesn't pay for them."""
+    runs = market_runs()
+    if runs:
+        run_opportunities(int(runs[0]["id"]))
+    _calibration_records()
 
 
 def _ticker_rows(df: Any, ticker: str) -> List[Dict[str, Any]]:

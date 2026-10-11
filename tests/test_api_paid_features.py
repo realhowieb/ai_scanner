@@ -65,8 +65,7 @@ class HistoryTests(PaidApiTestCase):
         rows = {(5, "breakout"): {"horizon_days": 5, "avg_return": 0.012, "median_return": 0.01, "win_rate": 0.55,
                                   "sample_size": 40, "runs_used": 20, "computed_at": None, "benchmark": "SPY",
                                   "top_n": 10, "ranking": "breakout"}}
-        with mock.patch("db.track_record.load_latest_track_record",
-                        side_effect=lambda h, ranking: rows.get((h, ranking))), \
+        with mock.patch("db.track_record.load_latest_track_records", return_value=list(rows.values())), \
                 mock.patch("db.track_record.load_daily_excess", return_value=[("2026-10-01", 0.004)]):
             tr = self.get("pro@example.com", "/v1/track-record").json()
             daily = self.get("pro@example.com", "/v1/track-record/daily?ranking=breakout&horizon=5").json()
@@ -76,6 +75,36 @@ class HistoryTests(PaidApiTestCase):
         self.assertIn("not evidence", tr["disclaimer"])
         self.assertEqual(daily, [{"day": "2026-10-01", "avg_excess_return": 0.004}])
         self.assertEqual(bad.status_code, 422)
+
+
+class ExportTests(PaidApiTestCase):
+    def test_export_has_every_section_no_secrets_and_names_what_failed(self):
+        from api import ratelimit
+
+        ratelimit.reset()
+        wl = {"id": 3, "name": "Main", "is_default": True, "items": [{"ticker": "AAPL", "note": "x"}]}
+        with mock.patch("api.user_data.list_watchlists", return_value=[{"id": 3, "name": "Main"}]), \
+                mock.patch("api.user_data.get_watchlist", return_value=wl), \
+                mock.patch("api.user_data.list_alerts", return_value=[{"id": 1, "ticker": "AAPL"}]), \
+                mock.patch("api.alert_rules.list_rules", return_value=[]), \
+                mock.patch("api.alert_rules.list_events", side_effect=RuntimeError("db down")), \
+                mock.patch("db.trades.list_trades", return_value=[{"id": 9, "ticker": "MSFT"}]), \
+                mock.patch("api.account.get_email_prefs", return_value={"digest": True}), \
+                mock.patch("api.devices.list_devices", return_value=[]), \
+                mock.patch("api.history.saved_runs", return_value=[]), \
+                mock.patch("api.account.is_verified", return_value=True):
+            r = self.get("pro@example.com", "/v1/me/export")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("attachment", r.headers["content-disposition"])
+        d = r.json()
+        self.assertEqual(d["account"]["email"], "pro@example.com")
+        self.assertEqual(d["watchlists"], [wl])
+        self.assertEqual(d["journal"], [{"id": 9, "ticker": "MSFT"}])
+        self.assertIsNone(d["alert_events"])
+        self.assertEqual(d["unavailable"], ["alert_events"])
+        self.assertNotIn("password", json.dumps(d))
+        self.assertEqual(self.client.get("/v1/me/export").status_code, 401)
+        ratelimit.reset()
 
 
 class StockHistoricalGateTests(PaidApiTestCase):
@@ -323,7 +352,7 @@ class AITests(PaidApiTestCase):
         r = self.post("prem@example.com", "/v1/ai/chat", {"messages": msgs})
         self.assertEqual(r.json()["answer"], "AAA has the higher score.")
         sent = self.chat.call_args.kwargs["messages"]
-        self.assertIn("scan results (CSV)", sent[0]["content"])
+        self.assertIn("scan results in HSF Score order (CSV)", sent[0]["content"])
         self.assertEqual(sent[-1], {"role": "user", "content": "q14"})
         self.assertLessEqual(len(sent), 2 + 16)
         self.assertEqual(sent[2]["role"], "user")
