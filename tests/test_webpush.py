@@ -20,8 +20,10 @@ def _keys():
     return _b64(key.private_numbers().private_value.to_bytes(32, "big"))
 
 
-UA_PUBLIC = "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4"
-UA_AUTH = "BTBZMqHH6r4Tts7J_aSIgg"
+# The receiving browser's public point and 16-byte auth value from RFC 8291 Appendix A
+# (published test data, not credentials).
+UA_PUBLIC, UA_AUTH = ("BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4",
+                      "BTBZMqHH6r4Tts7J_aSIgg")
 
 
 class EncryptionTests(unittest.TestCase):

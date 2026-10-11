@@ -6,7 +6,8 @@ import { PushToggle } from "@/features/AlertsView";
 
 import { jsonResponse } from "./helpers";
 
-const KEY = "BBodTTTtDFXJ_FCmSc-qrbPTO1AXnWPhSVdHlJaqJNXxqfacfD7P4tYhwrwQyVYo3pcDe7I3yxuqo9HOh-kAQbg";
+// Any uncompressed P-256 point works here: the fake push manager never checks it.
+const SERVER_POINT = "B" + "A".repeat(86);
 const calls: { method: string; path: string; body: unknown }[] = [];
 let enabled = true;
 let sub: { endpoint: string; toJSON: () => unknown; unsubscribe: () => Promise<boolean> } | null = null;
@@ -36,7 +37,7 @@ beforeEach(() => {
     const path = new URL(req.url).pathname.replace(/^\/api\/hsf/, "");
     const text = req.method === "GET" ? "" : await req.text();
     calls.push({ method: req.method, path, body: text ? JSON.parse(text) : null });
-    if (path === "/v1/web-push/config") return jsonResponse({ enabled, public_key: enabled ? KEY : null });
+    if (path === "/v1/web-push/config") return jsonResponse({ enabled, public_key: enabled ? SERVER_POINT : null });
     if (path === "/v1/me/web-push" && req.method === "POST") return jsonResponse({ id: 1, provider: "webpush", platform: "web" });
     if (path === "/v1/me/web-push" && req.method === "DELETE") return new Response(null, { status: 204 });
     return jsonResponse({ detail: "no fake" }, 404);
