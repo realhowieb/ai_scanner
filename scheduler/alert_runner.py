@@ -235,6 +235,7 @@ def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
                 return []
             sub = df[df[ticker_col].astype(str).str.upper().isin(watch_tickers)]
         vol_col = _col(df, "Volatility20D%")
+        scored: List[tuple] = []
         for _, row in sub.iterrows():
             try:
                 score = float(row[score_col])
@@ -252,7 +253,11 @@ def _evaluate(alert: Dict[str, Any], df, watch_tickers: set) -> List[str]:
                 if vol == vol and vol < MIN_ALERT_VOLATILITY_PCT:
                     continue
             if score >= threshold:
-                lines.append(f"{str(row[ticker_col]).upper()}: BreakoutScore {score:.1f} (≥ {threshold:g})")
+                scored.append((score, f"{str(row[ticker_col]).upper()}: BreakoutScore {score:.1f} (≥ {threshold:g})"))
+        # Strongest first: the first line names the event's headline ticker and
+        # the 25-line cap keeps the top scorers, not whatever came first in the scan.
+        scored.sort(key=lambda item: item[0], reverse=True)
+        lines = [line for _, line in scored]
 
     elif atype == "watchlist":
         if not watch_tickers:

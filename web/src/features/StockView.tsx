@@ -6,17 +6,16 @@ import type { FormEvent, MouseEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
-import { alerts } from "@/api/userData";
 import { backLabel, usePreviousPage } from "@/components/AppShell";
-import { Dialog } from "@/components/Dialog";
 import { AIText } from "@/components/AIText";
 import { Card, Disclaimer, Empty, ErrorLine, ErrorState, Freshness, Locked, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, setupLabel } from "@/lib/format";
 
-import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
 import { SymbolEvidence } from "./OutcomeEvidence";
+import { describeAlert } from "./AlertForm";
+import { PriceAlertButton } from "./PriceAlert";
 import { PriceChart } from "./PriceChart";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 
@@ -122,40 +121,6 @@ function Historical({ s }: { s: Stock }) {
   );
 }
 
-function PriceAlertButton({ s, onCreated }: { s: Stock; onCreated?: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
-  const types = useApi(open ? "alert-types" : null, (signal) => alerts.types(signal));
-  const quota = useApi(open ? `alert-quota:${s.ticker}` : null, (signal) => alerts.list(signal));
-  const full = !!quota.data && quota.data.used >= quota.data.limit;
-  const close = () => { setOpen(false); setDone(null); };
-  return (
-    <>
-      <button type="button" className="btn" onClick={() => setOpen(true)}>{s.price != null ? `Alert near ${price(s.price)}` : "Set price alert"}</button>
-      <Dialog open={open} title={`Price alert for ${s.ticker}`} onClose={close}>
-        {done ? (
-          <div className="stack-sm">
-            <p className="notice" role="status">Created: {done}.</p>
-            <div className="row-actions"><button type="button" className="btn" onClick={close} data-autofocus>Done</button><Link href="/alerts">See all alerts →</Link></div>
-          </div>
-        ) : types.error && typesUnavailable(types.error.status) ? <p className="notice" role="note">{TYPES_UNAVAILABLE}</p>
-          : types.error || quota.error ? <ErrorLine error={types.error ?? quota.error} /> : !types.data || !quota.data ? <p className="cap">Loading…</p> : full ? (
-          <div className="stack-sm">
-            <p className="strong">You&apos;re using all {quota.data.limit} alert{quota.data.limit === 1 ? "" : "s"} on your plan.</p>
-            <p className="cap">Delete one on the <Link href="/alerts">Alerts</Link> page, or upgrade for more.</p>
-          </div>
-        ) : (
-          <>
-            <p className="cap">Using {quota.data.used} of {quota.data.limit} alerts.{s.price != null ? ` Last scan price ${price(s.price)}${s.scan_at ? ` at ${etTime(s.scan_at)}` : ""}, not a live quote.` : ""}</p>
-            <AlertForm types={types.data} lockType prefill={{ type: "price", ticker: s.ticker, threshold: s.price != null ? Math.round(s.price * 100) / 100 : undefined, direction: "above" }}
-              onCreated={(a) => { setDone(describeAlert(a)); onCreated?.(); }} />
-          </>
-        )}
-      </Dialog>
-    </>
-  );
-}
-
 /** Back to the page the user came from (keeping its filters and scroll), else the Scanner. */
 function BackLink() {
   const prev = usePreviousPage();
@@ -258,7 +223,8 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
         <div className="row-actions">
           <SaveToWatchlistButton ticker={s.ticker} inLists={s.watchlists.map((w) => w.id)} onSaved={onChanged}
             label={s.watchlists.length ? `Watch ${s.ticker} elsewhere` : `Watch ${s.ticker}`} />
-          <PriceAlertButton s={s} onCreated={onChanged} />
+          <PriceAlertButton ticker={s.ticker} at={s.price} label={s.price != null ? `Alert near ${price(s.price)}` : "Set price alert"}
+            note={s.price != null ? `Last scan price ${price(s.price)}${s.scan_at ? ` at ${etTime(s.scan_at)}` : ""}, not a live quote.` : undefined} onCreated={onChanged} />
         </div>
       </section>
 

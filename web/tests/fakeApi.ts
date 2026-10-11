@@ -17,7 +17,9 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
   /** Serve GET /v1/watchlists/{id}/intelligence with these per-ticker facts (else 404, like an older API). */
   intel?: Record<string, Record<string, unknown>>;
   /** Serve the alert-rule routes (an in-memory rule list). */
-  rules?: boolean } = {}) {
+  rules?: boolean;
+  /** GET /v1/alerts/events returns these (newest first). */
+  events?: Record<string, unknown>[] } = {}) {
   let nextId = 1;
   const lists: WL[] = [];
   const alertRows: AlertRow[] = [];
@@ -134,7 +136,7 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
       if (method === "PATCH") { it.note = body.note; return new Response(null, { status: 204 }); }
     }
     if (path === "/v1/alerts/types") return jsonResponse(types);
-    if (path === "/v1/alerts/events") return jsonResponse([]);
+    if (path === "/v1/alerts/events") return jsonResponse(opts.events ?? []);
     if (path === "/v1/alerts" && method === "GET") return jsonResponse({ limit, used: alertRows.length, email_enabled: opts.emailEnabled ?? true, alerts: alertRows });
     if (path === "/v1/alerts" && method === "POST") {
       const spec = types.find((x) => x.type === body.type);
