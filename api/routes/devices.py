@@ -67,17 +67,20 @@ def register(app: FastAPI) -> None:
     def web_push_config(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         from api import webpush
 
-        return webpush.config()
+        return webpush.config(webpush.plan_allows(account))
 
     @app.post("/v1/me/web-push", response_model=models.Device,
               responses={**_AUTH, 400: {"description": "Not a push subscription"},
+                         403: {"description": "Browser notifications are part of Pro"},
                          503: {"description": "Browser notifications aren't set up on the server"}},
               summary="Turn on alert notifications in this browser")
     def web_push_subscribe(body: WebPushSubscribe, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Every alert that fires for you (price alerts and alert rules) is also pushed to this
-        browser. Pass the browser's PushSubscription (endpoint and keys)."""
+        browser. Pass the browser's PushSubscription (endpoint and keys). Pro and above."""
         from api import webpush
 
+        if not webpush.plan_allows(account):
+            raise HTTPException(403, webpush.UPGRADE)
         if not webpush.enabled():
             raise HTTPException(503, "Browser notifications aren't available yet.")
         try:

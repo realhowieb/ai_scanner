@@ -564,7 +564,10 @@ class Device(BaseModel):
 
 class WebPushConfig(BaseModel):
     enabled: bool = Field(description="False until the server has VAPID keys")
-    public_key: Optional[str] = Field(default=None, description="VAPID application server key (base64url)")
+    allowed: bool = Field(default=True, description="False when the account's plan doesn't include "
+                                                     "browser notifications (they're part of Pro)")
+    public_key: Optional[str] = Field(default=None, description="VAPID application server key (base64url); "
+                                                                 "only when enabled and allowed")
 
 
 # ---- custom scans (POST /v1/scans) --------------------------------------------------------------

@@ -6,6 +6,9 @@ VAPID_SUBJECT (a mailto: or https: contact push services can reach).
 HSF_WEB_PUSH_ENABLED=0 turns it off again without removing the keys. The public key is
 derived from the private one and handed to browsers by GET /v1/web-push/config.
 
+Browser notifications are part of Pro (and above, and admins): Free accounts can't turn
+them on, and an account that drops below Pro stops getting pushes at the next alert.
+
 A browser subscription is stored in api_push_devices (provider "webpush",
 platform "web") with its endpoint and keys as the token, so password changes and
 "sign out everywhere" remove it like a phone. Push services answer 404/410 for a
@@ -33,6 +36,8 @@ TTL_S = 4 * 3600          # a push that can't be delivered within 4 hours is no 
 RECORD_SIZE = 4096
 _JWT_TTL_S = 12 * 3600
 _B64 = re.compile(r"^[A-Za-z0-9_\-]+={0,2}$")
+PLAN = "pro"
+UPGRADE = "Browser notifications are part of Pro."
 
 
 class InvalidSubscription(ValueError):
@@ -77,9 +82,22 @@ def enabled() -> bool:
             and os.environ.get("HSF_WEB_PUSH_ENABLED", "1").strip() != "0")
 
 
-def config() -> Dict[str, Any]:
+def plan_allows(account: Optional[Dict[str, Any]]) -> bool:
+    """Pro and above, or an admin; never an inactive account."""
+    if not account or account.get("is_active") is False:
+        return False
+    if account.get("is_admin"):
+        return True
+    from auth.tiering import has_min_tier
+
+    return has_min_tier(str(account.get("tier") or "basic").strip().lower(), PLAN)
+
+
+def config(allowed: bool = True) -> Dict[str, Any]:
+    """`enabled`: the server can push. `allowed`: this account's plan includes it. The key
+    is only handed out when both hold."""
     on = enabled()
-    return {"enabled": on, "public_key": public_key() if on else None}
+    return {"enabled": on, "allowed": allowed, "public_key": public_key() if on and allowed else None}
 
 
 # ---- subscriptions ----------------------------------------------------------------------------------
@@ -184,6 +202,14 @@ def notify_user(user_id: str, title: str, body: str, url: str = "/alerts") -> in
         log.warning(json.dumps({"event": "webpush_targets_failed", "error": type(e).__name__}))
         return 0
     if not targets:
+        return 0
+    try:
+        from api import store
+
+        if not plan_allows(store.get_account(str(user_id).strip().lower())):
+            return 0
+    except Exception as e:
+        log.warning(json.dumps({"event": "webpush_plan_check_failed", "error": type(e).__name__}))
         return 0
     message = {"title": title[:80], "body": body[:240], "url": url if url.startswith("/") else "/alerts",
                "tag": "hsf-alert"}
