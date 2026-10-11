@@ -163,10 +163,13 @@ def _dt_symbols(source: str, custom: Sequence[str], watch: Sequence[str]) -> Lis
 def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = ()) -> Dict[str, Any]:
     """The web's Day Trader table: live Alpaca snapshot metrics for the source's
     symbols, with the day-trade score; plus the market state."""
+    from analytics.day_trade_display import enrich_row, rank_key
     from api.today import _cached
     from ui import day_trader as dtm
 
     symbols = _dt_symbols(source, custom, watch)
+    state = _cached("dt_state", lambda: dtm.market_state(clock_is_open=dtm._fetch_clock_is_open()), ttl_s=60,
+                    stale_s=300)
     rows: List[Dict[str, Any]] = []
     if symbols:
         def load():
@@ -174,13 +177,26 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
 
             return build_day_trader_metrics(list(symbols)) or []
 
-        rows = [dict(r, day_trade_score=dtm.day_trade_score(r))
-                for r in _cached(("dt_rows", tuple(symbols)), load, ttl_s=DT_ROWS_TTL_S,
-                                     stale_s=DT_ROWS_STALE_S)]
-    state = _cached("dt_state", lambda: dtm.market_state(clock_is_open=dtm._fetch_clock_is_open()), ttl_s=60,
-                    stale_s=300)
+        now = dt.datetime.now(dt.timezone.utc)
+        rows = sorted((enrich_row(r, state, now)
+                       for r in _cached(("dt_rows", tuple(symbols)), load, ttl_s=DT_ROWS_TTL_S,
+                                        stale_s=DT_ROWS_STALE_S)), key=rank_key)
     return {"state": state, "source": source, "symbols": symbols, "missing": max(0, len(symbols) - len(rows)),
             "as_of": dt.datetime.now(dt.timezone.utc), "rows": rows}
+
+
+def day_trader_sparklines(symbols: Sequence[str]) -> Dict[str, Any]:
+    """Latest-session 1-minute closes per symbol for the Day Trader row sparklines.
+    Shares the stair-stepper check's minute-bar cache."""
+    from analytics.day_trade_display import sparkline
+    from api.today import _cached
+    from ui.day_trader import _parse_symbols
+    from ui.stair_stepper import MAX_CHECK, fetch_recent_minute_bars
+
+    checked = _parse_symbols(",".join(symbols), MAX_CHECK)
+    bars = _cached(("dt_minute", tuple(sorted(set(checked)))), lambda: fetch_recent_minute_bars(checked),
+                   ttl_s=DT_MOVERS_TTL_S) if checked else {}
+    return {"checked": checked, "series": {s: sparkline((bars or {}).get(s) or []) for s in checked}}
 
 
 def stair_steppers(symbols: Sequence[str], *, window: int, direction: str, r2_min: float,

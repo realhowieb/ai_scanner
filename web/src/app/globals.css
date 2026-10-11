@@ -487,3 +487,27 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 16px; }
 .muted { color: var(--muted); }
+
+/* Day Trader: sortable headers, score tiers, sparklines, row actions and phone cards. */
+.th-sort { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: inherit; }
+.th-sort:hover { color: var(--text); }
+.dt-score { display: inline-flex; align-items: center; gap: 8px; }
+.dt-chg { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.dt-ticker { display: inline-flex; align-items: center; gap: 8px; }
+.dt-actions { display: inline-flex; gap: 6px; }
+.dt-actions .icon-btn { width: 32px; height: 32px; }
+.dt-why { display: flex; flex-direction: column; gap: 8px; white-space: normal; }
+.dt-why-row td { background: var(--bg-2); }
+.spark { display: block; }
+.spark.up { color: var(--up); }
+.spark.down { color: var(--down); }
+.inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); cursor: pointer; }
+.dt-help summary { cursor: pointer; }
+.dt-help[open] summary { margin-bottom: 10px; }
+.dt-cards { display: flex; flex-direction: column; gap: 10px; }
+.dt-card { display: flex; flex-direction: column; gap: 10px; }
+.dt-card-head, .dt-card-row, .dt-card-foot { display: flex; align-items: center; gap: 10px; }
+.dt-card-row { justify-content: space-between; font-size: 16px; }
+.dt-card-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.dt-card-stats dt { font-size: 12px; color: var(--muted); }
+.dt-card-stats dd { margin: 0; font-size: 14px; }

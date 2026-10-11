@@ -237,6 +237,31 @@ class DayTraderTests(PaidApiTestCase):
         self.assertEqual(len(b["matches"]), 1)
         self.assertEqual(self.get("pro@example.com", "/v1/day-trader/stair-steppers?symbols=AAPL&window=7").status_code, 422)
 
+    def test_bounded_score_and_bad_quotes_rank_last(self):
+        self.ROWS = self.ROWS + [{"ticker": "WFF", "open": 2.28, "last": 13.0, "previous_close": 2.11,
+                                  "chg_pct": 516.11, "gap_pct": 8.06, "vwap": 5.88, "vs_vwap_pct": 121.17,
+                                  "rvol": 18.4, "volume": 1e6}]
+        b = self.get("pro@example.com", "/v1/day-trader?source=custom&symbols=WFF,AAPL").json()
+        self.assertEqual([r["ticker"] for r in b["rows"]], ["AAPL", "WFF"])
+        wff = b["rows"][1]
+        self.assertLessEqual(wff["day_trade_score"], 100)
+        self.assertEqual(wff["quote_flags"], ["Extreme move", "Far from VWAP"])
+        self.assertIn(b["rows"][0]["dt_quality"], ("strong", "developing", "weak"))
+        self.assertTrue(b["rows"][0]["dt_reasons"])
+
+    def test_sparklines(self):
+        import datetime as dt
+
+        t0 = dt.datetime(2026, 10, 9, 14, 0, tzinfo=dt.timezone.utc)
+        bars = [{"t": t0 + dt.timedelta(minutes=i), "c": 100 + i} for i in range(120)]
+        with mock.patch("ui.stair_stepper.fetch_recent_minute_bars", return_value={"AAPL": bars}):
+            b = self.get("pro@example.com", "/v1/day-trader/sparklines?symbols=aapl,msft").json()
+        self.assertEqual(b["checked"], ["AAPL", "MSFT"])
+        self.assertEqual(len(b["series"]["AAPL"]), 48)
+        self.assertEqual((b["series"]["AAPL"][0], b["series"]["AAPL"][-1]), (100, 219))
+        self.assertEqual(b["series"]["MSFT"], [])
+        self.assertEqual(self.get("free@example.com", "/v1/day-trader/sparklines?symbols=AAPL").status_code, 403)
+
 
 class AITests(PaidApiTestCase):
     def setUp(self):
