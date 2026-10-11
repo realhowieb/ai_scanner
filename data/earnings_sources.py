@@ -27,6 +27,15 @@ FINNHUB_BASE = "https://finnhub.io/api/v1/calendar/earnings"
 
 EarnMap = Dict[str, Tuple[_dt.date, Optional[str]]]
 
+# Both providers cap how many rows one request returns, and Finnhub drops the
+# nearest dates first when a range is too big: one 120-day request came back
+# with ~1,500 rows and only 6 earnings in the coming week (no JPM, WFC, BAC...).
+# So the window is fetched in slices, and a Finnhub slice that comes back near
+# the cap is split again.
+FMP_SLICE_DAYS = 30
+FINNHUB_SLICE_DAYS = 7
+FINNHUB_SPLIT_ROWS = 1000
+
 
 def _secret(key: str) -> Optional[str]:
     """Read a key env-first, then Streamlit secrets (guarded), else None."""
@@ -80,24 +89,41 @@ def _merge_earliest(out: EarnMap, sym: str, d: _dt.date, t: Optional[str], today
         out[sym] = (d, t)
 
 
+def _slices(start_iso: str, end_iso: str, days: int):
+    """[start, end] as consecutive (from, to) ISO pairs of at most `days` days each."""
+    start, end = _parse_date(start_iso), _parse_date(end_iso)
+    if start is None or end is None:
+        return [(start_iso, end_iso)]
+    out = []
+    while start <= end:
+        stop = min(end, start + _dt.timedelta(days=max(1, days) - 1))
+        out.append((start.isoformat(), stop.isoformat()))
+        start = stop + _dt.timedelta(days=1)
+    return out
+
+
+def _fetch_fmp_rows(key: str, start_iso: str, end_iso: str) -> list:
+    params = urllib.parse.urlencode({"from": start_iso, "to": end_iso, "apikey": key})
+    for base in FMP_BASES:
+        try:
+            data = _get_json(f"{base}?{params}")
+            if isinstance(data, list) and data:
+                return data
+        except Exception as e:
+            print(f"[earnings] FMP {base} failed: {type(e).__name__}: {e}")
+    return []
+
+
 def fetch_earnings_window_fmp(start_iso: str, end_iso: str) -> EarnMap:
     """Bulk earnings calendar from FMP for [start_iso, end_iso]. {} if no key/error."""
     key = _secret("FMP_API_KEY")
     if not key:
         return {}
-    params = urllib.parse.urlencode({"from": start_iso, "to": end_iso, "apikey": key})
 
-    data = None
-    for base in FMP_BASES:
-        try:
-            data = _get_json(f"{base}?{params}")
-            if isinstance(data, list) and data:
-                print(f"[earnings] FMP endpoint OK: {base}")
-                break
-        except Exception as e:
-            print(f"[earnings] FMP {base} failed: {type(e).__name__}: {e}")
-            data = None
-    if not isinstance(data, list):
+    data: list = []
+    for lo, hi in _slices(start_iso, end_iso, FMP_SLICE_DAYS):
+        data.extend(_fetch_fmp_rows(key, lo, hi))
+    if not data:
         return {}
 
     out: EarnMap = {}
@@ -116,19 +142,35 @@ def fetch_earnings_window_fmp(start_iso: str, end_iso: str) -> EarnMap:
     return out
 
 
+def _fetch_finnhub_rows(key: str, start_iso: str, end_iso: str) -> list:
+    """One Finnhub request; a range that comes back near the row cap is split in half
+    and fetched again, so a busy week is not silently truncated."""
+    params = urllib.parse.urlencode({"from": start_iso, "to": end_iso, "token": key})
+    try:
+        data = _get_json(f"{FINNHUB_BASE}?{params}")
+    except Exception as e:
+        print(f"[earnings] Finnhub {start_iso}..{end_iso} failed: {type(e).__name__}: {e}")
+        return []
+    rows = (data or {}).get("earningsCalendar") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return []
+    start, end = _parse_date(start_iso), _parse_date(end_iso)
+    if len(rows) >= FINNHUB_SPLIT_ROWS and start and end and end > start:
+        mid = start + (end - start) // 2
+        return (_fetch_finnhub_rows(key, start.isoformat(), mid.isoformat())
+                + _fetch_finnhub_rows(key, (mid + _dt.timedelta(days=1)).isoformat(), end.isoformat()))
+    return rows
+
+
 def fetch_earnings_window_finnhub(start_iso: str, end_iso: str) -> EarnMap:
     """Bulk earnings calendar from Finnhub for [start_iso, end_iso]. {} if no key/error."""
     key = _secret("FINNHUB_API_KEY")
     if not key:
         return {}
-    params = urllib.parse.urlencode({"from": start_iso, "to": end_iso, "token": key})
-    try:
-        data = _get_json(f"{FINNHUB_BASE}?{params}")
-    except Exception as e:
-        print(f"[earnings] Finnhub fetch failed: {type(e).__name__}: {e}")
-        return {}
-    rows = (data or {}).get("earningsCalendar") if isinstance(data, dict) else None
-    if not isinstance(rows, list):
+    rows: list = []
+    for lo, hi in _slices(start_iso, end_iso, FINNHUB_SLICE_DAYS):
+        rows.extend(_fetch_finnhub_rows(key, lo, hi))
+    if not rows:
         return {}
     out: EarnMap = {}
     today = _dt.date.today()
