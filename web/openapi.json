@@ -9557,6 +9557,12 @@
    },
    "WebPushConfig": {
     "properties": {
+     "allowed": {
+      "default": true,
+      "description": "False when the account's plan doesn't include browser notifications (they're part of Pro)",
+      "title": "Allowed",
+      "type": "boolean"
+     },
      "enabled": {
       "description": "False until the server has VAPID keys",
       "title": "Enabled",
@@ -9571,7 +9577,7 @@
         "type": "null"
        }
       ],
-      "description": "VAPID application server key (base64url)",
+      "description": "VAPID application server key (base64url); only when enabled and allowed",
       "title": "Public Key"
      }
     },
@@ -12215,7 +12221,7 @@
     "summary": "Turn off alert notifications in this browser"
    },
    "post": {
-    "description": "Every alert that fires for you (price alerts and alert rules) is also pushed to this\nbrowser. Pass the browser's PushSubscription (endpoint and keys).",
+    "description": "Every alert that fires for you (price alerts and alert rules) is also pushed to this\nbrowser. Pass the browser's PushSubscription (endpoint and keys). Pro and above.",
     "operationId": "web_push_subscribe_v1_me_web_push_post",
     "requestBody": {
      "content": {
@@ -12243,6 +12249,9 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "403": {
+      "description": "Browser notifications are part of Pro"
      },
      "422": {
       "content": {

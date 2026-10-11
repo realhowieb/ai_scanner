@@ -113,7 +113,7 @@ const PUSH_COPY: Record<PushState, string> = {
 };
 
 /** Browser notifications for every alert that fires (price alerts and alert rules). Hidden
- * until the server has its push keys. */
+ * until the server has its push keys; part of Pro. */
 export function PushToggle() {
   const cfg = useApi("web-push-config", (signal) => unwrap(api.GET("/v1/web-push/config", { signal })));
   const [state, setState] = useState<PushState | null>(null);
@@ -123,7 +123,16 @@ export function PushToggle() {
     currentPushState().then((s) => live && setState(s), () => live && setState("unsupported"));
     return () => { live = false; };
   }, []);
-  if (!cfg.data?.enabled || !cfg.data.public_key || state === null) return null;
+  if (!cfg.data?.enabled || state === null) return null;
+  if (cfg.data.allowed === false) {
+    return state === "unsupported" ? null : (
+      <div className="stack-sm">
+        <p className="body-sm">Browser notifications are part of Pro.</p>
+        <UpgradeButton plan="pro" />
+      </div>
+    );
+  }
+  if (!cfg.data.public_key) return null;
   const key = cfg.data.public_key;
   const on = state === "on";
   const change = (next: boolean) => void act.run(async () => {

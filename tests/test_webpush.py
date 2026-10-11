@@ -76,7 +76,7 @@ class SendTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"HSF_WEB_PUSH_ENABLED": "0"}):
             self.assertFalse(webpush.config()["enabled"])
         with mock.patch.dict(os.environ, {"VAPID_PRIVATE_KEY": ""}):
-            self.assertEqual(webpush.config(), {"enabled": False, "public_key": None})
+            self.assertEqual(webpush.config(), {"enabled": False, "allowed": True, "public_key": None})
             self.assertEqual(webpush.notify_user("a@example.com", "t", "b"), 0)
 
     def test_posts_encrypted_payload_with_vapid_and_drops_gone_subscriptions(self):
@@ -108,7 +108,9 @@ class SendTests(unittest.TestCase):
 
         targets = [{"id": 1, "provider": "webpush", "token": live}, {"id": 2, "provider": "webpush", "token": gone},
                    {"id": 3, "provider": "expo", "token": "ExpoPushToken[abcdefghijkl]"}]
+        pro = {"username": "a@example.com", "tier": "pro", "is_active": True}
         with mock.patch("api.devices.devices_for_user", return_value=targets), \
+                mock.patch("api.store.get_account", return_value=pro), \
                 mock.patch("api.devices.remove") as remove, mock.patch("httpx.Client", _Client):
             self.assertEqual(webpush.notify_user("A@Example.com", "HSF alert", "AAPL crossed 200"), 1)
         self.assertEqual([p[0] for p in posted], ["https://push.example/live", "https://push.example/gone"])
@@ -140,15 +142,31 @@ class SendTests(unittest.TestCase):
                 raise OSError("down")
 
         with mock.patch("api.devices.devices_for_user", return_value=[{"id": 1, "provider": "webpush", "token": tok}]), \
-                mock.patch("httpx.Client", _Boom):
+                mock.patch("api.store.get_account", return_value={"tier": "pro"}), mock.patch("httpx.Client", _Boom):
             self.assertEqual(webpush.notify_user("a@example.com", "t", "b"), 0)
+
+    def test_only_pro_and_above_get_pushed(self):
+        from api import webpush
+
+        tok = webpush.subscription_token("https://push.example/x", UA_PUBLIC, UA_AUTH)
+        targets = [{"id": 1, "provider": "webpush", "token": tok}]
+        for account in ({"tier": "basic"}, {"tier": "premium", "is_active": False}, None):
+            with mock.patch("api.devices.devices_for_user", return_value=targets), \
+                    mock.patch("api.store.get_account", return_value=account), \
+                    mock.patch.object(webpush, "send") as send:
+                self.assertEqual(webpush.notify_user("a@example.com", "t", "b"), 0)
+            send.assert_not_called()
+        self.assertTrue(webpush.plan_allows({"tier": "basic", "is_admin": True}))
+        self.assertTrue(webpush.plan_allows({"tier": "premium"}))
+        self.assertFalse(webpush.plan_allows({"tier": "basic"}))
 
 
 @unittest.skipUnless(DEPS and CRYPTO, "needs fastapi, httpx, PyJWT, bcrypt and cryptography")
 class RouteTests(ApiTestCase):
     def test_config_subscribe_and_unsubscribe(self):
         h = self.auth(self.login().json()["access_token"])
-        self.assertEqual(self.client.get("/v1/web-push/config", headers=h).json(), {"enabled": False, "public_key": None})
+        self.assertEqual(self.client.get("/v1/web-push/config", headers=h).json(),
+                         {"enabled": False, "allowed": True, "public_key": None})
         body = {"endpoint": "https://push.example/x", "keys": {"p256dh": UA_PUBLIC, "auth": UA_AUTH}, "device_name": "Chrome"}
         self.assertEqual(self.client.post("/v1/me/web-push", json=body, headers=h).status_code, 503)
         device = {"id": 7, "provider": "webpush", "platform": "web", "device_name": "Chrome", "app_version": None,
@@ -168,6 +186,20 @@ class RouteTests(ApiTestCase):
         self.assertEqual(bad.status_code, 400)
         self.assertEqual(gone.status_code, 204)
         unsub.assert_called_once()
+
+    def test_free_plan_gets_the_upgrade_note_and_cant_subscribe(self):
+        self.accounts["free@example.com"] = {**self.accounts["pro@example.com"], "username": "free@example.com",
+                                             "tier": "basic"}
+        h = self.auth(self.login("free@example.com").json()["access_token"])
+        body = {"endpoint": "https://push.example/x", "keys": {"p256dh": UA_PUBLIC, "auth": UA_AUTH}}
+        with mock.patch.dict(os.environ, {"VAPID_PRIVATE_KEY": _keys(), "VAPID_SUBJECT": "mailto:ops@example.com"}), \
+                mock.patch("api.devices.register") as register:
+            cfg = self.client.get("/v1/web-push/config", headers=h).json()
+            r = self.client.post("/v1/me/web-push", json=body, headers=h)
+        self.assertEqual(cfg, {"enabled": True, "allowed": False, "public_key": None})
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("part of Pro", r.json()["detail"])
+        register.assert_not_called()
 
 
 class HookTests(unittest.TestCase):
