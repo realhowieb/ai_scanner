@@ -181,8 +181,17 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
         rows = sorted((enrich_row(r, state, now)
                        for r in _cached(("dt_rows", tuple(symbols)), load, ttl_s=DT_ROWS_TTL_S,
                                         stale_s=DT_ROWS_STALE_S)), key=rank_key)
+    flagged = [r for r in rows if r.get("quote_flags")]
+    bullish = [r for r in rows if r.get("dt_direction") == "bullish" and not r.get("quote_flags")]
+    bearish = [r for r in rows if r.get("dt_direction") == "bearish" and not r.get("quote_flags")]
     return {"state": state, "source": source, "symbols": symbols, "missing": max(0, len(symbols) - len(rows)),
-            "as_of": dt.datetime.now(dt.timezone.utc), "rows": rows}
+            "as_of": dt.datetime.now(dt.timezone.utc),
+            "summary": {"strong": sum(1 for r in rows if r.get("dt_quality") == "strong"),
+                        "developing": sum(1 for r in rows if r.get("dt_quality") == "developing"),
+                        "flagged": len(flagged), "missing": max(0, len(symbols) - len(rows)),
+                        "best_long": (bullish[0].get("ticker") if bullish else None),
+                        "best_short": (bearish[0].get("ticker") if bearish else None)},
+            "rows": rows}
 
 
 def day_trader_sparklines(symbols: Sequence[str]) -> Dict[str, Any]:

@@ -9,6 +9,7 @@ export type AlertType = Schemas["AlertType"];
 export type AlertCreate = Omit<Schemas["AlertCreate"], "watchlist_only"> & { watchlist_only?: boolean };
 export type WatchlistIntelligence = Schemas["WatchlistIntelligence"];
 export type WatchlistIntelItem = Schemas["WatchlistIntelItem"];
+export type WatchlistChanges = Schemas["WatchlistChanges"];
 export type AlertRule = Schemas["AlertRule"];
 export type AlertRuleType = Schemas["AlertRuleType"];
 export type AlertRuleCreate = Schemas["AlertRuleCreate"];
@@ -31,6 +32,8 @@ export const watchlists = {
     unwrap(api.DELETE("/v1/watchlists/{watchlist_id}/tickers/{ticker}", { params: { path: { watchlist_id: id, ticker } } })),
   intelligence: (id: number, signal?: AbortSignal) =>
     unwrap(api.GET("/v1/watchlists/{watchlist_id}/intelligence", { ...wid(id), signal })),
+  changes: (id: number, signal?: AbortSignal) =>
+    unwrap(api.GET("/v1/watchlists/{watchlist_id}/changes", { ...wid(id), signal })),
   setNote: (id: number, ticker: string, note: string) =>
     unwrap(api.PATCH("/v1/watchlists/{watchlist_id}/tickers/{ticker}", {
       params: { path: { watchlist_id: id, ticker } }, body: { note: note.trim() ? note : null },

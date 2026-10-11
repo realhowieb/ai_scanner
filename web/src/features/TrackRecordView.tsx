@@ -11,13 +11,15 @@ import type { TrackRecordSummary } from "@/api/account";
 import type { Schemas } from "@/api/client";
 import { Card, Empty, ErrorState, Locked, Pill, Skeleton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
-import { etDate, etTime } from "@/lib/format";
+import { etDate, etTime, pct } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
 import { OutcomeEvidence } from "./OutcomeEvidence";
 
 type Ranking = "breakout" | "prebreakout";
 type Day = Schemas["TrackRecordDay"];
+const metric = (v: unknown, fallback: string | number = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
+const numMetric = (v: unknown) => (typeof v === "number" ? v : null);
 
 const RANKINGS: { id: Ranking; label: string; note: string }[] = [
   { id: "breakout", label: "Breakout score", note: "Each saved scan's top names by Breakout score" },
@@ -127,6 +129,17 @@ function Research() {
   return (
     <>
       <p className="banner" role="note">{d.disclaimer}</p>
+      {d.summary && Object.keys(d.summary).length > 0 && (
+        <Card title="First read" id="first-read">
+          <div className="metric-strip" aria-label="Track record summary">
+            <span><strong>{metric(d.summary.best_ranking, "—")}</strong> best slice</span>
+            <span><strong>{numMetric(d.summary.best_horizon_days) ? `${numMetric(d.summary.best_horizon_days)}d` : "—"}</strong> horizon</span>
+            <span><strong>{pct(numMetric(d.summary.best_avg_excess_return) != null ? numMetric(d.summary.best_avg_excess_return)! * 100 : null)}</strong> excess</span>
+            <span><strong>{metric(d.summary.ready_horizons, 0)}</strong> ready</span>
+          </div>
+          <p className="cap">{String(metric(d.summary.read, "Use sample size first, then compare average excess return and win rate."))}</p>
+        </Card>
+      )}
       <section aria-label="Ranking" className="filters">
         <div className="chips" role="group" aria-label="Ranking">
           {RANKINGS.map((r) => (

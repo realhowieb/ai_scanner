@@ -2024,6 +2024,14 @@ export interface components {
              * @description Alerts this plan may have (Free 1, Pro 5, Premium 25)
              */
             limit: number;
+            /**
+             * Summary
+             * @description UI summary: active, paused, fired_recently, by_type and delivery availability
+             * @default {}
+             */
+            summary: {
+                [key: string]: unknown;
+            };
             /** Used */
             used: number;
         };
@@ -2324,6 +2332,14 @@ export interface components {
              * @enum {string}
              */
             state: "premarket" | "open" | "afterhours" | "closed";
+            /**
+             * Summary
+             * @description UI summary counts: strong, developing, flagged, missing, best long/short
+             * @default {}
+             */
+            summary: {
+                [key: string]: unknown;
+            };
             /** Symbols */
             symbols: string[];
         };
@@ -2592,6 +2608,14 @@ export interface components {
             stats?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Summary
+             * @description UI summary: open/closed counts, win rate, average return and open P/L
+             * @default {}
+             */
+            summary: {
+                [key: string]: unknown;
+            };
             /**
              * Trades
              * @default []
@@ -3781,6 +3805,14 @@ export interface components {
              * @default true
              */
             positions_available: boolean;
+            /**
+             * Summary
+             * @description UI summary: position/order counts, market value and unrealized P/L when available
+             * @default {}
+             */
+            summary: {
+                [key: string]: unknown;
+            };
         };
         /** PaperConnect */
         PaperConnect: {
@@ -4780,6 +4812,14 @@ export interface components {
              * @default []
              */
             summaries: components["schemas"]["TrackRecordSummary"][];
+            /**
+             * Summary
+             * @description UI headline: best horizon, sample readiness and plain-language read
+             * @default {}
+             */
+            summary: {
+                [key: string]: unknown;
+            };
         };
         /** TrackRecordDay */
         TrackRecordDay: {
@@ -4959,6 +4999,14 @@ export interface components {
             name: string;
             /** Previous Scan At */
             previous_scan_at?: string | null;
+            /**
+             * Summary
+             * @description UI summary counts for changes and alerts since the previous scan
+             * @default {}
+             */
+            summary: {
+                [key: string]: unknown;
+            };
             /** Watchlist Id */
             watchlist_id: number;
         };

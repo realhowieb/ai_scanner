@@ -34,6 +34,7 @@ const money = (v: unknown) => {
   const x = n(v);
   return x === null ? "—" : x.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 };
+const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 const tone = (v: number | null) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
 
 function Connect({ onDone }: { onDone: (s: Status) => void }) {
@@ -173,6 +174,14 @@ function Activity({ tick }: { tick: number }) {
   const orders = act.data.orders as Order[];
   return (
     <>
+      <Card title="Paper activity" id="activity-summary">
+        <div className="metric-strip" aria-label="Paper activity summary">
+          <span><strong>{metric(act.data.summary?.positions, positions.length)}</strong> positions</span>
+          <span><strong>{metric(act.data.summary?.orders, orders.length)}</strong> orders</span>
+          <span><strong>{money(act.data.summary?.market_value)}</strong> value</span>
+          <span><strong>{money(act.data.summary?.unrealized_pl)}</strong> open P/L</span>
+        </div>
+      </Card>
       <Card title="Positions" id="positions">
         {act.data.positions_available === false ? <p className="cap">Alpaca didn&apos;t return positions just now. <button type="button" className="link-btn" onClick={act.reload}>Try again</button></p>
           : positions.length === 0 ? <Empty title="No open paper positions." />

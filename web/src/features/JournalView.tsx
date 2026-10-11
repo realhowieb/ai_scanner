@@ -16,6 +16,7 @@ import { etTime, pct, price } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
 type Trade = Schemas["JournalTrade"];
+const metric = (v: unknown, fallback = 0) => (typeof v === "number" ? v : fallback);
 const tid = (id: number) => ({ params: { path: { trade_id: id } } });
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
 
@@ -101,9 +102,15 @@ export function JournalView() {
       </Card>
       {j.error && !j.data ? <ErrorState error={j.error} onRetry={j.reload} what="your journal" />
         : !j.data ? <Skeleton rows={5} label="Loading your journal" />
-        : j.data.trades.length === 0 ? <Card><Empty title="No trades logged yet." /></Card>
+        : j.data.trades.length === 0 ? <Card><Empty title="No trades logged yet.">Log your first trade above, or paper trade from a stock page.</Empty></Card>
         : (
           <Card title="Trades" id="trades" aside={stats?.closed ? `${stats.closed} closed · ${stats.wins ?? 0} wins · avg ${pct(stats.avg_return_pct)}` : undefined}>
+            <div className="metric-strip" aria-label="Journal summary">
+              <span><strong>{metric(j.data.summary?.open, j.data.trades.filter((t) => t.open).length)}</strong> open</span>
+              <span><strong>{metric(j.data.summary?.closed, j.data.trades.filter((t) => !t.open).length)}</strong> closed</span>
+              <span><strong>{pct(metric(j.data.summary?.avg_return_pct, stats?.avg_return_pct ?? 0))}</strong> avg return</span>
+              <span><strong>{pct(metric(j.data.summary?.win_rate, 0))}</strong> win rate</span>
+            </div>
             <div className="table-wrap">
               <table className="table">
                 <thead><tr><th scope="col">Ticker</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Entry</th>

@@ -47,6 +47,7 @@ function AlertRow({ a, onChanged }: { a: Alert; onChanged: () => void }) {
 }
 
 const FIRED_SHOWN = 8;
+const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 
 function FiredRowItem({ item }: { item: FiredItem }) {
   const [open, setOpen] = useState(false);
@@ -177,6 +178,15 @@ export function AlertsView() {
       {list.error && !data ? <ErrorState error={list.error} onRetry={list.reload} what="your alerts" /> : !data ? <Skeleton rows={6} label="Loading alerts" /> : (
         <div className="split">
           <div className="col-main">
+            <Card title="Alert center" id="summary" aside={`${data.used} of ${data.limit} used`}>
+              <div className="metric-strip" aria-label="Alert summary">
+                <span><strong>{metric(data.summary?.active, data.alerts.filter((a) => a.enabled).length)}</strong> active</span>
+                <span><strong>{metric(data.summary?.paused, data.alerts.filter((a) => !a.enabled).length)}</strong> paused</span>
+                <span><strong>{metric(data.summary?.fired_recently, data.alerts.filter((a) => a.last_fired_at).length)}</strong> fired</span>
+                <span><strong>{data.email_enabled ? "On" : "Pro"}</strong> email</span>
+              </div>
+              <p className="cap">Create alerts on the right, then use this page to pause, delete and review what fired.</p>
+            </Card>
             <Card title="Your alerts" id="mine" aside={`Using ${data.used} of ${data.limit} on your ${me?.plan_label ?? ""} plan`}>
               <div className="track cap-track" aria-hidden="true"><div className="fill" style={{ width: `${Math.min(100, (data.used / Math.max(1, data.limit)) * 100)}%` }} /></div>
               {data.alerts.length === 0 ? (
