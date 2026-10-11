@@ -16,3 +16,4 @@ PyJWT==2.15.0
 psycopg2-binary==2.9.10
 httpx==0.28.1
 anthropic>=0.69.0,<1  # /v1/ai (Premium); same pin as requirements-extended (lock: 0.116.0)
+cryptography  # browser push encryption and VAPID (api/webpush.py); version from the lock

@@ -52,9 +52,9 @@ def _private_key():
     raw = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
     if not raw:
         return None
-    from cryptography.hazmat.primitives.asymmetric import ec
-
     try:
+        from cryptography.hazmat.primitives.asymmetric import ec
+
         return ec.derive_private_key(int.from_bytes(_b64d(raw), "big"), ec.SECP256R1())
     except Exception:
         log.warning(json.dumps({"event": "webpush_bad_vapid_key"}))

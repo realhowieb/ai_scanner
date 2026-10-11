@@ -1,12 +1,15 @@
 """Browser push (api/webpush.py): RFC 8291 encryption, VAPID header, subscription
 checks, sending and cleanup of subscriptions the browser dropped."""
 import base64
+import importlib.util
 import json
 import os
 import unittest
 from unittest import mock
 
 from tests.test_api_v1 import DEPS, ApiTestCase
+
+CRYPTO = all(importlib.util.find_spec(m) for m in ("cryptography", "jwt", "httpx"))
 
 
 def _b64(b: bytes) -> str:
@@ -26,6 +29,7 @@ UA_PUBLIC, UA_AUTH = ("BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTB
                       "BTBZMqHH6r4Tts7J_aSIgg")
 
 
+@unittest.skipUnless(CRYPTO, "needs cryptography, PyJWT and httpx")
 class EncryptionTests(unittest.TestCase):
     def test_matches_the_rfc_8291_appendix_a_vector(self):
         from cryptography.hazmat.primitives.asymmetric import ec
@@ -54,6 +58,7 @@ class SubscriptionTests(unittest.TestCase):
                 subscription_token(*bad)
 
 
+@unittest.skipUnless(CRYPTO, "needs cryptography, PyJWT and httpx")
 class SendTests(unittest.TestCase):
     def setUp(self):
         self.env = mock.patch.dict(os.environ, {"VAPID_PRIVATE_KEY": _keys(), "VAPID_SUBJECT": "mailto:ops@example.com"})
@@ -139,7 +144,7 @@ class SendTests(unittest.TestCase):
             self.assertEqual(webpush.notify_user("a@example.com", "t", "b"), 0)
 
 
-@unittest.skipUnless(DEPS, "needs fastapi, httpx, PyJWT and bcrypt")
+@unittest.skipUnless(DEPS and CRYPTO, "needs fastapi, httpx, PyJWT, bcrypt and cryptography")
 class RouteTests(ApiTestCase):
     def test_config_subscribe_and_unsubscribe(self):
         h = self.auth(self.login().json()["access_token"])
