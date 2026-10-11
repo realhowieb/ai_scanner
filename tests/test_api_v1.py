@@ -4,8 +4,8 @@ The database is mocked at api.store's boundary and the Today builder at
 api.today, so these run without Postgres or network.
 """
 import datetime as dt
-import json
 import importlib.util
+import json
 import time
 import unittest
 from unittest import mock
