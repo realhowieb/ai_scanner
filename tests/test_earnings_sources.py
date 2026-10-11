@@ -72,6 +72,63 @@ class EarningsSourcesTest(unittest.TestCase):
         self.assertEqual(m["MSFT"][1], "AMC")
         self.assertEqual(m["TSLA"][1], "BMO")
 
+    def test_slices_cover_window(self):
+        from data.earnings_sources import _slices
+
+        self.assertEqual(_slices("2026-10-01", "2026-10-15", 7),
+                         [("2026-10-01", "2026-10-07"), ("2026-10-08", "2026-10-14"), ("2026-10-15", "2026-10-15")])
+        self.assertEqual(_slices("2026-10-01", "2026-10-01", 7), [("2026-10-01", "2026-10-01")])
+
+    def test_finnhub_cap_does_not_drop_next_week(self):
+        """Finnhub returns at most ~1,500 rows, latest dates first. One 120-day request
+        lost the coming week (DPZ, JPM, WFC...); sliced requests must keep it."""
+        import urllib.parse
+        from datetime import date, timedelta
+
+        from data import earnings_sources as es
+
+        today = date.today()
+        cal = [{"symbol": "DPZ", "date": (today + timedelta(days=2)).isoformat(), "hour": "bmo"},
+               {"symbol": "JPM", "date": (today + timedelta(days=2)).isoformat(), "hour": "bmo"}]
+        for i in range(3000):  # a crowded calendar further out
+            cal.append({"symbol": f"X{i}", "date": (today + timedelta(days=10 + i % 100)).isoformat(), "hour": ""})
+        calls = []
+
+        def fake(url, timeout=20.0):
+            q = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(url).query))
+            calls.append((q["from"], q["to"]))
+            rows = [r for r in cal if q["from"] <= r["date"] <= q["to"]]
+            rows.sort(key=lambda r: r["date"], reverse=True)
+            return {"earningsCalendar": rows[:1500]}
+
+        os.environ["FINNHUB_API_KEY"] = "test"
+        es._get_json = fake
+        m = es.fetch_earnings_window_finnhub(today.isoformat(), (today + timedelta(days=120)).isoformat())
+        self.assertEqual(m["DPZ"], (today + timedelta(days=2), "BMO"))
+        self.assertIn("JPM", m)
+        self.assertEqual(len([k for k in m if k.startswith("X")]), 3000)
+        self.assertGreater(len(calls), 1)
+
+    def test_finnhub_busy_slice_is_split(self):
+        import urllib.parse
+        from datetime import date, timedelta
+
+        from data import earnings_sources as es
+
+        today = date.today()
+        day = lambda n: (today + timedelta(days=n)).isoformat()
+        cal = [{"symbol": f"B{i}", "date": day(1 + i % 7), "hour": "amc"} for i in range(2100)]
+
+        def fake(url, timeout=20.0):
+            q = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(url).query))
+            rows = sorted((r for r in cal if q["from"] <= r["date"] <= q["to"]), key=lambda r: r["date"], reverse=True)
+            return {"earningsCalendar": rows[:1500]}
+
+        os.environ["FINNHUB_API_KEY"] = "test"
+        es._get_json = fake
+        m = es.fetch_earnings_window_finnhub(day(1), day(7))
+        self.assertEqual(len(m), 2100)
+
     def test_time_normalization(self):
         from data.earnings_sources import _norm_time
 
