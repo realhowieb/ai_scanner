@@ -236,11 +236,20 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const scanAt = legacy ? scan.data?.scan_at : w.scan_at;
   const stale = legacy ? scan.data?.stale : w.stale;
   const items = byScore ? [...w.items].sort((a, b) => (scores.get(b.ticker)?.score ?? -1) - (scores.get(a.ticker)?.score ?? -1)) : w.items;
+  const ranked = w.items.filter((i) => scores.has(i.ticker)).length;
+  const attention = w.items.filter((i) => scores.get(i.ticker)?.fading || (intelBy.get(i.ticker)?.score_change ?? 0) < 0).length;
+  const notes = w.items.filter((i) => i.note).length;
 
   return (
     <div className="stack">
       <Card title={<>{w.name} {w.is_default && <Pill>Default</Pill>}</>} id="wl-detail"
         aside={`${w.symbol_count} ticker${w.symbol_count === 1 ? "" : "s"}`}>
+        <div className="wl-summary" aria-label="Watchlist summary">
+          <span><strong>{w.symbol_count}</strong> tracked</span>
+          <span><strong>{ranked}</strong> ranked</span>
+          <span><strong>{attention}</strong> need attention</span>
+          <span><strong>{notes}</strong> with notes</span>
+        </div>
         <div className="row-actions">
           <button type="button" className="btn" onClick={() => { ren.clear(); setRenaming(true); }}>Rename</button>
           <button type="button" className="btn" disabled={w.is_default || act.busy}
@@ -282,6 +291,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                       </>
                     ) : <span className="cap">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not ranked in the latest scan"}</span>}
                     <span className="grow" />
+                    <Link href={`/stocks/${encodeURIComponent(it.ticker)}`} className="btn btn-sm">Open</Link>
                     <button type="button" className="icon-btn" aria-label={`Remove ${it.ticker} from ${w.name}`} onClick={() => { rm.clear(); setRemoving(it.ticker); }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
                     </button>
