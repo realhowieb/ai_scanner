@@ -404,6 +404,7 @@ def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Di
             ok, failed = _deliver(ev)
             result["delivered"] += ok
             result["delivery_failed"] += failed
+            _push(ev)
         retried_ok, retried_failed = retry_failed_deliveries(now)
         result["delivered"] += retried_ok
         result["delivery_failed"] += retried_failed
@@ -477,6 +478,17 @@ def _deliver(ev: Dict[str, Any], *, first: bool = True) -> Tuple[int, int]:
     except Exception as e:  # the event stays; its status may read 'pending' until the next retry
         log.warning(json.dumps({"event": "alert_rule_delivery_status_failed", "error": type(e).__name__}))
     return ok, failed
+
+
+def _push(ev: Dict[str, Any]) -> None:
+    """Browser notifications (api.webpush): every browser the owner turned them on in.
+    Best effort and not retried; the event row and the other channels don't depend on it."""
+    try:
+        from api import webpush
+
+        webpush.alert_fired(str(ev["user_id"]), str(ev["message"]))
+    except Exception as e:
+        log.warning(json.dumps({"event": "alert_rule_push_failed", "error": type(e).__name__}))
 
 
 def retry_failed_deliveries(now: dt.datetime) -> Tuple[int, int]:

@@ -873,6 +873,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/web-push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn on alert notifications in this browser
+         * @description Every alert that fires for you (price alerts and alert rules) is also pushed to this
+         *     browser. Pass the browser's PushSubscription (endpoint and keys).
+         */
+        post: operations["web_push_subscribe_v1_me_web_push_post"];
+        /** Turn off alert notifications in this browser */
+        delete: operations["web_push_unsubscribe_v1_me_web_push_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ml/readiness": {
         parameters: {
             query?: never;
@@ -1614,6 +1636,23 @@ export interface paths {
         head?: never;
         /** Watchlist Note */
         patch: operations["watchlist_note_v1_watchlists__watchlist_id__tickers__ticker__patch"];
+        trace?: never;
+    };
+    "/v1/web-push/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browser notifications: whether they're on and the server key */
+        get: operations["web_push_config_v1_web_push_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -2416,12 +2455,12 @@ export interface components {
              * Platform
              * @enum {string}
              */
-            platform: "ios" | "android";
+            platform: "ios" | "android" | "web";
             /**
              * Provider
              * @enum {string}
              */
-            provider: "apns" | "fcm" | "expo";
+            provider: "apns" | "fcm" | "expo" | "webpush";
         };
         /** DeviceBody */
         DeviceBody: {
@@ -5240,6 +5279,45 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** WebPushConfig */
+        WebPushConfig: {
+            /**
+             * Enabled
+             * @description False until the server has VAPID keys
+             */
+            enabled: boolean;
+            /**
+             * Public Key
+             * @description VAPID application server key (base64url)
+             */
+            public_key?: string | null;
+        };
+        /** WebPushKeys */
+        WebPushKeys: {
+            /** Auth */
+            auth: string;
+            /** P256Dh */
+            p256dh: string;
+        };
+        /** WebPushSubscribe */
+        WebPushSubscribe: {
+            /**
+             * Device Name
+             * @description e.g. Chrome on Mac
+             */
+            device_name?: string | null;
+            /**
+             * Endpoint
+             * @description PushSubscription.endpoint
+             */
+            endpoint: string;
+            keys: components["schemas"]["WebPushKeys"];
+        };
+        /** WebPushUnsubscribe */
+        WebPushUnsubscribe: {
+            /** Endpoint */
+            endpoint: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -7552,6 +7630,98 @@ export interface operations {
             };
         };
     };
+    web_push_subscribe_v1_me_web_push_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebPushSubscribe"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            /** @description Not a push subscription */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Browser notifications aren't set up on the server */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    web_push_unsubscribe_v1_me_web_push_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebPushUnsubscribe"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ml_readiness_status_v1_ml_readiness_get: {
         parameters: {
             query?: never;
@@ -9831,6 +10001,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    web_push_config_v1_web_push_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebPushConfig"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

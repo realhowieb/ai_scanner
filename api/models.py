@@ -554,12 +554,17 @@ class BillingLink(BaseModel):
 
 class Device(BaseModel):
     id: int = Field(description="Use with DELETE /v1/me/devices/{id}")
-    provider: Literal["apns", "fcm", "expo"]
-    platform: Literal["ios", "android"]
+    provider: Literal["apns", "fcm", "expo", "webpush"]
+    platform: Literal["ios", "android", "web"]
     device_name: Optional[str] = None
     app_version: Optional[str] = None
     created_at: Optional[str] = None
     last_seen_at: Optional[str] = None
+
+
+class WebPushConfig(BaseModel):
+    enabled: bool = Field(description="False until the server has VAPID keys")
+    public_key: Optional[str] = Field(default=None, description="VAPID application server key (base64url)")
 
 
 # ---- custom scans (POST /v1/scans) --------------------------------------------------------------

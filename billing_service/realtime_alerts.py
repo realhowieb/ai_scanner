@@ -396,6 +396,7 @@ def check_once() -> int:
                 continue
             _record_fire(conn, alert, message)
             fired += 1
+            run_fire_hooks(alert["user_id"], message)
             if (
                 "@" in alert["user_id"]
                 and alert["email_verified"]
@@ -423,6 +424,24 @@ _pass_hooks: List[Any] = []
 def register_pass_hook(fn: Any) -> None:
     if fn not in _pass_hooks:
         _pass_hooks.append(fn)
+
+
+# Called with (user_id, message) after each price alert fires. hsf-api registers its
+# browser push sender (api.webpush.alert_fired); the billing service registers nothing.
+_fire_hooks: List[Any] = []
+
+
+def register_fire_hook(fn: Any) -> None:
+    if fn not in _fire_hooks:
+        _fire_hooks.append(fn)
+
+
+def run_fire_hooks(user_id: str, message: str) -> None:
+    for fn in list(_fire_hooks):
+        try:
+            fn(user_id, message)
+        except Exception as e:
+            _log(f"fire hook failed: {type(e).__name__}")
 
 
 def run_hooks() -> None:

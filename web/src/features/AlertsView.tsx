@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { api, unwrap } from "@/api/client";
 import { alerts, emailPrefs } from "@/api/userData";
 import type { Alert } from "@/api/userData";
 import { ConfirmDialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import { currentPushState, disablePush, enablePush } from "@/lib/webPush";
+import type { PushState } from "@/lib/webPush";
 import { groupFired } from "@/lib/alertEvents";
 import type { FiredItem } from "@/lib/alertEvents";
 import { etTime } from "@/lib/format";
@@ -102,6 +105,44 @@ function EmailToggle() {
   );
 }
 
+const PUSH_COPY: Record<PushState, string> = {
+  unsupported: "This browser can't show notifications. On iPhone, add HSF to your Home Screen first.",
+  denied: "Notifications are blocked for this site. Allow them in your browser's site settings, then come back.",
+  off: "",
+  on: "",
+};
+
+/** Browser notifications for every alert that fires (price alerts and alert rules). Hidden
+ * until the server has its push keys. */
+export function PushToggle() {
+  const cfg = useApi("web-push-config", (signal) => unwrap(api.GET("/v1/web-push/config", { signal })));
+  const [state, setState] = useState<PushState | null>(null);
+  const act = useAction();
+  useEffect(() => {
+    let live = true;
+    currentPushState().then((s) => live && setState(s), () => live && setState("unsupported"));
+    return () => { live = false; };
+  }, []);
+  if (!cfg.data?.enabled || !cfg.data.public_key || state === null) return null;
+  const key = cfg.data.public_key;
+  const on = state === "on";
+  const change = (next: boolean) => void act.run(async () => {
+    setState(next ? await enablePush(key) : (await disablePush(), "off"));
+    return true;
+  });
+  return (
+    <div className="stack-sm">
+      <label className="check">
+        <input type="checkbox" checked={on} disabled={act.busy || state === "unsupported"}
+          onChange={(e) => change(e.target.checked)} />
+        <span>Notify me in this browser when an alert fires{act.busy ? " (saving…)" : ""}</span>
+      </label>
+      {PUSH_COPY[state] && <p className="cap">{PUSH_COPY[state]}</p>}
+      <ErrorLine error={act.error} />
+    </div>
+  );
+}
+
 export function AlertsView() {
   const { me } = useSession();
   const list = useApi("alerts", (signal) => alerts.list(signal));
@@ -166,6 +207,7 @@ export function AlertsView() {
 
             <Card title="How you're notified" id="delivery">
               <p className="body-sm">Fired alerts appear under Recently fired here and in the classic app.</p>
+              <PushToggle />
               {data.email_enabled ? (
                 <EmailToggle />
               ) : (

@@ -2162,7 +2162,8 @@
      "platform": {
       "enum": [
        "ios",
-       "android"
+       "android",
+       "web"
       ],
       "title": "Platform",
       "type": "string"
@@ -2171,7 +2172,8 @@
       "enum": [
        "apns",
        "fcm",
-       "expo"
+       "expo",
+       "webpush"
       ],
       "title": "Provider",
       "type": "string"
@@ -9552,6 +9554,102 @@
     },
     "title": "WatchlistUpdate",
     "type": "object"
+   },
+   "WebPushConfig": {
+    "properties": {
+     "enabled": {
+      "description": "False until the server has VAPID keys",
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "public_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "VAPID application server key (base64url)",
+      "title": "Public Key"
+     }
+    },
+    "required": [
+     "enabled"
+    ],
+    "title": "WebPushConfig",
+    "type": "object"
+   },
+   "WebPushKeys": {
+    "properties": {
+     "auth": {
+      "maxLength": 30,
+      "minLength": 16,
+      "title": "Auth",
+      "type": "string"
+     },
+     "p256dh": {
+      "maxLength": 100,
+      "minLength": 80,
+      "title": "P256Dh",
+      "type": "string"
+     }
+    },
+    "required": [
+     "p256dh",
+     "auth"
+    ],
+    "title": "WebPushKeys",
+    "type": "object"
+   },
+   "WebPushSubscribe": {
+    "properties": {
+     "device_name": {
+      "anyOf": [
+       {
+        "maxLength": 80,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "e.g. Chrome on Mac",
+      "title": "Device Name"
+     },
+     "endpoint": {
+      "description": "PushSubscription.endpoint",
+      "maxLength": 1000,
+      "minLength": 12,
+      "title": "Endpoint",
+      "type": "string"
+     },
+     "keys": {
+      "$ref": "#/components/schemas/WebPushKeys"
+     }
+    },
+    "required": [
+     "endpoint",
+     "keys"
+    ],
+    "title": "WebPushSubscribe",
+    "type": "object"
+   },
+   "WebPushUnsubscribe": {
+    "properties": {
+     "endpoint": {
+      "maxLength": 1000,
+      "minLength": 12,
+      "title": "Endpoint",
+      "type": "string"
+     }
+    },
+    "required": [
+     "endpoint"
+    ],
+    "title": "WebPushUnsubscribe",
+    "type": "object"
    }
   },
   "securitySchemes": {
@@ -12076,6 +12174,96 @@
      }
     ],
     "summary": "Resend Verification"
+   }
+  },
+  "/v1/me/web-push": {
+   "delete": {
+    "operationId": "web_push_unsubscribe_v1_me_web_push_delete",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WebPushUnsubscribe"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Turn off alert notifications in this browser"
+   },
+   "post": {
+    "description": "Every alert that fires for you (price alerts and alert rules) is also pushed to this\nbrowser. Pass the browser's PushSubscription (endpoint and keys).",
+    "operationId": "web_push_subscribe_v1_me_web_push_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WebPushSubscribe"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Device"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Not a push subscription"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "503": {
+      "description": "Browser notifications aren't set up on the server"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Turn on alert notifications in this browser"
    }
   },
   "/v1/ml/readiness": {
@@ -16168,6 +16356,32 @@
      }
     ],
     "summary": "Watchlist Note"
+   }
+  },
+  "/v1/web-push/config": {
+   "get": {
+    "operationId": "web_push_config_v1_web_push_config_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WebPushConfig"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Browser notifications: whether they're on and the server key"
    }
   }
  }

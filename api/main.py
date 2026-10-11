@@ -925,6 +925,21 @@ class DeviceBody(BaseModel):
     app_version: Optional[str] = Field(default=None, max_length=40)
 
 
+class WebPushKeys(BaseModel):
+    p256dh: str = Field(min_length=80, max_length=100)
+    auth: str = Field(min_length=16, max_length=30)
+
+
+class WebPushSubscribe(BaseModel):
+    endpoint: str = Field(min_length=12, max_length=1000, description="PushSubscription.endpoint")
+    keys: WebPushKeys
+    device_name: Optional[str] = Field(default=None, max_length=80, description="e.g. Chrome on Mac")
+
+
+class WebPushUnsubscribe(BaseModel):
+    endpoint: str = Field(min_length=12, max_length=1000)
+
+
 def _device_out(d: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(d)
     for k in ("created_at", "last_seen_at"):
@@ -950,6 +965,36 @@ def _device_routes(app: FastAPI) -> None:
     @app.get("/v1/me/devices", response_model=List[models.Device], responses=_AUTH)
     def device_list(account: Dict[str, Any] = Depends(current_account)) -> List[Dict[str, Any]]:
         return [_device_out(d) for d in devices.list_devices(_user(account))]
+
+    @app.get("/v1/web-push/config", response_model=models.WebPushConfig, responses=_AUTH,
+             summary="Browser notifications: whether they're on and the server key")
+    def web_push_config(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        from api import webpush
+
+        return webpush.config()
+
+    @app.post("/v1/me/web-push", response_model=models.Device,
+              responses={**_AUTH, 400: {"description": "Not a push subscription"},
+                         503: {"description": "Browser notifications aren't set up on the server"}},
+              summary="Turn on alert notifications in this browser")
+    def web_push_subscribe(body: WebPushSubscribe, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Every alert that fires for you (price alerts and alert rules) is also pushed to this
+        browser. Pass the browser's PushSubscription (endpoint and keys)."""
+        from api import webpush
+
+        if not webpush.enabled():
+            raise HTTPException(503, "Browser notifications aren't available yet.")
+        try:
+            token = webpush.subscription_token(body.endpoint, body.keys.p256dh, body.keys.auth)
+        except webpush.InvalidSubscription as e:
+            raise HTTPException(400, str(e)) from e
+        return _device_out(devices.register(_user(account), token, webpush.PROVIDER, webpush.PLATFORM,
+                                            (body.device_name or "").strip() or None, None))
+
+    @app.delete("/v1/me/web-push", status_code=204, responses=_AUTH,
+                summary="Turn off alert notifications in this browser")
+    def web_push_unsubscribe(body: WebPushUnsubscribe, account: Dict[str, Any] = Depends(current_account)) -> None:
+        devices.remove_web_endpoint(_user(account), body.endpoint.strip())
 
     @app.delete("/v1/me/devices/{device_id}", status_code=204, responses=_OWNED)
     def device_remove(device_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> None:
@@ -1797,9 +1842,11 @@ def _start_realtime_alerts() -> None:
     evaluates alert rules (api.alert_rules)."""
     try:
         from api.alert_rules import worker_pass
-        from billing_service.realtime_alerts import register_pass_hook, start_background_worker
+        from api.webpush import alert_fired
+        from billing_service.realtime_alerts import register_fire_hook, register_pass_hook, start_background_worker
 
         register_pass_hook(worker_pass)  # alert rules ride the same loop (HSF_ALERT_RULES_ENABLED=0 stops them)
+        register_fire_hook(alert_fired)  # browser notifications for price alerts (off until VAPID keys are set)
         start_background_worker()
     except Exception as e:  # alerts are best effort; the API serves regardless
         log.warning("realtime alerts worker failed to start: %s", str(e)[:120])
