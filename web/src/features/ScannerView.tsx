@@ -89,7 +89,6 @@ export function ScannerView() {
 
   return (
     <div className="stack">
-      <DataFreshness info={data?.freshness} />
       <section className="page-head">
         <div>
           <h1 className="h1">Scanner</h1>
@@ -103,6 +102,7 @@ export function ScannerView() {
           <Link href="/scanner/custom" className="btn btn-primary">Run custom scan</Link>
         </div>
       </section>
+      <DataFreshness info={data?.freshness} />
 
       <section className="priority-panel scanner-priority hide-narrow" aria-labelledby="scanner-priority-title">
         <div className="priority-copy">
