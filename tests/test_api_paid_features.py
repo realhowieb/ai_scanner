@@ -245,7 +245,7 @@ class DayTraderTests(PaidApiTestCase):
         b = self.get("pro@example.com", "/v1/day-trader?source=custom&symbols=aapl, $$$,brk.b").json()
         self.assertEqual(b["symbols"], ["AAPL", "BRK.B"])
         self.get("prem@example.com", "/v1/day-trader?source=custom&symbols=AAPL,BRK.B")
-        self.assertEqual(self.metrics.call_count, 1)                    # second caller hit the 30 s cache
+        self.assertEqual(self.metrics.call_count, 1)                    # second caller hit the 10 s cache
         self.assertEqual(self.get("pro@example.com", "/v1/day-trader?source=bogus").status_code, 422)
 
     def test_movers_source(self):

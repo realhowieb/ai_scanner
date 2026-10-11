@@ -61,6 +61,17 @@ class FlagTests(unittest.TestCase):
         self.assertEqual(dd.quote_flags(row(), NOW), [])
 
 
+class SlimRowTests(unittest.TestCase):
+    def test_drops_provenance_and_audit_fields_but_keeps_live_ones(self):
+        r = dd.enrich_row(row(open_source="alpaca_iex", last_feed="iex", vwap_timeframe="snapshot", rvol_formula="x",
+                              gap_pass=True, expected_gap_pct=2.0, market_data_feed="iex", data_source="alpaca_iex",
+                              adx=25.0, ema_cross="golden"), "open", NOW)
+        for k in ("open_source", "last_feed", "vwap_timeframe", "rvol_formula", "gap_pass", "expected_gap_pct",
+                  "market_data_feed"):
+            self.assertNotIn(k, r)
+        self.assertEqual((r["data_source"], r["adx"], r["ema_cross"], r["last"]), ("alpaca_iex", 25.0, "golden", 10.0))
+
+
 class SparklineTests(unittest.TestCase):
     def test_thins_to_points_and_keeps_ends(self):
         t0 = dt.datetime(2026, 10, 9, 14, 0, tzinfo=dt.timezone.utc)

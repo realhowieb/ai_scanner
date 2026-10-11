@@ -6,10 +6,14 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(join(__dirname, "..", "src", "app", "globals.css"), "utf8");
 
 describe("mobile CSS polish", () => {
-  it("keeps the phone header compact with horizontal nav instead of wrapped rows", () => {
+  it("keeps the phone header to one row, with sections in a bottom tab bar", () => {
     expect(css).toContain("@media (max-width: 760px)");
-    expect(css).toContain(".nav { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto;");
-    expect(css).toContain("scroll-snap-type: x proximity");
+    expect(css).toContain(".topbar-in { padding: 8px 16px; gap: 10px; flex-wrap: nowrap; }");
+    expect(css).toContain(".tabbar { display: flex; position: fixed;");
+  });
+
+  it("keeps the desktop header on one row", () => {
+    expect(css).toContain(".topbar-in { flex-wrap: nowrap; }");
   });
 
   it("makes core phone actions and filters comfortable to tap", () => {

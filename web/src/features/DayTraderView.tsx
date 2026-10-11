@@ -1,10 +1,12 @@
 "use client";
 
 // Day Trader (Pro): live quotes, gap, VWAP, relative volume and the 0-100 DT score for
-// a symbol source, from /v1/day-trader. Refreshes every 45 s while a session is trading.
+// a symbol source, from /v1/day-trader. Refreshes every 15 s while a session is trading (not
+// while the tab is hidden); rows slide to their new DT rank, with rank moves and changed
+// prices/scores highlighted, and a pause keeps the order still while you work.
 // Rows sort by any column, filter by side, price, RVOL and volume, explain their score,
 // and flag quotes that look wrong (split, bad print, stale prior close).
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
@@ -31,7 +33,8 @@ const SOURCES = [
 type Source = (typeof SOURCES)[number]["id"];
 const STATE: Record<string, string> = { premarket: "Pre-market", open: "Market open", afterhours: "After hours", closed: "Market closed" };
 const metric = (v: unknown, fallback: string | number = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
-export const DT_REFRESH_MS = 45_000;
+export const DT_REFRESH_MS = 15_000;
+const SPARK_EVERY = 8;   // sparklines reload every 8th quote refresh (~2 min; 1-minute bars change slowly)
 const SPARK_MAX = 40;
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
 
@@ -223,30 +226,138 @@ function FilterBar({ f, set, shown, total }: { f: Filters; set: (f: Filters) => 
   );
 }
 
+type Data = Schemas["DayTrader"];
+type Dir = -1 | 0 | 1;
+export type Move = { rank: number; last: Dir; score: Dir };
+const sign = (a: number | null | undefined, b: number | null | undefined): Dir =>
+  a == null || b == null || a === b ? 0 : a > b ? 1 : -1;
+
+/** What changed between two refreshes of the same source: DT-rank moves (positive = moved up)
+ * and the direction of each changed price and score. Empty across a source switch. */
+export function diffRefresh(prev: Data | null, cur: Data | null): Record<string, Move> {
+  if (!prev || !cur || prev.source !== cur.source || prev.as_of === cur.as_of) return {};
+  const rankOf = (d: Data) => new Map(sortRows(d.rows, "score", true).map((r, i) => [r.ticker, i]));
+  const before = rankOf(prev), after = rankOf(cur);
+  const old = new Map(prev.rows.map((r) => [r.ticker, r]));
+  const out: Record<string, Move> = {};
+  for (const r of cur.rows) {
+    const o = old.get(r.ticker);
+    if (!o) continue;
+    const m: Move = { rank: (before.get(r.ticker) ?? 0) - (after.get(r.ticker) ?? 0), last: sign(r.last, o.last),
+      score: sign(r.day_trade_score, o.day_trade_score) };
+    if (m.rank || m.last || m.score) out[r.ticker] = m;
+  }
+  return out;
+}
+
+/** Keep a frozen order: known tickers where they were, new ones at the end. */
+export function holdOrder(rows: Row[], order: string[]): Row[] {
+  const at = new Map(order.map((t, i) => [t, i]));
+  return [...rows].sort((a, b) => (at.get(a.ticker) ?? Infinity) - (at.get(b.ticker) ?? Infinity));
+}
+
+function useVisible(): boolean {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const on = () => setVisible(document.visibilityState !== "hidden");
+    on();
+    document.addEventListener("visibilitychange", on);
+    return () => document.removeEventListener("visibilitychange", on);
+  }, []);
+  return visible;
+}
+
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [active]);
+  return now;
+}
+
+/** Slide rows from where they were to where they are now (FLIP), keyed by data-t. */
+function useSlide(container: React.RefObject<HTMLElement | null>, order: string) {
+  const last = useRef<Map<string, number>>(new Map());
+  useLayoutEffect(() => {
+    const box = container.current;
+    if (!box) return;
+    const els = Array.from(box.querySelectorAll<HTMLElement>("[data-t]"));
+    const now = new Map(els.map((el) => [el.dataset.t!, el.getBoundingClientRect().top]));
+    const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (!still) {
+      for (const el of els) {
+        const before = last.current.get(el.dataset.t!);
+        const dy = before == null ? 0 : before - now.get(el.dataset.t!)!;
+        if (dy && typeof el.animate === "function") {
+          el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 450, easing: "cubic-bezier(.2,.7,.2,1)" });
+        }
+      }
+    }
+    last.current = now;
+  }, [container, order]);
+}
+
+/** Re-mounts on each new value so the highlight animation replays. */
+function Flash({ v, dir, children }: { v: unknown; dir: Dir | undefined; children: React.ReactNode }) {
+  return <span key={`${String(v)}`} className={dir ? (dir > 0 ? "flash-up" : "flash-down") : undefined}>{children}</span>;
+}
+
+function RankMove({ n }: { n: number | undefined }) {
+  if (!n) return null;
+  return <span className={`dt-move ${n > 0 ? "up" : "down"}`} aria-label={`${n > 0 ? "up" : "down"} ${Math.abs(n)} place${Math.abs(n) === 1 ? "" : "s"}`}>
+    {n > 0 ? "▲" : "▼"}{Math.abs(n)}</span>;
+}
+
 function Live() {
   const [source, setSource] = useState<Source>("movers");
   const [tick, setTick] = useState(0);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "score", desc: true });
   const [open, setOpen] = useState<string | null>(null);
+  const [held, setHeld] = useState<string[] | null>(null);
   const narrow = useNarrow();
+  const visible = useVisible();
   const dt = useApi(`dt:${source}:${tick}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: { source } }, signal })));
   const trading = !!dt.data && dt.data.state !== "closed";
+  const live = trading && visible;
+  // Next refresh one cycle after the last answer (at once when returning to a tab whose
+  // quotes are already older than that); nothing is scheduled while a request is in flight.
+  const asOfMs = dt.data ? Date.parse(dt.data.as_of) : 0;
   useEffect(() => {
-    if (!trading) return;
-    const t = setInterval(() => setTick((n) => n + 1), DT_REFRESH_MS);
-    return () => clearInterval(t);
-  }, [trading]);
+    if (!live || dt.loading) return;
+    const wait = Math.min(DT_REFRESH_MS, Math.max(0, DT_REFRESH_MS - (Date.now() - asOfMs)));
+    const t = setTimeout(() => setTick((n) => n + 1), wait);
+    return () => clearTimeout(t);
+  }, [live, dt.loading, asOfMs]);
+  const now = useNow(live);
   const d = dt.data;
+  // The previous refresh, kept alongside the current one to show what moved.
+  const [hist, setHist] = useState<{ cur: Data | null; prev: Data | null }>({ cur: null, prev: null });
+  if (d !== hist.cur) setHist({ cur: d, prev: hist.cur });
+  const moves = useMemo(() => diffRefresh(hist.prev, hist.cur), [hist]);
+  const switching = dt.loading && !!d && d.source !== source;
   const offHours = !!d && (d.state === "afterhours" || d.state === "closed");
   const all = useMemo(() => d?.rows ?? [], [d]);
-  const rows = useMemo(() => sortRows(applyFilters(all, filters), sort.key, sort.desc), [all, filters, sort]);
+  const rows = useMemo(() => {
+    const sorted = sortRows(applyFilters(all, filters), sort.key, sort.desc);
+    return held ? holdOrder(sorted, held) : sorted;
+  }, [all, filters, sort, held]);
+  const listRef = useRef<HTMLElement>(null);
+  useSlide(listRef, rows.map((r) => r.ticker).join(","));
   // Sparklines for the top names; 1-minute bars change slowly, so reload every third quote refresh.
   const sparkSyms = all.slice(0, SPARK_MAX).map((r) => r.ticker).join(",");
-  const spark = useApi(sparkSyms ? `dt-spark:${sparkSyms}:${Math.floor(tick / 3)}` : null, (signal) =>
+  const spark = useApi(sparkSyms ? `dt-spark:${sparkSyms}:${Math.floor(tick / SPARK_EVERY)}` : null, (signal) =>
     unwrap(api.GET("/v1/day-trader/sparklines", { params: { query: { symbols: sparkSyms } }, signal })));
   const series = spark.data?.series ?? {};
-  const sortBy = (key: SortKey) => setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "ticker" }));
+  const sortBy = (key: SortKey) => {
+    setHeld(null);
+    setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "ticker" }));
+  };
+  const togglePause = () => setHeld((h) => (h ? null : rows.map((r) => r.ticker)));
+  const ago = d ? Math.max(0, Math.round((now - Date.parse(d.as_of)) / 1000)) : 0;
   const toggle = (t: string) => setOpen((o) => (o === t ? null : t));
 
   return (
@@ -258,7 +369,11 @@ function Live() {
           </select>
         </label>
         <span className="grow" />
-        {d && <span className="cap">{STATE[d.state] ?? d.state} · quotes {etTime(d.as_of)}{trading ? " · refreshes every 45s" : ""}</span>}
+        {d && (live
+          ? <span className="cap dt-live" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Live · updated {ago}s ago</span>
+          : <span className="cap">{STATE[d.state] ?? d.state} · quotes {etTime(d.as_of)}{trading ? " · paused while this tab is hidden" : ""}</span>)}
+        {trading && <button type="button" className="btn btn-sm" aria-pressed={!!held} onClick={togglePause}
+          title="Keep rows in place while you work; prices still update">{held ? "Resume order" : "Pause order"}</button>}
         <button type="button" className="btn btn-sm" onClick={() => setTick((n) => n + 1)} disabled={dt.loading}>Refresh</button>
       </section>
       {d && all.length > 0 && (
@@ -278,7 +393,7 @@ function Live() {
             {source === "watchlist" ? "Add tickers to your default watchlist, or pick another source." : "Try another source."}</Empty></Card>
         : rows.length === 0 ? <Card><Empty title="No rows match these filters."><button type="button" className="btn btn-sm" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button></Empty></Card>
         : narrow ? (
-          <section className={`dt-cards${dt.loading ? " dim" : ""}`} aria-label="Day Trader symbols">
+          <section ref={listRef} className={`dt-cards${switching ? " dim" : ""}`} aria-label="Day Trader symbols">
             <div className="chips" role="group" aria-label="Sort by">
               {(["score", "chg", "rvol", "volume"] as const).map((k) => (
                 <button key={k} type="button" className="chip" aria-pressed={sort.key === k} onClick={() => sortBy(k)}>
@@ -287,14 +402,14 @@ function Live() {
               ))}
             </div>
             {rows.map((r) => (
-              <article key={r.ticker} className="card dt-card">
+              <article key={r.ticker} data-t={r.ticker} className="card dt-card">
                 <div className="dt-card-head">
-                  <TickerLink ticker={r.ticker} /><Flags r={r} />
+                  <TickerLink ticker={r.ticker} /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} />
                   <span className="grow" />
-                  <Score r={r} />
+                  <Flash v={r.day_trade_score} dir={moves[r.ticker]?.score}><Score r={r} /></Flash>
                 </div>
                 <div className="dt-card-row">
-                  <span className="mono">{price(r.last)}</span>
+                  <span className="mono"><Flash v={r.last} dir={moves[r.ticker]?.last}>{price(r.last)}</Flash></span>
                   <span className="mono"><Change r={r} offHours={offHours} /></span>
                   <Sparkline points={series[r.ticker]} ticker={r.ticker} />
                 </div>
@@ -314,7 +429,7 @@ function Live() {
             ))}
           </section>
         ) : (
-          <section className={`card flush${dt.loading ? " dim" : ""}`}>
+          <section ref={listRef} className={`card flush${switching ? " dim" : ""}`}>
             <div className="table-wrap">
               <table className="table dt-table">
                 <thead><tr>
@@ -332,13 +447,13 @@ function Live() {
                 <tbody>
                   {rows.map((r) => (
                     <Fragment key={r.ticker}>
-                      <tr className={flagged(r) ? "row-muted" : undefined}>
-                        <td><span className="dt-ticker"><TickerLink ticker={r.ticker} /><Flags r={r} /></span></td>
+                      <tr data-t={r.ticker} className={flagged(r) ? "row-muted" : undefined}>
+                        <td><span className="dt-ticker"><TickerLink ticker={r.ticker} /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} /></span></td>
                         <td className="num">
                           <button type="button" className="th-sort" aria-expanded={open === r.ticker} aria-label={`Why ${r.ticker} scores ${r.day_trade_score == null ? "no score" : Math.round(r.day_trade_score)}`}
-                            onClick={() => toggle(r.ticker)}><Score r={r} /></button>
+                            onClick={() => toggle(r.ticker)}><Flash v={r.day_trade_score} dir={moves[r.ticker]?.score}><Score r={r} /></Flash></button>
                         </td>
-                        <td className="num mono">{price(r.last)}</td>
+                        <td className="num mono"><Flash v={r.last} dir={moves[r.ticker]?.last}>{price(r.last)}</Flash></td>
                         <td className="num mono"><Change r={r} offHours={offHours} /></td>
                         <td className="num mono hide-narrow">{pct(r.gap_pct)}</td>
                         <td className={`num mono hide-narrow ${tone(r.vs_vwap_pct)}`}>{pct(r.vs_vwap_pct)}</td>

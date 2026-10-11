@@ -130,12 +130,12 @@ def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
 # ---- Day Trader (P1-70) --------------------------------------------------------------------------
 DT_SOURCES = ("watchlist", "movers", "movers_sp500", "movers_nasdaq", "premarket", "postmarket",
               "scan_picks", "megacaps", "custom")
-DT_ROWS_TTL_S = 30          # live quotes: shared across users for 30 s (the web refreshes every 30-60 s)
+DT_ROWS_TTL_S = 10          # live quotes: shared across users for 10 s (the web refreshes every 15 s while trading)
 DT_MOVERS_TTL_S = 120       # the movers screen, as on the web
 # Past their TTL, Day Trader lists and quotes are served for this long while one
 # background reload runs, so a visitor never waits on the movers screen (~16 s).
 DT_MOVERS_STALE_S = 600
-DT_ROWS_STALE_S = 90
+DT_ROWS_STALE_S = 45
 
 
 def _dt_symbols(source: str, custom: Sequence[str], watch: Sequence[str]) -> List[str]:

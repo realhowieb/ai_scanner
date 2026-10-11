@@ -41,15 +41,30 @@ describe("navigation", () => {
     render(<SessionProvider initialMe={me("pro")}><AppShell><p>body</p></AppShell></SessionProvider>);
     const nav = screen.getByRole("navigation", { name: "Main" });
     const links = within(nav).getAllByRole("link");
-    expect(links.map((l) => l.textContent)).toEqual(["Today", "Brief", "Scanner", "Stock Intelligence", "Day Trader", "Watchlists", "Alerts", "Track record"]);
+    expect(links.map((l) => l.textContent)).toEqual(["Today", "Brief", "Scanner", "Stocks", "Day Trader", "Watchlists", "Alerts"]);
     for (const l of links) expect(routeExists(l.getAttribute("href")!)).toBe(true);
     expect(within(nav).getByRole("link", { name: "Scanner" })).toHaveAttribute("aria-current", "page");
+    await u.click(within(nav).getByRole("button", { name: "More" }));
+    expect(within(nav).getByRole("menuitem", { name: "Track record" })).toHaveAttribute("href", "/track-record");
+    const tabs = screen.getByRole("navigation", { name: "Sections" });
+    expect(within(tabs).getAllByRole("link").map((l) => l.textContent)).toEqual(["Today", "Scanner", "Watchlists", "Alerts"]);
+    await u.click(within(tabs).getByRole("button", { name: "More" }));
+    expect(within(tabs).getAllByRole("menuitem").map((l) => l.textContent)).toEqual(["Brief", "Stocks", "Day Trader", "Track record"]);
+    await u.keyboard("{Escape}");
+    expect(within(tabs).queryByRole("menu")).not.toBeInTheDocument();
+    for (const l of [...links, ...within(tabs).getAllByRole("link")]) expect(routeExists(l.getAttribute("href")!)).toBe(true);
     await u.click(screen.getByRole("button", { name: /Account/ }));
     const menu = screen.getByRole("menu");
     for (const l of within(menu).getAllByRole("menuitem").filter((x) => x.tagName === "A" && x.getAttribute("href")!.startsWith("/"))) {
       expect(routeExists(l.getAttribute("href")!)).toBe(true);
     }
     expect(within(menu).getByRole("menuitem", { name: "Account & billing" })).toHaveAttribute("href", "/account");
+    await u.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Account/ })).toHaveFocus();
+    await u.click(screen.getByRole("button", { name: /Account/ }));
+    await u.click(screen.getByText("body"));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(routeExists("/how-hsf-works")).toBe(true);
     expect(routeExists("/demo")).toBe(true);
   });

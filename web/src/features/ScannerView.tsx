@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DataFreshness } from "@/features/DataFreshness";
 import { api, unwrap } from "@/api/client";
-import { Card, Disclaimer, Empty, ErrorState, Freshness, Locked, ResearchNotice, Skeleton, UpgradeButton } from "@/components/ui";
+import { Card, Empty, ErrorState, Freshness, Locked, ResearchNotice, Skeleton, UpgradeButton } from "@/components/ui";
 import { AIScanPanel } from "@/features/AIScanPanel";
 import { useApi } from "@/hooks/useApi";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
@@ -83,7 +83,7 @@ export function ScannerView() {
 
   const visibleTotal = data ? Math.min(data.total, data.max_results) : 0;
   const pages = Math.max(1, Math.ceil(visibleTotal / f.size));
-  const filtersActive = Boolean(f.signal || f.minScore || f.size !== 25 || sort !== "score");
+  const moreActive = Boolean(f.minScore || f.size !== 25 || sort !== "score");
   const leader = data?.setups[0];
   const setupCountLabel = data ? `${data.total} setup${data.total === 1 ? "" : "s"} ranked` : "Loading the latest ranked setups";
 
@@ -98,13 +98,13 @@ export function ScannerView() {
             {data && ` · ${data.total} setup${data.total === 1 ? "" : "s"} ranked`}
           </p>
         </div>
-        <div className="row-actions">
+        <div className="row-actions scanner-actions">
           <Link href="/scanner/history" className="btn">Scan history</Link>
           <Link href="/scanner/custom" className="btn btn-primary">Run custom scan</Link>
         </div>
       </section>
 
-      <section className="priority-panel scanner-priority" aria-labelledby="scanner-priority-title">
+      <section className="priority-panel scanner-priority hide-narrow" aria-labelledby="scanner-priority-title">
         <div className="priority-copy">
           <p className="cap">Best starting point</p>
           <h2 className="h2" id="scanner-priority-title">
@@ -119,24 +119,24 @@ export function ScannerView() {
         <ResearchNotice compact />
       </section>
 
-      <details className="filter-panel" open={filtersActive}>
+      <div className="chips scanner-chips" role="group" aria-label="Setup type">
+        {SIGNALS.map((s) => {
+          const locked = "feature" in s && !can(s.feature);
+          return (
+            <button key={s.id || "all"} type="button" className="chip" aria-pressed={f.signal === s.id}
+              onClick={() => set({ signal: s.id })}>
+              {s.label}{locked && <span className="chip-lock"> · Premium</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      <details className="filter-panel" open={moreActive}>
         <summary>
-          <span className="strong">Refine results</span>
-          <span className="cap">{filtersActive ? "Filters active" : "Setup type, score floor, sort, and rows"}</span>
+          <span className="strong">More filters</span>
+          <span className="cap">{moreActive ? "Filters active" : "Score floor, sort, and rows"}</span>
         </summary>
         <section aria-label="Filters" className="filters">
-          <div className="chips" role="group" aria-label="Setup type">
-            {SIGNALS.map((s) => {
-              const locked = "feature" in s && !can(s.feature);
-              return (
-                <button key={s.id || "all"} type="button" className="chip" aria-pressed={f.signal === s.id}
-                  onClick={() => set({ signal: s.id })}>
-                  {s.label}{locked && <span className="chip-lock"> · Premium</span>}
-                </button>
-              );
-            })}
-          </div>
-          <span className="grow" />
           <label className="inline-field">Min HSF Score
             <select value={f.minScore} onChange={(e) => set({ min: Number(e.target.value) })}>
               {MIN_SCORES.map((m) => <option key={m} value={m}>{m === 0 ? "Any" : m}</option>)}
@@ -193,7 +193,6 @@ export function ScannerView() {
         </nav>
       )}
       {data && data.setups.length > 0 && <AIScanPanel />}
-      <Disclaimer />
     </div>
   );
 }

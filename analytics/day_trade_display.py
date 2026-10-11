@@ -105,13 +105,30 @@ def quote_flags(row: Dict[str, Any], now: Optional[dt.datetime] = None) -> List[
     return out
 
 
+# Provenance and self-audit fields build_day_trader_metrics attaches for diagnostics. The web
+# never reads them, and at a 15 s refresh they were most of each row's bytes.
+_DEBUG_FIELDS = frozenset({
+    "change_difference", "change_pass", "displayed_change_dollar", "displayed_gap_pct",
+    "expected_change_dollar", "expected_gap_pct", "expected_vs_vwap_pct", "expected_vwap_state",
+    "gap_difference", "gap_pass", "open_source", "last_source", "prev_close_source",
+    "previous_close_source", "vwap_source", "volume_source", "rvol_source", "rvol_period",
+    "market_data_feed",
+})
+_DEBUG_SUFFIXES = ("_feed", "_timeframe", "_formula")
+
+
+def slim_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """The row without diagnostic provenance/audit fields."""
+    return {k: v for k, v in row.items() if k not in _DEBUG_FIELDS and not k.endswith(_DEBUG_SUFFIXES)}
+
+
 def enrich_row(row: Dict[str, Any], state: str, now: Optional[dt.datetime] = None) -> Dict[str, Any]:
     """One web row: live fields plus score, tier, direction, reasons, conflicts,
     session columns and quote flags."""
     intel = day_trade_intelligence(scoring_view(row, state))
     flags = quote_flags(row, now)
     return {
-        **row,
+        **slim_row(row),
         **session_changes(row, state),
         "day_trade_score": intel["score"],
         "dt_quality": intel["quality"],

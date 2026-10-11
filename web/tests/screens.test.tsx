@@ -44,7 +44,10 @@ describe("Scanner", () => {
     render(<SessionProvider initialMe={me("basic")}><ScannerView /></SessionProvider>);
     expect(await screen.findAllByRole("link", { name: "AAA" })).not.toHaveLength(0);
     expect(screen.getByRole("heading", { name: "AAA leads the latest HSF-ranked scan." })).toBeInTheDocument();
-    expect(screen.getByText("Refine results")).toBeInTheDocument();
+    expect(screen.getByText("More filters")).toBeInTheDocument();
+    expect(screen.getAllByRole("group", { name: "Setup type" })).toHaveLength(1); // chips sit outside the folded filters
+    expect(screen.queryByRole("columnheader", { name: "PreBreakout" })).not.toBeInTheDocument();
+    expect(screen.getByText(/PreBreakout probability is part of/)).toBeInTheDocument();
     const note = screen.getByRole("note");
     expect(note).toHaveTextContent("top 25 of 140 setups");
     expect(within(note).getByRole("button", { name: "Upgrade to Pro" })).toBeInTheDocument();
@@ -178,7 +181,8 @@ describe("Stock Intelligence", () => {
     render(<StockView s={stock()} premium />);
     expect(screen.getByRole("heading", { name: "Decision snapshot" })).toBeInTheDocument();
     expect(screen.getByText("Strong · HSF 77 and rising")).toBeInTheDocument();
-    expect(screen.getByText(/Breaking out; its HSF Score is improving/)).toBeInTheDocument();
+    expect(screen.getAllByText("Breaking out")).toHaveLength(1); // the main reason shows once, in the snapshot
+    expect(screen.queryByRole("heading", { name: "Other reasons it ranks" })).not.toBeInTheDocument();
     expect(screen.getByText(/not a live quote/)).toBeInTheDocument();
     expect(screen.getByText("No price history cached for this ticker.")).toBeInTheDocument();
     expect(screen.getByText("13%")).toBeInTheDocument();

@@ -16,7 +16,7 @@ const base: Schemas["Today"] = {
 describe("Today", () => {
   it("shows every section that loaded and a notice for the one that failed", () => {
     render(<TodayView data={{ ...base, recap: null, errors: [{ section: "recap", error: "OperationalError" }] }} />);
-    expect(screen.getByRole("heading", { name: "BBB is the strongest setup on the board." })).toBeInTheDocument();
+    expect(screen.getByText(/leads the board at HSF 81 with a Breakout setup/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review BBB" })).toHaveAttribute("href", "/stocks/BBB");
     expect(screen.getByText("Pre-market")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "AAA" })).toHaveAttribute("href", "/stocks/AAA");
@@ -177,5 +177,13 @@ describe("Today signed-in sections", () => {
       "New since your last visit couldn't load right now. The rest of the page is current.",
       "Your watchlist couldn't load right now. The rest of the page is current.",
     ]);
+  });
+  it("puts a returning user's own sections before the market-wide ones", () => {
+    render(<TodayView data={base} mine={{ errors: [], new_since: { marker: "11:", tickers: [], total: 0 },
+      watchlist: { watchlist_id: 1, name: "Main", in_scan: [{ ticker: "BBB", score: 81 }], missing: [] } }} />);
+    const side = screen.getByRole("complementary");
+    const first = side.firstElementChild!;
+    expect(first).toHaveClass("today-personal");
+    expect(within(first as HTMLElement).getByRole("heading", { name: "Your watchlist" })).toBeInTheDocument();
   });
 });

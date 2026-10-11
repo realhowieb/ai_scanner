@@ -5,7 +5,7 @@ import type { FormEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { TICKER_RE } from "@/components/AppShell";
-import { Card, Disclaimer, Empty, ErrorState, UpgradeButton } from "@/components/ui";
+import { Card, Empty, ErrorState, UpgradeButton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { CANCELLED, useScanJob } from "@/hooks/useScanJob";
 import type { ScanApi, ScanCreate, ScanJob } from "@/hooks/useScanJob";
@@ -306,7 +306,6 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
               </div>
             </Card>
           )}
-          <Disclaimer />
         </div>
       </div>
     </div>
