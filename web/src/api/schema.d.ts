@@ -885,7 +885,7 @@ export interface paths {
         /**
          * Turn on alert notifications in this browser
          * @description Every alert that fires for you (price alerts and alert rules) is also pushed to this
-         *     browser. Pass the browser's PushSubscription (endpoint and keys).
+         *     browser. Pass the browser's PushSubscription (endpoint and keys). Pro and above.
          */
         post: operations["web_push_subscribe_v1_me_web_push_post"];
         /** Turn off alert notifications in this browser */
@@ -5282,13 +5282,19 @@ export interface components {
         /** WebPushConfig */
         WebPushConfig: {
             /**
+             * Allowed
+             * @description False when the account's plan doesn't include browser notifications (they're part of Pro)
+             * @default true
+             */
+            allowed: boolean;
+            /**
              * Enabled
              * @description False until the server has VAPID keys
              */
             enabled: boolean;
             /**
              * Public Key
-             * @description VAPID application server key (base64url)
+             * @description VAPID application server key (base64url); only when enabled and allowed
              */
             public_key?: string | null;
         };
@@ -7661,6 +7667,13 @@ export interface operations {
             };
             /** @description Not signed in */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Browser notifications are part of Pro */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
