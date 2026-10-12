@@ -114,6 +114,22 @@ def register(app: FastAPI) -> None:
         return latest_scan(ent["entitlements"], ent["tier"], limit=limit, offset=offset,
                            min_score=min_score, signal=signal, sort=sort)
 
+    @app.get("/v1/sparklines", response_model=models.Sparklines, responses=_AUTH, summary="Daily sparklines")
+    def sparklines(account: Dict[str, Any] = Depends(current_account),
+                   symbols: str = Query(..., max_length=2000, description="Comma-separated; the first 50 are returned")
+                   ) -> Dict[str, Any]:
+        """Each ticker's last 21 daily closes, for the Scanner, Watchlists and Today row sparklines."""
+        from api.scans import daily_closes
+
+        return json_safe(daily_closes(symbols.split(",")))
+
+    @app.get("/v1/stocks/{ticker}/score-history", response_model=models.ScoreHistory, responses=_AUTH)
+    def stock_score_history(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The ticker's HSF Score in each recent full-market scan, with the Scanner's scores."""
+        from api.scans import score_history
+
+        return json_safe(score_history(ticker, entitlements_for(account)["entitlements"]))
+
     @app.get("/v1/stocks/{ticker}", response_model=models.StockDetail, responses=_AUTH)
     def stock(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Stock Intelligence for one ticker: score, signals, reasons and risks, lifecycle,

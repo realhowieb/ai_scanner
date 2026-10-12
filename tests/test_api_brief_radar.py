@@ -38,3 +38,37 @@ class ScanRadarTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SparklineAndScoreHistoryTest(unittest.TestCase):
+    def setUp(self):
+        api.scans.spark_cache.clear()
+        api.scans.score_cache.clear()
+
+    def test_daily_closes_one_batch_last_21(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"Close": [float(i) for i in range(30)]})
+        with mock.patch("data.prices.fetch_price_data_batch", return_value=({"AAA": df}, [])) as fetch:
+            out = api.scans.daily_closes(["aaa", "AAA", "ZZZ"])
+            api.scans.daily_closes(["AAA", "ZZZ"])  # same set: served from the cache
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(fetch.call_args.args[0], ["AAA", "ZZZ"])
+        self.assertEqual(out["series"]["AAA"], [float(i) for i in range(9, 30)])
+        self.assertNotIn("ZZZ", out["series"])
+
+    def test_score_history_uses_scanner_scores_gaps_and_added_signals(self):
+        runs = [{"id": 3, "created_at": "2026-10-12T19:38:00+00:00"},
+                {"id": 2, "created_at": "2026-10-12T16:38:00+00:00"},
+                {"id": 1, "created_at": "2026-10-12T13:38:00+00:00"}]
+        per_run = {1: {"CCC": {"score": 50, "signals": ["gapper"]}},
+                   2: {},
+                   3: {"CCC": {"score": 77, "signals": ["gapper", "golden_cross", "prebreakout"]}}}
+        with mock.patch("api.scans.market_runs", return_value=runs), \
+                mock.patch("api.scans._run_ticker_scores", side_effect=lambda rid: per_run[rid]):
+            pro = api.scans.score_history("ccc", {"can_early_breakout": False})
+            prem = api.scans.score_history("CCC", {"can_early_breakout": True})
+        self.assertEqual([p["score"] for p in pro["points"]], [50, None, 77])
+        self.assertEqual(pro["points"][2]["signals_added"], ["gapper", "golden_cross"])  # not ranked in the scan before
+        self.assertNotIn("prebreakout", pro["points"][2]["signals"])
+        self.assertIn("prebreakout", prem["points"][2]["signals_added"])

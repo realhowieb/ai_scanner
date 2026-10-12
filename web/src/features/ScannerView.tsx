@@ -182,7 +182,7 @@ export function ScannerView() {
         </Empty></Card>
       ) : data ? (
         <section className={`card flush${loading ? " dim" : ""}`} aria-busy={loading}>
-          <SetupTable rows={data.setups} offset={offset} premium={premium} numbered={sort === "score"} />
+          <SetupTable rows={data.setups} offset={offset} premium={premium} numbered={sort === "score"} sparks />
         </section>
       ) : null}
 

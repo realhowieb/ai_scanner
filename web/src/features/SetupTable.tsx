@@ -7,13 +7,16 @@ import { Pill, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
 import { num, pct, price, probWithRank, setupLabel } from "@/lib/format";
 
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
+import { DailySpark, RvolMeter, useDailySparks } from "./Sparks";
 
 type Row = Schemas["ScanSetup"];
 
 /** Ranked rows, as a table on wide screens and as cards on phones. Rows come ranked from the API. */
 /** `numbered` = rows are in HSF rank order, so the position is the rank; off for other sort orders. */
 /** The PreBreakout column shows only on Premium; other plans get one note under the rows instead of "Premium" per row. */
-export function SetupTable({ rows, offset = 0, premium, numbered = true }: { rows: Row[]; offset?: number; premium: boolean; numbered?: boolean }) {
+/** `sparks` adds each ticker's 20-session sparkline: for current scans only, not saved history. */
+export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false }: { rows: Row[]; offset?: number; premium: boolean; numbered?: boolean; sparks?: boolean }) {
+  const series = useDailySparks(sparks ? rows.map((r) => r.ticker) : []);
   return (
     <>
       <div className="table-wrap only-wide">
@@ -21,9 +24,9 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true }: { row
           <thead>
             <tr>
               <th scope="col">{numbered ? "#" : <span className="sr-only">Row</span>}</th><th scope="col">Ticker</th><th scope="col">Setup</th>
-              <th scope="col" className="w30">HSF Score</th><th scope="col" className="num">Last</th>
+              <th scope="col" className="w30">HSF Score</th>{sparks && <th scope="col">20 sessions</th>}<th scope="col" className="num">Last</th>
               <th scope="col" className="num">Chg %</th><th scope="col" className="num">Gap %</th>
-              <th scope="col" className="num">RVOL</th>{premium && <th scope="col" className="num">PreBreakout</th>}
+              <th scope="col">RVOL</th>{premium && <th scope="col" className="num">PreBreakout</th>}
               <th scope="col"><span className="sr-only">Save</span></th>
             </tr>
           </thead>
@@ -34,10 +37,11 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true }: { row
                 <td><TickerLink ticker={r.ticker} />{r.fading && <> <Pill tone="warn">Fading</Pill></>}</td>
                 <td><Pill>{setupLabel(r.primary_setup)}</Pill></td>
                 <td><ScoreBar score={r.score} /></td>
+                {sparks && <td><DailySpark points={series[r.ticker]} ticker={r.ticker} /></td>}
                 <td className="num mono">{price(r.last)}</td>
                 <td className={`num mono ${(r.chg_pct ?? 0) > 0 ? "up" : (r.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(r.chg_pct)}</td>
                 <td className="num mono">{pct(r.gap_pct)}</td>
-                <td className="num mono">{num(r.rvol)}</td>
+                <td><RvolMeter rvol={r.rvol} /></td>
                 {premium && <td className="num mono">{probWithRank(r.prob, r.prob_rank)}</td>}
                 <td className="num"><SaveToWatchlistButton ticker={r.ticker} compact /></td>
               </tr>
@@ -54,6 +58,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true }: { row
               <Pill>{setupLabel(r.primary_setup)}</Pill>
               {r.fading && <Pill tone="warn">Fading</Pill>}
               <span className="grow" />
+              {sparks && <DailySpark points={series[r.ticker]} ticker={r.ticker} width={72} height={22} />}
               <SaveToWatchlistButton ticker={r.ticker} compact />
             </div>
             <dl className="sc-facts">

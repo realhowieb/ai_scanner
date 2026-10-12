@@ -24,7 +24,8 @@ const PHASES: Record<string, { label: string; note: string; tone: string }> = {
 const CHIP_LIMIT = 12;
 
 /** Recap names arrive as "VST (53)"; each chip opens that stock. */
-function TickerChips({ items }: { items: string[] }) {
+/** `move` marks a list of names that rose into (up) or dropped out of (down) the ranked list. */
+function TickerChips({ items, move }: { items: string[]; move?: "up" | "down" }) {
   const shown = items.slice(0, CHIP_LIMIT);
   return (
     <div className="chips">
@@ -32,8 +33,8 @@ function TickerChips({ items }: { items: string[] }) {
         const m = /^(\S+)\s*\((\d+)\)$/.exec(e.trim());
         const ticker = m ? m[1]! : e.trim();
         return (
-          <Link key={e} href={`/stocks/${encodeURIComponent(ticker)}`} className="pill" aria-label={m ? `${ticker}, HSF ${m[2]}` : ticker}>
-            {ticker}{m && <span className="chip-score"> {m[2]}</span>}
+          <Link key={e} href={`/stocks/${encodeURIComponent(ticker)}`} className={`pill${move ? ` chip-${move}` : ""}`} aria-label={m ? `${ticker}, HSF ${m[2]}` : ticker}>
+            {move && <span className={move} aria-hidden="true">{move === "up" ? "▲ " : "▼ "}</span>}{ticker}{m && <span className="chip-score"> {m[2]}</span>}
           </Link>
         );
       })}
@@ -300,11 +301,11 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
               )}
               {data.recap.entered.length > 0 && (
                 <div className="chips-block"><p className="cap">Entered the ranked list (HSF {RANKED_MIN}+), with their latest score</p>
-                  <TickerChips items={data.recap.entered} /></div>
+                  <TickerChips items={data.recap.entered} move="up" /></div>
               )}
               {data.recap.left.length > 0 && (
                 <div className="chips-block"><p className="cap">Left the ranked list, with their score from the day&apos;s first scan</p>
-                  <TickerChips items={data.recap.left} /></div>
+                  <TickerChips items={data.recap.left} move="down" /></div>
               )}
               {data.recap.entered.length === 0 && data.recap.left.length === 0 && <p className="cap">No names entered or left the ranked list.</p>}
             </Card>

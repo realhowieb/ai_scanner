@@ -7170,6 +7170,75 @@
     "title": "ScanSetup",
     "type": "object"
    },
+   "ScoreHistory": {
+    "properties": {
+     "points": {
+      "default": [],
+      "description": "Recent full-market scans, oldest first",
+      "items": {
+       "$ref": "#/components/schemas/ScorePoint"
+      },
+      "title": "Points",
+      "type": "array"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "ScoreHistory",
+    "type": "object"
+   },
+   "ScorePoint": {
+    "properties": {
+     "score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "HSF Score in that scan, as the Scanner shows it; null when not ranked",
+      "title": "Score"
+     },
+     "signals": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "signals_added": {
+      "default": [],
+      "description": "Signals new since the scan before",
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals Added",
+      "type": "array"
+     },
+     "time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The full-market scan (ISO)",
+      "title": "Time"
+     }
+    },
+    "title": "ScorePoint",
+    "type": "object"
+   },
    "ScoredTicker": {
     "properties": {
      "score": {
@@ -7538,6 +7607,24 @@
      "status"
     ],
     "title": "Snapshot",
+    "type": "object"
+   },
+   "Sparklines": {
+    "properties": {
+     "series": {
+      "additionalProperties": {
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "default": {},
+      "description": "Ticker -> up to 21 daily closes, oldest first; the last is the session in progress during market hours. Tickers without bars are left out",
+      "title": "Series",
+      "type": "object"
+     }
+    },
+    "title": "Sparklines",
     "type": "object"
    },
    "StairSteppers": {
@@ -15528,6 +15615,57 @@
     "summary": "A custom scan's status and results"
    }
   },
+  "/v1/sparklines": {
+   "get": {
+    "description": "Each ticker's last 21 daily closes, for the Scanner, Watchlists and Today row sparklines.",
+    "operationId": "sparklines_v1_sparklines_get",
+    "parameters": [
+     {
+      "description": "Comma-separated; the first 50 are returned",
+      "in": "query",
+      "name": "symbols",
+      "required": true,
+      "schema": {
+       "description": "Comma-separated; the first 50 are returned",
+       "maxLength": 2000,
+       "title": "Symbols",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Sparklines"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Daily sparklines"
+   }
+  },
   "/v1/stocks/{ticker}": {
    "get": {
     "description": "Stock Intelligence for one ticker: score, signals, reasons and risks, lifecycle,\ndaily bars, and your watchlists and alerts on it.",
@@ -15658,6 +15796,57 @@
      }
     ],
     "summary": "Trade plan for a scan result (Pro)"
+   }
+  },
+  "/v1/stocks/{ticker}/score-history": {
+   "get": {
+    "description": "The ticker's HSF Score in each recent full-market scan, with the Scanner's scores.",
+    "operationId": "stock_score_history_v1_stocks__ticker__score_history_get",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ScoreHistory"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Stock Score History"
    }
   },
   "/v1/today": {

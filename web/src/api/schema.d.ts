@@ -1367,6 +1367,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sparklines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Daily sparklines
+         * @description Each ticker's last 21 daily closes, for the Scanner, Watchlists and Today row sparklines.
+         */
+        get: operations["sparklines_v1_sparklines_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/stocks/{ticker}": {
         parameters: {
             query?: never;
@@ -1401,6 +1421,26 @@ export interface paths {
          *     size from your risk budget. Educational only, not advice.
          */
         get: operations["stock_plan_v1_stocks__ticker__plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stocks/{ticker}/score-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stock Score History
+         * @description The ticker's HSF Score in each recent full-market scan, with the Scanner's scores.
+         */
+        get: operations["stock_score_history_v1_stocks__ticker__score_history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4394,6 +4434,41 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** ScoreHistory */
+        ScoreHistory: {
+            /**
+             * Points
+             * @description Recent full-market scans, oldest first
+             * @default []
+             */
+            points: components["schemas"]["ScorePoint"][];
+            /** Ticker */
+            ticker: string;
+        };
+        /** ScorePoint */
+        ScorePoint: {
+            /**
+             * Score
+             * @description HSF Score in that scan, as the Scanner shows it; null when not ranked
+             */
+            score?: number | null;
+            /**
+             * Signals
+             * @default []
+             */
+            signals: string[];
+            /**
+             * Signals Added
+             * @description Signals new since the scan before
+             * @default []
+             */
+            signals_added: string[];
+            /**
+             * Time
+             * @description The full-market scan (ISO)
+             */
+            time?: string | null;
+        };
         /** ScoredTicker */
         ScoredTicker: {
             /**
@@ -4545,6 +4620,17 @@ export interface components {
              * @description Market-data feed behind volume figures: 'iex' counts IEX exchange trades only (a small share of U.S. volume), 'sip' is consolidated
              */
             volume_feed?: string | null;
+        };
+        /** Sparklines */
+        Sparklines: {
+            /**
+             * Series
+             * @description Ticker -> up to 21 daily closes, oldest first; the last is the session in progress during market hours. Tickers without bars are left out
+             * @default {}
+             */
+            series: {
+                [key: string]: number[];
+            };
         };
         /** StairSteppers */
         StairSteppers: {
@@ -9310,6 +9396,45 @@ export interface operations {
             };
         };
     };
+    sparklines_v1_sparklines_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated; the first 50 are returned */
+                symbols: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sparklines"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stock_v1_stocks__ticker__get: {
         parameters: {
             query?: never;
@@ -9389,6 +9514,45 @@ export interface operations {
             };
             /** @description Not in the latest scan */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stock_score_history_v1_stocks__ticker__score_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ticker symbol, e.g. AAPL or BRK.B */
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreHistory"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

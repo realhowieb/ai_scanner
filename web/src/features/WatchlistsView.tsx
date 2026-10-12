@@ -22,6 +22,8 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
+import { DailySpark, useDailySparks } from "./Sparks";
+
 const NOTE_MAX = 500;
 const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 
@@ -142,7 +144,7 @@ function IntelFacts({ x }: { x: WatchlistIntelItem }) {
   const alerts = x.active_alert_count ?? 0;
   return (
     <>
-      {sc !== 0 && <span className={`mono ${sc > 0 ? "up" : "down"}`} title="HSF Score change since the previous scan">{sc > 0 ? "▲" : "▼"}{Math.abs(sc)}</span>}
+      {sc !== 0 && <span className={`delta-chip mono ${sc > 0 ? "up" : "down"}`} title="HSF Score change since the previous scan">{sc > 0 ? "▲ +" : "▼ −"}{Math.abs(sc)} HSF</span>}
       {rc !== 0 && <span>{rc > 0 ? "Up" : "Down"} {Math.abs(rc)} place{Math.abs(rc) === 1 ? "" : "s"}</span>}
       {x.prebreakout && <Pill tone="gold">PreBreakout</Pill>}
       {x.rvol != null && <span>RVOL {num(x.rvol)}x</span>}
@@ -253,6 +255,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
     if (!legacy) return new Map((detail.data?.items ?? []).filter((i) => i.latest).map((i) => [i.ticker, i.latest!]));
     return new Map((scan.data?.setups ?? []).map((s) => [s.ticker, s]));
   }, [legacy, detail.data, scan.data]);
+  const series = useDailySparks((detail.data?.items ?? []).map((i) => i.ticker));
 
   if (detail.error && !detail.data) return <ErrorState error={detail.error} onRetry={detail.reload} what="this watchlist" />;
   if (!detail.data || detail.loading && detail.data.id !== id) return <Skeleton rows={5} label="Loading watchlist" />;
@@ -316,6 +319,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                         {s.fading && <Pill tone="warn">Fading</Pill>}
                       </>
                     ) : <span className="cap wl-unranked">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not ranked in the latest scan"}</span>}
+                    <span className="wl-spark"><DailySpark points={series[it.ticker]} ticker={it.ticker} width={88} height={24} /></span>
                     <span className="wl-act">
                       <Link href={`/stocks/${encodeURIComponent(it.ticker)}`} className="btn btn-sm">Open</Link>
                       <button type="button" className="icon-btn" aria-label={`Remove ${it.ticker} from ${w.name}`} onClick={() => { rm.clear(); setRemoving(it.ticker); }}>

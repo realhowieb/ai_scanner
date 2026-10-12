@@ -780,6 +780,22 @@ class DayTraderSparklines(BaseModel):
     series: Dict[str, List[float]] = Field(default={}, description="Latest-session 1-minute closes, oldest first")
 
 
+class Sparklines(BaseModel):
+    series: Dict[str, List[float]] = Field(default={}, description="Ticker -> up to 21 daily closes, oldest first; the last is the session in progress during market hours. Tickers without bars are left out")
+
+
+class ScorePoint(BaseModel):
+    time: Optional[str] = Field(default=None, description="The full-market scan (ISO)")
+    score: Optional[int] = Field(default=None, description="HSF Score in that scan, as the Scanner shows it; null when not ranked")
+    signals: List[str] = []
+    signals_added: List[str] = Field(default=[], description="Signals new since the scan before")
+
+
+class ScoreHistory(BaseModel):
+    ticker: str
+    points: List[ScorePoint] = Field(default=[], description="Recent full-market scans, oldest first")
+
+
 class StairSteppers(BaseModel):
     checked: List[str]
     matches: List[Dict[str, Any]] = Field(default=[], description="Symbols that pass the filters (r2, trend, pullback…)")
