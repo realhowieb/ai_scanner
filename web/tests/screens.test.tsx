@@ -226,8 +226,11 @@ describe("Stock Intelligence", () => {
 
   it("draws the chart from returned bars", () => {
     const bars = Array.from({ length: 30 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, "0")}`, open: 10 + i, high: 11 + i, low: 9 + i, close: 10.5 + i, volume: 1e6 }));
-    render(<StockView s={stock({ bars, bars_as_of: new Date().toISOString() })} premium />);
+    render(<StockView s={stock({ bars, bars_as_of: "2026-09-30" })} premium />);
     expect(screen.getByRole("img", { name: /Daily price from/ })).toBeInTheDocument();
-    expect(screen.getByText(/30 daily bars/)).toHaveTextContent("Not live prices");
+    // Bar dates are calendar days: Sep 1 2026 is a Tuesday, not Monday evening in ET.
+    expect(screen.getByText(/30 daily bars/)).toHaveTextContent("Tuesday, September 1 to Wednesday, September 30");
+    expect(screen.getByText(/30 daily bars/)).toHaveTextContent("not live");
+    expect(screen.getByText("Daily bars through Sep 30")).toBeInTheDocument();
   });
 });

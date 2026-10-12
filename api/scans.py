@@ -154,24 +154,69 @@ def _ticker_rows(df: Any, ticker: str) -> List[Dict[str, Any]]:
     return sub.to_dict(orient="records")
 
 
-def daily_bars(ticker: str, limit: int = BAR_LIMIT) -> Dict[str, Any]:
-    """Daily OHLCV the scans already cached (no market-data call from the API)."""
-    from db.prices import get_price_data_snapshot
+BARS_TTL_S = 900  # a provider top-up is reused for 15 minutes per ticker
+BARS_STALE_S = 6 * 3600  # past that, served while one background refetch runs
 
-    frames, _stale = get_price_data_snapshot([ticker], max_age_minutes=7 * 24 * 60)
-    df = frames.get(ticker)
+
+def _last_session_day(now: Optional[dt.datetime] = None) -> dt.date:
+    """The latest weekday whose regular session has closed, in ET (holidays are not
+    known here, so on a holiday the previous day's bars simply count as current)."""
+    from zoneinfo import ZoneInfo
+
+    et = (now or dt.datetime.now(dt.timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    day = et.date() if et.hour >= 16 else et.date() - dt.timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= dt.timedelta(days=1)
+    return day
+
+
+def _frame_bars(df: Any, limit: int, through: dt.date) -> List[Dict[str, Any]]:
+    """Completed daily bars (through `through`) from an OHLCV frame, oldest first."""
     if df is None or getattr(df, "empty", True):
-        return {"bars": [], "as_of": None}
+        return []
     cols = {str(c).lower().replace("adj close", "adj_close"): c for c in df.columns}
     pick = {k: cols.get(k) for k in ("open", "high", "low", "close", "volume")}
     if pick["close"] is None:
-        return {"bars": [], "as_of": None}
+        return []
     bars = []
-    for idx, row in df.tail(limit).iterrows():
+    for idx, row in df.iterrows():
         day = idx.date().isoformat() if hasattr(idx, "date") else str(idx)[:10]
+        if day > through.isoformat():  # today's session is still trading
+            continue
         bar = {"date": day, **{k: _num(row[c]) if c is not None else None for k, c in pick.items()}}
         if bar["close"] is not None:
             bars.append(bar)
+    return bars[-limit:]
+
+
+def _provider_bars(ticker: str, limit: int, through: dt.date) -> List[Dict[str, Any]]:
+    from data.prices import fetch_price_data_batch
+
+    frames, _skipped = fetch_price_data_batch([ticker], period="1y", timeout_s=8.0, batch_retries=1)
+    return _frame_bars(frames.get(ticker), limit, through)
+
+
+def daily_bars(ticker: str, limit: int = BAR_LIMIT) -> Dict[str, Any]:
+    """Daily OHLCV for the Stock Intelligence chart.
+
+    Starts from the frames the scans cached. Scheduled scans don't write that cache
+    (only admin full-universe scans do), so when its last bar is older than the last
+    completed session the ticker's bars are fetched once from the price provider and
+    reused for BARS_TTL_S. The cached bars stand if that fetch fails."""
+    from db.prices import get_price_data_snapshot
+
+    through = _last_session_day()
+    frames, _stale = get_price_data_snapshot([ticker], max_age_minutes=7 * 24 * 60)
+    bars = _frame_bars(frames.get(ticker), limit, through)
+    if not bars or bars[-1]["date"] < through.isoformat():
+        try:
+            fresh = stock_cache.get(("bars", ticker, through.isoformat(), limit),
+                                    lambda: _provider_bars(ticker, limit, through),
+                                    ttl_s=BARS_TTL_S, stale_s=BARS_STALE_S)
+        except Exception:
+            fresh = []
+        if fresh and (not bars or fresh[-1]["date"] > bars[-1]["date"]):
+            bars = fresh
     return {"bars": bars, "as_of": bars[-1]["date"] if bars else None}
 
 

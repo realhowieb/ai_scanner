@@ -10,8 +10,8 @@ const H = 300;
 const VOL_H = 56;
 const PAD = { l: 8, r: 56, t: 12, b: 8 };
 
-/** Daily candles plus volume, from the bars the scans cached. Not a live chart. */
-export function PriceChart({ bars, asOf }: { bars: Bar[]; asOf?: string | null }) {
+/** Daily candles plus volume (completed sessions only). Not a live chart. */
+export function PriceChart({ bars }: { bars: Bar[] }) {
   const data = bars.filter((b) => Number.isFinite(b.close));
   if (data.length < 2) return null;
   const highs = data.map((b) => b.high ?? b.close);
@@ -52,7 +52,7 @@ export function PriceChart({ bars, asOf }: { bars: Bar[]; asOf?: string | null }
         })}
       </svg>
       <figcaption className="cap">
-        {data.length} daily bars, {etDate(first.date)} to {etDate(last.date)}{asOf ? ` · cached by HSF scans` : ""}. Not live prices.
+        {data.length} daily bars, {etDate(first.date)} to {etDate(last.date)}. End-of-day prices, not live.
       </figcaption>
     </figure>
   );
