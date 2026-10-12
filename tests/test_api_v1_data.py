@@ -416,6 +416,38 @@ class ReliabilityTests(DataApiBase):
 
         today.clear_cache()
         self.addCleanup(today.clear_cache)
+        mock.patch("api.main.READYZ_RETRY_S", 0).start()
+        self.addCleanup(mock.patch.stopall)
+
+    def test_readyz_retries_one_failed_ping(self):
+        """A database waking from idle fails the first ping; that mustn't page the monitor."""
+        from api.store import DatabaseUnavailable
+
+        with mock.patch("api.store.ping", side_effect=[DatabaseUnavailable("x"), None]) as ping, \
+                mock.patch("api.today.market_runs", return_value=[]):
+            r = self.client.get("/readyz")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(ping.call_count, 2)
+        self.assertIsInstance(r.json()["db_ping_ms"], float)
+
+    def test_get_answers_carry_an_etag_and_revalidate_to_304(self):
+        r = self.client.get("/v1/watchlists", headers=self.h)
+        self.assertEqual(r.status_code, 200)
+        tag = r.headers["etag"]
+        self.assertTrue(tag.startswith('W/"'))
+        self.assertEqual(r.headers["cache-control"], "private, no-cache")
+        again = self.client.get("/v1/watchlists", headers={**self.h, "If-None-Match": tag})
+        self.assertEqual(again.status_code, 304)
+        self.assertEqual(again.content, b"")
+        self.client.post("/v1/watchlists", json={"name": "Changed"}, headers=self.h)
+        changed = self.client.get("/v1/watchlists", headers={**self.h, "If-None-Match": tag})
+        self.assertEqual(changed.status_code, 200)
+        self.assertNotEqual(changed.headers["etag"], tag)
+
+    def test_no_etag_on_errors_writes_or_health(self):
+        self.assertNotIn("etag", self.client.get("/v1/watchlists").headers)  # 401
+        self.assertNotIn("etag", self.client.post("/v1/watchlists", json={"name": "x"}, headers=self.h).headers)
+        self.assertNotIn("etag", self.client.get("/healthz").headers)
 
     def test_readyz_reports_database_and_scan_age(self):
         created = dt.datetime.now(UTC) - dt.timedelta(minutes=30)

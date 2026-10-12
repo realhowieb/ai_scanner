@@ -29,6 +29,7 @@ from api import devices, models, routes, store, user_data
 
 # Re-exported: tests and older callers reach these through api.main.
 from api.deps import _account_cache, _recent_account, current_account, entitlements_for, forget_account  # noqa: F401
+from api.etag import ETagMiddleware
 from api.scans import json_safe
 from api.settings import Settings, load_settings
 
@@ -65,6 +66,9 @@ class _ReleasingRoute(APIRoute):
         super().__init__(path, endpoint, **kwargs)
 
 
+READYZ_RETRY_S = 2.0
+
+
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     settings = settings or load_settings()
     app = FastAPI(title="HSFinest.AI API", version="1.0.0")
@@ -72,6 +76,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.state.settings = settings
     # Scan, history and stock responses are large JSON; the web BFF's fetch() accepts
     # gzip and unpacks it, so this only shrinks what crosses the network.
+    # Inside GZip so the ETag is a hash of the plain JSON (api/etag.py).
+    app.add_middleware(ETagMiddleware)
     app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
     if settings.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
@@ -203,8 +209,17 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             "Answer 503 when a scheduled full-market scan was missed, so an outside uptime "
             "monitor alerts on stale data as well as on a database outage"))) -> Any:
         """Readiness: the database answers, plus the latest market scan's age for
-        freshness monitoring. /healthz stays the liveness check."""
-        store.ping()
+        freshness monitoring. /healthz stays the liveness check. One failed database
+        ping is retried after READYZ_RETRY_S: a database waking from idle shouldn't
+        page an uptime monitor. db_ping_ms is the time of the answered ping."""
+        t0 = time.perf_counter()
+        try:
+            store.ping()
+        except store.DatabaseUnavailable:
+            time.sleep(READYZ_RETRY_S)
+            t0 = time.perf_counter()
+            store.ping()  # a second failure is a real outage: 503 from the handler
+        db_ms = round((time.perf_counter() - t0) * 1000, 1)
         now = dt.datetime.now(dt.timezone.utc)
         latest, age, fresh = None, None, {"stale": None, "expected_scan_at": None}
         try:
@@ -220,7 +235,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise
         except Exception:  # scan freshness is informational
             pass
-        body = {"ok": True, "database": "ok", "latest_scan_at": latest, "scan_age_minutes": age, **fresh}
+        body = {"ok": True, "database": "ok", "db_ping_ms": db_ms, "latest_scan_at": latest,
+                "scan_age_minutes": age, **fresh}
         if strict and fresh["stale"]:
             return JSONResponse({**body, "ok": False}, status_code=503)
         return body

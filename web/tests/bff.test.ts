@@ -147,6 +147,31 @@ describe("BFF proxy", () => {
     expect(calls[0]!.path).toBe("/v1/scans/latest?limit=5&signal=breakout");
     expect(res.status).toBe(504);
   });
+
+  it("forwards If-None-Match and passes an ETag'd 304 through with no body", async () => {
+    const tag = 'W/"abc123"';
+    const { up, calls } = fakeUpstream((c) => {
+      const inm = (c.init.headers as Record<string, string>)["if-none-match"];
+      return inm === tag ? new Response(null, { status: 304, headers: { etag: tag } }) : jsonResponse({ ok: 1 }, 200, { etag: tag });
+    });
+    const first = await proxy(req("/api/hsf/v1/scans/latest", { cookies: { [ACCESS_COOKIE]: jwt(600) } }), "v1/scans/latest", up);
+    expect(first.status).toBe(200);
+    expect(first.headers.get("etag")).toBe(tag);
+    expect(first.headers.get("cache-control")).toBe("private, no-cache");
+    const again = new Request(`https://${HOST}/api/hsf/v1/scans/latest`, {
+      headers: { host: HOST, cookie: `${ACCESS_COOKIE}=${jwt(600)}`, "if-none-match": tag } });
+    const second = await proxy(again, "v1/scans/latest", up);
+    expect((calls[1]!.init.headers as Record<string, string>)["if-none-match"]).toBe(tag);
+    expect(second.status).toBe(304);
+    expect(await second.text()).toBe("");
+  });
+
+  it("keeps no-store on answers without an ETag", async () => {
+    const { up } = fakeUpstream(() => jsonResponse({ ok: 1 }));
+    const res = await proxy(req("/api/hsf/v1/me", { cookies: { [ACCESS_COOKIE]: jwt(600) } }), "v1/me", up);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("etag")).toBeNull();
+  });
 });
 
 describe("cookie mode", () => {

@@ -1,0 +1,134 @@
+name: Live acceptance
+
+# Beta prerequisites: the API journey with writes (scripts/api_acceptance.py) and the
+# signed-in browser journey (web/scripts/journey.mjs) against the live services.
+# Both use dedicated test accounts from repository secrets and delete what they create
+# (records named zz-acceptance-* / zz-e2e-*; alerts use a threshold that can't fire).
+#   ACC_PRO_EMAIL / ACC_PRO_PASSWORD     required for the write checks and the browser journey
+#   ACC_PRO2_EMAIL / ACC_PRO2_PASSWORD   second Pro account: two-account isolation
+#   ACC_FREE_* / ACC_PREMIUM_* / ACC_ADMIN_*  optional: plan limits and plan refusals
+# Without secrets it still runs the no-account checks and reports the rest as BLOCKED.
+# A FAIL fails the run, and GitHub emails it. GitHub's cron can run late; for a
+# once-a-day check that is fine.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 15 * * 1-5"  # weekdays, after the morning scans
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-acceptance
+  cancel-in-progress: false
+
+env:
+  API_BASE_URL: ${{ vars.LIVE_API_URL || 'https://hsf-api.onrender.com' }}
+  WEB_BASE_URL: ${{ vars.LIVE_WEB_URL || 'https://hsf-web-beta.onrender.com' }}
+
+jobs:
+  api:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: python -m pip install httpx
+
+      - name: API journey with writes
+        env:
+          ACC_FREE_EMAIL: ${{ secrets.ACC_FREE_EMAIL }}
+          ACC_FREE_PASSWORD: ${{ secrets.ACC_FREE_PASSWORD }}
+          ACC_PRO_EMAIL: ${{ secrets.ACC_PRO_EMAIL }}
+          ACC_PRO_PASSWORD: ${{ secrets.ACC_PRO_PASSWORD }}
+          ACC_PRO2_EMAIL: ${{ secrets.ACC_PRO2_EMAIL }}
+          ACC_PRO2_PASSWORD: ${{ secrets.ACC_PRO2_PASSWORD }}
+          ACC_PREMIUM_EMAIL: ${{ secrets.ACC_PREMIUM_EMAIL }}
+          ACC_PREMIUM_PASSWORD: ${{ secrets.ACC_PREMIUM_PASSWORD }}
+          ACC_ADMIN_EMAIL: ${{ secrets.ACC_ADMIN_EMAIL }}
+          ACC_ADMIN_PASSWORD: ${{ secrets.ACC_ADMIN_PASSWORD }}
+        run: python scripts/api_acceptance.py --allow-writes --report api-acceptance.json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-acceptance
+          path: api-acceptance.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    env:
+      HAS_ACCOUNT: ${{ secrets.ACC_PRO_EMAIL != '' && secrets.ACC_PRO_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright-core install --with-deps chromium
+
+      - name: Password files (never printed)
+        if: env.HAS_ACCOUNT == 'true'
+        env:
+          P1: ${{ secrets.ACC_PRO_PASSWORD }}
+          P2: ${{ secrets.ACC_PRO2_PASSWORD }}
+        run: |
+          umask 077
+          printf '%s' "$P1" > "$RUNNER_TEMP/pw1"
+          if [ -n "$P2" ]; then printf '%s' "$P2" > "$RUNNER_TEMP/pw2"; fi
+
+      - name: Deployment smoke (sign-in, cookies, headers, timings)
+        env:
+          BASE_URL: ${{ env.WEB_BASE_URL }}
+          HSF_TEST_EMAIL: ${{ secrets.ACC_PRO_EMAIL }}
+        run: |
+          if [ "$HAS_ACCOUNT" = "true" ]; then export HSF_TEST_PASSWORD_FILE="$RUNNER_TEMP/pw1"; fi
+          node scripts/beta-smoke.mjs
+
+      - name: Signed-in browser journey
+        if: env.HAS_ACCOUNT == 'true'
+        env:
+          BASE_URL: ${{ env.WEB_BASE_URL }}
+          HSF_TEST_EMAIL: ${{ secrets.ACC_PRO_EMAIL }}
+          HSF_TEST_EMAIL_2: ${{ secrets.ACC_PRO2_EMAIL }}
+          OUT_DIR: journey-screenshots
+        run: |
+          export HSF_TEST_PASSWORD_FILE="$RUNNER_TEMP/pw1"
+          if [ -f "$RUNNER_TEMP/pw2" ]; then export HSF_TEST_PASSWORD_FILE_2="$RUNNER_TEMP/pw2"; fi
+          node scripts/journey.mjs
+
+      - name: Journey blocked
+        if: env.HAS_ACCOUNT != 'true'
+        run: echo "::warning::Browser journey skipped (BLOCKED) - add ACC_PRO_EMAIL and ACC_PRO_PASSWORD repository secrets."
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: journey-screenshots
+          path: web/journey-screenshots
+          if-no-files-found: ignore
+          retention-days: 14
