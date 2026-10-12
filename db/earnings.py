@@ -124,7 +124,12 @@ INSERT INTO earnings_calendar (symbol, earnings_date, earnings_time, updated_at)
 VALUES (%s, %s, %s, NOW())
 ON CONFLICT (symbol) DO UPDATE SET
   earnings_date = COALESCE(EXCLUDED.earnings_date, earnings_calendar.earnings_date),
-  earnings_time = COALESCE(EXCLUDED.earnings_time, earnings_calendar.earnings_time),
+  -- A time only carries over for the same date: a moved date's old time is stale.
+  earnings_time = CASE
+    WHEN EXCLUDED.earnings_date IS NOT NULL
+         AND EXCLUDED.earnings_date IS DISTINCT FROM earnings_calendar.earnings_date THEN EXCLUDED.earnings_time
+    ELSE COALESCE(EXCLUDED.earnings_time, earnings_calendar.earnings_time)
+  END,
   updated_at = NOW();
 """
 
