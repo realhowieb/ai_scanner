@@ -90,6 +90,45 @@ class EvaluateAlertTests(unittest.TestCase):
 
         self.assertIsNone(evaluate_alert(self._alert("move", 5.0), {"last": 106.0}))
 
+    def test_monday_premarket_does_not_realert_fridays_move(self):
+        """2026-10-12 04:00 ET: NVAX's snapshot still held Friday (+15.9% vs Thursday),
+        and the worker emailed it as "today". No trade yet today means no alert."""
+        import datetime as dt
+        from unittest import mock
+
+        from billing_service import realtime_alerts as ra
+
+        payload = {"NVAX": {
+            "latestTrade": {"t": "2026-10-09T23:59:00Z", "p": 12.74},
+            "minuteBar": {"t": "2026-10-09T23:59:00Z", "c": 12.74, "v": 100},
+            "dailyBar": {"t": "2026-10-09T04:00:00Z", "c": 12.70, "v": 9_000_000},
+            "prevDailyBar": {"t": "2026-10-08T04:00:00Z", "c": 10.99, "v": 4_000_000},
+        }}
+        resp = mock.Mock(json=mock.Mock(return_value=payload), raise_for_status=mock.Mock())
+        fake_httpx = mock.Mock(get=mock.Mock(return_value=resp))  # smoke CI has no httpx
+        with mock.patch.dict("os.environ", {"ALPACA_API_KEY_ID": "k", "ALPACA_API_SECRET_KEY": "s"}), \
+                mock.patch.dict("sys.modules", {"httpx": fake_httpx}):
+            snap = ra._latest_snapshots(["NVAX"])["NVAX"]
+        monday = ra._today_et(dt.datetime(2026, 10, 12, 8, 0, tzinfo=dt.timezone.utc))
+        alert = {**self._alert("move", 5.0), "ticker": "NVAX"}
+        self.assertIsNone(ra.evaluate_alert(alert, snap, today=monday))
+        self.assertIsNone(ra.evaluate_alert({**alert, "alert_type": "rvol", "threshold": 1.0},
+                                            snap, today=monday))
+        self.assertIsNone(ra.evaluate_alert({**alert, "alert_type": "price", "threshold": 10.0},
+                                            snap, today=monday))
+        # Friday itself was a real move.
+        self.assertIn("+15.9%", ra.evaluate_alert(alert, snap, today="2026-10-09"))
+
+    def test_premarket_move_measured_from_last_close(self):
+        from billing_service.realtime_alerts import evaluate_alert
+
+        snap = {"last": 13.50, "prev_close": 10.99, "daily_close": 12.70,
+                "trade_day": "2026-10-12", "daily_day": "2026-10-09"}
+        msg = evaluate_alert({**self._alert("move", 5.0), "ticker": "NVAX"}, snap, today="2026-10-12")
+        self.assertIn("+6.3%", msg)  # vs Friday's 12.70 close, not Thursday's 10.99
+        snap["last"] = 12.90
+        self.assertIsNone(evaluate_alert({**self._alert("move", 5.0)}, snap, today="2026-10-12"))
+
     def test_rvol_alert_uses_cached_average(self):
         import datetime as dt
 

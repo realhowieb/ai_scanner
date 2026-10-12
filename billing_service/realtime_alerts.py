@@ -58,6 +58,24 @@ def market_session_open(now_utc: Optional[datetime] = None) -> bool:
     return 4 * 60 <= minutes < 20 * 60
 
 
+def _et_day(ts: Any) -> Optional[str]:
+    """ET calendar date (YYYY-MM-DD) of an Alpaca RFC3339 timestamp, else None."""
+    if not ts:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+
+
+def _today_et(now_utc: Optional[datetime] = None) -> str:
+    now = now_utc or datetime.now(timezone.utc)
+    return now.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+
+
 def crossed(direction: str, last: float, threshold: float) -> bool:
     """Whether a price condition is met."""
     if direction == "below":
@@ -220,6 +238,12 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
                 "last": last,
                 "prev_close": _f(prev.get("c")),
                 "volume": _f(daily.get("v")) or _f(minute.get("v")),
+                # Session dates let evaluate_alert tell this session from the last
+                # one: at 4:00 ET Monday the latest trade and daily bar are still
+                # Friday's, and Friday's move vs Thursday is not "today".
+                "trade_day": _et_day(trade.get("t") or minute.get("t")),
+                "daily_day": _et_day(daily.get("t")),
+                "daily_close": _f(daily.get("c")),
             }
     return out
 
@@ -331,10 +355,20 @@ def _avg_volume(ticker: str) -> Optional[float]:
     return None
 
 
-def evaluate_alert(alert: Dict[str, Any], snap: Dict[str, Optional[float]]) -> Optional[str]:
-    """Message when the alert condition is met against a snapshot, else None."""
+def evaluate_alert(alert: Dict[str, Any], snap: Dict[str, Any],
+                   today: Optional[str] = None) -> Optional[str]:
+    """Message when the alert condition is met against a snapshot, else None.
+
+    Only this session's prints count: before the first trade of the day (e.g. 4:00 ET
+    Monday) the snapshot still holds the previous session, so nothing fires. Snapshots
+    without session dates (tests, older callers) are evaluated as given."""
     last = snap.get("last")
     if last is None:
+        return None
+    today = today or _today_et()
+    trade_day = snap.get("trade_day")
+    daily_day = snap.get("daily_day")
+    if trade_day and trade_day != today:
         return None
     atype = alert.get("alert_type", "price")
     threshold = alert["threshold"]
@@ -347,6 +381,10 @@ def evaluate_alert(alert: Dict[str, Any], snap: Dict[str, Optional[float]]) -> O
         return None
     if atype == "move":
         prev = snap.get("prev_close")
+        if daily_day and daily_day != today:
+            # No bar for today yet (pre-market): the daily bar IS the last session,
+            # so measure from its close, not from the session before it.
+            prev = snap.get("daily_close")
         if not prev:
             return None
         move = (last - prev) / prev * 100.0
@@ -358,6 +396,8 @@ def evaluate_alert(alert: Dict[str, Any], snap: Dict[str, Optional[float]]) -> O
         return None
     if atype == "rvol":
         volume = snap.get("volume")
+        if daily_day and daily_day != today:
+            return None  # the last session's full-day volume, not today's
         if not volume:
             return None
         avg = _avg_volume(alert["ticker"])
