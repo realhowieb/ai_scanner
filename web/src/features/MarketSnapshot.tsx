@@ -1,9 +1,14 @@
+"use client";
+
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { DataFreshness } from "@/features/DataFreshness";
 
 import type { Schemas } from "@/api/client";
 import { ago, compact, etTime, pct } from "@/lib/format";
+
+import { DailySpark, useDailySparks } from "./Sparks";
 
 type Today = Schemas["Today"];
 type Snapshot = Schemas["Snapshot"];
@@ -36,17 +41,17 @@ export function StatusStrip({ market, snapshot }: { market: Today["market"]; sna
   );
 }
 
-function Tile({ label, value, delta, tone, href }: { label: string; value: string; delta: string; tone: string; href?: string }) {
+function Tile({ label, value, delta, tone, href, spark }: { label: string; value: string; delta: string; tone: string; href?: string; spark?: ReactNode }) {
   return (
     <div className="tile">
       <p className="cap">{label}</p>
       <p className="tile-value mono">{href ? <Link href={href}>{value}</Link> : value}</p>
-      <span className={`tile-delta mono ${tone}`}>{delta}</span>
+      <span className="tile-foot"><span className={`tile-delta mono ${tone}`}>{delta}</span>{spark}</span>
     </div>
   );
 }
 
-/** SPY, QQQ, and the latest scan's top gainer and most active name. */
+/** SPY, QQQ, and the top gainer and most active name among the latest scan's ranked setups. */
 export function SnapshotTiles({ snapshot }: { snapshot: Snapshot }) {
   const idx = (sym: string) => snapshot.indices.find((q) => q.symbol === sym);
   const spy = idx("SPY");
@@ -54,13 +59,15 @@ export function SnapshotTiles({ snapshot }: { snapshot: Snapshot }) {
   const g = snapshot.top_gainer;
   const a = snapshot.most_active;
   const stock = (t: string) => `/stocks/${encodeURIComponent(t)}`;
+  const series = useDailySparks(["SPY", "QQQ"]);
+  const spark = (t: string) => series[t] ? <DailySpark points={series[t]} ticker={t} width={84} height={24} /> : undefined;
   return (
     <div className="tiles">
-      <Tile label="S&P 500 (SPY)" value={spy ? spy.last.toFixed(2) : "—"} delta={pct(spy?.chg_pct)} tone={moveClass(spy?.chg_pct)} />
-      <Tile label="Nasdaq 100 (QQQ)" value={qqq ? qqq.last.toFixed(2) : "—"} delta={pct(qqq?.chg_pct)} tone={moveClass(qqq?.chg_pct)} />
-      <Tile label="Top gainer" value={g?.ticker ?? "—"} href={g ? stock(g.ticker) : undefined} delta={pct(g?.chg_pct)} tone={moveClass(g?.chg_pct)} />
-      <Tile label="Most active" value={a?.ticker ?? "—"} href={a ? stock(a.ticker) : undefined}
-        delta={a?.volume ? `${compact(a.volume)} shares` : "—"} tone="" />
+      <Tile label="S&P 500 (SPY)" value={spy ? spy.last.toFixed(2) : "—"} delta={pct(spy?.chg_pct)} tone={moveClass(spy?.chg_pct)} spark={spark("SPY")} />
+      <Tile label="Nasdaq 100 (QQQ)" value={qqq ? qqq.last.toFixed(2) : "—"} delta={pct(qqq?.chg_pct)} tone={moveClass(qqq?.chg_pct)} spark={spark("QQQ")} />
+      <Tile label="Top ranked gainer" value={g?.ticker ?? "—"} href={g ? stock(g.ticker) : undefined} delta={pct(g?.chg_pct)} tone={moveClass(g?.chg_pct)} />
+      <Tile label="Most active ranked" value={a?.ticker ?? "—"} href={a ? stock(a.ticker) : undefined}
+        delta={a?.volume ? `${compact(a.volume)} ${snapshot.volume_feed === "iex" ? "IEX shares" : "shares"}` : "—"} tone="" />
     </div>
   );
 }

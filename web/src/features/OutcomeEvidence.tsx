@@ -86,11 +86,49 @@ function SummaryCard({ s }: { s: OutcomeSummary }) {
   );
 }
 
+/** Median excess return vs SPY per score range on one zero line; bar height follows the
+ * sample size, and thin samples are faded, so a lucky 2-signal bucket can't read as a result. */
+export function ScoreLadder({ buckets }: { buckets: OutcomeScores["buckets"] }) {
+  const rows = buckets.filter((b) => b.median_excess_return !== null && b.median_excess_return !== undefined && Number.isFinite(b.median_excess_return));
+  if (rows.length < 2) return null;
+  const W = 1200, ROW = 32, TOP = 8, LABEL = 190, VAL = 80;
+  const H = TOP + rows.length * ROW + 4;
+  const lim = Math.max(0.001, ...rows.map((b) => Math.abs(b.median_excess_return as number)));
+  const zero = LABEL + (W - LABEL) / 2;
+  const half = (W - LABEL) / 2 - VAL;
+  const maxN = Math.max(1, ...rows.map((b) => b.matured_count));
+  return (
+    <figure className="chart ladder">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img"
+        aria-label={`Median 5-day return vs SPY by HSF score range: ${rows.map((b) => `${b.bucket} ${signed(b.median_excess_return)} (n=${b.matured_count})`).join(", ")}`}>
+        <line x1={zero} x2={zero} y1={2} y2={H - 2} className="grid-strong" />
+        {rows.map((b, i) => {
+          const v = b.median_excess_return as number;
+          const y = TOP + i * ROW + ROW / 2;
+          const w = (Math.abs(v) / lim) * half;
+          const h = 6 + 12 * Math.sqrt(b.matured_count / maxN);
+          const thin = b.evidence_quality === "INSUFFICIENT";
+          return (
+            <g key={b.bucket} className={thin ? "ladder-thin" : undefined}>
+              <text x={0} y={y + 4} className="axis-label mono">HSF {b.bucket}</text>
+              <text x={LABEL - 12} y={y + 4} className="axis" textAnchor="end">n={b.matured_count}</text>
+              <rect x={v >= 0 ? zero : zero - w} y={y - h / 2} width={Math.max(1, w)} height={h} rx={3} className={v >= 0 ? "bar-up" : "bar-down"} />
+              <text x={v >= 0 ? zero + w + 6 : zero - w - 6} y={y + 4} textAnchor={v >= 0 ? "start" : "end"} className={`mono axis-val ${v >= 0 ? "up" : "down"}`}>{signed(v)}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <figcaption className="cap">Median return vs SPY over the holding period, by score range. Thicker bars have more matured signals; faded ones are too thin to read as evidence.</figcaption>
+    </figure>
+  );
+}
+
 function ScoresCard({ d }: { d: OutcomeScores }) {
   const inv = d.calibration.metrics["median_excess_return"]?.inversions ?? [];
   return (
     <Card title="By HSF score" id="scores">
       <p className="cap">Every score range, including weak ones, over {d.horizon} trading days. Ranges with fewer than {d.evidence_thresholds["LIMITED"]} matured signals are greyed: read them as anecdotes.</p>
+      <ScoreLadder buckets={d.buckets} />
       <div className="table-wrap">
         <table className="table">
           <MetricHead first="HSF score" />

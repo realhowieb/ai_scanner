@@ -7,6 +7,7 @@ Premium model output is redacted below Premium, as on the web.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import math
 from typing import Any, Dict, List, Optional
 
@@ -320,3 +321,86 @@ def stock_detail(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
     if out["historical_locked"]:
         out.update({"history_summary": None, "historical_context": None, "outcome_cohort": None})
     return json_safe(out)
+
+
+# ---- sparklines and score history (Scanner, Watchlists, Today, Stock page) ----------------------
+SPARK_SESSIONS = 21  # 20 sessions of change: the first close is the baseline
+SPARK_MAX = 50
+SPARK_TTL_S = 900
+spark_cache = TTLCache(max_entries=64)
+
+
+def daily_closes(tickers: List[str]) -> Dict[str, Any]:
+    """The last SPARK_SESSIONS daily closes per ticker (the session in progress included),
+    for row sparklines. One provider batch per distinct ticker set, shared by every visitor
+    for SPARK_TTL_S; a ticker the provider has no bars for is left out."""
+    syms = sorted({str(t).strip().upper() for t in tickers if str(t).strip()})[:SPARK_MAX]
+    if not syms:
+        return {"series": {}}
+
+    def load() -> Dict[str, List[float]]:
+        from data.prices import fetch_price_data_batch
+
+        frames, _skipped = fetch_price_data_batch(syms, period="2mo", timeout_s=8.0, batch_retries=1)
+        out: Dict[str, List[float]] = {}
+        for t in syms:
+            df = frames.get(t)
+            if df is None or getattr(df, "empty", True):
+                continue
+            col = next((c for c in df.columns if str(c).lower() == "close"), None)
+            if col is None:
+                continue
+            closes = [v for v in (_num(x) for x in df[col].tolist()) if v is not None]
+            if len(closes) >= 2:
+                out[t] = [round(v, 4) for v in closes[-SPARK_SESSIONS:]]
+        return out
+
+    try:
+        series = spark_cache.get(("closes", tuple(syms)), load, ttl_s=SPARK_TTL_S, stale_s=6 * 3600)
+    except Exception:
+        series = {}
+    return {"series": series}
+
+
+SCORE_HISTORY_RUNS = 24  # about eight sessions of full-market scans
+score_cache = TTLCache(max_entries=SCORE_HISTORY_RUNS * 2)
+
+
+def _run_ticker_scores(run_id: int) -> Dict[str, Dict[str, Any]]:
+    """Ticker -> HSF Score and signals in one saved market run, scored the Scanner's way.
+    Read straight from the run (not run_df's small cache, which holds the latest few runs)."""
+    def load() -> Dict[str, Dict[str, Any]]:
+        from db.runs import load_run_results
+        from ui.results_intelligence import consolidate_scanner_results
+
+        raw = load_run_results(int(run_id))
+        if not raw:
+            return {}
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        rows = data if isinstance(data, list) else [data]
+        return {o["ticker"]: {"score": o.get("score"), "signals": [str(s) for s in o.get("signals") or []]}
+                for o in consolidate_scanner_results(rows, top_n=None)}
+
+    return score_cache.get(("scores", int(run_id)), load, ttl_s=RUN_TTL_S, stale_s=RUN_TTL_S)
+
+
+def score_history(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
+    """The ticker's HSF Score in each recent full-market scan, oldest first, with the same
+    scores as the Scanner. score is None when the ticker wasn't ranked in that scan.
+    signals_added names the signals new since the scan before. PreBreakout is Premium."""
+    t = ticker.strip().upper()
+    early = bool(entitlements.get("can_early_breakout"))
+    runs = list(reversed(market_runs()[:SCORE_HISTORY_RUNS]))
+    points: List[Dict[str, Any]] = []
+    prev: Optional[set] = None
+    for run in runs:
+        try:
+            hit = _run_ticker_scores(int(run["id"])).get(t)
+        except Exception:
+            continue  # an unreadable run is a gap, not an error
+        signals = [s for s in (hit or {}).get("signals", []) if early or s != "prebreakout"]
+        added = sorted(set(signals) - prev) if (hit and prev is not None) else []
+        points.append({"time": _iso(run["created_at"]), "score": (hit or {}).get("score"),
+                       "signals": signals, "signals_added": added})
+        prev = set(signals)
+    return {"ticker": t, "points": points}

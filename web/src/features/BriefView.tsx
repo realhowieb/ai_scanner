@@ -23,17 +23,58 @@ const PHASE: Record<string, string> = { premarket: "Pre-market", regular: "Marke
 
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
 
-function MoverList({ rows, empty, plain = false }: { rows: { ticker: string; chg_pct?: number | null; extra?: string }[]; empty: string; plain?: boolean }) {
+function MoverList({ rows, empty }: { rows: { ticker: string; chg_pct?: number | null; extra?: string }[]; empty: string }) {
   if (!rows.length) return <p className="cap">{empty}</p>;
   return (
     <ul className="rows">
       {rows.map((r) => (
         <li key={r.ticker} className="row">
-          {plain ? <span className="sector">{r.ticker}</span> : <TickerLink ticker={r.ticker} />}
+          <TickerLink ticker={r.ticker} />
           <span className={`mono strong move ${tone(r.chg_pct)}`}>{pct(r.chg_pct)}</span>
           <span className="cap grow">{r.extra ?? ""}</span>
         </li>
       ))}
+    </ul>
+  );
+}
+
+/** Gainers and losers on one shared zero line, so a +9% and a -5% read at their true sizes. */
+function MoverBars({ gainers, losers }: { gainers: { ticker: string; chg_pct?: number | null }[]; losers: { ticker: string; chg_pct?: number | null }[] }) {
+  const rows = [...gainers, ...losers].filter((r) => typeof r.chg_pct === "number" && Number.isFinite(r.chg_pct));
+  if (!rows.length) return <p className="cap">No movers in this snapshot.</p>;
+  const lim = Math.max(0.01, ...rows.map((r) => Math.abs(r.chg_pct as number)));
+  return (
+    <ul className="mover-bars">
+      {rows.map((r) => {
+        const v = r.chg_pct as number;
+        return (
+          <li key={r.ticker}>
+            <TickerLink ticker={r.ticker} />
+            <span className="mb-track" aria-hidden="true"><span className={`mb-fill ${v >= 0 ? "up" : "down"}`} style={{ width: `${(Math.abs(v) / lim) * 50}%` }} /></span>
+            <span className={`mono strong ${tone(v)}`}>{pct(v)}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Sector moves as tiles whose colour strength follows the move (shape and sign carry it too). */
+function SectorHeat({ sectors }: { sectors: { sector?: unknown; chg_pct?: unknown }[] }) {
+  const rows = sectors.filter((s) => typeof s.chg_pct === "number" && Number.isFinite(s.chg_pct)) as { sector?: unknown; chg_pct: number }[];
+  if (!rows.length) return <p className="cap">No sector data.</p>;
+  const lim = Math.max(0.5, ...rows.map((s) => Math.abs(s.chg_pct)));
+  return (
+    <ul className="sector-heat">
+      {rows.map((s) => {
+        const a = 0.12 + 0.6 * Math.min(1, Math.abs(s.chg_pct) / lim);
+        return (
+          <li key={String(s.sector)} className={s.chg_pct >= 0 ? "up" : "down"} style={{ ["--heat" as string]: a.toFixed(2) }}>
+            <span>{String(s.sector ?? "")}</span>
+            <span className="mono strong">{pct(s.chg_pct)}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -93,13 +134,12 @@ function BriefBody({ b }: { b: Brief }) {
           <OpportunityRadar b={b} />
         </div>
         <div className="brief-left">
-            <Card title="Top gainers" id="gainers"><MoverList rows={b.gainers} empty="No gainers listed." /></Card>
-            <Card title="Top losers" id="losers"><MoverList rows={b.losers} empty="No losers listed." /></Card>
+            <Card title="Top movers" id="gainers"><MoverBars gainers={b.gainers} losers={b.losers} /></Card>
             <Card title="Gappers" id="gap">
               <MoverList rows={b.gappers.map((g) => ({ ticker: g.ticker, chg_pct: g.gap_pct, extra: `${price(g.last)}${g.earnings_days != null ? ` · earnings in ${g.earnings_days}d` : ""}` }))} empty="No gappers in this snapshot." />
             </Card>
             <Card title="Sectors" id="sectors">
-              <MoverList rows={b.sectors.map((s) => ({ ticker: String(s.sector ?? ""), chg_pct: typeof s.chg_pct === "number" ? s.chg_pct : null }))} empty="No sector data." plain />
+              <SectorHeat sectors={b.sectors} />
             </Card>
         </div>
         <aside className="brief-right">

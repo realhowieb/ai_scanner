@@ -34,7 +34,7 @@ describe("Brief intelligence", () => {
     expect(screen.getByText("Rising +5")).toBeInTheDocument();
     expect(screen.getByText("Falling -3")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "AAA" })).toHaveAttribute("href", "/stocks/AAA");
-    expect(screen.getByText("Brief #1")).toBeInTheDocument();
+    expect(screen.getByText("#1")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Rank improved/)).not.toBeInTheDocument();
   });
   it("does not infer missing score movement and explains empty Radar", () => {
