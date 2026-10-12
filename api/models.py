@@ -17,6 +17,9 @@ class Health(BaseModel):
 class Ready(BaseModel):
     ok: bool
     database: Literal["ok"]
+    db_ping_ms: Optional[float] = Field(default=None, description=(
+        "One SELECT 1 through the pool, in ms. A few ms means the API and database share a "
+        "region; tens of ms means they don't"))
     latest_scan_at: Optional[str] = Field(default=None, description="Latest market scan (ISO); null when none")
     scan_age_minutes: Optional[float] = None
     stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")

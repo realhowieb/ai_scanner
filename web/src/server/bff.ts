@@ -15,6 +15,7 @@ const PATH_RE = /^v1\/[A-Za-z0-9._~\-/]{0,200}$/;
 const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,64}$/;
 const MAX_BODY_BYTES = 256 * 1024;
 const PASS_HEADERS = ["content-type", "retry-after"];
+const ETAG_RE = /^(W\/)?"[A-Za-z0-9]{1,64}"$/;
 
 /** API routes that answer with a token pair. They go through /api/auth/* instead, which
  * keeps the tokens in cookies; proxied, the pair would reach browser JavaScript. */
@@ -94,6 +95,9 @@ export async function proxy(req: Request, apiPath: string, upstream: Upstream): 
     if (body.byteLength > MAX_BODY_BYTES) return json({ detail: "Request too large." }, 413, rid);
   }
   const search = new URL(req.url).search;
+  // ETag revalidation (api/etag.py): the browser's If-None-Match goes upstream, and an
+  // unchanged answer comes back as an empty 304 instead of the whole body.
+  const ifNoneMatch = req.method === "GET" ? req.headers.get("if-none-match") : null;
   const send = () =>
     upstream(`/${apiPath}${search}`, {
       method: req.method,
@@ -101,6 +105,7 @@ export async function proxy(req: Request, apiPath: string, upstream: Upstream): 
         authorization: `Bearer ${access}`,
         accept: "application/json",
         "x-request-id": rid,
+        ...(ifNoneMatch && ifNoneMatch.length <= 512 ? { "if-none-match": ifNoneMatch } : {}),
         ...(body && body.byteLength ? { "content-type": "application/json" } : {}),
       },
       body: body && body.byteLength ? body : undefined,
@@ -125,7 +130,14 @@ export async function proxy(req: Request, apiPath: string, upstream: Upstream): 
     const v = res.headers.get(h);
     if (v) headers.set(h, v);
   }
+  // A GET answer the API tagged may be kept by this browser only (private) and must be
+  // revalidated on every use (no-cache); everything else stays no-store.
+  const etag = res.headers.get("etag");
+  if (req.method === "GET" && (res.status === 200 || res.status === 304) && etag && ETAG_RE.test(etag)) {
+    headers.set("etag", etag);
+    headers.set("cache-control", "private, no-cache");
+  }
   for (const c of setCookies) headers.append("set-cookie", c);
-  const payload = res.status === 204 ? null : await res.arrayBuffer();
+  const payload = res.status === 204 || res.status === 304 ? null : await res.arrayBuffer();
   return new Response(payload, { status: res.status, headers });
 }

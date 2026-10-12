@@ -34,7 +34,9 @@ export interface paths {
         /**
          * Readyz
          * @description Readiness: the database answers, plus the latest market scan's age for
-         *     freshness monitoring. /healthz stays the liveness check.
+         *     freshness monitoring. /healthz stays the liveness check. One failed database
+         *     ping is retried after READYZ_RETRY_S: a database waking from idle shouldn't
+         *     page an uptime monitor. db_ping_ms is the time of the answered ping.
          */
         get: operations["readyz_readyz_get"];
         put?: never;
@@ -3947,6 +3949,11 @@ export interface components {
              * @constant
              */
             database: "ok";
+            /**
+             * Db Ping Ms
+             * @description One SELECT 1 through the pool, in ms. A few ms means the API and database share a region; tens of ms means they don't
+             */
+            db_ping_ms?: number | null;
             /**
              * Expected Scan At
              * @description When stale: the missed scan slot (ISO)
