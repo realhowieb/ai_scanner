@@ -7,7 +7,7 @@
 // environment and are never printed:
 //   BASE_URL=http://localhost:3000 HSF_TEST_EMAIL=… HSF_TEST_PASSWORD_FILE=… \
 //   [HSF_TEST_EMAIL_2=… (a second account, for isolation)] [OUT_DIR=screenshots] node scripts/journey.mjs
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE_URL || "http://localhost:3100";
@@ -19,6 +19,9 @@ const password2 = process.env.HSF_TEST_PASSWORD_FILE_2 ? readFileSync(process.en
 const RUN = `zz-e2e-${Date.now().toString(36)}`;
 const THRESHOLD = "999999";
 const SHOWN = "999,999"; // as the app formats it
+// Stock page buttons: "Watch ZS" / "Watch ZS elsewhere" and "Alert near $231.50" (#79 and later).
+const SAVE_BTN = /^(Watch \S+( elsewhere)?|Save to watchlist)$/;
+const ALERT_BTN = /^(Alert near .*|Set price alert)$/;
 mkdirSync(OUT, { recursive: true });
 
 const results = [];
@@ -34,7 +37,11 @@ const step = async (name, fn) => {
   }
 };
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+// CHROMIUM_PATH, else the cloud container's browser, else Playwright's own download
+// (`npx playwright-core install chromium`, as the Live acceptance workflow does).
+const LOCAL_CHROMIUM = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+const executablePath = process.env.CHROMIUM_PATH || (existsSync(LOCAL_CHROMIUM) ? LOCAL_CHROMIUM : undefined);
+const browser = await chromium.launch({ executablePath });
 const problems = [];
 
 async function signIn(ctx, who, pw) {
@@ -84,7 +91,7 @@ await step("Stock Intelligence shows the watchlist; saving again reports already
   await page.waitForURL(new RegExp(`/stocks/${ticker}`));
   await page.getByRole("heading", { name: "HSF Score" }).waitFor();
   await page.getByRole("link", { name: RUN }).waitFor();
-  await page.getByRole("button", { name: "Save to watchlist" }).click();
+  await page.getByRole("button", { name: SAVE_BTN }).click();
   const dlg = page.getByRole("dialog");
   await dlg.getByRole("button", { name: new RegExp(RUN) }).waitFor();
   const label = await dlg.getByRole("button", { name: new RegExp(RUN) }).textContent();
@@ -93,7 +100,7 @@ await step("Stock Intelligence shows the watchlist; saving again reports already
 });
 
 await step("create a non-firing price alert from Stock Intelligence", async () => {
-  await page.getByRole("button", { name: "Set price alert" }).click();
+  await page.getByRole("button", { name: ALERT_BTN }).click();
   const dlg = page.getByRole("dialog", { name: `Price alert for ${ticker}` });
   await dlg.getByLabel("Price ($)").fill(THRESHOLD);
   await shot(page, "journey-2-price-alert");
@@ -106,7 +113,7 @@ await step("create a non-firing price alert from Stock Intelligence", async () =
 });
 
 await step("duplicate alert is refused with the server's message", async () => {
-  await page.getByRole("button", { name: "Set price alert" }).click();
+  await page.getByRole("button", { name: ALERT_BTN }).click();
   const dlg = page.getByRole("dialog");
   await dlg.getByLabel("Price ($)").fill(THRESHOLD);
   await dlg.getByRole("button", { name: "Create alert" }).click();
@@ -170,7 +177,7 @@ await step("phone layout: watchlist, alerts and the save dialog", async () => {
   await mp.getByText(`${ticker} price rises above $${SHOWN}`).waitFor();
   await shot(mp, "journey-m-alerts");
   await mp.goto(`${BASE}/stocks/${ticker}`);
-  await mp.getByRole("button", { name: "Save to watchlist" }).click();
+  await mp.getByRole("button", { name: SAVE_BTN }).click();
   await mp.getByRole("dialog").getByRole("button", { name: new RegExp(RUN) }).waitFor();
   await mp.screenshot({ path: `${OUT}/journey-m-save-dialog.png` });
   const width = await mp.evaluate(() => document.documentElement.scrollWidth);

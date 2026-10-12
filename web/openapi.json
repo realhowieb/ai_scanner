@@ -6059,6 +6059,18 @@
       "title": "Database",
       "type": "string"
      },
+     "db_ping_ms": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "One SELECT 1 through the pool, in ms. A few ms means the API and database share a region; tens of ms means they don't",
+      "title": "Db Ping Ms"
+     },
      "expected_scan_at": {
       "anyOf": [
        {
@@ -9747,7 +9759,7 @@
   },
   "/readyz": {
    "get": {
-    "description": "Readiness: the database answers, plus the latest market scan's age for\nfreshness monitoring. /healthz stays the liveness check.",
+    "description": "Readiness: the database answers, plus the latest market scan's age for\nfreshness monitoring. /healthz stays the liveness check. One failed database\nping is retried after READYZ_RETRY_S: a database waking from idle shouldn't\npage an uptime monitor. db_ping_ms is the time of the answered ping.",
     "operationId": "readyz_readyz_get",
     "parameters": [
      {
