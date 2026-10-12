@@ -164,8 +164,9 @@ class Snapshot(BaseModel):
     ranked_count: Optional[int] = Field(default=None, description="Results in the latest full-market scan")
     status: SystemStatus
     indices: List[IndexQuote] = Field(default=[], description="SPY and QQQ; empty when no quote is available")
-    top_gainer: Optional[ScanLeader] = Field(default=None, description="Biggest gain in the latest full-market scan")
-    most_active: Optional[ScanLeader] = Field(default=None, description="Most shares traded in the latest full-market scan")
+    top_gainer: Optional[ScanLeader] = Field(default=None, description="Biggest gain among the latest full-market scan's ranked results (not the whole market)")
+    most_active: Optional[ScanLeader] = Field(default=None, description="Most shares traded among the latest full-market scan's ranked results (not the whole market)")
+    volume_feed: Optional[str] = Field(default=None, description="Market-data feed behind volume figures: 'iex' counts IEX exchange trades only (a small share of U.S. volume), 'sip' is consolidated")
 
 
 class ScoredTicker(BaseModel):
@@ -304,6 +305,7 @@ class StockDetail(BaseModel):
     lifecycle: List[LifecycleEvent] = []
     bars: List[Bar] = Field(default=[], description="Daily bars cached by the scans, oldest first (up to 120)")
     bars_as_of: Optional[str] = None
+    volume_feed: Optional[str] = Field(default=None, description="Market-data feed behind bar volume: 'iex' counts IEX exchange trades only, 'sip' is consolidated")
     watchlists: List[WatchlistRef] = Field(default=[], description="Your watchlists that hold this ticker")
     alerts: List[Alert] = Field(default=[], description="Your alerts on this ticker")
 
@@ -776,6 +778,22 @@ class DayTrader(BaseModel):
 class DayTraderSparklines(BaseModel):
     checked: List[str]
     series: Dict[str, List[float]] = Field(default={}, description="Latest-session 1-minute closes, oldest first")
+
+
+class Sparklines(BaseModel):
+    series: Dict[str, List[float]] = Field(default={}, description="Ticker -> up to 21 daily closes, oldest first; the last is the session in progress during market hours. Tickers without bars are left out")
+
+
+class ScorePoint(BaseModel):
+    time: Optional[str] = Field(default=None, description="The full-market scan (ISO)")
+    score: Optional[int] = Field(default=None, description="HSF Score in that scan, as the Scanner shows it; null when not ranked")
+    signals: List[str] = []
+    signals_added: List[str] = Field(default=[], description="Signals new since the scan before")
+
+
+class ScoreHistory(BaseModel):
+    ticker: str
+    points: List[ScorePoint] = Field(default=[], description="Recent full-market scans, oldest first")
 
 
 class StairSteppers(BaseModel):

@@ -39,7 +39,8 @@ function share(v: number | null | undefined): string {
 
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
 
-function DailyChart({ days }: { days: Day[] }) {
+/** `runningSum` overlays the running sum of the daily averages: only for 1-day holds, where days don't overlap. */
+function DailyChart({ days, runningSum = false }: { days: Day[]; runningSum?: boolean }) {
   const pts = days.filter((d) => d.avg_excess_return !== null && d.avg_excess_return !== undefined && Number.isFinite(d.avg_excess_return));
   if (pts.length < 2) return <Empty title="Not enough matured days to chart yet." />;
   const W = 720, H = 200, PAD = 12;
@@ -49,6 +50,13 @@ function DailyChart({ days }: { days: Day[] }) {
   const step = (W - PAD * 2) / pts.length;
   const bw = Math.max(1, step * 0.7);
   const pos = vals.filter((v) => v > 0).length;
+  // Running sum of the daily averages, on its own scale (right-hand labels).
+  const run: number[] = [];
+  vals.forEach((v, i) => run.push((run[i - 1] ?? 0) + v));
+  const rlim = Math.max(0.001, ...run.map(Math.abs));
+  const ry = (v: number) => mid - (v / rlim) * (mid - PAD);
+  const runPath = run.map((v, i) => `${i ? "L" : "M"}${(PAD + i * step + step / 2).toFixed(1)},${ry(v).toFixed(1)}`).join("");
+  const total = run[run.length - 1]!;
   return (
     <figure className="chart">
       <svg viewBox={`0 0 ${W} ${H}`} role="img"
@@ -59,11 +67,14 @@ function DailyChart({ days }: { days: Day[] }) {
           const h = (Math.abs(v) / lim) * (mid - PAD);
           return <rect key={d.day} className={v >= 0 ? "bar-up" : "bar-down"} x={PAD + i * step + (step - bw) / 2} width={bw} y={v >= 0 ? mid - h : mid} height={Math.max(1, h)} />;
         })}
+        {runningSum && <path d={runPath} className="run-line" />}
+        {runningSum && <circle cx={PAD + (run.length - 1) * step + step / 2} cy={ry(total)} r={3.5} className="run-dot" />}
         <text x={W - PAD} y={PAD + 10} className="axis" textAnchor="end">{signedPct(lim)}</text>
         <text x={W - PAD} y={H - PAD} className="axis" textAnchor="end">{signedPct(-lim)}</text>
       </svg>
       <figcaption className="cap">
         {pts.length} days, {etDate(pts[0]!.day)} to {etDate(pts[pts.length - 1]!.day)}. Bars are each day&apos;s average excess return of that day&apos;s picks vs SPY. {pos} of {pts.length} days were above SPY.
+        {runningSum && <>{" "}<span className="run-key">Line</span>: running sum of those daily averages, {signedPct(total)} at the end (its own scale; no costs, so not a portfolio return).</>}
       </figcaption>
     </figure>
   );
@@ -173,7 +184,7 @@ function Research() {
           }>
             {daily.error && !daily.data ? <ErrorState error={daily.error} onRetry={daily.reload} what="the daily series" />
               : !daily.data || daily.loading ? <Skeleton rows={4} label="Loading the daily series" />
-              : <DailyChart days={daily.data} />}
+              : <DailyChart days={daily.data} runningSum={chosen === 1} />}
             {chosen !== null && !rows.find((r) => r.horizon_days === chosen)?.sufficient && (
               <p className="cap"><Pill tone="warn">Small sample</Pill> This horizon hasn&apos;t reached {d.min_sample_size} matured picks; read the bars as anecdotes.</p>
             )}

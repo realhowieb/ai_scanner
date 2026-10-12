@@ -17,6 +17,7 @@ import { SymbolEvidence } from "./OutcomeEvidence";
 import { describeAlert } from "./AlertForm";
 import { PriceAlertButton } from "./PriceAlert";
 import { PriceChart, type ChartEvent } from "./PriceChart";
+import { ScoreHistory } from "./ScoreHistory";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 
 type Stock = Schemas["StockDetail"];
@@ -80,23 +81,6 @@ function DecisionSnapshot({ s }: { s: Stock }) {
       </div>
       {empty && <p className="cap">Useful next steps: watch {s.ticker}, set a price alert, or reopen this page after the next market scan.</p>}
     </Card>
-  );
-}
-
-function ScoreTrend({ s }: { s: Stock }) {
-  const items = s.lifecycle.filter((e) => e.score !== null && e.score !== undefined).slice(-6);
-  if (items.length < 2) return null;
-  const max = Math.max(...items.map((e) => Number(e.score)));
-  const min = Math.min(...items.map((e) => Number(e.score)));
-  const span = Math.max(1, max - min);
-  return (
-    <div className="trend" aria-label={`Recent HSF Score trend for ${s.ticker}`}>
-      {items.map((e, i) => {
-        const score = Number(e.score);
-        const x = items.length <= 1 ? 0 : i / (items.length - 1);
-        return <span key={`${e.time}-${i}`} className="trend-dot" title={`${etTime(e.time)} · HSF ${score}`} style={{ ["--x" as string]: x, ["--y" as string]: `${100 - ((score - min) / span) * 100}%` }} />;
-      })}
-    </div>
   );
 }
 
@@ -246,7 +230,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
       <div className="split stock-split">
         <div className="col-main">
           <Card title="Price" id="price" className="price-card" aside={s.bars_as_of ? `Daily bars through ${shortDate(s.bars_as_of)}` : undefined}>
-            {s.bars.length >= 2 ? <PriceChart bars={s.bars} events={signalEvents(s)} earningsDate={earningsDate(s.earnings_days)} /> : <Empty title="No price history cached for this ticker.">Charts appear once daily bars are available for this ticker.</Empty>}
+            {s.bars.length >= 2 ? <PriceChart bars={s.bars} events={signalEvents(s)} earningsDate={earningsDate(s.earnings_days)} volumeFeed={s.volume_feed} /> : <Empty title="No price history cached for this ticker.">Charts appear once daily bars are available for this ticker.</Empty>}
           </Card>
           {/* The first reason is already the snapshot's "Main reason". */}
           {s.reasons.length > 1 && (
@@ -298,7 +282,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
           <Card title="Signals" id="signals">
             {s.signals.length ? <div className="chips">{s.signals.map((g) => <Pill key={g}>{setupLabel(g)}</Pill>)}</div> : <p className="cap">No active signals.</p>}
             <dl className="kv">
-              <div><dt>Breakout score</dt><dd className="mono">{s.breakout_score ?? "—"}</dd></div>
+              <div><dt>Breakout score</dt><dd className="mono">{s.breakout_score != null && Number.isFinite(s.breakout_score) ? s.breakout_score.toFixed(1) : "—"}</dd></div>
               <div><dt>PreBreakout</dt><dd className="mono">{premium ? probPct(s.prob) : <Pill tone="gold">Premium</Pill>}</dd></div>
               <div><dt>Earnings</dt><dd className="mono">{s.earnings_days === null || s.earnings_days === undefined ? "—" : s.earnings_days === 0 ? "Today" : `in ${s.earnings_days}d`}</dd></div>
             </dl>
@@ -311,16 +295,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             ) : <p className="cap">No alerts on {s.ticker}.</p>}
           </Card>
 
-          {s.lifecycle.length > 0 && (
-            <Card title="Recent history" id="life">
-              <ScoreTrend s={s} />
-              <ul className="timeline">
-                {s.lifecycle.slice(-6).reverse().map((e, i) => (
-                  <li key={`${e.time}-${i}`}><span className="cap">{etTime(e.time)}</span> <span className="mono">{e.score ?? "—"}</span> {e.label || e.status || ""}</li>
-                ))}
-              </ul>
-            </Card>
-          )}
+          <ScoreHistory ticker={s.ticker} />
         </aside>
       </div>
     </div>

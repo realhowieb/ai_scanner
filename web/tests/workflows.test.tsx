@@ -154,9 +154,9 @@ describe("Watchlist Intelligence", () => {
     const w = api.seedList("Main", ["AAPL", "NVDA"]);
     const u = user();
     wrap(<WatchlistsView />, "premium");
-    expect(await screen.findByText("▲6")).toBeInTheDocument();
+    expect(await screen.findByText("▲ +6 HSF")).toBeInTheDocument();
     expect(screen.getByText("Up 3 places")).toBeInTheDocument();
-    expect(screen.getByText("▼2")).toBeInTheDocument();
+    expect(screen.getByText("▼ −2 HSF")).toBeInTheDocument();
     expect(screen.getByText("Down 1 place")).toBeInTheDocument();
     expect(screen.getByText("PreBreakout")).toBeInTheDocument();
     expect(screen.getByText("RVOL 3.1x")).toBeInTheDocument();

@@ -298,7 +298,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
               {job.result.setups.length === 0 ? (
                 <Empty title="No setups matched.">Try a larger list or looser filters.</Empty>
               ) : (
-                <div className="flush-inner"><SetupTable rows={job.result.setups} premium={can("can_early_breakout")} /></div>
+                <div className="flush-inner"><SetupTable rows={job.result.setups} premium={can("can_early_breakout")} sparks /></div>
               )}
               <div className="card-foot">
                 <span className="cap">{job.params.session !== job.params.session_requested ? "Outside that session, the regular session was scanned. " : ""}Prices are from the scan.</span>
