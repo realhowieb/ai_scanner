@@ -10,7 +10,7 @@ import datetime as dt
 import math
 from typing import Any, Dict, List, Optional
 
-from api.today import RUN_TTL_S, TTLCache, _cached, _iso, _num, market_runs, run_df, scan_freshness
+from api.today import RUN_TTL_S, TTLCache, _cached, _iso, _num, market_runs, run_df, run_freshness, scan_freshness
 
 SCAN_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
 SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob", "prob_rank")
@@ -79,10 +79,11 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     cap = max_results_for(tier)
     runs = market_runs()
     if not runs:
-        return {"scan_at": None, "total": 0, "max_results": cap, "limited": False, "setups": [],
+        return {"scan_at": None, "total": 0, "scan_total": 0, "max_results": cap, "limited": False, "setups": [],
                 'freshness': describe(None)}
     allowed = bool(entitlements.get("can_early_breakout"))
     opps = redact_prebreakout_rows(run_opportunities(int(runs[0]["id"])), allowed=allowed)
+    scan_total = len(opps)
     if min_score:
         opps = [o for o in opps if int(o.get("score") or 0) >= int(min_score)]
     if signal:
@@ -94,10 +95,10 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             v = _num(o.get(sort))
             return (v is None, -(v or 0.0))
         visible = sorted(visible, key=key)
-    return {"scan_at": _iso(runs[0]["created_at"]), "total": len(opps), "max_results": cap,
-            "limited": len(opps) > cap,
+    return {"scan_at": _iso(runs[0]["created_at"]), "total": len(opps), "scan_total": scan_total,
+            "max_results": cap, "limited": len(opps) > cap,
             "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
-            'freshness': describe(runs[0]['created_at']),
+            'freshness': run_freshness(runs[0]),
             "setups": [_scan_row(o) for o in visible[offset:offset + limit]]}
 
 

@@ -223,6 +223,7 @@ class LatestScan(BaseModel):
     freshness: Optional[DataFreshness] = None
     scan_at: Optional[str] = Field(default=None, description="ISO time of the market scan; null when none exists")
     total: int = Field(description="Setups matching the filters, before the plan cap")
+    scan_total: Optional[int] = Field(default=None, description="Setups in the scan before any filter (signal, score floor)")
     max_results: int = Field(description="Rows this plan sees (Free 25, Pro 100, Premium 200)")
     limited: bool = Field(description="True when the plan cap hides some matching setups")
     stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")
