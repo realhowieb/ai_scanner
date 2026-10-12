@@ -129,6 +129,38 @@ class EarningsSourcesTest(unittest.TestCase):
         m = es.fetch_earnings_window_finnhub(day(1), day(7))
         self.assertEqual(len(m), 2100)
 
+    def test_fmp_missing_time_keeps_finnhub_time(self):
+        """FMP without a time must not blank Finnhub's BMO for the same date (JPM showed
+        "After close" because the stale stored time survived)."""
+        import urllib.parse
+        from datetime import date, timedelta
+
+        from data import earnings_sources as es
+
+        today = date.today()
+        d = (today + timedelta(days=1)).isoformat()
+        later = (today + timedelta(days=3)).isoformat()
+        seen = []
+
+        def fake(url, timeout=20.0):
+            if "finnhub" in url:
+                return {"earningsCalendar": [{"symbol": "JPM", "date": d, "hour": "bmo"},
+                                             {"symbol": "XYZ", "date": d, "hour": "amc"}]}
+            seen.append(dict(urllib.parse.parse_qsl(urllib.parse.urlparse(url).query)))
+            return [{"symbol": "JPM", "date": d},              # no time
+                    {"symbol": "XYZ", "date": later},          # different date: FMP wins, no time
+                    {"symbol": "GS", "date": d, "time": "bmo"}]
+
+        os.environ["FMP_API_KEY"] = "test"
+        os.environ["FINNHUB_API_KEY"] = "test"
+        es._get_json = fake
+        m, src = es.fetch_earnings_window(today.isoformat(), (today + timedelta(days=6)).isoformat())
+        self.assertEqual(src, "fmp+finnhub")
+        self.assertEqual(m["JPM"], (date.fromisoformat(d), "BMO"))
+        self.assertEqual(m["XYZ"], (date.fromisoformat(later), None))
+        self.assertEqual(m["GS"][1], "BMO")
+        self.assertTrue(all(q.get("includeReportTimes") == "true" for q in seen))
+
     def test_time_normalization(self):
         from data.earnings_sources import _norm_time
 
