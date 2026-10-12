@@ -233,4 +233,17 @@ describe("Stock Intelligence", () => {
     expect(screen.getByText(/30 daily bars/)).toHaveTextContent("not live");
     expect(screen.getByText("Daily bars through Sep 30")).toBeInTheDocument();
   });
+
+  it("draws EMA 9/21 and marks the golden cross", () => {
+    // EMA 9 below EMA 21 for ten sessions, then above: one golden cross on Sep 11.
+    const bars = Array.from({ length: 20 }, (_, i) => ({
+      date: `2026-09-${String(i + 1).padStart(2, "0")}`, open: 10, high: 11, low: 9, close: 10.5, volume: 1e6,
+      ema9: i < 10 ? 10 : 10.4, ema21: 10.2,
+    }));
+    const { container } = render(<StockView s={stock({ bars, bars_as_of: "2026-09-20" })} premium />);
+    expect(container.querySelectorAll("path.ema")).toHaveLength(2);
+    expect(container.querySelectorAll("polygon.x-golden")).toHaveLength(1);
+    expect(container.querySelectorAll("polygon.x-death")).toHaveLength(0);
+    expect(screen.getByText(/20 daily bars/)).toHaveTextContent("Last golden cross Sep 11 (9 sessions ago)");
+  });
 });

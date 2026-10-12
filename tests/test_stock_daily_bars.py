@@ -83,3 +83,22 @@ class DailyBarsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EmaLineTests(unittest.TestCase):
+    def test_emas_match_the_scanner_golden_cross(self):
+        from scan.indicators import ema_cross_detail
+
+        # Falling then rising closes: the 9 EMA crosses above the 21 somewhere in the rise.
+        closes = [100 - i for i in range(40)] + [61 + 2 * i for i in range(20)]
+        days = pd.bdate_range("2026-06-01", periods=len(closes))
+        df = pd.DataFrame({"Close": closes}, index=days)
+        bars = scans._frame_bars(df, 500, dt.date(2026, 12, 31))
+        self.assertIsNone(bars[0]["ema9"])
+        cross = next(i for i in range(1, len(bars))
+                     if bars[i - 1]["ema9"] is not None
+                     and bars[i - 1]["ema9"] <= bars[i - 1]["ema21"] and bars[i]["ema9"] > bars[i]["ema21"])
+        detail = ema_cross_detail(df.iloc[:cross + 1])
+        self.assertEqual(detail["direction"], "bullish")
+        self.assertAlmostEqual(detail["ema_fast"], bars[cross]["ema9"], places=3)
+        self.assertIsNone(ema_cross_detail(df.iloc[:cross]))

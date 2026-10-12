@@ -295,6 +295,17 @@ select, .field input { min-height: 40px; border-radius: 8px; background: var(--b
 .chart .c-up line, .chart .c-up rect { stroke: var(--up); fill: var(--up); }
 .chart .c-down line, .chart .c-down rect { stroke: var(--down); fill: var(--down); }
 .chart rect.vol { opacity: .3; stroke: none; }
+.chart path.ema { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
+.chart .ema-9 { stroke: var(--accent); }
+.chart .ema-21 { stroke: var(--amber); }
+.chart .x-golden { fill: var(--gold); color: var(--gold); }
+.chart .x-death { fill: var(--down); color: var(--down); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend .sw { display: inline-block; width: 16px; height: 2px; border-radius: 1px; }
+.chart-legend .sw.ema-9 { background: var(--accent); }
+.chart-legend .sw.ema-21 { background: var(--amber); }
+.chart-legend .mk { font-style: normal; font-size: 10px; }
 
 /* dialogs */
 .backdrop { position: fixed; inset: 0; z-index: 20; background: rgba(4, 7, 11, .72); display: grid; place-items: center; padding: 16px; }

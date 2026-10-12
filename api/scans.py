@@ -17,6 +17,7 @@ SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob", 
 CALIBRATION_TTL_S = 1800  # matured outcomes change once a day; same as the web
 CALIBRATION_STALE_S = 6 * 3600  # past the TTL, served while one background rebuild runs
 BAR_LIMIT = 120
+EMA_WARMUP_BARS = 22  # ema_cross_detail needs 23 bars before it reports a cross
 # Stock pages get their own cache so a client paging through many tickers can't
 # push the scan runs out of the shared one.
 stock_cache = TTLCache(max_entries=128)
@@ -186,7 +187,22 @@ def _frame_bars(df: Any, limit: int, through: dt.date) -> List[Dict[str, Any]]:
         bar = {"date": day, **{k: _num(row[c]) if c is not None else None for k, c in pick.items()}}
         if bar["close"] is not None:
             bars.append(bar)
+    _add_emas(bars)
     return bars[-limit:]
+
+
+def _add_emas(bars: List[Dict[str, Any]]) -> None:
+    """EMA 9/21 per bar, the same lines the scanner's golden cross uses
+    (scan.indicators.ema_cross_detail: ewm adjust=False over the whole history),
+    so the chart's crossovers match the signal. Left None during the warm-up."""
+    fast = slow = None
+    for i, b in enumerate(bars):
+        c = b["close"]
+        fast = c if fast is None else fast + (c - fast) * 2 / 10
+        slow = c if slow is None else slow + (c - slow) * 2 / 22
+        warm = i >= EMA_WARMUP_BARS
+        b["ema9"] = round(fast, 4) if warm else None
+        b["ema21"] = round(slow, 4) if warm else None
 
 
 def _provider_bars(ticker: str, limit: int, through: dt.date) -> List[Dict[str, Any]]:
