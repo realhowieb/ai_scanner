@@ -42,9 +42,11 @@ export function etTime(iso: string | null | undefined, withDate = true): string 
   return `${d.toLocaleString("en-US", opts)} ET`;
 }
 
+/** "Tuesday, October 6". A bare "YYYY-MM-DD" is that calendar day (read at noon UTC, so it
+ * isn't shifted to the previous evening in ET). */
 export function etDate(iso: string | null | undefined): string {
   if (!iso) return "";
-  const d = new Date(iso);
+  const d = new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso);
   return d.toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric" });
 }
 

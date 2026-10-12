@@ -252,6 +252,10 @@ class Bar(BaseModel):
     low: Optional[float] = None
     close: float
     volume: Optional[float] = None
+    ema9: Optional[float] = Field(None, description="EMA 9 of closes (the scanner's golden cross fast line)")
+    ema21: Optional[float] = Field(None, description="EMA 21 of closes (the golden cross slow line)")
+    sma20: Optional[float] = Field(None, description="20-day simple moving average of closes")
+    sma50: Optional[float] = Field(None, description="50-day simple moving average of closes")
 
 
 class WatchlistRef(BaseModel):

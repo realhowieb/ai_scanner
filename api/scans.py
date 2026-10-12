@@ -16,7 +16,8 @@ SCAN_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
 SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob", "prob_rank")
 CALIBRATION_TTL_S = 1800  # matured outcomes change once a day; same as the web
 CALIBRATION_STALE_S = 6 * 3600  # past the TTL, served while one background rebuild runs
-BAR_LIMIT = 120
+BAR_LIMIT = 260  # about a year of sessions, for the chart's 1Y range
+EMA_WARMUP_BARS = 22  # ema_cross_detail needs 23 bars before it reports a cross
 # Stock pages get their own cache so a client paging through many tickers can't
 # push the scan runs out of the shared one.
 stock_cache = TTLCache(max_entries=128)
@@ -154,24 +155,95 @@ def _ticker_rows(df: Any, ticker: str) -> List[Dict[str, Any]]:
     return sub.to_dict(orient="records")
 
 
-def daily_bars(ticker: str, limit: int = BAR_LIMIT) -> Dict[str, Any]:
-    """Daily OHLCV the scans already cached (no market-data call from the API)."""
-    from db.prices import get_price_data_snapshot
+BARS_TTL_S = 900  # a provider top-up is reused for 15 minutes per ticker
+BARS_STALE_S = 6 * 3600  # past that, served while one background refetch runs
 
-    frames, _stale = get_price_data_snapshot([ticker], max_age_minutes=7 * 24 * 60)
-    df = frames.get(ticker)
+
+def _last_session_day(now: Optional[dt.datetime] = None) -> dt.date:
+    """The latest weekday whose regular session has closed, in ET (holidays are not
+    known here, so on a holiday the previous day's bars simply count as current)."""
+    from zoneinfo import ZoneInfo
+
+    et = (now or dt.datetime.now(dt.timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    day = et.date() if et.hour >= 16 else et.date() - dt.timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= dt.timedelta(days=1)
+    return day
+
+
+def _frame_bars(df: Any, limit: int, through: dt.date) -> List[Dict[str, Any]]:
+    """Completed daily bars (through `through`) from an OHLCV frame, oldest first."""
     if df is None or getattr(df, "empty", True):
-        return {"bars": [], "as_of": None}
+        return []
     cols = {str(c).lower().replace("adj close", "adj_close"): c for c in df.columns}
     pick = {k: cols.get(k) for k in ("open", "high", "low", "close", "volume")}
     if pick["close"] is None:
-        return {"bars": [], "as_of": None}
+        return []
     bars = []
-    for idx, row in df.tail(limit).iterrows():
+    for idx, row in df.iterrows():
         day = idx.date().isoformat() if hasattr(idx, "date") else str(idx)[:10]
+        if day > through.isoformat():  # today's session is still trading
+            continue
         bar = {"date": day, **{k: _num(row[c]) if c is not None else None for k, c in pick.items()}}
         if bar["close"] is not None:
             bars.append(bar)
+    _add_emas(bars)
+    return bars[-limit:]
+
+
+def _add_emas(bars: List[Dict[str, Any]]) -> None:
+    """EMA 9/21 per bar, the same lines the scanner's golden cross uses
+    (scan.indicators.ema_cross_detail: ewm adjust=False over the whole history),
+    so the chart's crossovers match the signal. Left None during the warm-up."""
+    fast = slow = None
+    for i, b in enumerate(bars):
+        c = b["close"]
+        fast = c if fast is None else fast + (c - fast) * 2 / 10
+        slow = c if slow is None else slow + (c - slow) * 2 / 22
+        warm = i >= EMA_WARMUP_BARS
+        b["ema9"] = round(fast, 4) if warm else None
+        b["ema21"] = round(slow, 4) if warm else None
+    for n in (20, 50):
+        total = 0.0
+        for i, b in enumerate(bars):
+            total += b["close"]
+            if i >= n:
+                total -= bars[i - n]["close"]
+            b[f"sma{n}"] = round(total / n, 4) if i >= n - 1 else None
+
+
+def _provider_bars(ticker: str, limit: int, through: dt.date) -> List[Dict[str, Any]]:
+    from data.prices import fetch_price_data_batch
+
+    # Two years, so the moving averages are warmed up across the whole 1Y view.
+    frames, _skipped = fetch_price_data_batch([ticker], period="2y", timeout_s=8.0, batch_retries=1)
+    return _frame_bars(frames.get(ticker), limit, through)
+
+
+def daily_bars(ticker: str, limit: int = BAR_LIMIT) -> Dict[str, Any]:
+    """Daily OHLCV for the Stock Intelligence chart.
+
+    Starts from the frames the scans cached. Scheduled scans don't write that cache
+    (only admin full-universe scans do) and its frames are short, so when its last bar
+    is older than the last completed session, or it holds fewer than `limit` bars, the
+    ticker's bars are fetched once from the price provider and reused for BARS_TTL_S.
+    The cached bars stand if that fetch fails."""
+    from db.prices import get_price_data_snapshot
+
+    through = _last_session_day()
+    frames, _stale = get_price_data_snapshot([ticker], max_age_minutes=7 * 24 * 60)
+    bars = _frame_bars(frames.get(ticker), limit, through)
+    # Scan frames hold only a few months; a year of history comes from the provider.
+    if len(bars) < limit or bars[-1]["date"] < through.isoformat():
+        try:
+            fresh = stock_cache.get(("bars", ticker, through.isoformat(), limit),
+                                    lambda: _provider_bars(ticker, limit, through),
+                                    ttl_s=BARS_TTL_S, stale_s=BARS_STALE_S)
+        except Exception:
+            fresh = []
+        if fresh and (not bars or fresh[-1]["date"] > bars[-1]["date"]
+                      or (fresh[-1]["date"] == bars[-1]["date"] and len(fresh) > len(bars))):
+            bars = fresh
     return {"bars": bars, "as_of": bars[-1]["date"] if bars else None}
 
 
