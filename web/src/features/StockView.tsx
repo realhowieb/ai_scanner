@@ -11,15 +11,35 @@ import { AIText } from "@/components/AIText";
 import { Card, Empty, ErrorLine, ErrorState, Freshness, Locked, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
-import { etTime, pct, price, probPct, setupLabel } from "@/lib/format";
+import { etTime, pct, price, probPct, setupLabel, shortDate } from "@/lib/format";
 
 import { SymbolEvidence } from "./OutcomeEvidence";
 import { describeAlert } from "./AlertForm";
 import { PriceAlertButton } from "./PriceAlert";
-import { PriceChart } from "./PriceChart";
+import { PriceChart, type ChartEvent } from "./PriceChart";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 
 type Stock = Schemas["StockDetail"];
+
+const SIGNAL_NAMES: Record<string, string> = {
+  golden_cross: "Golden Cross", breakout: "Breakout", prebreakout: "PreBreakout", gapper: "Gapper", gainer: "Gainer",
+};
+const etDay = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+/** The sessions where the scans saw a signal start, for the price chart. */
+function signalEvents(s: Stock): ChartEvent[] {
+  return s.lifecycle.flatMap((e) => (e.time && e.signals_added.length
+    ? [{ date: etDay(new Date(e.time)), label: e.signals_added.map((k) => SIGNAL_NAMES[k] ?? k).join(", ") }]
+    : []));
+}
+
+/** earnings_days counts from today (ET); the chart wants the date. */
+function earningsDate(days: number | null | undefined, nowMs = Date.now()): string | null {
+  if (days == null || days < 0) return null;
+  const d = new Date(`${etDay(new Date(nowMs))}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 const MOVEMENT: Record<string, string> = {
   RISING: "Rising since the previous scan", FALLING: "Falling since the previous scan", UNCHANGED: "Unchanged since the previous scan",
@@ -225,8 +245,8 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
 
       <div className="split stock-split">
         <div className="col-main">
-          <Card title="Price" id="price" className="price-card" aside={s.bars_as_of ? `Bars as of ${etTime(s.bars_as_of)}` : undefined}>
-            {s.bars.length >= 2 ? <PriceChart bars={s.bars} asOf={s.bars_as_of} /> : <Empty title="No price history cached for this ticker.">Charts appear once a scan has downloaded its daily bars.</Empty>}
+          <Card title="Price" id="price" className="price-card" aside={s.bars_as_of ? `Daily bars through ${shortDate(s.bars_as_of)}` : undefined}>
+            {s.bars.length >= 2 ? <PriceChart bars={s.bars} events={signalEvents(s)} earningsDate={earningsDate(s.earnings_days)} /> : <Empty title="No price history cached for this ticker.">Charts appear once daily bars are available for this ticker.</Empty>}
           </Card>
           {/* The first reason is already the snapshot's "Main reason". */}
           {s.reasons.length > 1 && (

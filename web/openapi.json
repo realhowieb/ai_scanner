@@ -1054,6 +1054,30 @@
       "title": "Date",
       "type": "string"
      },
+     "ema21": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "EMA 21 of closes (the golden cross slow line)",
+      "title": "Ema21"
+     },
+     "ema9": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "EMA 9 of closes (the scanner's golden cross fast line)",
+      "title": "Ema9"
+     },
      "high": {
       "anyOf": [
        {
@@ -1086,6 +1110,30 @@
        }
       ],
       "title": "Open"
+     },
+     "sma20": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "20-day simple moving average of closes",
+      "title": "Sma20"
+     },
+     "sma50": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "50-day simple moving average of closes",
+      "title": "Sma50"
      },
      "volume": {
       "anyOf": [

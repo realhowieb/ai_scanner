@@ -2043,12 +2043,32 @@ export interface components {
             close: number;
             /** Date */
             date: string;
+            /**
+             * Ema21
+             * @description EMA 21 of closes (the golden cross slow line)
+             */
+            ema21?: number | null;
+            /**
+             * Ema9
+             * @description EMA 9 of closes (the scanner's golden cross fast line)
+             */
+            ema9?: number | null;
             /** High */
             high?: number | null;
             /** Low */
             low?: number | null;
             /** Open */
             open?: number | null;
+            /**
+             * Sma20
+             * @description 20-day simple moving average of closes
+             */
+            sma20?: number | null;
+            /**
+             * Sma50
+             * @description 50-day simple moving average of closes
+             */
+            sma50?: number | null;
             /** Volume */
             volume?: number | null;
         };
