@@ -7481,7 +7481,7 @@
         "type": "null"
        }
       ],
-      "description": "Most shares traded in the latest full-market scan"
+      "description": "Most shares traded among the latest full-market scan's ranked results (not the whole market)"
      },
      "ranked_count": {
       "anyOf": [
@@ -7507,7 +7507,7 @@
         "type": "null"
        }
       ],
-      "description": "Biggest gain in the latest full-market scan"
+      "description": "Biggest gain among the latest full-market scan's ranked results (not the whole market)"
      },
      "universe_symbols": {
       "anyOf": [
@@ -7520,6 +7520,18 @@
       ],
       "description": "Tradable U.S. stocks in the scan universe",
       "title": "Universe Symbols"
+     },
+     "volume_feed": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Market-data feed behind volume figures: 'iex' counts IEX exchange trades only (a small share of U.S. volume), 'sip' is consolidated",
+      "title": "Volume Feed"
      }
     },
     "required": [
@@ -7854,6 +7866,18 @@
      "ticker": {
       "title": "Ticker",
       "type": "string"
+     },
+     "volume_feed": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Market-data feed behind bar volume: 'iex' counts IEX exchange trades only, 'sip' is consolidated",
+      "title": "Volume Feed"
      },
      "watch_next": {
       "default": [],

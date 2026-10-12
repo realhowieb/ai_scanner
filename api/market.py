@@ -69,9 +69,44 @@ def _brief_core() -> Optional[Dict[str, Any]]:
             compared = compare_opportunities(opps, previous)
         except Exception:
             compared = []
+        radar = _scan_radar()
+        if radar is not None:
+            compared, has_previous = radar
         return {"data": data, "compared": compared, "has_previous": has_previous, "phase": _market_phase()}
 
     return _cached("brief", load, ttl_s=BRIEF_TTL_S, stale_s=BRIEF_STALE_S)
+
+
+RADAR_N = 5
+
+
+def _scan_radar() -> Optional[tuple]:
+    """The Radar's top names with the Scanner's HSF Scores: the latest saved market run's
+    ranked opportunities, each compared with its score and rank in the run before.
+
+    The Brief's own opportunity list scores only the few names in its top-5 signal lists,
+    so a ticker read lower there than in the Scanner for the same scan (CCC 50 vs 77).
+    None when no saved run is available, and the Brief's list stands."""
+    try:
+        from api.scans import run_opportunities
+        from api.today import market_runs
+        from ui.opportunities import compare_opportunities
+
+        runs = market_runs()
+        if not runs:
+            return None
+        current = run_opportunities(int(runs[0]["id"]))[:RADAR_N]
+        if not current:
+            return None
+        previous = run_opportunities(int(runs[1]["id"])) if len(runs) > 1 else None
+        prev_rank = {str(o.get("ticker") or "").upper(): i + 1 for i, o in enumerate(previous or [])}
+        compared = compare_opportunities(current, previous)
+        for i, o in enumerate(compared):
+            o["rank"] = i + 1
+            o["previous_rank"] = prev_rank.get(str(o.get("ticker") or "").upper())
+        return compared, previous is not None
+    except Exception:
+        return None
 
 
 _EARN_FLAG = re.compile(r"^\s*(\S+)\s*(?:⚠️\s*E(\d+)d)?\s*$")

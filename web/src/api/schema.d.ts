@@ -4525,7 +4525,7 @@ export interface components {
              * @default []
              */
             indices: components["schemas"]["IndexQuote"][];
-            /** @description Most shares traded in the latest full-market scan */
+            /** @description Most shares traded among the latest full-market scan's ranked results (not the whole market) */
             most_active?: components["schemas"]["ScanLeader"] | null;
             /**
              * Ranked Count
@@ -4533,13 +4533,18 @@ export interface components {
              */
             ranked_count?: number | null;
             status: components["schemas"]["SystemStatus"];
-            /** @description Biggest gain in the latest full-market scan */
+            /** @description Biggest gain among the latest full-market scan's ranked results (not the whole market) */
             top_gainer?: components["schemas"]["ScanLeader"] | null;
             /**
              * Universe Symbols
              * @description Tradable U.S. stocks in the scan universe
              */
             universe_symbols?: number | null;
+            /**
+             * Volume Feed
+             * @description Market-data feed behind volume figures: 'iex' counts IEX exchange trades only (a small share of U.S. volume), 'sip' is consolidated
+             */
+            volume_feed?: string | null;
         };
         /** StairSteppers */
         StairSteppers: {
@@ -4679,6 +4684,11 @@ export interface components {
             status?: string | null;
             /** Ticker */
             ticker: string;
+            /**
+             * Volume Feed
+             * @description Market-data feed behind bar volume: 'iex' counts IEX exchange trades only, 'sip' is consolidated
+             */
+            volume_feed?: string | null;
             /**
              * Watch Next
              * @default []

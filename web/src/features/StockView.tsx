@@ -246,7 +246,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
       <div className="split stock-split">
         <div className="col-main">
           <Card title="Price" id="price" className="price-card" aside={s.bars_as_of ? `Daily bars through ${shortDate(s.bars_as_of)}` : undefined}>
-            {s.bars.length >= 2 ? <PriceChart bars={s.bars} events={signalEvents(s)} earningsDate={earningsDate(s.earnings_days)} /> : <Empty title="No price history cached for this ticker.">Charts appear once daily bars are available for this ticker.</Empty>}
+            {s.bars.length >= 2 ? <PriceChart bars={s.bars} events={signalEvents(s)} earningsDate={earningsDate(s.earnings_days)} volumeFeed={s.volume_feed} /> : <Empty title="No price history cached for this ticker.">Charts appear once daily bars are available for this ticker.</Empty>}
           </Card>
           {/* The first reason is already the snapshot's "Main reason". */}
           {s.reasons.length > 1 && (

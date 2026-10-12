@@ -81,8 +81,10 @@ function sessionsBetween(last: string, target: string): number {
 /** Daily candles plus volume (completed sessions only): EMA 9/21 with their golden and
  * death crosses, optional SMA 20/50, HSF signal days, the next earnings date, a range
  * picker and a crosshair readout. Not a live chart. */
-export function PriceChart({ bars, events = [], earningsDate }: {
+export function PriceChart({ bars, events = [], earningsDate, volumeFeed }: {
   bars: Bar[];
+  /** "iex": volume counts IEX exchange trades only, a small share of all U.S. volume. */
+  volumeFeed?: string | null;
   events?: ChartEvent[];
   /** Next earnings date (YYYY-MM-DD), drawn past the last bar when it's close. */
   earningsDate?: string | null;
@@ -203,7 +205,7 @@ export function PriceChart({ bars, events = [], earningsDate }: {
         {shown.low != null && <span>L {price(shown.low)}</span>}
         <span>C {price(shown.close)}</span>
         {chg != null && <span className={chg >= 0 ? "up" : "down"}>{pct(chg)}</span>}
-        {shown.volume != null && <span>Vol {compact(shown.volume)}</span>}
+        {shown.volume != null && <span>{volumeFeed === "iex" ? "IEX vol" : "Vol"} {compact(shown.volume)}</span>}
         {notes.map((n) => <span key={n} className="rd-note">{n}</span>)}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" tabIndex={0} onKeyDown={onKey}
@@ -282,7 +284,7 @@ export function PriceChart({ bars, events = [], earningsDate }: {
         </div>
       )}
       <figcaption className="cap">
-        {data.length} daily bars, {etDate(first.date)} to {etDate(last.date)}.{hasEma ? (lastGolden ? ` Last golden cross ${shortDate(all[lastGolden.i]!.date)} (${all.length - 1 - lastGolden.i === 0 ? "latest session" : `${all.length - 1 - lastGolden.i} sessions ago`}).` : " No recent golden cross.") : ""} End-of-day prices, not live.
+        {data.length} daily bars, {etDate(first.date)} to {etDate(last.date)}.{hasEma ? (lastGolden ? ` Last golden cross ${shortDate(all[lastGolden.i]!.date)} (${all.length - 1 - lastGolden.i === 0 ? "latest session" : `${all.length - 1 - lastGolden.i} sessions ago`}).` : " No recent golden cross.") : ""} End-of-day prices, not live.{volumeFeed === "iex" ? " Volume counts IEX exchange trades only, a small share of all U.S. volume." : ""}
       </figcaption>
     </figure>
   );

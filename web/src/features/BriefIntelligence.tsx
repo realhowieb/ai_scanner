@@ -54,10 +54,10 @@ export function MarketPulse({ b }: { b: Brief }) {
 export function OpportunityRadar({ b }: { b: Brief }) {
   const opportunities = (b.opportunities as Opportunity[]).filter((o) => o.ticker);
   return <Card title="HSF Opportunity Radar" id="opps">
-    <p className="cap">Top opportunities in canonical Brief order. Snapshot {etTime(b.snapshot_time)}.</p>
+    <p className="cap">Top names by HSF Score, the same scores as the Scanner. Snapshot {etTime(b.snapshot_time)}.</p>
     {!opportunities.length ? <Empty title="No ranked opportunities in this snapshot." /> : <ol className="brief-radar">
       {opportunities.map((o, i) => <li key={o.ticker}>
-        <div className="brief-radar-identity"><TickerLink ticker={o.ticker!} /><span className="cap">Brief #{o.rank ?? i + 1} <RankMovement rank={o.rank} previous={o.previous_rank} /></span></div>
+        <div className="brief-radar-identity"><TickerLink ticker={o.ticker!} /><span className="cap">#{o.rank ?? i + 1} <RankMovement rank={o.rank} previous={o.previous_rank} /></span></div>
         <div><span className="cap">HSF Score </span><ScoreBadge score={o.score} />
           {finite(o.score_delta) && <span className={`cap ${tone(o.score_delta)}`}> {o.score_delta > 0 ? "Rising +" : o.score_delta < 0 ? "Falling " : "Unchanged "}{o.score_delta}</span>}
           {!finite(o.score_delta) && o.movement_state === "NEW" && <span className="cap"> New</span>}

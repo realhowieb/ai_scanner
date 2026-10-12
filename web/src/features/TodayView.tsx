@@ -227,7 +227,7 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
       )}
 
       {failed.has("snapshot") ? <SectionFailed name="Market snapshot" /> : data.snapshot && (
-        <Card title="Market snapshot" id="snap" aside="Top gainer and most active are from the latest full-market scan">
+        <Card title="Market snapshot" id="snap" aside="Top gainer and most active are among the latest scan's ranked setups, not the whole market">
           <SnapshotTiles snapshot={data.snapshot} />
         </Card>
       )}

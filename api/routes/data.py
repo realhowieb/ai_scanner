@@ -119,6 +119,7 @@ def register(app: FastAPI) -> None:
         """Stock Intelligence for one ticker: score, signals, reasons and risks, lifecycle,
         daily bars, and your watchlists and alerts on it."""
         from api.scans import daily_bars, stock_detail
+        from api.today import volume_feed
 
         t = ticker.strip().upper()
         user = _user(account)
@@ -127,7 +128,7 @@ def register(app: FastAPI) -> None:
             bars = daily_bars(t)
         except Exception:  # chart data is optional; the page still renders
             bars = {"bars": [], "as_of": None}
-        out.update({"bars": bars["bars"], "bars_as_of": bars["as_of"],
+        out.update({"bars": bars["bars"], "bars_as_of": bars["as_of"], "volume_feed": volume_feed(),
                     "watchlists": user_data.watchlists_with(user, t),
                     "alerts": json_safe(user_data.alerts_for(user, t))})
         return out

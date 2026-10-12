@@ -423,6 +423,16 @@ def _system_status(now: dt.datetime) -> Dict[str, Any]:
     return {"status": info["status"], "universe_symbols": info["universe_symbols"]}
 
 
+def volume_feed() -> Optional[str]:
+    """'iex' or 'sip': the Alpaca feed the scans read volume from (None when unknown)."""
+    try:
+        from data.alpaca_config import get_alpaca_data_feed
+
+        return get_alpaca_data_feed()
+    except Exception:
+        return None
+
+
 def _scan_leader(df: Any, column: str) -> Optional[Dict[str, Any]]:
     """The row with the largest `column` value in a scan's results (one row per ticker)."""
     if df is None or column not in df.columns or "Ticker" not in df.columns:
@@ -446,7 +456,8 @@ def snapshot(now: dt.datetime) -> Dict[str, Any]:
     to null on its own."""
     out: Dict[str, Any] = {"universe_symbols": None, "ranked_count": None,
                            "status": {"level": "unknown", "label": "Status unavailable"},
-                           "indices": _index_quotes(), "top_gainer": None, "most_active": None}
+                           "indices": _index_quotes(), "top_gainer": None, "most_active": None,
+                           "volume_feed": volume_feed()}
     try:
         out.update(_system_status(now))
     except Exception:
