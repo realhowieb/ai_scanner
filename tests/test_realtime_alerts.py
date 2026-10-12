@@ -105,8 +105,9 @@ class EvaluateAlertTests(unittest.TestCase):
             "prevDailyBar": {"t": "2026-10-08T04:00:00Z", "c": 10.99, "v": 4_000_000},
         }}
         resp = mock.Mock(json=mock.Mock(return_value=payload), raise_for_status=mock.Mock())
+        fake_httpx = mock.Mock(get=mock.Mock(return_value=resp))  # smoke CI has no httpx
         with mock.patch.dict("os.environ", {"ALPACA_API_KEY_ID": "k", "ALPACA_API_SECRET_KEY": "s"}), \
-                mock.patch("httpx.get", return_value=resp):
+                mock.patch.dict("sys.modules", {"httpx": fake_httpx}):
             snap = ra._latest_snapshots(["NVAX"])["NVAX"]
         monday = ra._today_et(dt.datetime(2026, 10, 12, 8, 0, tzinfo=dt.timezone.utc))
         alert = {**self._alert("move", 5.0), "ticker": "NVAX"}
