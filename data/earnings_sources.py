@@ -103,7 +103,10 @@ def _slices(start_iso: str, end_iso: str, days: int):
 
 
 def _fetch_fmp_rows(key: str, start_iso: str, end_iso: str) -> list:
-    params = urllib.parse.urlencode({"from": start_iso, "to": end_iso, "apikey": key})
+    # The stable endpoint only returns "time" (bmo/amc) with includeReportTimes;
+    # v3 ignores the extra parameter.
+    params = urllib.parse.urlencode({"from": start_iso, "to": end_iso, "apikey": key,
+                                     "includeReportTimes": "true"})
     for base in FMP_BASES:
         try:
             data = _get_json(f"{base}?{params}")
@@ -135,7 +138,7 @@ def fetch_earnings_window_fmp(start_iso: str, end_iso: str) -> EarnMap:
             out,
             _norm_symbol(row.get("symbol")),
             _parse_date(row.get("date")),
-            # v3 used "time"; stable may omit it.
+            # v3 and stable (with includeReportTimes) both use "time".
             _norm_time(row.get("time")),
             today,
         )
@@ -205,6 +208,13 @@ def fetch_earnings_window(start_iso: str, end_iso: str) -> Tuple[EarnMap, str]:
         return {}, "none"
 
     merged: EarnMap = dict(finnhub)
-    merged.update(fmp)  # FMP wins on overlap (primary)
+    for sym, (d, t) in fmp.items():
+        # FMP wins on overlap (primary), but a missing FMP time must not hide
+        # Finnhub's for the same date: JPM/WFC/C/UNH/JNJ showed "After close"
+        # because FMP's None kept a stale stored time (both providers say BMO).
+        other = finnhub.get(sym)
+        if t is None and other is not None and other[0] == d:
+            t = other[1]
+        merged[sym] = (d, t)
     source = "fmp+finnhub" if (fmp and finnhub) else ("fmp" if fmp else "finnhub")
     return merged, source
