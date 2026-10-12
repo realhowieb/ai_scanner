@@ -65,6 +65,14 @@ describe("Scanner", () => {
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
+  it("counts the whole scan in the headline and names what a filter left", async () => {
+    search = new URLSearchParams("signal=prebreakout");
+    fetchMock.mockResolvedValue(jsonResponse(latest({ total: 0, scan_total: 100, limited: false, max_results: 200, setups: [] })));
+    render(<SessionProvider initialMe={me("premium")}><ScannerView /></SessionProvider>);
+    expect(await screen.findByText(/100 setups ranked · 0 PreBreakout/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "0 PreBreakout setups of 100 ranked" })).toBeInTheDocument();
+  });
+
   it("locks PreBreakout below Premium without asking the API", async () => {
     search = new URLSearchParams("signal=prebreakout");
     render(<SessionProvider initialMe={me("pro")}><ScannerView /></SessionProvider>);

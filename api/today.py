@@ -243,6 +243,31 @@ def scan_freshness(latest: Optional[dt.datetime], now: dt.datetime) -> Dict[str,
     return shared(latest, now)
 
 
+def run_freshness(run: Dict[str, Any], now: Optional[dt.datetime] = None) -> Dict[str, Any]:
+    """describe() for one saved market run, with the times the run itself records.
+
+    The scan stamps every row with its start time (SourceScanId, since 2026-10-09)
+    and saves its duration, so completion is start + duration. Prices are fetched
+    from the start onward, so the start is the earliest the market data can be; it
+    is reported as the market-data time. Older runs without the stamp leave both
+    unknown rather than guessing.
+    """
+    from analytics.data_freshness import describe, timestamp
+
+    started = completed = None
+    try:
+        df = run_df(int(run["id"]))
+        if df is not None and "SourceScanId" in df.columns:
+            stamps = df["SourceScanId"].dropna()
+            started = timestamp(stamps.iloc[0]) if len(stamps) else None
+        duration = _num(run.get("duration_sec"))
+        if started is not None and duration is not None:
+            completed = started + dt.timedelta(seconds=duration)
+    except Exception:  # unknown times stay unknown; never fail the page
+        started = completed = None
+    return describe(run.get("created_at"), market_data_at=started, scan_completed_at=completed, now=now)
+
+
 def market_status(now: dt.datetime) -> Dict[str, Any]:
     """Phase plus scan freshness for the Today page; freshness fails on its own."""
     out: Dict[str, Any] = {"phase": market_phase(now), "latest_scan_at": None, "stale": None,
@@ -253,7 +278,7 @@ def market_status(now: dt.datetime) -> Dict[str, Any]:
         runs = market_runs()
         latest = runs[0]["created_at"] if runs else None
         out.update(latest_scan_at=_iso(latest), **scan_freshness(latest, now))
-        out["freshness"] = describe(latest, now=now)
+        out["freshness"] = run_freshness(runs[0], now=now) if runs else describe(None, now=now)
     except Exception:  # unknown freshness reads as null, never as stale
         pass
     return out

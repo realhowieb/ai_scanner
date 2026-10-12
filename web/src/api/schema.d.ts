@@ -2688,6 +2688,11 @@ export interface components {
              */
             scan_at?: string | null;
             /**
+             * Scan Total
+             * @description Setups in the scan before any filter (signal, score floor)
+             */
+            scan_total?: number | null;
+            /**
              * Setups
              * @default []
              */

@@ -2733,6 +2733,18 @@
       "description": "ISO time of the market scan; null when none exists",
       "title": "Scan At"
      },
+     "scan_total": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Setups in the scan before any filter (signal, score floor)",
+      "title": "Scan Total"
+     },
      "setups": {
       "default": [],
       "items": {
