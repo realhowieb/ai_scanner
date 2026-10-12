@@ -16,7 +16,7 @@ SCAN_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
 SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob", "prob_rank")
 CALIBRATION_TTL_S = 1800  # matured outcomes change once a day; same as the web
 CALIBRATION_STALE_S = 6 * 3600  # past the TTL, served while one background rebuild runs
-BAR_LIMIT = 120
+BAR_LIMIT = 260  # about a year of sessions, for the chart's 1Y range
 EMA_WARMUP_BARS = 22  # ema_cross_detail needs 23 bars before it reports a cross
 # Stock pages get their own cache so a client paging through many tickers can't
 # push the scan runs out of the shared one.
@@ -203,12 +203,20 @@ def _add_emas(bars: List[Dict[str, Any]]) -> None:
         warm = i >= EMA_WARMUP_BARS
         b["ema9"] = round(fast, 4) if warm else None
         b["ema21"] = round(slow, 4) if warm else None
+    for n in (20, 50):
+        total = 0.0
+        for i, b in enumerate(bars):
+            total += b["close"]
+            if i >= n:
+                total -= bars[i - n]["close"]
+            b[f"sma{n}"] = round(total / n, 4) if i >= n - 1 else None
 
 
 def _provider_bars(ticker: str, limit: int, through: dt.date) -> List[Dict[str, Any]]:
     from data.prices import fetch_price_data_batch
 
-    frames, _skipped = fetch_price_data_batch([ticker], period="1y", timeout_s=8.0, batch_retries=1)
+    # Two years, so the moving averages are warmed up across the whole 1Y view.
+    frames, _skipped = fetch_price_data_batch([ticker], period="2y", timeout_s=8.0, batch_retries=1)
     return _frame_bars(frames.get(ticker), limit, through)
 
 
@@ -216,22 +224,25 @@ def daily_bars(ticker: str, limit: int = BAR_LIMIT) -> Dict[str, Any]:
     """Daily OHLCV for the Stock Intelligence chart.
 
     Starts from the frames the scans cached. Scheduled scans don't write that cache
-    (only admin full-universe scans do), so when its last bar is older than the last
-    completed session the ticker's bars are fetched once from the price provider and
-    reused for BARS_TTL_S. The cached bars stand if that fetch fails."""
+    (only admin full-universe scans do) and its frames are short, so when its last bar
+    is older than the last completed session, or it holds fewer than `limit` bars, the
+    ticker's bars are fetched once from the price provider and reused for BARS_TTL_S.
+    The cached bars stand if that fetch fails."""
     from db.prices import get_price_data_snapshot
 
     through = _last_session_day()
     frames, _stale = get_price_data_snapshot([ticker], max_age_minutes=7 * 24 * 60)
     bars = _frame_bars(frames.get(ticker), limit, through)
-    if not bars or bars[-1]["date"] < through.isoformat():
+    # Scan frames hold only a few months; a year of history comes from the provider.
+    if len(bars) < limit or bars[-1]["date"] < through.isoformat():
         try:
             fresh = stock_cache.get(("bars", ticker, through.isoformat(), limit),
                                     lambda: _provider_bars(ticker, limit, through),
                                     ttl_s=BARS_TTL_S, stale_s=BARS_STALE_S)
         except Exception:
             fresh = []
-        if fresh and (not bars or fresh[-1]["date"] > bars[-1]["date"]):
+        if fresh and (not bars or fresh[-1]["date"] > bars[-1]["date"]
+                      or (fresh[-1]["date"] == bars[-1]["date"] and len(fresh) > len(bars))):
             bars = fresh
     return {"bars": bars, "as_of": bars[-1]["date"] if bars else None}
 

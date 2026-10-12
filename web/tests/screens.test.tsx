@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Schemas } from "@/api/client";
@@ -245,5 +245,38 @@ describe("Stock Intelligence", () => {
     expect(container.querySelectorAll("polygon.x-golden")).toHaveLength(1);
     expect(container.querySelectorAll("polygon.x-death")).toHaveLength(0);
     expect(screen.getByText(/20 daily bars/)).toHaveTextContent("Last golden cross Sep 11 (9 sessions ago)");
+  });
+
+  it("offers ranges, line toggles, a readout, signal days and earnings", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T21:00:00Z"));
+    try {
+      const d = new Date("2026-03-02T12:00:00Z");
+      const bars = Array.from({ length: 160 }, (_, i) => {
+        if (i) do d.setUTCDate(d.getUTCDate() + 1); while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+        return { date: d.toISOString().slice(0, 10), open: 10, high: 11, low: 9, close: 10 + (i % 3) * 0.1, volume: 1e6 + i, sma20: 10, sma50: 10 };
+      });
+      const lastDay = bars[bars.length - 1]!.date;
+      const lifecycle = [{ time: `${bars[150]!.date}T14:00:00Z`, signals: ["breakout"], signals_added: ["breakout"], signals_removed: [] }];
+      const { container } = render(<StockView s={stock({ bars, bars_as_of: lastDay, lifecycle, earnings_days: 3 })} premium />);
+      // 160 bars: 1M, 3M, 6M (the default) and 1Y, which shows everything.
+      expect(screen.getByRole("button", { name: "6M" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByText(/daily bars,/)).toHaveTextContent("126 daily bars");
+      fireEvent.click(screen.getByRole("button", { name: "1M" }));
+      expect(screen.getByText(/daily bars,/)).toHaveTextContent("21 daily bars");
+      expect(container.querySelectorAll("path.sma50")).toHaveLength(0);
+      fireEvent.click(screen.getByRole("button", { name: /SMA 50/ }));
+      expect(container.querySelectorAll("path.sma50")).toHaveLength(1);
+      expect(container.querySelectorAll("rect.sig-mark")).toHaveLength(1);
+      expect(container.querySelector(".earn-mark")).toHaveTextContent("Earnings Oct 15");
+      const svg = screen.getByRole("img", { name: /Daily price from/ });
+      fireEvent.keyDown(svg, { key: "ArrowLeft" });
+      fireEvent.keyDown(svg, { key: "ArrowLeft" });
+      const readout = container.querySelector(".chart-readout")!;
+      expect(readout).toHaveTextContent(new Date(`${bars[157]!.date}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }));
+      expect(readout).toHaveTextContent("O $10.00");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

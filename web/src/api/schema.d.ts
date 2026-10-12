@@ -2059,6 +2059,16 @@ export interface components {
             low?: number | null;
             /** Open */
             open?: number | null;
+            /**
+             * Sma20
+             * @description 20-day simple moving average of closes
+             */
+            sma20?: number | null;
+            /**
+             * Sma50
+             * @description 50-day simple moving average of closes
+             */
+            sma50?: number | null;
             /** Volume */
             volume?: number | null;
         };

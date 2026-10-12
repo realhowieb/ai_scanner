@@ -1111,6 +1111,30 @@
       ],
       "title": "Open"
      },
+     "sma20": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "20-day simple moving average of closes",
+      "title": "Sma20"
+     },
+     "sma50": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "50-day simple moving average of closes",
+      "title": "Sma50"
+     },
      "volume": {
       "anyOf": [
        {

@@ -46,7 +46,7 @@ class DailyBarsTests(unittest.TestCase):
     def test_fresh_cache_skips_provider(self):
         with self._snapshot(["2026-10-09", "2026-10-12"]), \
                 mock.patch("data.prices.fetch_price_data_batch") as fetch:
-            out = scans.daily_bars("ABC")
+            out = scans.daily_bars("ABC", limit=2)
         fetch.assert_not_called()
         self.assertEqual(out["as_of"], "2026-10-12")
 
@@ -58,6 +58,13 @@ class DailyBarsTests(unittest.TestCase):
         # The 13th (a session not yet closed) is dropped.
         self.assertEqual([b["date"] for b in out["bars"]], ["2026-10-09", "2026-10-12"])
         self.assertEqual(out["as_of"], "2026-10-12")
+
+    def test_short_cache_gets_longer_provider_history(self):
+        with self._snapshot(["2026-10-09", "2026-10-12"]), \
+                mock.patch("data.prices.fetch_price_data_batch",
+                           return_value=({"ABC": _frame(["2026-10-07", "2026-10-08", "2026-10-09", "2026-10-12"])}, [])):
+            out = scans.daily_bars("ABC")
+        self.assertEqual(len(out["bars"]), 4)
 
     def test_provider_failure_keeps_cached_bars(self):
         with self._snapshot(["2026-10-06", "2026-10-07"]), \
@@ -102,3 +109,15 @@ class EmaLineTests(unittest.TestCase):
         self.assertEqual(detail["direction"], "bullish")
         self.assertAlmostEqual(detail["ema_fast"], bars[cross]["ema9"], places=3)
         self.assertIsNone(ema_cross_detail(df.iloc[:cross]))
+
+
+class SmaTests(unittest.TestCase):
+    def test_simple_moving_averages(self):
+        days = pd.bdate_range("2026-01-01", periods=60)
+        df = pd.DataFrame({"Close": [float(i) for i in range(60)]}, index=days)
+        bars = scans._frame_bars(df, 500, dt.date(2026, 12, 31))
+        self.assertIsNone(bars[18]["sma20"])
+        self.assertAlmostEqual(bars[19]["sma20"], 9.5)
+        self.assertAlmostEqual(bars[59]["sma20"], 49.5)
+        self.assertIsNone(bars[48]["sma50"])
+        self.assertAlmostEqual(bars[59]["sma50"], 34.5)
