@@ -152,7 +152,49 @@ def list_pending_outcomes(min_age_days: int = 8, limit: int = 1000) -> List[Dict
     return out
 
 
-def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any]) -> bool:
+# Opportunity rows by where their HSF score came from. Legacy rows were frozen
+# from the Market Brief's top-5 lists (build_opportunities), which saw only a few
+# of each name's signals and scored lower than the Scanner. New rows are frozen
+# from the Scanner's ranking of the whole saved run (consolidate_scanner_results).
+BRIEF_SIGNAL_TYPE = "hsf_opportunity"
+SCANNER_SIGNAL_TYPE = "hsf_scanner"
+
+# Readers keep one score source per snapshot: a Brief row is dropped once that
+# snapshot has Scanner rows (frozen going forward, or backfilled from the saved
+# run), so the two scorings never mix inside one scan. Both kinds share
+# fired_at = the run's created_at, and (source, fired_at) is indexed.
+_SCANNER_SUPERSEDES_BRIEF = (
+    "AND NOT (signal_outcomes.signal_type = 'hsf_opportunity' AND EXISTS ("
+    "SELECT 1 FROM signal_outcomes s2 WHERE s2.source = 'opportunity' "
+    "AND s2.signal_type = 'hsf_scanner' AND s2.fired_at = signal_outcomes.fired_at)) "
+)
+
+_OPPORTUNITY_OUTCOMES_SQL = (
+    "SELECT ticker, fired_at, setup_score, prebreakout_prob, indicators, raw_signal, "
+    "return_1d, return_3d, return_5d, mfe_5d, mae_5d, outcome_computed_at "
+    "FROM signal_outcomes WHERE source = 'opportunity' "
+    "AND fired_at >= NOW() - make_interval(days => %s) "
+    + _SCANNER_SUPERSEDES_BRIEF
+    + "ORDER BY fired_at ASC LIMIT %s"
+)
+_TICKER_HISTORY_SQL = (
+    "SELECT fired_at, raw_signal, indicators, setup_score, prebreakout_prob, mfe_5d, outcome_computed_at "
+    "FROM signal_outcomes WHERE source = 'opportunity' AND UPPER(ticker) = %s "
+    "AND fired_at >= NOW() - make_interval(days => %s) "
+    + _SCANNER_SUPERSEDES_BRIEF
+    + "ORDER BY fired_at ASC LIMIT %s"
+)
+_OBSERVATIONS_SQL = (
+    "SELECT id, ticker, fired_at, raw_signal, indicators "
+    "FROM signal_outcomes WHERE source = 'opportunity' "
+    "AND fired_at >= NOW() - make_interval(days => %s) "
+    + _SCANNER_SUPERSEDES_BRIEF
+    + "ORDER BY fired_at ASC LIMIT %s"
+)
+
+
+def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any], *,
+                       signal_type: str = BRIEF_SIGNAL_TYPE) -> bool:
     """Freeze one HSF Top-Opportunity into signal_outcomes for calibration.
 
     Reuses the existing freeze + forward-outcome backfill pipeline (source=
@@ -185,11 +227,12 @@ def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any]) -> bool:
         "models": opp.get("models") or {},
         "primary_setup": opp.get("primary_setup"),
         "status": opp.get("status"),
+        "score_source": "scanner" if signal_type == SCANNER_SIGNAL_TYPE else "brief",
     }
     return freeze_signal(
         source="opportunity",
         source_event_id=event_id,
-        signal_type="hsf_opportunity",
+        signal_type=signal_type,
         user_id=None,
         alert_id=None,
         ticker=opp.get("ticker"),
@@ -203,9 +246,10 @@ def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any]) -> bool:
     )
 
 
-def freeze_opportunities(snapshot_time: Any, opps: List[Dict[str, Any]]) -> int:
+def freeze_opportunities(snapshot_time: Any, opps: List[Dict[str, Any]], *,
+                         signal_type: str = BRIEF_SIGNAL_TYPE) -> int:
     """Freeze a snapshot's opportunities; returns how many rows were written."""
-    return sum(1 for o in (opps or []) if freeze_opportunity(snapshot_time, o))
+    return sum(1 for o in (opps or []) if freeze_opportunity(snapshot_time, o, signal_type=signal_type))
 
 
 def fetch_opportunity_outcomes(days_back: int = 180, limit: int = 20000) -> List[Dict[str, Any]]:
@@ -221,17 +265,7 @@ def fetch_opportunity_outcomes(days_back: int = 180, limit: int = 20000) -> List
         _ensure_schema(conn)
         cur = conn.cursor()
         cur.execute(
-            """
-            SELECT ticker, fired_at, setup_score, prebreakout_prob,
-                   indicators, raw_signal,
-                   return_1d, return_3d, return_5d, mfe_5d, mae_5d,
-                   outcome_computed_at
-            FROM signal_outcomes
-            WHERE source = 'opportunity'
-              AND fired_at >= NOW() - make_interval(days => %s)
-            ORDER BY fired_at ASC
-            LIMIT %s
-            """,
+            _OPPORTUNITY_OUTCOMES_SQL,
             (int(days_back), int(limit)),
         )
         rows = cur.fetchall() or []
@@ -268,15 +302,7 @@ def fetch_ticker_opportunity_history(
         _ensure_schema(conn)
         cur = conn.cursor()
         cur.execute(
-            """
-            SELECT fired_at, raw_signal, indicators, setup_score, prebreakout_prob,
-                   mfe_5d, outcome_computed_at
-            FROM signal_outcomes
-            WHERE source = 'opportunity' AND UPPER(ticker) = %s
-              AND fired_at >= NOW() - make_interval(days => %s)
-            ORDER BY fired_at ASC
-            LIMIT %s
-            """,
+            _TICKER_HISTORY_SQL,
             (t, int(days_back), int(limit)),
         )
         rows = cur.fetchall() or []
@@ -321,14 +347,7 @@ def fetch_opportunity_observations(days_back: int = 30, limit: int = 20000) -> L
         _ensure_schema(conn)
         cur = conn.cursor()
         cur.execute(
-            """
-            SELECT id, ticker, fired_at, raw_signal, indicators
-            FROM signal_outcomes
-            WHERE source = 'opportunity'
-              AND fired_at >= NOW() - make_interval(days => %s)
-            ORDER BY fired_at ASC
-            LIMIT %s
-            """,
+            _OBSERVATIONS_SQL,
             (int(days_back), int(limit)),
         )
         rows = cur.fetchall() or []
@@ -587,6 +606,7 @@ _OUTCOME_SELECT = (
     "return_1d, return_3d, return_5d, mfe_5d, mae_5d, outcome_computed_at, "
     "benchmark_symbol, benchmark_return_1d, benchmark_return_3d, benchmark_return_5d "
     "FROM signal_outcomes WHERE source = 'opportunity' "
+    + _SCANNER_SUPERSEDES_BRIEF
 )
 _OUTCOME_ALL_SQL = _OUTCOME_SELECT + "ORDER BY fired_at ASC, id ASC LIMIT %s"
 _OUTCOME_TICKER_SQL = _OUTCOME_SELECT + "AND UPPER(ticker) = %s ORDER BY fired_at ASC, id ASC LIMIT %s"
