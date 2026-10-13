@@ -67,23 +67,78 @@ class FreezePayloadTests(unittest.TestCase):
 
 
 class FreezeOwnershipTests(unittest.TestCase):
-    def test_cron_freeze_latest_reuses_canonical_build_and_freeze(self):
+    _RUNS = [{"id": 7, "created_at": "T7"}, {"id": 6, "created_at": "T6"}]
+
+    def test_cron_freezes_latest_run_with_scanner_scores(self):
         from analytics import opportunity_freeze as ofz
-        data = {"snapshot_time": "T", "top_setups": [("NVDA", 74)], "golden": ["NVDA"]}
+        opps = [{"ticker": "NVDA", "score": 77}]
         with (
-            mock.patch("ui.market_brief._compute_brief", return_value=data),
+            mock.patch.object(ofz, "market_runs", return_value=self._RUNS),
+            mock.patch.object(ofz, "scanner_opportunities", return_value=opps) as sc,
             mock.patch("db.signal_outcomes.freeze_opportunities", return_value=3) as fz,
         ):
             n = ofz.freeze_latest_opportunities()
         self.assertEqual(n, 3)
-        self.assertTrue(fz.called)
+        sc.assert_called_once_with(7, ofz.FREEZE_TOP_N)
+        fz.assert_called_once_with("T7", opps, signal_type=so.SCANNER_SIGNAL_TYPE)
+
+    def test_scanner_opportunities_use_the_scanner_ranking(self):
+        import pandas as pd
+
+        from analytics import opportunity_freeze as ofz
+        df = pd.DataFrame([
+            {"Ticker": "NVDA", "IsBreakout": True, "EMACross": "Golden",
+             "PreBreakoutProb%": 78, "BreakoutScore": 74, "PctChange": 2.4},
+            {"Ticker": "ZZZ", "IsBreakout": False, "PctChange": 0.1},
+        ])
+        with mock.patch("ui.market_scans._run_df_uncached", return_value=df):
+            opps = ofz.scanner_opportunities(7)
+        from ui.results_intelligence import consolidate_scanner_results
+        self.assertEqual(opps, consolidate_scanner_results(df.to_dict(orient="records")))
 
     def test_cron_freeze_safe_when_no_data_or_error(self):
         from analytics import opportunity_freeze as ofz
-        with mock.patch("ui.market_brief._compute_brief", return_value=None):
+        with mock.patch.object(ofz, "market_runs", return_value=[]):
             self.assertEqual(ofz.freeze_latest_opportunities(), 0)
-        with mock.patch("ui.market_brief._compute_brief", side_effect=RuntimeError("x")):
+        with mock.patch.object(ofz, "market_runs", side_effect=RuntimeError("x")):
             self.assertEqual(ofz.freeze_latest_opportunities(), 0)
+        with (
+            mock.patch.object(ofz, "market_runs", return_value=self._RUNS),
+            mock.patch.object(ofz, "scanner_opportunities", return_value=[]),
+        ):
+            self.assertEqual(ofz.freeze_latest_opportunities(), 0)
+
+    def test_scanner_freeze_is_tagged_and_keyed_apart_from_brief_rows(self):
+        import datetime as dt
+        seen = []
+        with mock.patch.object(so, "freeze_signal", side_effect=lambda **kw: seen.append(kw) or True):
+            t = dt.datetime(2026, 10, 13, 13, 35, tzinfo=dt.timezone.utc)
+            so.freeze_opportunity(t, _opp())
+            so.freeze_opportunity(t, _opp(), signal_type=so.SCANNER_SIGNAL_TYPE)
+        self.assertEqual([kw["signal_type"] for kw in seen], ["hsf_opportunity", "hsf_scanner"])
+        self.assertEqual([kw["raw_signal"]["score_source"] for kw in seen], ["brief", "scanner"])
+        self.assertEqual(seen[0]["source_event_id"], seen[1]["source_event_id"])
+
+    def test_every_opportunity_reader_drops_brief_rows_superseded_by_scanner_rows(self):
+        self.assertIn("hsf_scanner", so._SCANNER_SUPERSEDES_BRIEF)
+        self.assertIn(so._SCANNER_SUPERSEDES_BRIEF, so._OUTCOME_ALL_SQL)
+        self.assertIn(so._SCANNER_SUPERSEDES_BRIEF, so._OUTCOME_TICKER_SQL)
+        for fn in (so.fetch_opportunity_outcomes, so.fetch_ticker_opportunity_history,
+                   so.fetch_opportunity_observations):
+            cur = mock.MagicMock()
+            cur.fetchall.return_value = []
+            conn = mock.MagicMock()
+            conn.cursor.return_value = cur
+            with mock.patch.object(so, "get_neon_conn", return_value=conn), \
+                    mock.patch.object(so, "_ensure_schema"):
+                fn("NVDA") if fn is so.fetch_ticker_opportunity_history else fn()
+            sql = cur.execute.call_args[0][0]
+            self.assertIn(so._SCANNER_SUPERSEDES_BRIEF, sql, fn.__name__)
+
+    def test_brief_render_no_longer_freezes(self):
+        from pathlib import Path
+        src = (Path(__file__).resolve().parent.parent / "ui" / "market_brief.py").read_text()
+        self.assertNotIn("freeze_opportunities(", src)
 
 
 class PipelineIntegrityTests(unittest.TestCase):
