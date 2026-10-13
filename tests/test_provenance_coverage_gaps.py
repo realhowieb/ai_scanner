@@ -34,19 +34,15 @@ class CoverageGapTests(unittest.TestCase):
         self.assertNotIn("raw_probability", result)
 
     def test_actual_freeze_path_preserves_non_pick_evidence(self):
-        from analytics.opportunity_freeze import freeze_latest_opportunities
-        from ui.opportunities import build_opportunities
+        from analytics import opportunity_freeze as ofz
 
         snapshot = datetime(2026, 10, 9, 17, tzinfo=timezone.utc)
         models = {"prebreakout": prediction()}
-        data = {"snapshot_time": snapshot, "top_setups": [("ABC", 9)], "picks": [],
-                "source_models": {"ABC": models}}
-        baseline = build_opportunities({k: v for k, v in data.items() if k != "source_models"})
-        after = build_opportunities(data)
-        self.assertEqual([{k: v for k, v in o.items() if k != "models"} for o in baseline],
-                         [{k: v for k, v in o.items() if k != "models"} for o in after])
-        with patch("ui.market_brief._compute_brief", return_value=data), patch("db.signal_outcomes.freeze_signal", return_value=True) as save:
-            self.assertEqual(freeze_latest_opportunities(), 1)
+        df = pd.DataFrame([{"Ticker": "ABC", "BreakoutScore": 9, COLUMN: models}])
+        with patch.object(ofz, "market_runs", return_value=[{"id": 1, "created_at": snapshot}]), \
+                patch("ui.market_scans._run_df_uncached", return_value=df), \
+                patch("db.signal_outcomes.freeze_signal", return_value=True) as save:
+            self.assertEqual(ofz.freeze_latest_opportunities(), 1)
         self.assertEqual(save.call_args.kwargs["raw_signal"]["models"], models)
         self.assertIsNone(save.call_args.kwargs["prebreakout_prob"])
         self.assertEqual(save.call_args.kwargs["fired_at"], snapshot)

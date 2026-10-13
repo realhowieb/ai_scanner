@@ -862,15 +862,9 @@ def compute_compared_opportunities(data: Dict[str, Any]) -> tuple:
         save_opportunity_snapshot(ts, to_snapshot_rows(opps), context="market_brief")
     except Exception:
         previous_rows = None
-    # Freeze full opportunities (score + components + signal-time features) into
-    # signal_outcomes for leakage-safe calibration; the existing cron backfill
-    # fills their forward outcomes. Idempotent per (snapshot, ticker).
-    try:
-        from db.signal_outcomes import freeze_opportunities
-
-        freeze_opportunities(ts, opps)
-    except Exception:
-        pass
+    # No freeze here: the cron freezes each run's Scanner-scored opportunities
+    # (analytics.opportunity_freeze), so the Track record never mixes in these
+    # Brief-list scores.
 
     compared = compare_opportunities(opps, previous_rows)
     if st is not None:
