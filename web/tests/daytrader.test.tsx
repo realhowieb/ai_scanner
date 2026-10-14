@@ -73,6 +73,38 @@ describe("Day Trader table", () => {
   });
 });
 
+describe("Day Trader pre-market", () => {
+  it("explains an empty Top movers list before pre-market trades start", async () => {
+    fetchMock.mockImplementation(async (req: Request) => {
+      if (new URL(req.url).pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
+      const source = new URL(req.url).searchParams.get("source") ?? "watchlist";
+      return jsonResponse({ state: "premarket", source, symbols: [], missing: 0, as_of: new Date().toISOString(), rows: [] });
+    });
+    render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    await userEvent.selectOptions(screen.getByLabelText("Symbols"), "movers");
+    expect(await screen.findByText("No pre-market gappers yet today.")).toBeInTheDocument();
+    expect(screen.getByText(/about 8:00 AM ET/)).toBeInTheDocument();
+    expect(screen.queryByText("No symbols in this source.")).not.toBeInTheDocument();
+  });
+});
+
+describe("Day Trader waiting rows", () => {
+  it("shows Waiting, not a score, for names with no trade yet today", async () => {
+    fetchMock.mockImplementation(async (req: Request) => {
+      if (new URL(req.url).pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
+      return jsonResponse({ state: "premarket", source: "premarket", symbols: ["XP", "AAA"], missing: 0, as_of: new Date().toISOString(), rows: [
+        row({ ticker: "AAA", day_trade_score: 64, last: 10, chg_pct: 3, traded_today: true }),
+        row({ ticker: "XP", day_trade_score: null, dt_quality: "insufficient", dt_direction: "neutral", last: 31.38, chg_pct: null, traded_today: false }),
+      ] });
+    });
+    render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    await waitFor(() => expect(tickers()).toEqual(["AAA", "XP"]));
+    const xp = screen.getAllByRole("row").find((r) => within(r).queryByRole("link", { name: "XP" }))!;
+    expect(within(xp).getByText("Waiting")).toBeInTheDocument();
+    expect(within(xp).queryByText("Strong")).not.toBeInTheDocument();
+  });
+});
+
 describe("Day Trader live refresh", () => {
   type D = Parameters<typeof diffRefresh>[0];
   const data = (rows: unknown[], as_of: string, source = "movers") => ({ state: "open", source, symbols: [], missing: 0, as_of, rows }) as unknown as D;

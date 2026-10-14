@@ -761,6 +761,8 @@ class DayTraderRow(BaseModel):
     dt_conflicts: List[str] = Field(default=[], description="Signals that lower the score")
     quote_flags: List[str] = Field(default=[], description="Why the quote may be wrong: Extreme move, Far from "
                                    "VWAP, Stale quote. Flagged rows rank last.")
+    traded_today: Optional[bool] = Field(default=None, description="Pre-market only: false until the name trades "
+                                         "today; such rows have no change and no DT score")
 
     model_config = {"extra": "allow"}   # extra live fields (EMA cross, ranges, data source) pass through
 
