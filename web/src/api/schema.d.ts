@@ -433,7 +433,7 @@ export interface paths {
         put?: never;
         /**
          * Alert Create
-         * @description Same types and rules as the web app. Free 1 alert, Pro 5, Premium 25.
+         * @description Same types and rules as the web app. Starter 1 alert, Pro 5, Premium 25.
          */
         post: operations["alert_create_v1_alerts_post"];
         delete?: never;
@@ -674,7 +674,7 @@ export interface paths {
         put?: never;
         /**
          * Signup
-         * @description Create a Free account (same rules as the web form) and sign in. A verification
+         * @description Create a Starter (free) account (same rules as the web form) and sign in. A verification
          *     email is sent; verifying is needed to upgrade and for alert emails.
          */
         post: operations["signup_v1_auth_signup_post"];
@@ -2935,7 +2935,7 @@ export interface components {
             email_enabled: boolean;
             /**
              * Limit
-             * @description Alerts this plan may have (Free 1, Pro 5, Premium 25)
+             * @description Alerts this plan may have (Starter 1, Pro 5, Premium 25)
              */
             limit: number;
             /**
@@ -3618,7 +3618,7 @@ export interface components {
             limited: boolean;
             /**
              * Max Results
-             * @description Rows this plan sees (Free 25, Pro 100, Premium 200)
+             * @description Rows this plan sees (Starter 25, Pro 100, Premium 200)
              */
             max_results: number;
             /**
@@ -3751,7 +3751,7 @@ export interface components {
             plan: "basic" | "pro" | "premium" | "admin";
             /**
              * Plan Label
-             * @description Customer-facing name, e.g. Free, Pro
+             * @description Customer-facing name, e.g. Starter, Pro
              */
             plan_label: string;
         };
@@ -5173,7 +5173,7 @@ export interface components {
             session: "regular" | "premarket" | "afterhours";
             /**
              * Top N
-             * @description Rows to return; at most the plan's cap (Free 25, Pro 100, Premium 200). Default min(25, cap)
+             * @description Rows to return; at most the plan's cap (Starter 25, Pro 100, Premium 200). Default min(25, cap)
              */
             top_n?: number | null;
             /**
@@ -5247,7 +5247,7 @@ export interface components {
             max_price: number;
             /**
              * Max Results
-             * @description This plan's row cap (Free 25, Pro 100, Premium 200)
+             * @description This plan's row cap (Starter 25, Pro 100, Premium 200)
              */
             max_results: number;
             /** Min Dollar Vol */

@@ -65,7 +65,7 @@ describe("Account", () => {
     expect(screen.getByRole("heading", { name: "Account" })).toBeInTheDocument();
     expect(screen.getByText("basic@example.invalid")).toBeInTheDocument();
     const plan = screen.getByRole("region", { name: /Plan/ });
-    expect(within(plan).getByText("Free")).toBeInTheDocument();
+    expect(within(plan).getByText("Starter")).toBeInTheDocument();
     expect(within(plan).getByRole("button", { name: "Upgrade to Pro" })).toBeInTheDocument();
     expect(within(plan).getByRole("button", { name: "Upgrade to Premium" })).toBeInTheDocument();
     expect(within(plan).queryByRole("button", { name: "Manage subscription" })).not.toBeInTheDocument();

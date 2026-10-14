@@ -72,7 +72,7 @@ export function SignupForm() {
   return (
     <form onSubmit={submit} noValidate>
       <Shell title="Create your account">
-        <p className="cap">Free plan. Upgrade any time from Account.</p>
+        <p className="cap">Starter plan, free. Upgrade any time from Account.</p>
         <label className="field"><span>Email</span>
           <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>

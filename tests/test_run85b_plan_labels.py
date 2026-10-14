@@ -15,7 +15,7 @@ from ui.plan_labels import PLAN_LABELS, plan_label
 
 ROOT = Path(__file__).resolve().parents[1]
 HAS_ST = importlib.util.find_spec("streamlit") is not None
-EXPECTED = {"basic": "Free", "pro": "Pro", "premium": "Premium", "admin": "Admin"}
+EXPECTED = {"basic": "Starter", "pro": "Pro", "premium": "Premium", "admin": "Admin"}
 
 
 class PlanLabelTests(unittest.TestCase):
@@ -23,14 +23,14 @@ class PlanLabelTests(unittest.TestCase):
         for key, label in EXPECTED.items():
             self.assertEqual(plan_label(key), label)
             self.assertEqual(plan_label(key.upper()), label)
-        self.assertEqual(plan_label("free"), "Free")
+        self.assertEqual(plan_label("free"), "Starter")
 
     def test_tier_objects_and_missing_values(self):
-        self.assertEqual(plan_label(SimpleNamespace(key="basic", name="BASIC")), "Free")
+        self.assertEqual(plan_label(SimpleNamespace(key="basic", name="BASIC")), "Starter")
         self.assertEqual(plan_label(SimpleNamespace(key="premium", name="PREMIUM")), "Premium")
-        self.assertEqual(plan_label(SimpleNamespace(name="Free")), "Free")
+        self.assertEqual(plan_label(SimpleNamespace(name="Free")), "Starter")
         for missing in (None, "", "unknown-tier"):
-            self.assertEqual(plan_label(missing), "Free")
+            self.assertEqual(plan_label(missing), "Starter")
 
     def test_admin_role_wins(self):
         self.assertEqual(plan_label("basic", is_admin=True), "Admin")
@@ -41,7 +41,7 @@ class PlanLabelTests(unittest.TestCase):
     def test_pricing_uses_the_same_names(self):
         from ui.pricing import TIER_NAMES
 
-        self.assertEqual(TIER_NAMES, {"basic": "Free", "pro": "Pro", "premium": "Premium"})
+        self.assertEqual(TIER_NAMES, {"basic": "Starter", "pro": "Pro", "premium": "Premium"})
 
     def test_entitlements_still_keyed_on_internal_basic(self):
         from ui.app_session import FEATURE_MIN_TIER, TIER_ORDER

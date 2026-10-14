@@ -131,7 +131,7 @@ def cell(flag: Optional[str], tier: str) -> str:
 
 def pricing_markdown() -> str:
     """The comparison table (Markdown) for the Billing page."""
-    lines = ["| Feature | Free | Pro | Premium |", "|---|---:|---:|---:|",
+    lines = [f"| Feature | {TIER_NAMES['basic']} | Pro | Premium |", "|---|---:|---:|---:|",
              f"| **Price** | **{PRICES['basic']}** | **{PRICES['pro']}** | **{PRICES['premium']}** |"]
     for label, flag in ROWS:
         lines.append(f"| {label} | " + " | ".join(cell(flag, t) for t in TIERS) + " |")
@@ -159,7 +159,7 @@ def benefits_markdown() -> str:
     """Short 'what each plan adds' text for the Billing page."""
     h = plan_highlights()
     return "\n".join([
-        f"- **Free — Discover:** {'; '.join(h['basic'])}.",
+        f"- **{TIER_NAMES['basic']} — Discover:** {'; '.join(h['basic'])}.",
         f"- **Pro — Monitor & investigate:** {'; '.join(h['pro'])}.",
         f"- **Premium — Research & workflow:** {'; '.join(h['premium'])}.",
     ])

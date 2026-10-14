@@ -76,7 +76,7 @@ def register(app: FastAPI) -> None:
               responses={400: {"description": "Invalid input or password rule"}, 409: {"description": "Email or username taken"},
                          429: {"description": "Too many sign-ups from this address"}})
     def signup(body: SignupBody, request: Request, _l: None = Depends(ratelimit.limit("signup"))) -> Dict[str, Any]:
-        """Create a Free account (same rules as the web form) and sign in. A verification
+        """Create a Starter (free) account (same rules as the web form) and sign in. A verification
         email is sent; verifying is needed to upgrade and for alert emails."""
         res = acct.signup(body.email, body.password, body.username, body.accept_terms)
         if body.attribution is not None:
