@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
 import { ErrorReporter } from "@/components/ErrorReporter";
+import { OfflineReady } from "@/components/OfflineReady";
 
 import "./globals.css";
 
@@ -37,6 +38,8 @@ export const metadata: Metadata = {
   title: { default: "HSFinest.AI", template: "%s · HSFinest.AI" },
   description: "HSF AI stock scanner: ranked setups, custom scans and stock intelligence.",
   robots: { index: false, follow: false },
+  // Opened from the iPhone Home Screen: full screen, named "HSF", dark status bar.
+  appleWebApp: { capable: true, title: "HSF", statusBarStyle: "black" },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0B0F14" };
@@ -46,6 +49,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className={`${sora.variable} ${plex.variable} ${mono.variable}`}>
       <body>
         <ErrorReporter />
+        <OfflineReady />
         {children}
       </body>
     </html>
