@@ -229,6 +229,28 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
             "rows": rows}
 
 
+PM_GAPPERS_TTL_S = 180      # the whole-market pre-market screen (~4,000 snapshots) reloads every 3 minutes
+PM_GAPPERS_STALE_S = 600
+
+
+def premarket_gappers(limit: int = 25) -> Dict[str, Any]:
+    """Today's pre-market gappers over S&P 500 + NASDAQ: biggest % moves vs
+    yesterday's close among names that traded today and clear the pre-market
+    dollar-volume floor. Empty outside pre-market (4:00 ET to the open)."""
+    from api.today import _cached
+    from market_data import _get_alpaca_data_feed, build_premarket_gappers, premarket_session_date
+    from ui import day_trader as dtm
+
+    now = dt.datetime.now(dt.timezone.utc)
+    day = premarket_session_date(now)
+    rows: List[Dict[str, Any]] = []
+    if day is not None:
+        rows = _cached(("pm_gappers", day.isoformat()),
+                       lambda: build_premarket_gappers(dtm._movers_universe(), limit=40),
+                       ttl_s=PM_GAPPERS_TTL_S, stale_s=PM_GAPPERS_STALE_S) or []
+    return {"active": day is not None, "as_of": now, "feed": _get_alpaca_data_feed(),
+            "rows": [{k: v for k, v in r.items() if k != "market_data_feed"} for r in rows[:limit]]}
+
 def day_trader_sparklines(symbols: Sequence[str]) -> Dict[str, Any]:
     """Latest-session 1-minute closes per symbol for the Day Trader row sparklines.
     Shares the stair-stepper check's minute-bar cache."""

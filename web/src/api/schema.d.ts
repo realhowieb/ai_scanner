@@ -1143,6 +1143,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/premarket/gappers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pre-market gappers (Pro)
+         * @description S&P 500 + NASDAQ names gapping before the open: today's latest pre-market trade vs
+         *     yesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min.
+         */
+        get: operations["premarket_gappers_v1_premarket_gappers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/research/coverage": {
         parameters: {
             query?: never;
@@ -4001,6 +4022,65 @@ export interface components {
              * @description 'cancel' opens the cancellation screen
              */
             flow?: string | null;
+        };
+        /** PremarketGapper */
+        PremarketGapper: {
+            /**
+             * Last
+             * @description Today's latest pre-market trade
+             */
+            last: number;
+            /**
+             * Pct
+             * @description Pre-market move in percent vs the previous close
+             */
+            pct: number;
+            /** Pm Dollar Volume */
+            pm_dollar_volume?: number | null;
+            /** Pm High */
+            pm_high?: number | null;
+            /** Pm Low */
+            pm_low?: number | null;
+            /**
+             * Pm Volume
+             * @description Shares traded since 4:00 ET on this feed
+             */
+            pm_volume?: number | null;
+            /** Pm Vwap */
+            pm_vwap?: number | null;
+            /**
+             * Previous Close
+             * @description Yesterday's regular-session close
+             */
+            previous_close: number;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Trade Ts
+             * @description Time of the latest trade
+             */
+            trade_ts?: string | null;
+        };
+        /**
+         * PremarketGappers
+         * @description Whole-market pre-market gappers (Pro). `active` is false outside pre-market
+         *     (4:00 ET to the open), with no rows.
+         */
+        PremarketGappers: {
+            /** Active */
+            active: boolean;
+            /** As Of */
+            as_of: string;
+            /**
+             * Feed
+             * @description Market data feed: iex (partial pre-market volume) or sip
+             */
+            feed: string;
+            /**
+             * Rows
+             * @default []
+             */
+            rows: components["schemas"]["PremarketGapper"][];
         };
         /** Ready */
         Ready: {
@@ -8729,6 +8809,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Plans"];
+                };
+            };
+        };
+    };
+    premarket_gappers_v1_premarket_gappers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PremarketGappers"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

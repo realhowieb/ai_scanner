@@ -175,7 +175,7 @@ function FirstRunGuide({ top }: { top: Today["top_setups"] }) {
 }
 
 /** `mine` is the signed-in sections (GET /v1/today/me); they load separately and never hold up the page. */
-export function TodayView({ data, mine, mineFailed = false, side }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode }) {
+export function TodayView({ data, mine, mineFailed = false, side, lead }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode; lead?: ReactNode }) {
   const failed = new Set(data.errors.map((e) => e.section));
   const mineErr = new Set(mine?.errors.map((e) => e.section) ?? (mineFailed ? ["new_since", "watchlist"] : []));
   const phase = PHASES[data.market.phase] ?? PHASES.closed!;
@@ -235,6 +235,7 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
 
       <div className="split today-split">
         <div className="col-main">
+          {lead}
           {failed.has("before_open") ? <SectionFailed name="Before the open" /> : data.before_open && (
             <Movers card={data.before_open} id="bto" title="Before the open" caption="Pre-market scan vs the previous close. Pre-market prices keep moving." />
           )}

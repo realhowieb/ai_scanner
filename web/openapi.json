@@ -6100,6 +6100,138 @@
     "title": "PortalBody",
     "type": "object"
    },
+   "PremarketGapper": {
+    "properties": {
+     "last": {
+      "description": "Today's latest pre-market trade",
+      "title": "Last",
+      "type": "number"
+     },
+     "pct": {
+      "description": "Pre-market move in percent vs the previous close",
+      "title": "Pct",
+      "type": "number"
+     },
+     "pm_dollar_volume": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pm Dollar Volume"
+     },
+     "pm_high": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pm High"
+     },
+     "pm_low": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pm Low"
+     },
+     "pm_volume": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Shares traded since 4:00 ET on this feed",
+      "title": "Pm Volume"
+     },
+     "pm_vwap": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pm Vwap"
+     },
+     "previous_close": {
+      "description": "Yesterday's regular-session close",
+      "title": "Previous Close",
+      "type": "number"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "trade_ts": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Time of the latest trade",
+      "title": "Trade Ts"
+     }
+    },
+    "required": [
+     "ticker",
+     "last",
+     "previous_close",
+     "pct"
+    ],
+    "title": "PremarketGapper",
+    "type": "object"
+   },
+   "PremarketGappers": {
+    "description": "Whole-market pre-market gappers (Pro). `active` is false outside pre-market\n(4:00 ET to the open), with no rows.",
+    "properties": {
+     "active": {
+      "title": "Active",
+      "type": "boolean"
+     },
+     "as_of": {
+      "title": "As Of",
+      "type": "string"
+     },
+     "feed": {
+      "description": "Market data feed: iex (partial pre-market volume) or sip",
+      "title": "Feed",
+      "type": "string"
+     },
+     "rows": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/PremarketGapper"
+      },
+      "title": "Rows",
+      "type": "array"
+     }
+    },
+    "required": [
+     "active",
+     "as_of",
+     "feed"
+    ],
+    "title": "PremarketGappers",
+    "type": "object"
+   },
    "Ready": {
     "properties": {
      "database": {
@@ -14571,6 +14703,60 @@
      }
     },
     "summary": "Plans and pricing (public)"
+   }
+  },
+  "/v1/premarket/gappers": {
+   "get": {
+    "description": "S&P 500 + NASDAQ names gapping before the open: today's latest pre-market trade vs\nyesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min.",
+    "operationId": "premarket_gappers_v1_premarket_gappers_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 25,
+       "maximum": 40,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PremarketGappers"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Pre-market gappers (Pro)"
    }
   },
   "/v1/research/coverage": {

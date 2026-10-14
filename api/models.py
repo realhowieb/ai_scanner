@@ -765,6 +765,27 @@ class DayTraderRow(BaseModel):
     model_config = {"extra": "allow"}   # extra live fields (EMA cross, ranges, data source) pass through
 
 
+class PremarketGapper(BaseModel):
+    ticker: str
+    last: float = Field(description="Today's latest pre-market trade")
+    previous_close: float = Field(description="Yesterday's regular-session close")
+    pct: float = Field(description="Pre-market move in percent vs the previous close")
+    pm_volume: Optional[int] = Field(default=None, description="Shares traded since 4:00 ET on this feed")
+    pm_dollar_volume: Optional[float] = None
+    pm_vwap: Optional[float] = None
+    pm_high: Optional[float] = None
+    pm_low: Optional[float] = None
+    trade_ts: Optional[str] = Field(default=None, description="Time of the latest trade")
+
+
+class PremarketGappers(BaseModel):
+    """Whole-market pre-market gappers (Pro). `active` is false outside pre-market
+    (4:00 ET to the open), with no rows."""
+    active: bool
+    as_of: str
+    feed: str = Field(description="Market data feed: iex (partial pre-market volume) or sip")
+    rows: List[PremarketGapper] = []
+
 class DayTrader(BaseModel):
     state: Literal["premarket", "open", "afterhours", "closed"]
     source: str
