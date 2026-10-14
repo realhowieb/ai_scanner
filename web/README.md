@@ -111,7 +111,6 @@ Environment variables:
 | Name | Value |
 |---|---|
 | `HSF_API_BASE_URL` | `https://hsf-api-v1.onrender.com` (server-only; https required) |
-| `NEXT_PUBLIC_STREAMLIT_URL` | The Streamlit app, for "Create account", "Forgot password", "Open classic app" (default `https://hsfinestai.streamlit.app`). Read at build time. |
 | `WEB_BETA_ALLOWED_EMAILS` | Optional, comma-separated: only these accounts can sign in (invite-only beta). Unset = every HSF account. |
 | `NODE_VERSION` | `22` (optional; `.node-version` already says 22) |
 

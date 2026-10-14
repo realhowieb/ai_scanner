@@ -120,7 +120,7 @@ class ShareAndHomeScreenTests(unittest.TestCase):
         from ui.stock_intelligence import share_url
 
         with mock.patch("config.APP_BASE_URL", "https://example.test/"):
-            self.assertEqual(share_url(" nvda "), "https://example.test/stock?ticker=NVDA")
+            self.assertEqual(share_url(" nvda "), "https://example.test/stocks/NVDA")
 
     def test_shared_link_survives_sign_in(self):
         stock = (ROOT / "pages" / "stock.py").read_text()
