@@ -5,24 +5,29 @@ signal performance and HSF Score calibration, Stair-Stepper evidence, research
 evidence, ML v4 readiness and Autonomous Recovery. The maths stays in
 ``analytics.admin_research`` and ``analytics.stair_step_research``.
 
-Research reads use a slim JSONB projection (only the fields the summaries use)
-instead of whole observation records, so a 90-day view stays small in memory
-and in Neon egress. Each answer is cached 10 minutes per period and filter set.
+Research reads never load whole observation records: SQL returns one row per
+observation with only the scalars the summaries use (outcomes folded into one
+small JSON object), streamed in batches into compact tuples. Signal performance
+and research evidence share one cached set per period (one database read per
+10 minutes, newest 20,000 observations); each answer is cached 10 minutes.
 """
 from __future__ import annotations
 
 import datetime as dt
-from collections import Counter
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from array import array
+from collections import Counter, defaultdict
+from statistics import mean, median
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple
 
 from analytics import admin_research as ar
 from api.today import TTLCache
 
 PERIODS = (7, 30, 90, 365)
 TTL_S = 600
-MAX_RESEARCH_ROWS = 60_000
-MAX_STAIR_OBSERVATIONS = 5_000
-_cache = TTLCache(24)
+MAX_SCANNER_OBSERVATIONS = 20_000  # newest first; the response says when a period holds more
+MAX_STAIR_OBSERVATIONS = 3_000
+_cache = TTLCache(24)  # computed answers (small)
+_datasets = TTLCache(1)  # the compact research set behind them: one period at a time
 
 
 class AnalyticsError(ValueError):
@@ -35,6 +40,7 @@ class AnalyticsUnavailable(AnalyticsError):
 
 def clear_cache() -> None:
     _cache.clear()
+    _datasets.clear()
 
 
 def _iso(value: Any) -> Optional[str]:
@@ -145,47 +151,50 @@ def _systems(data: Mapping[str, Any]) -> List[Dict[str, Any]]:
 
 
 # ---- research reads ------------------------------------------------------------------------------
-# Only the fields admin_research reads. A scanner without "triggered" counts as triggered. Every
-# column is named: the connection returns dict rows, so two columns with one name would collide.
-_SLIM_SQL = """
-SELECT o.observation_id, o.symbol, o.timestamp, o.context,
-  jsonb_build_object(
-    'session', o.record->'session',
-    'research_cohort', o.record->'research_cohort',
-    'hsf_score', o.record->'hsf_score',
-    'models', jsonb_build_object('hsf_score', o.record->'models'->'hsf_score'),
-    'market_context', jsonb_build_object(
-      'research_cohort', o.record->'market_context'->'research_cohort',
-      'hsf_score', o.record->'market_context'->'hsf_score'),
-    'research_metadata', CASE WHEN jsonb_typeof(o.record->'research_metadata') = 'object'
-      THEN jsonb_build_object('row_features', jsonb_build_object(
-        'hsf_score', o.record->'research_metadata'->'row_features'->'hsf_score')) END,
-    'scanners', (SELECT jsonb_agg(jsonb_build_object('name', s->'name',
-                   'triggered', COALESCE(s->'triggered', 'true'::jsonb)))
-                 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(o.record->'scanners') = 'array'
-                   THEN o.record->'scanners' ELSE '[]'::jsonb END) s)
-  ) AS slim,
-  oc.horizon,
-  CASE WHEN oc.record IS NOT NULL THEN jsonb_build_object(
-    'data_status', oc.record->'data_status', 'raw_return', oc.record->'raw_return',
-    'directional_return', oc.record->'directional_return', 'mfe', oc.record->'mfe',
-    'mae', oc.record->'mae', 'hit', oc.record->'hit', 'evaluation_time', oc.record->'evaluation_time') END AS outcome
+# One row per observation with only the scalars the summaries use, and its outcomes folded into one
+# small JSON object, so a Research tab load stays a few MB on a 512 MB instance. Every column is
+# named: the connection returns dict rows, so two columns with one name would collide.
+_SCANNER_SQL = """
+SELECT o.observation_id, o.timestamp,
+  o.record->>'session' AS session,
+  o.record->>'research_cohort' AS cohort,
+  o.record->'market_context'->>'research_cohort' AS context_cohort,
+  o.record->>'hsf_score' AS score_a,
+  o.record->'models'->>'hsf_score' AS score_b,
+  o.record->'market_context'->>'hsf_score' AS score_c,
+  o.record->'research_metadata'->'row_features'->>'hsf_score' AS score_d,
+  jsonb_typeof(o.record->'research_metadata') = 'object' AS has_metadata,
+  ARRAY(SELECT s->>'name' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(o.record->'scanners') = 'array'
+          THEN o.record->'scanners' ELSE '[]'::jsonb END) s
+        WHERE jsonb_typeof(s) = 'object'
+          AND COALESCE(s->'triggered', 'true'::jsonb) NOT IN ('false'::jsonb, 'null'::jsonb, '0'::jsonb, '""'::jsonb)
+       ) AS signals,
+  (SELECT jsonb_object_agg(oc.horizon, jsonb_build_object(
+      's', oc.record->'data_status', 'r', oc.record->'raw_return', 'd', oc.record->'directional_return',
+      'f', oc.record->'mfe', 'a', oc.record->'mae', 'h', oc.record->'hit', 'e', oc.record->'evaluation_time'))
+   FROM hsf_observation_outcomes oc WHERE oc.observation_id = o.observation_id) AS outcomes
 FROM hsf_observations o
-LEFT JOIN hsf_observation_outcomes oc ON oc.observation_id = o.observation_id
 WHERE o.timestamp >= %s AND o.context LIKE %s
 ORDER BY o.timestamp DESC LIMIT %s
 """
 
 _STAIR_SQL = """
-SELECT o.observation_id, o.record, oc.horizon, oc.record AS outcome
+SELECT o.observation_id, o.symbol, o.timestamp,
+  o.record->'scan_timestamp' AS scan_timestamp,
+  o.record->'stair_step' AS stair_step,
+  o.record->'market'->'price' AS price,
+  (SELECT jsonb_object_agg(oc.horizon, jsonb_build_object(
+      'data_status', oc.record->'data_status', 'directional_return', oc.record->'directional_return',
+      'mfe', oc.record->'mfe', 'mae', oc.record->'mae'))
+   FROM hsf_observation_outcomes oc WHERE oc.observation_id = o.observation_id) AS outcomes
 FROM hsf_observations o
-LEFT JOIN hsf_observation_outcomes oc ON oc.observation_id = o.observation_id
 WHERE o.timestamp >= %s AND o.context = %s
 ORDER BY o.timestamp DESC LIMIT %s
 """
 
 
-def _rows(sql: str, params: tuple) -> List[tuple]:
+def _stream(sql: str, params: tuple, batch: int = 2000) -> Iterator[tuple]:
+    """Rows in batches, so the whole result never sits in Python as one list."""
     from db.engine import get_neon_conn
 
     conn = get_neon_conn()
@@ -194,9 +203,13 @@ def _rows(sql: str, params: tuple) -> List[tuple]:
     try:
         cur = conn.cursor()
         cur.execute(sql, params)
-        rows = cur.fetchall() or []
+        while True:
+            rows = cur.fetchmany(batch)
+            if not rows:
+                break
+            for r in rows:
+                yield tuple(r.values()) if isinstance(r, dict) else tuple(r)
         cur.close()
-        return [tuple(r.values()) if isinstance(r, dict) else tuple(r) for r in rows]
     finally:
         conn.close()
 
@@ -207,51 +220,165 @@ def _json(value: Any) -> Dict[str, Any]:
     return _loads(value)
 
 
-def scanner_observations(days: int) -> List[Dict[str, Any]]:
-    """Scheduled-scan research observations (slim) with their outcomes by horizon."""
-    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
-    by_id: Dict[str, Dict[str, Any]] = {}
-    for oid, symbol, ts, context, record, horizon, outcome in _rows(
-            _SLIM_SQL, (since, ar.SCANNER_CONTEXT_PREFIX + "%", MAX_RESEARCH_ROWS)):
-        if not oid:
-            continue
-        obs = by_id.get(str(oid))
-        if obs is None:
-            obs = by_id[str(oid)] = {**_json(record), "observation_id": str(oid), "symbol": symbol,
-                                     "timestamp": _iso(ts), "context": context}
-        out = _json(outcome)
-        if horizon is not None and out:
-            obs.setdefault("outcomes", {})[str(horizon)] = out
-    return list(by_id.values())
+# The flattened research rows (one per observation x signal x outcome horizon, and one with no
+# horizon while pending), as analytics.admin_research.flatten_research builds them, stored by
+# column in typed arrays: about 40 bytes a row instead of ~700 as dicts or tuples.
+_CATEGORIES = ("signal", "cohort", "session", "bucket", "horizon")
+_INCLUDED_COHORTS = {"CANDIDATE", "NEAR_MISS", "CONTROL"}
+_NAN = float("nan")
+
+
+class ResearchTable:
+    def __init__(self) -> None:
+        self.oi = array("I")
+        self.codes = {c: array("H") for c in _CATEGORIES}
+        self.labels: Dict[str, List[Optional[str]]] = {c: [] for c in _CATEGORIES}
+        self._index: Dict[str, Dict[Optional[str], int]] = {c: {} for c in _CATEGORIES}
+        self.matured = array("b")
+        self.positive = array("b")  # -1 unknown, 0 no, 1 yes
+        self.num = {c: array("d") for c in ("score", "ret", "mfe", "mae")}
+
+    def __len__(self) -> int:
+        return len(self.oi)
+
+    def code(self, cat: str, label: Optional[str]) -> int:
+        index = self._index[cat]
+        if label not in index:
+            index[label] = len(self.labels[cat])
+            self.labels[cat].append(label)
+        return index[label]
+
+    def add(self, oi: int, cats: Mapping[str, Optional[str]], matured: bool, positive: Optional[bool],
+            nums: Mapping[str, Optional[float]]) -> None:
+        self.oi.append(oi)
+        for c in _CATEGORIES:
+            self.codes[c].append(self.code(c, cats[c]))
+        self.matured.append(1 if matured else 0)
+        self.positive.append(-1 if positive is None else int(bool(positive)))
+        for c, col in self.num.items():
+            v = nums[c]
+            col.append(_NAN if v is None else v)
+
+    def label(self, cat: str, i: int) -> Optional[str]:
+        return self.labels[cat][self.codes[cat][i]]
+
+    def value(self, col: str, i: int) -> Optional[float]:
+        v = self.num[col][i]
+        return None if v != v else v
+
+    def values(self, cat: str) -> List[str]:
+        return sorted(str(v) for v in self.labels[cat] if v is not None)
+
+
+def compact_research(rows: Iterable[tuple], *, limit: int) -> Dict[str, Any]:
+    """The research table and the evidence funnel from slim observation rows, in one pass.
+
+    Mirrors ``admin_research.flatten_research`` and ``evidence_funnel`` (tests hold them equal)."""
+    table = ResearchTable()
+    seen = valid = matured_n = usable_n = included_n = 0
+    pending_times: List[dt.datetime] = []
+    latest_obs: Optional[dt.datetime] = None
+    latest_matured: Optional[dt.datetime] = None
+    cohorts: Counter = Counter()
+    for oi, (_oid, ts, session, cohort, ctx_cohort, sa, sb, sc, sd, has_meta, signals, outcomes) in enumerate(rows):
+        seen += 1
+        cohort = str(cohort or ctx_cohort or "UNTAGGED").upper()
+        session = str(session or "UNKNOWN").upper()
+        score = next((v for v in (ar.number(x) for x in (sa, sb, sc, sd)) if v is not None), None)
+        names: List[str] = []
+        for name in signals or []:
+            name = str(name or "").strip()
+            if name and name not in names:
+                names.append(name)
+        items = [(str(h), o if isinstance(o, Mapping) else {}) for h, o in _json(outcomes).items()] or [(None, {})]
+        parsed = []
+        for horizon, o in items:
+            raw, direction = ar.number(o.get("r")), ar.number(o.get("d"))
+            hit = o.get("h") if isinstance(o.get("h"), bool) else None
+            positive = hit if hit is not None else (direction > 0 if direction is not None else (
+                raw > 0 if raw is not None else None))
+            parsed.append((horizon, str(o.get("s") or "PENDING").upper() == "MATURED",
+                           direction if direction is not None else raw, ar.number(o.get("f")), ar.number(o.get("a")),
+                           positive, o.get("e")))
+        for signal in names or ["unclassified"]:
+            for horizon, mat, ret, mfe, mae, positive, _e in parsed:
+                table.add(oi, {"signal": signal, "cohort": cohort, "session": session,
+                               "bucket": ar.score_bucket(score), "horizon": horizon},
+                          mat, positive, {"score": score, "ret": ret, "mfe": mfe, "mae": mae})
+        valid += bool(has_meta)
+        cohorts[cohort] += 1
+        stamp = ar.parse_timestamp(ts)
+        if stamp and (latest_obs is None or stamp > latest_obs):
+            latest_obs = stamp
+        mature = [p for p in parsed if p[0] is not None and p[1]]
+        if mature:
+            matured_n += 1
+        elif stamp:
+            pending_times.append(stamp)
+        if any(p[2] is not None for p in mature):
+            usable_n += 1
+        if cohort in _INCLUDED_COHORTS and mature:
+            included_n += 1
+        for p in mature:
+            evaluated = ar.parse_timestamp(p[6])
+            if evaluated and (latest_matured is None or evaluated > latest_matured):
+                latest_matured = evaluated
+    funnel = {
+        "captured": seen, "valid_metadata": valid, "matured": matured_n, "usable_outcome": usable_n,
+        "included_in_research": included_n, "excluded": max(0, seen - included_n), "pending": max(0, seen - matured_n),
+        "metadata_completeness": (valid / seen) if seen else None, "cohorts": dict(cohorts),
+        "oldest_pending_observation": min(pending_times).isoformat() if pending_times else None,
+        "latest_observation": latest_obs.isoformat() if latest_obs else None,
+        "latest_matured_observation": latest_matured.isoformat() if latest_matured else None,
+    }
+    return {"table": table, "funnel": funnel, "observations": seen, "truncated": seen >= limit}
+
+
+def scanner_research(days: int) -> Dict[str, Any]:
+    """The compact scheduled-scan research set for a period. One set is kept (10 minutes) and
+    concurrent callers share one load, so the Research tab reads the database once."""
+    def load() -> Dict[str, Any]:
+        since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+        return compact_research(_stream(_SCANNER_SQL, (since, ar.SCANNER_CONTEXT_PREFIX + "%",
+                                                       MAX_SCANNER_OBSERVATIONS)), limit=MAX_SCANNER_OBSERVATIONS)
+    return _datasets.get(("scanner", days), load, TTL_S)
 
 
 def stair_observations(days: int) -> List[Dict[str, Any]]:
     since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
-    by_id: Dict[str, Dict[str, Any]] = {}
-    for oid, record, horizon, outcome in _rows(
-            _STAIR_SQL, (since, ar.STAIR_STEPPER_CONTEXT, MAX_STAIR_OBSERVATIONS * 4)):
-        if not oid:
-            continue
-        obs = by_id.setdefault(str(oid), _json(record))
-        obs.setdefault("observation_id", str(oid))
-        obs.setdefault("context", ar.STAIR_STEPPER_CONTEXT)
-        out = _json(outcome)
-        if horizon is not None and out:
-            obs.setdefault("outcomes", {})[str(horizon)] = out
-    return list(by_id.values())
+    return [{"observation_id": str(oid), "symbol": symbol, "timestamp": _iso(ts), "context": ar.STAIR_STEPPER_CONTEXT,
+             "scan_timestamp": scan_ts, "stair_step": stair if isinstance(stair, dict) else _json(stair),
+             "market": {"price": price}, "outcomes": _json(outcomes)}
+            for oid, symbol, ts, scan_ts, stair, price, outcomes in _stream(
+                _STAIR_SQL, (since, ar.STAIR_STEPPER_CONTEXT, MAX_STAIR_OBSERVATIONS)) if oid]
 
 
 # ---- signal performance --------------------------------------------------------------------------
-def _group(g: Mapping[str, Any], a: str, b: Optional[str] = None) -> Dict[str, Any]:
-    return {"key": g.get(a), "column": g.get(b) if b else None, "n": int(g.get("n") or 0),
-            "matured": int(g.get("matured") or 0), "sufficient": bool(g.get("sufficient")),
-            **{k: g.get(k) for k in ("positive_rate", "average_return", "median_return", "average_mfe", "average_mae")}}
+def _perf(t: ResearchTable, idx: Iterable[int], min_n: int) -> Dict[str, Any]:
+    """``admin_research.performance_summary`` over table rows."""
+    matured = [i for i in idx if t.matured[i]]
+    rets = [v for i in matured if (v := t.value("ret", i)) is not None]
+    positives = [t.positive[i] for i in matured if t.positive[i] >= 0]
+    mfes = [v for i in matured if (v := t.value("mfe", i)) is not None]
+    maes = [v for i in matured if (v := t.value("mae", i)) is not None]
+    return {"n": len(rets), "matured": len(matured), "sufficient": len(rets) >= max(0, int(min_n)),
+            "positive_rate": (sum(positives) / len(positives)) if positives else None,
+            "average_return": mean(rets) if rets else None, "median_return": median(rets) if rets else None,
+            "average_mfe": mean(mfes) if mfes else None, "average_mae": mean(maes) if maes else None}
 
 
-def _cells(groups: Sequence[Mapping[str, Any]], a: str, b: str) -> List[Dict[str, Any]]:
+def _grouped(t: ResearchTable, idx: Iterable[int], a: str, b: Optional[str], min_n: int) -> List[Dict[str, Any]]:
+    """``admin_research.grouped_performance`` over table rows, as API groups."""
+    groups: Dict[tuple, List[int]] = defaultdict(list)
+    for i in idx:
+        groups[(t.label(a, i), t.label(b, i) if b else None)].append(i)
+    return [{"key": k[0], "column": k[1], **_perf(t, g, min_n)}
+            for k, g in sorted(groups.items(), key=lambda item: tuple(str(v) for v in item[0]))]
+
+
+def _cells(groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     # Pending observations are listed once with no horizon; they hold no outcomes.
-    return [_group(g, a, b) for g in groups
-            if g.get(a) is not None and g.get(b) is not None or int(g.get("n") or 0)]
+    return [g for g in groups if g["key"] is not None and g["column"] is not None or g["n"]]
 
 
 def signals(days: int = 30, *, signal: str = "", cohort: str = "", horizon: str = "", session: str = "",
@@ -267,38 +394,36 @@ def signals(days: int = 30, *, signal: str = "", cohort: str = "", horizon: str 
 
 def _signals(days: int, signal: str, cohort: str, horizon: str, session: str, score_min: Optional[float],
              score_max: Optional[float], min_n: int, score_horizon: str) -> Dict[str, Any]:
-    rows = ar.flatten_research(scanner_observations(days))
-    scores = [float(r["hsf_score"]) for r in rows if r.get("hsf_score") is not None]
-    horizons = sorted({str(r["horizon"]) for r in rows if r.get("horizon")})
+    data = scanner_research(days)
+    t: ResearchTable = data["table"]
+    every = range(len(t))
+    scores = [v for i in every if (v := t.value("score", i)) is not None]
+    horizons = t.values("horizon")
+    want = {"signal": signal, "cohort": cohort, "horizon": horizon, "session": session}
 
-    def keep(r: Mapping[str, Any]) -> bool:
-        score = ar.number(r.get("hsf_score"))
-        if (score_min is not None or score_max is not None) and score is None:
+    def keep(i: int) -> bool:
+        if any(v and t.label(c, i) != v for c, v in want.items()):
             return False
-        return ((not signal or r.get("signal") == signal) and (not cohort or r.get("cohort") == cohort)
-                and (not horizon or r.get("horizon") == horizon) and (not session or r.get("session") == session)
-                and (score_min is None or score >= score_min) and (score_max is None or score <= score_max))
+        s = t.value("score", i)
+        if score_min is None and score_max is None:
+            return True
+        return s is not None and (score_min is None or s >= score_min) and (score_max is None or s <= score_max)
 
-    filtered = [r for r in rows if keep(r)]
-    summary = ar.performance_summary(filtered, min_n=min_n)
-    scored = [r for r in rows if r.get("hsf_score") is not None]
+    filtered = [i for i in every if keep(i)]
+    scored = [i for i in every if t.value("score", i) is not None]
     score_horizon = score_horizon if score_horizon in horizons else (horizons[0] if horizons else "")
     return {
         "loaded_at": _iso(dt.datetime.now(dt.timezone.utc)), "days": days, "min_n": min_n,
-        "options": {"signals": sorted({str(r["signal"]) for r in rows}), "cohorts": sorted({str(r["cohort"]) for r in rows}),
-                    "horizons": horizons, "sessions": sorted({str(r["session"]) for r in rows}),
+        "loaded_observations": data["observations"], "truncated": data["truncated"],
+        "options": {"signals": t.values("signal"), "cohorts": t.values("cohort"), "horizons": horizons,
+                    "sessions": t.values("session"),
                     "score_low": int(min(scores)) if scores else None, "score_high": int(max(scores)) if scores else None},
-        "summary": {"observations": len({r.get("observation_id") for r in filtered}), "matured": summary["matured"],
-                    "n": summary["n"], "sufficient": summary["sufficient"],
-                    **{k: summary[k] for k in ("positive_rate", "average_return", "median_return",
-                                               "average_mfe", "average_mae")}},
-        "by_signal_horizon": _cells(ar.grouped_performance(rows, ("signal", "horizon"), min_n=min_n), "signal", "horizon"),
+        "summary": {"observations": len({t.oi[i] for i in filtered}), **_perf(t, filtered, min_n)},
+        "by_signal_horizon": _cells(_grouped(t, every, "signal", "horizon", min_n)),
         "score_available": bool(scored),
         "score_horizon": score_horizon or None,
-        "score_buckets": [_group(g, "score_bucket") for g in ar.grouped_performance(
-            [r for r in scored if r.get("horizon") == score_horizon], ("score_bucket",), min_n=min_n)],
-        "score_matrix": _cells(ar.grouped_performance(scored, ("score_bucket", "horizon"), min_n=min_n),
-                               "score_bucket", "horizon"),
+        "score_buckets": _grouped(t, [i for i in scored if t.label("horizon", i) == score_horizon], "bucket", None, min_n),
+        "score_matrix": _cells(_grouped(t, scored, "bucket", "horizon", min_n)),
     }
 
 
@@ -311,7 +436,8 @@ def evidence(days: int = 30) -> Dict[str, Any]:
 def _evidence(days: int) -> Dict[str, Any]:
     from api.operations import load_snapshot
 
-    funnel = ar.evidence_funnel(scanner_observations(days))
+    data = scanner_research(days)
+    funnel = data["funnel"]
     health = load_snapshot().get("report") or {}
     subsystems = health.get("subsystems") or {}
     forward = subsystems.get("forward_evidence") or {}
@@ -322,6 +448,7 @@ def _evidence(days: int) -> Dict[str, Any]:
     base = funnel["captured"] or 0
     return {
         "loaded_at": _iso(dt.datetime.now(dt.timezone.utc)), "days": days,
+        "loaded_observations": data["observations"], "truncated": data["truncated"],
         "funnel": [{"stage": label, "count": funnel[k], "pct": round(funnel[k] / base * 100, 1) if base else None}
                    for label, k in stages],
         "pending": funnel["pending"], "excluded": funnel["excluded"],

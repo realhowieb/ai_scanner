@@ -775,6 +775,11 @@
       ],
       "title": "Loaded At"
      },
+     "loaded_observations": {
+      "default": 0,
+      "title": "Loaded Observations",
+      "type": "integer"
+     },
      "metadata_completeness": {
       "anyOf": [
        {
@@ -803,6 +808,11 @@
      },
      "readiness": {
       "$ref": "#/components/schemas/AdminEvidenceReadiness"
+     },
+     "truncated": {
+      "default": false,
+      "title": "Truncated",
+      "type": "boolean"
      }
     },
     "required": [
@@ -1749,6 +1759,12 @@
       ],
       "title": "Loaded At"
      },
+     "loaded_observations": {
+      "default": 0,
+      "description": "Observations read for this period (newest first)",
+      "title": "Loaded Observations",
+      "type": "integer"
+     },
      "min_n": {
       "title": "Min N",
       "type": "integer"
@@ -1787,6 +1803,12 @@
      },
      "summary": {
       "$ref": "#/components/schemas/AdminSignalSummary"
+     },
+     "truncated": {
+      "default": false,
+      "description": "The period holds more observations than were read",
+      "title": "Truncated",
+      "type": "boolean"
      }
     },
     "required": [

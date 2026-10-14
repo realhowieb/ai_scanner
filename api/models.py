@@ -1395,6 +1395,8 @@ class AdminSignals(BaseModel):
     loaded_at: Optional[str] = None
     days: int
     min_n: int
+    loaded_observations: int = Field(0, description="Observations read for this period (newest first)")
+    truncated: bool = Field(False, description="The period holds more observations than were read")
     options: AdminSignalOptions
     summary: AdminSignalSummary
     by_signal_horizon: List[AdminPerfGroup]
@@ -1428,6 +1430,8 @@ class AdminEvidenceReadiness(BaseModel):
 class AdminEvidence(BaseModel):
     loaded_at: Optional[str] = None
     days: int
+    loaded_observations: int = 0
+    truncated: bool = False
     funnel: List[AdminFunnelStage]
     pending: int
     excluded: int
