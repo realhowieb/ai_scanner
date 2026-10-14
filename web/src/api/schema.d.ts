@@ -2234,6 +2234,11 @@ export interface components {
             latest_observation?: string | null;
             /** Loaded At */
             loaded_at?: string | null;
+            /**
+             * Loaded Observations
+             * @default 0
+             */
+            loaded_observations: number;
             /** Metadata Completeness */
             metadata_completeness?: number | null;
             /** Oldest Pending */
@@ -2241,6 +2246,11 @@ export interface components {
             /** Pending */
             pending: number;
             readiness: components["schemas"]["AdminEvidenceReadiness"];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /** AdminEvidenceReadiness */
         AdminEvidenceReadiness: {
@@ -2500,6 +2510,12 @@ export interface components {
             days: number;
             /** Loaded At */
             loaded_at?: string | null;
+            /**
+             * Loaded Observations
+             * @description Observations read for this period (newest first)
+             * @default 0
+             */
+            loaded_observations: number;
             /** Min N */
             min_n: number;
             options: components["schemas"]["AdminSignalOptions"];
@@ -2512,6 +2528,12 @@ export interface components {
             /** Score Matrix */
             score_matrix: components["schemas"]["AdminPerfGroup"][];
             summary: components["schemas"]["AdminSignalSummary"];
+            /**
+             * Truncated
+             * @description The period holds more observations than were read
+             * @default false
+             */
+            truncated: boolean;
         };
         /** AdminStairStepper */
         AdminStairStepper: {

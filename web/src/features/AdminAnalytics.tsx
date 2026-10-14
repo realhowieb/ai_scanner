@@ -256,7 +256,7 @@ function Signals({ days }: { days: number }) {
               ["Positive outcome", frac(d.summary.positive_rate)], ["Median forward return", frac(d.summary.median_return, true)],
               ["Average forward return", frac(d.summary.average_return, true)], ["Average MFE", frac(d.summary.average_mfe, true)],
               ["Average MAE", frac(d.summary.average_mae, true)], ["Evidence", d.summary.sufficient ? "Sufficient" : "Insufficient"]]} />
-            <p className="cap">Missing outcomes are left out, never counted as zero.</p>
+            <p className="cap">Missing outcomes are left out, never counted as zero.{d.truncated ? ` Based on the newest ${fmt(d.loaded_observations)} observations in this period.` : ""}</p>
             <label className="field"><span>Matrix metric</span>
               <select value={metric} onChange={(e) => setMetric(e.target.value as Metric)}>{METRICS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
             </label>
@@ -318,6 +318,7 @@ function Evidence({ days }: { days: number }) {
     "research evidence", (e) => (
       <Card title="Research evidence" id="evidence">
         <p className="cap">Latest observation {etTime(e.latest_observation)} · latest matured {etTime(e.latest_matured)} · last maturation run {etTime(e.last_maturation_run)}</p>
+        {e.truncated && <p className="cap">Based on the newest {fmt(e.loaded_observations)} observations in this period.</p>}
         <HBars label="Evidence funnel" rows={e.funnel.map((s) => [s.stage, s.count, s.pct != null ? `(${s.pct}%)` : undefined])} />
         <Tiles items={[["Pending", fmt(e.pending)], ["Excluded", fmt(e.excluded)], ["Metadata complete", frac(e.metadata_completeness)], ["Oldest pending", etTime(e.oldest_pending)]]} />
         <h3 className="h3">Cohort coverage</h3>

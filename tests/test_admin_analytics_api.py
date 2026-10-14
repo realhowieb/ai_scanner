@@ -23,6 +23,58 @@ def _obs(oid, signal, cohort, score, ret, horizon="5d", status="MATURED"):
 OBS = [_obs("a", "Breakout", "candidate", 82, 0.04), _obs("b", "Breakout", "control", 55, -0.01),
        _obs("c", "Momentum", "candidate", 91, 0.02), _obs("d", "Momentum", "near_miss", None, None)]
 
+
+def _sql_row(o):
+    """What _SCANNER_SQL returns for an observation record (see the Postgres check in the PR)."""
+    mc, rm = o.get("market_context") or {}, o.get("research_metadata")
+    text = lambda v: None if v is None else str(v)  # noqa: E731  (->> returns text)
+    names = [s.get("name") for s in o.get("scanners") or []
+             if isinstance(s, dict) and s.get("triggered", True) not in (False, None, 0, "")]
+    outcomes = {h: {"s": v.get("data_status"), "r": v.get("raw_return"), "d": v.get("directional_return"),
+                    "f": v.get("mfe"), "a": v.get("mae"), "h": v.get("hit"), "e": v.get("evaluation_time")}
+                for h, v in (o.get("outcomes") or {}).items()} or None
+    return (o["observation_id"], o["timestamp"], text(o.get("session")), text(o.get("research_cohort")),
+            text(mc.get("research_cohort")), text(o.get("hsf_score")), text((o.get("models") or {}).get("hsf_score")),
+            text(mc.get("hsf_score")), text(((rm or {}).get("row_features") or {}).get("hsf_score")),
+            isinstance(rm, dict), names, outcomes)
+
+
+ROWS = [_sql_row(o) for o in OBS]
+
+
+@unittest.skipUnless(DEPS, "needs API dependencies")
+class CompactResearchParityTests(unittest.TestCase):
+    """The compact one-pass pipeline must give the same answers as analytics.admin_research."""
+
+    def test_matches_admin_research(self):
+        from analytics import admin_research as ar
+        from api import admin_analytics as aa
+
+        extra = [dict(_obs("e", "Breakout", "candidate", 70, 0.0, horizon="1d"), hsf_score="n/a",
+                      scanners=[{"name": "Breakout"}, {"name": " Off ", "triggered": False}, {"name": "Breakout"}]),
+                 dict(_obs("f", "x", None, None, 0.03, status="FAILED"), scanners=[], session=None,
+                      market_context={"research_cohort": "control"}, research_metadata=None)]
+        obs = OBS + extra
+        data = aa.compact_research([_sql_row(o) for o in obs], limit=100)
+        self.assertEqual(data["funnel"], ar.evidence_funnel(obs))
+        flat = ar.flatten_research(obs)
+        t = data["table"]
+        self.assertEqual(len(t), len(flat))
+        for min_n in (1, 3):
+            want = ar.grouped_performance(flat, ("signal", "horizon"), min_n=min_n)
+            got = aa._grouped(t, range(len(t)), "signal", "horizon", min_n)
+            self.assertEqual([(g["signal"], g["horizon"]) for g in want], [(g["key"], g["column"]) for g in got])
+            for w, g in zip(want, got):
+                for k in ("n", "matured", "sufficient", "positive_rate", "average_return", "median_return",
+                          "average_mfe", "average_mae"):
+                    self.assertEqual(w[k], g[k], k)
+        want = ar.grouped_performance([r for r in flat if r["hsf_score"] is not None], ("score_bucket",), min_n=1)
+        got = aa._grouped(t, [i for i in range(len(t)) if t.value("score", i) is not None], "bucket", None, 1)
+        self.assertEqual([(g["score_bucket"], g["n"], g["median_return"]) for g in want],
+                         [(g["key"], g["n"], g["median_return"]) for g in got])
+        self.assertFalse(data["truncated"])
+        self.assertTrue(aa.compact_research([_sql_row(o) for o in obs], limit=len(obs))["truncated"])
+
 BUNDLE = {
     "available": True, "loaded_at": NOW.isoformat(), "days": 30, "errors": {"acquisition_events": "UndefinedTable"},
     "users": [{"tier": "pro", "is_active": True, "created_at": NOW - dt.timedelta(days=1), "has_subscription": True},
@@ -53,7 +105,7 @@ class AdminAnalyticsApiTests(ApiTestCase):
     def test_every_analytics_endpoint_needs_an_admin(self):
         pro = self.auth("pro@example.com")
         with mock.patch("db.admin_analytics.load_admin_data", side_effect=AssertionError("must not load")), \
-             mock.patch("api.admin_analytics._rows", side_effect=AssertionError("must not load")):
+             mock.patch("api.admin_analytics._stream", side_effect=AssertionError("must not load")):
             for path in ("/v1/admin/analytics", "/v1/admin/signals", "/v1/admin/evidence",
                          "/v1/admin/stair-stepper", "/v1/admin/ml-readiness"):
                 self.assertEqual(self.client.get(path).status_code, 401, path)
@@ -85,7 +137,7 @@ class AdminAnalyticsApiTests(ApiTestCase):
 
     def test_signal_performance_filters_and_calibration(self):
         h = self.auth()
-        with mock.patch("api.admin_analytics.scanner_observations", return_value=OBS):
+        with mock.patch("api.admin_analytics._stream", return_value=iter(ROWS)):
             all_ = self.client.get("/v1/admin/signals?min_n=1", headers=h).json()
             only = self.client.get("/v1/admin/signals?min_n=1&signal=Breakout&score_min=60", headers=h).json()
         self.assertEqual(all_["options"]["signals"], ["Breakout", "Momentum"])
@@ -106,7 +158,7 @@ class AdminAnalyticsApiTests(ApiTestCase):
         report = {"subsystems": {"forward_evidence": {"detail_state": "COLLECTING", "reason": "need more days",
                                                       "metrics": {"trading_days_collected": 9, "trading_days_preferred": 20}},
                                  "maturation": {"metrics": {"last_success": "2026-10-14T03:00:00Z"}}}}
-        with mock.patch("api.admin_analytics.scanner_observations", return_value=OBS), \
+        with mock.patch("api.admin_analytics._stream", return_value=iter(ROWS)), \
              mock.patch("api.operations.load_snapshot", return_value={"report": report}):
             r = self.client.get("/v1/admin/evidence?days=90", headers=self.auth())
         self.assertEqual(r.status_code, 200, r.text)
@@ -117,6 +169,17 @@ class AdminAnalyticsApiTests(ApiTestCase):
         self.assertEqual(b["readiness"]["trading_days"], 9)
         self.assertEqual(b["last_maturation_run"], "2026-10-14T03:00:00+00:00")
         self.assertEqual({c["cohort"]: c["observations"] for c in b["cohorts"]}, {"CANDIDATE": 2, "CONTROL": 1, "NEAR_MISS": 1})
+
+    def test_signals_and_evidence_share_one_database_read(self):
+        h = self.auth()
+        with mock.patch("api.admin_analytics._stream", side_effect=lambda *a, **k: iter(ROWS)) as stream, \
+             mock.patch("api.operations.load_snapshot", return_value={"report": {}}):
+            self.client.get("/v1/admin/signals", headers=h)
+            self.client.get("/v1/admin/signals?signal=Breakout", headers=h)
+            r = self.client.get("/v1/admin/evidence", headers=h)
+        self.assertEqual(stream.call_count, 1)
+        self.assertEqual(r.json()["loaded_observations"], 4)
+        self.assertFalse(r.json()["truncated"])
 
     def test_stair_stepper_without_evidence(self):
         with mock.patch("api.admin_analytics.stair_observations", return_value=[]):
