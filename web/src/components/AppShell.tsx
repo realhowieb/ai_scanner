@@ -69,7 +69,6 @@ function MoreMenu({ items, path, id, className }: { items: NavItem[]; path: stri
   );
 }
 export const TICKER_RE = /^[A-Za-z0-9][A-Za-z0-9.-]{0,9}$/;
-const CLASSIC = process.env.NEXT_PUBLIC_STREAMLIT_URL || "https://hsfinestai.streamlit.app";
 
 /** The in-app page the user came from (path + query), for "Back" links. */
 const PreviousPage = createContext<string | null>(null);
@@ -154,7 +153,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link role="menuitem" href="/journal" className="menu-item" onClick={() => setMenu(false)}>Journal</Link>
                 <Link role="menuitem" href="/paper" className="menu-item" onClick={() => setMenu(false)}>Paper trading</Link>
                 <Link role="menuitem" href="/pricing" className="menu-item" onClick={() => setMenu(false)}>Plans and pricing</Link>
-                <a role="menuitem" href={CLASSIC} className="menu-item">Classic app</a>
                 <button role="menuitem" type="button" className="menu-item" onClick={() => void signOut()}>Sign out</button>
               </div>
             )}
