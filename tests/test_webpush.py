@@ -76,7 +76,7 @@ class SendTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"HSF_WEB_PUSH_ENABLED": "0"}):
             self.assertFalse(webpush.config()["enabled"])
         with mock.patch.dict(os.environ, {"VAPID_PRIVATE_KEY": ""}):
-            self.assertEqual(webpush.config(), {"enabled": False, "allowed": True, "public_key": None})
+            self.assertEqual(webpush.config(), {"enabled": False, "allowed": True, "public_key": None, "apns_enabled": False})
             self.assertEqual(webpush.notify_user("a@example.com", "t", "b"), 0)
 
     def test_posts_encrypted_payload_with_vapid_and_drops_gone_subscriptions(self):
@@ -166,7 +166,7 @@ class RouteTests(ApiTestCase):
     def test_config_subscribe_and_unsubscribe(self):
         h = self.auth(self.login().json()["access_token"])
         self.assertEqual(self.client.get("/v1/web-push/config", headers=h).json(),
-                         {"enabled": False, "allowed": True, "public_key": None})
+                         {"enabled": False, "allowed": True, "public_key": None, "apns_enabled": False})
         body = {"endpoint": "https://push.example/x", "keys": {"p256dh": UA_PUBLIC, "auth": UA_AUTH}, "device_name": "Chrome"}
         self.assertEqual(self.client.post("/v1/me/web-push", json=body, headers=h).status_code, 503)
         device = {"id": 7, "provider": "webpush", "platform": "web", "device_name": "Chrome", "app_version": None,
@@ -196,7 +196,7 @@ class RouteTests(ApiTestCase):
                 mock.patch("api.devices.register") as register:
             cfg = self.client.get("/v1/web-push/config", headers=h).json()
             r = self.client.post("/v1/me/web-push", json=body, headers=h)
-        self.assertEqual(cfg, {"enabled": True, "allowed": False, "public_key": None})
+        self.assertEqual(cfg, {"enabled": True, "allowed": False, "public_key": None, "apns_enabled": False})
         self.assertEqual(r.status_code, 403)
         self.assertIn("part of Pro", r.json()["detail"])
         register.assert_not_called()

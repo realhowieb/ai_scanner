@@ -44,3 +44,17 @@ cd mobile && npm ci && npx cap sync ios && open ios/App/App.xcodeproj
 
 `npx cap sync ios` must run after `npm ci` or a config change: it writes the
 generated `capacitor.config.json` and `public/` into the Xcode project (both gitignored).
+
+## Push alerts (hsf-api)
+
+Alerts reach the app through Apple Push Notification service (`api/apns.py`). On
+developer.apple.com → Certificates, IDs & Profiles → **Keys** → +, tick "Apple Push
+Notifications service (APNs)", download the `.p8`, and set on hsf-api (Render → Environment):
+
+- `APNS_KEY_P8`: the `.p8` contents (literal `\n` line breaks are fine)
+- `APNS_KEY_ID`: that key's ID
+- `APNS_TEAM_ID`: the Team ID
+
+Then the app's Alerts page shows "Notify me on this iPhone" (Pro and above).
+`HSF_APNS_ENABLED=0` turns it off without removing the key; `APNS_SANDBOX=1` is only
+for debug builds run from Xcode.
