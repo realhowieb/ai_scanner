@@ -41,7 +41,9 @@ export function GappersCard() {
       {!data ? (
         <p className="cap">Loading…</p>
       ) : rows.length === 0 ? (
-        <Empty title="No pre-market gappers yet today.">Names show up here once they trade before the open and move 2% or more.</Empty>
+        <Empty title="No pre-market gappers yet today.">
+          Stocks show up here once they trade before the open and move 2% or more.{partial ? " Our market data usually shows pre-market trades from about 8:00 AM ET." : ""}
+        </Empty>
       ) : (
         <ul className="rows">
           {rows.slice(0, ROW_LIMIT).map((g) => (

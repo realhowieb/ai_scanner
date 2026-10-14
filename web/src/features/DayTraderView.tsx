@@ -422,6 +422,8 @@ function Live() {
       {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: Chg % and DT score use the regular session; AH shows the move since the close.</p>}
       {dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />
         : !d ? <Skeleton rows={8} label="Loading live quotes" />
+        : all.length === 0 && d.state === "premarket" && source.startsWith("movers") && d.symbols.length === 0
+          ? <Card><Empty title="No pre-market gappers yet today.">Top movers lists stocks trading before the open. Our market data usually shows pre-market trades from about 8:00 AM ET, so check back then, or pick My default watchlist to see last night&apos;s prices.</Empty></Card>
         : all.length === 0 ? <Card><Empty title={d.symbols.length ? "No live quotes for these symbols right now." : "No symbols in this source."}>
             {source === "watchlist" ? "Add tickers to your default watchlist, or pick another source." : "Try another source."}</Empty></Card>
         : rows.length === 0 ? <Card><Empty title="No rows match these filters."><button type="button" className="btn btn-sm" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button></Empty></Card>

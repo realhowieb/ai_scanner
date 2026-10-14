@@ -73,6 +73,21 @@ describe("Day Trader table", () => {
   });
 });
 
+describe("Day Trader pre-market", () => {
+  it("explains an empty Top movers list before pre-market trades start", async () => {
+    fetchMock.mockImplementation(async (req: Request) => {
+      if (new URL(req.url).pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
+      const source = new URL(req.url).searchParams.get("source") ?? "watchlist";
+      return jsonResponse({ state: "premarket", source, symbols: [], missing: 0, as_of: new Date().toISOString(), rows: [] });
+    });
+    render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    await userEvent.selectOptions(screen.getByLabelText("Symbols"), "movers");
+    expect(await screen.findByText("No pre-market gappers yet today.")).toBeInTheDocument();
+    expect(screen.getByText(/about 8:00 AM ET/)).toBeInTheDocument();
+    expect(screen.queryByText("No symbols in this source.")).not.toBeInTheDocument();
+  });
+});
+
 describe("Day Trader live refresh", () => {
   type D = Parameters<typeof diffRefresh>[0];
   const data = (rows: unknown[], as_of: string, source = "movers") => ({ state: "open", source, symbols: [], missing: 0, as_of, rows }) as unknown as D;
