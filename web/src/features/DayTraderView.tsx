@@ -134,6 +134,7 @@ export function Sparkline({ points, ticker }: { points: number[] | undefined; ti
 }
 
 function Score({ r }: { r: Row }) {
+  if (r.traded_today === false) return <span className="cap" title="No trade yet today. The score starts with today's first trade.">Waiting</span>;
   if (r.day_trade_score == null) return <span className="cap" title="Too little evidence to score">—</span>;
   // A flagged quote's score rests on numbers we already say not to trust: show it muted, with no tier.
   if (flagged(r)) {
@@ -171,7 +172,8 @@ function Why({ r }: { r: Row }) {
   return (
     <div className="dt-why">
       <p className="cap">
-        {r.day_trade_score == null ? "Too little evidence to score this setup."
+        {r.traded_today === false ? "No trade yet today. The score starts with today's first trade, so yesterday's session can't rank this name."
+          : r.day_trade_score == null ? "Too little evidence to score this setup."
           : flagged(r) ? "No tier while the quote is flagged: check it before relying on this score."
           : `${QUALITY[r.dt_quality]?.label ?? "Unrated"} ${r.dt_direction} setup.`}
       </p>

@@ -2080,6 +2080,18 @@
       "title": "Ticker",
       "type": "string"
      },
+     "traded_today": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Pre-market only: false until the name trades today; such rows have no change and no DT score",
+      "title": "Traded Today"
+     },
      "volume": {
       "anyOf": [
        {
