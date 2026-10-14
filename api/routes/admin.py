@@ -1,7 +1,7 @@
 """Admin console (admins only): accounts, health and maintenance tools for the web app's Admin page."""
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, TypeVar
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 from fastapi import Depends, FastAPI, HTTPException
 
@@ -28,8 +28,20 @@ def _act(fn: Callable[[], T]) -> T:
         raise HTTPException(422, str(e)) from None
 
 
+def _analytics(fn: Callable[[], T]) -> T:
+    from api.admin_analytics import AnalyticsError, AnalyticsUnavailable
+
+    try:
+        return fn()
+    except AnalyticsUnavailable as e:
+        raise HTTPException(503, str(e)) from None
+    except AnalyticsError as e:
+        raise HTTPException(422, str(e)) from None
+
+
 def register(app: FastAPI) -> None:
     from api import admin
+    from api import admin_analytics as aa
 
     responses = {**_ADMIN, 422: {"description": "Refused (the detail says why)"}}
 
@@ -92,6 +104,31 @@ def register(app: FastAPI) -> None:
     @get("/v1/admin/earnings-refresh", models.AdminEarningsRefresh, "The last manual earnings refresh")
     def admin_earnings_status(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
         return admin.earnings_refresh_status()
+
+    @get("/v1/admin/analytics", models.AdminAnalytics,
+         "Product analytics: users over time, plan mix, scan activity, conversions, recovery")
+    def admin_analytics(days: int = 30, _a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        return _analytics(lambda: aa.product(days))
+
+    @get("/v1/admin/signals", models.AdminSignals, "Signal performance and HSF Score calibration")
+    def admin_signals(days: int = 30, signal: str = "", cohort: str = "", horizon: str = "", session: str = "",
+                      score_min: Optional[float] = None, score_max: Optional[float] = None, min_n: int = 30,
+                      score_horizon: str = "", _a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        return _analytics(lambda: aa.signals(days, signal=signal, cohort=cohort, horizon=horizon, session=session,
+                                             score_min=score_min, score_max=score_max, min_n=min_n,
+                                             score_horizon=score_horizon))
+
+    @get("/v1/admin/evidence", models.AdminEvidence, "Research evidence: funnel, cohort coverage, readiness")
+    def admin_evidence(days: int = 30, _a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        return _analytics(lambda: aa.evidence(days))
+
+    @get("/v1/admin/stair-stepper", models.AdminStairStepper, "Stair-Stepper outcome evidence by window")
+    def admin_stair_stepper(days: int = 30, _a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        return _analytics(lambda: aa.stair_stepper(days))
+
+    @get("/v1/admin/ml-readiness", models.AdminMlReadiness, "ML v4 readiness: status, coverage and gates")
+    def admin_ml_readiness(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        return _analytics(aa.ml_readiness)
 
     @post("/v1/admin/earnings-refresh", models.AdminEarningsRefresh,
           "Refresh the earnings calendar now (FMP then Finnhub, in the background)")

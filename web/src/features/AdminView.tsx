@@ -10,6 +10,7 @@ import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
+import { AnalyticsTab, ResearchTab } from "@/features/AdminAnalytics";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
@@ -19,7 +20,7 @@ type User = Schemas["AdminUser"];
 type Check = Schemas["AdminCheck"];
 const PLANS = ["basic", "pro", "premium"] as const;
 type Plan = (typeof PLANS)[number];
-const TABS = [["users", "Users"], ["health", "Health"], ["tools", "Tools"]] as const;
+const TABS = [["users", "Users"], ["analytics", "Analytics"], ["research", "Research"], ["health", "Health"], ["tools", "Tools"]] as const;
 type Tab = (typeof TABS)[number][0];
 
 const GOOD = new Set(["HEALTHY", "WAITING", "ok"]);
@@ -394,7 +395,7 @@ export function AdminView() {
       <section className="page-head">
         <div>
           <h1 className="h1">Admin</h1>
-          <p className="cap">Accounts, system health and maintenance tools. Account changes are recorded in the admin log.</p>
+          <p className="cap">Accounts, product and research analytics, system health and maintenance tools. Account changes are recorded in the admin log.</p>
         </div>
       </section>
       <div className="seg-group" role="tablist" aria-label="Admin sections">
@@ -402,7 +403,8 @@ export function AdminView() {
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`seg${tab === k ? " on" : ""}`} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
-      {tab === "users" ? <UsersTab self={me.email ?? ""} /> : tab === "health" ? <HealthTab /> : <ToolsTab />}
+      {tab === "users" ? <UsersTab self={me.email ?? ""} /> : tab === "analytics" ? <AnalyticsTab /> : tab === "research" ? <ResearchTab />
+        : tab === "health" ? <HealthTab /> : <ToolsTab />}
     </div>
   );
 }

@@ -182,6 +182,87 @@
     "title": "AdminAiUsage",
     "type": "object"
    },
+   "AdminAnalytics": {
+    "properties": {
+     "conversions": {
+      "$ref": "#/components/schemas/AdminConversions"
+     },
+     "days": {
+      "title": "Days",
+      "type": "integer"
+     },
+     "loaded_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Loaded At"
+     },
+     "overview": {
+      "$ref": "#/components/schemas/AdminOverview"
+     },
+     "plans": {
+      "items": {
+       "$ref": "#/components/schemas/AdminPlanCount"
+      },
+      "title": "Plans",
+      "type": "array"
+     },
+     "recovery": {
+      "items": {
+       "$ref": "#/components/schemas/AdminRecoveryEvent"
+      },
+      "title": "Recovery",
+      "type": "array"
+     },
+     "scans_daily": {
+      "items": {
+       "$ref": "#/components/schemas/AdminScansDay"
+      },
+      "title": "Scans Daily",
+      "type": "array"
+     },
+     "systems": {
+      "items": {
+       "$ref": "#/components/schemas/AdminSystemStatus"
+      },
+      "title": "Systems",
+      "type": "array"
+     },
+     "unavailable": {
+      "default": [],
+      "description": "Sources that failed to load; the rest is still shown",
+      "items": {
+       "type": "string"
+      },
+      "title": "Unavailable",
+      "type": "array"
+     },
+     "users_daily": {
+      "items": {
+       "$ref": "#/components/schemas/AdminUsersDay"
+      },
+      "title": "Users Daily",
+      "type": "array"
+     }
+    },
+    "required": [
+     "days",
+     "overview",
+     "systems",
+     "users_daily",
+     "plans",
+     "scans_daily",
+     "conversions",
+     "recovery"
+    ],
+    "title": "AdminAnalytics",
+    "type": "object"
+   },
    "AdminAudit": {
     "properties": {
      "events": {
@@ -293,6 +374,62 @@
      "status"
     ],
     "title": "AdminCheck",
+    "type": "object"
+   },
+   "AdminCohort": {
+    "properties": {
+     "cohort": {
+      "title": "Cohort",
+      "type": "string"
+     },
+     "observations": {
+      "title": "Observations",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "cohort",
+     "observations"
+    ],
+    "title": "AdminCohort",
+    "type": "object"
+   },
+   "AdminConversions": {
+    "properties": {
+     "destinations": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/AdminPlanCount"
+      },
+      "title": "Destinations",
+      "type": "array"
+     },
+     "paid": {
+      "title": "Paid",
+      "type": "integer"
+     },
+     "signup_to_paid": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Fraction of recorded signups with a recorded paid conversion",
+      "title": "Signup To Paid"
+     },
+     "signups": {
+      "title": "Signups",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "signups",
+     "paid"
+    ],
+    "title": "AdminConversions",
     "type": "object"
    },
    "AdminCreateUser": {
@@ -570,6 +707,215 @@
     "title": "AdminEmailJob",
     "type": "object"
    },
+   "AdminEvidence": {
+    "properties": {
+     "cohorts": {
+      "items": {
+       "$ref": "#/components/schemas/AdminCohort"
+      },
+      "title": "Cohorts",
+      "type": "array"
+     },
+     "days": {
+      "title": "Days",
+      "type": "integer"
+     },
+     "excluded": {
+      "title": "Excluded",
+      "type": "integer"
+     },
+     "funnel": {
+      "items": {
+       "$ref": "#/components/schemas/AdminFunnelStage"
+      },
+      "title": "Funnel",
+      "type": "array"
+     },
+     "last_maturation_run": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Maturation Run"
+     },
+     "latest_matured": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Latest Matured"
+     },
+     "latest_observation": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Latest Observation"
+     },
+     "loaded_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Loaded At"
+     },
+     "metadata_completeness": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Metadata Completeness"
+     },
+     "oldest_pending": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Oldest Pending"
+     },
+     "pending": {
+      "title": "Pending",
+      "type": "integer"
+     },
+     "readiness": {
+      "$ref": "#/components/schemas/AdminEvidenceReadiness"
+     }
+    },
+    "required": [
+     "days",
+     "funnel",
+     "pending",
+     "excluded",
+     "cohorts",
+     "readiness"
+    ],
+    "title": "AdminEvidence",
+    "type": "object"
+   },
+   "AdminEvidenceReadiness": {
+    "properties": {
+     "formal_evaluation": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Formal Evaluation"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "scan_runs": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan Runs"
+     },
+     "scan_runs_preferred": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan Runs Preferred"
+     },
+     "state": {
+      "title": "State",
+      "type": "string"
+     },
+     "trading_days": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Trading Days"
+     },
+     "trading_days_preferred": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Trading Days Preferred"
+     }
+    },
+    "required": [
+     "state"
+    ],
+    "title": "AdminEvidenceReadiness",
+    "type": "object"
+   },
+   "AdminFunnelStage": {
+    "properties": {
+     "count": {
+      "title": "Count",
+      "type": "integer"
+     },
+     "pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pct"
+     },
+     "stage": {
+      "title": "Stage",
+      "type": "string"
+     }
+    },
+    "required": [
+     "stage",
+     "count"
+    ],
+    "title": "AdminFunnelStage",
+    "type": "object"
+   },
    "AdminHealth": {
     "properties": {
      "email": {
@@ -751,6 +1097,303 @@
     "title": "AdminLoginAttempt",
     "type": "object"
    },
+   "AdminMlGate": {
+    "properties": {
+     "gate": {
+      "title": "Gate",
+      "type": "string"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "needs": {
+      "title": "Needs",
+      "type": "string"
+     },
+     "progress": {
+      "description": "0 to 1",
+      "title": "Progress",
+      "type": "number"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "value": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "why": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Why"
+     }
+    },
+    "required": [
+     "gate",
+     "kind",
+     "needs",
+     "status",
+     "progress"
+    ],
+    "title": "AdminMlGate",
+    "type": "object"
+   },
+   "AdminMlReadiness": {
+    "properties": {
+     "blocking_reasons": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Blocking Reasons",
+      "type": "array"
+     },
+     "estimate_trading_days": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Estimate Trading Days"
+     },
+     "gates": {
+      "items": {
+       "$ref": "#/components/schemas/AdminMlGate"
+      },
+      "title": "Gates",
+      "type": "array"
+     },
+     "generated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Generated At"
+     },
+     "matured_rows": {
+      "title": "Matured Rows",
+      "type": "integer"
+     },
+     "matured_signal_days": {
+      "title": "Matured Signal Days",
+      "type": "integer"
+     },
+     "matured_symbols": {
+      "title": "Matured Symbols",
+      "type": "integer"
+     },
+     "matured_trading_days": {
+      "title": "Matured Trading Days",
+      "type": "integer"
+     },
+     "outcome_coverage_recent": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Outcome Coverage Recent"
+     },
+     "recommendation": {
+      "title": "Recommendation",
+      "type": "string"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "walk_forward_folds": {
+      "title": "Walk Forward Folds",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "status",
+     "recommendation",
+     "matured_signal_days",
+     "matured_rows",
+     "matured_trading_days",
+     "matured_symbols",
+     "walk_forward_folds",
+     "gates",
+     "blocking_reasons"
+    ],
+    "title": "AdminMlReadiness",
+    "type": "object"
+   },
+   "AdminOverview": {
+    "properties": {
+     "active_users_30d": {
+      "title": "Active Users 30D",
+      "type": "integer"
+     },
+     "new_users_7d": {
+      "title": "New Users 7D",
+      "type": "integer"
+     },
+     "paying_users": {
+      "title": "Paying Users",
+      "type": "integer"
+     },
+     "scans_today": {
+      "title": "Scans Today",
+      "type": "integer"
+     },
+     "total_users": {
+      "title": "Total Users",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "total_users",
+     "active_users_30d",
+     "new_users_7d",
+     "scans_today",
+     "paying_users"
+    ],
+    "title": "AdminOverview",
+    "type": "object"
+   },
+   "AdminPerfGroup": {
+    "properties": {
+     "average_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mae"
+     },
+     "average_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mfe"
+     },
+     "average_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Return"
+     },
+     "column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Column"
+     },
+     "key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Key"
+     },
+     "matured": {
+      "title": "Matured",
+      "type": "integer"
+     },
+     "median_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Return"
+     },
+     "n": {
+      "title": "N",
+      "type": "integer"
+     },
+     "positive_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Positive Rate"
+     },
+     "sufficient": {
+      "title": "Sufficient",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "n",
+     "matured",
+     "sufficient"
+    ],
+    "title": "AdminPerfGroup",
+    "type": "object"
+   },
+   "AdminPlanCount": {
+    "properties": {
+     "plan": {
+      "title": "Plan",
+      "type": "string"
+     },
+     "users": {
+      "title": "Users",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "plan",
+     "users"
+    ],
+    "title": "AdminPlanCount",
+    "type": "object"
+   },
    "AdminProviders": {
     "properties": {
      "checked_at": {
@@ -774,6 +1417,56 @@
      "earnings_cache"
     ],
     "title": "AdminProviders",
+    "type": "object"
+   },
+   "AdminRecoveryEvent": {
+    "properties": {
+     "action": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Action"
+     },
+     "incident": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Incident"
+     },
+     "result": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Result"
+     },
+     "started_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started At"
+     }
+    },
+    "title": "AdminRecoveryEvent",
     "type": "object"
    },
    "AdminScanError": {
@@ -844,6 +1537,29 @@
     "title": "AdminScanError",
     "type": "object"
    },
+   "AdminScansDay": {
+    "properties": {
+     "day": {
+      "title": "Day",
+      "type": "string"
+     },
+     "scheduled": {
+      "title": "Scheduled",
+      "type": "integer"
+     },
+     "user": {
+      "title": "User",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "day",
+     "scheduled",
+     "user"
+    ],
+    "title": "AdminScansDay",
+    "type": "object"
+   },
    "AdminSetRole": {
     "properties": {
      "is_admin": {
@@ -861,6 +1577,398 @@
      "is_admin"
     ],
     "title": "AdminSetRole",
+    "type": "object"
+   },
+   "AdminSignalOptions": {
+    "properties": {
+     "cohorts": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Cohorts",
+      "type": "array"
+     },
+     "horizons": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Horizons",
+      "type": "array"
+     },
+     "score_high": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score High"
+     },
+     "score_low": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Low"
+     },
+     "sessions": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Sessions",
+      "type": "array"
+     },
+     "signals": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+     }
+    },
+    "required": [
+     "signals",
+     "cohorts",
+     "horizons",
+     "sessions"
+    ],
+    "title": "AdminSignalOptions",
+    "type": "object"
+   },
+   "AdminSignalSummary": {
+    "properties": {
+     "average_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mae"
+     },
+     "average_mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Mfe"
+     },
+     "average_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Return"
+     },
+     "matured": {
+      "title": "Matured",
+      "type": "integer"
+     },
+     "median_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Return"
+     },
+     "n": {
+      "title": "N",
+      "type": "integer"
+     },
+     "observations": {
+      "title": "Observations",
+      "type": "integer"
+     },
+     "positive_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Positive Rate"
+     },
+     "sufficient": {
+      "title": "Sufficient",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "observations",
+     "matured",
+     "n",
+     "sufficient"
+    ],
+    "title": "AdminSignalSummary",
+    "type": "object"
+   },
+   "AdminSignals": {
+    "description": "Returns are fractions. Missing outcomes are excluded, never counted as zero.",
+    "properties": {
+     "by_signal_horizon": {
+      "items": {
+       "$ref": "#/components/schemas/AdminPerfGroup"
+      },
+      "title": "By Signal Horizon",
+      "type": "array"
+     },
+     "days": {
+      "title": "Days",
+      "type": "integer"
+     },
+     "loaded_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Loaded At"
+     },
+     "min_n": {
+      "title": "Min N",
+      "type": "integer"
+     },
+     "options": {
+      "$ref": "#/components/schemas/AdminSignalOptions"
+     },
+     "score_available": {
+      "title": "Score Available",
+      "type": "boolean"
+     },
+     "score_buckets": {
+      "items": {
+       "$ref": "#/components/schemas/AdminPerfGroup"
+      },
+      "title": "Score Buckets",
+      "type": "array"
+     },
+     "score_horizon": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score Horizon"
+     },
+     "score_matrix": {
+      "items": {
+       "$ref": "#/components/schemas/AdminPerfGroup"
+      },
+      "title": "Score Matrix",
+      "type": "array"
+     },
+     "summary": {
+      "$ref": "#/components/schemas/AdminSignalSummary"
+     }
+    },
+    "required": [
+     "days",
+     "min_n",
+     "options",
+     "summary",
+     "by_signal_horizon",
+     "score_available",
+     "score_buckets",
+     "score_matrix"
+    ],
+    "title": "AdminSignals",
+    "type": "object"
+   },
+   "AdminStairStepper": {
+    "properties": {
+     "best_window": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Best Window"
+     },
+     "days": {
+      "title": "Days",
+      "type": "integer"
+     },
+     "horizons": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Horizons",
+      "type": "array"
+     },
+     "latest": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Latest"
+     },
+     "loaded_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Loaded At"
+     },
+     "observations": {
+      "title": "Observations",
+      "type": "integer"
+     },
+     "verdict_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Verdict Reason"
+     },
+     "windows": {
+      "items": {
+       "$ref": "#/components/schemas/AdminStairWindow"
+      },
+      "title": "Windows",
+      "type": "array"
+     }
+    },
+    "required": [
+     "days",
+     "observations",
+     "horizons",
+     "windows"
+    ],
+    "title": "AdminStairStepper",
+    "type": "object"
+   },
+   "AdminStairWindow": {
+    "properties": {
+     "average_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Return"
+     },
+     "horizon": {
+      "title": "Horizon",
+      "type": "string"
+     },
+     "mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mae"
+     },
+     "matured": {
+      "title": "Matured",
+      "type": "integer"
+     },
+     "median_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Return"
+     },
+     "mfe": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mfe"
+     },
+     "observations": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Observations"
+     },
+     "positive_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Positive Rate"
+     },
+     "window": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Window"
+     }
+    },
+    "required": [
+     "horizon",
+     "matured"
+    ],
+    "title": "AdminStairWindow",
     "type": "object"
    },
    "AdminSubsystem": {
@@ -907,6 +2015,29 @@
      "name"
     ],
     "title": "AdminSubsystem",
+    "type": "object"
+   },
+   "AdminSystemStatus": {
+    "properties": {
+     "reason": {
+      "title": "Reason",
+      "type": "string"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "system": {
+      "title": "System",
+      "type": "string"
+     }
+    },
+    "required": [
+     "system",
+     "status",
+     "reason"
+    ],
+    "title": "AdminSystemStatus",
     "type": "object"
    },
    "AdminUpdateUser": {
@@ -1033,6 +2164,29 @@
      "users"
     ],
     "title": "AdminUsers",
+    "type": "object"
+   },
+   "AdminUsersDay": {
+    "properties": {
+     "day": {
+      "title": "Day",
+      "type": "string"
+     },
+     "new": {
+      "title": "New",
+      "type": "integer"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "day",
+     "new",
+     "total"
+    ],
+    "title": "AdminUsersDay",
     "type": "object"
    },
    "Alert": {
@@ -11045,6 +12199,54 @@
     "x-internal": true
    }
   },
+  "/v1/admin/analytics": {
+   "get": {
+    "operationId": "admin_analytics_v1_admin_analytics_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "days",
+      "required": false,
+      "schema": {
+       "default": 30,
+       "title": "Days",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminAnalytics"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Product analytics: users over time, plan mix, scan activity, conversions, recovery",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
   "/v1/admin/audit": {
    "get": {
     "operationId": "admin_audit_v1_admin_audit_get",
@@ -11187,6 +12389,54 @@
     "x-internal": true
    }
   },
+  "/v1/admin/evidence": {
+   "get": {
+    "operationId": "admin_evidence_v1_admin_evidence_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "days",
+      "required": false,
+      "schema": {
+       "default": 30,
+       "title": "Days",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminEvidence"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Research evidence: funnel, cohort coverage, readiness",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
   "/v1/admin/health": {
    "get": {
     "operationId": "admin_health_v1_admin_health_get",
@@ -11217,6 +12467,42 @@
      }
     ],
     "summary": "System health snapshot and email delivery",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml-readiness": {
+   "get": {
+    "operationId": "admin_ml_readiness_v1_admin_ml_readiness_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminMlReadiness"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "ML v4 readiness: status, coverage and gates",
     "tags": [
      "admin (admins only)"
     ],
@@ -11288,6 +12574,194 @@
      }
     ],
     "summary": "Live checks: database, Alpaca, FMP, Finnhub, billing",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/signals": {
+   "get": {
+    "operationId": "admin_signals_v1_admin_signals_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "days",
+      "required": false,
+      "schema": {
+       "default": 30,
+       "title": "Days",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "signal",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Signal",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "cohort",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Cohort",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "horizon",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Horizon",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "session",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Session",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "score_min",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Score Min"
+      }
+     },
+     {
+      "in": "query",
+      "name": "score_max",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Score Max"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_n",
+      "required": false,
+      "schema": {
+       "default": 30,
+       "title": "Min N",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "score_horizon",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Score Horizon",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminSignals"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Signal performance and HSF Score calibration",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/stair-stepper": {
+   "get": {
+    "operationId": "admin_stair_stepper_v1_admin_stair_stepper_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "days",
+      "required": false,
+      "schema": {
+       "default": 30,
+       "title": "Days",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminStairStepper"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Stair-Stepper outcome evidence by window",
     "tags": [
      "admin (admins only)"
     ],

@@ -1295,3 +1295,194 @@ class AdminEarningsRefresh(BaseModel):
     symbols: Optional[int] = None
     dated: Optional[int] = None
     error: Optional[str] = None
+
+
+# ---- admin analytics (Phase 2) -------------------------------------------------------------------
+class AdminOverview(BaseModel):
+    total_users: int
+    active_users_30d: int
+    new_users_7d: int
+    scans_today: int
+    paying_users: int
+
+
+class AdminSystemStatus(BaseModel):
+    system: str
+    status: str
+    reason: str
+
+
+class AdminUsersDay(BaseModel):
+    day: str
+    new: int
+    total: int
+
+
+class AdminScansDay(BaseModel):
+    day: str
+    scheduled: int
+    user: int
+
+
+class AdminPlanCount(BaseModel):
+    plan: str
+    users: int
+
+
+class AdminConversions(BaseModel):
+    signups: int
+    paid: int
+    signup_to_paid: Optional[float] = Field(None, description="Fraction of recorded signups with a recorded paid conversion")
+    destinations: List[AdminPlanCount] = []
+
+
+class AdminRecoveryEvent(BaseModel):
+    started_at: Optional[str] = None
+    incident: Optional[str] = None
+    action: Optional[str] = None
+    result: Optional[str] = None
+
+
+class AdminAnalytics(BaseModel):
+    loaded_at: Optional[str] = None
+    days: int
+    unavailable: List[str] = Field([], description="Sources that failed to load; the rest is still shown")
+    overview: AdminOverview
+    systems: List[AdminSystemStatus]
+    users_daily: List[AdminUsersDay]
+    plans: List[AdminPlanCount]
+    scans_daily: List[AdminScansDay]
+    conversions: AdminConversions
+    recovery: List[AdminRecoveryEvent]
+
+
+class AdminPerfGroup(BaseModel):
+    key: Optional[str] = None
+    column: Optional[str] = None
+    n: int
+    matured: int
+    sufficient: bool
+    positive_rate: Optional[float] = None
+    average_return: Optional[float] = None
+    median_return: Optional[float] = None
+    average_mfe: Optional[float] = None
+    average_mae: Optional[float] = None
+
+
+class AdminSignalOptions(BaseModel):
+    signals: List[str]
+    cohorts: List[str]
+    horizons: List[str]
+    sessions: List[str]
+    score_low: Optional[int] = None
+    score_high: Optional[int] = None
+
+
+class AdminSignalSummary(BaseModel):
+    observations: int
+    matured: int
+    n: int
+    sufficient: bool
+    positive_rate: Optional[float] = None
+    average_return: Optional[float] = None
+    median_return: Optional[float] = None
+    average_mfe: Optional[float] = None
+    average_mae: Optional[float] = None
+
+
+class AdminSignals(BaseModel):
+    """Returns are fractions. Missing outcomes are excluded, never counted as zero."""
+    loaded_at: Optional[str] = None
+    days: int
+    min_n: int
+    options: AdminSignalOptions
+    summary: AdminSignalSummary
+    by_signal_horizon: List[AdminPerfGroup]
+    score_available: bool
+    score_horizon: Optional[str] = None
+    score_buckets: List[AdminPerfGroup]
+    score_matrix: List[AdminPerfGroup]
+
+
+class AdminFunnelStage(BaseModel):
+    stage: str
+    count: int
+    pct: Optional[float] = None
+
+
+class AdminCohort(BaseModel):
+    cohort: str
+    observations: int
+
+
+class AdminEvidenceReadiness(BaseModel):
+    state: str
+    reason: Optional[str] = None
+    trading_days: Optional[Any] = None
+    trading_days_preferred: Optional[Any] = None
+    scan_runs: Optional[Any] = None
+    scan_runs_preferred: Optional[Any] = None
+    formal_evaluation: Optional[str] = None
+
+
+class AdminEvidence(BaseModel):
+    loaded_at: Optional[str] = None
+    days: int
+    funnel: List[AdminFunnelStage]
+    pending: int
+    excluded: int
+    metadata_completeness: Optional[float] = None
+    oldest_pending: Optional[str] = None
+    latest_observation: Optional[str] = None
+    latest_matured: Optional[str] = None
+    last_maturation_run: Optional[str] = None
+    cohorts: List[AdminCohort]
+    readiness: AdminEvidenceReadiness
+
+
+class AdminStairWindow(BaseModel):
+    window: Optional[Any] = None
+    horizon: str
+    observations: Optional[int] = None
+    matured: int
+    positive_rate: Optional[float] = None
+    average_return: Optional[float] = None
+    median_return: Optional[float] = None
+    mfe: Optional[float] = None
+    mae: Optional[float] = None
+
+
+class AdminStairStepper(BaseModel):
+    loaded_at: Optional[str] = None
+    days: int
+    observations: int
+    latest: Optional[str] = None
+    horizons: List[str]
+    windows: List[AdminStairWindow]
+    best_window: Optional[Any] = None
+    verdict_reason: Optional[str] = None
+
+
+class AdminMlGate(BaseModel):
+    gate: str
+    kind: str
+    value: Optional[Any] = None
+    needs: str
+    status: str
+    progress: float = Field(..., description="0 to 1")
+    why: Optional[str] = None
+
+
+class AdminMlReadiness(BaseModel):
+    status: str
+    recommendation: str
+    generated_at: Optional[str] = None
+    matured_signal_days: int
+    matured_rows: int
+    matured_trading_days: int
+    matured_symbols: int
+    outcome_coverage_recent: Optional[float] = None
+    walk_forward_folds: int
+    gates: List[AdminMlGate]
+    blocking_reasons: List[str]
+    estimate_trading_days: Optional[int] = None
