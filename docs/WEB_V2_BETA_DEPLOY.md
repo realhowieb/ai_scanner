@@ -4,12 +4,18 @@ A separate Render web service for the new frontend. It runs **beside** Streamlit
 Streamlit, its domain, the billing service and hsf-api routing don't change. Removing
 the beta never affects them.
 
+> **Current setup (2026-10-14):** the live web app is `hsf-web-v1` (Render Virginia,
+> Starter, branch `main`, root `web`) at `https://hsf-web-v1.onrender.com`, calling
+> `https://hsf-api-v1.onrender.com`. `hsf-web-beta` (branch `dev`) is a preview of dev.
+> The sections below describe the original beta setup; for the live service, read
+> `hsf-web-v1` and `main` where they say `hsf-web-beta` and `dev`.
+
 ## 0. Order of operations
 
 1. **Merge PR #8 into dev**, then **promote** (dev → main). Render redeploys hsf-api from
    main. Web v2 needs two endpoints that only exist after that: `DELETE /v1/scans/{id}`
    (Cancel) and `GET /v1/alerts/types` (alert forms).
-   - Check: `https://hsf-api.onrender.com/openapi.json` lists both paths.
+   - Check: `https://hsf-api-v1.onrender.com/openapi.json` lists both paths.
 2. **hsf-api to Starter** (Settings → Instance type). On Free it sleeps after 15 minutes
    (the first request then takes about 60 s) and has 512 MB, so restarts lose queued scans.
 3. **Create the beta service** (section 1) and point it at `dev`.
@@ -33,7 +39,7 @@ Environment variables (all server-side; nothing secret):
 
 | Name | Value |
 |---|---|
-| `HSF_API_BASE_URL` | `https://hsf-api.onrender.com`. Server-only: the browser never sees it. https is required; the app refuses plain http except localhost. |
+| `HSF_API_BASE_URL` | `https://hsf-api-v1.onrender.com`. Server-only: the browser never sees it. https is required; the app refuses plain http except localhost. |
 | `NEXT_PUBLIC_STREAMLIT_URL` | `https://hsfinestai.streamlit.app` (or the beta Streamlit app). Used for "Open classic app", "Create an account" and "Forgot password". Read at **build** time, so a change needs a redeploy. |
 | `WEB_BETA_ALLOWED_EMAILS` | Comma-separated emails of invited testers, e.g. `you@example.com,tester@example.com`. Anyone else who signs in gets a polite "invite-only" message, and their new session is revoked at once. Leave unset to allow every HSF account. |
 | `NODE_VERSION` | `22` (optional; matches `.node-version`) |
@@ -65,15 +71,15 @@ it out everywhere.
 ## 3. Verify (in this order)
 
 1. **Smoke** (no account needed):
-   `BASE_URL=https://hsf-web-beta.onrender.com node web/scripts/beta-smoke.mjs`.
+   `BASE_URL=https://hsf-web-v1.onrender.com node web/scripts/beta-smoke.mjs`.
    It checks HTTPS, health, security headers, the sign-in redirect and the BFF refusals.
    With `HSF_TEST_EMAIL` and `HSF_TEST_PASSWORD_FILE` it also checks cookie flags and
    signed-in timings for each screen's API call.
 2. **API acceptance** (dedicated test accounts only):
-   `API_BASE_URL=https://hsf-api.onrender.com python scripts/api_acceptance.py --allow-writes --report acceptance.json`
+   `API_BASE_URL=https://hsf-api-v1.onrender.com python scripts/api_acceptance.py --allow-writes --report acceptance.json`
    with the `ACC_FREE`, `ACC_PRO`, `ACC_PRO2`, `ACC_PREMIUM`, `ACC_ADMIN` `_EMAIL` / `_PASSWORD` variables.
 3. **Browser journey** through the beta:
-   `BASE_URL=https://hsf-web-beta.onrender.com HSF_TEST_EMAIL=… HSF_TEST_PASSWORD_FILE=… HSF_TEST_EMAIL_2=… node web/scripts/journey.mjs`.
+   `BASE_URL=https://hsf-web-v1.onrender.com HSF_TEST_EMAIL=… HSF_TEST_PASSWORD_FILE=… HSF_TEST_EMAIL_2=… node web/scripts/journey.mjs`.
    - It covers sign-in, reload, Scanner → save to a new watchlist, the stock page, a
      non-firing price alert, a duplicate refused, a note, the alert turned off, sign out
      and back in, a second account seeing nothing, phone layout, and confirmed cleanup.
