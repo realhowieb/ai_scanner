@@ -64,6 +64,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Product analytics: users over time, plan mix, scan activity, conversions, recovery */
+        get: operations["admin_analytics_v1_admin_analytics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/audit": {
         parameters: {
             query?: never;
@@ -116,6 +133,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Research evidence: funnel, cohort coverage, readiness */
+        get: operations["admin_evidence_v1_admin_evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/health": {
         parameters: {
             query?: never;
@@ -125,6 +159,23 @@ export interface paths {
         };
         /** System health snapshot and email delivery */
         get: operations["admin_health_v1_admin_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/ml-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ML v4 readiness: status, coverage and gates */
+        get: operations["admin_ml_readiness_v1_admin_ml_readiness_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -159,6 +210,40 @@ export interface paths {
         };
         /** Live checks: database, Alpaca, FMP, Finnhub, billing */
         get: operations["admin_providers_v1_admin_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Signal performance and HSF Score calibration */
+        get: operations["admin_signals_v1_admin_signals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/stair-stepper": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stair-Stepper outcome evidence by window */
+        get: operations["admin_stair_stepper_v1_admin_stair_stepper_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1972,6 +2057,31 @@ export interface components {
             /** Feature */
             feature: string;
         };
+        /** AdminAnalytics */
+        AdminAnalytics: {
+            conversions: components["schemas"]["AdminConversions"];
+            /** Days */
+            days: number;
+            /** Loaded At */
+            loaded_at?: string | null;
+            overview: components["schemas"]["AdminOverview"];
+            /** Plans */
+            plans: components["schemas"]["AdminPlanCount"][];
+            /** Recovery */
+            recovery: components["schemas"]["AdminRecoveryEvent"][];
+            /** Scans Daily */
+            scans_daily: components["schemas"]["AdminScansDay"][];
+            /** Systems */
+            systems: components["schemas"]["AdminSystemStatus"][];
+            /**
+             * Unavailable
+             * @description Sources that failed to load; the rest is still shown
+             * @default []
+             */
+            unavailable: string[];
+            /** Users Daily */
+            users_daily: components["schemas"]["AdminUsersDay"][];
+        };
         /** AdminAudit */
         AdminAudit: {
             /** Events */
@@ -2003,6 +2113,30 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "warn" | "error" | "not_configured";
+        };
+        /** AdminCohort */
+        AdminCohort: {
+            /** Cohort */
+            cohort: string;
+            /** Observations */
+            observations: number;
+        };
+        /** AdminConversions */
+        AdminConversions: {
+            /**
+             * Destinations
+             * @default []
+             */
+            destinations: components["schemas"]["AdminPlanCount"][];
+            /** Paid */
+            paid: number;
+            /**
+             * Signup To Paid
+             * @description Fraction of recorded signups with a recorded paid conversion
+             */
+            signup_to_paid?: number | null;
+            /** Signups */
+            signups: number;
         };
         /** AdminCreateUser */
         AdminCreateUser: {
@@ -2082,6 +2216,58 @@ export interface components {
             /** Status */
             status?: string | null;
         };
+        /** AdminEvidence */
+        AdminEvidence: {
+            /** Cohorts */
+            cohorts: components["schemas"]["AdminCohort"][];
+            /** Days */
+            days: number;
+            /** Excluded */
+            excluded: number;
+            /** Funnel */
+            funnel: components["schemas"]["AdminFunnelStage"][];
+            /** Last Maturation Run */
+            last_maturation_run?: string | null;
+            /** Latest Matured */
+            latest_matured?: string | null;
+            /** Latest Observation */
+            latest_observation?: string | null;
+            /** Loaded At */
+            loaded_at?: string | null;
+            /** Metadata Completeness */
+            metadata_completeness?: number | null;
+            /** Oldest Pending */
+            oldest_pending?: string | null;
+            /** Pending */
+            pending: number;
+            readiness: components["schemas"]["AdminEvidenceReadiness"];
+        };
+        /** AdminEvidenceReadiness */
+        AdminEvidenceReadiness: {
+            /** Formal Evaluation */
+            formal_evaluation?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Scan Runs */
+            scan_runs?: unknown | null;
+            /** Scan Runs Preferred */
+            scan_runs_preferred?: unknown | null;
+            /** State */
+            state: string;
+            /** Trading Days */
+            trading_days?: unknown | null;
+            /** Trading Days Preferred */
+            trading_days_preferred?: unknown | null;
+        };
+        /** AdminFunnelStage */
+        AdminFunnelStage: {
+            /** Count */
+            count: number;
+            /** Pct */
+            pct?: number | null;
+            /** Stage */
+            stage: string;
+        };
         /** AdminHealth */
         AdminHealth: {
             email?: components["schemas"]["AdminEmailHealth"] | null;
@@ -2127,6 +2313,96 @@ export interface components {
             /** Username */
             username?: string | null;
         };
+        /** AdminMlGate */
+        AdminMlGate: {
+            /** Gate */
+            gate: string;
+            /** Kind */
+            kind: string;
+            /** Needs */
+            needs: string;
+            /**
+             * Progress
+             * @description 0 to 1
+             */
+            progress: number;
+            /** Status */
+            status: string;
+            /** Value */
+            value?: unknown | null;
+            /** Why */
+            why?: string | null;
+        };
+        /** AdminMlReadiness */
+        AdminMlReadiness: {
+            /** Blocking Reasons */
+            blocking_reasons: string[];
+            /** Estimate Trading Days */
+            estimate_trading_days?: number | null;
+            /** Gates */
+            gates: components["schemas"]["AdminMlGate"][];
+            /** Generated At */
+            generated_at?: string | null;
+            /** Matured Rows */
+            matured_rows: number;
+            /** Matured Signal Days */
+            matured_signal_days: number;
+            /** Matured Symbols */
+            matured_symbols: number;
+            /** Matured Trading Days */
+            matured_trading_days: number;
+            /** Outcome Coverage Recent */
+            outcome_coverage_recent?: number | null;
+            /** Recommendation */
+            recommendation: string;
+            /** Status */
+            status: string;
+            /** Walk Forward Folds */
+            walk_forward_folds: number;
+        };
+        /** AdminOverview */
+        AdminOverview: {
+            /** Active Users 30D */
+            active_users_30d: number;
+            /** New Users 7D */
+            new_users_7d: number;
+            /** Paying Users */
+            paying_users: number;
+            /** Scans Today */
+            scans_today: number;
+            /** Total Users */
+            total_users: number;
+        };
+        /** AdminPerfGroup */
+        AdminPerfGroup: {
+            /** Average Mae */
+            average_mae?: number | null;
+            /** Average Mfe */
+            average_mfe?: number | null;
+            /** Average Return */
+            average_return?: number | null;
+            /** Column */
+            column?: string | null;
+            /** Key */
+            key?: string | null;
+            /** Matured */
+            matured: number;
+            /** Median Return */
+            median_return?: number | null;
+            /** N */
+            n: number;
+            /** Positive Rate */
+            positive_rate?: number | null;
+            /** Sufficient */
+            sufficient: boolean;
+        };
+        /** AdminPlanCount */
+        AdminPlanCount: {
+            /** Plan */
+            plan: string;
+            /** Users */
+            users: number;
+        };
         /** AdminProviders */
         AdminProviders: {
             /** Checked At */
@@ -2134,6 +2410,17 @@ export interface components {
             /** Checks */
             checks: components["schemas"]["AdminCheck"][];
             earnings_cache: components["schemas"]["AdminEarningsCache"];
+        };
+        /** AdminRecoveryEvent */
+        AdminRecoveryEvent: {
+            /** Action */
+            action?: string | null;
+            /** Incident */
+            incident?: string | null;
+            /** Result */
+            result?: string | null;
+            /** Started At */
+            started_at?: string | null;
         };
         /** AdminScanError */
         AdminScanError: {
@@ -2150,12 +2437,121 @@ export interface components {
             /** Username */
             username?: string | null;
         };
+        /** AdminScansDay */
+        AdminScansDay: {
+            /** Day */
+            day: string;
+            /** Scheduled */
+            scheduled: number;
+            /** User */
+            user: number;
+        };
         /** AdminSetRole */
         AdminSetRole: {
             /** Is Admin */
             is_admin: boolean;
             /** Username */
             username: string;
+        };
+        /** AdminSignalOptions */
+        AdminSignalOptions: {
+            /** Cohorts */
+            cohorts: string[];
+            /** Horizons */
+            horizons: string[];
+            /** Score High */
+            score_high?: number | null;
+            /** Score Low */
+            score_low?: number | null;
+            /** Sessions */
+            sessions: string[];
+            /** Signals */
+            signals: string[];
+        };
+        /** AdminSignalSummary */
+        AdminSignalSummary: {
+            /** Average Mae */
+            average_mae?: number | null;
+            /** Average Mfe */
+            average_mfe?: number | null;
+            /** Average Return */
+            average_return?: number | null;
+            /** Matured */
+            matured: number;
+            /** Median Return */
+            median_return?: number | null;
+            /** N */
+            n: number;
+            /** Observations */
+            observations: number;
+            /** Positive Rate */
+            positive_rate?: number | null;
+            /** Sufficient */
+            sufficient: boolean;
+        };
+        /**
+         * AdminSignals
+         * @description Returns are fractions. Missing outcomes are excluded, never counted as zero.
+         */
+        AdminSignals: {
+            /** By Signal Horizon */
+            by_signal_horizon: components["schemas"]["AdminPerfGroup"][];
+            /** Days */
+            days: number;
+            /** Loaded At */
+            loaded_at?: string | null;
+            /** Min N */
+            min_n: number;
+            options: components["schemas"]["AdminSignalOptions"];
+            /** Score Available */
+            score_available: boolean;
+            /** Score Buckets */
+            score_buckets: components["schemas"]["AdminPerfGroup"][];
+            /** Score Horizon */
+            score_horizon?: string | null;
+            /** Score Matrix */
+            score_matrix: components["schemas"]["AdminPerfGroup"][];
+            summary: components["schemas"]["AdminSignalSummary"];
+        };
+        /** AdminStairStepper */
+        AdminStairStepper: {
+            /** Best Window */
+            best_window?: unknown | null;
+            /** Days */
+            days: number;
+            /** Horizons */
+            horizons: string[];
+            /** Latest */
+            latest?: string | null;
+            /** Loaded At */
+            loaded_at?: string | null;
+            /** Observations */
+            observations: number;
+            /** Verdict Reason */
+            verdict_reason?: string | null;
+            /** Windows */
+            windows: components["schemas"]["AdminStairWindow"][];
+        };
+        /** AdminStairWindow */
+        AdminStairWindow: {
+            /** Average Return */
+            average_return?: number | null;
+            /** Horizon */
+            horizon: string;
+            /** Mae */
+            mae?: number | null;
+            /** Matured */
+            matured: number;
+            /** Median Return */
+            median_return?: number | null;
+            /** Mfe */
+            mfe?: number | null;
+            /** Observations */
+            observations?: number | null;
+            /** Positive Rate */
+            positive_rate?: number | null;
+            /** Window */
+            window?: unknown | null;
         };
         /** AdminSubsystem */
         AdminSubsystem: {
@@ -2167,6 +2563,15 @@ export interface components {
             reason?: string | null;
             /** Status */
             status?: string | null;
+        };
+        /** AdminSystemStatus */
+        AdminSystemStatus: {
+            /** Reason */
+            reason: string;
+            /** Status */
+            status: string;
+            /** System */
+            system: string;
         };
         /** AdminUpdateUser */
         AdminUpdateUser: {
@@ -2203,6 +2608,15 @@ export interface components {
         AdminUsers: {
             /** Users */
             users: components["schemas"]["AdminUser"][];
+        };
+        /** AdminUsersDay */
+        AdminUsersDay: {
+            /** Day */
+            day: string;
+            /** New */
+            new: number;
+            /** Total */
+            total: number;
         };
         /** Alert */
         Alert: {
@@ -6131,6 +6545,49 @@ export interface operations {
             };
         };
     };
+    admin_analytics_v1_admin_analytics_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAnalytics"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     admin_audit_v1_admin_audit_get: {
         parameters: {
             query?: never;
@@ -6295,6 +6752,49 @@ export interface operations {
             };
         };
     };
+    admin_evidence_v1_admin_evidence_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvidence"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     admin_health_v1_admin_health_get: {
         parameters: {
             query?: never;
@@ -6311,6 +6811,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminHealth"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_ml_readiness_v1_admin_ml_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMlReadiness"];
                 };
             };
             /** @description Not signed in */
@@ -6388,6 +6929,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminProviders"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_signals_v1_admin_signals_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                signal?: string;
+                cohort?: string;
+                horizon?: string;
+                session?: string;
+                score_min?: number | null;
+                score_max?: number | null;
+                min_n?: number;
+                score_horizon?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSignals"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_stair_stepper_v1_admin_stair_stepper_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStairStepper"];
                 };
             };
             /** @description Not signed in */
