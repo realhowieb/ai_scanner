@@ -168,7 +168,7 @@ def require_min_tier(tier_or_key, required: str, feature_name: str) -> bool:
     current_key = _normalize_tier_key(tier_or_key)
     required_key = str(required or "basic").strip().lower()
 
-    try:  # Run 85B: customer-facing names (internal "basic" is shown as "Free")
+    try:  # Run 85B: customer-facing names (internal "basic" is shown as "Starter")
         from ui.plan_labels import plan_label
         current_label, required_label = plan_label(current_key), plan_label(required_key)
     except ImportError:

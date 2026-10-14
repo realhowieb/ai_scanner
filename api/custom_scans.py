@@ -6,7 +6,7 @@ by disabling widgets, which an API client can't be trusted to do):
 
   universe   sp500 (every plan) · nasdaq, combo (Pro+) · us_market (Premium+)
              · watchlist (your own) · ticker (every plan)
-  rows       top_n up to the plan's Scanner rows (Free 25, Pro 100, Premium 200)
+  rows       top_n up to the plan's Scanner rows (Starter 25, Pro 100, Premium 200)
   sessions   premarket / afterhours: Pro+ (outside that session the web scans
              the regular session instead, and so does this)
   filters    unusual volume and the gap filter: Pro+

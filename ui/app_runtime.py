@@ -164,7 +164,7 @@ def render_sidebar_upgrade_card(
     *,
     has_min_tier: Callable[[object | None, str], bool],
 ) -> None:
-    """Show the primary Pro upgrade path for Free users in the sidebar."""
+    """Show the primary Pro upgrade path for Starter users in the sidebar."""
     try:
         # Admins never see the upgrade card regardless of tier_obj key.
         import streamlit as _st
@@ -176,7 +176,7 @@ def render_sidebar_upgrade_card(
         return
 
     with st.sidebar.container(border=True):
-        st.markdown("### You're on Free")
+        st.markdown("### You're on Starter")
         st.caption(
             "Discover today's market opportunities with HSF Score and basic Stock Intelligence."
         )

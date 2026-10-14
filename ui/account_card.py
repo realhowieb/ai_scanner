@@ -50,7 +50,7 @@ def plan_card(tier: Any, *, is_admin: bool = False) -> Dict[str, Optional[str]]:
                 "cta_label": "Upgrade to Premium", "cta_plan": "premium",
                 "cta_note": f"Premium adds research and workflow: {_premium_value()}.",
                 "compare": "Compare all plans"}
-    return {"label": "Free", "headline": "You're on Free",
+    return {"label": "Starter", "headline": "You're on Starter",
             "summary": "Discover today's market opportunities with HSF Score and basic Stock Intelligence.",
             "cta_label": "Upgrade to Pro", "cta_plan": "pro",
             "cta_note": (f"Pro adds monitoring and investigation: {_alerts('pro')} alerts, email delivery, "

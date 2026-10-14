@@ -28,7 +28,7 @@ try:
     tier = plan_label(st.session_state.get("tier_key") or st.session_state.get("tier"),
                       is_admin=bool(st.session_state.get("is_admin")))
 except Exception:
-    tier = "Free"
+    tier = "Starter"
 verified = None
 try:
     from db.email_verification import is_email_verified

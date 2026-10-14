@@ -47,7 +47,7 @@ class DerivedPricingTests(unittest.TestCase):
         from ui.pricing import pricing_markdown
 
         md = pricing_markdown()
-        for s in ("| Feature | Free | Pro | Premium |", "$25/mo", "$40/mo"):
+        for s in ("| Feature | Starter | Pro | Premium |", "$25/mo", "$40/mo"):
             self.assertIn(s, md)
         alert_row = next(line for line in md.splitlines() if line.startswith("| Alerts"))
         for tier in ("basic", "pro", "premium"):
@@ -81,7 +81,7 @@ class DerivedPricingTests(unittest.TestCase):
         self.assertEqual(out.count("Recommended"), 1)   # P2-21: no "Most popular" claim before customers
         self.assertNotIn("Most popular", out)
         self.assertIn("$0", out)
-        self.assertIn("Everything in Free", out)
+        self.assertIn("Everything in Starter", out)
         self.assertIn("Everything in Pro", out)
 
 
@@ -132,7 +132,7 @@ class SignedOutBillingPageTests(unittest.TestCase):
         at.run()
         self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
         text = " ".join(m.value for m in at.markdown) + " ".join(c.value for c in at.caption)
-        self.assertIn("| Feature | Free | Pro | Premium |", text)
+        self.assertIn("| Feature | Starter | Pro | Premium |", text)
         self.assertIn("Start free", text)
         shown = text + " ".join(w.value for w in at.warning) + " ".join(i.value for i in at.info)
         self.assertNotIn("isn't linked to an email", shown)

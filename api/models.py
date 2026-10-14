@@ -37,7 +37,7 @@ class Me(BaseModel):
     email: str
     name: Optional[str] = None
     plan: Literal["basic", "pro", "premium", "admin"]
-    plan_label: str = Field(description="Customer-facing name, e.g. Free, Pro")
+    plan_label: str = Field(description="Customer-facing name, e.g. Starter, Pro")
     is_admin: bool
     alert_limit: int
     email_verified: bool = Field(default=True, description="False until the emailed link is used; needed to upgrade and for email alerts")
@@ -228,7 +228,7 @@ class LatestScan(BaseModel):
     scan_at: Optional[str] = Field(default=None, description="ISO time of the market scan; null when none exists")
     total: int = Field(description="Setups matching the filters, before the plan cap")
     scan_total: Optional[int] = Field(default=None, description="Setups in the scan before any filter (signal, score floor)")
-    max_results: int = Field(description="Rows this plan sees (Free 25, Pro 100, Premium 200)")
+    max_results: int = Field(description="Rows this plan sees (Starter 25, Pro 100, Premium 200)")
     limited: bool = Field(description="True when the plan cap hides some matching setups")
     stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")
     setups: List[ScanSetup] = []
@@ -350,7 +350,7 @@ class TickersResult(BaseModel):
 
 
 class Alerts(BaseModel):
-    limit: int = Field(description="Alerts this plan may have (Free 1, Pro 5, Premium 25)")
+    limit: int = Field(description="Alerts this plan may have (Starter 1, Pro 5, Premium 25)")
     used: int
     email_enabled: bool = Field(description="Pro+ get alert emails; everyone gets in-app alerts")
     summary: Dict[str, Any] = Field(default={}, description="UI summary: active, paused, fired_recently, by_type and delivery availability")
@@ -606,7 +606,7 @@ class ScanParams(BaseModel):
     apply_gap_filter: bool
     unusual_volume: bool
     top_n: int
-    max_results: int = Field(description="This plan's row cap (Free 25, Pro 100, Premium 200)")
+    max_results: int = Field(description="This plan's row cap (Starter 25, Pro 100, Premium 200)")
     full_lists: bool = Field(description="True for Premium/admin: NASDAQ and Combo scan the full lists")
     max_nasdaq: Optional[int] = None
     max_combo: Optional[int] = None

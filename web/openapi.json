@@ -3077,7 +3077,7 @@
       "type": "boolean"
      },
      "limit": {
-      "description": "Alerts this plan may have (Free 1, Pro 5, Premium 25)",
+      "description": "Alerts this plan may have (Starter 1, Pro 5, Premium 25)",
       "title": "Limit",
       "type": "integer"
      },
@@ -4834,7 +4834,7 @@
       "type": "boolean"
      },
      "max_results": {
-      "description": "Rows this plan sees (Free 25, Pro 100, Premium 200)",
+      "description": "Rows this plan sees (Starter 25, Pro 100, Premium 200)",
       "title": "Max Results",
       "type": "integer"
      },
@@ -5170,7 +5170,7 @@
       "type": "string"
      },
      "plan_label": {
-      "description": "Customer-facing name, e.g. Free, Pro",
+      "description": "Customer-facing name, e.g. Starter, Pro",
       "title": "Plan Label",
       "type": "string"
      }
@@ -8832,7 +8832,7 @@
         "type": "null"
        }
       ],
-      "description": "Rows to return; at most the plan's cap (Free 25, Pro 100, Premium 200). Default min(25, cap)",
+      "description": "Rows to return; at most the plan's cap (Starter 25, Pro 100, Premium 200). Default min(25, cap)",
       "title": "Top N"
      },
      "unusual_volume": {
@@ -9031,7 +9031,7 @@
       "type": "number"
      },
      "max_results": {
-      "description": "This plan's row cap (Free 25, Pro 100, Premium 200)",
+      "description": "This plan's row cap (Starter 25, Pro 100, Premium 200)",
       "title": "Max Results",
       "type": "integer"
      },
@@ -13290,7 +13290,7 @@
     "summary": "Alerts"
    },
    "post": {
-    "description": "Same types and rules as the web app. Free 1 alert, Pro 5, Premium 25.",
+    "description": "Same types and rules as the web app. Starter 1 alert, Pro 5, Premium 25.",
     "operationId": "alert_create_v1_alerts_post",
     "requestBody": {
      "content": {
@@ -14104,7 +14104,7 @@
   },
   "/v1/auth/signup": {
    "post": {
-    "description": "Create a Free account (same rules as the web form) and sign in. A verification\nemail is sent; verifying is needed to upgrade and for alert emails.",
+    "description": "Create a Starter (free) account (same rules as the web form) and sign in. A verification\nemail is sent; verifying is needed to upgrade and for alert emails.",
     "operationId": "signup_v1_auth_signup_post",
     "requestBody": {
      "content": {

@@ -35,7 +35,7 @@ class PortalReturnTests(unittest.TestCase):
         at = self.run_with("basic", "premium")
         self.assertEqual(at.session_state["tier"], "basic")
         text = " ".join(i.value for i in at.info)
-        self.assertIn("Your plan: **Free**", text)
+        self.assertIn("Your plan: **Starter**", text)
         self.assertNotIn("upgrade", text.lower())
         self.assertEqual(at.session_state["params_left"], [])
         self.assertNotIn("_tier_poll_attempt", at.session_state)

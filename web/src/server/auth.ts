@@ -230,7 +230,7 @@ export async function publicAuth(req: Request, flow: keyof typeof PUBLIC, upstre
   return json({ ok: true, message: out.message ?? "Done." }, 200, res.headers.get("x-request-id") || rid);
 }
 
-/** Create a Free account and sign in: the API's token pair goes into the cookies only.
+/** Create a Starter (free) account and sign in: the API's token pair goes into the cookies only.
  * With an invite list (WEB_BETA_ALLOWED_EMAILS) other emails are refused before any account is created. */
 export async function signup(req: Request, upstream: Upstream, allow: Set<string> | null = betaAllowlist()): Promise<Response> {
   const rid = requestIdFor(req);

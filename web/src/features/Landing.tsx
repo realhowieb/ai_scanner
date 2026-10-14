@@ -187,7 +187,7 @@ export function Landing() {
             <Link href="/demo" className="btn">View demo</Link>
             <Link href="/login" className="btn">Sign in</Link>
           </div>
-          <p className="cap">Free plan, no card needed.</p>
+          <p className="cap">Starter plan is free, no card needed.</p>
         </section>
 
         <Showcase />

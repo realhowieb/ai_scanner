@@ -61,7 +61,7 @@ def send_verification(email: str) -> bool:
 
 # ---- sign-up -------------------------------------------------------------------------------------
 def signup(email: str, password: str, username: str, accept_terms: bool) -> Dict[str, Any]:
-    """Create a Free account with the web form's rules. Returns {email, verification_sent}."""
+    """Create a Starter (free) account with the web form's rules. Returns {email, verification_sent}."""
     from db import users
 
     email = (email or "").strip().lower()

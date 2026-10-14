@@ -751,7 +751,7 @@ class BillingContractTest(unittest.TestCase):
 
         bm = _configured_module()
         self.assertEqual(TIERS, ("basic", "pro", "premium"))
-        self.assertEqual(TIER_NAMES, {"basic": "Free", "pro": "Pro", "premium": "Premium"})
+        self.assertEqual(TIER_NAMES, {"basic": "Starter", "pro": "Pro", "premium": "Premium"})
         self.assertEqual(PRICES, {"basic": "Free", "pro": "$25/mo", "premium": "$40/mo"})
         self.assertEqual(bm._price_to_plan(bm.STRIPE_PRICE_PRO), "pro")
         self.assertEqual(bm._price_to_plan(bm.STRIPE_PRICE_PREMIUM), "premium")
