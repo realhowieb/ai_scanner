@@ -290,6 +290,41 @@ class BillingServiceCheckoutTest(unittest.TestCase):
         self.assertIn("checkout=cancel", kwargs["cancel_url"])
         self.assertNotIn("price_premium_fake", repr(kwargs))
 
+    def _checkout_with(self, **extra):
+        return _client(self.bm).post(
+            "/create-checkout-session",
+            json={"email": "member@example.com", "plan": "pro", **extra},
+            headers={"X-HSF-Auth": "test-token"},
+        )
+
+    def test_web_app_return_links_are_honored_and_cancel_goes_back_there(self):
+        response = self._checkout_with(
+            success_url="https://hsf-web-v1.onrender.com/?checkout=success&rt=t1",
+            return_url="https://hsf-web-v1.onrender.com/?portal=return&rt=t2",
+        )
+        self.assertEqual(response.status_code, 200)
+        kwargs = self.bm.stripe.checkout.Session.create.call_args.kwargs
+        self.assertEqual(kwargs["success_url"], "https://hsf-web-v1.onrender.com/?checkout=success&rt=t1")
+        self.assertEqual(kwargs["cancel_url"], "https://hsf-web-v1.onrender.com/?checkout=cancel")
+
+    def test_streamlit_return_links_keep_the_configured_cancel_url(self):
+        response = self._checkout_with(success_url="https://hsf-beta.streamlit.app/?checkout=success&rt=t1")
+        self.assertEqual(response.status_code, 200)
+        kwargs = self.bm.stripe.checkout.Session.create.call_args.kwargs
+        self.assertEqual(kwargs["success_url"], "https://hsf-beta.streamlit.app/?checkout=success&rt=t1")
+        self.assertEqual(kwargs["cancel_url"], "https://hsf-beta.streamlit.app?checkout=cancel")
+
+    def test_foreign_or_plain_http_return_links_are_ignored(self):
+        for bad in ("https://evil.example/?checkout=success",
+                    "http://hsf-web-v1.onrender.com/?checkout=success",
+                    "https://hsf-web-v1.onrender.com.evil.example/"):
+            self.bm.stripe.checkout.Session.create.reset_mock()
+            response = self._checkout_with(success_url=bad)
+            self.assertEqual(response.status_code, 200)
+            kwargs = self.bm.stripe.checkout.Session.create.call_args.kwargs
+            self.assertEqual(kwargs["success_url"], "https://hsf-beta.streamlit.app?checkout=success", bad)
+            self.assertEqual(kwargs["cancel_url"], "https://hsf-beta.streamlit.app?checkout=cancel", bad)
+
     def test_premium_checkout_uses_only_configured_premium_price(self):
         response = self._checkout("premium")
         self.assertEqual(response.status_code, 200)
@@ -449,6 +484,18 @@ class BillingServicePortalTest(unittest.TestCase):
                 "redirect": {"return_url": kwargs["return_url"]},
             },
         })
+
+    def test_portal_return_to_the_web_app_is_honored(self):
+        response = self._portal(return_url="https://hsf-web-v1.onrender.com/?portal=return&rt=t")
+        self.assertEqual(response.status_code, 200)
+        kwargs = self.bm.stripe.billing_portal.Session.create.call_args.kwargs
+        self.assertEqual(kwargs["return_url"], "https://hsf-web-v1.onrender.com/?portal=return&rt=t")
+
+    def test_portal_return_to_a_foreign_host_is_ignored(self):
+        response = self._portal(return_url="https://evil.example/")
+        self.assertEqual(response.status_code, 200)
+        kwargs = self.bm.stripe.billing_portal.Session.create.call_args.kwargs
+        self.assertEqual(kwargs["return_url"], "https://hsf-beta.streamlit.app/billing?portal=return")
 
     def test_cancel_flow_without_active_subscription_fails_closed(self):
         self.bm.stripe.Subscription.list.return_value = {"data": []}

@@ -102,6 +102,10 @@ Required billing service environment variables:
 - `APP_SUCCESS_URL`
 - `APP_CANCEL_URL`
 
+Optional: `APP_RETURN_HOSTS` (default `hsf-web-v1.onrender.com`), comma-separated
+hosts of other apps whose https return links checkout and the portal accept, so
+upgrades started in the web app come back to it.
+
 Required Streamlit app billing setting:
 
 - `BILLING_API_BASE`
