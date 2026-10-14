@@ -76,6 +76,14 @@ APP_SUCCESS_URL = os.getenv("APP_SUCCESS_URL", "").strip()  # e.g. https://youra
 APP_CANCEL_URL = os.getenv("APP_CANCEL_URL", "").strip()    # e.g. https://yourapp.com
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()        # Neon Postgres URL
 APP_PORTAL_RETURN_URL = os.getenv("APP_PORTAL_RETURN_URL", "").strip()  # e.g. https://hsfinestai.streamlit.app/billing
+# Other apps that may send return links (success_url / return_url overrides):
+# the web app. Comma-separated hosts; links to them must be https. The host of
+# APP_SUCCESS_URL (Streamlit) is always allowed.
+APP_RETURN_HOSTS = frozenset(
+    h.strip().lower()
+    for h in os.getenv("APP_RETURN_HOSTS", "hsf-web-v1.onrender.com").split(",")
+    if h.strip()
+)
 
 if not STRIPE_SECRET_KEY:
     raise RuntimeError("Missing STRIPE_SECRET_KEY env var")
@@ -104,6 +112,33 @@ def _append_qp(url: str, key: str, value: str) -> str:
         return base
     sep = "&" if "?" in base else "?"
     return f"{base}{sep}{key}={value}"
+
+
+def _allowed_return_url(candidate: str) -> str | None:
+    """A caller-supplied return link, if it points at one of our apps: the host of
+    APP_SUCCESS_URL, or an https link to a host in APP_RETURN_HOSTS. Anything
+    else is ignored so this never becomes an open redirect."""
+    try:
+        url = urlparse(candidate or "")
+        base_host = urlparse(APP_SUCCESS_URL or "").netloc
+        if not url.netloc:
+            return None
+        if base_host and url.netloc == base_host:
+            return candidate
+        if url.scheme == "https" and url.netloc.lower() in APP_RETURN_HOSTS:
+            return candidate
+    except Exception:
+        pass
+    return None
+
+
+def _cancel_url_for(success_url: str) -> str:
+    """Checkout cancel link: back to the app the customer came from. APP_CANCEL_URL
+    unless the success link points at another allowed app (the web app)."""
+    url = urlparse(success_url or "")
+    if url.netloc and url.netloc != urlparse(APP_SUCCESS_URL or "").netloc:
+        return f"{url.scheme}://{url.netloc}/?checkout=cancel"
+    return _append_qp(APP_CANCEL_URL, "checkout", "cancel")
 
 
 def _required_env_missing(*names: str) -> list[str]:
@@ -685,24 +720,14 @@ async def create_checkout_session(payload: dict, request: Request):
         raise HTTPException(400, "Interval must be 'month' or 'year'")
 
     # Optional success_url / return_url overrides — only honored if they point at
-    # the same host as APP_SUCCESS_URL (prevents this becoming an open redirect).
-    def _validate_same_host(candidate: str) -> str | None:
-        try:
-            from urllib.parse import urlparse
-            base_host = urlparse(APP_SUCCESS_URL or "").netloc
-            if base_host and urlparse(candidate).netloc == base_host:
-                return candidate
-        except Exception:
-            pass
-        return None
-
+    # one of our apps (see _allowed_return_url; prevents an open redirect).
     success_url = _append_qp(APP_SUCCESS_URL, "checkout", "success")
-    success_override = _validate_same_host((payload.get("success_url") or "").strip())
+    success_override = _allowed_return_url((payload.get("success_url") or "").strip())
     if success_override:
         success_url = success_override
 
     portal_return_url = _append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL, "portal", "return")
-    return_override = _validate_same_host((payload.get("return_url") or "").strip())
+    return_override = _allowed_return_url((payload.get("return_url") or "").strip())
     if return_override:
         portal_return_url = return_override
 
@@ -762,7 +787,7 @@ async def create_checkout_session(payload: dict, request: Request):
             line_items=[{"price": price_id, "quantity": 1}],
             allow_promotion_codes=True,
             success_url=success_url,
-            cancel_url=_append_qp(APP_CANCEL_URL, "checkout", "cancel"),
+            cancel_url=_cancel_url_for(success_url),
             metadata={
                 "user_email": email,
                 "requested_plan": plan,
@@ -780,7 +805,7 @@ async def create_checkout_session(payload: dict, request: Request):
 async def create_portal_session(payload: dict, request: Request):
     """
     Requires the X-HSF-Auth billing token of the signed-in account (Run 83).
-    Optional payload: { "return_url": "<same-host URL>", "flow": "cancel" }.
+    Optional payload: { "return_url": "<URL on one of our apps>", "flow": "cancel" }.
     Any "email" must match the authenticated account; the Stripe customer
     always comes from that account's own users row, never from the request.
     """
@@ -800,15 +825,9 @@ async def create_portal_session(payload: dict, request: Request):
         raise HTTPException(400, "Unsupported billing portal flow.")
 
     return_url = _append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL, "portal", "return")
-    override = (payload.get("return_url") or "").strip()
+    override = _allowed_return_url((payload.get("return_url") or "").strip())
     if override:
-        try:
-            from urllib.parse import urlparse
-            base_host = urlparse(APP_SUCCESS_URL or "").netloc
-            if base_host and urlparse(override).netloc == base_host:
-                return_url = override
-        except Exception:
-            pass
+        return_url = override
 
     try:
         portal_kwargs = {"customer": customer_id, "return_url": return_url}
