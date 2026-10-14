@@ -3,7 +3,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 // The app opens the live web app, so every web release reaches the iPhone app without a
 // new App Store build. Only native changes (push, icons, plugins) need a TestFlight build.
 // HSF_APP_URL overrides the site for a test build, e.g. a dev deploy.
-const appUrl = process.env.HSF_APP_URL || "https://hsf-web-beta.onrender.com";
+const appUrl = process.env.HSF_APP_URL || "https://hsf-web-v1.onrender.com";
 
 const config: CapacitorConfig = {
   appId: "com.hsfinest.app",

@@ -1,7 +1,7 @@
 # HSF iPhone app
 
 A [Capacitor](https://capacitorjs.com) shell that opens the live web app
-(`https://hsf-web-beta.onrender.com/today`, see `capacitor.config.ts`). Web releases
+(`https://hsf-web-v1.onrender.com/today`, see `capacitor.config.ts`). Web releases
 reach the app right away; only native changes (icon, push, plugins) need a new build.
 
 - `capacitor.config.ts`: app id `com.hsfinest.app`, name "HSF", the site it opens.
