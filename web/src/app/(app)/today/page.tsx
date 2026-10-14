@@ -3,6 +3,7 @@
 import { api, unwrap } from "@/api/client";
 import { ErrorState, Skeleton } from "@/components/ui";
 import { EarningsCard } from "@/features/EarningsCard";
+import { GappersCard } from "@/features/GappersCard";
 import { PriceTape } from "@/features/PriceTape";
 import { TodayView } from "@/features/TodayView";
 import { useApi } from "@/hooks/useApi";
@@ -30,7 +31,8 @@ export default function TodayPage() {
       {error && !data ? <ErrorState error={error} onRetry={reload} what="Today" />
         : loading && !data ? <Skeleton rows={8} label="Loading Today" />
         : data ? <TodayView data={data} mine={mine.data} mineFailed={!!mine.error && !mine.data}
-            side={<EarningsCard tickers={tickers} watched={watched} />} /> : null}
+            side={<EarningsCard tickers={tickers} watched={watched} />}
+            lead={data.market.phase === "premarket" ? <GappersCard /> : undefined} /> : null}
     </div>
   );
 }

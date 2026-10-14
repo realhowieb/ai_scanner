@@ -45,6 +45,15 @@ def register(app: FastAPI) -> None:
                 watch = [i["ticker"] for i in user_data.get_watchlist(user, int(wid))["items"]]   # 404 if not yours
         return json_safe(market.day_trader(source, (symbols or "").split(","), watch))
 
+    @app.get("/v1/premarket/gappers", response_model=models.PremarketGappers, responses=_DT,
+             summary="Pre-market gappers (Pro)")
+    def premarket_gappers(account: Dict[str, Any] = Depends(current_account),
+                          limit: int = Query(25, ge=1, le=40)) -> Dict[str, Any]:
+        """S&P 500 + NASDAQ names gapping before the open: today's latest pre-market trade vs
+        yesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min."""
+        require_feature(account, "can_premarket")
+        return json_safe(market.premarket_gappers(limit))
+
     @app.get("/v1/day-trader/sparklines", response_model=models.DayTraderSparklines, responses=_DT,
              summary="Intraday sparklines (Pro)")
     def day_trader_sparklines(account: Dict[str, Any] = Depends(current_account),

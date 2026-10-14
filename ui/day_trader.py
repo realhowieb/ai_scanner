@@ -452,11 +452,15 @@ def _top_movers_symbols(limit: int = 40, universe: List[str] | None = None) -> L
     signals we lead with); a dollar-volume floor drops illiquid junk.
     """
     try:
-        from market_data import build_day_trader_metrics
+        from market_data import build_day_trader_metrics, build_premarket_gappers, premarket_session_date
 
         universe = universe if universe is not None else _movers_universe()
         if not universe:
             return []
+        if premarket_session_date() is not None:
+            # Before the open the snapshot's daily bars are yesterday's session, so
+            # rank today's pre-market gappers instead of re-ranking yesterday.
+            return [r["ticker"] for r in build_premarket_gappers(universe, limit=limit)]
         rows = build_day_trader_metrics(universe, with_rvol=False) or []
         scored: List[tuple] = []
         for r in rows:

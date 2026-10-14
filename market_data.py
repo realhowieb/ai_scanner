@@ -486,10 +486,189 @@ def fetch_daily_range_metrics(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+# ------------------------------ Pre-market ---------------------------------
+# Before the open Alpaca's snapshot still describes the last regular session:
+# dailyBar is yesterday and prevDailyBar the day before, so "today's move" from
+# those bars is yesterday's move (the NVAX stale-alert bug, PR #89). Pre-market
+# rows measure today's latest trade against yesterday's close instead.
+
+PREMARKET_START_ET = 4 * 60          # 4:00 ET, when extended-hours trading starts
+_PM_BARS_TTL_S = 60.0
+_pm_bars_cache: Dict[Any, Any] = {}
+
+
+def _et_date(ts: object):
+    """ET calendar date of an ISO timestamp, or None when unknown/unparseable."""
+    if not ts:
+        return None
+    import datetime as _dt
+    import re
+    from zoneinfo import ZoneInfo
+
+    # Alpaca prints nanoseconds (…T19:59:34.804444297Z); fromisoformat wants at most 6 digits.
+    txt = re.sub(r"(\.\d{6})\d+", r"\1", str(ts)).replace("Z", "+00:00")
+    try:
+        d = _dt.datetime.fromisoformat(txt)
+    except ValueError:
+        return None
+    if d.tzinfo is None:
+        return None
+    return d.astimezone(ZoneInfo("America/New_York")).date()
+
+
+def premarket_session_date(now=None):
+    """Today's ET date during pre-market (4:00 ET to the open on a trading day), else None."""
+    import datetime as _dt
+
+    from analytics import market_calendar as mc
+
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    et = now.astimezone(mc.ET)
+    day = et.date()
+    if not mc.is_trading_day(day):
+        return None
+    if et.hour * 60 + et.minute < PREMARKET_START_ET or now >= mc.session_bounds_utc(day)[0]:
+        return None
+    return day
+
+
+def _before(bar: object, day) -> bool:
+    """True when a snapshot bar is dated (ET) before `day`. Undated bars are not."""
+    d = _et_date(bar.get("t")) if isinstance(bar, dict) else None
+    return d is not None and d < day
+
+
+def premarket_quote(snapshot: object, day) -> Optional[Dict[str, Any]]:
+    """{last, prev_close, trade_ts} from today's latest pre-market trade, or None.
+
+    None until a trade prints today: a latest trade from an earlier day is last
+    night's after-hours print. The previous close is the newest daily bar dated
+    before today."""
+    if not isinstance(snapshot, dict):
+        return None
+    trade = snapshot.get("latestTrade") or {}
+    if not isinstance(trade, dict) or _et_date(trade.get("t")) != day:
+        return None
+    prev = None
+    for key in ("dailyBar", "prevDailyBar"):
+        bar = snapshot.get(key) or {}
+        if _before(bar, day):
+            prev = _sf(bar.get("c"))
+            break
+    last = _sf(trade.get("p"))
+    if not last or not prev or last <= 0 or prev <= 0:
+        return None
+    return {"last": last, "prev_close": prev, "trade_ts": trade.get("t")}
+
+
+def fetch_premarket_volume(symbols: List[str], day, now=None) -> Optional[Dict[str, Dict[str, float]]]:
+    """Per symbol: pre-market volume, dollar volume, VWAP, high and low from today's
+    1-minute bars since 4:00 ET. None when the bars can't be fetched (callers then
+    skip volume filters rather than drop every name). Cached for a minute."""
+    import datetime as _dt
+    import time as _time
+
+    from analytics import market_calendar as mc
+
+    syms = sorted({str(s).strip().upper() for s in symbols or [] if str(s).strip()})
+    if not syms:
+        return {}
+    key = (day, tuple(syms))
+    hit = _pm_bars_cache.get(key)
+    if hit and _time.monotonic() - hit[0] < _PM_BARS_TTL_S:
+        return hit[1]
+    start = _dt.datetime.combine(day, _dt.time(4, 0), tzinfo=mc.ET).astimezone(_dt.timezone.utc)
+    try:
+        from data.price_alpaca import fetch_minute_bars_multi
+
+        bars = fetch_minute_bars_multi(syms, start.strftime("%Y-%m-%dT%H:%M:%SZ"), max_pages=20)
+    except Exception:
+        return None
+    out: Dict[str, Dict[str, float]] = {}
+    for sym, rows in (bars or {}).items():
+        vol = dollars = 0.0
+        hi: Optional[float] = None
+        lo: Optional[float] = None
+        for b in rows or []:
+            v, c = _sf(b.get("v")) or 0.0, _sf(b.get("c"))
+            if c is None:
+                continue
+            vol += v
+            dollars += v * c
+            h, l = _sf(b.get("h")) or c, _sf(b.get("l")) or c
+            hi = h if hi is None else max(hi, h)
+            lo = l if lo is None else min(lo, l)
+        if vol > 0:
+            out[str(sym).upper()] = {"volume": vol, "dollar_volume": dollars, "vwap": dollars / vol,
+                                     "high": hi, "low": lo}
+    if len(_pm_bars_cache) > 64:
+        _pm_bars_cache.clear()
+    _pm_bars_cache[key] = (_time.monotonic(), out)
+    return out
+
+
+# Pre-market dollar-volume floor. The free IEX feed carries a small slice of
+# pre-market volume, so its floor is far lower than the consolidated (SIP) one.
+PREMARKET_MIN_DOLLAR_VOL = {"iex": 50_000, "sip": 1_000_000}
+
+
+def build_premarket_gappers(
+    symbols: List[str],
+    *,
+    now=None,
+    limit: int = 40,
+    min_price: float = 2.0,
+    min_abs_pct: float = 2.0,
+    min_dollar_volume: Optional[float] = None,
+    candidates: int = 150,
+) -> List[Dict[str, Any]]:
+    """Names gapping before the open, biggest % move vs yesterday's close first.
+
+    Only names with a trade today count. The `candidates` biggest moves get a
+    pre-market volume check (1-minute bars since 4:00 ET) and must clear the
+    feed's dollar-volume floor. [] outside pre-market. Never raises."""
+    day = premarket_session_date(now)
+    if day is None or not symbols:
+        return []
+    feed = _get_alpaca_data_feed()
+    snapshots = fetch_alpaca_snapshots(list(symbols), feed=feed)
+    moves: List[Dict[str, Any]] = []
+    for sym, snap in (snapshots or {}).items():
+        q = premarket_quote(snap, day)
+        if q is None or q["last"] < min_price:
+            continue
+        pct = (q["last"] / q["prev_close"] - 1.0) * 100.0
+        if abs(pct) < min_abs_pct:
+            continue
+        moves.append({"ticker": str(sym).upper(), "last": round(q["last"], 2),
+                      "previous_close": round(q["prev_close"], 2), "pct": round(pct, 2),
+                      "trade_ts": q["trade_ts"]})
+    moves.sort(key=lambda r: abs(r["pct"]), reverse=True)
+    moves = moves[:candidates]
+    vols = fetch_premarket_volume([m["ticker"] for m in moves], day) if moves else {}
+    floor = min_dollar_volume if min_dollar_volume is not None else PREMARKET_MIN_DOLLAR_VOL.get(feed, 50_000)
+    out: List[Dict[str, Any]] = []
+    for m in moves:
+        v = (vols or {}).get(m["ticker"])
+        if vols is not None and (v is None or v["dollar_volume"] < floor):
+            continue  # too thin to trade (skipped only when volume could be checked)
+        out.append({**m,
+                    "pm_volume": int(v["volume"]) if v else None,
+                    "pm_dollar_volume": round(v["dollar_volume"]) if v else None,
+                    "pm_vwap": round(v["vwap"], 2) if v else None,
+                    "pm_high": round(v["high"], 2) if v and v.get("high") is not None else None,
+                    "pm_low": round(v["low"], 2) if v and v.get("low") is not None else None,
+                    "market_data_feed": feed})
+        if len(out) >= limit:
+            break
+    return out
+
+
 def build_day_trader_metrics(
     symbols: List[str],
     *,
     with_rvol: bool = True,
+    now=None,
 ) -> List[Dict[str, Any]]:
     """Return per-symbol intraday day-trader metrics from Alpaca snapshots.
 
@@ -499,6 +678,11 @@ def build_day_trader_metrics(
       { ticker, open, last, change_dollar, chg_pct, gap_pct, adx, vwap,
         vs_vwap_pct, rvol, volume, supertrend, supertrend_direction, ewo }
     Symbols with no usable price are dropped. Sorted by |chg_pct| descending.
+
+    Pre-market (4:00 ET to the open) the snapshot still holds yesterday's
+    session, so rows instead measure today's latest trade against yesterday's
+    close, with pre-market volume/VWAP on the display path; names with no
+    trade yet today keep a price but no change (row["traded_today"] is False).
     """
     if not symbols:
         return []
@@ -517,6 +701,8 @@ def build_day_trader_metrics(
     ema_crosses = fetch_ema_crosses(syms) if with_rvol else {}
     range_metrics = fetch_daily_range_metrics(syms) if with_rvol else {}
     source = _alpaca_source(data_feed)
+    pm_day = premarket_session_date(now)
+    pm_vols = (fetch_premarket_volume(syms, pm_day) or {}) if (pm_day and with_rvol) else {}
 
     rows: List[Dict[str, Optional[float]]] = []
     for sym in syms:
@@ -547,6 +733,20 @@ def build_day_trader_metrics(
         vs_vwap_pct = ((last - vwap) / vwap * 100.0) if vwap else None
         avg = avg_vol.get(sym)
         rvol = (volume / avg) if (volume and avg) else None
+        premarket = pm_day is not None and _before(daily_bar, pm_day)
+        traded_today = None
+        if premarket:
+            # dailyBar is yesterday's session: its close is today's reference and
+            # nothing from it (open, VWAP, volume, gap) describes today.
+            q = premarket_quote(snap, pm_day)
+            traded_today = q is not None
+            prev_close = _sf(daily_bar.get("c"))
+            pm = pm_vols.get(sym) or {}
+            today_open = close_today = gap_pct = change_dollar = rvol = None
+            vwap = _sf(pm.get("vwap"))
+            volume = _sf(pm.get("volume"))
+            chg_pct = ((q["last"] - prev_close) / prev_close * 100.0) if (q and prev_close) else None
+            vs_vwap_pct = ((last - vwap) / vwap * 100.0) if (vwap and q) else None
 
         row = {
                 "ticker": sym,
@@ -592,6 +792,11 @@ def build_day_trader_metrics(
                 # ATR% / Donchian / Bollinger (daily). Empty dict when not fetched.
                 **(range_metrics.get(sym) or {}),
             }
+        if premarket:
+            row.update({"session": "premarket", "traded_today": traded_today,
+                        "previous_close_timeframe": "last_regular_session_daily_bar",
+                        "vwap_timeframe": "premarket_1min_bars", "vwap_formula": "sum(c*v)/sum(v) since 04:00 ET",
+                        "volume_timeframe": "premarket_1min_bars_since_0400_et"})
         row.update(calculate_day_trader_row_audit(row))
         rows.append(row)
 
