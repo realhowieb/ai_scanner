@@ -132,6 +132,909 @@
     "title": "AIText",
     "type": "object"
    },
+   "AdminActivity": {
+    "properties": {
+     "ai_usage": {
+      "items": {
+       "$ref": "#/components/schemas/AdminAiUsage"
+      },
+      "title": "Ai Usage",
+      "type": "array"
+     },
+     "login_attempts": {
+      "items": {
+       "$ref": "#/components/schemas/AdminLoginAttempt"
+      },
+      "title": "Login Attempts",
+      "type": "array"
+     },
+     "scan_errors": {
+      "items": {
+       "$ref": "#/components/schemas/AdminScanError"
+      },
+      "title": "Scan Errors",
+      "type": "array"
+     }
+    },
+    "required": [
+     "scan_errors",
+     "login_attempts",
+     "ai_usage"
+    ],
+    "title": "AdminActivity",
+    "type": "object"
+   },
+   "AdminAiUsage": {
+    "properties": {
+     "calls": {
+      "title": "Calls",
+      "type": "integer"
+     },
+     "feature": {
+      "title": "Feature",
+      "type": "string"
+     }
+    },
+    "required": [
+     "feature",
+     "calls"
+    ],
+    "title": "AdminAiUsage",
+    "type": "object"
+   },
+   "AdminAudit": {
+    "properties": {
+     "events": {
+      "items": {
+       "$ref": "#/components/schemas/AdminAuditEvent"
+      },
+      "title": "Events",
+      "type": "array"
+     }
+    },
+    "required": [
+     "events"
+    ],
+    "title": "AdminAudit",
+    "type": "object"
+   },
+   "AdminAuditEvent": {
+    "properties": {
+     "action": {
+      "title": "Action",
+      "type": "string"
+     },
+     "actor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Actor"
+     },
+     "at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "At"
+     },
+     "details": {
+      "title": "Details",
+      "type": "string"
+     },
+     "target": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target"
+     }
+    },
+    "required": [
+     "action",
+     "details"
+    ],
+    "title": "AdminAuditEvent",
+    "type": "object"
+   },
+   "AdminCheck": {
+    "properties": {
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     },
+     "ms": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ms"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "ok",
+       "warn",
+       "error",
+       "not_configured"
+      ],
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "status"
+    ],
+    "title": "AdminCheck",
+    "type": "object"
+   },
+   "AdminCreateUser": {
+    "properties": {
+     "active": {
+      "default": true,
+      "title": "Active",
+      "type": "boolean"
+     },
+     "email": {
+      "maxLength": 254,
+      "title": "Email",
+      "type": "string"
+     },
+     "full_name": {
+      "maxLength": 120,
+      "title": "Full Name",
+      "type": "string"
+     },
+     "password": {
+      "maxLength": 200,
+      "title": "Password",
+      "type": "string"
+     },
+     "tier": {
+      "default": "basic",
+      "enum": [
+       "basic",
+       "pro",
+       "premium"
+      ],
+      "title": "Tier",
+      "type": "string"
+     }
+    },
+    "required": [
+     "email",
+     "full_name",
+     "password"
+    ],
+    "title": "AdminCreateUser",
+    "type": "object"
+   },
+   "AdminDbCheck": {
+    "properties": {
+     "bad_symbols": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bad Symbols"
+     },
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "earnings_rows": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Earnings Rows"
+     },
+     "issues": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Issues",
+      "type": "array"
+     }
+    },
+    "required": [
+     "connected",
+     "issues"
+    ],
+    "title": "AdminDbCheck",
+    "type": "object"
+   },
+   "AdminEarningsCache": {
+    "properties": {
+     "dated_rows": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dated Rows"
+     },
+     "last_refresh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Refresh"
+     }
+    },
+    "title": "AdminEarningsCache",
+    "type": "object"
+   },
+   "AdminEarningsRefresh": {
+    "properties": {
+     "dated": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dated"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "finished_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Finished At"
+     },
+     "started_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started At"
+     },
+     "started_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started By"
+     },
+     "state": {
+      "enum": [
+       "idle",
+       "running",
+       "done",
+       "failed"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "symbols": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Symbols"
+     }
+    },
+    "required": [
+     "state"
+    ],
+    "title": "AdminEarningsRefresh",
+    "type": "object"
+   },
+   "AdminEmailHealth": {
+    "properties": {
+     "day": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Day"
+     },
+     "jobs": {
+      "items": {
+       "$ref": "#/components/schemas/AdminEmailJob"
+      },
+      "title": "Jobs",
+      "type": "array"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "jobs"
+    ],
+    "title": "AdminEmailHealth",
+    "type": "object"
+   },
+   "AdminEmailJob": {
+    "properties": {
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     },
+     "job": {
+      "title": "Job",
+      "type": "string"
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Label"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     }
+    },
+    "required": [
+     "job"
+    ],
+    "title": "AdminEmailJob",
+    "type": "object"
+   },
+   "AdminHealth": {
+    "properties": {
+     "email": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/AdminEmailHealth"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "health_score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Health Score"
+     },
+     "human_action": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Human Action"
+     },
+     "incidents": {
+      "items": {
+       "$ref": "#/components/schemas/AdminIncident"
+      },
+      "title": "Incidents",
+      "type": "array"
+     },
+     "next_expected_scan": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next Expected Scan"
+     },
+     "operations": {
+      "additionalProperties": true,
+      "description": "Same as GET /v1/admin/operations",
+      "title": "Operations",
+      "type": "object"
+     },
+     "subsystems": {
+      "items": {
+       "$ref": "#/components/schemas/AdminSubsystem"
+      },
+      "title": "Subsystems",
+      "type": "array"
+     }
+    },
+    "required": [
+     "operations",
+     "subsystems",
+     "incidents"
+    ],
+    "title": "AdminHealth",
+    "type": "object"
+   },
+   "AdminIncident": {
+    "properties": {
+     "age_hours": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Age Hours"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "recommended_action": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Recommended Action"
+     },
+     "severity": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Severity"
+     },
+     "summary": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Summary"
+     }
+    },
+    "title": "AdminIncident",
+    "type": "object"
+   },
+   "AdminLoginAttempt": {
+    "properties": {
+     "at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "At"
+     },
+     "ip_address": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ip Address"
+     },
+     "success": {
+      "title": "Success",
+      "type": "boolean"
+     },
+     "username": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Username"
+     }
+    },
+    "required": [
+     "success"
+    ],
+    "title": "AdminLoginAttempt",
+    "type": "object"
+   },
+   "AdminProviders": {
+    "properties": {
+     "checked_at": {
+      "title": "Checked At",
+      "type": "string"
+     },
+     "checks": {
+      "items": {
+       "$ref": "#/components/schemas/AdminCheck"
+      },
+      "title": "Checks",
+      "type": "array"
+     },
+     "earnings_cache": {
+      "$ref": "#/components/schemas/AdminEarningsCache"
+     }
+    },
+    "required": [
+     "checked_at",
+     "checks",
+     "earnings_cache"
+    ],
+    "title": "AdminProviders",
+    "type": "object"
+   },
+   "AdminScanError": {
+    "properties": {
+     "at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "At"
+     },
+     "context": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Context"
+     },
+     "error_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error Type"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "tickers": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tickers"
+     },
+     "username": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Username"
+     }
+    },
+    "required": [
+     "message"
+    ],
+    "title": "AdminScanError",
+    "type": "object"
+   },
+   "AdminSetRole": {
+    "properties": {
+     "is_admin": {
+      "title": "Is Admin",
+      "type": "boolean"
+     },
+     "username": {
+      "maxLength": 254,
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "is_admin"
+    ],
+    "title": "AdminSetRole",
+    "type": "object"
+   },
+   "AdminSubsystem": {
+    "properties": {
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Label"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "AdminSubsystem",
+    "type": "object"
+   },
+   "AdminUpdateUser": {
+    "properties": {
+     "is_active": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Is Active"
+     },
+     "tier": {
+      "anyOf": [
+       {
+        "enum": [
+         "basic",
+         "pro",
+         "premium"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tier"
+     },
+     "username": {
+      "maxLength": 254,
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username"
+    ],
+    "title": "AdminUpdateUser",
+    "type": "object"
+   },
+   "AdminUser": {
+    "properties": {
+     "created_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Created At"
+     },
+     "email_verified": {
+      "title": "Email Verified",
+      "type": "boolean"
+     },
+     "full_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Full Name"
+     },
+     "is_active": {
+      "title": "Is Active",
+      "type": "boolean"
+     },
+     "is_admin": {
+      "title": "Is Admin",
+      "type": "boolean"
+     },
+     "tier": {
+      "title": "Tier",
+      "type": "string"
+     },
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "tier",
+     "is_active",
+     "is_admin",
+     "email_verified"
+    ],
+    "title": "AdminUser",
+    "type": "object"
+   },
+   "AdminUserTarget": {
+    "properties": {
+     "username": {
+      "maxLength": 254,
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username"
+    ],
+    "title": "AdminUserTarget",
+    "type": "object"
+   },
+   "AdminUsers": {
+    "properties": {
+     "users": {
+      "items": {
+       "$ref": "#/components/schemas/AdminUser"
+      },
+      "title": "Users",
+      "type": "array"
+     }
+    },
+    "required": [
+     "users"
+    ],
+    "title": "AdminUsers",
+    "type": "object"
+   },
    "Alert": {
     "properties": {
      "created_at": {
@@ -10106,6 +11009,220 @@
     "summary": "Readyz"
    }
   },
+  "/v1/admin/activity": {
+   "get": {
+    "operationId": "admin_activity_v1_admin_activity_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminActivity"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Recent scan errors, sign-in attempts and AI usage (30 days)",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/audit": {
+   "get": {
+    "operationId": "admin_audit_v1_admin_audit_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminAudit"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Recent admin actions, newest first",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/db-check": {
+   "post": {
+    "operationId": "admin_db_check_v1_admin_db_check_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminDbCheck"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Database reachability and earnings-table hygiene",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/earnings-refresh": {
+   "get": {
+    "operationId": "admin_earnings_status_v1_admin_earnings_refresh_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminEarningsRefresh"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "The last manual earnings refresh",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   },
+   "post": {
+    "operationId": "admin_earnings_refresh_v1_admin_earnings_refresh_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminEarningsRefresh"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Refresh the earnings calendar now (FMP then Finnhub, in the background)",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/health": {
+   "get": {
+    "operationId": "admin_health_v1_admin_health_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminHealth"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "System health snapshot and email delivery",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
   "/v1/admin/operations": {
    "get": {
     "operationId": "operations_health_v1_admin_operations_get",
@@ -10137,6 +11254,306 @@
     "summary": "Operations Health",
     "tags": [
      "operations (admin only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/providers": {
+   "get": {
+    "operationId": "admin_providers_v1_admin_providers_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminProviders"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Live checks: database, Alpaca, FMP, Finnhub, billing",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/users": {
+   "get": {
+    "operationId": "admin_users_v1_admin_users_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminUsers"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Every account with plan, active, admin and verification status",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   },
+   "post": {
+    "operationId": "admin_create_user_v1_admin_users_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdminCreateUser"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Create an account (email username, password rules as sign-up)",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/users/resend-verification": {
+   "post": {
+    "operationId": "admin_resend_verification_v1_admin_users_resend_verification_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdminUserTarget"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Email the account a new verification link",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/users/role": {
+   "post": {
+    "operationId": "admin_set_role_v1_admin_users_role_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdminSetRole"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Grant or revoke the admin role (not your own)",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/users/update": {
+   "post": {
+    "operationId": "admin_update_user_v1_admin_users_update_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdminUpdateUser"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Change an account's plan or active flag",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/users/verify": {
+   "post": {
+    "operationId": "admin_verify_user_v1_admin_users_verify_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdminUserTarget"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mark an account's email verified",
+    "tags": [
+     "admin (admins only)"
     ],
     "x-internal": true
    }

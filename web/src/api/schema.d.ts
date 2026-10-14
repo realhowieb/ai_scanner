@@ -47,6 +47,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent scan errors, sign-in attempts and AI usage (30 days) */
+        get: operations["admin_activity_v1_admin_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent admin actions, newest first */
+        get: operations["admin_audit_v1_admin_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/db-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Database reachability and earnings-table hygiene */
+        post: operations["admin_db_check_v1_admin_db_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/earnings-refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The last manual earnings refresh */
+        get: operations["admin_earnings_status_v1_admin_earnings_refresh_get"];
+        put?: never;
+        /** Refresh the earnings calendar now (FMP then Finnhub, in the background) */
+        post: operations["admin_earnings_refresh_v1_admin_earnings_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** System health snapshot and email delivery */
+        get: operations["admin_health_v1_admin_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/operations": {
         parameters: {
             query?: never;
@@ -58,6 +144,109 @@ export interface paths {
         get: operations["operations_health_v1_admin_operations_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live checks: database, Alpaca, FMP, Finnhub, billing */
+        get: operations["admin_providers_v1_admin_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every account with plan, active, admin and verification status */
+        get: operations["admin_users_v1_admin_users_get"];
+        put?: never;
+        /** Create an account (email username, password rules as sign-up) */
+        post: operations["admin_create_user_v1_admin_users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/resend-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Email the account a new verification link */
+        post: operations["admin_resend_verification_v1_admin_users_resend_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Grant or revoke the admin role (not your own) */
+        post: operations["admin_set_role_v1_admin_users_role_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change an account's plan or active flag */
+        post: operations["admin_update_user_v1_admin_users_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark an account's email verified */
+        post: operations["admin_verify_user_v1_admin_users_verify_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1766,6 +1955,254 @@ export interface components {
             text?: string | null;
             /** Ticker */
             ticker?: string | null;
+        };
+        /** AdminActivity */
+        AdminActivity: {
+            /** Ai Usage */
+            ai_usage: components["schemas"]["AdminAiUsage"][];
+            /** Login Attempts */
+            login_attempts: components["schemas"]["AdminLoginAttempt"][];
+            /** Scan Errors */
+            scan_errors: components["schemas"]["AdminScanError"][];
+        };
+        /** AdminAiUsage */
+        AdminAiUsage: {
+            /** Calls */
+            calls: number;
+            /** Feature */
+            feature: string;
+        };
+        /** AdminAudit */
+        AdminAudit: {
+            /** Events */
+            events: components["schemas"]["AdminAuditEvent"][];
+        };
+        /** AdminAuditEvent */
+        AdminAuditEvent: {
+            /** Action */
+            action: string;
+            /** Actor */
+            actor?: string | null;
+            /** At */
+            at?: string | null;
+            /** Details */
+            details: string;
+            /** Target */
+            target?: string | null;
+        };
+        /** AdminCheck */
+        AdminCheck: {
+            /** Detail */
+            detail?: string | null;
+            /** Ms */
+            ms?: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "warn" | "error" | "not_configured";
+        };
+        /** AdminCreateUser */
+        AdminCreateUser: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** Password */
+            password: string;
+            /**
+             * Tier
+             * @default basic
+             * @enum {string}
+             */
+            tier: "basic" | "pro" | "premium";
+        };
+        /** AdminDbCheck */
+        AdminDbCheck: {
+            /** Bad Symbols */
+            bad_symbols?: number | null;
+            /** Connected */
+            connected: boolean;
+            /** Earnings Rows */
+            earnings_rows?: number | null;
+            /** Issues */
+            issues: string[];
+        };
+        /** AdminEarningsCache */
+        AdminEarningsCache: {
+            /** Dated Rows */
+            dated_rows?: number | null;
+            /** Last Refresh */
+            last_refresh?: string | null;
+        };
+        /** AdminEarningsRefresh */
+        AdminEarningsRefresh: {
+            /** Dated */
+            dated?: number | null;
+            /** Error */
+            error?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Started By */
+            started_by?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "idle" | "running" | "done" | "failed";
+            /** Symbols */
+            symbols?: number | null;
+        };
+        /** AdminEmailHealth */
+        AdminEmailHealth: {
+            /** Day */
+            day?: string | null;
+            /** Jobs */
+            jobs: components["schemas"]["AdminEmailJob"][];
+            /** Status */
+            status: string;
+        };
+        /** AdminEmailJob */
+        AdminEmailJob: {
+            /** Detail */
+            detail?: string | null;
+            /** Job */
+            job: string;
+            /** Label */
+            label?: string | null;
+            /** Status */
+            status?: string | null;
+        };
+        /** AdminHealth */
+        AdminHealth: {
+            email?: components["schemas"]["AdminEmailHealth"] | null;
+            /** Health Score */
+            health_score?: number | null;
+            /** Human Action */
+            human_action?: string | null;
+            /** Incidents */
+            incidents: components["schemas"]["AdminIncident"][];
+            /** Next Expected Scan */
+            next_expected_scan?: string | null;
+            /**
+             * Operations
+             * @description Same as GET /v1/admin/operations
+             */
+            operations: {
+                [key: string]: unknown;
+            };
+            /** Subsystems */
+            subsystems: components["schemas"]["AdminSubsystem"][];
+        };
+        /** AdminIncident */
+        AdminIncident: {
+            /** Age Hours */
+            age_hours?: number | null;
+            /** Id */
+            id?: string | null;
+            /** Recommended Action */
+            recommended_action?: string | null;
+            /** Severity */
+            severity?: string | null;
+            /** Summary */
+            summary?: string | null;
+        };
+        /** AdminLoginAttempt */
+        AdminLoginAttempt: {
+            /** At */
+            at?: string | null;
+            /** Ip Address */
+            ip_address?: string | null;
+            /** Success */
+            success: boolean;
+            /** Username */
+            username?: string | null;
+        };
+        /** AdminProviders */
+        AdminProviders: {
+            /** Checked At */
+            checked_at: string;
+            /** Checks */
+            checks: components["schemas"]["AdminCheck"][];
+            earnings_cache: components["schemas"]["AdminEarningsCache"];
+        };
+        /** AdminScanError */
+        AdminScanError: {
+            /** At */
+            at?: string | null;
+            /** Context */
+            context?: string | null;
+            /** Error Type */
+            error_type?: string | null;
+            /** Message */
+            message: string;
+            /** Tickers */
+            tickers?: number | null;
+            /** Username */
+            username?: string | null;
+        };
+        /** AdminSetRole */
+        AdminSetRole: {
+            /** Is Admin */
+            is_admin: boolean;
+            /** Username */
+            username: string;
+        };
+        /** AdminSubsystem */
+        AdminSubsystem: {
+            /** Label */
+            label?: string | null;
+            /** Name */
+            name: string;
+            /** Reason */
+            reason?: string | null;
+            /** Status */
+            status?: string | null;
+        };
+        /** AdminUpdateUser */
+        AdminUpdateUser: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Tier */
+            tier?: ("basic" | "pro" | "premium") | null;
+            /** Username */
+            username: string;
+        };
+        /** AdminUser */
+        AdminUser: {
+            /** Created At */
+            created_at?: string | null;
+            /** Email Verified */
+            email_verified: boolean;
+            /** Full Name */
+            full_name?: string | null;
+            /** Is Active */
+            is_active: boolean;
+            /** Is Admin */
+            is_admin: boolean;
+            /** Tier */
+            tier: string;
+            /** Username */
+            username: string;
+        };
+        /** AdminUserTarget */
+        AdminUserTarget: {
+            /** Username */
+            username: string;
+        };
+        /** AdminUsers */
+        AdminUsers: {
+            /** Users */
+            users: components["schemas"]["AdminUser"][];
         };
         /** Alert */
         Alert: {
@@ -5653,6 +6090,252 @@ export interface operations {
             };
         };
     };
+    admin_activity_v1_admin_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActivity"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_audit_v1_admin_audit_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAudit"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_db_check_v1_admin_db_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDbCheck"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_earnings_status_v1_admin_earnings_refresh_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEarningsRefresh"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_earnings_refresh_v1_admin_earnings_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEarningsRefresh"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_health_v1_admin_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHealth"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     operations_health_v1_admin_operations_get: {
         parameters: {
             query?: never;
@@ -5682,6 +6365,313 @@ export interface operations {
             };
             /** @description Admins only */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_providers_v1_admin_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProviders"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_users_v1_admin_users_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUsers"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_create_user_v1_admin_users_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateUser"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_resend_verification_v1_admin_users_resend_verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUserTarget"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_set_role_v1_admin_users_role_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminSetRole"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_update_user_v1_admin_users_update_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUpdateUser"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_verify_user_v1_admin_users_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUserTarget"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
