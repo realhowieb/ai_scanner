@@ -77,7 +77,7 @@ export const usePreviousPage = () => useContext(PreviousPage);
 const SECTIONS: [string, string][] = [
   ["/today", "Today"], ["/scanner/custom", "Custom scan"], ["/scanner/history", "Scan history"], ["/scanner", "Scanner"],
   ["/watchlists", "Watchlists"], ["/alerts", "Alerts"], ["/track-record", "Track record"], ["/brief", "Market Brief"],
-  ["/account", "Account"], ["/journal", "Journal"], ["/day-trader", "Day Trader"], ["/stocks", "Stock Intelligence"], ["/paper", "Paper trading"],
+  ["/account", "Account"], ["/journal", "Journal"], ["/day-trader", "Day Trader"], ["/stocks", "Stock Intelligence"], ["/paper", "Paper trading"], ["/admin", "Admin"],
 ];
 
 /** "Back to Watchlists" for /watchlists?id=3; null when there is no previous page here. */
@@ -153,6 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link role="menuitem" href="/journal" className="menu-item" onClick={() => setMenu(false)}>Journal</Link>
                 <Link role="menuitem" href="/paper" className="menu-item" onClick={() => setMenu(false)}>Paper trading</Link>
                 <Link role="menuitem" href="/pricing" className="menu-item" onClick={() => setMenu(false)}>Plans and pricing</Link>
+                {me?.is_admin && <Link role="menuitem" href="/admin" className="menu-item" onClick={() => setMenu(false)}>Admin</Link>}
                 <button role="menuitem" type="button" className="menu-item" onClick={() => void signOut()}>Sign out</button>
               </div>
             )}

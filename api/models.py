@@ -1147,3 +1147,151 @@ class OutcomeSymbol(_OutcomeEnvelope):
     ticker: str
     horizons: List[OutcomeMetrics]
     observations: OutcomePage
+
+
+# ---- admin console (admins only) ----------------------------------------------------------------
+class AdminUser(BaseModel):
+    username: str
+    full_name: Optional[str] = None
+    tier: str
+    is_active: bool
+    is_admin: bool
+    email_verified: bool
+    created_at: Optional[str] = None
+
+
+class AdminUsers(BaseModel):
+    users: List[AdminUser]
+
+
+class AdminCreateUser(BaseModel):
+    email: str = Field(max_length=254)
+    full_name: str = Field(max_length=120)
+    password: str = Field(max_length=200)
+    tier: Literal["basic", "pro", "premium"] = "basic"
+    active: bool = True
+
+
+class AdminUserTarget(BaseModel):
+    username: str = Field(max_length=254)
+
+
+class AdminUpdateUser(AdminUserTarget):
+    tier: Optional[Literal["basic", "pro", "premium"]] = None
+    is_active: Optional[bool] = None
+
+
+class AdminSetRole(AdminUserTarget):
+    is_admin: bool
+
+
+class AdminAuditEvent(BaseModel):
+    at: Optional[str] = None
+    actor: Optional[str] = None
+    action: str
+    target: Optional[str] = None
+    details: str
+
+
+class AdminAudit(BaseModel):
+    events: List[AdminAuditEvent]
+
+
+class AdminSubsystem(BaseModel):
+    name: str
+    status: Optional[str] = None
+    label: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class AdminIncident(BaseModel):
+    severity: Optional[str] = None
+    id: Optional[str] = None
+    age_hours: Optional[float] = None
+    summary: Optional[str] = None
+    recommended_action: Optional[str] = None
+
+
+class AdminEmailJob(BaseModel):
+    job: str
+    label: Optional[str] = None
+    status: Optional[str] = None
+    detail: Optional[str] = None
+
+
+class AdminEmailHealth(BaseModel):
+    status: str
+    day: Optional[str] = None
+    jobs: List[AdminEmailJob]
+
+
+class AdminHealth(BaseModel):
+    operations: Dict[str, Any] = Field(description="Same as GET /v1/admin/operations")
+    health_score: Optional[float] = None
+    human_action: Optional[str] = None
+    next_expected_scan: Optional[str] = None
+    subsystems: List[AdminSubsystem]
+    incidents: List[AdminIncident]
+    email: Optional[AdminEmailHealth] = None
+
+
+class AdminCheck(BaseModel):
+    name: str
+    status: Literal["ok", "warn", "error", "not_configured"]
+    detail: Optional[str] = None
+    ms: Optional[float] = None
+
+
+class AdminEarningsCache(BaseModel):
+    last_refresh: Optional[str] = None
+    dated_rows: Optional[int] = None
+
+
+class AdminProviders(BaseModel):
+    checked_at: str
+    checks: List[AdminCheck]
+    earnings_cache: AdminEarningsCache
+
+
+class AdminScanError(BaseModel):
+    at: Optional[str] = None
+    context: Optional[str] = None
+    username: Optional[str] = None
+    tickers: Optional[int] = None
+    error_type: Optional[str] = None
+    message: str
+
+
+class AdminLoginAttempt(BaseModel):
+    at: Optional[str] = None
+    username: Optional[str] = None
+    success: bool
+    ip_address: Optional[str] = None
+
+
+class AdminAiUsage(BaseModel):
+    feature: str
+    calls: int
+
+
+class AdminActivity(BaseModel):
+    scan_errors: List[AdminScanError]
+    login_attempts: List[AdminLoginAttempt]
+    ai_usage: List[AdminAiUsage]
+
+
+class AdminDbCheck(BaseModel):
+    connected: bool
+    earnings_rows: Optional[int] = None
+    bad_symbols: Optional[int] = None
+    issues: List[str]
+
+
+class AdminEarningsRefresh(BaseModel):
+    state: Literal["idle", "running", "done", "failed"]
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    started_by: Optional[str] = None
+    symbols: Optional[int] = None
+    dated: Optional[int] = None
+    error: Optional[str] = None
