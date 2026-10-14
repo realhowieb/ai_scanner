@@ -128,7 +128,7 @@ Admin) is the name to show. Tickers are upper case.
 
 ## Postman
 
-Import `https://hsf-api.onrender.com/openapi.json` (File → Import → Link; OpenAPI
+Import `https://hsf-api-v1.onrender.com/openapi.json` (File → Import → Link; OpenAPI
 3.1). Set a collection variable `base_url`, and after login paste the access token
 into the collection's Bearer auth. Never save real passwords or tokens in a shared
 collection. Smoke sequence:
@@ -213,7 +213,7 @@ test-account credentials from `ACC_<ROLE>_EMAIL` / `ACC_<ROLE>_PASSWORD`
 deletes it at the end. Alerts use a threshold that cannot fire, so no email is
 sent. Use dedicated test accounts only.
 
-    API_BASE_URL=https://hsf-api.onrender.com python scripts/api_acceptance.py \
+    API_BASE_URL=https://hsf-api-v1.onrender.com python scripts/api_acceptance.py \
         --allow-writes --origin https://<frontend origin> --report acceptance.json
 
 ## Tests

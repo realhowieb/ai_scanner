@@ -24,8 +24,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  API_BASE_URL: ${{ vars.LIVE_API_URL || 'https://hsf-api.onrender.com' }}
-  WEB_BASE_URL: ${{ vars.LIVE_WEB_URL || 'https://hsf-web-beta.onrender.com' }}
+  API_BASE_URL: ${{ vars.LIVE_API_URL || 'https://hsf-api-v1.onrender.com' }}
+  WEB_BASE_URL: ${{ vars.LIVE_WEB_URL || 'https://hsf-web-v1.onrender.com' }}
 
 jobs:
   api:
