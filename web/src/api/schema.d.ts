@@ -2502,6 +2502,11 @@ export interface components {
             supertrend_direction?: unknown | null;
             /** Ticker */
             ticker: string;
+            /**
+             * Traded Today
+             * @description Pre-market only: false until the name trades today; such rows have no change and no DT score
+             */
+            traded_today?: boolean | null;
             /** Volume */
             volume?: number | null;
             /** Vs Vwap Pct */

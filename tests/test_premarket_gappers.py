@@ -92,6 +92,19 @@ class DayTraderPremarketTests(unittest.TestCase):
         self.assertEqual(r["chg_pct"], 25.0)
 
 
+class WaitingScoreTests(unittest.TestCase):
+    def test_no_trade_today_gets_no_score(self):
+        """Yesterday's Supertrend + EWO alone used to score 100 "Strong" before the first trade."""
+        from analytics.day_trade_display import enrich_row
+
+        base = {"ticker": "XP", "last": 31.38, "supertrend_direction": 1, "ewo": 2.0, "chg_pct": None}
+        waiting = enrich_row({**base, "traded_today": False}, "premarket")
+        self.assertEqual((waiting["day_trade_score"], waiting["dt_quality"], waiting["dt_direction"]),
+                         (None, "insufficient", "neutral"))
+        self.assertTrue(waiting["traded_today"] is False)
+        traded = enrich_row({**base, "traded_today": True, "chg_pct": 3.0, "vs_vwap_pct": 1.0}, "premarket")
+        self.assertIsNotNone(traded["day_trade_score"])
+
 class GapperTests(unittest.TestCase):
     SNAPS = {
         "UP": snap(115.0, TODAY_TRADE),                  # +15%

@@ -125,7 +125,13 @@ def slim_row(row: Dict[str, Any]) -> Dict[str, Any]:
 def enrich_row(row: Dict[str, Any], state: str, now: Optional[dt.datetime] = None) -> Dict[str, Any]:
     """One web row: live fields plus score, tier, direction, reasons, conflicts,
     session columns and quote flags."""
-    intel = day_trade_intelligence(scoring_view(row, state))
+    if row.get("traded_today") is False:
+        # Pre-market with no trade yet today: only yesterday's daily indicators
+        # (Supertrend, EWO) are left, so a score would rate yesterday, not today.
+        intel = {"score": None, "quality": "insufficient", "direction": "neutral",
+                 "reasons": [], "conflicts": []}
+    else:
+        intel = day_trade_intelligence(scoring_view(row, state))
     flags = quote_flags(row, now)
     return {
         **slim_row(row),
