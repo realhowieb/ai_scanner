@@ -254,7 +254,7 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
 def _unsubscribe_url(token: Optional[str]) -> Optional[str]:
     if not token:
         return None
-    base = (os.getenv("APP_BASE_URL", "") or "https://hsfinestai.streamlit.app").rstrip("/")
+    base = (os.getenv("APP_BASE_URL", "") or "https://hsf-web-v1.onrender.com").rstrip("/")
     return f"{base}/unsubscribe?t={token}&k=alerts"
 
 
