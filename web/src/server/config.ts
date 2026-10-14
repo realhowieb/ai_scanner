@@ -2,7 +2,7 @@
 import "server-only";
 
 export function apiBaseUrl(): string {
-  const raw = (process.env.HSF_API_BASE_URL || "https://hsf-api.onrender.com").trim().replace(/\/+$/, "");
+  const raw = (process.env.HSF_API_BASE_URL || "https://hsf-api-v1.onrender.com").trim().replace(/\/+$/, "");
   const url = new URL(raw);
   if (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopback(url.hostname))) {
     throw new Error("HSF_API_BASE_URL must be https (http only for localhost)");

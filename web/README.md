@@ -99,7 +99,7 @@ New → Web Service → this repository.
 
 | Setting | Value |
 |---|---|
-| Branch | `dev` for a beta service first (e.g. `hsf-web-beta`); `main` later |
+| Branch | `main` for the live service (`hsf-web-v1`); `dev` for the preview (`hsf-web-beta`) |
 | Root directory | `web` |
 | Runtime | Node 22 (`web/.node-version`) |
 | Build command | `npm ci && npm run build` |
@@ -110,7 +110,7 @@ Environment variables:
 
 | Name | Value |
 |---|---|
-| `HSF_API_BASE_URL` | `https://hsf-api.onrender.com` (server-only; https required) |
+| `HSF_API_BASE_URL` | `https://hsf-api-v1.onrender.com` (server-only; https required) |
 | `NEXT_PUBLIC_STREAMLIT_URL` | The Streamlit app, for "Create account", "Forgot password", "Open classic app" (default `https://hsfinestai.streamlit.app`). Read at build time. |
 | `WEB_BETA_ALLOWED_EMAILS` | Optional, comma-separated: only these accounts can sign in (invite-only beta). Unset = every HSF account. |
 | `NODE_VERSION` | `22` (optional; `.node-version` already says 22) |
