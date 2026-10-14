@@ -35,7 +35,7 @@ const group = (key: string, column: string, n: number, median: number) => ({ key
   positive_rate: 0.6, average_return: median, median_return: median, average_mfe: 0.05, average_mae: -0.02 });
 function signals(q: URLSearchParams) {
   const breakout = q.get("signal") === "Breakout";
-  return { days: 30, min_n: Number(q.get("min_n") ?? 30),
+  return { days: 30, min_n: Number(q.get("min_n") ?? 30), loaded_observations: 20000, truncated: true,
     options: { signals: ["Breakout", "Momentum"], cohorts: ["CANDIDATE"], horizons: ["1d", "5d"], sessions: ["REGULAR"], score_low: 40, score_high: 95 },
     summary: { observations: breakout ? 777 : 50, matured: 40, n: 40, sufficient: true, positive_rate: 0.6, average_return: 0.012, median_return: 0.008, average_mfe: 0.05, average_mae: -0.02 },
     by_signal_horizon: [group("Breakout", "5d", 35, 0.021), group("Momentum", "5d", 4, -0.01)],
@@ -141,6 +141,7 @@ describe("Admin page", () => {
     await u.click(screen.getByRole("tab", { name: "Research" }));
     expect(await screen.findByText("+2.1%")).toBeInTheDocument();
     expect(screen.getByText("n=4")).toBeInTheDocument();
+    expect(screen.getByText(/Based on the newest 20,000 observations/)).toBeInTheDocument();
     await u.selectOptions(screen.getByRole("combobox", { name: "Signal" }), "Breakout");
     expect(await screen.findByText("777")).toBeInTheDocument();
     expect(await screen.findByText("Need 20 trading days")).toBeInTheDocument();
