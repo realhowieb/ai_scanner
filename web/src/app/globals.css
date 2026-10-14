@@ -80,6 +80,12 @@ button, input, select { font: inherit; color: inherit; }
   .tabbar .more-menu { left: auto; right: 0; top: auto; bottom: 56px; }
   .shell { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
 }
+.install-hint { max-width: 1360px; margin: 12px auto 0; padding: 10px 16px; display: flex; align-items: center; gap: 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+.install-hint p { margin: 0; flex: 1 1 auto; }
+.install-hint .btn { flex: 0 0 auto; min-height: 36px; }
+.share-glyph { display: inline-flex; vertical-align: -2px; color: var(--accent); }
+@media (max-width: 900px) { .install-hint { margin: 12px 16px 0; } }
 .navlink { color: var(--muted); font-size: 14px; font-weight: 500; padding: 10px 12px; border-radius: 8px; white-space: nowrap; }
 .navlink:hover { color: var(--text); }
 .navlink[aria-current="page"] { color: var(--text); background: var(--raise); }
