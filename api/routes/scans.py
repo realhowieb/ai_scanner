@@ -22,7 +22,7 @@ class ScanFilters(BaseModel):
     session: Literal["regular", "premarket", "afterhours"] = Field("regular", description="premarket / afterhours: Pro+")
     profile: Literal["regular", "aggressive", "conservative"] = "regular"
     top_n: Optional[int] = Field(None, ge=5, le=10_000,
-                                 description="Rows to return; at most the plan's cap (Free 25, Pro 100, Premium 200). "
+                                 description="Rows to return; at most the plan's cap (Starter 25, Pro 100, Premium 200). "
                                              "Default min(25, cap)")
     max_nasdaq: Optional[int] = Field(None, ge=100, le=100_000,
                                       description="NASDAQ ticker cap, Pro up to 4000 (default 1200); "

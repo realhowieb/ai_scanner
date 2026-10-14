@@ -50,7 +50,7 @@ function serve(routes: Record<string, Response | ((c: Call) => Response)>) {
 
 const PLANS = {
   tiers: [
-    { id: "basic", name: "Free", price: "Free", yearly_price: null, tagline: "Discover.", alert_limit: 1, highlights: ["HSF Score"] },
+    { id: "basic", name: "Starter", price: "Free", yearly_price: null, tagline: "Discover.", alert_limit: 1, highlights: ["HSF Score"] },
     { id: "pro", name: "Pro", price: "$25/mo", yearly_price: "$250/yr", tagline: "Monitor.", alert_limit: 5, highlights: ["Day Trader"] },
     { id: "premium", name: "Premium", price: "$40/mo", yearly_price: "$400/yr", tagline: "Research.", alert_limit: 25, highlights: ["AI scan summaries"] },
   ],

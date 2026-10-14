@@ -166,7 +166,7 @@ def test_background_email_and_alert_workers_enforce_tiers():
 def test_customer_plan_name_never_uses_basic_label():
     from ui.plan_labels import plan_label
 
-    assert plan_label("basic") == "Free"
+    assert plan_label("basic") == "Starter"
     for rel in ("ui/account_card.py", "ui/pricing.py", "pages/billing.py"):
         assert "You're on Basic" not in (ROOT / rel).read_text()
 

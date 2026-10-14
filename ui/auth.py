@@ -346,7 +346,7 @@ def auth_ui():
                     su_agree = st.checkbox("I agree to use this tool for educational/informational purposes only.", key="signup_agree")
                     signup_clicked = st.form_submit_button("Start scanning free")
 
-            with st.expander("What you get with a Free account", expanded=True):
+            with st.expander("What you get with Starter (free)", expanded=True):
                 st.write("- ✔️ The latest full-market ranking, updated through the trading day")
                 st.write("- ✔️ HSF Score (0–100 opportunity ranking) with the evidence behind it")
                 st.write("- ✔️ HSF Score and basic Stock Intelligence for current opportunities")

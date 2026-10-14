@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HAS_ST = importlib.util.find_spec("streamlit") is not None
 
 CTA = {"basic": "Upgrade to Pro", "pro": "Upgrade to Premium", "premium": None, "admin": None}
-LABEL = {"basic": "Free", "pro": "Pro", "premium": "Premium", "admin": "Admin"}
+LABEL = {"basic": "Starter", "pro": "Pro", "premium": "Premium", "admin": "Admin"}
 
 # Phrases in the card copy → the entitlement that makes each one true.
 CLAIMS = {
@@ -99,7 +99,7 @@ class ArchitectureTests(unittest.TestCase):
             if path.name in ("account_card.py", "app_runtime.py"):
                 continue          # the card itself; app_runtime keeps the unused legacy card for import safety
             for i, line in enumerate(path.read_text().splitlines(), 1):
-                if re.search(r"sidebar\.markdown\(f?\"\*\*Plan:\*\*|You're on (Free|Pro|Premium)\"", line):
+                if re.search(r"sidebar\.markdown\(f?\"\*\*Plan:\*\*|You're on (Free|Starter|Pro|Premium)\"", line):
                     hits.append(f"{path.name}:{i}")
         self.assertEqual(hits, [])
 

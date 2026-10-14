@@ -181,7 +181,7 @@ STRIPE_YEARLY_LINKS = {
 # ---------- Tier Metadata ----------
 TIERS_CONFIG = {
     "basic": {
-        "name": "Free",
+        "name": "Starter",
         "price_monthly": 0,
         "price_yearly": 0,
         "features": ["SP500 Scan"],

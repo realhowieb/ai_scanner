@@ -104,7 +104,7 @@ class PublicAcquisitionCopyTests(unittest.TestCase):
         self.assertIn("Explore the platform", hero)
         self.assertIn("What HSF AI surfaces and why", showcase)
         self.assertIn("Thousands of symbols", details)
-        self.assertIn("Free", details)
+        self.assertIn("Starter", details)
         self.assertIn("Pro", details)
         self.assertIn("Premium", details)
 

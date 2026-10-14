@@ -266,7 +266,7 @@ def register(app: FastAPI) -> None:
                          409: {"description": "You already have this alert"},
                          422: {"description": "Invalid type, ticker, threshold or direction"}})
     def alert_create(body: AlertCreate, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        """Same types and rules as the web app. Free 1 alert, Pro 5, Premium 25."""
+        """Same types and rules as the web app. Starter 1 alert, Pro 5, Premium 25."""
         ent = entitlements_for(account)
         try:
             created = user_data.create_alert(_user(account), ent["alert_limit"], body.type, ticker=body.ticker,
