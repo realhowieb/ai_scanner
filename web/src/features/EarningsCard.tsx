@@ -30,7 +30,7 @@ export function EarningsCard({ tickers, watched }: { tickers: string[] | null; w
   if (!allowed) {
     return (
       <Card title="Earnings this week" id="earn">
-        <Locked title="Earnings timing is part of Pro" plan="pro">See which names on your watchlist and in today&apos;s top setups report this week.</Locked>
+        <Locked title="Earnings this week is part of Pro" plan="pro">Who reports today is free on the Brief. Pro shows which names on your watchlist and in today&apos;s top setups report this week, before or after the bell.</Locked>
       </Card>
     );
   }
