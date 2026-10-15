@@ -39,7 +39,7 @@ describe("Earnings this week", () => {
 
   it("locks below Pro without asking the API, and reports a failure", async () => {
     const { unmount } = render(<SessionProvider initialMe={me("basic")}><EarningsCard tickers={["AAA"]} watched={new Set()} /></SessionProvider>);
-    expect(screen.getByText("Earnings timing is part of Pro")).toBeInTheDocument();
+    expect(screen.getByText("Earnings this week is part of Pro")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
     unmount();
     fetchMock.mockResolvedValue(jsonResponse({ detail: "down" }, 503));

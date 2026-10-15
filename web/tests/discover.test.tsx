@@ -63,9 +63,22 @@ describe("Market Brief", () => {
     const sectors = screen.getByRole("region", { name: "Sectors" });
     expect(within(sectors).queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText("PreBreakout is part of Premium")).toBeInTheDocument();
-    expect(screen.getByText("The earnings calendar is part of Pro")).toBeInTheDocument();
+    expect(screen.getByText("The 7-day earnings calendar is part of Pro")).toBeInTheDocument();
     expect(urls().map((u) => u.pathname)).toEqual(["/api/hsf/v1/brief"]);            // no Pro calls on Free
     expect(screen.queryByRole("region", { name: "AI market narrative" })).not.toBeInTheDocument();
+  });
+
+  it("keeps Reporting today free on Starter and says the week is Pro", async () => {
+    route({ "/v1/brief": () => jsonResponse(brief({ earnings_today: ["JPM"] })) });
+    const { unmount } = wrap(<BriefView />, "basic");
+    const today = await screen.findByRole("region", { name: "Reporting today" });
+    expect(within(today).getByRole("link", { name: "JPM" })).toBeInTheDocument();
+    expect(within(today).getByText(/Free on every plan/)).toBeInTheDocument();
+    unmount();
+    route({ "/v1/brief": () => jsonResponse(brief({ earnings_today: ["JPM"] })), "/v1/earnings": () => jsonResponse([]) });
+    wrap(<BriefView />, "pro");
+    const proToday = await screen.findByRole("region", { name: "Reporting today" });
+    expect(within(proToday).queryByText(/Free on every plan/)).not.toBeInTheDocument();
   });
 
   it("Pro gets the earnings calendar; not-ready and failed briefs are explained", async () => {

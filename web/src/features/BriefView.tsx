@@ -85,7 +85,7 @@ function Earnings() {
   const e = useApi(allowed ? "earnings:7" : null, (signal) => unwrap(api.GET("/v1/earnings", { params: { query: { days: 7 } }, signal })));
   return (
     <Card title="Earnings this week" id="earnings">
-      {!allowed ? <Locked title="The earnings calendar is part of Pro" plan="pro">Which names report in the next 7 days, before or after the bell.</Locked>
+      {!allowed ? <Locked title="The 7-day earnings calendar is part of Pro" plan="pro">Who reports today stays free. Pro adds the next 7 days, before or after the bell.</Locked>
         : e.error && !e.data ? <ErrorState error={e.error} onRetry={e.reload} what="the earnings calendar" />
         : !e.data ? <Skeleton rows={4} label="Loading earnings" />
         : e.data.length === 0 ? <Empty title="No earnings on file for the next 7 days." />
@@ -162,7 +162,10 @@ function BriefBody({ b }: { b: Brief }) {
           </Card>
           </details>
           {b.earnings_today.length > 0 && (
-            <Card title="Reporting today" id="et"><div className="chips">{b.earnings_today.map((t) => <TickerLink key={t} ticker={t} />)}</div></Card>
+            <Card title="Reporting today" id="et">
+              <div className="chips">{b.earnings_today.map((t) => <TickerLink key={t} ticker={t} />)}</div>
+              {!can("can_earnings") && <p className="cap">Free on every plan. Pro adds the 7-day calendar with before or after the bell timing.</p>}
+            </Card>
           )}
         </aside>
       </div>
