@@ -75,6 +75,15 @@ class AcquisitionAttributionTests(unittest.TestCase):
         self.assertNotIn("new@example.com", repr(params))
         self.assertEqual(len(params[8]), 24)
 
+        # Every value must be adaptable by psycopg (a bare dict is not, and the insert
+        # then failed silently, so no acquisition event was ever stored).
+        from psycopg import adapters
+        from psycopg.adapt import PyFormat
+
+        for value in params:
+            if value is not None:
+                adapters.get_dumper(type(value), PyFormat.AUTO)
+
     def test_authenticated_session_event_is_not_emitted_on_every_rerun(self):
         from ui import acquisition
 
