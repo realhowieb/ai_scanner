@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -74,6 +75,12 @@ class AcquisitionAttributionTests(unittest.TestCase):
         self.assertEqual(params[2], "reddit")
         self.assertNotIn("new@example.com", repr(params))
         self.assertEqual(len(params[8]), 24)
+
+        # psycopg can't adapt a bare dict; the insert then failed silently, so no
+        # acquisition event was ever stored. Metadata goes in as JSON text.
+        for value in params:
+            self.assertIsInstance(value, (str, type(None)))
+        self.assertEqual(json.loads(params[10]), {})
 
     def test_authenticated_session_event_is_not_emitted_on_every_rerun(self):
         from ui import acquisition
