@@ -404,6 +404,38 @@ class ScanRecordReadTest(unittest.TestCase):
         self.assertIsNone(rec["features"].values["price"])
 
 
+class ScannerSupersedesBriefReadTest(unittest.TestCase):
+    """Research readers keep one score source per snapshot, as the Track record readers:
+    a Brief row is dropped once its snapshot has Scanner rows (no double-counted tickers)."""
+
+    def _sqls(self, call):
+        from db import research_datasets as rdb
+
+        cur = mock.MagicMock()
+        cur.description = []
+        cur.fetchall.return_value = []
+        conn = mock.MagicMock()
+        conn.cursor.return_value = cur
+        with mock.patch.object(rdb, "_present_optional_columns", return_value=[]), \
+                mock.patch.object(rdb, "_rows", return_value=[{"fired_at": ts("2026-10-14T13:40:07")}]):
+            call(rdb, conn)
+        return [c[0][0] for c in cur.execute.call_args_list]
+
+    def test_readers_apply_the_filter(self):
+        from db.signal_outcomes import _SCANNER_SUPERSEDES_BRIEF
+
+        lo, hi = ts("2026-10-01T00:00:00"), ts("2026-10-16T00:00:00")
+        for call in (lambda rdb, c: rdb.fetch_readiness_rows(lo, hi, conn=c),
+                     lambda rdb, c: rdb.fetch_opportunity_rows(lo, hi, conn=c),
+                     lambda rdb, c: rdb.fetch_opportunity_rows(lo, hi, ids=[1], conn=c)):
+            sql = self._sqls(call)[-1]
+            self.assertIn(_SCANNER_SUPERSEDES_BRIEF, sql)
+            self.assertLess(sql.index(_SCANNER_SUPERSEDES_BRIEF), sql.index("ORDER BY"))
+        one, snap = self._sqls(lambda rdb, c: rdb.fetch_opportunity_row(5, conn=c))
+        self.assertNotIn(_SCANNER_SUPERSEDES_BRIEF, one)  # a row asked for by id is still returned
+        self.assertIn(_SCANNER_SUPERSEDES_BRIEF, snap)
+
+
 class RegistryImmutabilityTest(unittest.TestCase):
     def test_insert_once_never_updates(self):
         from db import research_datasets as rdb
