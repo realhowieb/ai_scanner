@@ -21,6 +21,7 @@ class AccountApiTestCase(ApiTestCase):
     def setUp(self):
         super().setUp()
         self.created, self.sent, self.verified = [], [], set()
+        self.verification_down = False
         self.reset_tokens = {}       # token -> username
         self.password_updates, self.web_signouts, self.app_signouts = [], [], []
         self.prefs = {}
@@ -33,7 +34,7 @@ class AccountApiTestCase(ApiTestCase):
             ("db.users.update_neon_user_password", self._update_pw),
             ("db.email_verification.create_verification_token", lambda u: f"verify-{u}-token"),
             ("db.email_verification.consume_verification_token", self._consume_verify),
-            ("db.email_verification.is_email_verified", lambda u: u in self.verified),
+            ("db.email_verification.email_verification_status", self._verification_status),
             ("ui.email_utils.send_verification_email", lambda to_address, verify_url: self.sent.append(("verify", to_address, verify_url)) or True),
             ("ui.email_utils.send_password_reset_email", lambda to, url: self.sent.append(("reset", to, url)) or True),
             ("db.password_reset.create_reset_token", self._new_reset),
@@ -47,6 +48,13 @@ class AccountApiTestCase(ApiTestCase):
             p(target, side_effect=fn).start()
 
     # fakes ---------------------------------------------------------------------------------------
+    def _verification_status(self, username):
+        if self.verification_down:
+            from db.email_verification import VerificationUnavailable
+
+            raise VerificationUnavailable("database unavailable")
+        return username in self.verified
+
     def _create(self, email, password_hash, tier="basic", full_name=None):
         self.created.append({"email": email, "hash": password_hash, "tier": tier, "name": full_name})
         self.accounts[email] = {"username": email, "full_name": full_name, "password": password_hash,
@@ -156,6 +164,18 @@ class VerificationTests(AccountApiTestCase):
         self.assertIn("already verified", self.client.post("/v1/me/verify-email", headers=h).json()["message"])
         self.assertEqual(self.client.post("/v1/me/verify-email").status_code, 401)
 
+    def test_verification_outage_is_unavailable_not_verified(self):
+        h = self.auth(self.login().json()["access_token"])
+        self.verified.add("pro@example.com")
+        self.verification_down = True
+        r = self.client.post("/v1/me/verify-email", headers=h)
+        self.assertEqual(r.status_code, 503)                      # not "already verified", no email sent
+        self.assertEqual(r.json()["code"], "verification_unavailable")
+        self.assertEqual(self.sent, [])
+        me = self.client.get("/v1/me", headers=h)
+        self.assertEqual(me.status_code, 200)                     # signing in still works
+        self.assertFalse(me.json()["email_verified"])             # never shown verified when unconfirmed
+
 
 class PasswordResetTests(AccountApiTestCase):
     def test_same_answer_whether_or_not_the_account_exists(self):
@@ -225,6 +245,30 @@ class PrefsAndBillingTests(AccountApiTestCase):
         self.assertEqual(r.json(), {"url": "https://checkout.stripe.com/c/pay/cs_test_1", "mode": "checkout"})
         m.assert_called_once_with("pro@example.com", "premium", "year")
         self.assertEqual(self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "gold"}).status_code, 422)
+
+    def test_checkout_blocked_while_verification_is_unavailable(self):
+        """A failed lookup is a 503 with its own code, distinct from the 403 for an unverified email."""
+        self.verified.add("pro@example.com")                      # verified, but the lookup can't say so
+        self.verification_down = True
+        with mock.patch("ui.checkout.create_checkout_url") as m:
+            r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.json()["code"], "verification_unavailable")
+        self.assertIn("can't confirm your email verification", r.json()["detail"])
+        self.assertEqual(r.headers.get("Retry-After"), "30")
+        m.assert_not_called()
+        self.verification_down = False
+        self.verified.discard("pro@example.com")
+        r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
+        self.assertEqual((r.status_code, r.json()["detail"]), (403, "Please verify your email before upgrading."))
+
+    def test_checkout_blocked_when_the_verification_module_fails(self):
+        self.verified.add("pro@example.com")
+        with mock.patch("db.email_verification.email_verification_status", side_effect=ImportError("psycopg")), \
+                mock.patch("ui.checkout.create_checkout_url") as m:
+            r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
+        self.assertEqual(r.status_code, 503)
+        m.assert_not_called()
 
     def test_billing_failures_never_leak_details(self):
         self.verified.add("pro@example.com")

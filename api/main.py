@@ -203,6 +203,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         return JSONResponse({"detail": "Billing is temporarily unavailable. Please try again in a minute."},
                             status_code=502)
 
+    @app.exception_handler(acct.VerificationUnavailable)
+    def _verification_down(_request: Request, exc: Exception) -> JSONResponse:
+        log.warning("email verification lookup failed: %s", type(exc.__cause__ or exc).__name__)
+        return JSONResponse({"detail": "We can't confirm your email verification right now. "
+                                       "Please try again in a few minutes.",
+                             "code": "verification_unavailable"},
+                            status_code=503, headers={"Retry-After": "30"})
+
     @app.get("/readyz", response_model=models.Ready,
              responses={503: {"description": "Database unavailable, or (strict=true) a scheduled scan was missed"}})
     def readyz(strict: bool = Query(False, description=(

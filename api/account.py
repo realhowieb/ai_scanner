@@ -102,13 +102,27 @@ def verify_email(token: str) -> str:
     return str(user).strip().lower()
 
 
-def is_verified(email: str) -> bool:
-    try:
-        from db.email_verification import is_email_verified
+class VerificationUnavailable(RuntimeError):
+    """The email verification status couldn't be read right now (503). Not the same
+    as an unverified account: the gate stays closed until the status can be confirmed."""
 
-        return bool(is_email_verified(email))
-    except Exception:
-        return True  # same fail-open rule as the web app's gate
+
+def verification_status(email: str) -> bool:
+    """True when verified, False when not; VerificationUnavailable when the lookup fails."""
+    try:
+        from db.email_verification import email_verification_status
+
+        return bool(email_verification_status(email))
+    except Exception as e:  # db.email_verification.VerificationUnavailable, import or driver errors
+        raise VerificationUnavailable("email verification lookup failed") from e
+
+
+def is_verified(email: str) -> bool:
+    """For display (/v1/me): True only when confirmed. Gates use verification_status."""
+    try:
+        return verification_status(email)
+    except VerificationUnavailable:
+        return False
 
 
 # ---- password reset -------------------------------------------------------------------------------
@@ -227,7 +241,7 @@ class BillingUnavailable(RuntimeError):
 def checkout_url(username: str, plan: str, interval: str) -> Dict[str, str]:
     """Stripe checkout (new subscribers) or plan-change portal (existing ones), the
     same call the web Billing page makes. Requires a verified email, as on the web."""
-    if not is_verified(username):
+    if not verification_status(username):  # VerificationUnavailable (503) blocks too
         raise AccountError("Please verify your email before upgrading.", status=403)
     from ui.checkout import create_checkout_url
 
