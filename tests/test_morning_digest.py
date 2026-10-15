@@ -204,6 +204,49 @@ class EarningsRailTests(unittest.TestCase):
             self.assertEqual(_annotate_earnings(lines), lines)
 
 
+class PreopenDigestTests(unittest.TestCase):
+    """Before the open (the 8:35 ET digest) there is no gap or session change yet."""
+
+    def _pm(self, ticker, *, traded, chg=None, prior=None, last=100.0, prev=99.0):
+        return {"ticker": ticker, "last": last, "previous_close": prev, "chg_pct": chg,
+                "gap_pct": None, "session": "premarket", "traded_today": traded,
+                "prior_session_chg_pct": prior}
+
+    def _compose(self, watch, gappers, preopen=True):
+        with mock.patch("scheduler.morning_digest._track_record_line", return_value=("", "")):
+            return _compose("u@example.com", watch, gappers, [], [], preopen_gappers=preopen)
+
+    def test_watchlist_shows_premarket_and_yesterday_columns(self):
+        html, text = self._compose(
+            [self._pm("NVDA", traded=True, chg=-2.5, prior=1.2, last=215.9, prev=221.49),
+             self._pm("AMT", traded=False, prior=-0.8, last=180.1, prev=179.47)], [])
+        self.assertIn("Pre-mkt %", html)
+        self.assertIn("Yesterday %", html)
+        self.assertNotIn("Gap %", html.split("Top market gappers")[0])
+        self.assertIn("-2.50%", html)
+        self.assertIn("-0.80%", html)
+        self.assertIn("179.47", html)     # no trade today: yesterday's close, not an after-hours print
+        self.assertNotIn("180.1", html)
+        self.assertIn("NVDA: 215.9 (pre-mkt -2.50%, yesterday +1.20%)", text)
+
+    def test_empty_preopen_gappers_say_so(self):
+        html, _ = self._compose([], [])
+        self.assertIn("No S&amp;P 500 or NASDAQ stock is gapping", html)
+
+    def test_preopen_gappers_table(self):
+        html, text = self._compose([], [{"ticker": "MU", "last": 110.0, "chg_pct": 10.0,
+                                         "gap_pct": None, "session": "premarket"}])
+        part = html.split("Top market gappers")[1]
+        self.assertIn("+10.00%", part)
+        self.assertNotIn("Gap %", part)
+        self.assertIn("MU: 110.0 (pre-mkt +10.00%)", text)
+
+    def test_regular_session_layout_unchanged(self):
+        html, _ = self._compose([_row()], [_row(ticker="NVDA")], preopen=False)
+        self.assertIn("Gap %", html)
+        self.assertNotIn("Pre-mkt %", html)
+
+
 import importlib.util as _ilu  # noqa: E402
 
 _PANDAS = _ilu.find_spec("pandas") is not None
@@ -233,9 +276,33 @@ class GappersFallbackTests(unittest.TestCase):
     def test_market_gappers_falls_back_when_live_empty(self):
         from scheduler.morning_digest import _market_gappers
 
-        with mock.patch("market_data.build_day_trader_metrics", return_value=[]):
+        with mock.patch("market_data.build_day_trader_metrics", return_value=[]), \
+                mock.patch("market_data.premarket_session_date", return_value=None):
             out = _market_gappers(self._df(), limit=3)
         self.assertEqual([r["ticker"] for r in out], ["AAOI", "VLO", "SKHY"])
+
+    def test_preopen_uses_live_premarket_gappers_not_yesterdays_scan(self):
+        import datetime as dt
+
+        from scheduler.morning_digest import _market_gappers
+
+        live = [{"ticker": "MU", "last": 110.0, "previous_close": 100.0, "pct": 10.0}]
+        with mock.patch("market_data.premarket_session_date", return_value=dt.date(2026, 10, 15)), \
+                mock.patch("market_data.build_premarket_gappers", return_value=live) as bpg, \
+                mock.patch("ui.day_trader._movers_universe", return_value=["MU", "NVDA"]):
+            out = _market_gappers(self._df(), limit=3)
+        self.assertEqual(bpg.call_args.args[0], ["MU", "NVDA"])
+        self.assertEqual(out, [{"ticker": "MU", "last": 110.0, "chg_pct": 10.0,
+                                "gap_pct": None, "session": "premarket"}])
+
+    def test_preopen_with_no_gappers_yet_is_empty_not_stale(self):
+        import datetime as dt
+
+        from scheduler.morning_digest import _market_gappers
+
+        with mock.patch("market_data.premarket_session_date", return_value=dt.date(2026, 10, 15)), \
+                mock.patch("market_data.build_premarket_gappers", side_effect=RuntimeError("feed down")):
+            self.assertEqual(_market_gappers(self._df(), limit=3), [])
 
 
 @unittest.skipUnless(_PANDAS, "_latest_snapshot_df loads DataFrames")
