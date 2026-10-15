@@ -31,9 +31,9 @@ except Exception:
     tier = "Starter"
 verified = None
 try:
-    from db.email_verification import is_email_verified
+    from db.email_verification import email_verification_status
 
-    verified = is_email_verified(_username)
+    verified = email_verification_status(_username)  # raises when unreadable -> "unknown"
 except Exception:
     verified = None
 try:

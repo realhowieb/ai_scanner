@@ -92,7 +92,7 @@ class ExportTests(PaidApiTestCase):
                 mock.patch("api.account.get_email_prefs", return_value={"digest": True}), \
                 mock.patch("api.devices.list_devices", return_value=[]), \
                 mock.patch("api.history.saved_runs", return_value=[]), \
-                mock.patch("api.account.is_verified", return_value=True):
+                mock.patch("api.account.verification_status", return_value=True):
             r = self.get("pro@example.com", "/v1/me/export")
         self.assertEqual(r.status_code, 200)
         self.assertIn("attachment", r.headers["content-disposition"])

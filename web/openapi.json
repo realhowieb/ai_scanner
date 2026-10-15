@@ -14257,6 +14257,9 @@
      },
      "502": {
       "description": "Billing service unavailable"
+     },
+     "503": {
+      "description": "Email verification can't be confirmed right now; try again"
      }
     },
     "security": [
@@ -15454,6 +15457,9 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "503": {
+      "description": "Email verification status or sending temporarily unavailable"
      }
     },
     "security": [

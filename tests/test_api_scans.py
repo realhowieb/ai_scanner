@@ -362,6 +362,66 @@ class ScanJobPostgresTests(unittest.TestCase):
         done = sj.cancel_job("pro@example.com", job2["id"])                     # finished: unchanged
         self.assertEqual(done["error"], sj.CANCELLED)
 
+    def _admit_concurrently(self, users):
+        """Call create_job for every user at once (one thread each) and sort the outcomes.
+        Every read is slowed so a check-then-insert gap would let callers overlap."""
+        import threading
+
+        sj, real_rows = self.sj, self.sj._rows
+        start = threading.Barrier(len(users))
+        out = {"ok": [], "busy": 0, "in_progress": 0, "other": []}
+        lock = threading.Lock()
+
+        def slow_rows(cur):
+            rows = real_rows(cur)
+            time.sleep(0.05)
+            return rows
+
+        def one(user):
+            start.wait(10)
+            try:
+                job = sj.create_job(user, "sp500", {})
+                key, val = "ok", job["id"]
+            except sj.ScanBusy:
+                key, val = "busy", None
+            except sj.ScanInProgress:
+                key, val = "in_progress", None
+            except Exception as e:  # pragma: no cover - surfaced by the assertion below
+                key, val = "other", repr(e)
+            with lock:
+                if key in ("ok", "other"):
+                    out[key].append(val)
+                else:
+                    out[key] += 1
+
+        with mock.patch.object(sj, "_rows", side_effect=slow_rows):
+            threads = [threading.Thread(target=one, args=(u,)) for u in users]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(60)
+        return out
+
+    def _active(self):
+        import psycopg
+
+        with psycopg.connect(PG_URL) as conn:
+            return conn.execute("SELECT username FROM api_scan_jobs WHERE status IN ('queued', 'running')").fetchall()
+
+    def test_shared_capacity_holds_under_concurrent_admission(self):
+        """Different accounts racing for the last slots never push the service past MAX_ACTIVE_JOBS."""
+        with mock.patch.object(self.sj, "MAX_ACTIVE_JOBS", 3):
+            out = self._admit_concurrently([f"user{i}@example.com" for i in range(12)])
+        self.assertEqual(out["other"], [])
+        self.assertEqual((len(out["ok"]), out["busy"]), (3, 9), out)
+        self.assertEqual(len(self._active()), 3)
+
+    def test_one_active_scan_per_account_under_concurrent_admission(self):
+        out = self._admit_concurrently(["pro@example.com"] * 8)
+        self.assertEqual(out["other"], [])
+        self.assertEqual((len(out["ok"]), out["in_progress"]), (1, 7), out)
+        self.assertEqual(self._active(), [("pro@example.com",)])
+
     def test_running_job_without_heartbeat_expires(self):
         import psycopg
 
