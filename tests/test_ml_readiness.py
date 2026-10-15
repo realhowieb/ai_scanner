@@ -166,6 +166,17 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(col["duplicates"]["exact_same_ticker_same_instant"], 1)
         self.assertEqual(col["late_frozen_observations"], 1)
 
+    def test_partial_snapshot_size_depends_on_freeze_source(self):
+        brief = [opp(i, f"B{i}", "2026-10-01T16:40:00") for i in range(5)]
+        scanner = [{**opp(10 + i, f"S{i}", "2026-10-02T16:40:00"), "signal_type": mr.SCANNER_SIGNAL_TYPE}
+                   for i in range(mr.SCANNER_TOP_N_PER_SNAPSHOT)]
+        short = [{**opp(50 + i, f"P{i}", "2026-10-05T16:40:00"), "signal_type": mr.SCANNER_SIGNAL_TYPE}
+                 for i in range(5)]
+        col = mr.build_report(brief + scanner + short, [], now=NOW)["collection"]
+        self.assertEqual(col["partial_snapshots"], 1)  # only the 5-row Scanner snapshot
+        self.assertEqual(col["expected_observations_per_trading_day"],
+                         len(mr.mc.SCAN_SLOTS_UTC) * mr.SCANNER_TOP_N_PER_SNAPSHOT)
+
     def test_lookahead_and_recorded_before_timestamp_are_pit_violations(self):
         row = {**opp(1, "AAA", "2026-10-01T16:40:00"), "created_at": ts("2026-10-01T10:00:00")}
         rep = mr.build_report([row], [], now=NOW)

@@ -49,7 +49,10 @@ DATASET_START = _dt.date(2026, 9, 1)
 PRIMARY_HORIZON = 5
 HORIZONS = (1, 3, 5)
 UNCOLLECTED_HORIZONS = (10, 15, 20)
-TOP_N_PER_SNAPSHOT = 5          # ui.opportunities.build_opportunities(top_n=5): rows frozen per snapshot
+BRIEF_TOP_N_PER_SNAPSHOT = 5    # ui.opportunities.build_opportunities(top_n=5): Brief freezes until 2026-10-13
+SCANNER_TOP_N_PER_SNAPSHOT = 25 # analytics.opportunity_freeze.FREEZE_TOP_N: Scanner freezes since 2026-10-13
+TOP_N_PER_SNAPSHOT = SCANNER_TOP_N_PER_SNAPSHOT  # rows frozen per snapshot now
+SCANNER_SIGNAL_TYPE = "hsf_scanner"  # db.signal_outcomes.SCANNER_SIGNAL_TYPE
 
 # ---- Maturation timing (mirrors the outcome cron, analytics.signal_outcomes) ---------------------------
 CRON_MIN_AGE = _dt.timedelta(days=8)       # db.signal_outcomes.list_pending_outcomes(min_age_days=8)
@@ -333,6 +336,13 @@ def _slot_of(ts: _dt.datetime) -> Optional[str]:
     return None
 
 
+def _snapshot_size(members: Sequence[Mapping[str, Any]]) -> int:
+    """Rows a complete snapshot holds: Scanner top 25, or the older Brief top 5."""
+    if any(m.get("signal_type") == SCANNER_SIGNAL_TYPE for m in members):
+        return SCANNER_TOP_N_PER_SNAPSHOT
+    return BRIEF_TOP_N_PER_SNAPSHOT
+
+
 def collection_audit(raw_rows: Sequence[Mapping[str, Any]], now: _dt.datetime, *,
                      stages: Mapping[int, str]) -> Dict[str, Any]:
     """Expected vs actual collection per trading day, missing scan windows,
@@ -370,7 +380,7 @@ def collection_audit(raw_rows: Sequence[Mapping[str, Any]], now: _dt.datetime, *
     per_slot = {s: {"expected": len(days), "with_snapshot": sum(1 for d in days if (d, s) in slot_hits)}
                 for s in slot_names}
     non_trading = sum(n for d, n in by_day_obs.items() if not mc.is_trading_day(d))
-    partial = sum(1 for m in snaps.values() if len(m) < TOP_N_PER_SNAPSHOT)
+    partial = sum(1 for m in snaps.values() if len(m) < _snapshot_size(m))
     exact_dups = sum(c - 1 for c in Counter((str(r["ticker"]).upper(), rd.iso(r["fired_at"]))
                                             for r in rows).values() if c > 1)
     signal_days = sum(len(v) for v in by_day_signal.values())
@@ -390,8 +400,9 @@ def collection_audit(raw_rows: Sequence[Mapping[str, Any]], now: _dt.datetime, *
         "trading_days_in_range": len(days),
         "trading_days_with_observations": sum(1 for d in days if by_day_obs.get(d)),
         "expected_observations_per_trading_day": expected_per_day,
-        "expected_basis": f"{len(mc.SCAN_SLOTS_UTC)} scheduled slots x top {TOP_N_PER_SNAPSHOT} opportunities "
-                          "(an upper bound: a slot whose snapshot is unchanged freezes nothing new)",
+        "expected_basis": f"{len(mc.SCAN_SLOTS_UTC)} scheduled slots x top {TOP_N_PER_SNAPSHOT} Scanner setups "
+                          "(an upper bound: a slot whose snapshot is unchanged freezes nothing new; "
+                          f"snapshots before 2026-10-13 froze the Brief's top {BRIEF_TOP_N_PER_SNAPSHOT})",
         "actual_observations_per_trading_day": _rate(sum(by_day_obs.get(d, 0) for d in days), len(days)),
         "actual_signal_days_per_trading_day": _rate(sum(len(by_day_signal.get(d, ())) for d in days), len(days)),
         "recent_trading_days": len(recent),

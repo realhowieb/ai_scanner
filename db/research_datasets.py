@@ -20,6 +20,7 @@ import json
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from db.engine import get_neon_conn, schema_once
+from db.signal_outcomes import _SCANNER_SUPERSEDES_BRIEF
 
 OPTIONAL_OUTCOME_COLUMNS = ("benchmark_return_1d", "benchmark_return_3d", "benchmark_return_5d")
 _BASE_COLUMNS = ("id", "ticker", "fired_at", "setup_score", "prebreakout_prob", "indicators", "raw_signal",
@@ -85,7 +86,9 @@ def fetch_opportunity_rows(start: _dt.datetime, end: _dt.datetime, *,
     try:
         cur = c.cursor()
         cols = list(_BASE_COLUMNS) + _present_optional_columns(cur)
-        where = "source = 'opportunity' AND fired_at >= %s AND fired_at < %s"
+        # One score source per snapshot, as the Track record readers: a Brief row
+        # is dropped once its snapshot has Scanner rows.
+        where = "source = 'opportunity' AND fired_at >= %s AND fired_at < %s " + _SCANNER_SUPERSEDES_BRIEF
         params: List[Any] = [start, end]
         if ids is not None:
             where += " AND id = ANY(%s)"
@@ -119,7 +122,7 @@ def fetch_opportunity_row(observation_id: int, *, conn=None) -> Optional[Dict[st
             cur.close()
             return None
         cur.execute(f"SELECT {sel} FROM signal_outcomes WHERE source = 'opportunity' AND fired_at = %s "  # nosec B608
-                    "ORDER BY id ASC", (found[0]["fired_at"],))
+                    + _SCANNER_SUPERSEDES_BRIEF + "ORDER BY id ASC", (found[0]["fired_at"],))
         snap = _rows(cur)
         cur.close()
         return {"row": found[0], "snapshot": snap}
@@ -195,8 +198,8 @@ _READINESS_IND_PG = (
     "jsonb_build_object('signals', indicators->'signals', 'status', indicators->'status', "
     "'primary_setup', indicators->'primary_setup')"
 )
-_READINESS_COLUMNS = ("id", "ticker", "fired_at", "created_at", "ai_confidence", "return_1d", "return_3d",
-                      "return_5d", "outcome_computed_at")
+_READINESS_COLUMNS = ("id", "ticker", "fired_at", "created_at", "signal_type", "ai_confidence", "return_1d",
+                      "return_3d", "return_5d", "outcome_computed_at")
 
 
 def fetch_readiness_rows(start: _dt.datetime, end: _dt.datetime, *, conn=None) -> List[Dict[str, Any]]:
@@ -211,7 +214,7 @@ def fetch_readiness_rows(start: _dt.datetime, end: _dt.datetime, *, conn=None) -
                                                    f"{_READINESS_IND_PG} AS indicators"]
         cur.execute(f"SELECT {', '.join(cols)} FROM signal_outcomes "  # nosec B608
                     "WHERE source = 'opportunity' AND fired_at >= %s AND fired_at < %s "
-                    "ORDER BY fired_at ASC, id ASC", (start, end))
+                    + _SCANNER_SUPERSEDES_BRIEF + "ORDER BY fired_at ASC, id ASC", (start, end))
         out = _rows(cur)
         cur.close()
         for r in out:
