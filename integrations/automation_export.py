@@ -502,7 +502,13 @@ def _history_path(root: Path, snapshot: dict[str, Any]) -> Path:
     return root / "history" / day / f"{safe_run_id}.json"
 
 
-def prune_history(root: Path, *, retention_days: int = DEFAULT_HISTORY_DAYS, now: dt.datetime | None = None) -> list[Path]:
+def prune_history(
+    root: Path,
+    *,
+    retention_days: int = DEFAULT_HISTORY_DAYS,
+    now: dt.datetime | None = None,
+    keep: Path | None = None,
+) -> list[Path]:
     history_root = root / "history"
     if not history_root.exists():
         return []
@@ -519,6 +525,8 @@ def prune_history(root: Path, *, retention_days: int = DEFAULT_HISTORY_DAYS, now
         if child_date >= cutoff:
             continue
         for file in child.glob("*.json"):
+            if keep is not None and file == keep:
+                continue
             try:
                 file.unlink()
                 removed.append(file)
@@ -567,7 +575,9 @@ def publish_snapshot(
     status = build_status(snapshot)
     write_json_atomic(status_path, status)
     days = DEFAULT_HISTORY_DAYS if retention_days is None else int(retention_days)
-    removed = prune_history(root_path, retention_days=days)
+    # Never prune the snapshot we just wrote, even when its scan date is
+    # older than the retention window (backfills, replays, fixed-date tests).
+    removed = prune_history(root_path, retention_days=days, keep=history_path)
     return {
         "ok": True,
         "latest_path": str(latest_path),
