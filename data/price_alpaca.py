@@ -205,6 +205,79 @@ def alpaca_start_from_period(period: str) -> str:
     return start.strftime("%Y-%m-%d")
 
 
+# P2-29: a 150-symbol batch that still fails after its retry is re-requested in
+# pieces of this size, so one slow response doesn't drop 150 symbols. The split
+# budget bounds the extra time when Alpaca itself is down (every batch failing).
+_SPLIT_SIZE = 50
+_MAX_SPLIT_BATCHES = 6
+
+
+def _failure_reason(exc: BaseException) -> str:
+    """Skip reason for symbols Alpaca couldn't return, in the scan's taxonomy
+    (data.provider_diagnostics): timeouts count as TIMEOUT, 429s as RATE_LIMIT,
+    anything else as a provider error, never as a policy skip."""
+    etype = type(exc).__name__
+    if isinstance(exc, AlpacaRateLimitError):
+        return f"alpaca_rate_limited:{etype}"
+    if "timeout" in etype.lower() or "timed out" in str(exc).lower():
+        return f"alpaca_timeout:{etype}"
+    return f"alpaca_batch_error:{etype}"
+
+
+def _fetch_bar_pages(url: str, headers: Dict[str, str], chunk: Sequence[str], *, timeframe: str,
+                     start: str, data_feed: str, timeout_s: float) -> tuple[Dict[str, list], str | None]:
+    """All bar pages for one batch of (Alpaca-form) symbols.
+
+    Returns (bars_by_symbol, None) on success or ({}, reason) when the batch failed.
+    """
+    symbols_param = ",".join(sorted(chunk))
+    # Accumulate bars across pages (a 150-symbol × ~60-bar response can
+    # exceed Alpaca's 1000-bar page limit, so we must follow next_page_token).
+    bars_by_symbol: Dict[str, list] = {}
+    page_token: str | None = None
+    for _ in range(50):  # hard page cap as a safety bound
+        params = {
+            "symbols": symbols_param,
+            "timeframe": timeframe,
+            "start": start,
+            "limit": 10000,
+            "adjustment": "raw",
+            "feed": data_feed,
+        }
+        if page_token:
+            params["page_token"] = page_token
+
+        try:
+            # P2-29: one retry (2 s) on a timeout, dropped connection, 429 or
+            # 5xx. A timed-out batch used to drop all 150 symbols from the scan
+            # (seen 2026-09-28); one retry keeps the scan's run time bounded.
+            payload = _alpaca_get(url, headers=headers, params=params, timeout_s=timeout_s,
+                                  max_retries=1, base_delay_s=2.0, max_delay_s=2.0)
+        except AlpacaRateLimitError as exc:
+            logger.warning("Alpaca rate-limited %s symbols (%s): %s", len(chunk), symbols_param, exc)
+            return {}, _failure_reason(exc)
+        except requests_exc.RequestException as exc:  # type: ignore[union-attr]
+            logger.warning("Alpaca request failed for %s symbols (%s): %s", len(chunk), symbols_param, exc)
+            return {}, _failure_reason(exc)
+        except ValueError as exc:
+            logger.warning("Alpaca returned invalid JSON for %s symbols (%s): %s", len(chunk), symbols_param, exc)
+            return {}, f"alpaca_batch_error:{type(exc).__name__}"
+
+        if not isinstance(payload, dict):
+            logger.warning("Alpaca returned non-dict payload for %s symbols", len(chunk))
+            return {}, "alpaca_batch_error:non_dict_payload"
+
+        page_bars = payload.get("bars") or {}
+        for sym, bars in page_bars.items():
+            if bars:
+                bars_by_symbol.setdefault(sym, []).extend(bars)
+
+        page_token = payload.get("next_page_token")
+        if not page_token:
+            break
+    return bars_by_symbol, None
+
+
 def download_multi_alpaca(
     tickers: Sequence[str],
     period: str,
@@ -212,8 +285,14 @@ def download_multi_alpaca(
     prepost: bool,
     timeout_s: float,
     feed: str | None = None,
+    failures: Dict[str, str] | None = None,
 ) -> Dict[str, pd.DataFrame]:
-    """Download bars for multiple symbols from Alpaca Market Data."""
+    """Download bars for multiple symbols from Alpaca Market Data.
+
+    Pass a dict as `failures` to learn which requested symbols were lost to a
+    provider failure (timeout, 429, error) rather than simply having no bars:
+    it is filled with {symbol: skip reason}.
+    """
     del prepost  # Daily Alpaca bars ignore extended-hours selection.
 
     cfg = get_alpaca_config()
@@ -248,63 +327,33 @@ def download_multi_alpaca(
     }
 
     start = alpaca_start_from_period(period)
+    fetch = dict(timeframe=timeframe, start=start, data_feed=data_feed, timeout_s=timeout_s)
     out: Dict[str, pd.DataFrame] = {}
+    splits_left = _MAX_SPLIT_BATCHES
     for chunk in chunks(symbols, 150):
-        symbols_param = ",".join(sorted(chunk))
-        # Accumulate bars across pages (a 150-symbol × ~60-bar response can
-        # exceed Alpaca's 1000-bar page limit, so we must follow next_page_token).
-        bars_by_symbol: Dict[str, list] = {}
-        page_token: str | None = None
-        failed = False
-        for _ in range(50):  # hard page cap as a safety bound
-            params = {
-                "symbols": symbols_param,
-                "timeframe": timeframe,
-                "start": start,
-                "limit": 10000,
-                "adjustment": "raw",
-                "feed": data_feed,
-            }
-            if page_token:
-                params["page_token"] = page_token
-
-            try:
-                # P2-29: one retry (2 s) on a timeout, dropped connection, 429 or
-                # 5xx. A timed-out batch used to drop all 150 symbols from the scan
-                # (seen 2026-09-28); one retry keeps the scan's run time bounded.
-                payload = _alpaca_get(url, headers=headers, params=params, timeout_s=timeout_s,
-                                      max_retries=1, base_delay_s=2.0, max_delay_s=2.0)
-            except AlpacaRateLimitError as exc:
-                logger.warning("Alpaca rate-limited %s symbols (%s): %s", len(chunk), symbols_param, exc)
-                failed = True
-                break
-            except requests_exc.RequestException as exc:  # type: ignore[union-attr]
-                logger.warning("Alpaca request failed for %s symbols (%s): %s", len(chunk), symbols_param, exc)
-                failed = True
-                break
-            except ValueError as exc:
-                logger.warning("Alpaca returned invalid JSON for %s symbols (%s): %s", len(chunk), symbols_param, exc)
-                failed = True
-                break
-
-            if not isinstance(payload, dict):
-                logger.warning("Alpaca returned non-dict payload for %s symbols", len(chunk))
-                failed = True
-                break
-
-            page_bars = payload.get("bars") or {}
-            for sym, bars in page_bars.items():
-                if bars:
-                    bars_by_symbol.setdefault(sym, []).extend(bars)
-
-            page_token = payload.get("next_page_token")
-            if not page_token:
-                break
-
-        if failed:
-            continue
+        bars_by_symbol, reason = _fetch_bar_pages(url, headers, chunk, **fetch)
+        if reason is not None:
+            pieces = list(chunks(chunk, _SPLIT_SIZE)) if len(chunk) > _SPLIT_SIZE and splits_left > 0 else []
+            if pieces:
+                splits_left -= 1
+                logger.warning("Alpaca batch of %s failed (%s); re-requesting in %s pieces",
+                               len(chunk), reason, len(pieces))
+            lost: list[str] = list(chunk) if not pieces else []
+            for piece in pieces:
+                piece_bars, piece_reason = _fetch_bar_pages(url, headers, piece, **fetch)
+                if piece_reason is not None:
+                    reason = piece_reason
+                    lost.extend(piece)
+                    continue
+                bars_by_symbol.update(piece_bars)
+            if lost:
+                logger.warning("Alpaca dropped %s symbols after retries (%s)", len(lost), reason)
+                if failures is not None:
+                    for sym in lost:
+                        failures[orig_by_alpaca.get(str(sym).upper(), str(sym).upper())] = reason
         if not bars_by_symbol:
-            logger.info("Alpaca returned no bars for %s symbols (%s)", len(chunk), symbols_param)
+            if reason is None:
+                logger.info("Alpaca returned no bars for %s symbols (%s)", len(chunk), ",".join(sorted(chunk)))
             continue
 
         for symbol, bars in (bars_by_symbol or {}).items():

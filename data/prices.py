@@ -314,10 +314,15 @@ def _download_batch(
     # intentional policy skip. Record the true cause so the coverage taxonomy
     # classifies them as TIMEOUT/PROVIDER_ERROR instead of FILTERED_BY_POLICY.
     batch_error_reason: Optional[str] = None
+    # P2-29: symbols lost to a provider failure inside one Alpaca batch (the call
+    # itself succeeds) carry their own reason, so they count as TIMEOUT/RATE_LIMIT
+    # instead of FILTERED_BY_POLICY.
+    alpaca_failures: Dict[str, str] = {}
     if alpaca_configured:
         try:
             alpaca_data = _download_multi_alpaca(
-                remaining, cfg.period, cfg.interval, cfg.prepost, cfg.timeout_s
+                remaining, cfg.period, cfg.interval, cfg.prepost, cfg.timeout_s,
+                failures=alpaca_failures,
             )
             for sym, adf in (alpaca_data or {}).items():
                 if adf is None or adf.empty:
@@ -343,9 +348,9 @@ def _download_batch(
     if alpaca_configured and os.getenv("PRICE_SKIP_YF_FALLBACK", "").strip() == "1":
         # A batch-level failure attributes the skip to the provider (timeout/error);
         # otherwise Alpaca succeeded but didn't return the symbol (policy skip).
-        reason = batch_error_reason or "skipped_yf_fallback"
         for sym in remaining:
             sym_u = str(sym).upper()
+            reason = alpaca_failures.get(sym_u) or batch_error_reason or "skipped_yf_fallback"
             skipped.append((sym_u, reason))
             _remember_missing(sym_u, cfg, reason)
         remaining = []
