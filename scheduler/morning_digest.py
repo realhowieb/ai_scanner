@@ -174,6 +174,34 @@ def _todays_setups(df, limit: int = 6) -> tuple:
         return [], []
 
 
+def _premarket_gappers(limit: int = 5, now=None) -> Optional[List[Dict[str, Any]]]:
+    """Before the open: today's pre-market gappers over S&P 500 + NASDAQ, the
+    same screen as Day Trader's pre-market gappers (traded today, >=2% vs
+    yesterday's close, clears the pre-market dollar-volume floor). None outside
+    pre-market so the caller uses its regular-session path; [] when nothing
+    qualifies yet. Yesterday's scan GapPct is never shown as today's gap."""
+    if not _premarket_gappers_active(now):
+        return None
+    try:
+        from market_data import build_premarket_gappers
+        from ui.day_trader import _movers_universe
+
+        rows = build_premarket_gappers(_movers_universe(), now=now, limit=limit)
+    except Exception:
+        return []
+    return [{"ticker": r["ticker"], "last": r.get("last"), "chg_pct": r.get("pct"),
+             "gap_pct": None, "session": "premarket"} for r in rows[:limit]]
+
+
+def _premarket_gappers_active(now=None) -> bool:
+    try:
+        from market_data import premarket_session_date
+
+        return premarket_session_date(now) is not None
+    except Exception:
+        return False
+
+
 def _market_gappers(df, limit: int = 5) -> List[Dict[str, Any]]:
     """Top gappers over the snapshot universe.
 
@@ -182,6 +210,9 @@ def _market_gappers(df, limit: int = 5) -> List[Dict[str, Any]]:
     that path can come back empty. Fall back to the snapshot's own stored GapPct
     (computed at scan time) so the digest's gappers section is never blank.
     """
+    pre = _premarket_gappers(limit)
+    if pre is not None:
+        return pre
     try:
         from market_data import build_day_trader_metrics
 
@@ -354,6 +385,69 @@ def _movers_table(rows: List[Dict[str, Any]], *, show_gap: bool = True) -> str:
     )
 
 
+def _is_preopen(rows: List[Dict[str, Any]]) -> bool:
+    return any(r.get("session") == "premarket" for r in rows or [])
+
+
+def _preopen_last(r: Dict[str, Any]):
+    """Today's pre-market trade when there is one, else yesterday's close (not
+    a stale after-hours print)."""
+    if r.get("traded_today") is False and r.get("previous_close") is not None:
+        return r.get("previous_close")
+    return r.get("last")
+
+
+def _pct(v) -> str:
+    return ("%+.2f%%" % v) if v is not None else "—"
+
+
+def _preopen_table(rows: List[Dict[str, Any]], *, show_prior: bool) -> str:
+    """Before the open there is no gap or session change yet: show the move vs
+    yesterday's close from today's latest pre-market trade, plus yesterday's
+    own move for watchlist rows."""
+    if not rows:
+        return "<p style='color:#888'>No data.</p>"
+    head = ("<tr><th align='left'>Ticker</th><th align='right'>Last</th>"
+            "<th align='right'>Pre-mkt %</th><th></th>")
+    if show_prior:
+        head += "<th align='right'>Yesterday %</th>"
+    head += "</tr>"
+    body = ""
+    for r in rows:
+        pm = r.get("chg_pct")
+        color = "#16a34a" if (pm is not None and pm >= 0) else "#dc2626"
+        bar = ""
+        if pm is not None:
+            width = int(min(abs(pm) / 5.0, 1.0) * 48) + 2
+            bar = (f"<div style='height:8px;width:{width}px;border-radius:3px;"
+                   f"background:{color};display:inline-block'></div>")
+        body += (f"<tr><td>{r.get('ticker')}</td><td align='right'>{_preopen_last(r)}</td>"
+                 f"<td align='right' style='color:{color if pm is not None else '#888'}'>{_pct(pm)}</td>"
+                 f"<td align='left'>{bar}</td>")
+        if show_prior:
+            prior = r.get("prior_session_chg_pct")
+            pc = "#888" if prior is None else ("#16a34a" if prior >= 0 else "#dc2626")
+            body += f"<td align='right' style='color:{pc}'>{_pct(prior)}</td>"
+        body += "</tr>"
+    return ("<table style='border-collapse:collapse;width:100%;font-size:13px' "
+            "cellpadding='4'>" + head + body + "</table>")
+
+
+def _preopen_text(rows: List[Dict[str, Any]], *, show_prior: bool) -> str:
+    if not rows:
+        return "  (none)"
+    out = []
+    for r in rows:
+        line = f"  {r.get('ticker')}: {_preopen_last(r)} (pre-mkt {_pct(r.get('chg_pct'))}"
+        if show_prior:
+            line += f", yesterday {_pct(r.get('prior_session_chg_pct'))}"
+        out.append(line + ")")
+    return "\n".join(out)
+
+
+_PREOPEN_NOTE = "<p style='margin:4px 0 0;font-size:12px;color:#888'>{}</p>"
+
+
 def _movers_text(rows: List[Dict[str, Any]]) -> str:
     if not rows:
         return "  (none)"
@@ -428,6 +522,7 @@ def _compose(
     golden: Optional[List[str]] = None,
     top_setups: Optional[List[tuple]] = None,
     premarket: Optional[List[Dict[str, Any]]] = None,
+    preopen_gappers: bool = False,
 ) -> tuple[str, str]:
     """Return (html_inner, text_inner) for one user's digest."""
     date_s = et_now().strftime("%A, %b %d")
@@ -440,16 +535,35 @@ def _compose(
         text += [tr_text, ""]
 
     html.append("<h3 style='margin:16px 0 6px'>📋 Your watchlist</h3>")
-    html.append(_movers_table(watch_rows, show_gap=True))
-    text += ["Your watchlist:", _movers_text(watch_rows), ""]
+    if _is_preopen(watch_rows):
+        html.append(_preopen_table(watch_rows, show_prior=True))
+        html.append(_PREOPEN_NOTE.format(
+            "Before the open. Pre-mkt % is today's latest pre-market trade vs yesterday's close; "
+            "— means no pre-market trade yet on our data feed, so Last is yesterday's close."))
+        text += ["Your watchlist (before the open):", _preopen_text(watch_rows, show_prior=True), ""]
+    else:
+        html.append(_movers_table(watch_rows, show_gap=True))
+        text += ["Your watchlist:", _movers_text(watch_rows), ""]
     if notes:
         joined = " · ".join(notes)
         html.append(f"<p style='color:#555;margin:4px 0 0'>📌 {joined}</p>")
         text += [f"Notes: {joined}", ""]
 
     html.append("<h3 style='margin:16px 0 6px'>🚀 Top market gappers</h3>")
-    html.append(_movers_table(gappers, show_gap=True))
-    text += ["Top market gappers:", _movers_text(gappers), ""]
+    if preopen_gappers:
+        if gappers:
+            html.append(_preopen_table(gappers, show_prior=False))
+        else:
+            html.append("<p style='color:#888'>No S&amp;P 500 or NASDAQ stock is gapping 2% or more "
+                        "on enough pre-market volume yet.</p>")
+        html.append(_PREOPEN_NOTE.format(
+            "S&amp;P 500 and NASDAQ stocks moving 2%+ before the open vs yesterday's close, "
+            "with enough pre-market volume to trade."))
+        text += ["Top market gappers (pre-market vs yesterday's close):",
+                 _preopen_text(gappers, show_prior=False), ""]
+    else:
+        html.append(_movers_table(gappers, show_gap=True))
+        text += ["Top market gappers:", _movers_text(gappers), ""]
 
     pm_html, pm_text = _premarket_section(premarket or [])
     if pm_html:
@@ -607,6 +721,7 @@ def run_morning_digest(force: bool = False) -> None:
 
     df = _latest_snapshot_df()
     gappers = _market_gappers(df)
+    preopen_gappers = _premarket_gappers_active()
     premarket = _premarket_movers()
     picks = _prebreakout_picks(df) if df is not None else []
     golden, top_setups = _todays_setups(df) if df is not None else ([], [])
@@ -690,6 +805,7 @@ def run_morning_digest(force: bool = False) -> None:
             html_inner, text_inner = _compose(
                 email, watch_rows, gappers, earnings_hits, user_picks, notes=notes,
                 golden=golden, top_setups=top_setups, premarket=premarket,
+                preopen_gappers=preopen_gappers,
             )
             # Count only sends the mail service accepted.
             if send_digest_email(

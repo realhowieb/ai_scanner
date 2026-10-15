@@ -67,6 +67,10 @@ class DayTraderPremarketTests(unittest.TestCase):
         self.assertFalse(r["traded_today"])
         self.assertIsNone(r["volume"])
 
+    def test_premarket_row_carries_yesterdays_session_move(self):
+        r = self.rows({"OLD": snap(100.0, YDAY_TRADE)}, WED_8_ET)["OLD"]
+        self.assertEqual(r["prior_session_chg_pct"], 25.0)     # yesterday 100 vs 80
+
     def test_display_path_uses_premarket_volume_and_vwap(self):
         pm = {"GAP": {"volume": 50_000, "dollar_volume": 5.5e6, "vwap": 110.0, "high": 112.0, "low": 105.0}}
         snaps = {"GAP": snap(111.0, TODAY_TRADE)}

@@ -747,6 +747,10 @@ def build_day_trader_metrics(
             volume = _sf(pm.get("volume"))
             chg_pct = ((q["last"] - prev_close) / prev_close * 100.0) if (q and prev_close) else None
             vs_vwap_pct = ((last - vwap) / vwap * 100.0) if (vwap and q) else None
+            day_before = _sf(prev_daily_bar.get("c"))
+            prior_chg_pct = (
+                (prev_close - day_before) / day_before * 100.0 if (prev_close and day_before) else None
+            )
 
         row = {
                 "ticker": sym,
@@ -794,6 +798,8 @@ def build_day_trader_metrics(
             }
         if premarket:
             row.update({"session": "premarket", "traded_today": traded_today,
+                        # Yesterday's full-session move (close vs the close before it).
+                        "prior_session_chg_pct": round(prior_chg_pct, 2) if prior_chg_pct is not None else None,
                         "previous_close_timeframe": "last_regular_session_daily_bar",
                         "vwap_timeframe": "premarket_1min_bars", "vwap_formula": "sum(c*v)/sum(v) since 04:00 ET",
                         "volume_timeframe": "premarket_1min_bars_since_0400_et"})
