@@ -8473,6 +8473,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Email verification can't be confirmed right now; try again */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     billing_portal_v1_billing_portal_post: {
@@ -9537,6 +9544,13 @@ export interface operations {
             };
             /** @description Not signed in */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Email verification status or sending temporarily unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

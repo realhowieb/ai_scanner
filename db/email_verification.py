@@ -124,13 +124,24 @@ def consume_verification_token(token: str) -> Optional[str]:
     return username
 
 
-def is_email_verified(username: str) -> bool:
-    """Return True if the user's email is verified. Defaults to True when DB unavailable."""
+class VerificationUnavailable(RuntimeError):
+    """The verification status couldn't be read (no database, or the lookup failed).
+
+    Distinct from "not verified": callers that gate paid or outbound actions must
+    block and say so, not treat it as verified."""
+
+
+def email_verification_status(username: str) -> bool:
+    """True when the account's email is verified, False when it isn't (or the account
+    has no row). Raises VerificationUnavailable when the status can't be read."""
     if get_neon_conn is None:
-        return True
-    conn = get_neon_conn()
+        raise VerificationUnavailable("database driver unavailable")
+    try:
+        conn = get_neon_conn()
+    except Exception as e:
+        raise VerificationUnavailable(type(e).__name__) from e
     if conn is None:
-        return True
+        raise VerificationUnavailable("database unavailable")
     try:
         _ensure_schema(conn)
         cur = conn.cursor()
@@ -140,10 +151,25 @@ def is_email_verified(username: str) -> bool:
         )
         row = cur.fetchone()
         cur.close()
-        conn.close()
-        if row is None:
-            return True  # unknown user — don't block
-        verified = row[0] if isinstance(row, (tuple, list)) else row.get("email_verified")
-        return bool(verified)
-    except Exception:
-        return True  # fail open so a DB blip doesn't lock everyone out
+    except Exception as e:
+        raise VerificationUnavailable(type(e).__name__) from e
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    if row is None:
+        return False
+    verified = row[0] if isinstance(row, (tuple, list)) else row.get("email_verified")
+    return bool(verified)
+
+
+def is_email_verified(username: str) -> bool:
+    """True only when the email is confirmed verified. Fails closed: an unknown
+    account or an unreadable status counts as not verified, so a database blip
+    can't open an upgrade or send email to an unconfirmed address. Use
+    email_verification_status to tell "not verified" from "can't tell"."""
+    try:
+        return email_verification_status(username)
+    except VerificationUnavailable:
+        return False

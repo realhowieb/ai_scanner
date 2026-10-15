@@ -1,18 +1,31 @@
 """Soft email-verification gate: block upgrades until the email is verified.
 
 Basic browsing stays open; only paid-upgrade and outbound email are gated.
-Fail-open: if the DB or verification module is unavailable, do not block.
+Fail-closed: if the verification status can't be read, the upgrade waits and the
+user is told verification is temporarily unavailable (not that they're unverified).
 """
 from __future__ import annotations
 
 
-def email_is_verified(username: str) -> bool:
-    """True if verified, or if we can't tell (fail-open)."""
+class VerificationUnavailable(RuntimeError):
+    """The verification status couldn't be read right now."""
+
+
+def verification_status(username: str) -> bool:
+    """True if verified, False if not; VerificationUnavailable if we can't tell."""
     try:
-        from db.email_verification import is_email_verified
-        return bool(is_email_verified(username))
-    except Exception:
-        return True
+        from db.email_verification import email_verification_status
+        return bool(email_verification_status(username))
+    except Exception as e:
+        raise VerificationUnavailable("email verification lookup failed") from e
+
+
+def email_is_verified(username: str) -> bool:
+    """True only when confirmed verified (fail-closed)."""
+    try:
+        return verification_status(username)
+    except VerificationUnavailable:
+        return False
 
 
 def _note(reason: str, detail: str = "") -> None:
@@ -73,8 +86,17 @@ def require_verified_for_upgrade(email: str, *, key_suffix: str = "") -> bool:
     """
     import streamlit as st
 
-    if not email or email_is_verified(email):
+    if not email:
         return True
+    try:
+        if verification_status(email):
+            return True
+    except VerificationUnavailable:
+        st.warning(
+            "We can't confirm your email verification right now, so upgrades are paused. "
+            "Please try again in a few minutes."
+        )
+        return False
 
     st.warning(
         "📧 Please verify your email before upgrading. "

@@ -91,11 +91,13 @@ def register(app: FastAPI) -> None:
         acct.verify_email(body.token)
         return {"message": "Email verified."}
 
-    @app.post("/v1/me/verify-email", response_model=models.Message, responses={401: {"description": "Not signed in"}})
+    @app.post("/v1/me/verify-email", response_model=models.Message,
+              responses={401: {"description": "Not signed in"},
+                         503: {"description": "Email verification status or sending temporarily unavailable"}})
     def resend_verification(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Send a new verification link to the signed-in account's email (3 per hour)."""
         user = _user(account)
-        if acct.is_verified(user):
+        if acct.verification_status(user):  # VerificationUnavailable answers 503
             return {"message": "Your email is already verified."}
         ratelimit.check("verify_resend", user)
         if not acct.send_verification(user):
@@ -152,7 +154,8 @@ def register(app: FastAPI) -> None:
 
     @app.post("/v1/billing/checkout", response_model=models.BillingLink,
               responses={**_AUTH, 403: {"description": "Verify your email first"},
-                         502: {"description": "Billing service unavailable"}})
+                         502: {"description": "Billing service unavailable"},
+                         503: {"description": "Email verification can't be confirmed right now; try again"}})
     def billing_checkout(body: CheckoutBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Stripe checkout for Pro or Premium (monthly or yearly when enabled). Existing
         subscribers get Stripe's plan-change screen instead (mode=portal). Open the URL in a browser."""
