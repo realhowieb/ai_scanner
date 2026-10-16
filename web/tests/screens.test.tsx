@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Schemas } from "@/api/client";
 import { CustomScanView } from "@/features/CustomScanView";
-import { ScannerView } from "@/features/ScannerView";
+import { readFilters, ScannerView } from "@/features/ScannerView";
 import { StockView } from "@/features/StockView";
 import type { ScanApi } from "@/hooks/useScanJob";
 import { SessionProvider } from "@/session/SessionProvider";
@@ -279,4 +279,22 @@ describe("Stock Intelligence", () => {
       vi.useRealTimers();
     }
   });
+});
+
+
+it("bounds malformed scanner pages before building an API request", () => {
+  expect(readFilters(new URLSearchParams("page=Infinity")).page).toBe(1);
+  expect(readFilters(new URLSearchParams("page=99999999&size=100")).page).toBe(101);
+  expect(readFilters(new URLSearchParams("page=-3")).page).toBe(1);
+});
+
+it("resets scanner filters and recovers a page that disappeared", async () => {
+  search = new URLSearchParams("signal=breakout&min=60&sort=rvol&size=50&page=3");
+  fetchMock.mockResolvedValue(jsonResponse(latest({ total: 2, max_results: 100, setups: [] })));
+  render(<SessionProvider initialMe={me("pro")}><ScannerView /></SessionProvider>);
+  await screen.findByText("This page is no longer available.");
+  fireEvent.click(screen.getByText("Back to first page"));
+  expect(replace).toHaveBeenLastCalledWith("/scanner?signal=breakout&min=60&sort=rvol&size=50", { scroll: false });
+  fireEvent.click(screen.getByText("Reset view"));
+  expect(replace).toHaveBeenLastCalledWith("/scanner", { scroll: false });
 });

@@ -77,6 +77,18 @@ def save(user, client_id, *, state, result=None, error=None):
         conn.close()
 
 
+def get(user, client_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM paper_order_requests WHERE user_id = %s AND client_order_id = %s", (user, client_id))
+        row = _row(cur, cur.fetchone())
+        cur.close()
+        return row
+    finally:
+        conn.close()
+
+
 def pending(user, account_ref, limit=5):
     # Lookups are read-only and checked against the connected broker account.
     # Include older key fingerprints so rotating keys doesn't orphan journal sync.

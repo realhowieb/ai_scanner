@@ -90,6 +90,19 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
   );
 }
 
+function RetryButton({ error, onRetry }: { error: ApiError; onRetry: () => void }) {
+  const [remaining, setRemaining] = useState(error.retryAfterS ?? 0);
+  useEffect(() => {
+    if (!error.retryAfterS) return;
+    const deadline = error.receivedAt + error.retryAfterS * 1000;
+    const timer = setInterval(() => setRemaining(Math.max(0, Math.ceil((deadline - Date.now()) / 1000))), 1000);
+    return () => clearInterval(timer);
+  }, [error]);
+  return <button type="button" className="btn" onClick={onRetry} disabled={remaining > 0}>
+    {remaining > 0 ? `Try again in ${remaining}s` : "Try again"}
+  </button>;
+}
+
 export function ErrorState({ error, onRetry, what = "this" }: { error: ApiError; onRetry?: () => void; what?: string }) {
   const outage = error.status === 503 || error.status === 502 || error.status === 504 || error.status === 0;
   return (
@@ -97,7 +110,7 @@ export function ErrorState({ error, onRetry, what = "this" }: { error: ApiError;
       <p className="strong">{outage ? `Couldn't load ${what} right now` : error.message}</p>
       {outage && <p className="cap">{error.message}{error.retryAfterS ? ` Try again in ${error.retryAfterS}s.` : ""}</p>}
       <div className="row-actions">
-        {onRetry && <button type="button" className="btn" onClick={onRetry}>Try again</button>}
+        {onRetry && <RetryButton key={error.receivedAt} error={error} onRetry={onRetry} />}
         {error.requestId && <span className="cap mono">Support code: {error.requestId}</span>}
       </div>
     </div>
@@ -160,7 +173,25 @@ export function ErrorLine({ error }: { error: ApiError | null }) {
   return (
     <p className="form-error" role="alert">
       {error.message}
+      {Object.entries(error.fields).map(([field, message]) => <span className="field-error" key={field}> {field.replaceAll("_", " ")}: {message}</span>)}
+      {error.retryAfterS ? <span> Wait {error.retryAfterS}s before retrying.</span> : null}
       {error.requestId && <span className="cap mono"> · Support code: {error.requestId}</span>}
     </p>
   );
+}
+
+/** Request freshness is separate from the API's market-data timestamps. */
+export function RefreshStatus({ updatedAt, refreshing, error, onRetry, sourceNote = "Market prices may be older." }: {
+  updatedAt: number | null; refreshing: boolean; error: ApiError | null; onRetry: () => void;
+  sourceNote?: string;
+}) {
+  return <div className="cap" aria-live="polite">
+    {refreshing ? <p role="status">Refreshing… Showing the last available data.</p>
+      : updatedAt ? <p>Last checked {etTime(new Date(updatedAt).toISOString())}. {sourceNote}</p> : null}
+    {error && <div className="banner">
+      <p>Couldn&apos;t refresh. Showing the last available data.</p>
+      <ErrorLine error={error} />
+      <RetryButton key={error.receivedAt} error={error} onRetry={onRetry} />
+    </div>}
+  </div>;
 }

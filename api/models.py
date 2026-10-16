@@ -5,9 +5,16 @@ clients can be generated from the OpenAPI schema.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
+
+
+class ValidationErrorResponse(BaseModel):
+    detail: Union[str, List[Dict[str, Any]]]
+    code: Optional[str] = None
+    fields: Dict[str, str] = Field(default_factory=dict)
+    request_id: Optional[str] = None
 
 
 class Health(BaseModel):
@@ -891,6 +898,13 @@ class PaperOrder(BaseModel):
     ticker: str
     qty: int
     filled_avg_price: Optional[Any] = None
+
+
+class PaperOrderTracking(PaperOrder):
+    state: Literal["pending", "submitted", "synced", "rejected"]
+    filled_qty: float = 0
+    broker_available: Optional[bool] = Field(default=None, description="False when this check could not reach or confirm the broker; saved status is retained")
+    updated_at: Optional[str] = Field(default=None, description="Last saved tracking change; not a market quote timestamp")
 
 
 class PlanTier(BaseModel):

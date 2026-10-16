@@ -349,8 +349,8 @@ function Live() {
   const visible = useVisible();
   // `at` is when this device received the answer. Timing uses it rather than the server's
   // as_of, so a phone whose clock runs ahead of the server doesn't refresh nonstop.
-  const dt = useApi(`dt:${source}:${tick}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: { source } }, signal }))
-    .then((data) => ({ data, at: Date.now() })));
+  const dt = useApi(`dt:${source}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: { source } }, signal }))
+    .then((data) => ({ data, at: Date.now() })), tick);
   const d = dt.data?.data ?? null;
   const gotAt = dt.data?.at ?? 0;
   const failed = !!dt.error && !!d;
@@ -360,11 +360,11 @@ function Live() {
   // quotes are already older than that); nothing is scheduled while a request is in flight.
   // A failed refresh keeps the last quotes on screen and retries after DT_RETRY_MS.
   useEffect(() => {
-    if (!live || dt.loading) return;
+    if (!live || dt.loading || dt.refreshing) return;
     const wait = failed ? DT_RETRY_MS : Math.min(DT_REFRESH_MS, Math.max(0, DT_REFRESH_MS - (Date.now() - gotAt)));
     const t = setTimeout(() => setTick((n) => n + 1), wait);
     return () => clearTimeout(t);
-  }, [live, dt.loading, gotAt, failed]);
+  }, [live, dt.loading, dt.refreshing, gotAt, failed]);
   const now = useNow(live);
   // The previous refresh, kept alongside the current one to show what moved.
   const [hist, setHist] = useState<{ cur: Data | null; prev: Data | null }>({ cur: null, prev: null });
@@ -381,8 +381,8 @@ function Live() {
   useSlide(listRef, rows.map((r) => r.ticker).join(","));
   // Sparklines for the top names; 1-minute bars change slowly, so reload every third quote refresh.
   const sparkSyms = all.slice(0, SPARK_MAX).map((r) => r.ticker).join(",");
-  const spark = useApi(sparkSyms ? `dt-spark:${sparkSyms}:${Math.floor(tick / SPARK_EVERY)}` : null, (signal) =>
-    unwrap(api.GET("/v1/day-trader/sparklines", { params: { query: { symbols: sparkSyms } }, signal })));
+  const spark = useApi(sparkSyms ? `dt-spark:${sparkSyms}` : null, (signal) =>
+    unwrap(api.GET("/v1/day-trader/sparklines", { params: { query: { symbols: sparkSyms } }, signal })), Math.floor(tick / SPARK_EVERY));
   const series = spark.data?.series ?? {};
   const sortBy = (key: SortKey) => {
     setHeld(null);
