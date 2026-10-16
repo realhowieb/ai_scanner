@@ -52,6 +52,7 @@ jobs:
           python -c "import fastapi, httpx, jwt, bcrypt"
           python -m pytest \
             tests/test_billing_service.py \
+            tests/test_api_billing.py \
             tests/test_run83_billing_auth.py \
             tests/test_run83_restore_token.py \
             tests/test_run72_pricing.py \

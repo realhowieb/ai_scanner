@@ -246,6 +246,10 @@ def checkout_url(username: str, plan: str, interval: str) -> Dict[str, str]:
     same call the web Billing page makes. Requires a verified email, as on the web."""
     if not verification_status(username):  # VerificationUnavailable (503) blocks too
         raise AccountError("Please verify your email before upgrading.", status=403)
+    from api.billing import embedded_enabled, session_for_account
+
+    if embedded_enabled():
+        return session_for_account(username, {"plan": plan, "interval": interval})
     from services.billing import create_checkout_url
 
     url, err = create_checkout_url(username, plan, interval)
@@ -258,6 +262,11 @@ def checkout_url(username: str, plan: str, interval: str) -> Dict[str, str]:
 def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
     """Stripe Customer Portal (manage plan, payment method, invoices; flow='cancel'
     opens the cancellation screen), via the billing service like the web page."""
+    from api.billing import embedded_enabled, session_for_account
+
+    if embedded_enabled():
+        return session_for_account(username, {"flow": flow}, portal=True)
+
     import requests
 
     from config import BILLING_API_BASE
