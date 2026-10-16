@@ -377,6 +377,9 @@ class JournalAndPaperTests(PaidApiTestCase):
         _cache.clear()
         self.addCleanup(_cache.clear)
         self.trades, self.keys, self.logged = [], {}, []
+        from tests.paper_fakes import MemoryOrders, PaperBroker
+
+        self.order_store, self.broker = MemoryOrders(), PaperBroker()
         df = pd.DataFrame([{"Ticker": "AAPL", "Last": 100.0, "Volatility20D%": 6.0, "BreakoutScore": 80}])
         p = mock.patch
         for target, fn in (
@@ -396,8 +399,13 @@ class JournalAndPaperTests(PaidApiTestCase):
             ("data.alpaca_trading._base_url", lambda: "https://paper-api.alpaca.markets"),
             ("data.alpaca_trading.get_account", lambda k, sec: {"status": "ACTIVE", "buying_power": "100000",
                                                                  "cash": "100000", "account_number": "PA123"} if k == "PKGOODKEY1" else None),
-            ("data.alpaca_trading.submit_market_order", lambda k, sec, sym, q, side="buy": {"ok": True, "order_id": "o1",
-                                                                                        "status": "accepted", "filled_avg_price": None}),
+            ("services.paper_orders.store.reserve", self.order_store.reserve),
+            ("services.paper_orders.store.save", self.order_store.save),
+            ("services.paper_orders.store.pending", self.order_store.pending),
+            ("data.alpaca_trading.submit_market_order", self.broker.submit),
+            ("data.alpaca_trading.get_order_by_client_id", self.broker.lookup),
+            ("services.paper_orders.reconcile_paper_fill", lambda u, oid, t, px, q, ctx:
+                self._log(u, t, px, q, source="paper", alpaca_order_id=oid, **ctx)),
             ("data.alpaca_trading.get_positions", lambda k, sec: [{"symbol": "AAPL", "qty": "3"}]),
             ("data.alpaca_trading.get_orders", lambda k, sec, status="all", limit=25: [{"id": "o1"}]),
             ("db.paper_events.sync_orders", lambda u, orders: len(orders)),
@@ -413,6 +421,8 @@ class JournalAndPaperTests(PaidApiTestCase):
                             "shares": shares, "source": source, "entered_at": None, "exit_price": None, "closed_at": None})
 
     def post(self, email, path, body=None):
+        if path == "/v1/paper/orders":
+            body = {"idempotency_key": "test-confirm-123", **(body or {})}
         return self.client.post(path, headers=self.h(email), json=body or {})
 
     def test_journal_read_all_plans_write_pro(self):
@@ -462,8 +472,13 @@ class JournalAndPaperTests(PaidApiTestCase):
         r = self.post("prem@example.com", "/v1/paper/orders", {"ticker": "aapl", "qty": 2, "confirm": True})
         self.assertEqual(r.status_code, 201, r.text)
         self.assertEqual(r.json()["order_id"], "o1")
+        self.assertFalse(r.json()["journal_synced"])
+        self.assertEqual(self.logged, [])
+        broker_row = next(iter(self.broker.orders.values()))
+        broker_row.update(status="filled", filled_avg_price="101.0", filled_qty="2")
+        act = self.get("prem@example.com", "/v1/paper/activity").json()
         user, ticker, entry, qty, source, kw = self.logged[-1]
-        self.assertEqual((user, ticker, entry, qty, source), ("prem@example.com", "AAPL", 100.0, 2, "paper"))
+        self.assertEqual((user, ticker, entry, qty, source), ("prem@example.com", "AAPL", 101.0, 2, "paper"))
         self.assertEqual((kw["stop_price"], kw["breakout_score"]), (97.0, 80))
         act = self.get("prem@example.com", "/v1/paper/activity").json()
         self.assertEqual((act["connected"], act["positions"][0]["symbol"], act["orders"][0]["order_id"]), (True, "AAPL", "o1"))
@@ -480,10 +495,10 @@ class JournalAndPaperTests(PaidApiTestCase):
 
     def test_rejected_order_is_400_and_not_journaled(self):
         self.keys["prem@example.com"] = {"api_key": "k", "api_secret": "s"}
-        with mock.patch("data.alpaca_trading.submit_market_order", return_value={"ok": False, "error": "insufficient buying power"}):
+        with mock.patch("data.alpaca_trading.submit_market_order", return_value={"ok": False, "status_code": 403, "error": "insufficient buying power"}):
             r = self.post("prem@example.com", "/v1/paper/orders", {"ticker": "AAPL", "qty": 1, "confirm": True})
         self.assertEqual(r.status_code, 400)
-        self.assertIn("insufficient", r.json()["detail"])
+        self.assertIn("rejected", r.json()["detail"].lower())
         self.assertEqual(self.logged, [])
 
 

@@ -885,6 +885,7 @@ class PaperActivity(BaseModel):
 
 
 class PaperOrder(BaseModel):
+    journal_synced: bool = Field(default=False, description="True only after an actual fill has been imported; pending fills retry on journal/activity refresh")
     order_id: Optional[str] = None
     status: str
     ticker: str

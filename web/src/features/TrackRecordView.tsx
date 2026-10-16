@@ -23,7 +23,7 @@ const numMetric = (v: unknown) => (typeof v === "number" ? v : null);
 
 const RANKINGS: { id: Ranking; label: string; note: string }[] = [
   { id: "breakout", label: "Breakout score", note: "Each saved scan's top names by Breakout score" },
-  { id: "prebreakout", label: "PreBreakout", note: "Each saved scan's top names by PreBreakout probability" },
+  { id: "prebreakout", label: "PreBreakout", note: "Top names by the PreBreakout probabilities saved with each scan. Scans without saved predictions are excluded." },
 ];
 
 /** 0.012 -> "+1.20%" (the API sends fractions). */

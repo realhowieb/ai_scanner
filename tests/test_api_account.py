@@ -189,6 +189,13 @@ class PasswordResetTests(AccountApiTestCase):
 
     def test_confirm_sets_the_password_and_signs_out_everywhere(self):
         pair = self.login().json()
+        other_pair = self.login("boss@example.com").json()
+        old_auth = self.auth(pair["access_token"])
+        self.assertEqual(self.client.get("/v1/me", headers=old_auth).status_code, 200)
+        # A different process can still hold a warm pre-reset account row.
+        from api.deps import _recent_account
+
+        _recent_account("pro@example.com")
         self.client.post("/v1/auth/password-reset", json={"email": "pro@example.com"})
         token = next(iter(self.reset_tokens))
         weak = self.client.post("/v1/auth/password-reset/confirm", json={"token": token, "new_password": "password123"})
@@ -198,8 +205,17 @@ class PasswordResetTests(AccountApiTestCase):
         self.assertEqual(ok.status_code, 200, ok.text)
         self.assertEqual(self.web_signouts, ["pro@example.com"])
         self.assertEqual(self.app_signouts, [("pro@example.com", "password_reset")])
+        # Simulate an independent server retaining stale cached account metadata.
+        import time
+
+        from api.deps import _account_cache
+
+        _account_cache["pro@example.com"] = (time.monotonic() + 900, {"username": "pro@example.com", "tier": "pro"})
+        self.assertEqual(self.client.get("/v1/me", headers=old_auth).status_code, 401)
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(other_pair["access_token"])).status_code, 200)
         self.assertEqual(self.client.post("/v1/auth/refresh", json={"refresh_token": pair["refresh_token"]}).status_code, 401)
-        self.assertEqual(self.login(password=NEW).status_code, 200)
+        new_pair = self.login(password=NEW).json()
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(new_pair["access_token"])).status_code, 200)
         again = self.client.post("/v1/auth/password-reset/confirm", json={"token": token, "new_password": NEW})
         self.assertEqual(again.status_code, 400)
 
@@ -219,6 +235,8 @@ class PasswordChangeTests(AccountApiTestCase):
         ok = self.client.post("/v1/me/password", headers=h, json={"current_password": "right pw", "new_password": NEW})
         self.assertEqual(ok.status_code, 200, ok.text)
         self.assertEqual(self.app_signouts, [("pro@example.com", "password_change")])
+        self.assertEqual(self.client.get("/v1/me", headers=h).status_code, 401)
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(ok.json()["access_token"])).status_code, 200)
         self.assertEqual(self.client.post("/v1/auth/refresh", json={"refresh_token": pair["refresh_token"]}).status_code, 401)
         self.assertEqual(self.client.post("/v1/auth/refresh", json={"refresh_token": ok.json()["refresh_token"]}).status_code, 200)
         self.assertEqual(self.login(password=NEW).status_code, 200)

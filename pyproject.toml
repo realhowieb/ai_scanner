@@ -50,6 +50,8 @@ packages = [
     "auth",
     "billing_service",
     "data",
+    "domain",
+    "services",
     "db",
     "jobs",
     "pages",

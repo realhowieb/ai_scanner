@@ -185,6 +185,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     def _paper_rejected(_request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=400)
 
+    @app.exception_handler(trading_mod.OrderConflict)
+    def _paper_conflict(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+
     @app.exception_handler(trading_mod.TradeClosed)
     def _trade_closed(_request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=409)

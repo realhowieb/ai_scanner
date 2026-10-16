@@ -42,6 +42,7 @@ def _ensure_schema(conn) -> None:
         ("ai_confidence", "DOUBLE PRECISION"),
     ):
         cur.execute(f"ALTER TABLE user_trades ADD COLUMN IF NOT EXISTS {col} {ddl}")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_trades_paper_order ON user_trades (user_id, alpaca_order_id)")
     conn.commit()
     cur.close()
 
@@ -93,6 +94,35 @@ def log_trade(
     )
     conn.commit()
     cur.close()
+
+
+def reconcile_paper_fill(user_id: str, order_id: str, ticker: str, price: float, shares: int, context: dict) -> None:
+    """Import/update one actual fill atomically, including retries on other servers.
+
+    A transaction lock avoids imposing a unique index on older journals that may
+    already contain duplicate paper rows. Manual trades and closed flags are kept.
+    """
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"paper-fill:{user_id}:{order_id}",))
+        cur.execute("SELECT id FROM user_trades WHERE user_id = %s AND alpaca_order_id = %s ORDER BY id LIMIT 1 FOR UPDATE",
+                    (user_id, order_id))
+        existing = cur.fetchone()
+        if existing:
+            trade_id = existing["id"] if isinstance(existing, dict) else existing[0]
+            cur.execute("UPDATE user_trades SET entry_price = %s, shares = %s WHERE id = %s AND user_id = %s AND shares <= %s",
+                        (price, shares, trade_id, user_id, shares))
+        else:
+            cur.execute("""INSERT INTO user_trades
+                (user_id,ticker,entry_price,shares,source,alpaca_order_id,stop_price,target_price,breakout_score,ai_confidence)
+                VALUES (%s,%s,%s,%s,'paper',%s,%s,%s,%s,%s)""",
+                        (user_id, ticker, price, shares, order_id, context.get("stop_price"), context.get("target_price"),
+                         context.get("breakout_score"), context.get("ai_confidence")))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
 
 
 def _row_to_trade(r: Any) -> Dict[str, Any]:

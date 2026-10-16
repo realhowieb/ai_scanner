@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 
 import type { TokenPair } from "./cookies";
 
-export type RefreshOutcome = { ok: true; pair: TokenPair } | { ok: false; status: number };
+export type RefreshOutcome = { ok: true; pair: TokenPair } | { ok: false; status: number; retryAfter?: string };
 export type RefreshFn = (refreshToken: string) => Promise<RefreshOutcome>;
 
 const REUSE_MS = 10_000;
@@ -24,7 +24,8 @@ export async function refreshOnce(refreshToken: string, doRefresh: RefreshFn, no
   const running = inflight.get(k);
   if (running) return running;
   const p = doRefresh(refreshToken)
-    .catch((): RefreshOutcome => ({ ok: false, status: 502 }))
+    .catch((e): RefreshOutcome => ({ ok: false, status: e instanceof Error &&
+      (e.name === "TimeoutError" || e.name === "AbortError") ? 504 : 502 }))
     .then((outcome) => {
       // Only a definite answer is remembered; a network failure may be retried.
       if (outcome.ok || outcome.status === 401) recent.set(k, { at: Date.now(), outcome });

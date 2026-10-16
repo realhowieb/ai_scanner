@@ -32,6 +32,12 @@ def render_journal_panel(user_id: str) -> None:
     try:
         from db.trades import close_trade, delete_trade, journal_stats, list_trades
 
+        try:
+            from services.paper_orders import reconcile_pending
+
+            reconcile_pending(user_id)
+        except Exception:
+            pass
         trades = list_trades(user_id)
     except Exception:
         return

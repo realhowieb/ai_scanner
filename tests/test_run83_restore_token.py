@@ -125,7 +125,7 @@ class AppCheckoutCallTests(unittest.TestCase):
 
 class WiringTests(unittest.TestCase):
     def test_stripe_return_links_use_single_use_restore_tokens(self):
-        checkout = (ROOT / "ui" / "checkout.py").read_text()
+        checkout = (ROOT / "services" / "billing.py").read_text()
         billing = (ROOT / "pages" / "billing.py").read_text()
         auth = (ROOT / "ui" / "auth.py").read_text()
         for src in (checkout, billing):

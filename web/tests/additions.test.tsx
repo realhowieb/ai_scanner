@@ -192,6 +192,7 @@ describe("Paper trading", () => {
   it("connects keys, then sends an order only after the confirmation", async () => {
     search = new URLSearchParams("ticker=aaa");
     let connected = false;
+    let submissions = 0;
     const status = () => (connected ? { connected: true, connected_at: new Date().toISOString(), account: { status: "ACTIVE", buying_power: "20000", cash: "10000" } } : { connected: false });
     serve({
       "GET /v1/paper/account": () => jsonResponse(status()),
@@ -204,10 +205,12 @@ describe("Paper trading", () => {
         positions: [{ symbol: "AAA", qty: "3", avg_entry_price: "10", current_price: "11", market_value: "33", unrealized_pl: "3", unrealized_plpc: "0.1" }],
         orders: [{ order_id: "o1", symbol: "AAA", side: "buy", qty: "3", filled_qty: "3", status: "filled", filled_avg_price: "10", submitted_at: new Date().toISOString() }] }),
       "GET /v1/stocks/AAA": jsonResponse({ ticker: "AAA", price: 12.5 }),
-      "POST /v1/paper/orders": (c) => jsonResponse({ order_id: "o2", status: "accepted", ticker: "AAA", qty: (c.body as { qty: number }).qty, filled_avg_price: null }, 201),
+      "POST /v1/paper/orders": (c) => ++submissions === 1
+        ? jsonResponse({ detail: "Order status is uncertain. Retry this confirmation." }, 503)
+        : jsonResponse({ order_id: "o2", status: "accepted", ticker: "AAA", qty: (c.body as { qty: number }).qty, filled_avg_price: null, journal_synced: false }, 201),
     });
     const u = userEvent.setup();
-    render(<SessionProvider initialMe={me("premium")}><PaperView /></SessionProvider>);
+    const mounted = render(<SessionProvider initialMe={me("premium")}><PaperView /></SessionProvider>);
     await u.type(await screen.findByLabelText("API key ID"), "PKBADKEY99");
     await u.type(screen.getByLabelText("API secret"), "secret-123456");
     await u.click(screen.getByRole("button", { name: "Connect paper account" }));
@@ -225,8 +228,21 @@ describe("Paper trading", () => {
     expect(await within(dialog).findByText("$50.00")).toBeInTheDocument();
     expect(calls.some((c) => c.path === "/v1/paper/orders")).toBe(false);
     await u.click(within(dialog).getByRole("button", { name: "Buy 4 AAA" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Order status is uncertain");
+    // A remount drops component refs; the confirmation must survive in storage.
+    mounted.unmount();
+    render(<SessionProvider initialMe={me("premium")}><PaperView /></SessionProvider>);
+    await u.clear(await screen.findByLabelText("Shares"));
+    await u.type(screen.getByLabelText("Shares"), "4");
+    await u.click(screen.getByRole("button", { name: "Review order" }));
+    const retried = await screen.findByRole("dialog");
+    await u.click(within(retried).getByRole("button", { name: "Buy 4 AAA" }));
     expect(await screen.findByText(/Sent: buy 4 AAA \(accepted\)/)).toBeInTheDocument();
-    expect(calls.find((c) => c.path === "/v1/paper/orders")!.body).toEqual({ ticker: "AAA", qty: 4, confirm: true });
+    expect(calls.find((c) => c.path === "/v1/paper/orders")!.body).toEqual({ ticker: "AAA", qty: 4, confirm: true, idempotency_key: expect.any(String) });
+    const sent = calls.filter((c) => c.path === "/v1/paper/orders");
+    expect(sent).toHaveLength(2);
+    expect(sent[1]!.body).toEqual(sent[0]!.body);
+    expect(screen.getByText(/Journal sync pending/)).toBeInTheDocument();
   });
 });
 
