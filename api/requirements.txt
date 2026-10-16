@@ -14,6 +14,7 @@ PyJWT==2.15.0
 # Real-time price alerts (billing_service/realtime_alerts.py, started in api/main.py);
 # same pins as billing_service/requirements.txt.
 psycopg2-binary==2.9.10
+stripe==11.1.1  # embedded billing; same SDK as the standalone service
 httpx==0.28.1
 anthropic>=0.69.0,<1  # /v1/ai (Premium); same pin as requirements-extended (lock: 0.116.0)
 cryptography  # browser push encryption and VAPID (api/webpush.py); version from the lock

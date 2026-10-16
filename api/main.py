@@ -265,6 +265,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         return body
 
     routes.register_all(app)
+    from api import billing
+
+    billing.register(app)
     return app
 
 

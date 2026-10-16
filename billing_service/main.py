@@ -12,6 +12,7 @@ import psycopg2
 import stripe
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _log = logging.getLogger("billing_service")
@@ -590,18 +591,21 @@ def _check_price(price_id: str, mode: str, interval: Optional[str], amount: Opti
 
 
 def _check_webhooks() -> dict:
-    """Is a Stripe webhook endpoint pointed at this service's /webhook with the
+    """Is a Stripe webhook endpoint pointed at this service with the
     three events? Restricted keys may not list endpoints; that's reported, not fatal."""
     try:
         endpoints = list(stripe.WebhookEndpoint.list(limit=100).auto_paging_iter())
     except Exception as e:
         return {"checked": False, "problems": [f"could not list endpoints ({type(e).__name__})"]}
+    expected_url = os.getenv("BILLING_WEBHOOK_URL", "").strip().rstrip("/")
+    expected_path = "/billing/webhook" if os.getenv("BILLING_MODE", "").strip().lower() == "embedded" else "/webhook"
     matching = [ep for ep in endpoints
-                if urlparse(str(ep.get("url") or "")).path.rstrip("/") == "/webhook"
+                if urlparse(str(ep.get("url") or "")).path.rstrip("/") == expected_path
+                and (not expected_url or str(ep.get("url") or "").rstrip("/") == expected_url)
                 and ep.get("status") == "enabled"]
     if not matching:
         urls = sorted({str(ep.get("url") or "") for ep in endpoints})
-        return {"checked": True, "problems": ["no enabled endpoint at path /webhook"], "urls": urls}
+        return {"checked": True, "problems": [f"no enabled endpoint at {expected_url or expected_path}"], "urls": urls}
     events = set()
     for ep in matching:
         events.update(ep.get("enabled_events") or [])
@@ -689,8 +693,15 @@ def _subscription_cancel_flow(subscription_id: str, return_url: str) -> Optional
 
 
 @app.post("/create-checkout-session")
-async def create_checkout_session(payload: dict, request: Request):
+def create_checkout_session(payload: dict, request: Request):
+    _require_env("STRIPE_PRICE_PRO", "STRIPE_PRICE_PREMIUM", "APP_SUCCESS_URL", "APP_CANCEL_URL", "DATABASE_URL")
+    return checkout_for_account(_authenticated_user(request, payload), payload)
+
+
+def checkout_for_account(email: str, payload: dict):
     """
+    Called only after the HTTP adapter or API has authenticated the account.
+
     Payload example:
     {
       "email": "user@email.com",
@@ -706,7 +717,7 @@ async def create_checkout_session(payload: dict, request: Request):
         "DATABASE_URL",
     )
 
-    email = _authenticated_user(request, payload)
+    email = _validate_email(email)
     plan = (payload.get("plan") or "").strip().lower()
 
     if not email or "@" not in email:
@@ -776,8 +787,9 @@ async def create_checkout_session(payload: dict, request: Request):
                     )
                 return {"portal_url": portal.url, "mode": "portal"}
         except Exception as e:
-            # If portal creation fails for any reason, fall back to Checkout (but only if needed)
-            print(f"[billing_service] portal redirect failed (falling back to checkout): {e}")
+            # A failed lookup or portal must never create a second subscription.
+            _log.warning("existing subscription check/portal failed: %s", type(e).__name__)
+            raise HTTPException(502, "Subscription management is temporarily unavailable. Please try again.")
 
     try:
         session = stripe.checkout.Session.create(
@@ -802,15 +814,19 @@ async def create_checkout_session(payload: dict, request: Request):
 
 
 @app.post("/create-portal-session")
-async def create_portal_session(payload: dict, request: Request):
+def create_portal_session(payload: dict, request: Request):
+    return portal_for_account(_authenticated_user(request, payload), payload)
+
+
+def portal_for_account(email: str, payload: dict):
     """
-    Requires the X-HSF-Auth billing token of the signed-in account (Run 83).
+    Called only after the HTTP adapter or API has authenticated the account.
     Optional payload: { "return_url": "<URL on one of our apps>", "flow": "cancel" }.
     Any "email" must match the authenticated account; the Stripe customer
     always comes from that account's own users row, never from the request.
     """
     _require_env("APP_SUCCESS_URL", "DATABASE_URL")
-    email = _authenticated_user(request, payload)
+    email = _validate_email(email)
     try:
         user = _get_user_by_email(email)
     except Exception as e:
@@ -850,12 +866,15 @@ async def create_portal_session(payload: dict, request: Request):
 
 @app.post("/webhook")
 async def stripe_webhook(request: Request):
+    # Stripe and psycopg2 are synchronous; keep them off the shared API event loop.
+    payload = await request.body()
+    return await run_in_threadpool(process_webhook, payload, request.headers.get("stripe-signature"))
+
+
+def process_webhook(payload: bytes, sig: Optional[str]):
     if not STRIPE_WEBHOOK_SECRET:
         raise HTTPException(500, "Missing STRIPE_WEBHOOK_SECRET env var")
     _require_env("DATABASE_URL")
-
-    payload = await request.body()
-    sig = request.headers.get("stripe-signature")
 
     try:
         event = stripe.Webhook.construct_event(payload=payload, sig_header=sig, secret=STRIPE_WEBHOOK_SECRET)
