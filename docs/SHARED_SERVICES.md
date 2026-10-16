@@ -8,6 +8,11 @@ the same rules. These modules import without a UI runtime or database.
 single-use billing/restore tokens. The former `ui` module paths remain aliases
 to the canonical implementations so existing integrations keep working.
 
+With `BILLING_MODE=embedded`, the API invokes `billing_service.main` directly
+for its authenticated checkout and portal routes and mounts Stripe delivery at
+`/billing/webhook`. External mode remains available for rollout and rollback.
+See [billing deployment](BILLING_API_DEPLOY.md) for settings and cutover checks.
+
 `services.paper_orders` owns recoverable paper-order submission and journal
 reconciliation for both frontends. `db.paper_orders` records confirmation
 intents and pending broker results before an order can be submitted. No trading
