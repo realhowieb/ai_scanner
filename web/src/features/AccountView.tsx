@@ -13,6 +13,7 @@ import { Dialog } from "@/components/Dialog";
 import { Card, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import { beginBilling } from "@/lib/billingReturn";
 import { FEATURE_PLAN, signOut, useSession } from "@/session/SessionProvider";
 import type { Me } from "@/session/SessionProvider";
 
@@ -42,9 +43,11 @@ const PREFS: { key: keyof EmailPrefs; label: string; note: string }[] = [
 ];
 
 function PlanCard({ me }: { me: Me }) {
+  const { syncBilling, billingBusy, billingStatus, billingError } = useSession();
   const portal = useAction();
   const open = (flow?: "cancel") => void portal.run(async () => {
     const link = await account.portal(flow);
+    beginBilling(me.plan);
     window.location.assign(link.url);
     return true;
   });
@@ -67,6 +70,14 @@ function PlanCard({ me }: { me: Me }) {
         </div>
       )}
       <ErrorLine error={portal.error} />
+      {me.plan !== "admin" && <div className="stack-sm">
+        <p className="cap">Billing may open in your browser. Return to HSF after confirming your change; your plan refreshes automatically.</p>
+        <div><button type="button" className="btn" disabled={billingBusy} onClick={() => void syncBilling()}>
+          {billingBusy ? "Checking plan…" : "Refresh plan"}
+        </button></div>
+        {billingStatus && <p className="notice" role="status">{billingStatus}</p>}
+        <ErrorLine error={billingError} />
+      </div>}
       {!me.email_verified && me.plan !== "admin" && <p className="cap">Verify your email before upgrading.</p>}
       {paid && <p className="cap">Change plan, payment method or invoices in the Stripe customer portal. <button type="button" className="link-btn" onClick={() => open("cancel")}>Cancel subscription</button></p>}
       <div className="grid2">

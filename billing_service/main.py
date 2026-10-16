@@ -398,6 +398,47 @@ def _price_to_plan(price_id: str) -> str:
     return "basic"
 
 
+def sync_account_subscription(email: str) -> dict:
+    """Read Stripe for this authenticated account's stored customer only.
+
+    Webhooks remain the primary source of updates. This recovery path changes
+    no Stripe subscription and never infers access from a return URL or amount.
+    Unknown prices and ambiguous subscriptions leave the current tier intact.
+    """
+    email = _validate_email(email)
+    try:
+        user = _get_user_by_email(email)
+        if (user or {}).get("tier") == "admin":
+            return {"message": "Admin access is managed by HSF and does not require a paid subscription."}
+        customer_id = (user or {}).get("stripe_customer_id")
+        if not customer_id:
+            return {"message": "No linked subscription yet. If you just paid, wait a moment and refresh again."}
+        subscriptions = stripe.Subscription.list(customer=customer_id, status="all", limit=100)
+        active = [s for s in subscriptions.get("data", []) if s.get("status") in {"active", "trialing"}]
+        if subscriptions.get("has_more") or len(active) > 1:
+            raise HTTPException(409, "Multiple subscriptions need review. Contact support to confirm your plan.")
+        if not active:
+            return {"message": "No active subscription confirmed. If you just paid, wait a moment and refresh again."}
+        subscription = active[0]
+        if subscription.get("customer") != customer_id:
+            raise HTTPException(502, "Subscription account could not be verified.")
+        items = (subscription.get("items") or {}).get("data") or []
+        if len(items) != 1:
+            raise HTTPException(409, "This subscription needs review. Contact support to confirm your plan.")
+        price_id = (items[0].get("price") or {}).get("id") or ""
+        plan = _price_to_plan(price_id)
+        if plan not in {"pro", "premium"}:
+            raise HTTPException(409, "Stripe's subscription price is not configured in HSF. Contact support to sync your plan.")
+        _set_user_plan_by_email(email=email, tier=plan, stripe_customer_id=customer_id,
+                               stripe_subscription_id=subscription.get("id"), stripe_price_id=price_id)
+        return {"message": "Subscription checked with Stripe. Your account now shows the confirmed plan."}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _log.warning("subscription sync failed: %s", type(exc).__name__)
+        raise HTTPException(502, "Subscription status is temporarily unavailable. Please try again.") from exc
+
+
 def _is_legacy_price(price_id: str) -> bool:
     price_id = (price_id or "").strip()
     return bool(price_id) and (price_id in STRIPE_PRICE_PRO_LEGACY or price_id in STRIPE_PRICE_PREMIUM_LEGACY)

@@ -167,6 +167,16 @@ def register(app: FastAPI) -> None:
         """Stripe Customer Portal: payment method, invoices, plan, cancellation (flow=cancel)."""
         return acct.portal_url(_user(account), body.flow)
 
+    @app.post("/v1/billing/sync", response_model=models.Message,
+              responses={**_AUTH, 409: {"description": "Subscription configuration needs review"},
+                         429: {"description": "Too many refreshes"}, 502: {"description": "Billing unavailable"}})
+    def billing_sync(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Refresh the signed-in account from its Stripe customer. Does not create or change a subscription."""
+        from api.billing import sync_account
+
+        ratelimit.check("billing_sync", _user(account))
+        return sync_account(_user(account))
+
 
 class DeleteAccountBody(BaseModel):
     password: str = Field(min_length=1, max_length=256)
