@@ -235,6 +235,7 @@ select, .field input { min-height: 40px; border-radius: 8px; background: var(--b
 .seg.on { background: var(--raise); color: var(--text); }
 .seg:focus-within { outline: 2px solid var(--accent); }
 .form-error { margin: 0; color: #ffb3b3; font-size: 14px; }
+.form-error .field-error { display: block; }
 .login { gap: 16px; }
 .login-links { text-align: center; }
 .pager { display: flex; align-items: center; justify-content: center; gap: 16px; }

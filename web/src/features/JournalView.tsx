@@ -9,7 +9,7 @@ import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { TICKER_RE } from "@/components/AppShell";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
-import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, RefreshStatus, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price } from "@/lib/format";
@@ -94,9 +94,11 @@ export function JournalView() {
       <section className="page-head">
         <div>
           <h1 className="h1">Journal</h1>
-          <p className="cap">Trades you log yourself. HSF doesn&apos;t place orders. Open trades are marked to live quotes.</p>
+          <p className="cap">Your logged trades and imported paper fills. Open trades are marked to available quotes.</p>
         </div>
       </section>
+      {j.data && <RefreshStatus updatedAt={j.updatedAt} refreshing={j.refreshing} error={j.error} onRetry={j.reload} />}
+      <div className="row-actions"><button type="button" className="btn" onClick={j.reload} disabled={j.loading || j.refreshing}>Refresh journal</button></div>
       <Card title="Log a trade" id="log">
         {pro ? <LogTrade onDone={j.reload} /> : <Locked title="Logging trades is part of Pro" plan="pro">Keep a record of your entries and exits with live marks and win rate.</Locked>}
       </Card>

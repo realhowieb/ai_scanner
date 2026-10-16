@@ -25,6 +25,10 @@ class MemoryOrders:
             )
             return deepcopy(row)
 
+    def get(self, user, cid):
+        with self.lock:
+            return deepcopy(self.rows.get((user, cid)))
+
     def save(self, user, cid, *, state, result=None, error=None):
         with self.lock:
             row = self.rows[user, cid]

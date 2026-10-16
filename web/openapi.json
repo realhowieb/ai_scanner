@@ -4575,19 +4575,6 @@
     "title": "FunnelEvent",
     "type": "object"
    },
-   "HTTPValidationError": {
-    "properties": {
-     "detail": {
-      "items": {
-       "$ref": "#/components/schemas/ValidationError"
-      },
-      "title": "Detail",
-      "type": "array"
-     }
-    },
-    "title": "HTTPValidationError",
-    "type": "object"
-   },
    "Health": {
     "properties": {
      "ok": {
@@ -4696,7 +4683,7 @@
      },
      "shares": {
       "maximum": 10000000.0,
-      "minimum": 0.0,
+      "minimum": 1.0,
       "title": "Shares",
       "type": "integer"
      },
@@ -8016,6 +8003,95 @@
     "title": "PaperOrderBody",
     "type": "object"
    },
+   "PaperOrderTracking": {
+    "properties": {
+     "broker_available": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "False when this check could not reach or confirm the broker; saved status is retained",
+      "title": "Broker Available"
+     },
+     "filled_avg_price": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Filled Avg Price"
+     },
+     "filled_qty": {
+      "default": 0,
+      "title": "Filled Qty",
+      "type": "number"
+     },
+     "journal_synced": {
+      "default": false,
+      "description": "True only after an actual fill has been imported; pending fills retry on journal/activity refresh",
+      "title": "Journal Synced",
+      "type": "boolean"
+     },
+     "order_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Order Id"
+     },
+     "qty": {
+      "title": "Qty",
+      "type": "integer"
+     },
+     "state": {
+      "enum": [
+       "pending",
+       "submitted",
+       "synced",
+       "rejected"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "updated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Last saved tracking change; not a market quote timestamp",
+      "title": "Updated At"
+     }
+    },
+    "required": [
+     "status",
+     "ticker",
+     "qty",
+     "state"
+    ],
+    "title": "PaperOrderTracking",
+    "type": "object"
+   },
    "PaperStatus": {
     "properties": {
      "account": {
@@ -10851,44 +10927,57 @@
     "title": "UnsubscribeState",
     "type": "object"
    },
-   "ValidationError": {
+   "ValidationErrorResponse": {
     "properties": {
-     "ctx": {
-      "title": "Context",
+     "code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Code"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "items": {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        "type": "array"
+       }
+      ],
+      "title": "Detail"
+     },
+     "fields": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "title": "Fields",
       "type": "object"
      },
-     "input": {
-      "title": "Input"
-     },
-     "loc": {
-      "items": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "integer"
-        }
-       ]
-      },
-      "title": "Location",
-      "type": "array"
-     },
-     "msg": {
-      "title": "Message",
-      "type": "string"
-     },
-     "type": {
-      "title": "Error Type",
-      "type": "string"
+     "request_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Request Id"
      }
     },
     "required": [
-     "loc",
-     "msg",
-     "type"
+     "detail"
     ],
-    "title": "ValidationError",
+    "title": "ValidationErrorResponse",
     "type": "object"
    },
    "Watchlist": {
@@ -12147,6 +12236,16 @@
        }
       },
       "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "summary": "Healthz"
@@ -12185,11 +12284,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "503": {
       "description": "Database unavailable, or (strict=true) a scheduled scan was missed"
@@ -12565,6 +12664,16 @@
      },
      "403": {
       "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -13091,6 +13200,16 @@
      "404": {
       "description": "Scan not found (or not yours)"
      },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
      "429": {
       "description": "Daily AI limit or hourly request limit reached"
      },
@@ -13147,11 +13266,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Daily AI limit or hourly request limit reached"
@@ -13213,11 +13332,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Daily AI limit or hourly request limit reached"
@@ -13275,11 +13394,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Daily AI limit or hourly request limit reached"
@@ -13315,6 +13434,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -13564,6 +13693,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -13642,6 +13781,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -13682,11 +13831,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -13731,11 +13880,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -13823,6 +13972,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -13861,11 +14020,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -13919,11 +14078,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -13965,11 +14124,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Rate limited"
@@ -14002,11 +14161,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "summary": "Logout"
@@ -14041,11 +14200,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Too many requests from this address"
@@ -14086,11 +14245,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "summary": "Password Reset Confirm"
@@ -14127,11 +14286,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "summary": "Refresh"
@@ -14172,11 +14331,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Too many sign-ups from this address"
@@ -14217,11 +14376,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "summary": "Verify Email"
@@ -14262,11 +14421,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "502": {
       "description": "Billing service unavailable"
@@ -14318,11 +14477,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "502": {
       "description": "Billing service unavailable"
@@ -14353,6 +14512,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -14390,11 +14559,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Too many reports from this address"
@@ -14489,11 +14658,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -14543,11 +14712,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -14660,11 +14829,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -14737,11 +14906,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -14787,11 +14956,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Too many attempts"
@@ -14830,11 +14999,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Too many attempts"
@@ -14873,11 +15042,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Too many events from this address"
@@ -14903,6 +15072,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -14943,11 +15122,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -14990,11 +15169,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15050,11 +15229,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15082,6 +15261,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15148,6 +15337,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15174,6 +15373,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15204,6 +15413,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15246,11 +15465,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15290,11 +15509,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15321,6 +15540,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15360,11 +15589,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15390,6 +15619,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      },
      "429": {
       "description": "Too many exports"
@@ -15438,11 +15677,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15470,6 +15709,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      },
      "503": {
       "description": "Email verification status or sending temporarily unavailable"
@@ -15507,11 +15756,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -15558,11 +15807,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "503": {
       "description": "Browser notifications aren't set up on the server"
@@ -15598,6 +15847,16 @@
      },
      "403": {
       "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -17426,6 +17685,16 @@
      "403": {
       "description": "Premium feature"
      },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
      "503": {
       "description": "Paper trading unavailable on the server"
      }
@@ -17455,6 +17724,16 @@
      },
      "403": {
       "description": "Premium feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      },
      "503": {
       "description": "Paper trading unavailable on the server"
@@ -17504,11 +17783,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "503": {
       "description": "Paper trading unavailable on the server"
@@ -17560,11 +17839,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      },
      "503": {
       "description": "Paper trading unavailable on the server"
@@ -17633,6 +17912,67 @@
     "summary": "Paper trade a setup (Premium)"
    }
   },
+  "/v1/paper/orders/{confirmation_id}": {
+   "get": {
+    "description": "Only checks an existing confirmation owned by this account. Never places an order.",
+    "operationId": "paper_order_status_v1_paper_orders__confirmation_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "confirmation_id",
+      "required": true,
+      "schema": {
+       "pattern": "^[A-Za-z0-9_-]{8,128}$",
+       "title": "Confirmation Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PaperOrderTracking"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many status checks (Retry-After)"
+     },
+     "503": {
+      "description": "Paper trading unavailable on the server"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Check a paper order confirmation"
+   }
+  },
   "/v1/plans": {
    "get": {
     "description": "The plan comparison the landing and pricing pages show, from the same source as\nthe Billing page (ui.pricing), so copy can't drift from what each plan gets.",
@@ -17647,6 +17987,16 @@
        }
       },
       "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "summary": "Plans and pricing (public)"
@@ -17691,11 +18041,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -17804,6 +18154,16 @@
      },
      "403": {
       "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -17872,11 +18232,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -17934,11 +18294,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18282,11 +18642,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18357,11 +18717,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18411,11 +18771,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18466,11 +18826,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18632,11 +18992,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18684,11 +19044,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18733,11 +19093,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18784,11 +19144,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18835,11 +19195,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18916,11 +19276,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18967,11 +19327,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -18998,6 +19358,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19070,11 +19440,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19105,6 +19475,16 @@
      },
      "403": {
       "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19183,11 +19563,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19218,6 +19598,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19263,11 +19653,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19307,11 +19697,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19356,11 +19746,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19417,11 +19807,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19468,11 +19858,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19519,11 +19909,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19579,11 +19969,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19634,11 +20024,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19694,11 +20084,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19749,11 +20139,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19812,11 +20202,11 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ValidationErrorResponse"
         }
        }
       },
-      "description": "Validation Error"
+      "description": "Invalid request fields"
      }
     },
     "security": [
@@ -19843,6 +20233,16 @@
      },
      "401": {
       "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
      }
     },
     "security": [

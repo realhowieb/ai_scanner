@@ -49,6 +49,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET | `/v1/stocks/{ticker}/plan?account_size&risk_pct` | Bearer, **Pro** | Trade plan for a latest-scan result: entry, stop, 1.5R/3R targets, size. |
 | GET / POST / DELETE | `/v1/paper/account` | Bearer, **Premium** | Paper account status; connect your own Alpaca **paper** keys (validated, stored encrypted, never returned); disconnect. |
 | GET | `/v1/paper/activity` | Bearer, **Premium** | Live positions and the order feed. |
+| GET | `/v1/paper/orders/{confirmation_id}` | Bearer, **Premium** | Check an existing confirmation owned by this user. Returns durable state, broker status, fill quantity, and journal-sync status. Never submits an order. `broker_available: false` means the saved status could not be confirmed; completed receipts are returned without recreating deleted journal entries. Poll every 10 seconds while visible; limited to 60 checks/minute per account. |
 | POST | `/v1/paper/orders` | Bearer, **Premium** | `{ticker, qty, "confirm": true, idempotency_key}` → whole-share market buy in your paper account. Reuse the confirmation ID on retries. Actual fills import into the journal; `journal_synced: false` means fill confirmation or import is pending. Refused unless the trading endpoint is Alpaca's paper host. |
 | DELETE | `/v1/me` | Bearer | `{password, "confirm": "DELETE"}` → deletes your account and its data. 409 while a paid subscription is active (cancel via the portal first) and for admins. |
 | GET | `/v1/stocks/{ticker}` | Bearer | Stock Intelligence (same builder as the web page): score, components, signals, reasons, risks, what to watch, lifecycle, historical context, daily bars the scans cached (up to 120), and your watchlists and alerts on it. |
@@ -138,8 +139,13 @@ GET /v1/scans/9f37c3e6…
                 "setups": [{"ticker": "…", "score": <0-100>, "signals": ["breakout"], …}]}}
 ```
 
-Errors are `{"detail": "<message>"}` (validation errors: `{"detail": [ … ]}`, FastAPI's
-standard list). Times are ISO 8601 and always carry a timezone. Plans are
+Errors retain `detail` for existing clients. HTTP errors also include a stable `code`
+and `request_id`. Validation errors return a `detail` list and a `fields` map
+(e.g. `{"shares": "Enter a whole number."}`), with `code: "validation_error"`.
+Submitted values and validator context are omitted, so invalid credentials are
+never echoed in validation responses.
+
+Times are ISO 8601 and always carry a timezone. Plans are
 `basic` / `pro` / `premium` / `admin` in data; `plan_label` (Free / Pro / Premium /
 Admin) is the name to show. Tickers are upper case.
 

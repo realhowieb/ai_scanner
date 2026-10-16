@@ -12,7 +12,8 @@ export function DataFreshness({ info }: { info?: Schemas["DataFreshness"] | null
       <strong>Data freshness: {labels[info.state]}</strong>
       <div>Last successful scan (saved): {time(info.last_successful_scan_at)}</div>
       {info.scan_completed_at && <div>Scan completed: {time(info.scan_completed_at)}</div>}
-      {info.market_data_at && <div>Market data as of: {time(info.market_data_at)}</div>}
+      <div>Market data as of: {time(info.market_data_at)}</div>
+      {info.market_data_note && <p className="cap">{info.market_data_note}</p>}
     </div>
   );
 }

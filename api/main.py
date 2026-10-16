@@ -71,7 +71,15 @@ READYZ_RETRY_S = 2.0
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     settings = settings or load_settings()
-    app = FastAPI(title="HSFinest.AI API", version="1.0.0")
+    app = FastAPI(title="HSFinest.AI API", version="1.0.0",
+                  responses={422: {"model": models.ValidationErrorResponse, "description": "Invalid request fields"}})
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException
+
+    from api.errors import http_response, validation_response
+
+    app.add_exception_handler(RequestValidationError, validation_response)
+    app.add_exception_handler(HTTPException, http_response)
     app.router.route_class = _ReleasingRoute
     app.state.settings = settings
     # Scan, history and stock responses are large JSON; the web BFF's fetch() accepts
@@ -179,15 +187,18 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     @app.exception_handler(trading_mod.PaperUnavailable)
     def _paper_unavailable(_request: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse({"detail": str(exc)}, status_code=503)
+        return JSONResponse({"detail": str(exc), "code": "paper_unavailable",
+                             "request_id": getattr(_request.state, "request_id", None)}, status_code=503)
 
     @app.exception_handler(trading_mod.PaperRejected)
     def _paper_rejected(_request: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse({"detail": str(exc)}, status_code=400)
+        return JSONResponse({"detail": str(exc), "code": "paper_rejected",
+                             "request_id": getattr(_request.state, "request_id", None)}, status_code=400)
 
     @app.exception_handler(trading_mod.OrderConflict)
     def _paper_conflict(_request: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse({"detail": str(exc)}, status_code=409)
+        return JSONResponse({"detail": str(exc), "code": "order_conflict",
+                             "request_id": getattr(_request.state, "request_id", None)}, status_code=409)
 
     @app.exception_handler(trading_mod.TradeClosed)
     def _trade_closed(_request: Request, exc: Exception) -> JSONResponse:

@@ -50,6 +50,8 @@ class PaperOrderPostgresTests(unittest.TestCase):
                     pool.map(lambda _: paper_orders.reserve("u", "confirmation", "account", "AAPL", 2, {}), range(4))
                 )
             self.assertEqual({r["client_order_id"] for r in rows}, {"confirmation"})
+            self.assertIsNone(paper_orders.get("another-user", "confirmation"))
+            self.assertEqual(paper_orders.get("u", "confirmation")["ticker"], "AAPL")
             paper_orders.save("u", "confirmation", state="submitted", result={"order_id": "order"})
             self.assertEqual(paper_orders.pending("u", "account")[0]["result"], {"order_id": "order"})
 

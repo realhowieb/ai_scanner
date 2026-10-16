@@ -13,11 +13,12 @@ import { ApiError, api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { TICKER_RE } from "@/components/AppShell";
 import { Dialog } from "@/components/Dialog";
-import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, RefreshStatus, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
+import { PaperOrderTracker, usePaperTracking } from "@/features/PaperOrderTracker";
 
 type Status = Schemas["PaperStatus"];
 type Position = { symbol?: string; qty?: string | number; avg_entry_price?: string | number; current_price?: string | number;
@@ -112,6 +113,7 @@ function AccountCard({ s, onDisconnected }: { s: Status; onDisconnected: () => v
 
 function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => void }) {
   const { me } = useSession();
+  const tracking = usePaperTracking(me?.email);
   const confirmation = useRef<{ slot: string; key: string } | null>(null);
   const [ticker, setTicker] = useState(initial);
   const [qty, setQty] = useState("1");
@@ -136,16 +138,19 @@ function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => voi
       confirmation.current = null;
       try { sessionStorage.removeItem(slot); } catch { /* blocked storage */ }
     };
+    tracking.save(key);
     const ok = await act.run(async () => {
       try {
         setPlaced(await unwrap(api.POST("/v1/paper/orders", { body: { ticker: t, qty: q, confirm: true, idempotency_key: key } })));
       } catch (e) {
-        if (e instanceof ApiError && [400, 409, 422].includes(e.status)) clear();
+        if (e instanceof ApiError && [400, 409, 422].includes(e.status)) { clear(); tracking.save(null); }
+        else tracking.save(key);
         throw e;
       }
       return true;
     });
     if (ok) {
+      tracking.save(key);
       clear();
       setReview(false);
       onPlaced();
@@ -165,6 +170,7 @@ function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => voi
       <p className="cap">Whole-share market buy in your Alpaca paper account. No real money. Actual fills are added to your <Link href="/journal">Journal</Link>. If a request is interrupted, confirm the same ticker and share count again to check it safely.</p>
       {placed && <p className="notice" role="status">Sent: buy {placed.qty} {placed.ticker} ({placed.status}{n(placed.filled_avg_price) !== null ? `, filled at ${price(n(placed.filled_avg_price))}` : ""}).</p>}
       {placed && !placed.journal_synced && <p className="cap">Journal sync pending. Refresh Journal or paper activity to check fills and retry the import.</p>}
+      {tracking.key && !act.busy && <PaperOrderTracker key={tracking.key} confirmationId={tracking.key} />}
       <Dialog open={review} title="Confirm paper order" onClose={() => { setReview(false); act.clear(); }}>
         <div className="stack-sm">
           <dl className="kv">
@@ -187,13 +193,15 @@ function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => voi
 }
 
 function Activity({ tick }: { tick: number }) {
-  const act = useApi(`paper-activity:${tick}`, (signal) => unwrap(api.GET("/v1/paper/activity", { params: { query: { limit: 25 } }, signal })));
+  const act = useApi("paper-activity", (signal) => unwrap(api.GET("/v1/paper/activity", { params: { query: { limit: 25 } }, signal })), tick);
   if (act.error && !act.data) return <ErrorState error={act.error} onRetry={act.reload} what="your paper positions" />;
   if (!act.data) return <Skeleton rows={6} label="Loading positions and orders" />;
   const positions = act.data.positions as Position[];
   const orders = act.data.orders as Order[];
   return (
     <>
+      <RefreshStatus updatedAt={act.updatedAt} refreshing={act.refreshing} error={act.error} onRetry={act.reload} />
+      <div className="row-actions"><button type="button" className="btn" onClick={act.reload} disabled={act.loading || act.refreshing}>Refresh activity</button></div>
       <Card title="Paper activity" id="activity-summary">
         <div className="metric-strip" aria-label="Paper activity summary">
           <span><strong>{metric(act.data.summary?.positions, positions.length)}</strong> positions</span>

@@ -6,6 +6,7 @@ instance count; the per-account limits in the database still apply.
 """
 from __future__ import annotations
 
+import math
 import threading
 import time
 from collections import deque
@@ -24,6 +25,7 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "ai": (60, 3600),            # per account, on top of the daily AI_DAILY_LIMIT
     "paper_connect": (5, 3600),  # per account: key validation attempts
     "paper_order": (30, 3600),   # per account
+    "paper_status": (60, 60),    # per account: read-only confirmation polling
     "delete_account": (5, 3600), # per account: password attempts on DELETE /v1/me
     "events": (120, 3600),       # per IP: anonymous funnel events from the web landing page
     "unsubscribe": (30, 600),    # per IP: token lookups on the emailed unsubscribe link
@@ -51,14 +53,24 @@ def check(bucket: str, key: str, *, now: Optional[float] = None) -> None:
     limit, window = LIMITS[bucket]
     now = time.monotonic() if now is None else now
     with _lock:
-        if len(_hits) > _MAX_KEYS:
-            for k in [k for k, q in _hits.items() if not q or now - q[-1] > window]:
+        identity = (bucket, key)
+        if identity not in _hits and len(_hits) >= _MAX_KEYS:
+            # Each bucket has its own window. Never evict an active quota to make
+            # room: rotating addresses must not reset another caller's limit.
+            for k in [k for k, q in _hits.items()
+                      if not q or now - q[-1] >= LIMITS[k[0]][1]]:
                 del _hits[k]
-        q = _hits.setdefault((bucket, key), deque())
+            if len(_hits) >= _MAX_KEYS:
+                retry = max(1, math.ceil(min(
+                    q[-1] + LIMITS[k[0]][1] - now for k, q in _hits.items()
+                )))
+                raise HTTPException(429, "Too many requests. Try again later.",
+                                    headers={"Retry-After": str(retry)})
+        q = _hits.setdefault(identity, deque())
         while q and now - q[0] >= window:
             q.popleft()
         if len(q) >= limit:
-            retry = max(1, int(window - (now - q[0])))
+            retry = max(1, math.ceil(window - (now - q[0])))
             raise HTTPException(429, "Too many requests. Try again later.",
                                 headers={"Retry-After": str(retry)})
         q.append(now)

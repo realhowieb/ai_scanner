@@ -23,6 +23,14 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 
+  readonly receivedAt = Date.now();
+
+  get fields(): Record<string, string> {
+    const fields = (this.body as { fields?: unknown } | null)?.fields;
+    if (!fields || typeof fields !== "object" || Array.isArray(fields)) return {};
+    return Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+  }
+
   get code(): string | null {
     const b = this.body as { code?: unknown } | null;
     return b && typeof b.code === "string" ? b.code : null;
@@ -59,7 +67,7 @@ const requestIds: Middleware = {
 export function messageFrom(body: unknown, status: number): string {
   const detail = (body as { detail?: unknown } | null)?.detail;
   if (typeof detail === "string" && detail) return detail;
-  if (Array.isArray(detail)) return "Some of the values aren't valid.";
+  if (Array.isArray(detail)) return "Check the fields below and try again.";
   if (status === 503) return "The HSF service is unavailable right now.";
   if (status === 429) return "Too many requests. Wait a moment and try again.";
   return `Something went wrong (HTTP ${status}).`;
