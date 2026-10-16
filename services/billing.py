@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from urllib.parse import urlsplit
 
 
 def _build_return_urls(username: str) -> tuple[str | None, str | None]:
@@ -54,6 +55,10 @@ def create_checkout_url(email: str, plan: str, interval: str = "month") -> tuple
         base = (BILLING_API_BASE or "").rstrip("/")
         if not base:
             return None, "BILLING_API_BASE not configured."
+        endpoint = urlsplit(base)
+        if (not endpoint.hostname or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment
+                or not (endpoint.scheme == "https" or (endpoint.scheme == "http" and endpoint.hostname in {"localhost", "127.0.0.1", "::1"}))):
+            return None, "BILLING_API_BASE must use HTTPS (HTTP is allowed only for localhost)."
 
         auth = billing_auth_headers(email)
         if not auth:
@@ -73,7 +78,7 @@ def create_checkout_url(email: str, plan: str, interval: str = "month") -> tuple
             headers={"Content-Type": "application/json", **auth},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310 -- scheme and host validated above
             data = json.loads(resp.read())
         url = data.get("checkout_url") or data.get("url") or data.get("portal_url")
         return (url, None) if url else (None, f"Unexpected billing response: {data}")

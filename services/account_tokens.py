@@ -34,14 +34,14 @@ TTL = {
 }
 
 SCHEMA_SQL = (
-    f"CREATE TABLE IF NOT EXISTS {TABLE} ("
+    "CREATE TABLE IF NOT EXISTS hsf_auth_tokens ("
     " token_hash text PRIMARY KEY,"
     " username text NOT NULL,"
     " purpose text NOT NULL,"
     " expires_at timestamptz NOT NULL,"
     " created_at timestamptz NOT NULL DEFAULT now())"
 )
-CONSUME_SQL = f"DELETE FROM {TABLE} WHERE token_hash = %s AND purpose = %s AND expires_at > %s RETURNING username"
+CONSUME_SQL = "DELETE FROM hsf_auth_tokens WHERE token_hash = %s AND purpose = %s AND expires_at > %s RETURNING username"
 
 
 def token_hash(token: str) -> str:
@@ -76,9 +76,9 @@ def issue_token(username: str, purpose: str, *, conn: Any = None, now: Optional[
         token = secrets.token_urlsafe(32)
         cur = c.cursor()
         cur.execute(SCHEMA_SQL)
-        cur.execute(f"DELETE FROM {TABLE} WHERE expires_at <= %s", (now,))  # housekeeping
+        cur.execute("DELETE FROM hsf_auth_tokens WHERE expires_at <= %s", (now,))  # housekeeping
         cur.execute(
-            f"INSERT INTO {TABLE} (token_hash, username, purpose, expires_at) VALUES (%s, %s, %s, %s)",
+            "INSERT INTO hsf_auth_tokens (token_hash, username, purpose, expires_at) VALUES (%s, %s, %s, %s)",
             (token_hash(token), user, purpose, now + TTL[purpose]),
         )
         c.commit()
