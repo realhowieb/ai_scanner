@@ -14,7 +14,7 @@ from api.scans import json_safe
 class JournalCreate(BaseModel):
     ticker: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,9}$")
     entry_price: float = Field(gt=0, le=1_000_000)
-    shares: int = Field(ge=0, le=10_000_000)
+    shares: int = Field(ge=1, le=10_000_000)
 
 
 class JournalClose(BaseModel):
@@ -112,3 +112,18 @@ def register(app: FastAPI) -> None:
         user = _user(account)
         ratelimit.check("paper_order", user)
         return json_safe(trading.order(user, body.ticker.upper(), body.qty, body.idempotency_key))
+
+    @app.get("/v1/paper/orders/{confirmation_id}", response_model=models.PaperOrderTracking,
+             responses={**_PREM, **_OWNED, 429: {"description": "Too many status checks (Retry-After)"}},
+             summary="Check a paper order confirmation")
+    def paper_order_status(confirmation_id: str = Path(pattern=r"^[A-Za-z0-9_-]{8,128}$"),
+                           account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Only checks an existing confirmation owned by this account. Never places an order."""
+        from services.paper_orders import status
+
+        require_feature(account, "can_paper_trade")
+        ratelimit.check("paper_status", _user(account))
+        result = status(_user(account), confirmation_id)
+        if result is None:
+            raise user_data.NotFound("order confirmation")
+        return json_safe(result)

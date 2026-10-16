@@ -17,7 +17,7 @@ describe("data freshness", () => {
     expect(screen.getByLabelText("Data freshness")).toHaveTextContent("Partially available");
     expect(screen.getByText(/Last successful scan/)).toHaveTextContent("3:35 PM ET");
     expect(screen.queryByText(/Scan completed/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Market data as of/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Market data as of/)).toHaveTextContent("Unavailable");
   });
   it("shows the scan's completion and market-data times when the server knows them", () => {
     render(<DataFreshness info={{ ...info, scan_completed_at: "2026-10-09T18:58:41+00:00",

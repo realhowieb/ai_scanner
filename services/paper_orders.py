@@ -54,7 +54,7 @@ def _confirmed(result, intent):
             and float(result.get("qty")) == intent["qty"]
             and result.get("side") == "buy"
         )
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, AttributeError):
         return False
 
 
@@ -128,7 +128,7 @@ def submit(user, ticker, qty, key, context=None):
         if intent["state"] == "rejected":
             raise PaperRejected(intent.get("error") or "Order rejected. Review a new order to try again.")
         if intent.get("state") == "synced" and intent.get("result"):
-            return _record(user, intent, intent["result"])
+            return _snapshot(intent)
         result = _lookup(account, cid)
         if not result.get("ok") and intent.get("result"):
             return _record(user, intent, intent["result"])
@@ -156,6 +156,47 @@ def submit(user, ticker, qty, key, context=None):
         raise
     except Exception as exc:
         raise PaperUnavailable("Order tracking is temporarily unavailable. Retry the same confirmation.") from exc
+
+
+def _snapshot(intent, broker_available=None):
+    result = intent.get("result") or {}
+    filled = float(result.get("filled_qty") or 0)
+    if not math.isfinite(filled) or not 0 <= filled <= intent["qty"] or not filled.is_integer():
+        raise PaperUnavailable("The broker's fill quantity could not be confirmed. Your confirmation is saved.")
+    return {"state": intent["state"], "order_id": result.get("order_id"),
+            "status": result.get("status") or intent["state"], "ticker": intent["ticker"],
+            "qty": intent["qty"], "filled_qty": filled, "filled_avg_price": result.get("filled_avg_price"),
+            "journal_synced": intent["state"] == "synced" and filled > 0,
+            "broker_available": broker_available, "updated_at": intent.get("updated_at")}
+
+
+def status(user, key):
+    """Recover an owned confirmation with lookups only, never a broker submission."""
+    from db.paper_trading import get_paper_account
+
+    user = user.strip().lower()
+    cid = client_id(user, key)
+    try:
+        intent = store.get(user, cid)
+        if intent is None:
+            return None
+        # A completed receipt must not recreate a journal row the user deleted.
+        if intent["state"] in {"synced", "rejected"}:
+            return _snapshot(intent)
+        require_paper_endpoint()
+        account = get_paper_account(user)
+        if not account:
+            return _snapshot(intent, False)
+        result = _lookup(account, cid)
+        if not result.get("ok") or not _confirmed(result, intent):
+            return _snapshot(intent, False)
+        receipt = _record(user, intent, result)
+        latest = store.get(user, cid)
+        return {**_snapshot(latest, True), "journal_synced": receipt["journal_synced"]}
+    except PaperUnavailable:
+        raise
+    except Exception as exc:
+        raise PaperUnavailable("Order tracking is temporarily unavailable. Your confirmation is saved.") from exc
 
 
 def reconcile_pending(user):

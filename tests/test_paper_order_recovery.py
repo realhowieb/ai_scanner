@@ -11,6 +11,7 @@ class RecoveryTests(unittest.TestCase):
         self.store, self.broker, self.fills = MemoryOrders(), PaperBroker(), {}
         for target, fn in (
             ("services.paper_orders.store.reserve", self.store.reserve),
+            ("services.paper_orders.store.get", self.store.get),
             ("services.paper_orders.store.save", self.store.save),
             ("services.paper_orders.store.pending", self.store.pending),
             ("services.paper_orders.broker.get_order_by_client_id", self.broker.lookup),
@@ -129,3 +130,56 @@ class RecoveryTests(unittest.TestCase):
             with self.assertRaises(orders.PaperUnavailable):
                 self.send()
         self.assertEqual(len(self.broker.posts), 1)
+
+
+    def test_status_is_owned_and_never_submits_an_unknown_confirmation(self):
+        self.assertIsNone(orders.status("a", "confirm-123"))
+        self.send()
+        self.assertIsNone(orders.status("b", "confirm-123"))
+        self.assertEqual(len(self.broker.posts), 1)
+
+    def test_status_recovers_partial_and_full_fills_without_resubmitting(self):
+        self.send()
+        self.assertEqual(orders.status("a", "confirm-123")["status"], "accepted")
+        self.fill(qty="1", status="partially_filled")
+        partial = orders.status("a", "confirm-123")
+        self.assertEqual(partial["filled_qty"], 1)
+        self.assertTrue(partial["journal_synced"])
+        self.fill()
+        complete = orders.status("a", "confirm-123")
+        self.assertEqual(complete["state"], "synced")
+        self.assertTrue(complete["journal_synced"])
+        self.assertEqual(len(self.broker.posts), 1)
+
+    def test_status_keeps_saved_receipt_when_broker_cannot_confirm(self):
+        self.send()
+        with patch.object(orders.broker, "get_order_by_client_id", return_value={"ok": False}):
+            receipt = orders.status("a", "confirm-123")
+        self.assertEqual(receipt["status"], "accepted")
+        self.assertFalse(receipt["broker_available"])
+        self.assertEqual(len(self.broker.posts), 1)
+
+    def test_status_rejects_malformed_broker_fill_quantities(self):
+        self.send()
+        for quantity in ("nan", "inf", "-1", "3", "0.5"):
+            with self.subTest(quantity=quantity):
+                self.fill(qty=quantity)
+                with self.assertRaises(orders.PaperUnavailable):
+                    orders.status("a", "confirm-123")
+        self.assertEqual(len(self.broker.posts), 1)
+
+    def test_completed_checks_and_retries_do_not_recreate_deleted_journal_rows(self):
+        self.send()
+        self.fill()
+        orders.status("a", "confirm-123")
+        self.fills.clear()  # user removed the imported trade
+        self.assertTrue(orders.status("a", "confirm-123")["journal_synced"])
+        self.assertTrue(self.send()["journal_synced"])
+        self.assertFalse(self.fills)
+
+    def test_status_with_changed_credentials_never_imports_an_unconfirmed_order(self):
+        self.send()
+        with patch("db.paper_trading.get_paper_account", return_value={"api_key": "other", "api_secret": "fake"}):
+            self.assertFalse(orders.status("a", "confirm-123")["broker_available"])
+        self.assertEqual(len(self.broker.posts), 1)
+        self.assertFalse(self.fills)
