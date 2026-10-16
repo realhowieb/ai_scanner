@@ -14510,6 +14510,52 @@
     "summary": "Billing Portal"
    }
   },
+  "/v1/billing/sync": {
+   "post": {
+    "description": "Refresh the signed-in account from its Stripe customer. Does not create or change a subscription.",
+    "operationId": "billing_sync_v1_billing_sync_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "409": {
+      "description": "Subscription configuration needs review"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many refreshes"
+     },
+     "502": {
+      "description": "Billing unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Billing Sync"
+   }
+  },
   "/v1/brief": {
    "get": {
     "description": "The web's Market Brief (same builder as the morning email): market backdrop, top\nopportunities with movement, gappers, movers, setups and catalysts. Cached 5 minutes.\nPreBreakout picks and model fields are Premium. AI narrative: /v1/ai (Premium);\nhistorical scorecard: /v1/track-record (Pro); your alerts: /v1/alerts/events.",

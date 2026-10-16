@@ -75,3 +75,29 @@ client's `BILLING_API_BASE` as well. A redeploy is required for mode/env changes
 Code tests use mocked Stripe and Postgres; they do not confirm a live payment,
 Render configuration or Stripe delivery. Complete the live checks before
 suspending the old service.
+
+## Returning from Stripe on a Mac
+
+macOS may open Stripe in Safari outside an installed HSF web app. Embedded API
+sessions return to `/billing/return`, which explains how to switch back or open
+the account in the browser. No Streamlit restore token is added to these web
+URLs. An upgrade confirmation flow redirects after completion; the general
+Stripe portal also has a return link.
+
+The originating HSF window remembers a pending billing flow for up to two
+hours and makes up to three checks when it becomes visible or gains focus.
+Account also offers **Refresh plan**. These checks call authenticated
+`POST /v1/billing/sync`, then reload `/v1/me`. The API reads subscriptions for
+the account's stored Stripe customer, recognizes only configured price IDs,
+and updates the local plan from Stripe's confirmed active/trialing subscription.
+It does not create or modify a Stripe subscription. Unknown prices, multiple
+active subscriptions, mismatched customers and Stripe failures never grant
+access; unknown prices produce an actionable configuration error. Webhooks
+remain necessary for ongoing renewals and cancellations.
+
+If Stripe shows Premium while HSF still shows Pro, verify that the subscription's
+actual price ID is in `STRIPE_PRICE_PREMIUM`, `STRIPE_PRICE_PREMIUM_YEARLY` or
+`STRIPE_PRICE_PREMIUM_LEGACY` (uppercase). A product name or dollar amount alone
+does not identify the plan. Also verify webhook deliveries and that the Stripe
+key and prices are all in the same test/live mode. A portal marked **Test mode**
+does not confirm a live payment.

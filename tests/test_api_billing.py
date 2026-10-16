@@ -36,9 +36,13 @@ class EmbeddedBillingTest(unittest.TestCase):
 
         self.client = TestClient(self.app, raise_server_exceptions=False)
         self.addCleanup(self.client.close)
-        returns = patch("services.billing._build_return_urls", return_value=(None, None))
-        returns.start()
-        self.addCleanup(returns.stop)
+        base = patch("config.APP_BASE_URL", "https://app.hsfinest.com")
+        base.start()
+        self.addCleanup(base.stop)
+
+    def session_body(self, **values):
+        return {**values, "success_url": "https://app.hsfinest.com/billing/return?checkout=success",
+                "return_url": "https://app.hsfinest.com/billing/return?portal=return"}
 
     def sign_in(self):
         from api.deps import current_account
@@ -61,7 +65,7 @@ class EmbeddedBillingTest(unittest.TestCase):
                 self.main.create_app(self.settings)
 
     def test_session_routes_require_api_authentication(self):
-        for path in ("checkout", "portal"):
+        for path in ("checkout", "portal", "sync"):
             response = self.client.post(f"/v1/billing/{path}", json={"plan": "pro"})
             self.assertEqual(response.status_code, 401)
 
@@ -81,7 +85,7 @@ class EmbeddedBillingTest(unittest.TestCase):
             response = self.client.post("/v1/billing/checkout", json={"plan": "pro", "email": "other@example.com"})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json(), {"url": "https://checkout.stripe.com/test", "mode": "checkout"})
-        checkout.assert_called_once_with("member@example.com", {"plan": "pro", "interval": "month"})
+        checkout.assert_called_once_with("member@example.com", self.session_body(plan="pro", interval="month"))
         remote.assert_not_called()
         token.assert_not_called()
 
@@ -92,7 +96,7 @@ class EmbeddedBillingTest(unittest.TestCase):
             response = self.client.post("/v1/billing/portal", json={"flow": "cancel"})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["mode"], "portal")
-        portal.assert_called_once_with("member@example.com", {"flow": "cancel"})
+        portal.assert_called_once_with("member@example.com", self.session_body(flow="cancel"))
         token.assert_not_called()
 
     def test_checkout_failure_is_safe(self):
@@ -152,3 +156,72 @@ class EmbeddedBillingTest(unittest.TestCase):
         with patch.object(self.billing, "_start_realtime_alerts") as worker, self.client:
             self.assertEqual(self.client.get("/billing/healthz").status_code, 200)
         worker.assert_not_called()
+
+    def sync_subscription(self, *, price="price_premium_fake", customer="cus_member", status="active"):
+        self.billing._get_user_by_email = MagicMock(return_value={"stripe_customer_id": "cus_member"})
+        self.billing._set_user_plan_by_email = MagicMock()
+        self.billing.stripe.Subscription.list.return_value = {"data": [
+            {"id": "sub_member", "customer": customer, "status": status,
+             "items": {"data": [{"price": {"id": price}}]}},
+        ], "has_more": False}
+        self.sign_in()
+        return self.client.post("/v1/billing/sync", json={"email": "attacker@example.com", "plan": "premium"})
+
+    def test_sync_uses_stored_customer_and_confirmed_price(self):
+        response = self.sync_subscription()
+        self.assertEqual(response.status_code, 200, response.text)
+        self.billing._get_user_by_email.assert_called_once_with("member@example.com")
+        self.billing.stripe.Subscription.list.assert_called_once_with(customer="cus_member", status="all", limit=100)
+        self.billing._set_user_plan_by_email.assert_called_once_with(
+            email="member@example.com", tier="premium", stripe_customer_id="cus_member",
+            stripe_subscription_id="sub_member", stripe_price_id="price_premium_fake")
+        self.billing.stripe.checkout.Session.create.assert_not_called()
+
+    def test_sync_unknown_price_preserves_plan_and_explains_configuration(self):
+        response = self.sync_subscription(price="price_unconfigured")
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("not configured", response.text)
+        self.billing._set_user_plan_by_email.assert_not_called()
+
+    def test_sync_customer_mismatch_never_grants_access(self):
+        response = self.sync_subscription(customer="cus_other")
+        self.assertEqual(response.status_code, 502, response.text)
+        self.billing._set_user_plan_by_email.assert_not_called()
+
+    def test_sync_incomplete_payment_never_grants_access(self):
+        response = self.sync_subscription(status="incomplete")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("No active subscription", response.text)
+        self.billing._set_user_plan_by_email.assert_not_called()
+
+    def test_sync_failure_preserves_plan(self):
+        self.sign_in()
+        with patch.object(self.billing, "_get_user_by_email", side_effect=RuntimeError("DB unavailable")), \
+                patch.object(self.billing, "_set_user_plan_by_email") as update:
+            response = self.client.post("/v1/billing/sync")
+        self.assertEqual(response.status_code, 502, response.text)
+        update.assert_not_called()
+
+    def test_sync_multiple_subscriptions_needs_review(self):
+        self.sync_subscription()
+        self.billing._set_user_plan_by_email.reset_mock()
+        entries = self.billing.stripe.Subscription.list.return_value["data"]
+        entries.append({**entries[0], "id": "sub_second"})
+        response = self.client.post("/v1/billing/sync")
+        self.assertEqual(response.status_code, 409, response.text)
+        self.billing._set_user_plan_by_email.assert_not_called()
+
+    def test_sync_recognizes_grandfathered_premium_price(self):
+        self.billing.STRIPE_PRICE_PREMIUM_LEGACY = frozenset({"price_legacy_premium"})
+        response = self.sync_subscription(price="price_legacy_premium")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.billing._set_user_plan_by_email.call_args.kwargs["tier"], "premium")
+
+    def test_sync_cannot_downgrade_admin_tier(self):
+        self.sign_in()
+        with patch.object(self.billing, "_get_user_by_email", return_value={"tier": "admin", "stripe_customer_id": "cus_admin"}), \
+                patch.object(self.billing, "_set_user_plan_by_email") as update:
+            response = self.client.post("/v1/billing/sync")
+        self.assertEqual(response.status_code, 200, response.text)
+        update.assert_not_called()
+        self.billing.stripe.Subscription.list.assert_not_called()
