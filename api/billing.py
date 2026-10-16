@@ -36,14 +36,14 @@ def register(app) -> None:
 def session_for_account(username: str, payload: dict, *, portal: bool = False) -> dict:
     from api.account import AccountError, BillingUnavailable
     from billing_service import main as billing
-    from services.billing import _build_return_urls
+    from config import APP_BASE_URL
 
     body = dict(payload)
-    success, return_url = _build_return_urls(username)
-    if success:
-        body["success_url"] = success
-    if return_url:
-        body["return_url"] = return_url
+    # The web app uses its own HttpOnly session. Streamlit restore tokens are
+    # neither needed nor consumed by Next.js and must not go in these URLs.
+    base = APP_BASE_URL.rstrip("/")
+    body["success_url"] = f"{base}/billing/return?checkout=success"
+    body["return_url"] = f"{base}/billing/return?portal=return"
     try:
         handler = billing.portal_for_account if portal else billing.checkout_for_account
         result = handler(username, body)
@@ -57,3 +57,19 @@ def session_for_account(username: str, payload: dict, *, portal: bool = False) -
     if not url:
         raise BillingUnavailable("no billing session URL")
     return {"url": url, "mode": "portal" if result.get("portal_url") else "checkout"}
+
+
+def sync_account(username: str) -> dict:
+    """Recover a delayed webhook from Stripe state, never from browser claims."""
+    from api.account import AccountError, BillingUnavailable
+
+    if not embedded_enabled():
+        raise BillingUnavailable("billing sync requires embedded mode")
+    from billing_service import main as billing
+
+    try:
+        return billing.sync_account_subscription(username)
+    except HTTPException as exc:
+        if exc.status_code == 409:
+            raise AccountError(str(exc.detail), status=409) from exc
+        raise BillingUnavailable("subscription sync unavailable") from exc

@@ -12,6 +12,7 @@ export const account = {
   setEmailPrefs: (patch: Partial<EmailPrefs>) => unwrap(api.PATCH("/v1/me/email-preferences", { body: patch })),
   resendVerification: () => unwrap(api.POST("/v1/me/verify-email")),
   portal: (flow?: "cancel") => unwrap(api.POST("/v1/billing/portal", { body: flow ? { flow } : {} })),
+  syncBilling: () => unwrap(api.POST("/v1/billing/sync")),
   checkout: (plan: "pro" | "premium", interval: "month" | "year" = "month") =>
     unwrap(api.POST("/v1/billing/checkout", { body: { plan, interval } })),
   exportData: () => unwrap(api.GET("/v1/me/export")),

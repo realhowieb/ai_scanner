@@ -48,6 +48,8 @@ beforeEach(() => {
   assign.mockReset();
   prefs = { digest: true, evening: false, alerts: true };
   routes = [
+    on("POST", "/v1/billing/sync", () => jsonResponse({ message: "Subscription checked with Stripe." })),
+    on("GET", "/v1/me", () => jsonResponse(me("pro"))),
     on("GET", "/v1/me/email-preferences", () => jsonResponse(prefs)),
     on("PATCH", "/v1/me/email-preferences", (b) => { Object.assign(prefs, b); return jsonResponse(prefs); }),
   ];
