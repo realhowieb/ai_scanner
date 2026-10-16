@@ -46,12 +46,13 @@ def _quotes(tickers: List[str]) -> Dict[str, float]:
         return {}
 
 
-def journal(username: str) -> Dict[str, Any]:
+def journal(username: str, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
     """Trades (open first), open ones marked to live quotes, plus closed-trade stats."""
     from db.trades import journal_stats, list_trades
 
     _reconcile(username)
-    trades = list_trades(username, limit=200)
+    page = list_trades(username, limit=limit + 1, offset=offset)
+    trades = page[:limit]
     live = _quotes([t["ticker"] for t in trades if not t.get("closed_at")])
     out = []
     for t in trades:
@@ -65,18 +66,18 @@ def journal(username: str) -> Dict[str, Any]:
     stats = journal_stats(username)
     open_trades = [t for t in out if t.get("open")]
     closed = [t for t in out if not t.get("open")]
-    return {"trades": out, "stats": stats,
+    return {"trades": out, "stats": stats, "limit": limit, "offset": offset, "has_more": len(page) > limit,
             "summary": {"open": len(open_trades), "closed": len(closed),
-                        "win_rate": (stats or {}).get("win_rate"),
+                        "win_rate": (100.0 * stats["wins"] / stats["closed"]) if stats and stats.get("closed") else None,
                         "avg_return_pct": (stats or {}).get("avg_return_pct"),
                         "open_pnl": sum(float(t.get("pnl") or 0) for t in open_trades if t.get("pnl") is not None),
                         "total_pnl": sum(float(t.get("pnl") or 0) for t in out if t.get("pnl") is not None)}}
 
 
 def _owned_trade(username: str, trade_id: int) -> Optional[Dict[str, Any]]:
-    from db.trades import list_trades
+    from db.trades import get_trade
 
-    return next((t for t in list_trades(username, limit=1000) if int(t["id"]) == int(trade_id)), None)
+    return get_trade(username, trade_id)
 
 
 def log(username: str, ticker: str, entry_price: float, shares: int) -> None:
@@ -209,9 +210,9 @@ def activity(username: str, limit: int = 25) -> Dict[str, Any]:
             return None
     return {"connected": True, "positions": pos, "positions_available": positions is not None,
             "orders": orders_out,
-            "summary": {"positions": len(pos), "orders": len(orders_out),
-                        "market_value": sum(n(p.get("market_value")) or 0 for p in pos) if pos else 0,
-                        "unrealized_pl": sum(n(p.get("unrealized_pl")) or 0 for p in pos) if pos else 0}}
+            "summary": {"positions": len(pos) if positions is not None else None, "orders": len(orders_out),
+                        "market_value": sum(n(p.get("market_value")) or 0 for p in pos) if positions is not None else None,
+                        "unrealized_pl": sum(n(p.get("unrealized_pl")) or 0 for p in pos) if positions is not None else None}}
 
 
 def order(username: str, ticker: str, qty: int, idempotency_key: str) -> Dict[str, Any]:

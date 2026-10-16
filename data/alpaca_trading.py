@@ -196,14 +196,21 @@ def _order_result(d):
     }
 
 
-def get_order_by_client_id(api_key: str, api_secret: str, client_order_id: str) -> Dict[str, Any]:
+def get_order_by_client_id(api_key: str, api_secret: str, client_order_id: str, *, timeout_s: Optional[float] = None) -> Dict[str, Any]:
     """Only a broker 404 proves the order is absent; transport errors are uncertain."""
     if requests is None:
         return {"ok": False}
     try:
+        if timeout_s is not None and timeout_s <= 0:
+            return {"ok": False}
+        timeout = _TIMEOUT
+        if timeout_s is not None:
+            from urllib3.util import Timeout
+
+            timeout = Timeout(total=min(timeout_s, _TIMEOUT))
         r = requests.get(f"{_base_url()}/v2/orders:by_client_order_id",
                          headers=_headers(api_key, api_secret),
-                         params={"client_order_id": client_order_id}, timeout=_TIMEOUT)
+                         params={"client_order_id": client_order_id}, timeout=timeout)
         if r.status_code == 404:
             return {"ok": False, "not_found": True}
         if r.status_code != 200:

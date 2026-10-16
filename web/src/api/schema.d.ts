@@ -3578,6 +3578,21 @@ export interface components {
         /** Journal */
         Journal: {
             /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+            /**
+             * Limit
+             * @default 200
+             */
+            limit: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
              * Stats
              * @description {closed, wins, avg_return_pct}; null before any closed trade
              */
@@ -3586,7 +3601,7 @@ export interface components {
             } | null;
             /**
              * Summary
-             * @description UI summary: open/closed counts, win rate, average return and open P/L
+             * @description Page open/closed counts and P/L; win rate and average return use all closed trades
              * @default {}
              */
             summary: {
@@ -9077,7 +9092,10 @@ export interface operations {
     };
     journal_v1_journal_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;

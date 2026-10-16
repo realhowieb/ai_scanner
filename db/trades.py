@@ -140,23 +140,39 @@ def _row_to_trade(r: Any) -> Dict[str, Any]:
     }
 
 
-def list_trades(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+def list_trades(user_id: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
     """User's trades, open first then most recent."""
     conn = _get_conn()
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, ticker, entry_price, shares, source, entered_at, exit_price, closed_at
-        FROM user_trades
-        WHERE user_id = %s
-        ORDER BY (closed_at IS NOT NULL), entered_at DESC
-        LIMIT %s
-        """,
-        (user_id, int(limit)),
-    )
-    rows = cur.fetchall()
-    cur.close()
-    return [_row_to_trade(r) for r in rows]
+    try:
+        cur.execute(
+            """
+            SELECT id, ticker, entry_price, shares, source, entered_at, exit_price, closed_at
+            FROM user_trades
+            WHERE user_id = %s
+            ORDER BY (closed_at IS NOT NULL), entered_at DESC, id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (user_id, int(limit), int(offset)),
+        )
+        return [_row_to_trade(r) for r in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_trade(user_id: str, trade_id: int) -> Optional[Dict[str, Any]]:
+    """Look up an owned trade directly, independent of journal page limits."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""SELECT id, ticker, entry_price, shares, source, entered_at, exit_price, closed_at
+            FROM user_trades WHERE user_id = %s AND id = %s""", (user_id, int(trade_id)))
+        row = cur.fetchone()
+        return None if row is None else _row_to_trade(row)
+    finally:
+        cur.close()
+        conn.close()
 
 
 def close_trade(trade_id: int, user_id: str, exit_price: float) -> None:

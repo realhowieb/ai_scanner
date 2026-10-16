@@ -204,10 +204,10 @@ function Activity({ tick }: { tick: number }) {
       <div className="row-actions"><button type="button" className="btn" onClick={act.reload} disabled={act.loading || act.refreshing}>Refresh activity</button></div>
       <Card title="Paper activity" id="activity-summary">
         <div className="metric-strip" aria-label="Paper activity summary">
-          <span><strong>{metric(act.data.summary?.positions, positions.length)}</strong> positions</span>
+          <span><strong>{act.data.positions_available === false ? "Unavailable" : metric(act.data.summary?.positions, positions.length)}</strong> positions</span>
           <span><strong>{metric(act.data.summary?.orders, orders.length)}</strong> orders</span>
-          <span><strong>{money(act.data.summary?.market_value)}</strong> value</span>
-          <span><strong>{money(act.data.summary?.unrealized_pl)}</strong> open P/L</span>
+          <span><strong>{act.data.positions_available === false ? "Unavailable" : money(act.data.summary?.market_value)}</strong> value</span>
+          <span><strong>{act.data.positions_available === false ? "Unavailable" : money(act.data.summary?.unrealized_pl)}</strong> open P/L</span>
         </div>
       </Card>
       <Card title="Positions" id="positions">
