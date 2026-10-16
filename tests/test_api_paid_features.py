@@ -383,7 +383,8 @@ class JournalAndPaperTests(PaidApiTestCase):
         df = pd.DataFrame([{"Ticker": "AAPL", "Last": 100.0, "Volatility20D%": 6.0, "BreakoutScore": 80}])
         p = mock.patch
         for target, fn in (
-            ("db.trades.list_trades", lambda u, limit=50: [dict(t) for t in self.trades if t["user"] == u]),
+            ("db.trades.list_trades", lambda u, limit=50, offset=0: [dict(t) for t in self.trades if t["user"] == u][offset:offset + limit]),
+            ("db.trades.get_trade", lambda u, tid: next((dict(t) for t in self.trades if t["user"] == u and t["id"] == tid), None)),
             ("db.trades.log_trade", self._log),
             ("db.trades.close_trade", lambda tid, u, px: [t.update(exit_price=px, closed_at="2026-10-06T15:00:00+00:00")
                                                        for t in self.trades if t["id"] == tid and t["user"] == u]),
@@ -438,6 +439,39 @@ class JournalAndPaperTests(PaidApiTestCase):
         closed = self.get("pro@example.com", "/v1/journal").json()["trades"][0]
         self.assertEqual((closed["open"], closed["pnl"]), (False, 100.0))
         self.assertEqual(self.client.delete(f"/v1/journal/{tid}", headers=self.h("pro@example.com")).status_code, 204)
+
+    def test_journal_pages_and_old_owned_trade_remain_accessible(self):
+        for _ in range(1002):
+            self._log("pro@example.com", "AAPL", 100, 2)
+        response = self.get("pro@example.com", "/v1/journal?limit=2&offset=1000")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([trade["id"] for trade in response.json()["trades"]], [1001, 1002])
+        self.assertFalse(response.json()["has_more"])
+        first = self.get("pro@example.com", "/v1/journal?limit=2").json()
+        self.assertTrue(first["has_more"])
+        self.assertEqual(self.post("pro@example.com", "/v1/journal/1002/close", {"exit_price": 101}).status_code, 204)
+        self.assertEqual(self.client.delete("/v1/journal/1002", headers=self.h("prem@example.com")).status_code, 404)
+        self.assertEqual(self.client.delete("/v1/journal/1002", headers=self.h("pro@example.com")).status_code, 204)
+
+    def test_unavailable_positions_have_unknown_totals_but_empty_positions_are_zero(self):
+        self.keys["prem@example.com"] = {"api_key": "PKGOODKEY1", "api_secret": "fake"}
+        with mock.patch("data.alpaca_trading.get_positions", return_value=None):
+            missing = self.get("prem@example.com", "/v1/paper/activity").json()
+        self.assertFalse(missing["positions_available"])
+        self.assertIsNone(missing["summary"]["positions"])
+        self.assertIsNone(missing["summary"]["market_value"])
+        self.assertIsNone(missing["summary"]["unrealized_pl"])
+        with mock.patch("data.alpaca_trading.get_positions", return_value=[]):
+            empty = self.get("prem@example.com", "/v1/paper/activity").json()
+        self.assertTrue(empty["positions_available"])
+        self.assertEqual(empty["summary"]["market_value"], 0)
+        self.assertEqual(empty["summary"]["unrealized_pl"], 0)
+
+    def test_paginated_journal_keeps_win_rate_based_on_all_closed_trades(self):
+        with mock.patch("db.trades.journal_stats", return_value={"closed": 2, "wins": 1, "avg_return_pct": 10}):
+            result = self.get("pro@example.com", "/v1/journal?limit=1").json()
+        self.assertEqual(result["summary"]["win_rate"], 50)
+        self.assertEqual(result["stats"]["closed"], 2)
 
     def test_trade_plan(self):
         self.assertEqual(self.get("free@example.com", "/v1/stocks/AAPL/plan").status_code, 403)

@@ -860,9 +860,12 @@ class JournalTrade(BaseModel):
 
 
 class Journal(BaseModel):
+    limit: int = 200
+    offset: int = 0
+    has_more: bool = False
     trades: List[JournalTrade] = []
     stats: Optional[Dict[str, Any]] = Field(default=None, description="{closed, wins, avg_return_pct}; null before any closed trade")
-    summary: Dict[str, Any] = Field(default={}, description="UI summary: open/closed counts, win rate, average return and open P/L")
+    summary: Dict[str, Any] = Field(default={}, description="Page open/closed counts and P/L; win rate and average return use all closed trades")
 
 
 class TradePlan(BaseModel):

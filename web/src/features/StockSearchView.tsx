@@ -61,17 +61,19 @@ export function StockSearchView() {
                   </li>
                 ))}
               </ul>
-              <form className="stock-inline-search" onSubmit={open} noValidate>
-                <label className="field grow"><span>Open any ticker</span>
-                  <input value={q} maxLength={10} autoComplete="off" placeholder="e.g. NVDA" autoCapitalize="characters"
-                    aria-invalid={bad || undefined} aria-describedby={bad ? "stock-q-err" : undefined}
-                    onChange={(e) => { setQ(e.target.value); setBad(false); }} />
-                </label>
-                <button type="submit" className="btn btn-primary">Open</button>
-              </form>
-              {bad && <p id="stock-q-err" className="form-error" role="alert">Enter a ticker symbol like AAPL.</p>}
             </div>
           )}
+      </Card>
+      <Card title="Open a ticker" id="ticker-search">
+        <form className="stock-inline-search" onSubmit={open} noValidate>
+          <label className="field grow"><span>Open any ticker</span>
+            <input value={q} maxLength={10} autoComplete="off" placeholder="e.g. NVDA" autoCapitalize="characters"
+              aria-invalid={bad || undefined} aria-describedby={bad ? "stock-q-err" : undefined}
+              onChange={(e) => { setQ(e.target.value); setBad(false); }} />
+          </label>
+          <button type="submit" className="btn btn-primary">Open</button>
+        </form>
+        {bad && <p id="stock-q-err" className="form-error" role="alert">Enter a ticker symbol like AAPL.</p>}
       </Card>
     </div>
   );

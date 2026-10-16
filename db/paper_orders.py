@@ -3,6 +3,7 @@
 import json
 
 from db.engine import get_neon_conn, schema_once
+from domain.paper_order_state import transition
 
 
 @schema_once
@@ -66,13 +67,21 @@ def save(user, client_id, *, state, result=None, error=None):
     conn = _conn()
     try:
         cur = conn.cursor()
+        cur.execute("SELECT * FROM paper_order_requests WHERE user_id = %s AND client_order_id = %s FOR UPDATE",
+                    (user, client_id))
+        current = _row(cur, cur.fetchone())
+        if current is None:
+            raise RuntimeError("Missing paper order intent")
+        state, result, error = transition(current, state, result, error)
         cur.execute(
             """UPDATE paper_order_requests SET state = %s, result = COALESCE(%s::jsonb, result),
-            error = %s, updated_at = NOW() WHERE user_id = %s AND client_order_id = %s""",
+            error = %s, updated_at = NOW() WHERE user_id = %s AND client_order_id = %s RETURNING *""",
             (state, json.dumps(result, allow_nan=False) if result else None, error, user, client_id),
         )
+        saved = _row(cur, cur.fetchone())
         conn.commit()
         cur.close()
+        return saved
     finally:
         conn.close()
 

@@ -3,6 +3,8 @@
 from copy import deepcopy
 from threading import Lock
 
+from domain.paper_order_state import transition
+
 
 class MemoryOrders:
     def __init__(self):
@@ -32,9 +34,11 @@ class MemoryOrders:
     def save(self, user, cid, *, state, result=None, error=None):
         with self.lock:
             row = self.rows[user, cid]
+            state, result, error = transition(row, state, result, error)
             row.update(state=state, error=error)
             if result:
                 row["result"] = deepcopy(result)
+            return deepcopy(row)
 
     def pending(self, user, account_ref, limit=5):
         with self.lock:
@@ -51,7 +55,7 @@ class PaperBroker:
         self.posts = []
         self.lock = Lock()
 
-    def lookup(self, key, secret, cid):
+    def lookup(self, key, secret, cid, *, timeout_s=None):
         with self.lock:
             return deepcopy(self.orders.get((key, cid), {"ok": False, "not_found": True}))
 

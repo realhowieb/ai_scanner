@@ -44,7 +44,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET | `/v1/day-trader?source=…` | Bearer, **Pro** | Live Day Trader table for `watchlist` (default list or `watchlist_id`), `movers`, `movers_sp500`, `movers_nasdaq`, `premarket`, `postmarket`, `scan_picks`, `megacaps` or `custom` (`symbols=`). Quotes shared 30 s; poll every 30–60 s. |
 | GET | `/v1/day-trader/stair-steppers?symbols=…` | Bearer, **Pro** | Smooth 1-minute trends (R², trend/hour, pullback filters). |
 | POST | `/v1/ai/summary`, `/v1/ai/chat`, `/v1/ai/notes/{ticker}`; GET `/v1/ai/brief-narrative` | Bearer, **Premium** | Claude explains a scan (latest market scan or one of your `run_id`s), answers questions about it (client sends the conversation; 8 turns kept), writes a setup note for a ticker, or the brief's narrative. Same guardrails and daily limit as the web; 429 at the limit, 503 when AI is off. Shared answers are cached 30 min per scan. |
-| GET / POST | `/v1/journal` | Bearer (POST **Pro**) | Your trades marked to live quotes with P&L and stats; log a trade `{ticker, entry_price, shares}`. |
+| GET / POST | `/v1/journal` | Bearer (POST **Pro**) | Read trades with `limit` (1–200, default 200), `offset` (default 0), and `has_more`. Page counts/P&L are separate from full closed-trade statistics. Log a trade `{ticker, entry_price, shares}`. |
 | POST / DELETE | `/v1/journal/{id}/close`, `/v1/journal/{id}` | Bearer, **Pro** | Close `{exit_price}` (409 if already closed) or delete a trade. |
 | GET | `/v1/stocks/{ticker}/plan?account_size&risk_pct` | Bearer, **Pro** | Trade plan for a latest-scan result: entry, stop, 1.5R/3R targets, size. |
 | GET / POST / DELETE | `/v1/paper/account` | Bearer, **Premium** | Paper account status; connect your own Alpaca **paper** keys (validated, stored encrypted, never returned); disconnect. |
@@ -113,6 +113,10 @@ a new explicit confirmation. Accepted orders do not create estimated journal
 entries. Journal/activity refreshes reconcile up to five pending intents using
 broker-confirmed quantities and average fill prices. Partial fills update the
 same journal row, and failed imports remain pending for a later refresh.
+
+Paper-order tracking updates lock the saved intent before applying changes. Lower fill counts and older nonterminal statuses cannot replace newer progress or completed receipts. Journal/activity recovery checks up to five orders, passes the remaining three-second network budget to each lookup, and isolates individual failures so later orders still get checked. Database operations use their configured timeouts.
+
+When Alpaca positions are unavailable, paper activity returns `positions_available: false` and null position counts, market value, and open P/L. A successful empty position list returns zero totals.
 
 Custom scans run in the background because they take from a couple of seconds
 (one ticker, S&P 500) to minutes (US market: 224.6 s on 2026-10-06). They use

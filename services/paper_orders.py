@@ -41,7 +41,9 @@ def client_id(user, key):
     return "hsf-" + hashlib.sha256(f"{user.strip().lower()}\0{key}".encode()).hexdigest()[:40]
 
 
-def _lookup(account, cid):
+def _lookup(account, cid, *, timeout_s=None):
+    if timeout_s is not None:
+        return broker.get_order_by_client_id(account["api_key"], account["api_secret"], cid, timeout_s=timeout_s)
     return broker.get_order_by_client_id(account["api_key"], account["api_secret"], cid)
 
 
@@ -61,9 +63,15 @@ def _confirmed(result, intent):
 def _record(user, intent, result):
     if not _confirmed(result, intent):
         raise PaperUnavailable("The order response couldn't be confirmed. Retry the same order confirmation.")
+    _fill_quantity(result, intent["qty"])
     cid = intent["client_order_id"]
     # Persist the broker response before attempting the independent journal write.
-    store.save(user, cid, state="submitted", result=result)
+    saved = store.save(user, cid, state="submitted", result=result)
+    if saved["state"] == "synced":
+        return _snapshot(saved)
+    if saved["state"] == "rejected":
+        raise PaperRejected(saved.get("error") or "Order rejected.")
+    result = saved["result"]
     synced = False
     try:
         filled = float(result.get("filled_qty") or 0)
@@ -79,7 +87,9 @@ def _record(user, intent, result):
             synced = True
         terminal = result.get("status") in {"filled", "canceled", "expired", "rejected"}
         if terminal and (synced or filled == 0):
-            store.save(user, cid, state="synced", result=result)
+            saved = store.save(user, cid, state="synced", result=result)
+            if saved["state"] == "synced":
+                return _snapshot(saved)
     except Exception:
         # The durable submitted intent remains eligible for reconciliation.
         log.warning("paper_journal_sync_pending", exc_info=False)
@@ -158,11 +168,19 @@ def submit(user, ticker, qty, key, context=None):
         raise PaperUnavailable("Order tracking is temporarily unavailable. Retry the same confirmation.") from exc
 
 
+def _fill_quantity(result, qty):
+    try:
+        filled = float(result.get("filled_qty") or 0)
+    except (TypeError, ValueError):
+        filled = math.nan
+    if not math.isfinite(filled) or not 0 <= filled <= qty or not filled.is_integer():
+        raise PaperUnavailable("The broker's fill quantity could not be confirmed. Your confirmation is saved.")
+    return filled
+
+
 def _snapshot(intent, broker_available=None):
     result = intent.get("result") or {}
-    filled = float(result.get("filled_qty") or 0)
-    if not math.isfinite(filled) or not 0 <= filled <= intent["qty"] or not filled.is_integer():
-        raise PaperUnavailable("The broker's fill quantity could not be confirmed. Your confirmation is saved.")
+    filled = _fill_quantity(result, intent["qty"])
     return {"state": intent["state"], "order_id": result.get("order_id"),
             "status": result.get("status") or intent["state"], "ticker": intent["ticker"],
             "qty": intent["qty"], "filled_qty": filled, "filled_avg_price": result.get("filled_avg_price"),
@@ -214,11 +232,17 @@ def reconcile_pending(user):
         for intent in intents:
             if time.monotonic() >= deadline:
                 break
-            result = _lookup(account, intent["client_order_id"])
-            if result.get("ok"):
-                _record(user, intent, result)
-            else:
-                # Rotate unresolved lookups so older failures cannot starve later fills.
-                store.save(user, intent["client_order_id"], state=intent["state"])
+            try:
+                result = _lookup(account, intent["client_order_id"], timeout_s=deadline - time.monotonic())
+                if result.get("ok"):
+                    _record(user, intent, result)
+            except Exception:
+                log.warning("paper_order_reconciliation_item_pending", exc_info=False)
+            finally:
+                # Touch the existing state atomically; a stale batch cannot reset it.
+                try:
+                    store.save(user, intent["client_order_id"], state="pending")
+                except Exception:
+                    log.warning("paper_order_reconciliation_touch_failed", exc_info=False)
     except Exception:
         log.warning("paper_order_reconciliation_pending", exc_info=False)
