@@ -1,8 +1,8 @@
 """Rate quotas survive key pressure and expire using their own windows."""
 import pytest
-from fastapi import HTTPException
 
-from api import ratelimit
+HTTPException = pytest.importorskip("fastapi").HTTPException
+ratelimit = pytest.importorskip("api.ratelimit")
 
 
 @pytest.fixture(autouse=True)

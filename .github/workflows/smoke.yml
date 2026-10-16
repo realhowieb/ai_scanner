@@ -61,6 +61,8 @@ jobs:
             tests/test_p1_39_billing_email_health.py \
             tests/test_p2_backlog_fixes_0929.py \
             tests/test_api_v1.py \
+            tests/test_api_ratelimit.py \
+            tests/test_api_experience.py \
             tests/test_api_today_and_store.py \
             -v --tb=short
 
