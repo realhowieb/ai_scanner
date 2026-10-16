@@ -220,3 +220,17 @@ class SubmitAndImportTests(unittest.TestCase):
             submit.side_effect = PaperRejected("rejected")
             ptui._submit_and_import("u@x.com", self._row(), "CNTA", 20, {})
         self.assertEqual(fake.session_state, {})
+
+
+@unittest.skipUnless(importlib.util.find_spec("urllib3"), "urllib3 required for total HTTP budgets")
+class RecoveryTimeoutTests(unittest.TestCase):
+    def test_order_lookup_uses_the_callers_total_http_budget(self):
+        from data import alpaca_trading as broker
+
+        with mock.patch.object(broker, "requests") as http:
+            http.get.return_value.status_code = 404
+            broker.get_order_by_client_id("key", "secret", "confirmation-123", timeout_s=0.5)
+            self.assertEqual(http.get.call_args.kwargs["timeout"].total, 0.5)
+            http.reset_mock()
+            broker.get_order_by_client_id("key", "secret", "confirmation-123", timeout_s=0)
+            http.get.assert_not_called()

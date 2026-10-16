@@ -66,3 +66,29 @@ class PaperOrderPostgresTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT COUNT(*) AS n FROM paper_order_requests").fetchone()["n"], 1)
             rows = conn.execute("SELECT shares, entry_price FROM user_trades").fetchall()
             self.assertEqual(rows, [{"shares": 2, "entry_price": 100.0}])
+
+
+    def test_concurrent_delayed_responses_cannot_overwrite_a_completed_receipt(self):
+        from db import paper_orders
+
+        with patch.object(paper_orders, "_conn", side_effect=self.connect):
+            paper_orders.reserve("u", "confirmation", "account", "AAPL", 2, {})
+            full = {"order_id": "o1", "status": "filled", "filled_qty": "2"}
+            paper_orders.save("u", "confirmation", state="synced", result=full)
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                receipts = list(pool.map(lambda _: paper_orders.save(
+                    "u", "confirmation", state="submitted",
+                    result={"order_id": "o1", "status": "accepted", "filled_qty": "0"}), range(12)))
+            self.assertTrue(all(receipt["state"] == "synced" and receipt["result"] == full for receipt in receipts))
+
+    def test_journal_paging_and_direct_owned_lookup_reach_older_trades(self):
+        from db import trades
+
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.executemany("INSERT INTO user_trades (user_id,ticker,entry_price,shares) VALUES (%s,%s,%s,%s)",
+                                [("u", "AAPL", 100, 2)] * 1002)
+        with patch.object(trades, "_get_conn", side_effect=self.connect):
+            self.assertEqual(len(trades.list_trades("u", limit=50, offset=1000)), 2)
+            self.assertEqual(trades.get_trade("u", 1)["id"], 1)
+            self.assertIsNone(trades.get_trade("someone-else", 1))

@@ -41,9 +41,10 @@ def register(app: FastAPI) -> None:
     _PRO_MSG = "Trade plans and logging trades are part of Pro."
 
     @app.get("/v1/journal", response_model=models.Journal, responses=_AUTH, summary="Your trade journal")
-    def journal(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+    def journal(account: Dict[str, Any] = Depends(current_account),
+                limit: int = Query(200, ge=1, le=200), offset: int = Query(0, ge=0)) -> Dict[str, Any]:
         """Your logged trades (open first), open ones marked to live quotes, with closed-trade stats."""
-        return json_safe(trading.journal(_user(account)))
+        return json_safe(trading.journal(_user(account), limit=limit, offset=offset))
 
     @app.post("/v1/journal", status_code=201, responses=_PRO, summary="Log a trade (Pro)")
     def journal_log(body: JournalCreate, account: Dict[str, Any] = Depends(current_account)) -> None:

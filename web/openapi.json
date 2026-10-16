@@ -4626,6 +4626,21 @@
    },
    "Journal": {
     "properties": {
+     "has_more": {
+      "default": false,
+      "title": "Has More",
+      "type": "boolean"
+     },
+     "limit": {
+      "default": 200,
+      "title": "Limit",
+      "type": "integer"
+     },
+     "offset": {
+      "default": 0,
+      "title": "Offset",
+      "type": "integer"
+     },
      "stats": {
       "anyOf": [
        {
@@ -4642,7 +4657,7 @@
      "summary": {
       "additionalProperties": true,
       "default": {},
-      "description": "UI summary: open/closed counts, win rate, average return and open P/L",
+      "description": "Page open/closed counts and P/L; win rate and average return use all closed trades",
       "title": "Summary",
       "type": "object"
      },
@@ -15059,6 +15074,31 @@
    "get": {
     "description": "Your logged trades (open first), open ones marked to live quotes, with closed-trade stats.",
     "operationId": "journal_v1_journal_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 200,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "offset",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "minimum": 0,
+       "title": "Offset",
+       "type": "integer"
+      }
+     }
+    ],
     "responses": {
      "200": {
       "content": {

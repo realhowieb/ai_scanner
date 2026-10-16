@@ -183,3 +183,47 @@ class RecoveryTests(unittest.TestCase):
             self.assertFalse(orders.status("a", "confirm-123")["broker_available"])
         self.assertEqual(len(self.broker.posts), 1)
         self.assertFalse(self.fills)
+
+    def test_delayed_response_cannot_regress_completed_receipt_or_reimport_deleted_fill(self):
+        self.send()
+        cid = orders.client_id("a", "confirm-123")
+        old_intent = self.store.get("a", cid)
+        old_result = self.broker.lookup("a", "fake", cid)
+        self.fill()
+        orders.status("a", "confirm-123")
+        self.fills.clear()
+        result = orders._record("a", old_intent, old_result)
+        self.assertEqual(result["status"], "filled")
+        self.assertEqual(self.store.get("a", cid)["state"], "synced")
+        self.assertEqual(self.fills, {})
+
+    def test_delayed_partial_response_uses_the_newer_fill_during_journal_recovery(self):
+        self.send()
+        cid = orders.client_id("a", "confirm-123")
+        self.fill(qty="1", status="partially_filled")
+        old_result = self.broker.lookup("a", "fake", cid)
+        self.fill()
+        with patch.object(orders, "reconcile_paper_fill", side_effect=RuntimeError("journal down")):
+            self.send()
+        receipt = orders._record("a", self.store.get("a", cid), old_result)
+        self.assertEqual(receipt["status"], "filled")
+        self.assertEqual(self.fills["a", "o1"][2], 2)
+
+    def test_recovery_continues_after_a_malformed_first_order(self):
+        self.send()
+        self.send(key="confirm-456", ticker="MSFT")
+        self.fill()
+        self.fill(key="confirm-456")
+        first = orders.client_id("a", "confirm-123")
+        self.broker.orders["a", first]["symbol"] = None
+        orders.reconcile_pending("a")
+        self.assertEqual(self.fills["a", "o2"][0], "MSFT")
+
+    def test_recovery_passes_remaining_budget_and_stops_when_it_expires(self):
+        self.send()
+        self.send(key="confirm-456", ticker="MSFT")
+        with patch.object(orders.time, "monotonic", side_effect=[0, 0.25, 0.5, 3.2]), \
+             patch.object(orders.broker, "get_order_by_client_id", return_value={"ok": False}) as lookup:
+            orders.reconcile_pending("a")
+        self.assertEqual(lookup.call_count, 1)
+        self.assertEqual(lookup.call_args.kwargs["timeout_s"], 2.5)
