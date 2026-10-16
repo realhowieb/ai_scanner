@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { DataFreshness } from "@/features/DataFreshness";
+import { ScannerDataStatus } from "@/features/ScannerDataStatus";
 import { api, unwrap } from "@/api/client";
-import { Card, Empty, ErrorState, Freshness, Locked, ResearchNotice, RefreshStatus, Skeleton, UpgradeButton } from "@/components/ui";
+import { Card, Empty, ErrorState, Locked, ResearchNotice, Skeleton, UpgradeButton } from "@/components/ui";
 import { AIScanPanel } from "@/features/AIScanPanel";
 import { useApi } from "@/hooks/useApi";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
-import { etTime, freshness } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
 import { SetupTable } from "./SetupTable";
@@ -105,8 +104,7 @@ export function ScannerView() {
         <div>
           <h1 className="h1">Scanner</h1>
           <p className="cap">
-            {data?.scan_at ? <Freshness at={data.scan_at} label="Latest full-market scan" stale={data.stale} /> : "Latest full-market scan"}
-            {data && ` · ${countText}`}
+            {data ? countText : "Latest full-market scan"}
           </p>
         </div>
         <div className="row-actions scanner-actions">
@@ -115,8 +113,8 @@ export function ScannerView() {
           <Link href="/scanner/custom" className="btn btn-primary">Run custom scan</Link>
         </div>
       </section>
-      <DataFreshness info={data?.freshness} />
-      {data && !lockedSignal && <RefreshStatus updatedAt={updatedAt} refreshing={refreshing} error={error} onRetry={reload} />}
+      {data && !lockedSignal && <ScannerDataStatus info={data.freshness} scanAt={data.scan_at} stale={data.stale}
+        checkedAt={updatedAt} refreshing={refreshing} error={error} reload={reload} />}
       {(f.signal || f.minScore || f.sort !== "score" || f.size !== 25 || f.page !== 1) && <div className="row-actions">
         <span className="cap">Current view: {SIGNALS.find((s) => s.id === f.signal)?.label} · score {f.minScore}+ · {SORTS.find((s) => s.id === f.sort)?.label} · {f.size} rows</span>
         <button type="button" className="btn btn-sm" onClick={() => set({ signal: "", min: 0, sort: "score", size: 25, page: 1 })}>Reset view</button>
@@ -172,10 +170,6 @@ export function ScannerView() {
           </label>
         </section>
       </details>
-
-      {data?.scan_at && (data.stale ?? freshness(data.scan_at).stale) && (
-        <p className="banner" role="status">Market data is delayed: a scheduled scan didn&apos;t arrive, so this is the scan from {etTime(data.scan_at)}. Scores and prices are from that scan.</p>
-      )}
 
       {lockedSignal ? (
         <Card><Locked title="PreBreakout is part of Premium" plan="premium">The PreBreakout model ranks names before they break out, with its probability.</Locked></Card>

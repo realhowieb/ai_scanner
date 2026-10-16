@@ -359,6 +359,27 @@ select, .field input { min-height: 40px; border-radius: 8px; background: var(--b
 .link-btn:hover { color: var(--accent-2); }
 .data-fresh { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; color: var(--muted); }
 .data-fresh strong { flex-basis: 100%; color: var(--text-2); font-weight: 600; }
+.scanner-data-status { border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); color: var(--muted); font-size: 13px; }
+.scanner-data-status summary { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; list-style: none; }
+.scanner-data-status summary::-webkit-details-marker { display: none; }
+.scanner-data-status summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 12px; }
+.scanner-data-badge { flex-shrink: 0; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; color: var(--text-2); font-weight: 600; }
+.scanner-data-time { min-width: 0; }
+.scanner-data-details { margin-left: auto; flex-shrink: 0; color: var(--text-2); }
+.scanner-data-details::after { content: " +"; }
+.scanner-data-status details[open] .scanner-data-details::after { content: " −"; }
+.scanner-data-body { border-top: 1px solid var(--line); padding: 12px 16px; }
+.scanner-data-body p { margin: 0 0 8px; }
+.scanner-data-body p:last-child { margin-bottom: 0; }
+.scanner-data-body dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 20px; margin: 12px 0; }
+.scanner-data-body dt { color: var(--text-2); }
+.scanner-data-body dd { margin: 4px 0 0; }
+.scanner-data-status.is-delayed { border-color: var(--amber); }
+.scanner-data-warning, .scanner-data-status > .cap { margin: 0; padding: 0 16px 12px; }
+@media (max-width: 600px) {
+  .scanner-data-status summary { flex-wrap: wrap; gap: 8px; }
+  .scanner-data-time { flex: 1 1 100%; order: 1; }
+}
 .wl-act { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 0 auto; }
 .wl-unranked { flex: 1 1 120px; min-width: 0; }
 .dt-stale .dt-dot { background: var(--amber); animation: none; }
