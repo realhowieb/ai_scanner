@@ -7942,6 +7942,12 @@
       ],
       "title": "Filled Avg Price"
      },
+     "journal_synced": {
+      "default": false,
+      "description": "True only after an actual fill has been imported; pending fills retry on journal/activity refresh",
+      "title": "Journal Synced",
+      "type": "boolean"
+     },
      "order_id": {
       "anyOf": [
        {
@@ -7982,6 +7988,12 @@
       "title": "Confirm",
       "type": "boolean"
      },
+     "idempotency_key": {
+      "description": "Reuse this confirmation ID on every retry of the same order",
+      "pattern": "^[A-Za-z0-9_-]{8,128}$",
+      "title": "Idempotency Key",
+      "type": "string"
+     },
      "qty": {
       "description": "Whole shares",
       "maximum": 100000.0,
@@ -7996,6 +8008,7 @@
      }
     },
     "required": [
+     "idempotency_key",
      "ticker",
      "qty",
      "confirm"
@@ -17598,6 +17611,9 @@
      },
      "403": {
       "description": "Premium feature"
+     },
+     "409": {
+      "description": "Confirmation belongs to another order"
      },
      "422": {
       "description": "confirm must be true"

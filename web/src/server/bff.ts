@@ -2,7 +2,7 @@
 // server attaches the access token from its HttpOnly cookie and forwards to the API.
 // It refreshes before forwarding when the access token is missing or expiring,
 // retries an authenticated request once after a 401, and ends the session (401
-// code session_expired, cookies cleared) when the refresh fails.
+// code session_expired, cookies cleared) only when refresh credentials are rejected.
 import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, clearedCookies, parseCookies, sessionCookies } from "./cookies";
 import type { TokenPair } from "./cookies";
 import { refreshOnce } from "./refresh";
@@ -56,9 +56,17 @@ export function upstreamRefresh(upstream: Upstream, requestId: string) {
       headers: { "content-type": "application/json", "x-request-id": requestId },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
-    if (!r.ok) return { ok: false, status: r.status };
+    if (!r.ok) return { ok: false, status: r.status, retryAfter: r.headers.get("retry-after") ?? undefined };
     return { ok: true, pair: (await r.json()) as TokenPair };
   };
+}
+
+/** A service outage must not destroy a valid refresh session. */
+export function refreshFailure(outcome: Extract<RefreshOutcome, { ok: false }> | null, rid: string): Response {
+  if (!outcome || outcome.status === 401) return json(SESSION_EXPIRED, 401, rid, clearedCookies());
+  const status = [429, 502, 503, 504].includes(outcome.status) ? outcome.status : 503;
+  return json({ detail: "Your session couldn't be refreshed right now. Please try again." }, status, rid, [],
+    { "retry-after": outcome.retryAfter || "5" });
 }
 
 export async function proxy(req: Request, apiPath: string, upstream: Upstream): Promise<Response> {
@@ -75,18 +83,19 @@ export async function proxy(req: Request, apiPath: string, upstream: Upstream): 
   const setCookies: string[] = [];
   let refreshed = false;
 
-  const doRefresh = async (): Promise<boolean> => {
-    if (!refresh) return false;
+  const doRefresh = async (): Promise<Response | null> => {
+    if (!refresh) return refreshFailure(null, rid);
     const out = await refreshOnce(refresh, upstreamRefresh(upstream, rid));
-    if (!out.ok) return false;
+    if (!out.ok) return refreshFailure(out, rid);
     access = out.pair.access_token;
     setCookies.splice(0, setCookies.length, ...sessionCookies(out.pair));
     refreshed = true;
-    return true;
+    return null;
   };
 
   if (!accessTokenUsable(access)) {
-    if (!(await doRefresh())) return json(SESSION_EXPIRED, 401, rid, clearedCookies());
+    const failure = await doRefresh();
+    if (failure) return failure;
   }
 
   let body: ArrayBuffer | undefined;
@@ -115,7 +124,8 @@ export async function proxy(req: Request, apiPath: string, upstream: Upstream): 
   try {
     res = await send();
     if (res.status === 401 && !refreshed) {
-      if (!(await doRefresh())) return json(SESSION_EXPIRED, 401, rid, clearedCookies());
+      const failure = await doRefresh();
+      if (failure) return failure;
       res = await send();
     }
   } catch (e) {

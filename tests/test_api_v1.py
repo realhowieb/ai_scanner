@@ -331,7 +331,8 @@ class TokenTests(ApiTestCase):
 
         self.assertEqual(self.client.get("/v1/me").status_code, 401)
         self.assertEqual(self.client.get("/v1/me", headers=self.auth("garbage")).status_code, 401)
-        old = tokens.create_access_token("pro@example.com", self.settings, now=time.time() - 3600)
+        old = tokens.create_access_token("pro@example.com", self.settings,
+                                         password_hash=self.accounts["pro@example.com"]["password"], now=time.time() - 3600)
         self.assertEqual(self.client.get("/v1/me", headers=self.auth(old)).status_code, 401)
         forged = jwt.encode({"sub": "pro@example.com", "iat": int(time.time()), "exp": int(time.time()) + 600,
                              "iss": "hsf-api", "typ": "access"}, "another-secret-" + "y" * 40, algorithm="HS256")
@@ -343,6 +344,20 @@ class TokenTests(ApiTestCase):
         token = self.login().json()["access_token"]
         self.accounts["pro@example.com"]["is_active"] = False
         self.assertEqual(self.client.get("/v1/me", headers=self.auth(token)).status_code, 401)
+
+    def test_legacy_access_token_can_refresh_to_credential_bound_token(self):
+        import jwt
+
+        pair = self.login().json()
+        claims = jwt.decode(pair["access_token"], self.settings.jwt_secret, algorithms=["HS256"],
+                            issuer=self.settings.issuer)
+        self.assertNotIn(self.accounts["pro@example.com"]["password"], json.dumps(claims))
+        claims.pop("cv")
+        legacy = jwt.encode(claims, self.settings.jwt_secret, algorithm="HS256")
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(legacy)).status_code, 401)
+        rotated = self.client.post("/v1/auth/refresh", json={"refresh_token": pair["refresh_token"]})
+        self.assertEqual(rotated.status_code, 200)
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(rotated.json()["access_token"])).status_code, 200)
 
     def test_plan_change_applies_to_existing_token(self):
         token = self.login().json()["access_token"]

@@ -78,6 +78,21 @@ class RestoreTokenTests(unittest.TestCase):
 class AppCheckoutCallTests(unittest.TestCase):
     """ui/checkout.py: the app proves the account to the billing service."""
 
+    def test_unsafe_billing_urls_never_issue_tokens_or_send_requests(self):
+        from unittest import mock
+
+        from services import billing
+
+        for base in ("file:///tmp/billing", "ftp://billing.test", "http://billing.test", "https://user:pass@billing.test"):
+            with mock.patch("config.BILLING_API_BASE", base), \
+                    mock.patch.object(billing, "billing_auth_headers") as headers, \
+                    mock.patch.object(billing.urllib.request, "urlopen") as send:
+                url, error = billing.create_checkout_url("alice@example.com", "pro")
+                self.assertIsNone(url)
+                self.assertIn("HTTPS", error)
+                headers.assert_not_called()
+                send.assert_not_called()
+
     def _run(self, tokens):
         import json
         from unittest import mock
@@ -125,7 +140,7 @@ class AppCheckoutCallTests(unittest.TestCase):
 
 class WiringTests(unittest.TestCase):
     def test_stripe_return_links_use_single_use_restore_tokens(self):
-        checkout = (ROOT / "ui" / "checkout.py").read_text()
+        checkout = (ROOT / "services" / "billing.py").read_text()
         billing = (ROOT / "pages" / "billing.py").read_text()
         auth = (ROOT / "ui" / "auth.py").read_text()
         for src in (checkout, billing):

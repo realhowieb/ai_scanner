@@ -6,6 +6,8 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
+from tests.repo_files import python_files
+
 ROOT = Path(__file__).resolve().parents[1]
 _STREAMLIT = importlib.util.find_spec("streamlit") is not None
 
@@ -134,7 +136,7 @@ class ListRunsScopeTests(unittest.TestCase):
 
     def test_every_caller_scopes_its_runs(self):
         unscoped = []
-        for path in ROOT.rglob("*.py"):
+        for path in python_files(ROOT):
             rel = path.relative_to(ROOT).as_posix()
             if rel.startswith(("tests/", ".venv/")) or rel == "db/runs.py":
                 continue

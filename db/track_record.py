@@ -10,6 +10,21 @@ from typing import Any, Dict, List, Optional
 
 from db.engine import get_neon_conn, schema_once
 
+# Separate stored results from the old method that re-scored historical scans.
+# Public callers keep using "prebreakout"; legacy rows remain for audit only.
+PREBREAKOUT_SNAPSHOT = "prebreakout_snapshot_v1"
+
+
+def _stored_ranking(ranking):
+    return PREBREAKOUT_SNAPSHOT if ranking == "prebreakout" else ranking
+
+
+def _public_summary(row):
+    out = dict(row)
+    if out.get("ranking") == PREBREAKOUT_SNAPSHOT:
+        out["ranking"] = "prebreakout"
+    return out
+
 
 @schema_once
 def _ensure_schema(conn) -> None:
@@ -75,7 +90,7 @@ def save_daily_excess(ranking: str, horizon_days: int, daily) -> int:
                           n_picks = EXCLUDED.n_picks,
                           computed_at = NOW()
             """,
-            (day, ranking, int(horizon_days), float(avg_excess), int(n_picks)),
+            (day, _stored_ranking(ranking), int(horizon_days), float(avg_excess), int(n_picks)),
         )
         saved += 1
     conn.commit()
@@ -98,7 +113,7 @@ def load_daily_excess(ranking: str = "breakout", horizon_days: int = 5, days: in
               AND day >= CURRENT_DATE - make_interval(days => %s)
             ORDER BY day ASC
             """,
-            (ranking, int(horizon_days), int(days)),
+            (_stored_ranking(ranking), int(horizon_days), int(days)),
         )
         rows = cur.fetchall() or []
     except Exception:
@@ -159,7 +174,7 @@ def save_track_record(
             int(runs_used),
             benchmark,
             int(top_n) if top_n is not None else None,
-            ranking,
+            _stored_ranking(ranking),
         ),
     )
     conn.commit()
@@ -191,6 +206,7 @@ def load_latest_track_records() -> List[Dict[str, Any]]:
                    sample_size, runs_used, computed_at, benchmark, top_n,
                    COALESCE(ranking, 'breakout') AS ranking
             FROM signal_track_record
+            WHERE ranking IS NULL OR ranking != 'prebreakout'
             ORDER BY horizon_days, COALESCE(ranking, 'breakout'), computed_at DESC
             """
         )
@@ -198,7 +214,7 @@ def load_latest_track_records() -> List[Dict[str, Any]]:
         cur.close()
     finally:
         conn.close()
-    return [dict(r) if isinstance(r, dict) else dict(zip(_SUMMARY_COLS, r)) for r in rows]
+    return [_public_summary(r if isinstance(r, dict) else dict(zip(_SUMMARY_COLS, r))) for r in rows]
 
 
 def load_latest_track_record(
@@ -224,7 +240,7 @@ def load_latest_track_record(
         ORDER BY computed_at DESC
         LIMIT 1
         """,
-        (int(horizon_days), ranking, ranking),
+        (int(horizon_days), _stored_ranking(ranking), _stored_ranking(ranking)),
     )
     row = cur.fetchone()
     cur.close()
@@ -232,8 +248,8 @@ def load_latest_track_record(
     if not row:
         return None
     if isinstance(row, dict):
-        return dict(row)
-    return {
+        return _public_summary(row)
+    return _public_summary({
         "horizon_days": row[0],
         "avg_return": row[1],
         "median_return": row[2],
@@ -244,4 +260,4 @@ def load_latest_track_record(
         "benchmark": row[7],
         "top_n": row[8],
         "ranking": row[9],
-    }
+    })

@@ -27,6 +27,7 @@ class PaperConnect(BaseModel):
 
 
 class PaperOrderBody(BaseModel):
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9_-]{8,128}$", description="Reuse this confirmation ID on every retry of the same order")
     ticker: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,9}$")
     qty: int = Field(ge=1, le=100_000, description="Whole shares")
     confirm: Literal[True] = Field(description="Must be true: the user confirmed this order (the web's confirmation step)")
@@ -102,7 +103,7 @@ def register(app: FastAPI) -> None:
 
     @app.post("/v1/paper/orders", response_model=models.PaperOrder, status_code=201,
               responses={**_PREM, 400: {"description": "Order rejected"}, 422: {"description": "confirm must be true"},
-                         429: {"description": "Too many orders this hour"}},
+                         429: {"description": "Too many orders this hour"}, 409: {"description": "Confirmation belongs to another order"}},
               summary="Paper trade a setup (Premium)")
     def paper_order(body: PaperOrderBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """A whole-share market BUY sent to your Alpaca PAPER account (no real money), imported into
@@ -110,4 +111,4 @@ def register(app: FastAPI) -> None:
         require_feature(account, "can_paper_trade")
         user = _user(account)
         ratelimit.check("paper_order", user)
-        return json_safe(trading.order(user, body.ticker.upper(), body.qty))
+        return json_safe(trading.order(user, body.ticker.upper(), body.qty, body.idempotency_key))
