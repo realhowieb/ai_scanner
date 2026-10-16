@@ -26,9 +26,10 @@ browser ──(same origin, HttpOnly cookies)──> Next.js server (BFF) ──
   **single-flight** (`src/server/refresh.ts`): concurrent requests with the same
   refresh token share one rotation, and requests arriving within 10 s reuse its
   result. Across several server instances, the API's 30-second rotation grace covers
-  the same race. A failed refresh clears the cookies and answers
+  the same race. A rejected refresh token clears the cookies and answers
   `401 {"code": "session_expired"}`; the client then sends the user to sign in again
-  (`?next=` brings them back).
+  (`?next=` brings them back). Temporary service errors, rate limits and timeouts
+  preserve the cookies and return a retryable error with `Retry-After`.
 - **CSRF**: mutating calls must carry this site's `Origin` (or `Sec-Fetch-Site:
   same-origin`); cookies are `SameSite=Lax`.
 - **Only `/v1/...` data routes** are proxied (`/v1/auth/*` is refused), bodies are

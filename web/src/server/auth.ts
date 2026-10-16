@@ -2,7 +2,7 @@
 // only when a gateway error shows the request never reached it) and are
 // never stored or logged; the token pair goes straight into HttpOnly cookies.
 import type { Upstream } from "./bff";
-import { SESSION_EXPIRED, json, requestIdFor, sameOrigin, upstreamRefresh } from "./bff";
+import { SESSION_EXPIRED, json, refreshFailure, requestIdFor, sameOrigin, upstreamRefresh } from "./bff";
 import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, clearedCookies, parseCookies, sessionCookies } from "./cookies";
 import type { TokenPair } from "./cookies";
 import { cleanAttribution } from "./public";
@@ -146,7 +146,7 @@ export async function changePassword(req: Request, upstream: Upstream): Promise<
   try {
     if (!accessTokenUsable(access)) {
       const out = refresh ? await refreshOnce(refresh, upstreamRefresh(upstream, rid)) : null;
-      if (!out || !out.ok) return json(SESSION_EXPIRED, 401, rid, clearedCookies());
+      if (!out || !out.ok) return refreshFailure(out, rid);
       access = out.pair.access_token;
       pending = sessionCookies(out.pair);
     }

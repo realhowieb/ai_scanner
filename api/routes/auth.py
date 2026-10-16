@@ -50,7 +50,7 @@ def register(app: FastAPI) -> None:
         record_login_attempt(email, success=ok, failure_reason=None if ok else "api_login_failed")
         if not ok:
             raise HTTPException(401, _BAD_LOGIN)
-        return _token_pair(str(account["username"]).strip().lower(), settings, body.client)
+        return _token_pair(str(account["username"]).strip().lower(), settings, body.client, account)
 
     @app.post("/v1/auth/refresh", response_model=models.TokenPair,
               responses={401: {"description": "Unknown, expired or reused refresh token"}})
@@ -66,7 +66,7 @@ def register(app: FastAPI) -> None:
         account = store.get_account(username) if status in ("ok", "grace") and username else None
         if not account or account.get("is_active") is False:
             raise HTTPException(401, _UNAUTHORIZED)
-        return _token_pair(str(account["username"]).strip().lower(), settings, None)
+        return _token_pair(str(account["username"]).strip().lower(), settings, None, account)
 
     @app.post("/v1/auth/logout", status_code=204)
     def logout(body: LogoutBody) -> None:

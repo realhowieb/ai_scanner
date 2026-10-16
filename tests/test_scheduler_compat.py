@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from scheduler import jobs
 from scheduler.cron_runner import ScanRunSummary, _load_universe, _skip_reason, _write_summary
+from tests.repo_files import python_files
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -148,7 +149,7 @@ class ScannerEntrypointSourceTests(unittest.TestCase):
 
     def test_project_uses_timezone_aware_utc_datetimes(self) -> None:
         forbidden = "datetime." + "utcnow()"
-        for path in ROOT.rglob("*.py"):
+        for path in python_files(ROOT):
             if any(part in {"__pycache__", ".venv", "venv"} for part in path.parts):
                 continue
             source = path.read_text(encoding="utf-8")

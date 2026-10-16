@@ -100,7 +100,11 @@ class CleanupSourceChecks(unittest.TestCase):
             ROOT / "ui" / "app_boot.py",
         }
         offenders = []
-        for path in (ROOT / "ui").rglob("*.py"):
+        from tests.repo_files import python_files
+
+        for path in python_files(ROOT):
+            if not path.is_relative_to(ROOT / "ui"):
+                continue
             if path in allowed:
                 continue
             if "use_container_width" in path.read_text():
@@ -229,7 +233,10 @@ class CleanupSourceChecks(unittest.TestCase):
         self.assertNotIn("FEATURE_MIN_TIER: dict", app_source)
         self.assertIn("def normalize_admin_users", session_source)
         self.assertIn("def is_admin_user", session_source)
-        self.assertIn("def compute_entitlements", session_source)
+        from domain.plans import compute_entitlements
+        from ui import app_session
+
+        self.assertIs(app_session.compute_entitlements, compute_entitlements)
 
     def test_app_runtime_helpers_are_extracted_from_app(self):
         app_source = (ROOT / "app.py").read_text()

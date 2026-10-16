@@ -49,7 +49,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET | `/v1/stocks/{ticker}/plan?account_size&risk_pct` | Bearer, **Pro** | Trade plan for a latest-scan result: entry, stop, 1.5R/3R targets, size. |
 | GET / POST / DELETE | `/v1/paper/account` | Bearer, **Premium** | Paper account status; connect your own Alpaca **paper** keys (validated, stored encrypted, never returned); disconnect. |
 | GET | `/v1/paper/activity` | Bearer, **Premium** | Live positions and the order feed. |
-| POST | `/v1/paper/orders` | Bearer, **Premium** | `{ticker, qty, "confirm": true}` → whole-share market buy in your paper account, imported into the journal. Refused unless the trading endpoint is Alpaca's paper host. |
+| POST | `/v1/paper/orders` | Bearer, **Premium** | `{ticker, qty, "confirm": true, idempotency_key}` → whole-share market buy in your paper account. Reuse the confirmation ID on retries. Actual fills import into the journal; `journal_synced: false` means fill confirmation or import is pending. Refused unless the trading endpoint is Alpaca's paper host. |
 | DELETE | `/v1/me` | Bearer | `{password, "confirm": "DELETE"}` → deletes your account and its data. 409 while a paid subscription is active (cancel via the portal first) and for admins. |
 | GET | `/v1/stocks/{ticker}` | Bearer | Stock Intelligence (same builder as the web page): score, components, signals, reasons, risks, what to watch, lifecycle, historical context, daily bars the scans cached (up to 120), and your watchlists and alerts on it. |
 | GET / POST | `/v1/watchlists` | Bearer | List; create `{"name","make_default"?}` (201; 409 duplicate name; 403 past 50 lists). |
@@ -85,9 +85,15 @@ proxy-added `X-Forwarded-For` entry is the one counted).
 Send the access token as `Authorization: Bearer <token>`. Plan and admin status
 are read from the database on every request, so a plan change applies at once.
 
-Logout revokes the refresh token only. Access tokens are stateless: one already
-issued keeps working until it expires (at most 15 minutes). Deactivating an
-account or changing its plan applies on the next request.
+Logout revokes the refresh token only; an already issued access token keeps
+working until expiry (at most 15 minutes). Password resets and changes invalidate
+existing access tokens immediately: each token carries a keyed credential version
+bound to the password hash, checked against a fresh account row on every request.
+Deactivating an account or changing its plan also applies on the next request.
+No password hash is included in the token or cached for authorization. Older
+access tokens without credential binding receive 401 and can be exchanged using
+their existing refresh token. Temporary refresh outages preserve browser cookies
+and return a retryable error; only a rejected refresh token ends the session.
 
 Push devices (P1-64): the app should call `POST /v1/me/devices` at every start
 and whenever it gets new tokens (sign-in, sign-up, password change) or the OS gives
@@ -95,6 +101,17 @@ it a new push token. Signing out with `push_token` removes that device; a passwo
 change or reset, or a refresh-token reuse sweep, removes every device of the
 account, so the app registers again after its next sign-in. Nothing sends pushes
 yet; the alert sender will read `api.devices.devices_for_user()`.
+
+Paper-order confirmations are saved before contacting Alpaca. The server uses a
+stable, account-user-scoped client order ID and checks Alpaca before submitting.
+If a response is lost, retry the **same** `idempotency_key` (8–128 letters,
+digits, underscores or hyphens). A different ticker, quantity or unconfirmed
+account change with that key returns 409. Uncertain network outcomes return 503;
+the client must preserve its key. A confirmed rejection returns 400 and requires
+a new explicit confirmation. Accepted orders do not create estimated journal
+entries. Journal/activity refreshes reconcile up to five pending intents using
+broker-confirmed quantities and average fill prices. Partial fills update the
+same journal row, and failed imports remain pending for a later refresh.
 
 Custom scans run in the background because they take from a couple of seconds
 (one ticker, S&P 500) to minutes (US market: 224.6 s on 2026-10-06). They use

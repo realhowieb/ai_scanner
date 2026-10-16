@@ -6,10 +6,10 @@
 // orders are imported into the Journal.
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 
-import { api, unwrap } from "@/api/client";
+import { ApiError, api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { TICKER_RE } from "@/components/AppShell";
 import { Dialog } from "@/components/Dialog";
@@ -111,6 +111,8 @@ function AccountCard({ s, onDisconnected }: { s: Status; onDisconnected: () => v
 }
 
 function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => void }) {
+  const { me } = useSession();
+  const confirmation = useRef<{ slot: string; key: string } | null>(null);
   const [ticker, setTicker] = useState(initial);
   const [qty, setQty] = useState("1");
   const [review, setReview] = useState(false);
@@ -123,11 +125,28 @@ function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => voi
     unwrap(api.GET("/v1/stocks/{ticker}", { params: { path: { ticker: t } }, signal })));
   const last = quote.data?.price ?? null;
   const send = async () => {
+    const slot = `hsf-paper-confirmation:${me?.email}:${t}:${q}`;
+    let key = confirmation.current?.slot === slot ? confirmation.current.key : null;
+    try { key = key || sessionStorage.getItem(slot); } catch { /* mounted retries still use the ref */ }
+    key = key || crypto.randomUUID();
+    confirmation.current = { slot, key };
+    // Persist before sending: a lost response or reload must reuse this ID.
+    try { sessionStorage.setItem(slot, key); } catch { /* blocked storage */ }
+    const clear = () => {
+      confirmation.current = null;
+      try { sessionStorage.removeItem(slot); } catch { /* blocked storage */ }
+    };
     const ok = await act.run(async () => {
-      setPlaced(await unwrap(api.POST("/v1/paper/orders", { body: { ticker: t, qty: q, confirm: true } })));
+      try {
+        setPlaced(await unwrap(api.POST("/v1/paper/orders", { body: { ticker: t, qty: q, confirm: true, idempotency_key: key } })));
+      } catch (e) {
+        if (e instanceof ApiError && [400, 409, 422].includes(e.status)) clear();
+        throw e;
+      }
       return true;
     });
     if (ok) {
+      clear();
       setReview(false);
       onPlaced();
     }
@@ -143,8 +162,9 @@ function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => voi
         </label>
         <button type="submit" className="btn btn-primary" disabled={!valid}>Review order</button>
       </form>
-      <p className="cap">Whole-share market buy in your Alpaca paper account. No real money. The order is added to your <Link href="/journal">Journal</Link> with the trade plan&apos;s stop and target.</p>
+      <p className="cap">Whole-share market buy in your Alpaca paper account. No real money. Actual fills are added to your <Link href="/journal">Journal</Link>. If a request is interrupted, confirm the same ticker and share count again to check it safely.</p>
       {placed && <p className="notice" role="status">Sent: buy {placed.qty} {placed.ticker} ({placed.status}{n(placed.filled_avg_price) !== null ? `, filled at ${price(n(placed.filled_avg_price))}` : ""}).</p>}
+      {placed && !placed.journal_synced && <p className="cap">Journal sync pending. Refresh Journal or paper activity to check fills and retry the import.</p>}
       <Dialog open={review} title="Confirm paper order" onClose={() => { setReview(false); act.clear(); }}>
         <div className="stack-sm">
           <dl className="kv">

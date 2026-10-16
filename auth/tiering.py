@@ -25,6 +25,7 @@ except Exception:
 
 # Load tier configuration from config.py
 from config import TIERS_CONFIG
+from domain.plans import TIER_ORDER, has_min_tier
 
 
 # ------------------------------
@@ -111,12 +112,6 @@ class Tier:
 # ------------------------------
 
 # Rank order for tiers from lowest to highest privilege
-TIER_ORDER = {
-    "basic": 0,
-    "pro": 1,
-    "premium": 2,
-    "admin": 3,
-}
 
 
 def _normalize_tier_key(tier_or_key) -> str:
@@ -129,20 +124,6 @@ def _normalize_tier_key(tier_or_key) -> str:
     else:
         key = str(tier_or_key or "basic")
     return key.strip().lower()
-
-
-def has_min_tier(tier_or_key, required: str) -> bool:
-    """
-    Return True if the current tier is >= the required tier based on TIER_ORDER.
-
-    Example:
-        has_min_tier(current_tier, "pro")
-    """
-    current_key = _normalize_tier_key(tier_or_key)
-    required_key = str(required or "basic").strip().lower()
-    current_rank = TIER_ORDER.get(current_key, 0)
-    required_rank = TIER_ORDER.get(required_key, 0)
-    return current_rank >= required_rank
 
 
 def require_min_tier(tier_or_key, required: str, feature_name: str) -> bool:

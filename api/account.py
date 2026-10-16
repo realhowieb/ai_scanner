@@ -40,7 +40,7 @@ def _link(path: str, token: str) -> str:
 
 
 def _check_password(password: str, *, email: Optional[str], username: Optional[str] = None) -> None:
-    from ui.password_policy import password_problem
+    from domain.password_policy import password_problem
 
     problem = password_problem(password, email=email, username=username)
     if problem:
@@ -158,6 +158,9 @@ def _set_password_and_sign_out(username: str, new_password: str, reason: str) ->
 
     if not update_neon_user_password(username, _hash_password(new_password)):
         raise DatabaseUnavailable("database unavailable")
+    from api.deps import forget_account
+
+    forget_account(username)
     try:  # P1-54: sign the account out everywhere (web sessions and app sessions)
         from ui.auth_sessions import revoke_user_sessions
 
@@ -243,7 +246,7 @@ def checkout_url(username: str, plan: str, interval: str) -> Dict[str, str]:
     same call the web Billing page makes. Requires a verified email, as on the web."""
     if not verification_status(username):  # VerificationUnavailable (503) blocks too
         raise AccountError("Please verify your email before upgrading.", status=403)
-    from ui.checkout import create_checkout_url
+    from services.billing import create_checkout_url
 
     url, err = create_checkout_url(username, plan, interval)
     if not url:
@@ -258,7 +261,7 @@ def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
     import requests
 
     from config import BILLING_API_BASE
-    from ui.checkout import billing_auth_headers
+    from services.billing import billing_auth_headers
 
     base = (BILLING_API_BASE or "").rstrip("/")
     if not base.startswith(("https://", "http://")):
@@ -270,7 +273,7 @@ def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
     if flow:
         body["flow"] = flow
     try:
-        from ui.checkout import _build_return_urls
+        from services.billing import _build_return_urls
 
         _success, ret = _build_return_urls(username)
         if ret:

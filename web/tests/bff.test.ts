@@ -92,6 +92,40 @@ describe("BFF proxy", () => {
     expect(calls.filter((c) => c.path === "/v1/auth/refresh")).toHaveLength(1);
   });
 
+  it.each([429, 502, 503, 504])("preserves cookies when refreshing returns %i, including after an API 401", async (status) => {
+    for (const access of [undefined, jwt(600)]) {
+      _resetRefreshState();
+      const { up, calls } = fakeUpstream((c) => c.path === "/v1/auth/refresh"
+        ? jsonResponse({ detail: "temporarily unavailable" }, status, { "retry-after": "30" })
+        : jsonResponse({ detail: "expired" }, 401));
+      const cookies = { [REFRESH_COOKIE]: "rt-outage", ...(access ? { [ACCESS_COOKIE]: access } : {}) };
+      const res = await proxy(req("/api/hsf/v1/me", { cookies }), "v1/me", up);
+      expect(res.status).toBe(status);
+      expect(res.headers.get("retry-after")).toBe("30");
+      expect(setCookies(res)).toEqual([]);
+      expect(await res.json()).not.toHaveProperty("code", "session_expired");
+      expect(calls.filter((c) => c.path === "/v1/auth/refresh")).toHaveLength(1);
+    }
+  });
+
+  it.each([new TypeError("offline"), new DOMException("timed out", "TimeoutError")])(
+    "keeps the session after a refresh transport error and succeeds when retried", async (error) => {
+      let down = true;
+      const { up } = fakeUpstream((c) => {
+        if (c.path !== "/v1/auth/refresh") return jsonResponse({ ok: true });
+        if (down) throw error;
+        return jsonResponse(pair(11));
+      });
+      const request = () => req("/api/hsf/v1/me", { cookies: { [REFRESH_COOKIE]: "rt-retry" } });
+      const failed = await proxy(request(), "v1/me", up);
+      expect(failed.status).toBe(error.name === "TimeoutError" ? 504 : 502);
+      expect(setCookies(failed)).toEqual([]);
+      down = false;
+      const recovered = await proxy(request(), "v1/me", up);
+      expect(recovered.status).toBe(200);
+      expect(setCookies(recovered).join("\n")).toContain(`${REFRESH_COOKIE}=rt-11`);
+    });
+
   it("answers 401 without calling the API when there is no session at all", async () => {
     const { up, calls } = fakeUpstream(() => jsonResponse({}));
     const res = await proxy(req("/api/hsf/v1/me"), "v1/me", up);
@@ -281,6 +315,17 @@ describe("login and logout", () => {
 describe("password change", () => {
   const cookies = { [ACCESS_COOKIE]: jwt(600), [REFRESH_COOKIE]: "rt-0" };
   const body = { current_password: "old-pass", new_password: "new-pass-123" };
+
+  it("preserves the session if refreshing before a password change is unavailable", async () => {
+    const { up, calls } = fakeUpstream(() => jsonResponse({ detail: "unavailable" }, 503, { "retry-after": "20" }));
+    const res = await changePassword(req("/api/auth/password", {
+      method: "POST", cookies: { [REFRESH_COOKIE]: "rt-0" }, body,
+    }), up);
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBe("20");
+    expect(setCookies(res)).toEqual([]);
+    expect(calls.map((c) => c.path)).toEqual(["/v1/auth/refresh"]);
+  });
 
   it("is never proxied, because the API answers with a token pair", async () => {
     const { up, calls } = fakeUpstream(() => jsonResponse(pair(1)));

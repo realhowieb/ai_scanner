@@ -18,18 +18,17 @@ ALPACA_BASE_URL can never route a customer's order to a live account.
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+
+from services.paper_orders import (
+    OrderConflict,
+    PaperRejected,
+    PaperUnavailable,
+    reconcile_pending,
+    require_paper_endpoint,
+)
 
 PAPER_HOST = "paper-api.alpaca.markets"
 MAX_ORDER_QTY = 100_000
-
-
-class PaperUnavailable(RuntimeError):
-    """Paper trading can't run on this server (503)."""
-
-
-class PaperRejected(ValueError):
-    """Alpaca or the request rejected the order / keys (400)."""
 
 
 class TradeClosed(ValueError):
@@ -51,6 +50,7 @@ def journal(username: str) -> Dict[str, Any]:
     """Trades (open first), open ones marked to live quotes, plus closed-trade stats."""
     from db.trades import journal_stats, list_trades
 
+    _reconcile(username)
     trades = list_trades(username, limit=200)
     live = _quotes([t["ticker"] for t in trades if not t.get("closed_at")])
     out = []
@@ -130,11 +130,7 @@ def plan(ticker: str, account_size: float, risk_pct: float) -> Optional[Dict[str
 
 
 # ---- paper trading --------------------------------------------------------------------------------
-def _require_paper_endpoint() -> None:
-    from data.alpaca_trading import _base_url
-
-    if (urlparse(_base_url()).hostname or "").lower() != PAPER_HOST:
-        raise PaperUnavailable("Paper trading is unavailable right now.")
+_require_paper_endpoint = require_paper_endpoint
 
 
 def _require_encryption() -> None:
@@ -188,6 +184,7 @@ def activity(username: str, limit: int = 25) -> Dict[str, Any]:
     from db.paper_events import list_events, sync_orders
     from db.paper_trading import get_paper_account
 
+    _reconcile(username)
     acct = get_paper_account(username)
     if not acct:
         orders = list_events(username, limit)
@@ -217,29 +214,32 @@ def activity(username: str, limit: int = 25) -> Dict[str, Any]:
                         "unrealized_pl": sum(n(p.get("unrealized_pl")) or 0 for p in pos) if pos else 0}}
 
 
-def order(username: str, ticker: str, qty: int) -> Dict[str, Any]:
-    """Whole-share market BUY to the user's paper account, imported into the journal
-    with the plan's stop/target and the scan's score, like the web."""
-    from data.alpaca_trading import submit_market_order
-    from db.paper_trading import get_paper_account
-    from db.trades import log_trade
+def order(username: str, ticker: str, qty: int, idempotency_key: str) -> Dict[str, Any]:
+    from services.paper_orders import submit
 
     _require_paper_endpoint()
-    acct = get_paper_account(username)
-    if not acct:
-        raise PaperRejected("Connect your Alpaca paper account first (POST /v1/paper/account).")
-    res = submit_market_order(acct["api_key"], acct["api_secret"], ticker, int(qty), side="buy")
-    if not res.get("ok"):
-        raise PaperRejected(f"Order rejected: {str(res.get('error') or 'unknown error')[:200]}")
-    row = latest_row(ticker) or {}
-    p = plan(ticker, 10_000.0, 1.0) or {}
-    filled = res.get("filled_avg_price")
-    entry = float(filled) if filled not in (None, "") else float(row.get("Last") or 0.0)
     try:
-        log_trade(username, ticker, entry, int(qty), source="paper", alpaca_order_id=res.get("order_id"),
-                  stop_price=p.get("stop"), target_price=(p.get("targets") or [None])[0],
-                  breakout_score=row.get("BreakoutScore"), ai_confidence=row.get("AI Confidence"))
+        row = latest_row(ticker) or {}
+        p = plan(ticker, 10_000.0, 1.0) or {}
     except Exception:
-        pass
-    return {"order_id": res.get("order_id"), "status": res.get("status") or "submitted", "ticker": ticker,
-            "qty": int(qty), "filled_avg_price": filled}
+        row, p = {}, {}  # a scan outage must not prevent recovering an accepted order
+    def number(value):
+        import math
+
+        try:
+            value = float(value)
+            return value if math.isfinite(value) else None
+        except (TypeError, ValueError):
+            return None
+    context = {"stop_price": number(p.get("stop")), "target_price": number((p.get("targets") or [None])[0]),
+               "breakout_score": number(row.get("BreakoutScore")), "ai_confidence": number(row.get("AI Confidence"))}
+    return submit(username, ticker, qty, idempotency_key, context)
+
+
+def _reconcile(username):
+    import logging
+
+    try:
+        reconcile_pending(username)
+    except Exception:
+        logging.getLogger(__name__).warning("paper_reconciliation_unavailable")

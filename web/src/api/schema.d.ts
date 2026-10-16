@@ -4797,6 +4797,12 @@ export interface components {
         PaperOrder: {
             /** Filled Avg Price */
             filled_avg_price?: unknown | null;
+            /**
+             * Journal Synced
+             * @description True only after an actual fill has been imported; pending fills retry on journal/activity refresh
+             * @default false
+             */
+            journal_synced: boolean;
             /** Order Id */
             order_id?: string | null;
             /** Qty */
@@ -4814,6 +4820,11 @@ export interface components {
              * @constant
              */
             confirm: true;
+            /**
+             * Idempotency Key
+             * @description Reuse this confirmation ID on every retry of the same order
+             */
+            idempotency_key: string;
             /**
              * Qty
              * @description Whole shares
@@ -10431,6 +10442,13 @@ export interface operations {
             };
             /** @description Premium feature */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation belongs to another order */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
