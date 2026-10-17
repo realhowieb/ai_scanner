@@ -62,6 +62,33 @@ class TemporalJoinTest(unittest.TestCase):
     def _join(self, observed, scans, **kw):
         return rd.match_scan_observation("AAA", ts(observed), rd.index_scan_records(scans), **kw)
 
+    def test_source_scan_id_links_own_scan_written_seconds_later(self):
+        own = scan("AAA", "2026-09-15T16:35:00", written="2026-09-15T16:40:05")   # written after T
+        best, info = self._join("2026-09-15T16:40:00", [own], source_scan_id="2026-09-15 16:35:00+00:00")
+        self.assertIsNotNone(best)
+        self.assertEqual(info["status"], rd.JOIN_MATCHED)
+        self.assertEqual(info["link"], rd.LINK_SOURCE_SCAN)
+        self.assertFalse(info["known_at_verified"])
+        # Without the id the same record is still refused (backward join unchanged).
+        _b, plain = self._join("2026-09-15T16:40:00", [own])
+        self.assertEqual(plain["status"], rd.JOIN_FUTURE_ONLY)
+
+    def test_source_scan_id_never_links_a_scan_started_after_T_or_another_scan(self):
+        later = scan("AAA", "2026-09-15T16:45:00")
+        _b, info = self._join("2026-09-15T16:40:00", [later], source_scan_id=ts("2026-09-15T16:45:00").isoformat())
+        self.assertNotEqual(info["status"], rd.JOIN_MATCHED)
+        other = scan("AAA", "2026-09-15T16:00:00", written="2026-09-15T16:41:00")
+        _b, info = self._join("2026-09-15T16:40:00", [other], source_scan_id=ts("2026-09-15T16:35:00").isoformat())
+        self.assertEqual(info["status"], rd.JOIN_FUTURE_ONLY)
+
+    def test_build_records_uses_the_row_scan_id(self):
+        row = opp(1, "AAA", "2026-09-15T16:40:00")
+        row["raw_signal"]["source_scan_id"] = ts("2026-09-15T16:35:00").isoformat()
+        own = scan("AAA", "2026-09-15T16:35:00", written="2026-09-15T16:40:05", price=12.5)
+        f = rd.build_records([row], [own])[0]["features"]
+        self.assertEqual(f.join["status"], rd.JOIN_MATCHED)
+        self.assertEqual(f.values["price"], 12.5)
+
     def test_boundary_written_exactly_at_T_is_included(self):
         best, info = self._join("2026-09-15T16:40:00",
                                 [scan("AAA", "2026-09-15T16:35:00", written="2026-09-15T16:40:00")])

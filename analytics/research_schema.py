@@ -167,8 +167,10 @@ UNAVAILABLE_FEATURES: Tuple[Dict[str, str], ...] = (
     {"name": "prev_close / vol_avg_20 / high_20 / spark_10d", "pit": SAFE_STORED,
      "reason": "Stored in per-scan runs.results_json for 90 days only (then pruned). Not read by schema v1."},
     {"name": "prebreakout_model_version (served)", "pit": UNKNOWN,
-     "reason": "The served model version lives in the loaded bundle and is not frozen on observations. "
-               "hsf_observations.versions holds the code constant, which can differ from the served champion."},
+     "reason": "Scanner freezes since 2026-10-17 store it as raw_signal.prebreakout_model_version, from the "
+               "scan's own inference record (raw_signal.models.prebreakout.loaded_artifact). Older rows have it only "
+               "there, when the scan captured it. hsf_observations.versions holds the code constant, which can "
+               "differ from the served champion."},
     {"name": "sector / industry / market_cap / fundamentals", "pit": UNSAFE_CURRENT_VALUE,
      "reason": "Only current metadata exists. Joining it to history would leak today's values."},
     {"name": "market_regime / breadth", "pit": MISSING,

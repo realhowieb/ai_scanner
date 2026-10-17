@@ -21,6 +21,13 @@ Temporal join rule for scan features (the only join in this layer):
                              observed_at - scan_timestamp <= MAX_SCAN_LAG
     pick the latest scan_timestamp; ties -> 'scheduled:us_market' first, then
     the lowest observation id. Never "ticker -> latest record".
+
+Same-scan link (rows frozen since the scan id was stamped on them): when the
+frozen payload names its own scan (`raw_signal.source_scan_id`, the scan's start
+time), the record of THAT scan is used even though it was written a few seconds
+after the row. Both were written from the same in-memory scan results, so no
+value from after the observation can enter. Rows without the id use the
+backward join above.
 """
 from __future__ import annotations
 
@@ -41,6 +48,8 @@ JOIN_MATCHED = "MATCHED"
 JOIN_STALE = "NO_SCAN_WITHIN_LAG"      # an earlier scan exists, but older than MAX_SCAN_LAG
 JOIN_MISSING = "NO_SCAN_RECORD"        # no eligible scan record at all
 JOIN_FUTURE_ONLY = "ONLY_LATER_SCANS"  # records exist for the ticker, all written after observed_at
+LINK_SOURCE_SCAN = "source_scan_id"    # matched to the row's own scan by its stamped id
+LINK_BACKWARD = "backward_asof"        # matched by the backward as-of join
 
 # Maturity states are Outcome Intelligence's own (one definition in the codebase).
 from analytics.outcome_intelligence import INVALID, MATURED, PENDING, UNAVAILABLE  # noqa: E402
@@ -174,21 +183,41 @@ def index_scan_records(scan_rows: Iterable[Mapping[str, Any]]) -> Dict[str, List
     return by_symbol
 
 
+def source_scan_id_of(row: Mapping[str, Any]) -> Optional[str]:
+    """The scan id a frozen opportunity row was stamped with, if any."""
+    return _str(_json(row.get("raw_signal")).get("source_scan_id"))
+
+
 def match_scan_observation(ticker: str, observed_at: Any, by_symbol: Mapping[str, Sequence[Dict[str, Any]]],
-                           *, max_lag: _dt.timedelta = MAX_SCAN_LAG) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+                           *, max_lag: _dt.timedelta = MAX_SCAN_LAG,
+                           source_scan_id: Any = None) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     """Backward as-of join (module docstring). Returns (scan view or None, join info).
 
     A scan record is eligible only when it was both started AND written at or
     before observed_at. A record without a write time (known_at) is accepted on
     scan_timestamp alone and flagged, because the write time is the only proof
-    the values existed before the observation."""
+    the values existed before the observation.
+
+    With `source_scan_id` (the row's own scan start time), the record of that
+    exact scan is used first: it must have started at or before observed_at and
+    within max_lag, but may have been written after it (same scan results)."""
     obs = to_dt(observed_at)
     cands = list(by_symbol.get(str(ticker).upper(), ()))
     info: Dict[str, Any] = {"status": JOIN_MISSING, "scan_observation_id": None, "scan_timestamp": None,
                             "scan_context": None, "lag_seconds": None, "known_at_verified": None,
-                            "max_lag_seconds": int(max_lag.total_seconds())}
+                            "max_lag_seconds": int(max_lag.total_seconds()), "link": None}
     if obs is None:
         return None, info
+    sid = to_dt(source_scan_id)
+    if sid is not None:
+        own = [c for c in cands if c["scan_timestamp"] == sid and sid <= obs and obs - sid <= max_lag]
+        if own:
+            best = min(own, key=lambda c: (c["context"] != PREFERRED_SCAN_CONTEXT, c["scan_observation_id"]))
+            info.update(status=JOIN_MATCHED, scan_observation_id=best["scan_observation_id"],
+                        scan_timestamp=best["scan_timestamp"].isoformat(), scan_context=best["context"],
+                        lag_seconds=int((obs - sid).total_seconds()), known_at_verified=False,
+                        link=LINK_SOURCE_SCAN)
+            return best, info
     eligible = [c for c in cands if c["scan_timestamp"] <= obs
                 and (c["known_at"] is None or c["known_at"] <= obs)]
     if not eligible:
@@ -204,7 +233,8 @@ def match_scan_observation(ticker: str, observed_at: Any, by_symbol: Mapping[str
         return None, info
     info.update(status=JOIN_MATCHED, scan_observation_id=best["scan_observation_id"],
                 scan_timestamp=best["scan_timestamp"].isoformat(), scan_context=best["context"],
-                lag_seconds=int(lag.total_seconds()), known_at_verified=best["known_at"] is not None)
+                lag_seconds=int(lag.total_seconds()), known_at_verified=best["known_at"] is not None,
+                link=LINK_BACKWARD)
     return best, info
 
 
@@ -373,7 +403,8 @@ def build_records(rows: Sequence[Mapping[str, Any]], scan_rows: Iterable[Mapping
         if row.get("id") is None:
             continue
         ident = observation_identity(row)
-        scan, join_info = match_scan_observation(ident["ticker"], row.get("fired_at"), by_symbol, max_lag=max_lag)
+        scan, join_info = match_scan_observation(ident["ticker"], row.get("fired_at"), by_symbol, max_lag=max_lag,
+                                                 source_scan_id=source_scan_id_of(row))
         snap = feature_snapshot(row, scan, join_info, rank=ranks.get(ident["observation_id"]),
                                 feature_schema_version=feature_schema_version)
         outc = outcome_record(row, label_schema_version=label_schema_version)

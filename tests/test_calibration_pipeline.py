@@ -74,12 +74,15 @@ class FreezeOwnershipTests(unittest.TestCase):
         opps = [{"ticker": "NVDA", "score": 77}]
         with (
             mock.patch.object(ofz, "market_runs", return_value=self._RUNS),
-            mock.patch.object(ofz, "scanner_opportunities", return_value=opps) as sc,
+            mock.patch("ui.market_scans._run_df_uncached", return_value="DF") as load,
+            mock.patch("ui.market_scans.top_setups", return_value=opps) as top,
+            mock.patch.object(ofz, "ai_confidence_by_ticker", return_value={}),
             mock.patch("db.signal_outcomes.freeze_opportunities", return_value=3) as fz,
         ):
             n = ofz.freeze_latest_opportunities()
         self.assertEqual(n, 3)
-        sc.assert_called_once_with(7, ofz.FREEZE_TOP_N)
+        load.assert_called_once_with(7)
+        top.assert_called_once_with("DF", n=ofz.FREEZE_TOP_N)
         fz.assert_called_once_with("T7", opps, signal_type=so.SCANNER_SIGNAL_TYPE)
 
     def test_scanner_opportunities_use_the_scanner_ranking(self):
@@ -104,7 +107,7 @@ class FreezeOwnershipTests(unittest.TestCase):
             self.assertEqual(ofz.freeze_latest_opportunities(), 0)
         with (
             mock.patch.object(ofz, "market_runs", return_value=self._RUNS),
-            mock.patch.object(ofz, "scanner_opportunities", return_value=[]),
+            mock.patch("ui.market_scans._run_df_uncached", return_value=None),
         ):
             self.assertEqual(ofz.freeze_latest_opportunities(), 0)
 
@@ -199,3 +202,92 @@ class PipelineIntegrityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FreezeProvenanceTests(unittest.TestCase):
+    """Scanner freezes carry their scan id, served PreBreakout version and AI Confidence."""
+
+    SID = "2026-10-16 19:45:12.397097+00:00"
+
+    def _df(self):
+        import pandas as pd
+        prov = ('{"prebreakout":{"status":"captured","loaded_artifact":'
+                '{"registry_id":9,"version":"prebreakout-xgb-v16","artifact":null,"sha256":"x"}}}')
+        return pd.DataFrame([
+            {"Ticker": "NVDA", "IsBreakout": True, "EMACross": "Golden", "PreBreakoutProb%": 78,
+             "BreakoutScore": 74, "PctChange": 2.4, "SourceScanId": self.SID, "ModelProvenance": prov},
+            {"Ticker": "AMD", "IsBreakout": True, "PreBreakoutProb%": 60, "BreakoutScore": 50,
+             "PctChange": 1.0, "SourceScanId": self.SID, "ModelProvenance": prov},
+        ])
+
+    def _freeze(self, df, conf, **kw):
+        import datetime as dt
+
+        from analytics import opportunity_freeze as ofz
+        seen = []
+        run = {"id": 7, "created_at": dt.datetime(2026, 10, 16, 19, 50, tzinfo=dt.timezone.utc)}
+        with (
+            mock.patch("ui.market_scans._run_df_uncached", return_value=df),
+            mock.patch.object(ofz, "ai_confidence_by_ticker", return_value=conf) as ac,
+            mock.patch.object(so, "freeze_signal", side_effect=lambda **k: seen.append(k) or True),
+        ):
+            n = ofz.freeze_run(run, **kw)
+        return n, {k["ticker"]: k for k in seen}, ac
+
+    def test_rows_carry_scan_id_model_version_and_ai_confidence(self):
+        n, rows, _ = self._freeze(self._df(), {"NVDA": {"value": 61.5, "model_version": "ai-confidence-xgb-v1"}})
+        self.assertEqual(n, 2)
+        nv, amd = rows["NVDA"], rows["AMD"]
+        self.assertEqual(nv["raw_signal"]["source_scan_id"], self.SID)
+        self.assertEqual(nv["raw_signal"]["prebreakout_model_version"], "prebreakout-xgb-v16")
+        self.assertEqual(nv["ai_confidence"], 61.5)
+        self.assertEqual(nv["raw_signal"]["ai_confidence_model_version"], "ai-confidence-xgb-v1")
+        # A ticker the model could not score stays empty; nothing is filled in.
+        self.assertIsNone(amd["ai_confidence"])
+        self.assertNotIn("ai_confidence_model_version", amd["raw_signal"])
+
+    def test_backfill_never_scores_ai_confidence(self):
+        _n, rows, ac = self._freeze(self._df(), {"NVDA": {"value": 1.0, "model_version": "v"}},
+                                    score_confidence=False)
+        ac.assert_not_called()
+        self.assertTrue(all(r["ai_confidence"] is None for r in rows.values()))
+        self.assertEqual(rows["NVDA"]["raw_signal"]["source_scan_id"], self.SID)
+
+    def test_ai_confidence_failure_still_freezes(self):
+        import datetime as dt
+
+        from analytics import opportunity_freeze as ofz
+        run = {"id": 7, "created_at": dt.datetime(2026, 10, 16, 19, 50, tzinfo=dt.timezone.utc)}
+        with (
+            mock.patch("ui.market_scans._run_df_uncached", return_value=self._df()),
+            mock.patch.object(ofz, "ai_confidence_by_ticker", side_effect=RuntimeError("x")),
+            mock.patch.object(so, "freeze_signal", return_value=True),
+        ):
+            self.assertEqual(ofz.freeze_run(run), 2)
+
+    def test_no_scan_id_when_run_mixes_scans(self):
+        from analytics import opportunity_freeze as ofz
+        df = self._df()
+        df.loc[1, "SourceScanId"] = "2026-10-16 18:00:00+00:00"
+        self.assertIsNone(ofz.source_scan_id(df))
+        self.assertEqual(ofz.source_scan_id(self._df()), self.SID)
+
+    def test_ai_confidence_scores_only_the_frozen_tickers_from_the_saved_row(self):
+        import pandas as pd
+
+        from analytics import opportunity_freeze as ofz
+
+        def fake_score(frame):
+            out = frame.copy()
+            out["AI Confidence"] = [55.0 if t == "NVDA" else float("nan") for t in out["Ticker"]]
+            return out
+
+        with (
+            mock.patch("scan.ai_confidence.score_ai_confidence", side_effect=fake_score) as sc,
+            mock.patch("scan.ai_confidence.load_ai_confidence_bundle",
+                       return_value=(object(), {"model_version": "ai-confidence-xgb-v1"}, None)),
+        ):
+            out = ofz.ai_confidence_by_ticker(self._df(), ["NVDA", "AMD"])
+        self.assertEqual(out, {"NVDA": {"value": 55.0, "model_version": "ai-confidence-xgb-v1"}})
+        self.assertEqual(sorted(sc.call_args[0][0]["Ticker"]), ["AMD", "NVDA"])
+        self.assertEqual(ofz.ai_confidence_by_ticker(pd.DataFrame(), ["NVDA"]), {})

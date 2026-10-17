@@ -229,6 +229,12 @@ def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any], *,
         "status": opp.get("status"),
         "score_source": "scanner" if signal_type == SCANNER_SIGNAL_TYPE else "brief",
     }
+    # Point-in-time provenance, only when the caller has it (Scanner freezes):
+    # the row's own scan id, the served PreBreakout version, and the AI
+    # Confidence model version. Absent keys stay absent; nothing is guessed.
+    for k in ("source_scan_id", "prebreakout_model_version", "ai_confidence_model_version"):
+        if opp.get(k):
+            raw_signal[k] = str(opp[k])
     return freeze_signal(
         source="opportunity",
         source_event_id=event_id,
@@ -239,7 +245,7 @@ def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any], *,
         fired_at=snapshot_time,
         entry_price=None,
         setup_score=opp.get("breakout_score"),
-        ai_confidence=None,
+        ai_confidence=opp.get("ai_confidence"),
         prebreakout_prob=opp.get("prob"),
         indicators=indicators,
         raw_signal=raw_signal,
