@@ -406,7 +406,7 @@ function Live() {
             {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </label>
-        <a href="#stair-steppers" className="cap">Jump to Stair-Steppers</a>
+        {rows.length > 0 && <a href="#stair-steppers" className="cap">Jump to Stair-Steppers</a>}
         <span className="grow" />
         {d && (live
           ? failed
@@ -474,7 +474,7 @@ function Live() {
           </section>
         ) : (
           <section ref={listRef} className={`card flush${switching ? " dim" : ""}`}>
-            <div className="table-wrap">
+            <div className="table-wrap dt-scroll" tabIndex={0} role="region" aria-label="Day Trader candidates; scroll for more rows and columns">
               <table className="table dt-table">
                 <thead><tr>
                   {COLS.map((c) => (

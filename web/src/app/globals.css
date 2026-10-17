@@ -858,3 +858,5 @@ summary:focus-visible, .table-wrap:focus-visible { outline: 2px solid var(--acce
 
 .showcase-img { height: 620px; object-fit: cover; object-position: top; }
 @media (max-width: 760px) { .showcase-img { height: 680px; } }
+
+.dt-scroll { max-height: 65vh; }
