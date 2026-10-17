@@ -330,6 +330,74 @@
     "title": "AdminAuditEvent",
     "type": "object"
    },
+   "AdminBilling": {
+    "properties": {
+     "failed_syncs": {
+      "default": 0,
+      "title": "Failed Syncs",
+      "type": "integer"
+     },
+     "last_webhook_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Webhook At"
+     },
+     "mode": {
+      "enum": [
+       "test",
+       "live",
+       "unknown",
+       "external"
+      ],
+      "title": "Mode",
+      "type": "string"
+     },
+     "prices_configured": {
+      "additionalProperties": {
+       "type": "boolean"
+      },
+      "title": "Prices Configured",
+      "type": "object"
+     },
+     "prices_valid": {
+      "additionalProperties": {
+       "type": "boolean"
+      },
+      "title": "Prices Valid",
+      "type": "object"
+     },
+     "webhook_check_available": {
+      "title": "Webhook Check Available",
+      "type": "boolean"
+     },
+     "webhook_configured": {
+      "title": "Webhook Configured",
+      "type": "boolean"
+     },
+     "webhook_failures": {
+      "items": {
+       "$ref": "#/components/schemas/BillingFailure"
+      },
+      "title": "Webhook Failures",
+      "type": "array"
+     }
+    },
+    "required": [
+     "mode",
+     "prices_configured",
+     "prices_valid",
+     "webhook_configured",
+     "webhook_check_available"
+    ],
+    "title": "AdminBilling",
+    "type": "object"
+   },
    "AdminCheck": {
     "properties": {
      "detail": {
@@ -3233,6 +3301,29 @@
     "title": "Bar",
     "type": "object"
    },
+   "BillingFailure": {
+    "properties": {
+     "at": {
+      "title": "At",
+      "type": "string"
+     },
+     "code": {
+      "title": "Code",
+      "type": "string"
+     },
+     "event_type": {
+      "title": "Event Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "event_type",
+     "code",
+     "at"
+    ],
+    "title": "BillingFailure",
+    "type": "object"
+   },
    "BillingLink": {
     "properties": {
      "mode": {
@@ -3254,6 +3345,165 @@
      "mode"
     ],
     "title": "BillingLink",
+    "type": "object"
+   },
+   "BillingStatus": {
+    "properties": {
+     "amount": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Amount"
+     },
+     "cancel_at_period_end": {
+      "default": false,
+      "title": "Cancel At Period End",
+      "type": "boolean"
+     },
+     "cancellation_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cancellation At"
+     },
+     "checked_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Checked At"
+     },
+     "checkout_pending": {
+      "default": false,
+      "title": "Checkout Pending",
+      "type": "boolean"
+     },
+     "checkout_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Checkout Url"
+     },
+     "currency": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Currency"
+     },
+     "grace_ends_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Grace Ends At"
+     },
+     "interval": {
+      "anyOf": [
+       {
+        "enum": [
+         "month",
+         "year"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Interval"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "plan": {
+      "anyOf": [
+       {
+        "enum": [
+         "basic",
+         "pro",
+         "premium",
+         "admin"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Plan"
+     },
+     "renewal_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Renewal At"
+     },
+     "status": {
+      "default": "unknown",
+      "title": "Status",
+      "type": "string"
+     },
+     "sync_state": {
+      "default": "pending",
+      "enum": [
+       "confirmed",
+       "pending",
+       "needs_attention",
+       "unavailable"
+      ],
+      "title": "Sync State",
+      "type": "string"
+     },
+     "test_mode": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Test Mode"
+     }
+    },
+    "required": [
+     "message"
+    ],
+    "title": "BillingStatus",
     "type": "object"
    },
    "Brief": {
@@ -12432,6 +12682,42 @@
     "x-internal": true
    }
   },
+  "/v1/admin/billing": {
+   "get": {
+    "operationId": "admin_billing_v1_admin_billing_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminBilling"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Billing mode, price checks and webhook/sync diagnostics; no secrets",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
   "/v1/admin/db-check": {
    "post": {
     "operationId": "admin_db_check_v1_admin_db_check_post",
@@ -14457,6 +14743,46 @@
     "summary": "Billing Checkout"
    }
   },
+  "/v1/billing/checkout/cancel": {
+   "post": {
+    "description": "Expire only this account's unfinished checkout, without canceling a subscription.",
+    "operationId": "billing_checkout_cancel_v1_billing_checkout_cancel_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "409": {
+      "description": "Payment processing"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Billing Checkout Cancel"
+   }
+  },
   "/v1/billing/portal": {
    "post": {
     "description": "Stripe Customer Portal: payment method, invoices, plan, cancellation (flow=cancel).",
@@ -14510,6 +14836,43 @@
     "summary": "Billing Portal"
    }
   },
+  "/v1/billing/status": {
+   "get": {
+    "description": "The account's last confirmed billing status. Does not contact Stripe.",
+    "operationId": "billing_status_v1_billing_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BillingStatus"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Billing Status"
+   }
+  },
   "/v1/billing/sync": {
    "post": {
     "description": "Refresh the signed-in account from its Stripe customer. Does not create or change a subscription.",
@@ -14519,7 +14882,7 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/Message"
+         "$ref": "#/components/schemas/BillingStatus"
         }
        }
       },

@@ -42,6 +42,7 @@ type Ctx = {
   billingBusy: boolean;
   billingStatus: string | null;
   billingError: ApiError | null;
+  billingRevision: number;
 };
 
 const SessionContext = createContext<Ctx | null>(null);
@@ -68,6 +69,7 @@ export function SessionProvider({ children, initialMe = null }: { children: Reac
   const [billingBusy, setBillingBusy] = useState(false);
   const [billingStatus, setBillingStatus] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<ApiError | null>(null);
+  const [billingRevision, setBillingRevision] = useState(0);
   const syncing = useRef<Promise<void> | null>(null);
   const syncBilling = useCallback((): Promise<void> => {
     if (syncing.current) return syncing.current;
@@ -81,7 +83,7 @@ export function SessionProvider({ children, initialMe = null }: { children: Reac
       setBillingError(error as ApiError);
       // Still refresh the server's current plan if Stripe is unavailable.
       reload();
-    }).finally(() => { syncing.current = null; setBillingBusy(false); });
+    }).finally(() => { syncing.current = null; setBillingBusy(false); setBillingRevision((v) => v + 1); });
     syncing.current = request;
     return request;
   }, [reload]);
@@ -129,8 +131,8 @@ export function SessionProvider({ children, initialMe = null }: { children: Reac
   }, [syncBilling]);
   const can = useCallback((feature: string) => !!me?.entitlements?.[feature], [me]);
   const value = useMemo<Ctx>(() => ({ me, loading: !me && state.loading, error: state.error, can, signOut, reload,
-    syncBilling, billingBusy, billingStatus, billingError }),
-    [me, state.loading, state.error, can, reload, syncBilling, billingBusy, billingStatus, billingError]);
+    syncBilling, billingBusy, billingStatus, billingError, billingRevision }),
+    [me, state.loading, state.error, can, reload, syncBilling, billingBusy, billingStatus, billingError, billingRevision]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

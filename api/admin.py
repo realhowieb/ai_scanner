@@ -229,6 +229,17 @@ def _probe_earnings(which: str) -> Dict[str, Any]:
 
 
 def _probe_billing() -> Dict[str, Any]:
+    if os.getenv("BILLING_MODE", "external").strip().lower() == "embedded":
+        try:
+            from billing_service import main as billing
+
+            health, ms = _timed(billing.health)
+            ok = isinstance(health, dict) and health.get("ok") is True
+            return {"name": "Billing service", "status": "ok" if ok else "error", "ms": ms,
+                    "detail": "Billing runs in the API; configuration and database are ready." if ok
+                    else "Embedded billing configuration or database needs attention."}
+        except Exception:
+            return {"name": "Billing service", "status": "error", "detail": "Embedded billing check failed.", "ms": None}
     import requests
 
     base = (os.getenv("BILLING_API_BASE") or "https://ai-scanner-h2c8.onrender.com").strip().rstrip("/")

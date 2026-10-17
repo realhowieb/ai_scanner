@@ -52,7 +52,9 @@ need `APP_BASE_URL=https://app.hsfinest.com` in their environment.
 3. In Stripe, **edit the existing webhook endpoint URL** to
    `https://hsf-api-v1.onrender.com/billing/webhook`. Retain its signing secret
    and enabled events: `checkout.session.completed`,
-   `customer.subscription.updated`, `customer.subscription.deleted`.
+   `customer.subscription.updated`, `customer.subscription.deleted`,
+   `invoice.paid`, `invoice.payment_failed`. Use snapshot events. The handler
+   also accepts subscription-created and asynchronous-checkout payment events.
    Do not leave two active endpoints delivering the same events. If creating a
    replacement endpoint instead, its new signing secret must be set on the API
    before enabling delivery, and the old endpoint must be disabled.
@@ -108,3 +110,61 @@ actual price ID is in `STRIPE_PRICE_PREMIUM`, `STRIPE_PRICE_PREMIUM_YEARLY` or
 does not identify the plan. Also verify webhook deliveries and that the Stripe
 key and prices are all in the same test/live mode. A portal marked **Test mode**
 does not confirm a live payment.
+
+## Reliability, recovery and billing status
+
+The additive bootstrap in `billing_service/schema.sql` creates `hsf_billing_state`
+(with an account foreign key and cascade deletion), `hsf_billing_failures`, and
+retains the existing `stripe_processed_events` ledger. The application applies
+it once per process on first use, serialized across instances. No manual
+production database change is needed. CI tests this bootstrap and transaction
+behavior against an isolated Postgres service before promotion.
+
+Webhooks and manual refresh use one access policy and fetch the latest Stripe
+subscription state while holding the account's database row lock. A late event
+cannot overwrite the plan using its old snapshot. Plan updates and processed
+event IDs commit together; failures return a retryable response and save a
+sanitized diagnostic code. Unknown prices never grant a new plan or silently
+revoke an existing one. Admin access and unlinked manual grants are preserved.
+
+| Stripe state | Access policy |
+| --- | --- |
+| Active / trialing, known price | Confirmed paid plan |
+| Cancellation scheduled, still active | Paid access until Stripe ends the subscription |
+| Canceled / unpaid / incomplete expired / paused | Starter |
+| Incomplete payment | Starter; payment pending message |
+| Past due | Keep only the existing paid tier during the grace period, then Starter |
+| Unknown price/status, ambiguous subscriptions, provider failure | Preserve current access; show/store the error for review |
+
+`BILLING_PAST_DUE_GRACE_DAYS` defaults to **3** and accepts 0–30. Grace starts at
+an expanded invoice's due/created timestamp, or the first observed past-due
+state when no invoice timestamp is available. Refreshing does not reset it.
+It never grants an unpaid upgrade. Hourly reconciliation recovers missed
+webhooks for up to 100 stale paid/pending accounts per pass. Database leases
+avoid duplicate work across API workers. Set `BILLING_RECONCILIATION_ENABLED=0`
+to disable this recovery worker; webhooks and manual refresh keep working.
+
+`GET /v1/billing/status` returns the last confirmed interval, price, status,
+renewal/cancellation dates and timestamp without calling Stripe. Account
+shows these separately from the interval selected for the next checkout.
+`POST /v1/billing/sync` returns the same structured status after checking Stripe.
+
+Checkout requests persist a per-account intent before contacting Stripe, then
+reuse the same Stripe idempotency key on retries. Concurrent requests for the
+same choice reuse its session; a different choice is refused while checkout is
+open. Sessions expire after one hour. Account offers Continue checkout and
+Start over. Starting over expires only an unfinished checkout; a completed
+payment cannot be discarded to open another checkout. Web Locks also prevent
+simultaneous launches from browser tabs where supported. Portal plan changes
+continue updating the existing subscription.
+
+Admin → Health → Billing diagnostics reports test/live mode, configured and
+validated prices, webhook configuration, last successful delivery, failed sync
+counts and sanitized event errors. It is authenticated, admin-only and rate
+limited. It never returns keys, signing secrets, raw Stripe payloads, customer
+IDs, checkout URLs or personal account information. Provider health checks use
+the embedded billing service rather than probing the retired billing host.
+
+Roll back by deploying the prior code and disabling reconciliation before
+switching external mode. The new tables are additive; keep the event ledger
+and settings. Do not delete customer/subscription data as part of rollback.

@@ -4,7 +4,7 @@
 // existing Stripe flow (checkout / customer portal), email settings, password, sign
 // out and account deletion. Every change is shown only after the server confirms it.
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { account } from "@/api/account";
@@ -15,6 +15,7 @@ import { Card, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/co
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { beginBilling } from "@/lib/billingReturn";
+import { etTime } from "@/lib/format";
 import { FEATURE_PLAN, signOut, useSession } from "@/session/SessionProvider";
 import type { Me } from "@/session/SessionProvider";
 
@@ -42,6 +43,44 @@ const PREFS: { key: keyof EmailPrefs; label: string; note: string }[] = [
   { key: "evening", label: "Evening market wrap", note: "After the close" },
   { key: "alerts", label: "Alert emails", note: "In-app alerts continue either way" },
 ];
+
+function BillingDetails({ me }: { me: Me }) {
+  const { billingRevision, reload } = useSession();
+  const state = useApi(`billing-status:${me.email}`, (signal) => account.billingStatus(signal), billingRevision);
+  const close = useAction();
+  const data = state.data;
+  useEffect(() => {
+    // A recovery worker can update the tier while this window is already open.
+    // Reload /me rather than deriving entitlements from billing fields.
+    if (data?.plan && data.plan !== me.plan) reload();
+  }, [data?.plan, me.plan, reload]);
+  if (state.error && !data) return <ErrorState error={state.error} onRetry={state.reload} what="billing details" />;
+  if (!data) return <Skeleton rows={2} label="Loading billing details" />;
+  const cost = data.amount != null && data.currency ? new Intl.NumberFormat("en-US", {
+    style: "currency", currency: data.currency.toUpperCase(),
+  }).format(data.amount / 100) : null;
+  return <div className="stack-sm">
+    <dl className="kv" aria-label="Current subscription">
+      <div><dt>Status</dt><dd>{data.status.replaceAll("_", " ")}{data.test_mode && <> · <Pill tone="warn">Test mode</Pill></>}</dd></div>
+      {data.interval && <div><dt>Current billing</dt><dd>{data.interval === "year" ? "Yearly" : "Monthly"}{cost ? ` · ${cost} before tax` : ""}</dd></div>}
+      {data.renewal_at && <div><dt>Next renewal</dt><dd>{etTime(data.renewal_at)}</dd></div>}
+      {data.cancellation_at && <div><dt>{data.cancel_at_period_end ? "Paid access until" : "Cancellation date"}</dt><dd>{etTime(data.cancellation_at)}</dd></div>}
+      {data.grace_ends_at && <div><dt>Payment grace ends</dt><dd>{etTime(data.grace_ends_at)}</dd></div>}
+      {data.checked_at && <div><dt>Last confirmed</dt><dd>{etTime(data.checked_at)}</dd></div>}
+    </dl>
+    {(data.sync_state !== "confirmed" || data.cancel_at_period_end) && <p className="notice" role="status">{data.message}</p>}
+    {data.checkout_pending && <div className="row-actions">
+      {data.checkout_url && <button type="button" className="btn btn-primary" onClick={() => {
+        beginBilling(me.plan);
+        window.location.assign(data.checkout_url!);
+      }}>Continue checkout</button>}
+      <button type="button" className="btn" disabled={close.busy} onClick={() => void close.run(async () => {
+        await account.cancelCheckout(); state.reload(); return true;
+      })}>{close.busy ? "Closing checkout…" : "Start over"}</button>
+    </div>}
+    <ErrorLine error={close.error} />
+  </div>;
+}
 
 function PlanCard({ me }: { me: Me }) {
   const [interval] = useBillingInterval();
@@ -78,6 +117,7 @@ function PlanCard({ me }: { me: Me }) {
         </div>
       )}
       <ErrorLine error={portal.error} />
+      {me.plan !== "admin" && <BillingDetails me={me} />}
       {me.plan !== "admin" && <div className="stack-sm">
         <p className="cap">Billing may open in your browser. Return to HSF after confirming your change; your plan refreshes automatically.</p>
         <div><button type="button" className="btn" disabled={billingBusy} onClick={() => void syncBilling()}>

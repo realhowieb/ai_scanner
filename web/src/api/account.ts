@@ -13,6 +13,8 @@ export const account = {
   resendVerification: () => unwrap(api.POST("/v1/me/verify-email")),
   portal: (flow?: "cancel") => unwrap(api.POST("/v1/billing/portal", { body: flow ? { flow } : {} })),
   syncBilling: () => unwrap(api.POST("/v1/billing/sync")),
+  billingStatus: (signal?: AbortSignal) => unwrap(api.GET("/v1/billing/status", { signal })),
+  cancelCheckout: () => unwrap(api.POST("/v1/billing/checkout/cancel")),
   checkout: (plan: "pro" | "premium", interval: "month" | "year" = "month") =>
     unwrap(api.POST("/v1/billing/checkout", { body: { plan, interval } })),
   exportData: () => unwrap(api.GET("/v1/me/export")),

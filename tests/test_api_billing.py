@@ -171,7 +171,8 @@ class EmbeddedBillingTest(unittest.TestCase):
         response = self.sync_subscription()
         self.assertEqual(response.status_code, 200, response.text)
         self.billing._get_user_by_email.assert_called_once_with("member@example.com")
-        self.billing.stripe.Subscription.list.assert_called_once_with(customer="cus_member", status="all", limit=100)
+        self.billing.stripe.Subscription.list.assert_called_once_with(customer="cus_member", status="all", limit=100,
+                                                                     expand=["data.latest_invoice", "data.items.data.price"])
         self.billing._set_user_plan_by_email.assert_called_once_with(
             email="member@example.com", tier="premium", stripe_customer_id="cus_member",
             stripe_subscription_id="sub_member", stripe_price_id="price_premium_fake")
@@ -191,8 +192,8 @@ class EmbeddedBillingTest(unittest.TestCase):
     def test_sync_incomplete_payment_never_grants_access(self):
         response = self.sync_subscription(status="incomplete")
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertIn("No active subscription", response.text)
-        self.billing._set_user_plan_by_email.assert_not_called()
+        self.assertIn("Payment is pending", response.text)
+        self.assertEqual(self.billing._set_user_plan_by_email.call_args.kwargs["tier"], "basic")
 
     def test_sync_failure_preserves_plan(self):
         self.sign_in()
@@ -225,3 +226,50 @@ class EmbeddedBillingTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         update.assert_not_called()
         self.billing.stripe.Subscription.list.assert_not_called()
+
+    def test_new_status_cancel_and_admin_routes_require_authentication(self):
+        self.assertEqual(self.client.get("/v1/billing/status").status_code, 401)
+        self.assertEqual(self.client.post("/v1/billing/checkout/cancel").status_code, 401)
+        self.assertEqual(self.client.get("/v1/admin/billing").status_code, 401)
+
+    def test_normal_account_cannot_read_billing_diagnostics(self):
+        self.sign_in()
+        self.assertEqual(self.client.get("/v1/admin/billing").status_code, 403)
+
+    def test_status_uses_signed_in_account_and_does_not_contact_stripe(self):
+        self.sign_in()
+        with patch.object(self.billing, "billing_status", return_value={"message": "Confirmed", "status": "active", "sync_state": "confirmed"}) as status:
+            response = self.client.get("/v1/billing/status?email=other@example.com")
+        self.assertEqual(response.status_code, 200)
+        status.assert_called_once_with("member@example.com")
+        self.billing.stripe.Subscription.list.assert_not_called()
+
+    def test_admin_diagnostics_never_return_secrets_or_raw_payload(self):
+        from api.deps import current_account
+
+        self.app.dependency_overrides[current_account] = lambda: {"username": "boss@example.com", "is_admin": True}
+        preflight = {"stripe_mode": "test", "prices": {"STRIPE_PRICE_PRO": {"id_set": True, "problems": []}},
+                     "webhooks": {"checked": True, "problems": [], "urls": ["https://private.example/?secret=hidden"]}}
+        with patch.object(self.billing, "_billing_preflight", return_value=preflight):
+            response = self.client.get("/v1/admin/billing")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["mode"], "test")
+        self.assertNotIn("sk_test", response.text)
+        self.assertNotIn("whsec", response.text)
+        self.assertNotIn("private.example", response.text)
+
+    def test_checkout_cancel_uses_only_signed_in_account(self):
+        self.sign_in()
+        engine = self.billing._billing_engine
+        with patch.object(engine, "cancel_checkout", return_value={"message": "Closed"}) as cancel:
+            response = self.client.post("/v1/billing/checkout/cancel", json={"email": "other@example.com", "session_id": "cs_other"})
+        self.assertEqual(response.status_code, 200, response.text)
+        cancel.assert_called_once_with("member@example.com")
+
+    def test_embedded_provider_probe_checks_current_service(self):
+        from api.admin import _probe_billing
+
+        with patch.object(self.billing, "health", return_value={"ok": True}):
+            result = _probe_billing()
+        self.assertEqual(result["status"], "ok")
+        self.assertIn("runs in the API", result["detail"])

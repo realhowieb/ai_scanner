@@ -167,7 +167,22 @@ def register(app: FastAPI) -> None:
         """Stripe Customer Portal: payment method, invoices, plan, cancellation (flow=cancel)."""
         return acct.portal_url(_user(account), body.flow)
 
-    @app.post("/v1/billing/sync", response_model=models.Message,
+    @app.get("/v1/billing/status", response_model=models.BillingStatus, responses=_AUTH)
+    def billing_status(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The account's last confirmed billing status. Does not contact Stripe."""
+        from api.billing import status_for_account
+
+        return status_for_account(_user(account))
+
+    @app.post("/v1/billing/checkout/cancel", response_model=models.Message, responses={**_AUTH, 409: {"description": "Payment processing"}})
+    def billing_checkout_cancel(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Expire only this account's unfinished checkout, without canceling a subscription."""
+        from api.billing import cancel_checkout
+
+        ratelimit.check("billing_sync", _user(account))
+        return cancel_checkout(_user(account))
+
+    @app.post("/v1/billing/sync", response_model=models.BillingStatus,
               responses={**_AUTH, 409: {"description": "Subscription configuration needs review"},
                          429: {"description": "Too many refreshes"}, 502: {"description": "Billing unavailable"}})
     def billing_sync(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
