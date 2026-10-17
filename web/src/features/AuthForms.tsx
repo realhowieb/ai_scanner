@@ -6,7 +6,7 @@
 // paths the emailed links use (/reset_password?token=, /verify_email?token=).
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { FormEvent, ReactNode } from "react";
 
 import { messageFrom, newRequestId } from "@/api/client";
@@ -42,12 +42,15 @@ function Shell({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+const noSubscribe = () => () => {};
+
 export function SignupForm() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [agree, setAgree] = useState(false);
+  const invited = useSyncExternalStore(noSubscribe, () => !!captureAttribution().ref, () => false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const slow = useSlow(busy);
@@ -73,6 +76,7 @@ export function SignupForm() {
     <form onSubmit={submit} noValidate>
       <Shell title="Create your account">
         <p className="cap">Starter plan, free. Upgrade any time from Account.</p>
+        {invited && <p className="notice" role="status">You were invited by a friend. Confirm your email after signing up and you both get free Pro time.</p>}
         <label className="field"><span>Email</span>
           <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>

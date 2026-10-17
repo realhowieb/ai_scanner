@@ -31,7 +31,7 @@ afterEach(() => vi.unstubAllGlobals());
 const APP = join(__dirname, "..", "src", "app");
 /** A route exists when a page file serves it (route groups like (app) don't add a segment). */
 function routeExists(href: string): boolean {
-  const segs = href.split("?")[0]!.split("/").filter(Boolean);
+  const segs = href.split(/[?#]/)[0]!.split("/").filter(Boolean);
   return [join(APP, ...segs, "page.tsx"), join(APP, "(app)", ...segs, "page.tsx")].some(existsSync);
 }
 
@@ -49,7 +49,7 @@ describe("navigation", () => {
     const tabs = screen.getByRole("navigation", { name: "Sections" });
     expect(within(tabs).getAllByRole("link").map((l) => l.textContent)).toEqual(["Today", "Scanner", "Watchlists", "Alerts"]);
     await u.click(within(tabs).getByRole("button", { name: "More" }));
-    expect(within(tabs).getAllByRole("menuitem").map((l) => l.textContent)).toEqual(["Brief", "Stocks", "Day Trader", "Track record"]);
+    expect(within(tabs).getAllByRole("menuitem").map((l) => l.textContent)).toEqual(["Brief", "Stocks", "Day Trader", "Track record", "Compare"]);
     await u.keyboard("{Escape}");
     expect(within(tabs).queryByRole("menu")).not.toBeInTheDocument();
     for (const l of [...links, ...within(tabs).getAllByRole("link")]) expect(routeExists(l.getAttribute("href")!)).toBe(true);

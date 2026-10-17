@@ -19,6 +19,7 @@ import { useSession } from "@/session/SessionProvider";
 
 import { NotificationDelivery } from "./NotificationDelivery";
 import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
+import { SmartAlerts } from "./SmartAlerts";
 
 function AlertRow({ a, onChanged }: { a: Alert; onChanged: () => void }) {
   const toggle = useAction();
@@ -197,6 +198,8 @@ export function AlertsView() {
               )}
               {data.used > data.limit && <p className="cap">Only your newest {data.limit} alert{data.limit === 1 ? "" : "s"} can fire on this plan. Delete some or upgrade.</p>}
             </Card>
+
+            <SmartAlerts onChanged={reload} />
 
             <NotificationDelivery events={events.data ?? []} />
             <Card title="Recently fired" id="events">

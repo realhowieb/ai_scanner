@@ -104,6 +104,49 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             "setups": [_scan_row(o) for o in visible[offset:offset + limit]]}
 
 
+MOVERS_MAX = 10
+
+
+def score_movers(tier: str, *, limit: int = 5) -> Dict[str, Any]:
+    """The setups whose HSF Score moved most between the two latest full-market scans.
+
+    Read-only over the same observation the watchlist and alert-rule code use (no
+    provider calls). Only tickers ranked in both scans count, and only within the
+    plan's row cap (risers by their rank now, fallers by their rank before), so a
+    plan never sees setups below its Scanner cap. Never raises: no data reads as empty."""
+    from api import watchlist_intel
+
+    out: Dict[str, Any] = {"scan_at": None, "previous_scan_at": None, "rising": [], "falling": [],
+                           "max_results": max_results_for(tier)}
+    try:
+        obs = watchlist_intel.market_observation()
+    except Exception:
+        return out
+    if not obs or obs.get("previous_run_id") is None:
+        if obs:
+            out["scan_at"] = _iso(obs.get("scan_at"))
+        return out
+    cap = out["max_results"]
+    rows = []
+    for t, cur in obs["ranked"].items():
+        prev = obs["previous_ranked"].get(t)
+        now_s, was_s = _num(cur.get("score")), _num((prev or {}).get("score"))
+        if prev is None or now_s is None or was_s is None or now_s == was_s:
+            continue
+        rows.append({"ticker": t, "score": int(round(now_s)), "previous_score": int(round(was_s)),
+                     "change": int(round(now_s - was_s)), "rank": int(cur["rank"]),
+                     "previous_rank": int(prev["rank"]), "setup": cur.get("primary_setup"),
+                     "last": _num(cur.get("last")), "chg_pct": _num(cur.get("chg_pct"))})
+    n = max(1, min(int(limit), MOVERS_MAX))
+    rising = sorted((r for r in rows if r["change"] > 0 and r["rank"] <= cap),
+                    key=lambda r: (-r["change"], r["rank"]))[:n]
+    falling = sorted((r for r in rows if r["change"] < 0 and r["previous_rank"] <= cap),
+                     key=lambda r: (r["change"], r["previous_rank"]))[:n]
+    out.update(scan_at=_iso(obs.get("scan_at")), previous_scan_at=_iso(obs.get("previous_scan_at")),
+               rising=rising, falling=falling)
+    return out
+
+
 def watchlist_scan_state(tickers: List[str], entitlements: Dict[str, bool]) -> Dict[str, Any]:
     """Each ticker's row in the latest market scan's ranked setups (None when it isn't one),
     with its rank in that scan. The same rows as /v1/scans/latest, without the plan's row

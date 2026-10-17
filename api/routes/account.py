@@ -72,6 +72,22 @@ _RESET_SENT = ("If that email is registered, a reset link has been sent. "
 
 
 def register(app: FastAPI) -> None:
+    @app.get("/v1/me/referrals", response_model=models.Referrals,
+             responses={**_AUTH, 503: {"description": "Invites are switched off or storage is unavailable"}},
+             summary="Your invite link")
+    def my_referrals(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Your invite code and sign-up link, how many people joined with it, and your free Pro
+        time. Each friend who signs up with the link and confirms their email gives you both
+        `reward_days` of Pro."""
+        from api import referrals
+
+        if not referrals.enabled():
+            raise HTTPException(503, "Invites are switched off right now.")
+        try:
+            return referrals.summary(_user(account))
+        except Exception as e:
+            raise HTTPException(503, "Your invite link isn't available right now. Try again later.") from e
+
     @app.post("/v1/auth/signup", response_model=models.SignupResult, status_code=201,
               responses={400: {"description": "Invalid input or password rule"}, 409: {"description": "Email or username taken"},
                          429: {"description": "Too many sign-ups from this address"}})
@@ -81,14 +97,24 @@ def register(app: FastAPI) -> None:
         res = acct.signup(body.email, body.password, body.username, body.accept_terms)
         if body.attribution is not None:
             _track(body.attribution, "signup_completed", username=res["email"], plan="basic")
+            from api import referrals
+
+            referrals.credit_signup(body.attribution, res["email"])
         return {**_token_pair(res["email"], _settings(request), body.client),
                 "email": res["email"], "verification_sent": res["verification_sent"]}
 
     @app.post("/v1/auth/verify-email", response_model=models.Message,
               responses={400: {"description": "Invalid or expired link"}})
     def verify_email(body: TokenBody, _l: None = Depends(ratelimit.limit("verify"))) -> Dict[str, Any]:
-        """Confirm an email address with the token from the verification link."""
-        acct.verify_email(body.token)
+        """Confirm an email address with the token from the verification link. An account that
+        signed up with an invite link starts the free Pro month for both people here."""
+        from api import referrals
+
+        email = acct.verify_email(body.token)
+        if referrals.reward_on_verify(email):
+            forget_account(email)
+            return {"message": f"Email verified. You and your friend each get {referrals.reward_days()} days of Pro."
+                    if referrals.reward_days() else "Email verified."}
         return {"message": "Email verified."}
 
     @app.post("/v1/me/verify-email", response_model=models.Message,

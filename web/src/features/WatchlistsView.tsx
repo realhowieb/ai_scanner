@@ -23,6 +23,7 @@ import { useApi } from "@/hooks/useApi";
 import { num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
 import { DailySpark, useDailySparks } from "./Sparks";
+import { WatchlistPerformanceCard } from "./WatchlistPerformance";
 
 const NOTE_MAX = 500;
 const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
@@ -347,6 +348,8 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
         {legacy && scan.data && <p className="cap">Scores and prices are from that scan, only for tickers among your plan&apos;s top {scan.data.max_results} ranked setups. Not live quotes.</p>}
         {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? "Score, setup, price and change are from that scan, not live quotes. The rank is the ticker's place among the scan's ranked setups." : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
       </Card>
+
+      <WatchlistPerformanceCard id={w.id} version={w.items.length} />
 
       <WatchlistRules wl={w.id} onChanged={intel.reload} />
 

@@ -12,12 +12,12 @@ const ROUTES: Record<string, ReadonlyArray<"GET" | "POST">> = {
 const MAX_BODY = 4096;
 const GATEWAY = new Set([502, 503, 504]);
 
-/** Utm tags and the referrer, cleaned for the API (it cleans them again). */
+/** Utm tags, the referrer and an invite code (ref), cleaned for the API (it cleans them again). */
 export function cleanAttribution(raw: unknown): Record<string, string> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (!/^(utm_(source|medium|campaign|content|term)|referrer)$/.test(k) || typeof v !== "string" || !v) continue;
+    if (!/^(utm_(source|medium|campaign|content|term)|referrer|ref)$/.test(k) || typeof v !== "string" || !v) continue;
     out[k] = v.slice(0, 200);
   }
   return Object.keys(out).length ? out : null;

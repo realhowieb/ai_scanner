@@ -20,6 +20,7 @@ const NAV = [
   { href: "/watchlists", label: "Watchlists", top: true, tab: true },
   { href: "/alerts", label: "Alerts", top: true, tab: true },
   { href: "/track-record", label: "Track record", top: false, tab: false },
+  { href: "/compare", label: "Compare", top: false, tab: false },
 ];
 
 const isActive = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
@@ -129,6 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {me && <p className="cap menu-email">{me.email}</p>}
                 <Link role="menuitem" href="/account" className="menu-item" onClick={() => setMenu(false)}>Account &amp; billing</Link>
                 <Link role="menuitem" href="/journal" className="menu-item" onClick={() => setMenu(false)}>Journal</Link>
+                <Link role="menuitem" href="/account#invite-h" className="menu-item" onClick={() => setMenu(false)}>Invite a friend</Link>
                 <Link role="menuitem" href="/paper" className="menu-item" onClick={() => setMenu(false)}>Paper trading</Link>
                 <Link role="menuitem" href="/pricing" className="menu-item" onClick={() => setMenu(false)}>Plans and pricing</Link>
                 {me?.is_admin && <Link role="menuitem" href="/admin" className="menu-item" onClick={() => setMenu(false)}>Admin</Link>}

@@ -18,13 +18,17 @@ const fetchMock = vi.fn();
 const urls = () => fetchMock.mock.calls.map((c) => new URL((c[0] as Request).url));
 // The Historical card also asks /v1/outcomes/symbols/{ticker}, and the score history card
 // /v1/stocks/{ticker}/score-history; these tests are about the plan and AI note, so those calls are
-// answered here (404: an API without them) and never reach fetchMock.
+// answered here (404: an API without them) and never reach fetchMock. So are the Smart alerts
+// card's /v1/alerts/rules and /v1/watchlists calls.
 const outcomeCalls: string[] = [];
 beforeEach(() => {
   fetchMock.mockReset();
   outcomeCalls.length = 0;
   vi.stubGlobal("fetch", (req: Request, ...rest: unknown[]) => {
     const path = new URL(req.url).pathname;
+    if (path.includes("/v1/alerts/rules") || path.endsWith("/v1/watchlists")) {
+      return Promise.resolve(jsonResponse({ detail: "Not Found" }, 404));
+    }
     if (path.includes("/v1/outcomes/") || path.endsWith("/score-history")) {
       outcomeCalls.push(req.url);
       return Promise.resolve(jsonResponse({ detail: "Not Found" }, 404));

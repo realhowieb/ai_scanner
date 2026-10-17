@@ -11,6 +11,10 @@ api.watchlist_intel.market_observation):
     SETUP_APPEARED                                transition: not a ranked setup -> ranked setup
                                                   (optionally only a given setup, e.g. "Breakout")
     RVOL_ABOVE                                    level: scan relative volume >= threshold
+    EARNINGS_SOON                                 heads-up: the ticker reports earnings within
+                                                  threshold days (once per earnings date; Pro).
+                                                  Read from earnings_calendar, so it works for
+                                                  tickers that aren't in the scan
     RANK_IMPROVED                                 transition: HSF rank moved up >= threshold places
                                                   since the last scan this rule saw
 
@@ -73,6 +77,10 @@ RULE_TYPES: Dict[str, Dict[str, Any]] = {
                    "label": "Relative volume at or above",
                    "description": "Fires on each new market scan where the ticker trades at your multiple of "
                                   "its 20-day average volume or more (at most once per cooldown)."},
+    "EARNINGS_SOON": {"operator": "within_days", "kind": EDGE, "threshold": (0.0, 14.0), "default": 1.0,
+                      "label": "Reports earnings within (days)", "entitlement": "can_earnings", "plan": "Pro",
+                      "description": "Fires once per earnings date when the ticker reports within your number of "
+                                     "days (1 = the day before). Uses the HSF earnings calendar."},
     "RANK_IMPROVED": {"operator": "improves_by", "kind": EDGE, "threshold": (1.0, 10000.0), "default": 10.0,
                       "label": "HSF rank improves by",
                       "description": "Fires when the ticker moves up at least your number of places in the HSF "
@@ -137,7 +145,8 @@ def validate(entitlements: Dict[str, bool], *, rule_type: str, threshold: Option
     if spec is None:
         raise RuleError(f"Unknown rule type. Use one of: {', '.join(RULE_TYPES)}.")
     if not _allowed(spec, entitlements):
-        raise RuleForbidden(f"{spec['label']} alerts are a Premium feature.")
+        plan = spec.get("plan", "Premium")
+        raise RuleForbidden(f"{spec['label']} alerts are {'part of Pro' if plan == 'Pro' else 'a Premium feature'}.")
     out: Dict[str, Any] = {}
     if not partial:
         t = normalize_watchlist_ticker(ticker) if ticker else ""
@@ -192,6 +201,8 @@ def check(rule: Dict[str, Any], view: Dict[str, Any], state: Optional[Dict[str, 
     """(fires, trigger value, previous value, new state) for one rule on one ticker's
     canonical view. new state None = this observation says nothing about the ticker
     (absent from the scan), so the stored state is left as it was."""
+    if rule["rule_type"] == "EARNINGS_SOON":
+        return _check_earnings(rule, view, state or {})
     if not view.get("present"):
         return False, None, None, None
     rt, thr = rule["rule_type"], rule.get("threshold")
@@ -236,6 +247,58 @@ def check(rule: Dict[str, Any], view: Dict[str, Any], state: Optional[Dict[str, 
     return False, None, None, None
 
 
+def _check_earnings(rule: Dict[str, Any], view: Dict[str, Any], state: Dict[str, Any]
+                    ) -> Tuple[bool, Optional[float], Optional[float], Optional[Dict[str, Any]]]:
+    """EARNINGS_SOON: fires the first time a known earnings date is within the window.
+    last_text holds the earnings date it already fired for, so it fires once per report
+    (a moved date fires again). Needs no scan row: the date comes from the calendar."""
+    days, date = view.get("earnings_days"), view.get("earnings_date")
+    fired_for = state.get("last_text")
+    if days is None or date is None:
+        return False, None, None, {"last_value": None, "last_flag": False, "last_text": fired_for}
+    inside = 0 <= float(days) <= float(rule.get("threshold") or 0)
+    fires = inside and fired_for != date
+    return fires, float(days), None, {"last_value": float(days), "last_flag": inside,
+                                      "last_text": date if inside else fired_for}
+
+
+def _earnings_when(view: Dict[str, Any]) -> str:
+    days = int(view.get("earnings_days") or 0)
+    when = "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days ({view.get('earnings_date')})"
+    t = str(view.get("earnings_time") or "").strip().lower()
+    timing = {"bmo": " before the open", "amc": " after the close"}.get(t, "")
+    return f"{when}{timing}"
+
+
+def earnings_lookup(tickers: Sequence[str], now: dt.datetime) -> Dict[str, Dict[str, Any]]:
+    """{ticker: earnings_days, earnings_date, earnings_time} for upcoming reports, from
+    the earnings calendar (one query). Days count from today in New York. Best effort:
+    an unreadable calendar means no earnings alerts this pass, never a failed pass."""
+    syms = sorted({str(t).strip().upper() for t in tickers if str(t).strip()})
+    if not syms:
+        return {}
+    try:
+        from zoneinfo import ZoneInfo
+
+        from db.earnings import load_earnings_details_map
+
+        details = load_earnings_details_map(syms)
+        today = now.astimezone(ZoneInfo("America/New_York")).date()
+    except Exception as e:
+        log.warning(json.dumps({"event": "alert_rules_earnings_failed", "error": type(e).__name__}))
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for t in syms:
+        d, when = details.get(t) or details.get(t.replace(".", "-")) or (None, None)
+        if isinstance(d, dt.datetime):
+            d = d.date()
+        if not isinstance(d, dt.date) or d < today:
+            continue
+        out[t] = {"earnings_days": (d - today).days, "earnings_date": d.isoformat(),
+                  "earnings_time": (str(when).strip().lower() or None) if when else None}
+    return out
+
+
 def message_for(rule: Dict[str, Any], ticker: str, value: Optional[float], prev: Optional[float],
                 view: Dict[str, Any]) -> str:
     rt, thr = rule["rule_type"], rule.get("threshold")
@@ -253,6 +316,8 @@ def message_for(rule: Dict[str, Any], ticker: str, value: Optional[float], prev:
         return f"{ticker} is now a PreBreakout setup"
     if rt == "SETUP_APPEARED":
         return f"{ticker} is a new HSF setup: {view.get('setup') or 'Signal'}"
+    if rt == "EARNINGS_SOON":
+        return f"{ticker} reports earnings {_earnings_when(view)}"
     if rt == "RANK_IMPROVED":
         return f"{ticker} moved up {prev - value:.0f} places to #{value:.0f} in the HSF ranking"
     return f"{ticker} alert"
@@ -281,9 +346,12 @@ def metrics() -> Dict[str, Any]:
 
 # ---- evaluator --------------------------------------------------------------------------------------
 def _plan(rule: Dict[str, Any]) -> Tuple[str, Dict[str, bool], int]:
+    from api import referrals
     from api.main import entitlements_for
 
-    ent = entitlements_for({"tier": rule.get("owner_tier"), "is_admin": rule.get("owner_is_admin")})
+    tier, _until = referrals.effective_tier(str(rule.get("user_id") or ""), rule.get("owner_tier"),
+                                            bool(rule.get("owner_is_admin")))
+    ent = entitlements_for({"tier": tier, "is_admin": rule.get("owner_is_admin")})
     return ent["tier"], ent["entitlements"], int(ent["alert_limit"])
 
 
@@ -352,6 +420,11 @@ def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Di
     result["observation_id"] = obs_id
     wl = store.watchlist_tickers({(r["user_id"], r["watchlist_id"]) for r in rules if r.get("watchlist_id")})
     states = store.load_states([r["id"] for r in rules])
+    earn_tickers = set()
+    for r in rules:
+        if r["rule_type"] == "EARNINGS_SOON":
+            earn_tickers.update((wl.get(int(r["watchlist_id"])) or []) if r.get("watchlist_id") else [r["ticker"]])
+    earnings = earnings_lookup(sorted(earn_tickers), now) if earn_tickers else {}
     now_s = now.isoformat(timespec="microseconds")
     views: Dict[Tuple[str, bool], Dict[str, Any]] = {}
     new_states, events, evaluated, triggered = [], [], set(), set()
@@ -368,7 +441,8 @@ def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Di
                 continue  # this rule already saw this scan for this ticker
             key = (t, r["_premium"])
             if key not in views:
-                views[key] = watchlist_intel.ticker_view(obs, t, premium=r["_premium"])
+                views[key] = {**watchlist_intel.ticker_view(obs, t, premium=r["_premium"]),
+                              **earnings.get(t.upper(), {})}
             view = views[key]
             fires, value, prev, new = check(r, view, st)
             evaluated.add(r["id"])
