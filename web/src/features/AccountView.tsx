@@ -4,6 +4,7 @@
 // existing Stripe flow (checkout / customer portal), email settings, password, sign
 // out and account deletion. Every change is shown only after the server confirms it.
 import Link from "next/link";
+import { PasswordField } from "@/components/PasswordField";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
@@ -140,7 +141,7 @@ function PlanCard({ me }: { me: Me }) {
       </div>}
       {!me.email_verified && me.plan !== "admin" && <p className="cap">Verify your email before upgrading.</p>}
       {paid && <p className="cap">Change plan, payment method or invoices in the Stripe customer portal. <button type="button" className="link-btn" onClick={() => open("cancel")}>Cancel subscription</button></p>}
-      <div className="grid2">
+      <details className="plan-features"><summary>Plan features</summary><div className="grid2">
         <div className="stack-sm">
           <p className="strong">Included</p>
           <ul className="bullets">{included.map((k) => <li key={k}>{FEATURE_LABELS[k]}</li>)}</ul>
@@ -156,7 +157,7 @@ function PlanCard({ me }: { me: Me }) {
             </ul>
           </div>
         )}
-      </div>
+      </div></details>
     </Card>
   );
 }
@@ -241,19 +242,14 @@ function PasswordCard() {
   return (
     <Card title="Password" id="password">
       <form className="stack-sm" onSubmit={submit}>
-        <label className="field"><span>Current password</span>
-          <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
-        </label>
-        <label className="field"><span>New password</span>
-          <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
-        </label>
-        <label className="field"><span>Repeat new password</span>
-          <input type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} required
+        <p className="cap">Use at least 10 characters. Avoid common passwords, repeated patterns, and your name or email.</p>
+        <PasswordField label="Current password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+        <PasswordField label="New password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
+        <PasswordField label="Repeat new password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} required
             aria-invalid={mismatch || undefined} aria-describedby={mismatch ? "pw-mismatch" : undefined} />
-        </label>
         {mismatch && <p id="pw-mismatch" className="form-error">The new passwords don&apos;t match.</p>}
         <ErrorLine error={act.error} />
-        {done && <p className="notice" role="status">Password changed. Other devices and the classic app were signed out.</p>}
+        {done && <p className="notice" role="status">Password changed. Other sessions were signed out.</p>}
         <div className="row-actions">
           <button type="submit" className="btn btn-primary" disabled={act.busy || !current || !next || next !== again}>
             {act.busy ? "Changing…" : "Change password"}
@@ -350,6 +346,7 @@ export function AccountView() {
         </div>
         <button type="button" className="btn" onClick={() => void signOut()}>Sign out</button>
       </section>
+      <nav className="chips account-nav" aria-label="Account sections"><a className="chip" href="#plan">Plan and billing</a><a className="chip" href="#profile">Profile</a><a className="chip" href="#email">Email preferences</a><a className="chip" href="#password">Password</a><a className="chip" href="#data">Your data</a></nav>
       <div className="split">
         <div className="col-main">
           <PlanCard me={me} />
@@ -361,7 +358,7 @@ export function AccountView() {
           <ProfileCard me={me} />
           <PasswordCard />
           <DownloadData />
-          <DeleteAccount />
+          <details className="danger-zone"><summary>Danger zone</summary><DeleteAccount /></details>
         </div>
       </div>
     </div>

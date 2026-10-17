@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import type { Schemas } from "@/api/client";
 import { Card, Empty, Freshness, Locked, Pill, RANKED_MIN, ResearchNotice, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
-import { etDate, etTime, freshness, greeting, pct, price, setupLabel } from "@/lib/format";
+import { etDate, etTime, greeting, pct, price, setupLabel } from "@/lib/format";
 
 import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
 import { ScoreMoversCard } from "./ScoreMovers";
@@ -22,12 +23,13 @@ const PHASES: Record<string, { label: string; note: string; tone: string }> = {
   closed: { label: "Market closed", note: "Next session 9:30 AM ET", tone: "grey" },
 };
 
-const CHIP_LIMIT = 12;
+const CHIP_LIMIT = 5;
 
 /** Recap names arrive as "VST (53)"; each chip opens that stock. */
 /** `move` marks a list of names that rose into (up) or dropped out of (down) the ranked list. */
 function TickerChips({ items, move }: { items: string[]; move?: "up" | "down" }) {
-  const shown = items.slice(0, CHIP_LIMIT);
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? items : items.slice(0, CHIP_LIMIT);
   return (
     <div className="chips">
       {shown.map((e) => {
@@ -39,7 +41,7 @@ function TickerChips({ items, move }: { items: string[]; move?: "up" | "down" })
           </Link>
         );
       })}
-      {items.length > shown.length && <span className="cap">+{items.length - shown.length} more</span>}
+      {items.length > CHIP_LIMIT && <button type="button" className="link-btn cap" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>{expanded ? "Show fewer" : `+${items.length - shown.length} more`}</button>}
     </div>
   );
 }
@@ -92,12 +94,13 @@ const MISSING_LIMIT = 20;
 function YourWatchlist({ data }: { data: Schemas["WatchlistToday"] }) {
   const s = data.summary;
   return (
-    <Card title="Your watchlist" id="wl" aside={data.watchlist_id ? <Link href="/watchlists">{data.name}</Link> : undefined}>
+    <Card title="Your watchlist" id="wl" aside={data.watchlist_id ? <Link href={`/watchlists?id=${data.watchlist_id}`}>{data.name}</Link> : undefined}>
       {!data.watchlist_id || (data.in_scan.length === 0 && data.missing.length === 0) ? (
         <Empty title="Your watchlist is empty.">Add names from the Scanner or a stock page.</Empty>
       ) : (
         <>
-          {s && <p className="cap">{s.tracked} watched · {s.needs_attention} need attention · {s.strengthening} strengthening · {s.fading} fading</p>}
+          {s && <p className="cap">{s.tracked} across all watchlists · {s.needs_attention} need attention · {s.strengthening} strengthening · {s.fading} fading</p>}
+          <p className="cap">Showing {data.name || "your default list"} below.</p>
           {data.in_scan.length > 0 ? (
             <ul className="rows">
               {data.in_scan.map((r) => (
@@ -188,14 +191,14 @@ export function TodayView({ data, mine, mineFailed = false, side, lead }: { data
   // Standouts are the recapped session's top names; skip them when Top setups already shows the same list.
   const standouts = (data.recap?.standouts ?? []).filter((o) => !shownOnTop.has(o.ticker));
   // The API knows the scan schedule (a missed slot, not overnight or weekend gaps);
-  // the age rule is only a fallback for an API that predates market.stale.
+  // Unknown schedule coverage does not establish a delayed scan.
   const scanAt = data.market.latest_scan_at ?? top?.scan_at;
-  const stale = data.market.stale ?? (top?.scan_at ? freshness(top.scan_at).stale : false);
+  const stale = data.market.stale === true || data.market.freshness?.scan_state === "stale";
   const watchlist = mine?.watchlist;
   const hasWatchlist = Boolean(watchlist?.watchlist_id && ((watchlist.in_scan?.length ?? 0) > 0 || (watchlist.missing?.length ?? 0) > 0));
   const hasVisitMarker = Boolean(mine?.new_since?.marker);
   const showFirstRun = Boolean(mine && !mineFailed && !hasWatchlist && !hasVisitMarker);
-  // Returning users see their own sections first: atop the side column, and first of all on a phone.
+  // Returning users see personal sections atop the desktop side column.
   const personalFirst = hasWatchlist || hasVisitMarker;
   const personal = (
     <div className="today-personal">

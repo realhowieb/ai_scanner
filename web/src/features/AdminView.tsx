@@ -1,4 +1,5 @@
 "use client";
+import { tabKey } from "@/lib/tabs";
 
 // Admin console (admins only): accounts, health and maintenance tools, moved from the
 // classic app's Admin page. The API checks the admin role on every call; this page only
@@ -225,11 +226,13 @@ function HealthTab() {
           <>
             <Card title="System health" id="system" aside={ops?.generated_at ? `Snapshot ${etTime(ops.generated_at)}${ops.stale ? " · stale" : ""}` : "No snapshot yet"}>
               <div className="metric-strip">
-                <span>Status <StatusPill status={ops?.system_status} /></span>
+                <span>Operational status <StatusPill status={ops?.system_status} /></span>
                 <span><strong>{h.data.health_score ?? "—"}</strong>/100</span>
-                <span>Human action <strong>{h.data.human_action ?? "—"}</strong></span>
+                <span>Human action <strong>{["NO_ACTION", "NONE"].includes(h.data.human_action ?? "") ? "No action needed" : h.data.human_action?.replaceAll("_", " ").toLowerCase() ?? "—"}</strong></span>
                 {h.data.next_expected_scan && <span>Next scan <strong>{etTime(h.data.next_expected_scan)}</strong></span>}
               </div>
+              <p className="cap">Operational health measures service availability. Research validation and performance readiness are evaluated separately in Research.</p>
+              {h.data.subsystems.some((s) => /CRITICAL|BLOCKED|FAILED/i.test(s.reason ?? "") && GOOD.has(s.status ?? "")) && <p className="notice">A subsystem reports a research validation issue despite being operational. Review its explanation and the Research gates.</p>}
               <ul className="stack-sm" aria-label="Subsystems">
                 {h.data.subsystems.map((s) => <li key={s.name}><StatusPill status={s.status} /> <strong>{s.name}</strong> <span className="cap">{s.reason}</span></li>)}
               </ul>
@@ -340,7 +343,7 @@ function DbCheck() {
       <p className="cap">Checks the database answers and the earnings table&apos;s symbols are clean (and fixes them if not).</p>
       <div className="row-actions">
         <button type="button" className="btn" disabled={act.busy} onClick={() => void act.run(async () => { setOut(await unwrap(api.POST("/v1/admin/db-check"))); return true; })}>
-          {act.busy ? "Checking…" : "Run database checks"}
+          {act.busy ? "Checking…" : "Check and repair database"}
         </button>
       </div>
       <ErrorLine error={act.error} />
@@ -422,13 +425,13 @@ export function AdminView() {
           <p className="cap">Accounts, product and research analytics, system health and maintenance tools. Account changes are recorded in the admin log.</p>
         </div>
       </section>
-      <div className="seg-group" role="tablist" aria-label="Admin sections">
+      <div className="seg-group" role="tablist" onKeyDown={tabKey} aria-label="Admin sections">
         {TABS.map(([k, label]) => (
-          <button key={k} type="button" role="tab" aria-selected={tab === k} className={`seg${tab === k ? " on" : ""}`} onClick={() => setTab(k)}>{label}</button>
+          <button key={k} type="button" role="tab" tabIndex={tab === k ? 0 : -1} id={`admin-tab-${k}`} aria-controls="admin-panel" aria-selected={tab === k} className={`seg${tab === k ? " on" : ""}`} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
-      {tab === "users" ? <UsersTab self={me.email ?? ""} /> : tab === "analytics" ? <AnalyticsTab /> : tab === "research" ? <ResearchTab />
-        : tab === "health" ? <HealthTab /> : <ToolsTab />}
+      <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`} tabIndex={0}>{tab === "users" ? <UsersTab self={me.email ?? ""} /> : tab === "analytics" ? <AnalyticsTab /> : tab === "research" ? <ResearchTab />
+        : tab === "health" ? <HealthTab /> : <ToolsTab />}</div>
     </div>
   );
 }

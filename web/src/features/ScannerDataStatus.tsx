@@ -26,8 +26,8 @@ export function ScannerDataStatus({ info, scanAt, stale, checkedAt, refreshing, 
 }) {
   const delayed = info?.state === "stale" || stale === true;
   const label = delayed ? "Scan delayed" : info?.state === "fresh" ? "On schedule"
-    : info?.state === "partial" ? "Freshness incomplete"
-    : info?.state === "unavailable" ? "Freshness unavailable" : "Saved snapshot";
+    : info?.state === "partial" ? "Timestamp coverage incomplete"
+    : info?.state === "unavailable" ? "Snapshot unavailable" : "Saved snapshot";
   const asOf = info?.market_data_at;
   const savedAt = info?.last_successful_scan_at ?? scanAt;
   const checked = checkedAt ? new Date(checkedAt).toISOString() : info?.checked_at;

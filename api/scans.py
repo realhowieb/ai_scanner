@@ -382,11 +382,12 @@ def daily_closes(tickers: List[str]) -> Dict[str, Any]:
     if not syms:
         return {"series": {}}
 
-    def load() -> Dict[str, List[float]]:
+    def load() -> Dict[str, Any]:
         from data.prices import fetch_price_data_batch
 
         frames, _skipped = fetch_price_data_batch(syms, period="2mo", timeout_s=8.0, batch_retries=1)
         out: Dict[str, List[float]] = {}
+        last_bar: Dict[str, Any] = {}
         for t in syms:
             df = frames.get(t)
             if df is None or getattr(df, "empty", True):
@@ -394,16 +395,20 @@ def daily_closes(tickers: List[str]) -> Dict[str, Any]:
             col = next((c for c in df.columns if str(c).lower() == "close"), None)
             if col is None:
                 continue
-            closes = [v for v in (_num(x) for x in df[col].tolist()) if v is not None]
-            if len(closes) >= 2:
-                out[t] = [round(v, 4) for v in closes[-SPARK_SESSIONS:]]
-        return out
+            valid = [(stamp, value) for stamp, raw in df[col].items() if (value := _num(raw)) is not None]
+            if len(valid) >= 2:
+                out[t] = [round(value, 4) for _, value in valid[-SPARK_SESSIONS:]]
+            if valid:
+                stamp, value = valid[-1]
+                # A numeric index is not a session date. Never invent provenance.
+                if isinstance(stamp, (dt.datetime, dt.date)):
+                    last_bar[t] = {"close": round(value, 4), "session": stamp.strftime("%Y-%m-%d")}
+        return {"series": out, "last_bar": last_bar}
 
     try:
-        series = spark_cache.get(("closes", tuple(syms)), load, ttl_s=SPARK_TTL_S, stale_s=6 * 3600)
+        return spark_cache.get(("dated-closes", tuple(syms)), load, ttl_s=SPARK_TTL_S, stale_s=6 * 3600)
     except Exception:
-        series = {}
-    return {"series": series}
+        return {"series": {}, "last_bar": {}}
 
 
 SCORE_HISTORY_RUNS = 24  # about eight sessions of full-market scans

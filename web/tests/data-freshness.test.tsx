@@ -14,7 +14,7 @@ const info: Schemas["DataFreshness"] = {
 describe("data freshness", () => {
   it("does not mistake a successful saved scan for fresh underlying data or completion", () => {
     render(<DataFreshness info={info} />);
-    expect(screen.getByLabelText("Data freshness")).toHaveTextContent("Partially available");
+    expect(screen.getByLabelText("Data freshness")).toHaveTextContent("Timestamp coverage incomplete");
     expect(screen.getByText(/Last successful scan/)).toHaveTextContent("3:35 PM ET");
     expect(screen.queryByText(/Scan completed/)).not.toBeInTheDocument();
     expect(screen.getByText(/Market data as of/)).toHaveTextContent("Unavailable");
@@ -27,9 +27,9 @@ describe("data freshness", () => {
   });
   it("uses the server's session-aware state rather than clock age", () => {
     const { rerender } = render(<DataFreshness info={{ ...info, state: "fresh" }} />);
-    expect(screen.getByText("Data freshness: Fresh")).toBeInTheDocument();
+    expect(screen.getByText("Data freshness: On schedule")).toBeInTheDocument();
     rerender(<DataFreshness info={{ ...info, state: "stale" }} />);
-    expect(screen.getByText("Data freshness: Stale")).toBeInTheDocument();
+    expect(screen.getByText("Data freshness: Scan delayed")).toBeInTheDocument();
   });
   it("supports older API responses without freshness metadata", () => {
     render(<DataFreshness />);
