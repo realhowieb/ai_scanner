@@ -46,6 +46,14 @@ def register(app: FastAPI) -> None:
         """Your logged trades (open first), open ones marked to live quotes, with closed-trade stats."""
         return json_safe(trading.journal(_user(account), limit=limit, offset=offset))
 
+    @app.get("/v1/journal/insights", response_model=models.JournalInsights, responses=_PRO,
+             summary="Journal insights (Pro)")
+    def journal_insights(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Closed-trade analytics: win rate, average win and loss, profit factor, a running P&L
+        curve, and results by HSF Score at entry, holding time and source."""
+        require_min_plan(account, "pro", "Journal insights are part of Pro.")
+        return json_safe(trading.insights(_user(account)))
+
     @app.post("/v1/journal", status_code=201, responses=_PRO, summary="Log a trade (Pro)")
     def journal_log(body: JournalCreate, account: Dict[str, Any] = Depends(current_account)) -> None:
         require_min_plan(account, "pro", _PRO_MSG)

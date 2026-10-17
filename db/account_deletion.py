@@ -10,8 +10,9 @@ Shared by the web (Settings) and the API (DELETE /v1/me). Rules:
     alerts and alert history, journal, paper-trading keys and orders, settings
     and email preferences, saved scans, AI usage, sessions and sign-in records,
     verification/reset tokens, API refresh tokens, push devices and API scan jobs,
-    then the user row. Research and market tables hold no account data and are
-    untouched; acquisition_events only has a one-way hash and is kept.
+    invite codes, trials and invites sent, then the user row. Research and market
+    tables hold no account data and are untouched; acquisition_events and the
+    invited side of hsf_referrals only hold a one-way hash and are kept.
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ ACCOUNT_TABLES: Tuple[Tuple[str, str], ...] = (
     ("hsf_billing_state", "username"),
     ("hsf_workspace_preferences", "user_id"), ("hsf_push_deliveries", "user_id"),
     ("api_refresh_tokens", "username"), ("api_push_devices", "username"), ("api_scan_jobs", "username"),
+    ("hsf_referral_codes", "user_id"), ("hsf_plan_grants", "user_id"), ("hsf_referrals", "referrer"),
 )
 PAID = ("pro", "premium")
 

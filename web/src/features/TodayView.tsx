@@ -9,6 +9,7 @@ import { Card, Empty, Freshness, Locked, Pill, RANKED_MIN, ResearchNotice, Score
 import { etDate, etTime, greeting, pct, price, setupLabel } from "@/lib/format";
 
 import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
+import { ScoreMoversCard } from "./ScoreMovers";
 
 type Today = Schemas["Today"];
 type SessionCard = Schemas["SessionCard"];
@@ -280,6 +281,8 @@ export function TodayView({ data, mine, mineFailed = false, side, lead }: { data
               <Link href="/scanner">Open the Scanner →</Link>
             </div>
           </Card>
+
+          <ScoreMoversCard />
 
           {showFirstRun && <FirstRunGuide top={top} />}
 

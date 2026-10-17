@@ -84,6 +84,16 @@ class Me(BaseModel):
     alert_limit: int
     email_verified: bool = Field(default=True, description="False until the emailed link is used; needed to upgrade and for email alerts")
     entitlements: Dict[str, bool] = Field(description="Feature flags, e.g. can_day_trader, can_ai_notes")
+    pro_trial_until: Optional[str] = Field(default=None, description="Set while a free Pro month from an invite is running")
+
+
+class Referrals(BaseModel):
+    code: str = Field(description="Your invite code")
+    path: str = Field(description="Sign-up path with your code, e.g. /signup?ref=abc23def")
+    signed_up: int = Field(description="Accounts created with your link")
+    verified: int = Field(description="Of those, accounts that confirmed their email (each earned you both a trial)")
+    reward_days: int = Field(description="Days of Pro each of you gets per verified invite (0 = no trial right now)")
+    pro_trial_until: Optional[str] = None
 
 
 class DataFreshness(BaseModel):
@@ -274,6 +284,26 @@ class LatestScan(BaseModel):
     limited: bool = Field(description="True when the plan cap hides some matching setups")
     stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")
     setups: List[ScanSetup] = []
+
+
+class ScoreMover(BaseModel):
+    ticker: str
+    score: int = Field(description="HSF Score in the latest scan")
+    previous_score: int = Field(description="HSF Score in the scan before")
+    change: int = Field(description="score - previous_score")
+    rank: int
+    previous_rank: int
+    setup: Optional[str] = None
+    last: Optional[float] = None
+    chg_pct: Optional[float] = None
+
+
+class ScoreMovers(BaseModel):
+    scan_at: Optional[str] = Field(default=None, description="The latest full-market scan")
+    previous_scan_at: Optional[str] = Field(default=None, description="The scan it is compared with")
+    max_results: int = Field(description="The plan's Scanner row cap; movers stay inside it")
+    rising: List[ScoreMover] = []
+    falling: List[ScoreMover] = []
 
 
 class LifecycleEvent(BaseModel):
@@ -497,6 +527,48 @@ class WatchlistIntelligence(BaseModel):
     coverage: Coverage
     unavailable_fields: List[str] = Field(description="Fields always null because no canonical source exists yet")
     items: List[WatchlistIntelItem] = []
+
+
+class WatchlistPerfItem(BaseModel):
+    ticker: str
+    added_at: Optional[str] = None
+    base_date: Optional[str] = Field(default=None, description="Day of the starting price")
+    base_price: Optional[float] = None
+    base_source: Optional[Literal["saved", "close"]] = Field(
+        default=None, description="saved: the price stored when added; close: the last daily close at that time")
+    since_first_bar: bool = Field(default=False, description="Added before the year of history: measured from its first bar")
+    last: Optional[float] = None
+    last_date: Optional[str] = None
+    change_pct: Optional[float] = None
+    benchmark_change_pct: Optional[float] = Field(default=None, description="SPY over the same span")
+    vs_benchmark: Optional[float] = Field(default=None, description="change_pct - benchmark_change_pct, in points")
+    sessions: Optional[int] = Field(default=None, description="Trading sessions since the starting price")
+
+
+class PerfPick(BaseModel):
+    ticker: str
+    change_pct: float
+
+
+class WatchlistPerfSummary(BaseModel):
+    count: int
+    up: int
+    down: int
+    avg_change_pct: float
+    median_change_pct: float
+    beat_benchmark: int
+    compared: int
+    best: PerfPick
+    worst: PerfPick
+
+
+class WatchlistPerformance(BaseModel):
+    watchlist_id: Optional[int] = None
+    name: Optional[str] = None
+    benchmark: str = "SPY"
+    as_of: Optional[str] = Field(default=None, description="Latest daily bar used")
+    items: List[WatchlistPerfItem] = []
+    summary: Optional[WatchlistPerfSummary] = None
 
 
 class WatchlistChange(BaseModel):
@@ -908,6 +980,50 @@ class Journal(BaseModel):
     trades: List[JournalTrade] = []
     stats: Optional[Dict[str, Any]] = Field(default=None, description="{closed, wins, avg_return_pct}; null before any closed trade")
     summary: Dict[str, Any] = Field(default={}, description="Page open/closed counts and P/L; win rate and average return use all closed trades")
+
+
+class JournalGroup(BaseModel):
+    label: str
+    count: int
+    wins: int
+    win_rate: float
+    avg_return_pct: float
+    pnl: float
+
+
+class JournalPick(BaseModel):
+    ticker: Optional[str] = None
+    return_pct: float
+
+
+class JournalInsightSummary(BaseModel):
+    wins: int
+    losses: int
+    win_rate: float
+    avg_return_pct: float
+    avg_win_pct: Optional[float] = None
+    avg_loss_pct: Optional[float] = None
+    profit_factor: Optional[float] = Field(default=None, description="Gross $ won / gross $ lost; null with no losses")
+    total_pnl: float
+    avg_hold_days: Optional[float] = None
+    best: JournalPick
+    worst: JournalPick
+
+
+class JournalCurvePoint(BaseModel):
+    closed_at: Optional[str] = None
+    ticker: Optional[str] = None
+    pnl: float
+    cumulative_pnl: float
+
+
+class JournalInsights(BaseModel):
+    closed: int
+    summary: Optional[JournalInsightSummary] = None
+    curve: List[JournalCurvePoint] = []
+    by_score: List[JournalGroup] = Field(default=[], description="By HSF Score when the trade was logged")
+    by_hold: List[JournalGroup] = []
+    by_source: List[JournalGroup] = []
 
 
 class TradePlan(BaseModel):

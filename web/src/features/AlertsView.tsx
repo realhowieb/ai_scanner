@@ -20,6 +20,7 @@ import { useSession } from "@/session/SessionProvider";
 
 import { NotificationDelivery } from "./NotificationDelivery";
 import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
+import { SmartAlerts } from "./SmartAlerts";
 
 function AlertRow({ a, onChanged }: { a: Alert; onChanged: () => void }) {
   const toggle = useAction();
@@ -185,12 +186,13 @@ export function AlertsView() {
       <section id="alert-panel-activity" role="tabpanel" aria-labelledby="alert-tab-activity" hidden={view !== "activity"}>
         <Card title="Recently fired" id="events">{events.error ? <ErrorLine error={events.error} /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> : events.data.length === 0 ? <Empty title="Nothing has fired yet.">Create an alert using New alert or from a stock page.</Empty> : <ul className="fired-list">{groupFired(events.data).map((item) => <FiredRowItem key={item.key} item={item} />)}</ul>}</Card>
       </section>
-      <section id="alert-panel-rules" role="tabpanel" aria-labelledby="alert-tab-rules" hidden={view !== "rules"}>
+      <section id="alert-panel-rules" role="tabpanel" aria-labelledby="alert-tab-rules" hidden={view !== "rules"} className="stack">
         <Card title="Your alerts" id="mine" aside={`Using ${data.used} of ${data.limit} on your ${me?.plan_label ?? ""} plan`}>
           <p className="cap">Saved alerts include paused alerts. Delete a saved alert to free a slot.</p>
           {data.alerts.length ? <ul className="alert-list">{data.alerts.map((a) => <AlertRow key={a.id} a={a} onChanged={reload} />)}</ul> : <Empty title="No alerts yet.">Choose New alert to get started.</Empty>}
           {data.used > data.limit && <p className="cap">Only your newest {data.limit} alerts can fire on this plan. Delete some or upgrade.</p>}
         </Card>
+        <SmartAlerts onChanged={reload} />
       </section>
       <section id="alert-panel-delivery" role="tabpanel" aria-labelledby="alert-tab-delivery" hidden={view !== "delivery"} className="stack">
         <Card title="How you're notified" id="delivery"><p className="body-sm">Fired alerts appear in Activity.</p><PushToggle />

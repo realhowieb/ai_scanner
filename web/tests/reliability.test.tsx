@@ -59,7 +59,7 @@ it("pages the journal and lets users return from an empty last page", async () =
   vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
     const url = new URL(request.url);
     const offset = Number(url.searchParams.get("offset"));
-    offsets.push(offset);
+    if (!url.pathname.includes("insights")) offsets.push(offset);
     return jsonResponse({ trades: offset ? [] : [{ id: 1001, ticker: "OLD", open: true }], has_more: !offset, stats: null });
   }));
   render(<SessionProvider initialMe={me("pro")}><JournalView /></SessionProvider>);

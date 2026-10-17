@@ -15,6 +15,8 @@ import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
+import { JournalInsightsCard } from "./JournalInsights";
+
 type Trade = Schemas["JournalTrade"];
 const metric = (v: unknown, fallback = 0) => (typeof v === "number" ? v : fallback);
 const tid = (id: number) => ({ params: { path: { trade_id: id } } });
@@ -128,6 +130,7 @@ export function JournalView() {
             <p className="cap">Your own records, not HSF results. Not financial advice.</p>
           </Card>
         )}
+      <JournalInsightsCard pro={pro} version={j.updatedAt ?? 0} />
       {(page > 0 || j.data?.has_more) && <nav className="pager" aria-label="Journal pages">
         <button type="button" className="btn" disabled={page === 0 || j.loading || j.refreshing} onClick={() => setPage((p) => p - 1)}>Previous page</button>
         <span className="cap">Page {page + 1}</span>

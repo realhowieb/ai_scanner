@@ -20,6 +20,7 @@ import { PriceAlertButton } from "./PriceAlert";
 import { PriceChart, type ChartEvent } from "./PriceChart";
 import { ScoreHistory } from "./ScoreHistory";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
+import { SmartAlerts } from "./SmartAlerts";
 
 type Stock = Schemas["StockDetail"];
 
@@ -295,7 +296,10 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             {s.alerts.length ? (
               <ul className="bullets">{s.alerts.map((a) => <li key={a.id}>{describeAlert(a)}{a.enabled ? "" : " (off)"}</li>)}</ul>
             ) : <p className="cap">No alerts on {s.ticker}.</p>}
+            <Link href={`/stocks/compare?symbols=${encodeURIComponent(s.ticker)}`} className="cap">Compare {s.ticker} with other stocks →</Link>
           </Card>
+
+          <SmartAlerts ticker={s.ticker} onChanged={onChanged} />
 
           <ScoreHistory ticker={s.ticker} />
         </aside>

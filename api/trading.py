@@ -80,10 +80,23 @@ def _owned_trade(username: str, trade_id: int) -> Optional[Dict[str, Any]]:
     return get_trade(username, trade_id)
 
 
+def _entry_score(ticker: str) -> Optional[float]:
+    """The ticker's HSF Score in the latest market scan (None when it isn't a ranked setup),
+    stored with the trade so journal insights can group results by score at entry."""
+    try:
+        from api.scans import watchlist_scan_state
+
+        row = watchlist_scan_state([ticker], {})["rows"].get(ticker.upper()) or {}
+        score = row.get("score")
+        return float(score) if score is not None else None
+    except Exception:
+        return None
+
+
 def log(username: str, ticker: str, entry_price: float, shares: int) -> None:
     from db.trades import log_trade
 
-    log_trade(username, ticker, float(entry_price), int(shares), source="api")
+    log_trade(username, ticker, float(entry_price), int(shares), source="api", hsf_score=_entry_score(ticker))
 
 
 def close(username: str, trade_id: int, exit_price: float) -> bool:
@@ -105,6 +118,105 @@ def delete(username: str, trade_id: int) -> bool:
         return False
     delete_trade(int(trade_id), username)
     return True
+
+
+# ---- journal insights -----------------------------------------------------------------------------
+SCORE_BANDS = (("80+", 80.0), ("60-79", 60.0), ("Under 60", float("-inf")))
+HOLD_BANDS = (("Same day", 1), ("1-5 days", 5), ("6-20 days", 20), ("Over 20 days", None))  # upper bound, days
+SOURCE_LABELS = {"api": "Logged by hand", "scan": "From a scan", "paper": "Paper trading", "manual": "Logged by hand"}
+
+
+def _ts(v: Any):
+    import datetime as dt
+
+    if isinstance(v, dt.datetime):
+        return v if v.tzinfo else v.replace(tzinfo=dt.timezone.utc)
+    try:
+        t = dt.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+
+
+def _score_band(t: Dict[str, Any]) -> str:
+    s = t.get("hsf_score")
+    if s is None:
+        return "Not recorded"
+    return next(label for label, floor in SCORE_BANDS if float(s) >= floor)
+
+
+def _hold_band(days: Optional[float]) -> str:
+    if days is None:
+        return "Unknown"
+    for label, top in HOLD_BANDS:
+        if top is None or (days < top if label == "Same day" else days <= top):
+            return label
+    return HOLD_BANDS[-1][0]
+
+
+def _group(rows: List[Dict[str, Any]], key, order: List[str]) -> List[Dict[str, Any]]:
+    by: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        by.setdefault(key(r), []).append(r)
+    out = []
+    for label in [o for o in order if o in by] + sorted(k for k in by if k not in order):
+        g = by[label]
+        wins = sum(1 for r in g if r["return_pct"] > 0)
+        out.append({"label": label, "count": len(g), "wins": wins, "win_rate": round(100.0 * wins / len(g), 1),
+                    "avg_return_pct": round(sum(r["return_pct"] for r in g) / len(g), 2),
+                    "pnl": round(sum(r["pnl"] for r in g), 2)})
+    return out
+
+
+def insights(username: str) -> Dict[str, Any]:
+    """Closed-trade analytics: win/loss profile, a running P&L curve, and results by score at
+    entry, by holding time and by where the trade came from. Closed trades only (open
+    ones have no result yet); a trade without a recorded score reads 'Not recorded'."""
+    from db.trades import closed_trades
+
+    rows = []
+    for t in closed_trades(username):
+        entry, exit_, shares = float(t.get("entry_price") or 0), t.get("exit_price"), int(t.get("shares") or 0)
+        if not entry or exit_ is None:
+            continue
+        exit_ = float(exit_)
+        opened, closed = _ts(t.get("entered_at")), _ts(t.get("closed_at"))
+        hold = (closed - opened).total_seconds() / 86400.0 if opened and closed else None
+        rows.append({"ticker": t.get("ticker"), "pnl": (exit_ - entry) * shares,
+                     "return_pct": (exit_ - entry) / entry * 100.0, "closed_at": closed.isoformat() if closed else None,
+                     "hold_days": hold, "source": str(t.get("source") or "api"), "hsf_score": t.get("hsf_score")})
+    out: Dict[str, Any] = {"closed": len(rows), "summary": None, "curve": [], "by_score": [], "by_hold": [],
+                           "by_source": []}
+    if not rows:
+        return out
+    wins = [r for r in rows if r["return_pct"] > 0]
+    losses = [r for r in rows if r["return_pct"] < 0]
+    gross_win = sum(r["pnl"] for r in rows if r["pnl"] > 0)
+    gross_loss = -sum(r["pnl"] for r in rows if r["pnl"] < 0)
+    holds = [r["hold_days"] for r in rows if r["hold_days"] is not None]
+    best = max(rows, key=lambda r: r["return_pct"])
+    worst = min(rows, key=lambda r: r["return_pct"])
+    out["summary"] = {
+        "wins": len(wins), "losses": len(losses), "win_rate": round(100.0 * len(wins) / len(rows), 1),
+        "avg_return_pct": round(sum(r["return_pct"] for r in rows) / len(rows), 2),
+        "avg_win_pct": round(sum(r["return_pct"] for r in wins) / len(wins), 2) if wins else None,
+        "avg_loss_pct": round(sum(r["return_pct"] for r in losses) / len(losses), 2) if losses else None,
+        "profit_factor": round(gross_win / gross_loss, 2) if gross_loss > 0 else None,
+        "total_pnl": round(sum(r["pnl"] for r in rows), 2),
+        "avg_hold_days": round(sum(holds) / len(holds), 1) if holds else None,
+        "best": {"ticker": best["ticker"], "return_pct": round(best["return_pct"], 2)},
+        "worst": {"ticker": worst["ticker"], "return_pct": round(worst["return_pct"], 2)},
+    }
+    running = 0.0
+    for r in rows:
+        running += r["pnl"]
+        out["curve"].append({"closed_at": r["closed_at"], "ticker": r["ticker"], "pnl": round(r["pnl"], 2),
+                             "cumulative_pnl": round(running, 2)})
+    out["by_score"] = _group(rows, _score_band, [b[0] for b in SCORE_BANDS] + ["Not recorded"])
+    out["by_hold"] = _group(rows, lambda r: _hold_band(r["hold_days"]), [b[0] for b in HOLD_BANDS] + ["Unknown"])
+    out["by_source"] = _group(rows, lambda r: SOURCE_LABELS.get(r["source"], r["source"].title()),
+                              ["Logged by hand", "From a scan", "Paper trading"])
+    return out
 
 
 # ---- trade plan -----------------------------------------------------------------------------------
