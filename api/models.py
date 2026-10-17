@@ -846,7 +846,13 @@ class DayTraderSparklines(BaseModel):
     series: Dict[str, List[float]] = Field(default={}, description="Latest-session 1-minute closes, oldest first")
 
 
+class DailyBarClose(BaseModel):
+    close: float
+    session: str = Field(description="Provider daily-bar session date; the session may still be in progress")
+
+
 class Sparklines(BaseModel):
+    last_bar: Dict[str, DailyBarClose] = Field(default={}, description="Latest finite daily-bar value and its source session; omitted when undated. Not a live quote.")
     series: Dict[str, List[float]] = Field(default={}, description="Ticker -> up to 21 daily closes, oldest first; the last is the session in progress during market hours. Tickers without bars are left out")
 
 

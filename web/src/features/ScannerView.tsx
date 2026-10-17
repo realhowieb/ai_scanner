@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ScannerDataStatus } from "@/features/ScannerDataStatus";
 import { api, unwrap } from "@/api/client";
-import { Card, Empty, ErrorState, Locked, ResearchNotice, Skeleton, UpgradeButton } from "@/components/ui";
+import { Card, Empty, ErrorState, Locked, Skeleton, UpgradeButton } from "@/components/ui";
 import { AIScanPanel } from "@/features/AIScanPanel";
 import { useApi } from "@/hooks/useApi";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
@@ -94,10 +94,7 @@ export function ScannerView() {
   const filterName = f.signal ? SIGNALS.find((s) => s.id === f.signal)?.label : f.minScore ? `at HSF Score ${f.minScore}+` : "";
   const filtered = Boolean(data && filterName && scanTotal !== data.total);
   const countText = data ? `${plural(scanTotal)} ranked${filtered ? ` · ${data.total} ${filterName}` : ""}` : "";
-  const setupCountLabel = !data ? "Loading the latest ranked setups"
-    : !filtered ? `${plural(data.total)} ranked`
-    : f.signal ? `${data.total} ${filterName} ${data.total === 1 ? "setup" : "setups"} of ${scanTotal} ranked`
-    : `${plural(data.total)} ${filterName} of ${scanTotal} ranked`;
+
 
   return (
     <div className="stack">
@@ -111,7 +108,7 @@ export function ScannerView() {
         <div className="row-actions scanner-actions">
           <button type="button" className="btn" onClick={reload} disabled={lockedSignal || loading || refreshing}>Refresh results</button>
           <Link href="/scanner/history" className="btn">Scan history</Link>
-          <Link href="/scanner/custom" className="btn btn-primary">Run custom scan</Link>
+          <Link href="/scanner/custom" className="btn btn-primary">Custom scan</Link>
         </div>
       </section>
       {data && !lockedSignal && <ScannerDataStatus info={data.freshness} scanAt={data.scan_at} stale={data.stale}
@@ -121,20 +118,7 @@ export function ScannerView() {
         <button type="button" className="btn btn-sm" onClick={() => set({ signal: "", min: 0, sort: "score", size: 25, page: 1 })}>Reset view</button>
       </div>}
 
-      <section className="priority-panel scanner-priority hide-narrow" aria-labelledby="scanner-priority-title">
-        <div className="priority-copy">
-          <p className="cap">Best starting point</p>
-          <h2 className="h2" id="scanner-priority-title">
-            {leader ? `${leader.ticker} leads the latest HSF-ranked scan.` : setupCountLabel}
-          </h2>
-          <p className="body-sm">
-            {leader
-              ? `Review the score evidence first, then refine by setup type, score floor, or session context when you need a narrower list.`
-              : "Start with the ranked board, then narrow the list only when you know what kind of setup you want."}
-          </p>
-        </div>
-        <ResearchNotice compact />
-      </section>
+      {leader && <p className="scanner-leader cap"><Link href={`/stocks/${encodeURIComponent(leader.ticker)}`}>Review {leader.ticker}</Link> · HSF {leader.score} · leads the current ranked view</p>}
 
       <div className="chips scanner-chips" role="group" aria-label="Setup type">
         {SIGNALS.map((s) => {
@@ -148,6 +132,7 @@ export function ScannerView() {
         })}
       </div>
 
+      <div className="scanner-toolbar">
       <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100 }}
         onApply={(v) => { if ("signal" in v) set({ signal: v.signal ?? "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25, page: 1 }); }} />
       <details className="filter-panel" open={moreActive}>
@@ -173,6 +158,7 @@ export function ScannerView() {
           </label>
         </section>
       </details>
+      </div>
 
       {lockedSignal ? (
         <Card><Locked title="PreBreakout is part of Premium" plan="premium">The PreBreakout model ranks names before they break out, with its probability.</Locked></Card>

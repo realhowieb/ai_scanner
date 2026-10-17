@@ -99,11 +99,10 @@ export function JournalView() {
       <section className="page-head">
         <div>
           <h1 className="h1">Journal</h1>
-          <p className="cap">Your logged trades and imported paper fills. Open trades are marked to available quotes.</p>
+          <p className="cap">Your logged trades and imported paper fills. Open trades are marked to available quotes. Last checked is the request time; quote times are not supplied by this response.</p>
         </div>
       </section>
-      {j.data && <RefreshStatus updatedAt={j.updatedAt} refreshing={j.refreshing} error={j.error} onRetry={j.reload} />}
-      <div className="row-actions"><button type="button" className="btn" onClick={j.reload} disabled={j.loading || j.refreshing}>Refresh journal</button></div>
+      <div className="row-actions">{j.data && <RefreshStatus updatedAt={j.updatedAt} refreshing={j.refreshing} error={j.error} onRetry={j.reload} />}<button type="button" className="btn" onClick={j.reload} disabled={j.loading || j.refreshing}>Refresh journal</button></div>
       <Card title="Log a trade" id="log">
         {pro ? <LogTrade onDone={logged} /> : <Locked title="Logging trades is part of Pro" plan="pro">Keep a record of your entries and exits with live marks and win rate.</Locked>}
       </Card>
@@ -115,9 +114,10 @@ export function JournalView() {
             <div className="metric-strip" aria-label="Journal summary">
               <span><strong>{metric(j.data.summary?.open, j.data.trades.filter((t) => t.open).length)}</strong> open on this page</span>
               <span><strong>{metric(j.data.summary?.closed, j.data.trades.filter((t) => !t.open).length)}</strong> closed on this page</span>
-              <span><strong>{pct(metric(j.data.summary?.avg_return_pct, stats?.avg_return_pct ?? 0))}</strong> avg return (all closed trades)</span>
-              <span><strong>{pct(metric(j.data.summary?.win_rate, 0))}</strong> win rate (all closed trades)</span>
+              <span><strong>{pct(stats?.closed ? (typeof j.data.summary?.avg_return_pct === "number" ? j.data.summary.avg_return_pct : stats.avg_return_pct) : null)}</strong> avg return (all closed trades)</span>
+              <span><strong>{pct(stats?.closed ? metric(j.data.summary?.win_rate, (stats.wins ?? 0) / stats.closed * 100) : null)}</strong> win rate (all closed trades)</span>
             </div>
+            {!stats?.closed && <p className="cap">No closed trades yet; return and win-rate statistics are unavailable.</p>}
             <div className="table-wrap">
               <table className="table">
                 <thead><tr><th scope="col">Ticker</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Entry</th>

@@ -72,3 +72,23 @@ class SparklineAndScoreHistoryTest(unittest.TestCase):
         self.assertEqual(pro["points"][2]["signals_added"], ["gapper", "golden_cross"])  # not ranked in the scan before
         self.assertNotIn("prebreakout", pro["points"][2]["signals"])
         self.assertIn("prebreakout", prem["points"][2]["signals_added"])
+
+    def test_daily_bar_value_keeps_its_actual_session_when_newest_close_is_missing(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"Close": [10.0, 11.0, float("nan")]},
+                          index=pd.date_range("2026-10-13", periods=3))
+        with mock.patch("data.prices.fetch_price_data_batch", return_value=({"AAA": df}, [])) as fetch:
+            out = api.scans.daily_closes(["AAA"])
+            cached = api.scans.daily_closes(["AAA"])
+        self.assertEqual(out["last_bar"]["AAA"], {"close": 11.0, "session": "2026-10-14"})
+        self.assertEqual(out, cached)
+        self.assertEqual(fetch.call_count, 1)
+
+    def test_daily_bar_never_invents_a_date_for_undated_data(self):
+        import pandas as pd
+
+        with mock.patch("data.prices.fetch_price_data_batch", return_value=({"AAA": pd.DataFrame({"Close": [10.0, 11.0]})}, [])):
+            out = api.scans.daily_closes(["AAA"])
+        self.assertEqual(out["series"]["AAA"], [10.0, 11.0])
+        self.assertEqual(out["last_bar"], {})

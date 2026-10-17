@@ -25,6 +25,7 @@ beforeEach(() => {
   outcomeCalls.length = 0;
   vi.stubGlobal("fetch", (req: Request, ...rest: unknown[]) => {
     const path = new URL(req.url).pathname;
+    if (path.endsWith("/v1/scans/latest")) return Promise.resolve(jsonResponse({ scan_at: null, setups: [], total: 0 }));
     if (path.includes("/v1/outcomes/") || path.endsWith("/score-history")) {
       outcomeCalls.push(req.url);
       return Promise.resolve(jsonResponse({ detail: "Not Found" }, 404));

@@ -8,11 +8,12 @@ import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { backLabel, usePreviousPage } from "@/components/AppShell";
 import { AIText } from "@/components/AIText";
-import { Card, Empty, ErrorLine, ErrorState, Freshness, Locked, Pill, Skeleton } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, setupLabel, shortDate } from "@/lib/format";
 
+import { SnapshotTime } from "./SnapshotTime";
 import { SymbolEvidence } from "./OutcomeEvidence";
 import { describeAlert } from "./AlertForm";
 import { PriceAlertButton } from "./PriceAlert";
@@ -96,7 +97,7 @@ function Historical({ s }: { s: Stock }) {
       <SymbolEvidence ticker={s.ticker} />
       {!ctx && !sum && !coh ? null : <p className="cap">Descriptive research on saved scans. Not a forecast and not evidence that a setup will work.</p>}
       {ctx && (ctx.sufficient && ctx.positive_rate !== undefined ? (
-        <p className="body-sm">HSF {ctx.bucket}: {Math.round(ctx.positive_rate * 100)}% of past readings reached +4% within 5 days (n={ctx.n}, {String(ctx.confidence || "").toLowerCase()} confidence).</p>
+        <p className="body-sm">HSF {ctx.bucket}: {Math.round(ctx.positive_rate * 100)}% of past readings reached +4% within 5 days (n={ctx.n}, {String(ctx.confidence || "unspecified").toLowerCase().replace(/\s*confidence$/, "")} sample confidence).</p>
       ) : (
         <p className="body-sm">HSF {ctx.bucket}: still building history{ctx.n ? ` (n=${ctx.n})` : ""}.</p>
       ))}
@@ -104,7 +105,7 @@ function Historical({ s }: { s: Stock }) {
         <p className="body-sm">This ticker: {sum.observations} earlier HSF observation{sum.observations === 1 ? "" : "s"}, {sum.matured} matured, {sum.positive} positive (observations, not trades).</p>
       )}
       {coh && coh.follow_through_rate !== null && coh.follow_through_rate !== undefined && (
-        <p className="body-sm">Similar states ({coh.status}, HSF {coh.score_band}, {coh.horizon}): {coh.comparable} observations, {Math.round(coh.follow_through_rate * 100)}% persisted or strengthened ({String(coh.evidence_strength || "early").toLowerCase()} evidence).</p>
+        <p className="body-sm">Similar states ({coh.status}, HSF {coh.score_band}, {coh.horizon}): {coh.comparable} observations, {Math.round(coh.follow_through_rate * 100)}% persisted or strengthened ({String(coh.evidence_strength || "early").toLowerCase()} sample coverage; not a performance rating).</p>
       )}
     </div>
   );
@@ -190,6 +191,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
   const comps = Object.entries(s.score_components || {}).filter(([, v]) => Number.isFinite(v));
   const compMax = Math.max(1, ...comps.map(([, v]) => Math.abs(v)));
   const noScore = s.hsf_score === null || s.hsf_score === undefined;
+  const lastBar = s.bars.at(-1);
 
   return (
     <div className="stack">
@@ -207,7 +209,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
               <span className={`mono ${(s.change_pct ?? 0) > 0 ? "up" : (s.change_pct ?? 0) < 0 ? "down" : "cap"}`}>{pct(s.change_pct)}</span>
               <span className="cap">{s.from_history ? "from the last recorded observation" : s.scan_at ? `at the ${etTime(s.scan_at)} scan` : ""}, not a live quote</span>
             </div>
-          ) : <p className="cap">No price from the scans.</p>}
+          ) : lastBar ? <div className="quote"><span className="mono big">{price(lastBar.close)}</span><span className="cap">Daily close through {shortDate(s.bars_as_of ?? lastBar.date)} · not a live quote; no scan price available.</span></div> : <p className="cap">No price from the scans.</p>}
         </div>
         <div className="row-actions">
           <SaveToWatchlistButton ticker={s.ticker} inLists={s.watchlists.map((w) => w.id)} onSaved={onChanged}
@@ -239,7 +241,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             </Card>
           )}
           <div className="grid2">
-            <Card title="Risks" id="risks" className="risks-card"><List items={s.risks} empty="No specific risks flagged." /></Card>
+            <Card title="Risks" id="risks" className="risks-card"><List items={s.risks} empty="No risk details returned by this scan. This is not an all-clear." /></Card>
             <Card title="What to watch" id="watch" className="watch-card"><List items={s.watch_next} empty="Nothing specific to watch yet." /></Card>
           </div>
           <Card title="Historical context" id="hist"><Historical s={s} /></Card>
@@ -252,7 +254,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
         </div>
 
         <aside className="col-side">
-          <Card title="HSF Score" id="score" className="score-card" aside={s.scan_at ? <Freshness at={s.scan_at} /> : undefined}>
+          <Card title="HSF Score" id="score" className="score-card" aside={s.scan_at ? <SnapshotTime at={s.scan_at} archived={s.from_history} /> : undefined}>
             {noScore ? <Empty title="No HSF Score">It needs to appear in a scan first.</Empty> : (
               <>
                 <div className="score-ring" style={{ ["--p" as string]: `${s.hsf_score}%` }}>

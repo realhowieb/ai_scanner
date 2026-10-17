@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ResearchGlossary } from "@/components/ResearchGlossary";
 import { useState } from "react";
 
 import { Card, Pill, ResearchNotice, ScoreBar } from "@/components/ui";
@@ -34,6 +35,8 @@ function DemoScanner({ selected, onSelect }: { selected: string; onSelect: (stoc
           ))}</tbody>
         </table>
       </div>
+      <ResearchGlossary />
+      <p className="cap">Next: in your account, save a stock with the watchlist button, then create an alert from its research page.</p>
       <p className="cap">Fixed sample data, not live market data. Explore freely; this tour does not place trades or create alerts.</p>
     </Card>
     </div>
@@ -61,7 +64,7 @@ function DemoStock({ leader }: { leader: SampleSetup }) {
 
 function DemoWatchlist() {
   return (
-    <div id="demo-watchlist" tabIndex={-1}><Card title="Watchlist intelligence" id="demo-watchlist" aside="Main list">
+    <div id="demo-watchlist" tabIndex={-1}><Card title="Watchlist intelligence" id="demo-watchlist" aside="Sample activity">
       <ul className="rows">
         {WATCHLIST.map(([state, ticker, note]) => (
           <li key={ticker} className="row">

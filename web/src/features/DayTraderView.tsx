@@ -377,6 +377,12 @@ function Live() {
     const sorted = sortRows(applyFilters(all, filters), sort.key, sort.desc);
     return held ? holdOrder(sorted, held) : sorted;
   }, [all, filters, sort, held]);
+  const [showAll, setShowAll] = useState(false);
+  const shownRows = showAll ? rows : rows.slice(0, 15);
+  const candidate = (value: unknown) => {
+    const row = all.find((r) => r.ticker === value);
+    return row ? ` · DT ${row.day_trade_score == null ? "—" : Math.round(row.day_trade_score)} · ${row.dt_quality ?? "unrated"}` : "";
+  };
   const listRef = useRef<HTMLElement>(null);
   useSlide(listRef, rows.map((r) => r.ticker).join(","));
   // Sparklines for the top names; 1-minute bars change slowly, so reload every third quote refresh.
@@ -400,12 +406,13 @@ function Live() {
             {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </label>
+        {rows.length > 0 && <a href="#stair-steppers" className="cap">Jump to Stair-Steppers</a>}
         <span className="grow" />
         {d && (live
           ? failed
-            ? <span className="cap dt-live dt-stale" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Couldn&apos;t refresh, retrying · quotes {etTime(d.as_of)}</span>
+            ? <span className="cap dt-live dt-stale" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Couldn&apos;t refresh, retrying · checked {etTime(d.as_of)}</span>
             : <span className="cap dt-live" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Live · updated {ago}s ago</span>
-          : <span className="cap">{STATE[d.state] ?? d.state} · quotes {etTime(d.as_of)}{trading ? " · paused while this tab is hidden" : ""}</span>)}
+          : <span className="cap">{STATE[d.state] ?? d.state} · checked {etTime(d.as_of)}{trading ? " · paused while this tab is hidden" : ""}</span>)}
         {trading && <button type="button" className="btn btn-sm" aria-pressed={!!held} onClick={togglePause}
           title="Keep rows in place while you work; prices still update">{held ? "Resume order" : "Pause order"}</button>}
         <button type="button" className="btn btn-sm" onClick={() => setTick((n) => n + 1)} disabled={dt.loading}>Refresh</button>
@@ -415,13 +422,13 @@ function Live() {
           <span><strong>{metric(d.summary?.strong, all.filter((r) => r.dt_quality === "strong").length)}</strong> strong</span>
           <span><strong>{metric(d.summary?.developing, all.filter((r) => r.dt_quality === "developing").length)}</strong> developing</span>
           <span><strong>{metric(d.summary?.flagged, all.filter((r) => (r.quote_flags ?? []).length).length)}</strong> flagged</span>
-          <span><strong>{metric(d.summary?.best_long, "—")}</strong> best long</span>
-          <span><strong>{metric(d.summary?.best_short, "—")}</strong> best short</span>
+          <span><strong>{metric(d.summary?.best_long, "—")}</strong> top long candidate{candidate(d.summary?.best_long)}</span>
+          <span><strong>{metric(d.summary?.best_short, "—")}</strong> top short candidate{candidate(d.summary?.best_short)}</span>
         </div>
       )}
       {d && all.length > 0 && <FilterBar f={filters} set={setFilters} shown={rows.length} total={all.length} narrow={narrow} />}
       {d?.state === "premarket" && all.length > 0 && <p className="cap">Pre-market: Chg % is the latest trade today vs yesterday&apos;s close, and Volume and VWAP count pre-market trading only.{source.startsWith("movers") ? " Movers lists today's pre-market gappers until the open." : ""}</p>}
-      {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: Chg % and DT score use the regular session; AH shows the move since the close.</p>}
+      {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: last prices can be from an earlier session. Checked time is the request time, not the last trade time. Chg % and DT score use the regular session; AH shows the move since the close. Candidate highlights are relative rankings, not minimum-quality guarantees.</p>}
       {dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />
         : !d ? <Skeleton rows={8} label="Loading live quotes" />
         : all.length === 0 && d.state === "premarket" && source.startsWith("movers") && d.symbols.length === 0
@@ -438,7 +445,7 @@ function Live() {
                 </button>
               ))}
             </div>
-            {rows.map((r) => (
+            {shownRows.map((r) => (
               <article key={r.ticker} data-t={r.ticker} className={`card dt-card${flagged(r) ? " row-muted" : ""}`}>
                 <div className="dt-card-head">
                   <TickerLink ticker={r.ticker} /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} />
@@ -467,7 +474,7 @@ function Live() {
           </section>
         ) : (
           <section ref={listRef} className={`card flush${switching ? " dim" : ""}`}>
-            <div className="table-wrap">
+            <div className="table-wrap dt-scroll" tabIndex={0} role="region" aria-label="Day Trader candidates; scroll for more rows and columns">
               <table className="table dt-table">
                 <thead><tr>
                   {COLS.map((c) => (
@@ -482,7 +489,7 @@ function Live() {
                   <th scope="col"><span className="sr-only">Actions</span></th>
                 </tr></thead>
                 <tbody>
-                  {rows.map((r) => (
+                  {shownRows.map((r) => (
                     <Fragment key={r.ticker}>
                       <tr data-t={r.ticker} className={flagged(r) ? "row-muted" : undefined}>
                         <td><span className="dt-ticker"><TickerLink ticker={r.ticker} /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} /></span></td>
@@ -508,7 +515,8 @@ function Live() {
           </section>
         )}
       {d && d.missing > 0 && <p className="cap"><Pill tone="warn">{d.missing} missing</Pill> {d.missing} symbol{d.missing === 1 ? " has" : "s have"} no live quote right now.</p>}
-      {rows.length > 0 && <StairSteppers symbols={rows.map((r) => r.ticker)} />}
+      {rows.length > 15 && <div><button type="button" className="btn" onClick={() => setShowAll((v) => !v)}>{showAll ? "Show first 15" : `Show all ${rows.length} candidates`}</button></div>}
+      {rows.length > 0 && <section id="stair-steppers"><StairSteppers symbols={rows.map((r) => r.ticker)} /></section>}
       <details className="card dt-help">
         <summary className="strong">How the DT score works</summary>
         <div className="stack-sm">

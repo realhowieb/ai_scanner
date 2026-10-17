@@ -151,7 +151,7 @@ describe("Scan history", () => {
   it("lists saved scans and opens one", async () => {
     route({ "/v1/runs": () => jsonResponse([{ id: 7, name: "x", label: "SP500", row_count: 40, duration_s: 61.2, is_snapshot: false, created_at: "2026-10-07T14:00:00+00:00" }]) });
     const { unmount } = wrap(<ScanHistoryView />, "pro");
-    expect(await screen.findByRole("link", { name: "SP500" })).toHaveAttribute("href", "/scanner/history/7");
+    expect(await screen.findByRole("link", { name: "S&P 500" })).toHaveAttribute("href", "/scanner/history/7");
     unmount();
     route({ "/v1/runs": () => jsonResponse([]) });
     const b = wrap(<ScanHistoryView />, "pro");

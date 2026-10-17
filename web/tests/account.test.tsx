@@ -282,7 +282,7 @@ describe("Track record: HSF evidence (Outcome Intelligence)", () => {
     expect(card).toHaveTextContent("4 have a 5-trading-day outcome, 1 are still pending and 1 had no price data. No filters applied.");
     expect(card).toHaveTextContent("+2.00%");                       // median vs SPY
     expect(card).toHaveTextContent("67% of 3");                      // beat SPY with its own denominator
-    expect(card).toHaveTextContent("Insufficient evidence");
+    expect(card).toHaveTextContent("Insufficient sample coverage");
     expect(card).toHaveTextContent("1 matured signal has no SPY comparison yet");
     for (const c of calls.filter((x) => x.path.startsWith("/v1/outcomes/"))) expect(c.search).toBe("");   // no hidden filters
   });

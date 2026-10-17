@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { AuthShell } from "@/features/AuthForms";
+import { PasswordField } from "@/components/PasswordField";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -68,18 +70,14 @@ export function LoginForm() {
   };
 
   return (
-    <form className="card narrow login" onSubmit={submit} noValidate>
-      <p className="brand brand-lg">HSFinest<span>.AI</span></p>
-      <h1 className="h1">Sign in</h1>
+    <form onSubmit={submit} noValidate>
+      <AuthShell title="Sign in">
       {expired && <p className="notice" role="status">Your session ended. Sign in again to continue.</p>}
       <label className="field">
         <span>Email</span>
         <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
       </label>
-      <label className="field">
-        <span>Password</span>
-        <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-      </label>
+      <PasswordField label="Password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
       {error && (
         <p className="form-error" role="alert">
           {error}{waitS ? ` Try again in ${waitS}s.` : ""}{supportId ? ` Support code: ${supportId}` : ""}
@@ -92,7 +90,7 @@ export function LoginForm() {
       <p className="cap login-links">
         <Link href="/signup">Create an account</Link> · <Link href="/forgot-password">Forgot password?</Link>
       </p>
-      <p className="cap">Same account as the HSF web app.</p>
+      </AuthShell>
     </form>
   );
 }

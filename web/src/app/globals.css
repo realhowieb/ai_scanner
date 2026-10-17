@@ -783,3 +783,80 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .demo-results td, .demo-results th { padding: 10px 8px; }
   .demo-results .track { min-width: 44px; }
 }
+
+/* Audited research workflows: primary actions, compact details, and readable mobile order. */
+button.seg { border: 0; background: transparent; font: inherit; min-height: 44px; }
+button.seg.on { background: var(--raise); color: var(--text); }
+summary { cursor: pointer; min-height: 44px; padding: 10px 0; }
+summary:focus-visible, .table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.data-fresh { display: block; }
+.data-fresh summary { min-height: 0; padding: 4px 0; }
+.data-fresh strong { display: inline; }
+.data-fresh > :not(summary) { margin-top: 6px; }
+.scanner-toolbar { display: flex; flex-wrap: wrap; gap: 10px; }
+.scanner-toolbar > details { flex: 1 1 240px; min-width: 0; }
+.scanner-leader { padding: 10px 14px; border-left: 2px solid var(--accent); background: var(--bg-2); }
+.research-glossary, .delivery-diagnostics, .research-section { padding: 0 16px; border: 1px solid var(--line); border-radius: 12px; }
+.research-glossary > :not(summary), .delivery-diagnostics > :not(summary), .research-section > :not(summary) { margin-bottom: 16px; }
+.table-scroll-hint { padding: 8px 16px; }
+.table-wrap { position: relative; }
+.table-wrap thead { position: sticky; top: 0; z-index: 2; background: var(--bg-2); }
+.dt-table th:first-child, .dt-table td:first-child { position: sticky; left: 0; background: var(--bg-2); z-index: 1; }
+.dt-table { min-width: 860px; }
+.custom-scan-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); }
+.custom-scan-layout > * { min-width: 0; width: auto; }
+.custom-scan-layout fieldset { min-width: 0; }
+.scan-submit { position: sticky; bottom: 12px; padding: 12px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; z-index: 2; }
+.password-input { display: flex; gap: 8px; }
+.password-input input { flex: 1; min-width: 0; }
+.center > form { width: min(420px, 100%); }
+.plan-features .grid2 { margin-top: 12px; }
+.account-nav { flex-wrap: wrap; }
+[id] { scroll-margin-top: 100px; }
+.danger-zone { border: 1px solid var(--down); padding: 0 14px; border-radius: 12px; }
+.danger-zone > summary { color: var(--down); }
+.wl-item { padding-top: 12px; padding-bottom: 12px; }
+.history-filters { flex-wrap: wrap; align-items: end; }
+.history-filters .field { flex: 1 1 160px; }
+.history-filters > p { flex-basis: 100%; }
+.plan { gap: 16px; }
+.plan > .bullets { flex: initial; }
+.plan > .btn { margin-top: auto; }
+@media (max-width: 760px) {
+  .stock-split .price-card { order: -2; }
+  .stock-split .score-card { order: -1; }
+  .stock-split .risks-card, .stock-split .watch-card { order: 0; }
+  .today-split .today-personal { order: 0; }
+  .watchlists-split .wl-nav { display: none; }
+  .custom-scan-layout { display: flex; flex-direction: column; }
+  .scan-submit { bottom: 72px; }
+  .scanner-toolbar { gap: 8px; }
+  .scanner-toolbar > details { flex-basis: 140px; }
+  .table-scroll-hint { display: none; }
+  .data-fresh { font-size: 13px; }
+  .history-filters .field { flex-basis: 130px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+[hidden] { display: none !important; }
+.compare-difference { border-left: 3px solid var(--accent); padding-left: 10px; background: var(--bg-2); }
+
+.scanner-results .table-wrap th:nth-child(2), .scanner-results .table-wrap td:nth-child(2) { position: sticky; left: 0; background: var(--bg-2); z-index: 1; }
+.scanner-results .table-wrap thead th:nth-child(2) { z-index: 3; }
+.earnings-date { padding: 8px 0 2px; }
+
+@media (max-width: 760px) {
+  .watchlist-tools:not(.is-open) { display: none; }
+  .field.only-narrow { display: flex; width: 100%; }
+  .watchlist-tools { margin-top: 12px; }
+}
+.history-day { padding-top: 16px; background: var(--bg-2); text-align: left; }
+
+@media (min-width: 761px) { .custom-scan-layout .radio-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.showcase-img { height: 620px; object-fit: cover; object-position: top; }
+@media (max-width: 760px) { .showcase-img { height: 680px; } }
+
+.dt-scroll { max-height: 65vh; }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ResearchGlossary } from "@/components/ResearchGlossary";
 import { useState } from "react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { DEFAULT_COLUMNS, TablePreferences } from "./TablePreferences";
@@ -30,12 +31,13 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   return (
     <div className={sparks && table?.compact ? "scanner-results is-compact" : "scanner-results"}>
       {sparks && prefs.data && <TablePreferences key={JSON.stringify(table)} initial={table ?? { columns: [...DEFAULT_COLUMNS], compact: false }} premium={premium} />}
-      {sparks && <div className="row-actions compare-actions">
+      {sparks && selected.length > 0 && <div className="row-actions compare-actions">
         <span className="cap">Select 2–4 stocks to compare · {selected.length} selected</span>
         {selected.length >= 2 && <Link className="btn btn-sm" href={`/stocks/compare?symbols=${encodeURIComponent(selected.join(","))}`}>Compare selected</Link>}
         {selected.length > 0 && <button type="button" className="btn btn-sm" onClick={() => setSelected([])}>Clear selection</button>}
       </div>}
-      <div className="table-wrap only-wide">
+      <p className="table-scroll-hint cap">Scroll the table for more columns · tick boxes select 2–4 stocks to compare.</p>
+      <div className="table-wrap only-wide" tabIndex={0} role="region" aria-label="Ranked setups table; scroll for more columns">
         <table className="table">
           <thead>
             <tr>
@@ -89,6 +91,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
           </li>
         ))}
       </ol>
+      <ResearchGlossary />
       {!premium && <p className="cap table-note">PreBreakout probability is part of <Link href="/pricing">Premium</Link>.</p>}
     </div>
   );

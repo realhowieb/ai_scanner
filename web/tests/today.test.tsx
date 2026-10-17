@@ -39,10 +39,10 @@ describe("Today", () => {
     expect(screen.getByText("No setup reached HSF 75 in the latest scan.")).toBeInTheDocument();
   });
 
-  it("warns when the latest scan is stale", () => {
+  it("does not infer a missed scan from clock age without schedule coverage", () => {
     const old = new Date(Date.now() - 9 * 3600_000).toISOString();
     render(<TodayView data={{ ...base, top_setups: { ...base.top_setups!, scan_at: old } }} />);
-    expect(screen.getByRole("status")).toHaveTextContent(/may be out of date/);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("trusts the API's schedule over the age rule", () => {
@@ -142,11 +142,11 @@ describe("Today signed-in sections", () => {
     expect(screen.getByRole("heading", { name: "New since your last visit" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "TER, HSF 76" })).toHaveAttribute("href", "/stocks/TER");
     expect(screen.getByRole("link", { name: "ZZZ" })).toBeInTheDocument();
-    expect(screen.getByText("40 watched · 1 need attention · 2 strengthening · 0 fading")).toBeInTheDocument();
+    expect(screen.getByText("40 across all watchlists · 1 need attention · 2 strengthening · 0 fading")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "GNRC" })).toHaveAttribute("href", "/stocks/GNRC");
     expect(screen.getByLabelText("HSF Score 17")).toHaveClass("score-weak");
     expect(screen.getByText("Not in the latest scan: AEMD, NVDA")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Main" })).toHaveAttribute("href", "/watchlists");
+    expect(screen.getByRole("link", { name: "Main" })).toHaveAttribute("href", "/watchlists?id=1");
   });
 
   it("explains a first visit and an empty watchlist", () => {
