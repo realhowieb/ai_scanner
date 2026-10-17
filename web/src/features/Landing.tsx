@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { publicApi, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { ErrorState, Skeleton } from "@/components/ui";
+import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
 import { useApi } from "@/hooks/useApi";
 import { captureAttribution, track } from "@/lib/funnel";
 
@@ -123,19 +124,24 @@ function cell(v: unknown) {
 
 /** Plan cards, and with `table` the full comparison, from GET /v1/plans. */
 export function PlansSection({ table = false }: { table?: boolean }) {
+  const [interval] = useBillingInterval();
   const plans = useApi<Plans>("plans", (signal) => unwrap(publicApi.GET("/v1/plans", { signal })));
   if (plans.error && !plans.data) return <ErrorState error={plans.error} onRetry={plans.reload} what="plans and prices" />;
   if (!plans.data) return <Skeleton rows={6} label="Loading plans" />;
   const { tiers, rows } = plans.data;
+  const price = (tier: Plans["tiers"][number]) => interval === "year" && tier.yearly_price ? tier.yearly_price : tier.price;
   return (
     <div className="stack">
+      <BillingIntervalToggle />
       <div className="plans">
         {tiers.map((t) => (
           <article key={t.id} className={`card plan${t.id === "pro" ? " plan-pick" : ""}`} aria-labelledby={`plan-${t.id}`}>
             <div className="stack-xs">
               <h3 id={`plan-${t.id}`} className="h2">{t.name}</h3>
-              <p className="plan-price mono">{t.price}</p>
-              {t.yearly_price && <p className="cap">or {t.yearly_price} (two months free)</p>}
+              <p className="plan-price mono">{price(t)}</p>
+              {t.yearly_price && <p className="cap">{interval === "month"
+                ? `or ${t.yearly_price} (two months free)` : `${t.price} with monthly billing`}</p>}
+              {interval === "year" && t.id !== "basic" && !t.yearly_price && <p className="cap">Yearly pricing is not available for this plan.</p>}
               <p className="body-sm">{t.tagline}</p>
             </div>
             <ul className="bullets">
@@ -157,7 +163,7 @@ export function PlansSection({ table = false }: { table?: boolean }) {
               <tr><th scope="col">Feature</th>{tiers.map((t) => <th key={t.id} scope="col" className="num">{t.name}</th>)}</tr>
             </thead>
             <tbody>
-              <tr><th scope="row" className="row-h">Price</th>{tiers.map((t) => <td key={t.id} className="num mono strong">{t.price}</td>)}</tr>
+              <tr><th scope="row" className="row-h">Price</th>{tiers.map((t) => <td key={t.id} className="num mono strong">{price(t)}</td>)}</tr>
               {rows.map((r) => (
                 <tr key={r.label}>
                   <th scope="row" className="row-h">{r.label}</th>
