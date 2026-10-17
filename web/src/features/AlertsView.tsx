@@ -17,6 +17,7 @@ import type { FiredItem } from "@/lib/alertEvents";
 import { etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
+import { NotificationDelivery } from "./NotificationDelivery";
 import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
 
 function AlertRow({ a, onChanged }: { a: Alert; onChanged: () => void }) {
@@ -197,6 +198,7 @@ export function AlertsView() {
               {data.used > data.limit && <p className="cap">Only your newest {data.limit} alert{data.limit === 1 ? "" : "s"} can fire on this plan. Delete some or upgrade.</p>}
             </Card>
 
+            <NotificationDelivery events={events.data ?? []} />
             <Card title="Recently fired" id="events">
               {events.error ? <ErrorLine error={events.error} /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> :
                 events.data.length === 0 ? <Empty title="Nothing has fired yet.">When an alert&apos;s condition is met it shows here.</Empty> : (
@@ -235,7 +237,7 @@ export function AlertsView() {
                   <UpgradeButton plan="pro" />
                 </div>
               )}
-              <p className="cap">Phone push notifications aren&apos;t available yet.</p>
+              <p className="cap">Browser notifications depend on your device and browser permissions.</p>
               <Link href="/watchlists" className="cap">Manage the watchlists your alerts use →</Link>
             </Card>
           </aside>

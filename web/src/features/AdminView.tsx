@@ -3,6 +3,8 @@
 // Admin console (admins only): accounts, health and maintenance tools, moved from the
 // classic app's Admin page. The API checks the admin role on every call; this page only
 // hides itself from everyone else.
+import { OperationsView } from "./OperationsView";
+
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
@@ -256,6 +258,7 @@ function HealthTab() {
             </Card>
           </>
         )}
+      <OperationsView />
       <Card title="Billing diagnostics" id="billing-diagnostics">
         <p className="cap">Check price configuration, webhook delivery and subscription sync failures. Secrets are never shown.</p>
         <div><button type="button" className="btn" disabled={billingProbe.busy} onClick={() => void billingProbe.run(async () => {

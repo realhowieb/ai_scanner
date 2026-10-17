@@ -346,7 +346,7 @@ describe("Alerts", () => {
     await u.click(box);
     await waitFor(() => expect(api.prefs.alerts).toBe(false));
     await waitFor(() => expect(screen.getByRole("checkbox", { name: /Email me when an alert fires/ })).not.toBeChecked());
-    expect(screen.getByText("Phone push notifications aren't available yet.")).toBeInTheDocument();
+    expect(screen.getByText("Browser notifications depend on your device and browser permissions.")).toBeInTheDocument();
     expect(screen.getByText("Nothing has fired yet.")).toBeInTheDocument();
   });
 

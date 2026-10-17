@@ -26,6 +26,10 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "paper_connect": (5, 3600),  # per account: key validation attempts
     "paper_order": (30, 3600),   # per account
     "paper_status": (60, 60),    # per account: read-only confirmation polling
+    "research_preferences": (60, 600),
+    "symbol_search": (120, 60),
+    "notification_retry": (10, 600),
+    "operations": (60, 60),
     "billing_sync": (20, 600),  # per account: bounded return/focus checks against Stripe
     "billing_diagnostics": (10, 600),  # admin-only Stripe configuration probes
     "delete_account": (5, 3600), # per account: password attempts on DELETE /v1/me

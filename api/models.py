@@ -320,6 +320,7 @@ class Alert(BaseModel):
 
 class StockDetail(BaseModel):
     ticker: str
+    rvol: Optional[float] = Field(default=None, description="Relative volume in the displayed market scan")
     scan_at: Optional[str] = Field(default=None, description="Latest market scan used")
     in_latest_scan: bool = Field(description="The ticker had at least one row in that scan")
     has_setup: bool = Field(description="It qualifies as an HSF setup (or has a recent recorded score)")

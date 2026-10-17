@@ -49,7 +49,7 @@ it.each(["loading", "empty", "failed"])("keeps ticker search usable when the sca
   render(<StockSearchView />);
   if (state === "failed") await screen.findByText("Couldn't load the latest scan right now");
   if (state === "empty") await screen.findByText("No ranked setups in the latest scan.");
-  fireEvent.change(screen.getByLabelText("Open any ticker"), { target: { value: "nvda" } });
+  fireEvent.change(screen.getByLabelText("Search ticker or company"), { target: { value: "nvda" } });
   fireEvent.click(screen.getByRole("button", { name: "Open" }));
   expect(push).toHaveBeenCalledWith("/stocks/NVDA");
 });

@@ -235,6 +235,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operations */
+        get: operations["operations_v1_admin_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/signals": {
         parameters: {
             query?: never;
@@ -453,6 +470,40 @@ export interface paths {
          * @description Same types and rules as the web app. Starter 1 alert, Pro 5, Premium 25.
          */
         post: operations["alert_create_v1_alerts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alerts/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Deliveries */
+        get: operations["deliveries_v1_alerts_deliveries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alerts/deliveries/{delivery_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Delivery */
+        post: operations["retry_delivery_v1_alerts_deliveries__delivery_id__retry_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1206,6 +1257,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/research-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Preferences */
+        get: operations["get_preferences_v1_me_research_preferences_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Preferences */
+        patch: operations["update_preferences_v1_me_research_preferences_patch"];
+        trace?: never;
+    };
     "/v1/me/verify-email": {
         parameters: {
             query?: never;
@@ -1833,6 +1902,23 @@ export interface paths {
          * @description The ticker's HSF Score in each recent full-market scan, with the Scanner's scores.
          */
         get: operations["stock_score_history_v1_stocks__ticker__score_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/symbols/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Symbols */
+        get: operations["symbols_v1_symbols_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3411,6 +3497,59 @@ export interface components {
             /** Symbols */
             symbols: number;
         };
+        /** CustomView */
+        CustomView: {
+            /**
+             * Gap
+             * @default false
+             */
+            gap: boolean;
+            /** Max Price */
+            max_price?: number | null;
+            /** Min Dollar Vol */
+            min_dollar_vol?: number | null;
+            /** Min Gap */
+            min_gap?: number | null;
+            /** Min Price */
+            min_price?: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Score All
+             * @default false
+             */
+            score_all: boolean;
+            /**
+             * Session
+             * @default regular
+             * @enum {string}
+             */
+            session: "regular" | "premarket" | "afterhours";
+            /**
+             * Ticker
+             * @default
+             */
+            ticker: string;
+            /**
+             * Top N
+             * @default 25
+             * @enum {integer}
+             */
+            top_n: 10 | 25 | 50 | 100 | 200;
+            /**
+             * Universe
+             * @default sp500
+             * @enum {string}
+             */
+            universe: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker";
+            /**
+             * Unusual
+             * @default false
+             */
+            unusual: boolean;
+            /** Watchlist Id */
+            watchlist_id?: number | null;
+        };
         /** DataFreshness */
         DataFreshness: {
             /** Calendar Covered */
@@ -3593,6 +3732,21 @@ export interface components {
             confirm: "DELETE";
             /** Password */
             password: string;
+        };
+        /** Delivery */
+        Delivery: {
+            /** At */
+            at: string;
+            /** Attempts */
+            attempts: number;
+            /** Id */
+            id: string;
+            /** Retryable */
+            retryable: boolean;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
         };
         /** Device */
         Device: {
@@ -4023,6 +4177,23 @@ export interface components {
         NoteBody: {
             /** Note */
             note?: string | null;
+        };
+        /** OperationsSnapshot */
+        OperationsSnapshot: {
+            /** Errors */
+            errors: number;
+            /** Providers */
+            providers: components["schemas"]["ProviderDiagnostic"][];
+            /** Requests */
+            requests: components["schemas"]["RequestDiagnostic"][];
+            /** Scan Queue */
+            scan_queue?: components["schemas"]["QueueCount"][] | null;
+            /** Scope */
+            scope: string;
+            /** Slow */
+            slow: number;
+            /** Total */
+            total: number;
         };
         /** OutcomeBucket */
         OutcomeBucket: {
@@ -5201,6 +5372,47 @@ export interface components {
              */
             rows: components["schemas"]["PremarketGapper"][];
         };
+        /** ProviderDiagnostic */
+        ProviderDiagnostic: {
+            /** At */
+            at: string;
+            /** Ms */
+            ms: number;
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+        };
+        /** QueueCount */
+        QueueCount: {
+            /** Count */
+            count: number;
+            /** Status */
+            status: string;
+        };
+        /** QuietHours */
+        QuietHours: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * End
+             * @default 07:00
+             */
+            end: string;
+            /**
+             * Start
+             * @default 22:00
+             */
+            start: string;
+            /**
+             * Timezone
+             * @default America/New_York
+             */
+            timezone: string;
+        };
         /** Ready */
         Ready: {
             /**
@@ -5278,6 +5490,21 @@ export interface components {
         RefreshBody: {
             /** Refresh Token */
             refresh_token: string;
+        };
+        /** RequestDiagnostic */
+        RequestDiagnostic: {
+            /** At */
+            at: string;
+            /** Method */
+            method: string;
+            /** Ms */
+            ms: number;
+            /** Request Id */
+            request_id: string;
+            /** Route */
+            route: string;
+            /** Status */
+            status: number;
         };
         /** ResetConfirmBody */
         ResetConfirmBody: {
@@ -5633,6 +5860,35 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** ScannerView */
+        ScannerView: {
+            /**
+             * Min
+             * @default 0
+             * @enum {integer}
+             */
+            min: 0 | 40 | 60 | 75;
+            /** Name */
+            name: string;
+            /**
+             * Signal
+             * @default
+             * @enum {string}
+             */
+            signal: "" | "breakout" | "gapper" | "golden_cross" | "gainer" | "prebreakout";
+            /**
+             * Size
+             * @default 25
+             * @enum {integer}
+             */
+            size: 25 | 50 | 100;
+            /**
+             * Sort
+             * @default score
+             * @enum {string}
+             */
+            sort: "score" | "chg_pct" | "gap_pct" | "rvol" | "prob";
+        };
         /** ScoreHistory */
         ScoreHistory: {
             /**
@@ -5950,6 +6206,11 @@ export interface components {
              */
             risks: string[];
             /**
+             * Rvol
+             * @description Relative volume in the displayed market scan
+             */
+            rvol?: number | null;
+            /**
              * Scan At
              * @description Latest market scan used
              */
@@ -5986,6 +6247,20 @@ export interface components {
              */
             watchlists: components["schemas"]["WatchlistRef"][];
         };
+        /** SymbolSuggestion */
+        SymbolSuggestion: {
+            /** Name */
+            name: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** SymbolSuggestions */
+        SymbolSuggestions: {
+            /** Available */
+            available: boolean;
+            /** Results */
+            results: components["schemas"]["SymbolSuggestion"][];
+        };
         /** SystemStatus */
         SystemStatus: {
             /**
@@ -5998,6 +6273,16 @@ export interface components {
              * @enum {string}
              */
             level: "ok" | "limited" | "issue" | "unknown";
+        };
+        /** TablePreferences */
+        TablePreferences: {
+            /** Columns */
+            columns?: ("setup" | "spark" | "last" | "change" | "gap" | "rvol" | "prob")[];
+            /**
+             * Compact
+             * @default false
+             */
+            compact: boolean;
         };
         /**
          * Tape
@@ -6701,6 +6986,24 @@ export interface components {
             /** Endpoint */
             endpoint: string;
         };
+        /** WorkspacePatch */
+        WorkspacePatch: {
+            /** Custom Views */
+            custom_views?: components["schemas"]["CustomView"][] | null;
+            quiet_hours?: components["schemas"]["QuietHours"] | null;
+            /** Scanner Views */
+            scanner_views?: components["schemas"]["ScannerView"][] | null;
+            table?: components["schemas"]["TablePreferences"] | null;
+        };
+        /** WorkspacePreferences */
+        WorkspacePreferences: {
+            /** Custom Views */
+            custom_views?: components["schemas"]["CustomView"][];
+            quiet_hours?: components["schemas"]["QuietHours"];
+            /** Scanner Views */
+            scanner_views?: components["schemas"]["ScannerView"][];
+            table?: components["schemas"]["TablePreferences"];
+        };
     };
     responses: never;
     parameters: never;
@@ -7275,6 +7578,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    operations_v1_admin_requests_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                problems_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSnapshot"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };
@@ -8018,6 +8367,80 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    deliveries_v1_alerts_deliveries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Delivery"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    retry_delivery_v1_alerts_deliveries__delivery_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Delivery"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };
@@ -10082,6 +10505,82 @@ export interface operations {
             };
         };
     };
+    get_preferences_v1_me_research_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspacePreferences"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    update_preferences_v1_me_research_preferences_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspacePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspacePreferences"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     resend_verification_v1_me_verify_email_post: {
         parameters: {
             query?: never;
@@ -12025,6 +12524,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScoreHistory"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    symbols_v1_symbols_search_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SymbolSuggestions"];
                 };
             };
             /** @description Not signed in */

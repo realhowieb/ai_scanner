@@ -123,3 +123,47 @@ class BillingPostgresTest(unittest.TestCase):
 
         self.assertEqual(self.store.claim_reconciliation(), [self.email])
         self.assertEqual(PostgresStore(self.connect).claim_reconciliation(), [])
+
+
+    def test_research_preferences_merge_sections_and_isolate_users(self):
+        from unittest.mock import patch
+
+        from api import workspace
+        with patch.dict(os.environ, {"AI_SCANNER_SCHEMA_ONCE": "0"}), patch("api.workspace._conn", side_effect=self.connect):
+            initial = workspace.preferences(self.email)
+            self.assertEqual(initial["scanner_views"], [])
+            workspace.preferences(self.email, {"scanner_views": [{"name": "Morning", "min": 60}]})
+            workspace.preferences(self.email, {"table": {"compact": True}})
+            result = workspace.preferences(self.email)
+            self.assertTrue(result["table"]["compact"])
+            self.assertEqual(result["scanner_views"][0]["min"], 60)
+            self.assertEqual(workspace.preferences("other@example.com")["scanner_views"], [])
+            # Independent section updates must not clobber one another.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                list(pool.map(lambda change: workspace.preferences(self.email, change), [
+                    {"table": {"compact": False}}, {"quiet_hours": {"enabled": True}}]))
+            result = workspace.preferences(self.email)
+            self.assertFalse(result["table"]["compact"])
+            self.assertTrue(result["quiet_hours"]["enabled"])
+
+    def test_notification_retry_claims_only_failed_owned_receipts_once(self):
+        from unittest.mock import patch
+
+        from api import alert_delivery as delivery
+        with patch.dict(os.environ, {"AI_SCANNER_SCHEMA_ONCE": "0"}), patch("api.alert_delivery._conn", side_effect=self.connect):
+            key = delivery.begin(self.email, 1, {"body": "Private alert"})
+            delivery.finish(key, "failed")
+            self.assertEqual(delivery.recent("other@example.com"), [])
+            self.assertTrue(delivery.recent(self.email)[0]["retryable"])
+            with patch("api.webpush.enabled", return_value=True), patch("api.webpush.plan_allows", return_value=True), \
+                 patch("api.store.get_account", return_value={}), patch("api.workspace.is_quiet", return_value=False), \
+                 patch("api.devices.devices_for_user", return_value=[{"id": 1, "provider": "webpush", "token": "private-token"}]), \
+                 patch("api.webpush.send", return_value=(True, 201)) as send:
+                self.assertIsNone(delivery.retry("other@example.com", key))
+                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+                    results = list(pool.map(lambda _: delivery.retry(self.email, key), range(3)))
+                self.assertEqual(sum(r is not None for r in results), 1)
+                send.assert_called_once()
+            self.assertEqual(delivery.recent(self.email)[0]["status"], "accepted")
+            self.assertFalse(delivery.recent(self.email)[0]["retryable"])
+            self.assertNotIn("private-token", str(delivery.recent(self.email)))

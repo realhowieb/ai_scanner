@@ -27,6 +27,7 @@ ACCOUNT_TABLES: Tuple[Tuple[str, str], ...] = (
     ("login_attempts", "username"), ("runs", "username"), ("scan_errors", "username"),
     ("auth_sessions", "username"), ("hsf_auth_tokens", "username"),
     ("hsf_billing_state", "username"),
+    ("hsf_workspace_preferences", "user_id"), ("hsf_push_deliveries", "user_id"),
     ("api_refresh_tokens", "username"), ("api_push_devices", "username"), ("api_scan_jobs", "username"),
 )
 PAID = ("pro", "premium")

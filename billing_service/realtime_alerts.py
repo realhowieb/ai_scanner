@@ -416,6 +416,34 @@ def evaluate_alert(alert: Dict[str, Any], snap: Dict[str, Any],
 # --------------------------------- the loop -----------------------------------
 
 
+def _quiet_users(conn, users: List[str]) -> set:
+    """Read existing preferences in one batch; never create scanner tables here."""
+    try:
+        import json
+
+        try:
+            from billing_service.notification_preferences import quiet_at
+        except ImportError:  # standalone Render billing root
+            from notification_preferences import quiet_at
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('public.hsf_workspace_preferences') IS NOT NULL")
+            if not cur.fetchone()[0]:
+                return set()
+            cur.execute("SELECT user_id, data FROM hsf_workspace_preferences WHERE user_id = ANY(%s)", (users,))
+            rows = cur.fetchall()
+        quiet = set()
+        for user, data in rows:
+            if isinstance(data, str):
+                data = json.loads(data)
+            if quiet_at(data.get("quiet_hours") or {}):
+                quiet.add(user)
+        return quiet
+    except Exception:
+        conn.rollback()
+        return set()
+
+
 def check_once() -> int:
     """One evaluation pass. Returns number of alerts fired."""
     conn = _conn()
@@ -426,6 +454,7 @@ def check_once() -> int:
         if not alerts:
             return 0
         snaps = _latest_snapshots([a["ticker"] for a in alerts])
+        quiet = _quiet_users(conn, list({a["user_id"] for a in alerts}))
         fired = 0
         for alert in alerts:
             snap = snaps.get(alert["ticker"])
@@ -442,6 +471,7 @@ def check_once() -> int:
                 and alert["email_verified"]
                 and alert["tier"] in EMAIL_TIERS
                 and alert.get("alert_emails_on", True)
+                and alert["user_id"] not in quiet
             ):
                 _send_email(alert["user_id"], "⚡ Live alert triggered", message,
                             unsubscribe_url=_unsubscribe_url(alert.get("unsub_token")))

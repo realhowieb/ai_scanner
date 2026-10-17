@@ -26,7 +26,9 @@ beforeEach(() => {
   search = new URLSearchParams();
   replace.mockReset();
   fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("fetch", (request: Request) => new URL(request.url).pathname.endsWith("/v1/me/research-preferences")
+    ? Promise.resolve(jsonResponse({ scanner_views: [], custom_views: [], table: { columns: ["setup", "spark", "last", "change", "gap", "rvol", "prob"], compact: false }, quiet_hours: { enabled: false, start: "22:00", end: "07:00", timezone: "America/New_York" } }))
+    : fetchMock(request));
 });
 afterEach(() => vi.unstubAllGlobals());
 
