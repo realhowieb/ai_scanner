@@ -6,10 +6,11 @@ import type { ReactNode } from "react";
 
 import { useBillingInterval } from "@/components/BillingInterval";
 
-import { ApiError, api, unwrap } from "@/api/client";
+import { ApiError } from "@/api/client";
 import { freshness, etTime } from "@/lib/format";
 import { beginBilling } from "@/lib/billingReturn";
 import { readCachedMe } from "@/session/meCache";
+import { checkout } from "@/lib/checkout";
 
 export function Card({ title, aside, children, id, className = "" }: { title?: ReactNode; aside?: ReactNode; children: ReactNode; id?: string; className?: string }) {
   const hid = id ? `${id}-h` : undefined;
@@ -143,7 +144,7 @@ export function UpgradeButton({ plan, label }: { plan: "pro" | "premium"; label?
     setBusy(true);
     setErr(null);
     try {
-      const link = await unwrap(api.POST("/v1/billing/checkout", { body: { plan, interval } }));
+      const link = await checkout(plan, interval);
       beginBilling(readCachedMe()?.plan ?? null, plan);
       window.location.assign(link.url);
     } catch (e) {

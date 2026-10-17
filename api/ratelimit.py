@@ -27,6 +27,7 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "paper_order": (30, 3600),   # per account
     "paper_status": (60, 60),    # per account: read-only confirmation polling
     "billing_sync": (20, 600),  # per account: bounded return/focus checks against Stripe
+    "billing_diagnostics": (10, 600),  # admin-only Stripe configuration probes
     "delete_account": (5, 3600), # per account: password attempts on DELETE /v1/me
     "events": (120, 3600),       # per IP: anonymous funnel events from the web landing page
     "unsubscribe": (30, 600),    # per IP: token lookups on the emailed unsubscribe link

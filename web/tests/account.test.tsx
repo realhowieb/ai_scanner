@@ -48,6 +48,7 @@ beforeEach(() => {
   assign.mockReset();
   prefs = { digest: true, evening: false, alerts: true };
   routes = [
+    on("GET", "/v1/billing/status", () => jsonResponse({ status: "active", sync_state: "confirmed", message: "Confirmed" })),
     on("POST", "/v1/billing/sync", () => jsonResponse({ message: "Subscription checked with Stripe." })),
     on("GET", "/v1/me", () => jsonResponse(me("pro"))),
     on("GET", "/v1/me/email-preferences", () => jsonResponse(prefs)),
@@ -62,6 +63,34 @@ const user = () => userEvent.setup();
 const wrap = (ui: React.ReactNode, m: Schemas["Me"]) => render(<SessionProvider initialMe={m}>{ui}</SessionProvider>);
 
 describe("Account", () => {
+  it("shows the confirmed billing interval and renewal date independently of the next checkout choice", async () => {
+    routes.unshift(on("GET", "/v1/billing/status", () => jsonResponse({ status: "active", plan: "pro", interval: "month",
+      amount: 2500, currency: "usd", renewal_at: "2026-11-16T12:00:00Z", checked_at: "2026-10-16T12:00:00Z",
+      sync_state: "confirmed", test_mode: true, message: "Confirmed" })));
+    const u = user();
+    wrap(<AccountView />, me("pro"));
+    expect(await screen.findByText("Monthly · $25.00 before tax")).toBeInTheDocument();
+    expect(screen.getByText("Next renewal")).toBeInTheDocument();
+    expect(screen.getByText("Test mode")).toBeInTheDocument();
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    expect(screen.getByText("Monthly · $25.00 before tax")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose Pro yearly" })).toBeInTheDocument();
+  });
+
+  it("explains a pending checkout and lets the user resume or close it", async () => {
+    let open = true;
+    routes.unshift(on("GET", "/v1/billing/status", () => jsonResponse({ status: "incomplete", sync_state: open ? "pending" : "confirmed",
+      message: open ? "Payment is pending" : "No active subscription", checkout_pending: open,
+      checkout_url: open ? "https://checkout.stripe.com/resume" : null })),
+    on("POST", "/v1/billing/checkout/cancel", () => { open = false; return jsonResponse({ message: "Closed" }); }));
+    const u = user();
+    wrap(<AccountView />, me("basic"));
+    expect(await screen.findByText("Payment is pending")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue checkout" })).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Start over" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Continue checkout" })).not.toBeInTheDocument());
+    expect(calls.some((call) => call.path === "/v1/billing/checkout/cancel")).toBe(true);
+  });
   it("sends the selected yearly interval to checkout", async () => {
     routes.unshift(on("POST", "/v1/billing/checkout", () => jsonResponse({ url: "https://checkout.stripe.com/yearly", mode: "checkout" })));
     const u = user();
@@ -157,7 +186,7 @@ describe("Account", () => {
   it("email settings: loading, then an error with retry", async () => {
     routes.unshift(on("GET", "/v1/me/email-preferences", () => jsonResponse({ detail: "boom" }, 503)));
     wrap(<AccountView />, me("pro"));
-    expect(screen.getByRole("status")).toHaveTextContent("Loading email settings");
+    expect(screen.getByRole("region", { name: "Email" })).toHaveTextContent("Loading email settings");
     expect(await screen.findByText("Couldn't load your email settings right now")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });

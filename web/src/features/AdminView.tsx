@@ -211,6 +211,8 @@ function HealthTab() {
   const h = useApi("admin-health", (signal) => unwrap(api.GET("/v1/admin/health", { signal })));
   const probe = useAction();
   const [providers, setProviders] = useState<Schemas["AdminProviders"] | null>(null);
+  const billingProbe = useAction();
+  const [billing, setBilling] = useState<Schemas["AdminBilling"] | null>(null);
   const ops = h.data?.operations as { system_status?: string; generated_at?: string | null; stale?: boolean;
     workflows?: { workflow: string; label: string; status: string; last_success: string | null }[] } | undefined;
   return (
@@ -254,6 +256,25 @@ function HealthTab() {
             </Card>
           </>
         )}
+      <Card title="Billing diagnostics" id="billing-diagnostics">
+        <p className="cap">Check price configuration, webhook delivery and subscription sync failures. Secrets are never shown.</p>
+        <div><button type="button" className="btn" disabled={billingProbe.busy} onClick={() => void billingProbe.run(async () => {
+          setBilling(await unwrap(api.GET("/v1/admin/billing"))); return true;
+        })}>{billingProbe.busy ? "Checking billing…" : "Check billing"}</button></div>
+        <ErrorLine error={billingProbe.error} />
+        {billing && <div className="stack-sm">
+          <dl className="kv">
+            <div><dt>Stripe mode</dt><dd>{billing.mode}</dd></div>
+            <div><dt>Webhook configuration</dt><dd>{!billing.webhook_check_available ? "Check unavailable" : billing.webhook_configured ? "Ready" : "Needs attention"}</dd></div>
+            <div><dt>Last successful event</dt><dd>{billing.last_webhook_at ? etTime(billing.last_webhook_at) : "None recorded"}</dd></div>
+            <div><dt>Accounts with sync errors</dt><dd>{billing.failed_syncs}</dd></div>
+          </dl>
+          <ul className="bullets" aria-label="Billing price checks">{Object.entries(billing.prices_configured).map(([name, configured]) =>
+            <li key={name}>{name.replace("STRIPE_PRICE_", "").replaceAll("_", " ")}: {configured ? billing.prices_valid[name] ? "Ready" : "Needs review" : "Missing"}</li>)}</ul>
+          {(billing.webhook_failures ?? []).length > 0 && <ul className="bullets" aria-label="Failed billing events">{(billing.webhook_failures ?? []).map((failure, i) =>
+            <li key={i}>{failure.event_type}: {failure.code.replaceAll("_", " ")} · {etTime(failure.at)}</li>)}</ul>}
+        </div>}
+      </Card>
       <Card title="Services" id="services" aside={providers ? `Checked ${etTime(providers.checked_at)}` : undefined}>
         <p className="cap">Live checks of the database, Alpaca, the earnings APIs and the billing service.</p>
         <div className="row-actions">
