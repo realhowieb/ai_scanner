@@ -13,6 +13,7 @@ import { publicApi, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { ErrorState, Skeleton } from "@/components/ui";
 import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
+import { SampleSetupPreview } from "@/features/SampleSetupPreview";
 import { useApi } from "@/hooks/useApi";
 import { captureAttribution, track } from "@/lib/funnel";
 
@@ -184,16 +185,19 @@ export function Landing() {
     <div className="pub">
       <PublicHeader />
       <main id="main" className="pub-main stack">
-        <section className="hero stack-sm">
+        <section className="hero hero-with-preview">
+          <div className="stack-sm">
           <p className="eyebrow">HSF AI Stock Scanner</p>
           <h1 className="hero-title">{TAGLINE}</h1>
           <p className="hero-text">{POSITIONING}</p>
           <div className="row-actions">
             <SignupLink surface="hero">Create a free account</SignupLink>
             <Link href="/demo" className="btn">View demo</Link>
-            <Link href="/login" className="btn">Sign in</Link>
+            <Link href="/login" className="hero-signin">Sign in</Link>
           </div>
           <p className="cap">Starter plan is free, no card needed.</p>
+          </div>
+          <SampleSetupPreview />
         </section>
 
         <Showcase />

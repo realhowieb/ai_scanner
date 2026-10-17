@@ -126,16 +126,31 @@ describe("landing and pricing", () => {
     expect(screen.getAllByText("$25/mo")).toHaveLength(2);
   });
 
-  it("offers a frontend-only demo with sample product state", () => {
+  it("offers a guided sample scan with working stock selection", () => {
     render(<DemoPage />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("See HSF with polished sample data.");
-    expect(screen.getByRole("status")).toHaveTextContent("fixed sample data");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Explore a sample scan.");
+    expect(screen.getByRole("status")).toHaveTextContent("Sample data — not live");
     expect(screen.getByRole("table", { name: "Demo ranked setups" })).toHaveTextContent("NVDA");
     expect(screen.getByRole("heading", { name: "Stock detail" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Watchlist intelligence" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Alerts and AI research" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Create a free account" })).toHaveAttribute("href", "/signup");
   });
+});
+
+it("opens each sample stock's evidence and keeps the preview linked to NVDA", async () => {
+  const u = userEvent.setup();
+  render(<DemoPage />);
+  await u.click(screen.getByRole("link", { name: "Review AMD sample" }));
+  expect(screen.getByText("Why AMD matters in this sample")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Review AMD sample" })).toHaveAttribute("aria-current", "true");
+  const detail = screen.getByRole("region", { name: "Stock detail" });
+  expect(detail).toHaveTextContent("1.8x");
+  expect(detail).toHaveTextContent("moving-average cross can lag");
+  expect(document.getElementById("demo-stock")).toBeInTheDocument();
+  expect(document.getElementById("demo-scanner")).toBeInTheDocument();
+  await u.click(screen.getByRole("link", { name: /Explore the sample evidence/ }));
+  expect(screen.getByText("Why NVDA matters in this sample")).toBeInTheDocument();
 });
 
 describe("Stock Intelligence", () => {
