@@ -4017,6 +4017,143 @@
     "title": "Coverage",
     "type": "object"
    },
+   "CustomView": {
+    "additionalProperties": false,
+    "properties": {
+     "gap": {
+      "default": false,
+      "title": "Gap",
+      "type": "boolean"
+     },
+     "max_price": {
+      "anyOf": [
+       {
+        "maximum": 1000000.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Price"
+     },
+     "min_dollar_vol": {
+      "anyOf": [
+       {
+        "maximum": 1000000000000000.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Dollar Vol"
+     },
+     "min_gap": {
+      "anyOf": [
+       {
+        "maximum": 10000.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Gap"
+     },
+     "min_price": {
+      "anyOf": [
+       {
+        "maximum": 1000000.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Price"
+     },
+     "name": {
+      "maxLength": 60,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     },
+     "score_all": {
+      "default": false,
+      "title": "Score All",
+      "type": "boolean"
+     },
+     "session": {
+      "default": "regular",
+      "enum": [
+       "regular",
+       "premarket",
+       "afterhours"
+      ],
+      "title": "Session",
+      "type": "string"
+     },
+     "ticker": {
+      "default": "",
+      "maxLength": 10,
+      "pattern": "^$|^[A-Za-z][A-Za-z0-9.\\-]{0,9}$",
+      "title": "Ticker",
+      "type": "string"
+     },
+     "top_n": {
+      "default": 25,
+      "enum": [
+       10,
+       25,
+       50,
+       100,
+       200
+      ],
+      "title": "Top N",
+      "type": "integer"
+     },
+     "universe": {
+      "default": "sp500",
+      "enum": [
+       "sp500",
+       "nasdaq",
+       "combo",
+       "us_market",
+       "watchlist",
+       "ticker"
+      ],
+      "title": "Universe",
+      "type": "string"
+     },
+     "unusual": {
+      "default": false,
+      "title": "Unusual",
+      "type": "boolean"
+     },
+     "watchlist_id": {
+      "anyOf": [
+       {
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Watchlist Id"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "CustomView",
+    "type": "object"
+   },
    "DataFreshness": {
     "properties": {
      "calendar_covered": {
@@ -4509,6 +4646,44 @@
      "confirm"
     ],
     "title": "DeleteAccountBody",
+    "type": "object"
+   },
+   "Delivery": {
+    "properties": {
+     "at": {
+      "title": "At",
+      "type": "string"
+     },
+     "attempts": {
+      "title": "Attempts",
+      "type": "integer"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "retryable": {
+      "title": "Retryable",
+      "type": "boolean"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "status",
+     "attempts",
+     "at",
+     "title",
+     "retryable"
+    ],
+    "title": "Delivery",
     "type": "object"
    },
    "Device": {
@@ -5586,6 +5761,64 @@
      }
     },
     "title": "NoteBody",
+    "type": "object"
+   },
+   "OperationsSnapshot": {
+    "properties": {
+     "errors": {
+      "title": "Errors",
+      "type": "integer"
+     },
+     "providers": {
+      "items": {
+       "$ref": "#/components/schemas/ProviderDiagnostic"
+      },
+      "title": "Providers",
+      "type": "array"
+     },
+     "requests": {
+      "items": {
+       "$ref": "#/components/schemas/RequestDiagnostic"
+      },
+      "title": "Requests",
+      "type": "array"
+     },
+     "scan_queue": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/QueueCount"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan Queue"
+     },
+     "scope": {
+      "title": "Scope",
+      "type": "string"
+     },
+     "slow": {
+      "title": "Slow",
+      "type": "integer"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "scope",
+     "requests",
+     "providers",
+     "total",
+     "errors",
+     "slow"
+    ],
+    "title": "OperationsSnapshot",
     "type": "object"
    },
    "OutcomeBucket": {
@@ -8677,6 +8910,82 @@
     "title": "PremarketGappers",
     "type": "object"
    },
+   "ProviderDiagnostic": {
+    "properties": {
+     "at": {
+      "title": "At",
+      "type": "string"
+     },
+     "ms": {
+      "title": "Ms",
+      "type": "number"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "ok": {
+      "title": "Ok",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "ok",
+     "ms",
+     "at"
+    ],
+    "title": "ProviderDiagnostic",
+    "type": "object"
+   },
+   "QueueCount": {
+    "properties": {
+     "count": {
+      "title": "Count",
+      "type": "integer"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "count"
+    ],
+    "title": "QueueCount",
+    "type": "object"
+   },
+   "QuietHours": {
+    "additionalProperties": false,
+    "properties": {
+     "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "end": {
+      "default": "07:00",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "title": "End",
+      "type": "string"
+     },
+     "start": {
+      "default": "22:00",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "title": "Start",
+      "type": "string"
+     },
+     "timezone": {
+      "default": "America/New_York",
+      "maxLength": 64,
+      "title": "Timezone",
+      "type": "string"
+     }
+    },
+    "title": "QuietHours",
+    "type": "object"
+   },
    "Ready": {
     "properties": {
      "database": {
@@ -8828,6 +9137,44 @@
      "refresh_token"
     ],
     "title": "RefreshBody",
+    "type": "object"
+   },
+   "RequestDiagnostic": {
+    "properties": {
+     "at": {
+      "title": "At",
+      "type": "string"
+     },
+     "method": {
+      "title": "Method",
+      "type": "string"
+     },
+     "ms": {
+      "title": "Ms",
+      "type": "number"
+     },
+     "request_id": {
+      "title": "Request Id",
+      "type": "string"
+     },
+     "route": {
+      "title": "Route",
+      "type": "string"
+     },
+     "status": {
+      "title": "Status",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "request_id",
+     "method",
+     "route",
+     "status",
+     "ms",
+     "at"
+    ],
+    "title": "RequestDiagnostic",
     "type": "object"
    },
    "ResetConfirmBody": {
@@ -9747,6 +10094,68 @@
     "title": "ScanSetup",
     "type": "object"
    },
+   "ScannerView": {
+    "additionalProperties": false,
+    "properties": {
+     "min": {
+      "default": 0,
+      "enum": [
+       0,
+       40,
+       60,
+       75
+      ],
+      "title": "Min",
+      "type": "integer"
+     },
+     "name": {
+      "maxLength": 60,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     },
+     "signal": {
+      "default": "",
+      "enum": [
+       "",
+       "breakout",
+       "gapper",
+       "golden_cross",
+       "gainer",
+       "prebreakout"
+      ],
+      "title": "Signal",
+      "type": "string"
+     },
+     "size": {
+      "default": 25,
+      "enum": [
+       25,
+       50,
+       100
+      ],
+      "title": "Size",
+      "type": "integer"
+     },
+     "sort": {
+      "default": "score",
+      "enum": [
+       "score",
+       "chg_pct",
+       "gap_pct",
+       "rvol",
+       "prob"
+      ],
+      "title": "Sort",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "ScannerView",
+    "type": "object"
+   },
    "ScoreHistory": {
     "properties": {
      "points": {
@@ -10471,6 +10880,18 @@
       "title": "Risks",
       "type": "array"
      },
+     "rvol": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Relative volume in the displayed market scan",
+      "title": "Rvol"
+     },
      "scan_at": {
       "anyOf": [
        {
@@ -10570,6 +10991,45 @@
     "title": "StockDetail",
     "type": "object"
    },
+   "SymbolSuggestion": {
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "name"
+    ],
+    "title": "SymbolSuggestion",
+    "type": "object"
+   },
+   "SymbolSuggestions": {
+    "properties": {
+     "available": {
+      "title": "Available",
+      "type": "boolean"
+     },
+     "results": {
+      "items": {
+       "$ref": "#/components/schemas/SymbolSuggestion"
+      },
+      "title": "Results",
+      "type": "array"
+     }
+    },
+    "required": [
+     "results",
+     "available"
+    ],
+    "title": "SymbolSuggestions",
+    "type": "object"
+   },
    "SystemStatus": {
     "properties": {
      "label": {
@@ -10593,6 +11053,35 @@
      "label"
     ],
     "title": "SystemStatus",
+    "type": "object"
+   },
+   "TablePreferences": {
+    "additionalProperties": false,
+    "properties": {
+     "columns": {
+      "items": {
+       "enum": [
+        "setup",
+        "spark",
+        "last",
+        "change",
+        "gap",
+        "rvol",
+        "prob"
+       ],
+       "type": "string"
+      },
+      "maxItems": 7,
+      "title": "Columns",
+      "type": "array"
+     },
+     "compact": {
+      "default": false,
+      "title": "Compact",
+      "type": "boolean"
+     }
+    },
+    "title": "TablePreferences",
     "type": "object"
    },
    "Tape": {
@@ -12471,6 +12960,92 @@
     ],
     "title": "WebPushUnsubscribe",
     "type": "object"
+   },
+   "WorkspacePatch": {
+    "additionalProperties": false,
+    "properties": {
+     "custom_views": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/CustomView"
+        },
+        "maxItems": 20,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Custom Views"
+     },
+     "quiet_hours": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/QuietHours"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "scanner_views": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/ScannerView"
+        },
+        "maxItems": 20,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scanner Views"
+     },
+     "table": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TablePreferences"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "title": "WorkspacePatch",
+    "type": "object"
+   },
+   "WorkspacePreferences": {
+    "additionalProperties": false,
+    "properties": {
+     "custom_views": {
+      "items": {
+       "$ref": "#/components/schemas/CustomView"
+      },
+      "maxItems": 20,
+      "title": "Custom Views",
+      "type": "array"
+     },
+     "quiet_hours": {
+      "$ref": "#/components/schemas/QuietHours"
+     },
+     "scanner_views": {
+      "items": {
+       "$ref": "#/components/schemas/ScannerView"
+      },
+      "maxItems": 20,
+      "title": "Scanner Views",
+      "type": "array"
+     },
+     "table": {
+      "$ref": "#/components/schemas/TablePreferences"
+     }
+    },
+    "title": "WorkspacePreferences",
+    "type": "object"
    }
   },
   "securitySchemes": {
@@ -13023,6 +13598,71 @@
      "admin (admins only)"
     ],
     "x-internal": true
+   }
+  },
+  "/v1/admin/requests": {
+   "get": {
+    "operationId": "operations_v1_admin_requests_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "q",
+      "required": false,
+      "schema": {
+       "default": "",
+       "maxLength": 100,
+       "title": "Q",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "problems_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "title": "Problems Only",
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OperationsSnapshot"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Operations",
+    "tags": [
+     "admin (admins only)"
+    ]
    }
   },
   "/v1/admin/signals": {
@@ -13797,6 +14437,93 @@
      }
     ],
     "summary": "Alert Create"
+   }
+  },
+  "/v1/alerts/deliveries": {
+   "get": {
+    "operationId": "deliveries_v1_alerts_deliveries_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Delivery"
+         },
+         "title": "Response Deliveries V1 Alerts Deliveries Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Deliveries"
+   }
+  },
+  "/v1/alerts/deliveries/{delivery_id}/retry": {
+   "post": {
+    "operationId": "retry_delivery_v1_alerts_deliveries__delivery_id__retry_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "delivery_id",
+      "required": true,
+      "schema": {
+       "title": "Delivery Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Delivery"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Retry Delivery"
    }
   },
   "/v1/alerts/events": {
@@ -16139,6 +16866,86 @@
      }
     ],
     "summary": "Change Password"
+   }
+  },
+  "/v1/me/research-preferences": {
+   "get": {
+    "operationId": "get_preferences_v1_me_research_preferences_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkspacePreferences"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Preferences"
+   },
+   "patch": {
+    "operationId": "update_preferences_v1_me_research_preferences_patch",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WorkspacePatch"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkspacePreferences"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Update Preferences"
    }
   },
   "/v1/me/verify-email": {
@@ -19789,6 +20596,55 @@
      }
     ],
     "summary": "Stock Score History"
+   }
+  },
+  "/v1/symbols/search": {
+   "get": {
+    "operationId": "symbols_v1_symbols_search_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "q",
+      "required": true,
+      "schema": {
+       "maxLength": 80,
+       "minLength": 1,
+       "title": "Q",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SymbolSuggestions"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Symbols"
    }
   },
   "/v1/today": {

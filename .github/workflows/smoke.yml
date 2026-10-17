@@ -85,6 +85,7 @@ jobs:
             tests/test_billing_service.py \
             tests/test_api_billing.py \
             tests/test_billing_reliability.py \
+            tests/test_research_workflows.py \
             tests/test_run83_billing_auth.py \
             tests/test_run83_restore_token.py \
             tests/test_run72_pricing.py \

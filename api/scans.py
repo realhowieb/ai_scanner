@@ -278,7 +278,7 @@ def _stock_core(ticker: str) -> Dict[str, Any]:
             quote["last"] = quote["last"] if quote["last"] is not None else _num(r.get("Last"))
             quote["chg_pct"] = quote["chg_pct"] if quote["chg_pct"] is not None else _num(r.get("PctChange"))
         return {"intel": intel, "scan_at": _iso(run["created_at"]) if run else None,
-                "in_latest_scan": bool(rows), "quote": quote}
+                "in_latest_scan": bool(rows), "rvol": _num((current_opp or {}).get("rvol")), "quote": quote}
 
     return stock_cache.get(ticker, load, ttl_s=STOCK_TTL_S, stale_s=STOCK_STALE_S)
 
@@ -291,6 +291,7 @@ def stock_detail(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
     movement = intel.get("movement") or {}
     out = {
         "ticker": ticker,
+        "rvol": core.get("rvol"),
         "scan_at": core["scan_at"],
         "in_latest_scan": core["in_latest_scan"],
         "has_setup": bool(intel.get("has_opportunity")),

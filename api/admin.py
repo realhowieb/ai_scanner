@@ -288,6 +288,10 @@ def providers() -> Dict[str, Any]:
               _cached_probe("fmp", lambda: _probe_earnings("fmp")),
               _cached_probe("finnhub", lambda: _probe_earnings("finnhub")),
               _probe_billing()]
+    from api.operations import record_provider
+
+    for check in checks:
+        record_provider(check["name"], check["status"] == "ok", check.get("ms") or 0)
     return {"checked_at": _iso(dt.datetime.now(dt.timezone.utc)), "checks": checks,
             "earnings_cache": _earnings_cache()}
 

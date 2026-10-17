@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional, TypeVar
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
+from pydantic import BaseModel
 
 from api import models
 from api.deps import _ADMIN, _user, current_account
@@ -50,6 +51,20 @@ def register(app: FastAPI) -> None:
 
     def post(path: str, model: Any, summary: str):
         return app.post(path, response_model=model, tags=[_TAG], openapi_extra=_EXTRA, responses=responses, summary=summary)
+
+    @app.get("/v1/admin/requests", response_model=OperationsSnapshot, responses=_ADMIN, tags=[_TAG])
+    def operations(q: str = Query("", max_length=100), problems_only: bool = False, _a: Dict[str, Any] = Depends(_admin)):
+        from api import ratelimit
+        from api.operations import snapshot
+        ratelimit.check("operations", _user(_a))
+        from api.scan_jobs import _execute
+        out = snapshot(q[:100], problems_only)
+        try:
+            out["scan_queue"] = _execute("SELECT status, COUNT(*) AS count FROM api_scan_jobs "
+                                         "WHERE status IN ('queued', 'running') GROUP BY status", (), fetch=True)
+        except Exception:
+            out["scan_queue"] = None
+        return out
 
     @get("/v1/admin/users", models.AdminUsers, "Every account with plan, active, admin and verification status")
     def admin_users(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
@@ -141,3 +156,34 @@ def register(app: FastAPI) -> None:
           "Refresh the earnings calendar now (FMP then Finnhub, in the background)")
     def admin_earnings_refresh(a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
         return _act(lambda: admin.start_earnings_refresh(_user(a)))
+
+
+class RequestDiagnostic(BaseModel):
+    request_id: str
+    method: str
+    route: str
+    status: int
+    ms: float
+    at: str
+
+
+class ProviderDiagnostic(BaseModel):
+    name: str
+    ok: bool
+    ms: float
+    at: str
+
+
+class QueueCount(BaseModel):
+    status: str
+    count: int
+
+
+class OperationsSnapshot(BaseModel):
+    scope: str
+    requests: list[RequestDiagnostic]
+    providers: list[ProviderDiagnostic]
+    total: int
+    errors: int
+    slow: int
+    scan_queue: list[QueueCount] | None = None
