@@ -60,7 +60,9 @@ def current_account(request: Request,
     expected = tokens.credential_version(username, account.get("password") or "", settings)
     if not hmac.compare_digest(claims["cv"], expected):
         raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
-    return {k: v for k, v in account.items() if k != "password"}
+    from api import referrals
+
+    return referrals.apply_to_account({k: v for k, v in account.items() if k != "password"})
 
 
 # Compatibility cache for non-authorizing callers; current_account bypasses it.
@@ -155,7 +157,8 @@ def _me_out(account: Dict[str, Any]) -> Dict[str, Any]:
             "plan": ent["tier"], "plan_label": plan_label(ent["tier"]),
             "is_admin": ent["is_admin"], "alert_limit": ent["alert_limit"],
             "email_verified": acct.is_verified(str(account["username"]).strip().lower()),
-            "entitlements": ent["entitlements"]}
+            "entitlements": ent["entitlements"],
+            "pro_trial_until": account.get("pro_trial_until")}
 
 
 def _user(account: Dict[str, Any]) -> str:

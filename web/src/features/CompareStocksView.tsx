@@ -48,7 +48,7 @@ export function CompareStocksView() {
   const raw = params.get("symbols") ?? "";
   const symbols = compareSymbols(raw);
   const valid = symbols.length >= 2 && symbols.length <= 4 && symbols.every((s) => VALID.test(s));
-  const [input, setInput] = useState(raw);
+  const [input, setInput] = useState(symbols.length === 1 ? `${symbols[0]}, ` : raw); // one name (from a stock page): add more
   const [bad, setBad] = useState(false);
   const [loaded, setLoaded] = useState<Record<string, Stock>>({});
   const report = useCallback((ticker: string, stock: Stock) => setLoaded((old) => old[ticker] === stock ? old : { ...old, [ticker]: stock }), []);
@@ -61,7 +61,7 @@ export function CompareStocksView() {
       if (list.length < 2 || list.length > 4 || !list.every((s) => VALID.test(s))) { setBad(true); return; }
       setBad(false); router.replace(`/stocks/compare?symbols=${encodeURIComponent(list.join(","))}`);
     }}><label className="field">Tickers<input value={input} onChange={(e) => setInput(e.target.value)} maxLength={100} placeholder="AAPL, MSFT" /></label><button className="btn btn-primary">Compare</button></form>
-    {(bad || (raw && !valid)) && <p className="form-error" role="alert">Enter 2–4 different ticker symbols.</p>}
+    {(bad || (raw && !valid && symbols.length !== 1)) && <p className="form-error" role="alert">Enter 2–4 different ticker symbols.</p>}
     {valid && <><p className="cap">{complete ? differences.length ? `Highlighted differences: ${differences.map((key) => METRICS[key]).join(", ")}.` : "These summary metrics match across the selected stocks." : "Differences appear once all selected stocks have loaded."}</p><div className="stock-comparison">{symbols.map((ticker) => <ComparedStock key={ticker} ticker={ticker} differences={differences} report={report} />)}</div></>}
   </div>;
 }

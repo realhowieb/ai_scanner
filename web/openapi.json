@@ -5160,6 +5160,250 @@
     "title": "JournalCreate",
     "type": "object"
    },
+   "JournalCurvePoint": {
+    "properties": {
+     "closed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Closed At"
+     },
+     "cumulative_pnl": {
+      "title": "Cumulative Pnl",
+      "type": "number"
+     },
+     "pnl": {
+      "title": "Pnl",
+      "type": "number"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ticker"
+     }
+    },
+    "required": [
+     "pnl",
+     "cumulative_pnl"
+    ],
+    "title": "JournalCurvePoint",
+    "type": "object"
+   },
+   "JournalGroup": {
+    "properties": {
+     "avg_return_pct": {
+      "title": "Avg Return Pct",
+      "type": "number"
+     },
+     "count": {
+      "title": "Count",
+      "type": "integer"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "pnl": {
+      "title": "Pnl",
+      "type": "number"
+     },
+     "win_rate": {
+      "title": "Win Rate",
+      "type": "number"
+     },
+     "wins": {
+      "title": "Wins",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "label",
+     "count",
+     "wins",
+     "win_rate",
+     "avg_return_pct",
+     "pnl"
+    ],
+    "title": "JournalGroup",
+    "type": "object"
+   },
+   "JournalInsightSummary": {
+    "properties": {
+     "avg_hold_days": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Hold Days"
+     },
+     "avg_loss_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Loss Pct"
+     },
+     "avg_return_pct": {
+      "title": "Avg Return Pct",
+      "type": "number"
+     },
+     "avg_win_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Win Pct"
+     },
+     "best": {
+      "$ref": "#/components/schemas/JournalPick"
+     },
+     "losses": {
+      "title": "Losses",
+      "type": "integer"
+     },
+     "profit_factor": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Gross $ won / gross $ lost; null with no losses",
+      "title": "Profit Factor"
+     },
+     "total_pnl": {
+      "title": "Total Pnl",
+      "type": "number"
+     },
+     "win_rate": {
+      "title": "Win Rate",
+      "type": "number"
+     },
+     "wins": {
+      "title": "Wins",
+      "type": "integer"
+     },
+     "worst": {
+      "$ref": "#/components/schemas/JournalPick"
+     }
+    },
+    "required": [
+     "wins",
+     "losses",
+     "win_rate",
+     "avg_return_pct",
+     "total_pnl",
+     "best",
+     "worst"
+    ],
+    "title": "JournalInsightSummary",
+    "type": "object"
+   },
+   "JournalInsights": {
+    "properties": {
+     "by_hold": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/JournalGroup"
+      },
+      "title": "By Hold",
+      "type": "array"
+     },
+     "by_score": {
+      "default": [],
+      "description": "By HSF Score when the trade was logged",
+      "items": {
+       "$ref": "#/components/schemas/JournalGroup"
+      },
+      "title": "By Score",
+      "type": "array"
+     },
+     "by_source": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/JournalGroup"
+      },
+      "title": "By Source",
+      "type": "array"
+     },
+     "closed": {
+      "title": "Closed",
+      "type": "integer"
+     },
+     "curve": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/JournalCurvePoint"
+      },
+      "title": "Curve",
+      "type": "array"
+     },
+     "summary": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/JournalInsightSummary"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "closed"
+    ],
+    "title": "JournalInsights",
+    "type": "object"
+   },
+   "JournalPick": {
+    "properties": {
+     "return_pct": {
+      "title": "Return Pct",
+      "type": "number"
+     },
+     "ticker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ticker"
+     }
+    },
+    "required": [
+     "return_pct"
+    ],
+    "title": "JournalPick",
+    "type": "object"
+   },
    "JournalTrade": {
     "properties": {
      "closed_at": {
@@ -5641,6 +5885,18 @@
       "description": "Customer-facing name, e.g. Starter, Pro",
       "title": "Plan Label",
       "type": "string"
+     },
+     "pro_trial_until": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Set while a free Pro month from an invite is running",
+      "title": "Pro Trial Until"
      }
     },
     "required": [
@@ -8668,6 +8924,24 @@
     "title": "PasswordChangeBody",
     "type": "object"
    },
+   "PerfPick": {
+    "properties": {
+     "change_pct": {
+      "title": "Change Pct",
+      "type": "number"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "change_pct"
+    ],
+    "title": "PerfPick",
+    "type": "object"
+   },
    "PlanRow": {
     "properties": {
      "basic": {
@@ -9141,6 +9415,55 @@
      "scans"
     ],
     "title": "Recap",
+    "type": "object"
+   },
+   "Referrals": {
+    "properties": {
+     "code": {
+      "description": "Your invite code",
+      "title": "Code",
+      "type": "string"
+     },
+     "path": {
+      "description": "Sign-up path with your code, e.g. /signup?ref=abc23def",
+      "title": "Path",
+      "type": "string"
+     },
+     "pro_trial_until": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pro Trial Until"
+     },
+     "reward_days": {
+      "description": "Days of Pro each of you gets per verified invite (0 = no trial right now)",
+      "title": "Reward Days",
+      "type": "integer"
+     },
+     "signed_up": {
+      "description": "Accounts created with your link",
+      "title": "Signed Up",
+      "type": "integer"
+     },
+     "verified": {
+      "description": "Of those, accounts that confirmed their email (each earned you both a trial)",
+      "title": "Verified",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "code",
+     "path",
+     "signed_up",
+     "verified",
+     "reward_days"
+    ],
+    "title": "Referrals",
     "type": "object"
    },
    "RefreshBody": {
@@ -10195,6 +10518,134 @@
      "ticker"
     ],
     "title": "ScoreHistory",
+    "type": "object"
+   },
+   "ScoreMover": {
+    "properties": {
+     "change": {
+      "description": "score - previous_score",
+      "title": "Change",
+      "type": "integer"
+     },
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "previous_rank": {
+      "title": "Previous Rank",
+      "type": "integer"
+     },
+     "previous_score": {
+      "description": "HSF Score in the scan before",
+      "title": "Previous Score",
+      "type": "integer"
+     },
+     "rank": {
+      "title": "Rank",
+      "type": "integer"
+     },
+     "score": {
+      "description": "HSF Score in the latest scan",
+      "title": "Score",
+      "type": "integer"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "score",
+     "previous_score",
+     "change",
+     "rank",
+     "previous_rank"
+    ],
+    "title": "ScoreMover",
+    "type": "object"
+   },
+   "ScoreMovers": {
+    "properties": {
+     "falling": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/ScoreMover"
+      },
+      "title": "Falling",
+      "type": "array"
+     },
+     "max_results": {
+      "description": "The plan's Scanner row cap; movers stay inside it",
+      "title": "Max Results",
+      "type": "integer"
+     },
+     "previous_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The scan it is compared with",
+      "title": "Previous Scan At"
+     },
+     "rising": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/ScoreMover"
+      },
+      "title": "Rising",
+      "type": "array"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The latest full-market scan",
+      "title": "Scan At"
+     }
+    },
+    "required": [
+     "max_results"
+    ],
+    "title": "ScoreMovers",
     "type": "object"
    },
    "ScorePoint": {
@@ -12634,6 +13085,258 @@
      "ticker"
     ],
     "title": "WatchlistItemDetail",
+    "type": "object"
+   },
+   "WatchlistPerfItem": {
+    "properties": {
+     "added_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Added At"
+     },
+     "base_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Day of the starting price",
+      "title": "Base Date"
+     },
+     "base_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Base Price"
+     },
+     "base_source": {
+      "anyOf": [
+       {
+        "enum": [
+         "saved",
+         "close"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "saved: the price stored when added; close: the last daily close at that time",
+      "title": "Base Source"
+     },
+     "benchmark_change_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "SPY over the same span",
+      "title": "Benchmark Change Pct"
+     },
+     "change_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Change Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "last_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Date"
+     },
+     "sessions": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Trading sessions since the starting price",
+      "title": "Sessions"
+     },
+     "since_first_bar": {
+      "default": false,
+      "description": "Added before the year of history: measured from its first bar",
+      "title": "Since First Bar",
+      "type": "boolean"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "vs_benchmark": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "change_pct - benchmark_change_pct, in points",
+      "title": "Vs Benchmark"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "WatchlistPerfItem",
+    "type": "object"
+   },
+   "WatchlistPerfSummary": {
+    "properties": {
+     "avg_change_pct": {
+      "title": "Avg Change Pct",
+      "type": "number"
+     },
+     "beat_benchmark": {
+      "title": "Beat Benchmark",
+      "type": "integer"
+     },
+     "best": {
+      "$ref": "#/components/schemas/PerfPick"
+     },
+     "compared": {
+      "title": "Compared",
+      "type": "integer"
+     },
+     "count": {
+      "title": "Count",
+      "type": "integer"
+     },
+     "down": {
+      "title": "Down",
+      "type": "integer"
+     },
+     "median_change_pct": {
+      "title": "Median Change Pct",
+      "type": "number"
+     },
+     "up": {
+      "title": "Up",
+      "type": "integer"
+     },
+     "worst": {
+      "$ref": "#/components/schemas/PerfPick"
+     }
+    },
+    "required": [
+     "count",
+     "up",
+     "down",
+     "avg_change_pct",
+     "median_change_pct",
+     "beat_benchmark",
+     "compared",
+     "best",
+     "worst"
+    ],
+    "title": "WatchlistPerfSummary",
+    "type": "object"
+   },
+   "WatchlistPerformance": {
+    "properties": {
+     "as_of": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Latest daily bar used",
+      "title": "As Of"
+     },
+     "benchmark": {
+      "default": "SPY",
+      "title": "Benchmark",
+      "type": "string"
+     },
+     "items": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/WatchlistPerfItem"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "summary": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/WatchlistPerfSummary"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "watchlist_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Watchlist Id"
+     }
+    },
+    "title": "WatchlistPerformance",
     "type": "object"
    },
    "WatchlistRef": {
@@ -15402,7 +16105,7 @@
   },
   "/v1/auth/verify-email": {
    "post": {
-    "description": "Confirm an email address with the token from the verification link.",
+    "description": "Confirm an email address with the token from the verification link. An account that\nsigned up with an invite link starts the free Pro month for both people here.",
     "operationId": "verify_email_v1_auth_verify_email_post",
     "requestBody": {
      "content": {
@@ -16341,6 +17044,46 @@
     "summary": "Log a trade (Pro)"
    }
   },
+  "/v1/journal/insights": {
+   "get": {
+    "description": "Closed-trade analytics: win rate, average win and loss, profit factor, a running P&L\ncurve, and results by HSF Score at entry, holding time and source.",
+    "operationId": "journal_insights_v1_journal_insights_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/JournalInsights"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Journal insights (Pro)"
+   }
+  },
   "/v1/journal/{trade_id}": {
    "delete": {
     "operationId": "journal_delete_v1_journal__trade_id__delete",
@@ -16894,6 +17637,46 @@
      }
     ],
     "summary": "Change Password"
+   }
+  },
+  "/v1/me/referrals": {
+   "get": {
+    "description": "Your invite code and sign-up link, how many people joined with it, and your free Pro\ntime. Each friend who signs up with the link and confirms their email gives you both\n`reward_days` of Pro.",
+    "operationId": "my_referrals_v1_me_referrals_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Referrals"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "503": {
+      "description": "Invites are switched off or storage is unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Your invite link"
    }
   },
   "/v1/me/research-preferences": {
@@ -20291,6 +21074,57 @@
     "summary": "Scans Latest"
    }
   },
+  "/v1/scans/latest/movers": {
+   "get": {
+    "description": "Setups ranked in both of the two latest full-market scans whose HSF Score rose or\nfell the most, within the plan's Scanner row cap.",
+    "operationId": "scans_movers_v1_scans_latest_movers_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 5,
+       "maximum": 10,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ScoreMovers"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Biggest HSF Score moves since the previous scan"
+   }
+  },
   "/v1/scans/{scan_id}": {
    "delete": {
     "description": "Cancel your queued or running scan: it reads `failed` with error \"Cancelled.\" and you\ncan start another at once. A running scan stops at its next progress step. A scan that\nalready finished is returned unchanged.",
@@ -21255,6 +22089,57 @@
      }
     ],
     "summary": "HSF intelligence for every symbol on a watchlist"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}/performance": {
+   "get": {
+    "description": "Each symbol's move from the price when it was added (saved price, else the last daily\nclose at that time) to the latest daily close, next to SPY over the same span. Best first.",
+    "operationId": "watchlist_performance_v1_watchlists__watchlist_id__performance_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WatchlistPerformance"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "How each ticker did since you added it"
    }
   },
   "/v1/watchlists/{watchlist_id}/symbols": {

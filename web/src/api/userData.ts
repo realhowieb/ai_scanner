@@ -13,6 +13,11 @@ export type WatchlistChanges = Schemas["WatchlistChanges"];
 export type AlertRule = Schemas["AlertRule"];
 export type AlertRuleType = Schemas["AlertRuleType"];
 export type AlertRuleCreate = Schemas["AlertRuleCreate"];
+export type AlertRuleUpdate = Schemas["AlertRuleUpdate"];
+export type WatchlistPerformance = Schemas["WatchlistPerformance"];
+export type ScoreMovers = Schemas["ScoreMovers"];
+export type JournalInsights = Schemas["JournalInsights"];
+export type Referrals = Schemas["Referrals"];
 
 const wid = (id: number) => ({ params: { path: { watchlist_id: id } } });
 
@@ -34,6 +39,8 @@ export const watchlists = {
     unwrap(api.GET("/v1/watchlists/{watchlist_id}/intelligence", { ...wid(id), signal })),
   changes: (id: number, signal?: AbortSignal) =>
     unwrap(api.GET("/v1/watchlists/{watchlist_id}/changes", { ...wid(id), signal })),
+  performance: (id: number, signal?: AbortSignal) =>
+    unwrap(api.GET("/v1/watchlists/{watchlist_id}/performance", { ...wid(id), signal })),
   setNote: (id: number, ticker: string, note: string) =>
     unwrap(api.PATCH("/v1/watchlists/{watchlist_id}/tickers/{ticker}", {
       params: { path: { watchlist_id: id, ticker } }, body: { note: note.trim() ? note : null },
@@ -55,7 +62,15 @@ export const alertRules = {
   list: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/rules", { signal })),
   types: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/rules/types", { signal })),
   create: (body: AlertRuleCreate) => unwrap(api.POST("/v1/alerts/rules", { body })),
+  update: (id: number, body: AlertRuleUpdate) =>
+    unwrap(api.PATCH("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } }, body })),
   remove: (id: number) => unwrap(api.DELETE("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } } })),
+};
+
+export const insights = {
+  movers: (signal?: AbortSignal) => unwrap(api.GET("/v1/scans/latest/movers", { params: { query: { limit: 5 } }, signal })),
+  journal: (signal?: AbortSignal) => unwrap(api.GET("/v1/journal/insights", { signal })),
+  referrals: (signal?: AbortSignal) => unwrap(api.GET("/v1/me/referrals", { signal })),
 };
 
 export const emailPrefs = {

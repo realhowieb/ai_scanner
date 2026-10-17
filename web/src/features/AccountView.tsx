@@ -16,9 +16,11 @@ import { Card, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/co
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { beginBilling } from "@/lib/billingReturn";
-import { etTime } from "@/lib/format";
+import { etDate, etTime } from "@/lib/format";
 import { FEATURE_PLAN, signOut, useSession } from "@/session/SessionProvider";
 import type { Me } from "@/session/SessionProvider";
+
+import { InviteFriendCard } from "./InviteFriend";
 
 /** What each entitlement means to a customer. Unknown flags are not shown. */
 export const FEATURE_LABELS: Record<string, string> = {
@@ -95,11 +97,21 @@ function PlanCard({ me }: { me: Me }) {
   });
   const included = Object.keys(FEATURE_LABELS).filter((k) => me.entitlements[k]);
   const locked = Object.keys(FEATURE_LABELS).filter((k) => k in me.entitlements && !me.entitlements[k]);
-  const paid = me.plan === "pro" || me.plan === "premium";
+  const trial = me.pro_trial_until ?? null;
+  const paid = (me.plan === "pro" || me.plan === "premium") && !trial;
   return (
     <Card title="Plan" id="plan" aside={<Pill tone={paid ? "gold" : undefined}>{me.plan_label}</Pill>}>
       {me.plan === "admin" ? (
         <p className="body-sm">Admin account. Every feature is on and billing doesn&apos;t apply.</p>
+      ) : trial ? (
+        <div className="stack-sm">
+          <p className="notice" role="status">You have free Pro from an invite until {etDate(trial)}. After that your account goes back to Starter unless you upgrade. Nothing is charged.</p>
+          <BillingIntervalToggle />
+          <div className="row-actions">
+            <UpgradeButton plan="pro" label="Keep Pro" />
+            <UpgradeButton plan="premium" />
+          </div>
+        </div>
       ) : (
         <div className="stack-sm">
           <BillingIntervalToggle />
@@ -339,6 +351,7 @@ export function AccountView() {
         <div className="col-main">
           <PlanCard me={me} />
           <EmailCard me={me} />
+          <InviteFriendCard />
           <p className="cap">Alerts and watchlists have their own pages: <Link href="/alerts">Alerts</Link> · <Link href="/watchlists">Watchlists</Link>.</p>
         </div>
         <div className="col-side">

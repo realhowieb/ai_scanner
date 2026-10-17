@@ -8,14 +8,38 @@ const KEY = "hsf-attribution";
 const KEEP_MS = 30 * 24 * 3600 * 1000;
 const UTM = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"] as const;
 
-export type Attribution = Partial<Record<(typeof UTM)[number] | "referrer", string>>;
+export type Attribution = Partial<Record<(typeof UTM)[number] | "referrer" | "ref", string>>;
+
+const REF_RE = /^[a-z0-9]{4,32}$/;
+
+/** An invite code (?ref=) on this page; it wins over an older first visit, so the friend who
+ * sent the latest link gets the credit. */
+function inviteCode(href: string): string | null {
+  try {
+    const v = (new URL(href).searchParams.get("ref") || "").trim().toLowerCase();
+    return REF_RE.test(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Read utm tags and an outside referrer from this page; the first visit that has any is kept for 30 days. */
 export function captureAttribution(href = typeof window === "undefined" ? "" : window.location.href,
   referrer = typeof document === "undefined" ? "" : document.referrer): Attribution {
   const kept = storedAttribution();
-  if (kept) return kept;
-  const found: Attribution = {};
+  const ref = inviteCode(href);
+  if (kept) {
+    if (!ref || kept.ref === ref) return kept;
+    const merged = { ...kept, ref };
+    try {
+      const raw = JSON.parse(localStorage.getItem(KEY) || "null") as { at?: number } | null;
+      localStorage.setItem(KEY, JSON.stringify({ at: raw?.at ?? Date.now(), attribution: merged }));
+    } catch {
+      /* private mode */
+    }
+    return merged;
+  }
+  const found: Attribution = ref ? { ref } : {};
   try {
     const url = new URL(href);
     for (const k of UTM) {

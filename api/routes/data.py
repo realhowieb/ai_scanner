@@ -114,6 +114,16 @@ def register(app: FastAPI) -> None:
         return latest_scan(ent["entitlements"], ent["tier"], limit=limit, offset=offset,
                            min_score=min_score, signal=signal, sort=sort)
 
+    @app.get("/v1/scans/latest/movers", response_model=models.ScoreMovers, responses=_AUTH,
+             summary="Biggest HSF Score moves since the previous scan")
+    def scans_movers(account: Dict[str, Any] = Depends(current_account),
+                     limit: int = Query(5, ge=1, le=10)) -> Dict[str, Any]:
+        """Setups ranked in both of the two latest full-market scans whose HSF Score rose or
+        fell the most, within the plan's Scanner row cap."""
+        from api.scans import score_movers
+
+        return json_safe(score_movers(entitlements_for(account)["tier"], limit=limit))
+
     @app.get("/v1/sparklines", response_model=models.Sparklines, responses=_AUTH, summary="Daily sparklines")
     def sparklines(account: Dict[str, Any] = Depends(current_account),
                    symbols: str = Query(..., max_length=2000, description="Comma-separated; the first 50 are returned")
@@ -214,6 +224,16 @@ def register(app: FastAPI) -> None:
         user = _user(account)
         wl = user_data.get_watchlist(user, watchlist_id)
         return json_safe(watchlist_intel.changes(user, wl, entitlements_for(account)["entitlements"]))
+
+    @app.get("/v1/watchlists/{watchlist_id}/performance", response_model=models.WatchlistPerformance,
+             responses=_OWNED, summary="How each ticker did since you added it")
+    def watchlist_performance(watchlist_id: int, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Each symbol's move from the price when it was added (saved price, else the last daily
+        close at that time) to the latest daily close, next to SPY over the same span. Best first."""
+        from api import watchlist_perf
+
+        wl = user_data.get_watchlist(_user(account), watchlist_id)
+        return json_safe(watchlist_perf.performance(wl))
 
     @app.post("/v1/watchlists/{watchlist_id}/tickers", response_model=models.TickersResult, responses=_OWNED)
     def watchlist_add(watchlist_id: int, body: TickersBody,

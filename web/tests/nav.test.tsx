@@ -31,7 +31,7 @@ afterEach(() => vi.unstubAllGlobals());
 const APP = join(__dirname, "..", "src", "app");
 /** A route exists when a page file serves it (route groups like (app) don't add a segment). */
 function routeExists(href: string): boolean {
-  const segs = href.split("?")[0]!.split("/").filter(Boolean);
+  const segs = href.split(/[?#]/)[0]!.split("/").filter(Boolean);
   return [join(APP, ...segs, "page.tsx"), join(APP, "(app)", ...segs, "page.tsx")].some(existsSync);
 }
 

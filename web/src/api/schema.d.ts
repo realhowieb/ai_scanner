@@ -763,7 +763,8 @@ export interface paths {
         put?: never;
         /**
          * Verify Email
-         * @description Confirm an email address with the token from the verification link.
+         * @description Confirm an email address with the token from the verification link. An account that
+         *     signed up with an invite link starts the free Pro month for both people here.
          */
         post: operations["verify_email_v1_auth_verify_email_post"];
         delete?: never;
@@ -1067,6 +1068,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/journal/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Journal insights (Pro)
+         * @description Closed-trade analytics: win rate, average win and loss, profit factor, a running P&L
+         *     curve, and results by HSF Score at entry, holding time and source.
+         */
+        get: operations["journal_insights_v1_journal_insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/journal/{trade_id}": {
         parameters: {
             query?: never;
@@ -1251,6 +1273,28 @@ export interface paths {
          *     device gets a new token pair.
          */
         post: operations["change_password_v1_me_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/referrals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your invite link
+         * @description Your invite code and sign-up link, how many people joined with it, and your free Pro
+         *     time. Each friend who signs up with the link and confirms their email gives you both
+         *     `reward_days` of Pro.
+         */
+        get: operations["my_referrals_v1_me_referrals_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1805,6 +1849,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/scans/latest/movers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Biggest HSF Score moves since the previous scan
+         * @description Setups ranked in both of the two latest full-market scans whose HSF Score rose or
+         *     fell the most, within the plan's Scanner row cap.
+         */
+        get: operations["scans_movers_v1_scans_latest_movers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/scans/{scan_id}": {
         parameters: {
             query?: never;
@@ -2081,6 +2146,27 @@ export interface paths {
          *     source are null and listed in `unavailable_fields`.
          */
         get: operations["watchlist_intelligence_v1_watchlists__watchlist_id__intelligence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/watchlists/{watchlist_id}/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How each ticker did since you added it
+         * @description Each symbol's move from the price when it was added (saved price, else the last daily
+         *     close at that time) to the latest daily close, next to SPY over the same span. Best first.
+         */
+        get: operations["watchlist_performance_v1_watchlists__watchlist_id__performance_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3952,6 +4038,92 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** JournalCurvePoint */
+        JournalCurvePoint: {
+            /** Closed At */
+            closed_at?: string | null;
+            /** Cumulative Pnl */
+            cumulative_pnl: number;
+            /** Pnl */
+            pnl: number;
+            /** Ticker */
+            ticker?: string | null;
+        };
+        /** JournalGroup */
+        JournalGroup: {
+            /** Avg Return Pct */
+            avg_return_pct: number;
+            /** Count */
+            count: number;
+            /** Label */
+            label: string;
+            /** Pnl */
+            pnl: number;
+            /** Win Rate */
+            win_rate: number;
+            /** Wins */
+            wins: number;
+        };
+        /** JournalInsightSummary */
+        JournalInsightSummary: {
+            /** Avg Hold Days */
+            avg_hold_days?: number | null;
+            /** Avg Loss Pct */
+            avg_loss_pct?: number | null;
+            /** Avg Return Pct */
+            avg_return_pct: number;
+            /** Avg Win Pct */
+            avg_win_pct?: number | null;
+            best: components["schemas"]["JournalPick"];
+            /** Losses */
+            losses: number;
+            /**
+             * Profit Factor
+             * @description Gross $ won / gross $ lost; null with no losses
+             */
+            profit_factor?: number | null;
+            /** Total Pnl */
+            total_pnl: number;
+            /** Win Rate */
+            win_rate: number;
+            /** Wins */
+            wins: number;
+            worst: components["schemas"]["JournalPick"];
+        };
+        /** JournalInsights */
+        JournalInsights: {
+            /**
+             * By Hold
+             * @default []
+             */
+            by_hold: components["schemas"]["JournalGroup"][];
+            /**
+             * By Score
+             * @description By HSF Score when the trade was logged
+             * @default []
+             */
+            by_score: components["schemas"]["JournalGroup"][];
+            /**
+             * By Source
+             * @default []
+             */
+            by_source: components["schemas"]["JournalGroup"][];
+            /** Closed */
+            closed: number;
+            /**
+             * Curve
+             * @default []
+             */
+            curve: components["schemas"]["JournalCurvePoint"][];
+            summary?: components["schemas"]["JournalInsightSummary"] | null;
+        };
+        /** JournalPick */
+        JournalPick: {
+            /** Return Pct */
+            return_pct: number;
+            /** Ticker */
+            ticker?: string | null;
+        };
         /** JournalTrade */
         JournalTrade: {
             /** Closed At */
@@ -4131,6 +4303,11 @@ export interface components {
              * @description Customer-facing name, e.g. Starter, Pro
              */
             plan_label: string;
+            /**
+             * Pro Trial Until
+             * @description Set while a free Pro month from an invite is running
+             */
+            pro_trial_until?: string | null;
         };
         /** Message */
         Message: {
@@ -5265,6 +5442,13 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** PerfPick */
+        PerfPick: {
+            /** Change Pct */
+            change_pct: number;
+            /** Ticker */
+            ticker: string;
+        };
         /** PlanRow */
         PlanRow: {
             /**
@@ -5495,6 +5679,36 @@ export interface components {
             standouts: components["schemas"]["Standout"][];
             /** Title */
             title: string;
+        };
+        /** Referrals */
+        Referrals: {
+            /**
+             * Code
+             * @description Your invite code
+             */
+            code: string;
+            /**
+             * Path
+             * @description Sign-up path with your code, e.g. /signup?ref=abc23def
+             */
+            path: string;
+            /** Pro Trial Until */
+            pro_trial_until?: string | null;
+            /**
+             * Reward Days
+             * @description Days of Pro each of you gets per verified invite (0 = no trial right now)
+             */
+            reward_days: number;
+            /**
+             * Signed Up
+             * @description Accounts created with your link
+             */
+            signed_up: number;
+            /**
+             * Verified
+             * @description Of those, accounts that confirmed their email (each earned you both a trial)
+             */
+            verified: number;
         };
         /** RefreshBody */
         RefreshBody: {
@@ -5909,6 +6123,64 @@ export interface components {
             points: components["schemas"]["ScorePoint"][];
             /** Ticker */
             ticker: string;
+        };
+        /** ScoreMover */
+        ScoreMover: {
+            /**
+             * Change
+             * @description score - previous_score
+             */
+            change: number;
+            /** Chg Pct */
+            chg_pct?: number | null;
+            /** Last */
+            last?: number | null;
+            /** Previous Rank */
+            previous_rank: number;
+            /**
+             * Previous Score
+             * @description HSF Score in the scan before
+             */
+            previous_score: number;
+            /** Rank */
+            rank: number;
+            /**
+             * Score
+             * @description HSF Score in the latest scan
+             */
+            score: number;
+            /** Setup */
+            setup?: string | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /** ScoreMovers */
+        ScoreMovers: {
+            /**
+             * Falling
+             * @default []
+             */
+            falling: components["schemas"]["ScoreMover"][];
+            /**
+             * Max Results
+             * @description The plan's Scanner row cap; movers stay inside it
+             */
+            max_results: number;
+            /**
+             * Previous Scan At
+             * @description The scan it is compared with
+             */
+            previous_scan_at?: string | null;
+            /**
+             * Rising
+             * @default []
+             */
+            rising: components["schemas"]["ScoreMover"][];
+            /**
+             * Scan At
+             * @description The latest full-market scan
+             */
+            scan_at?: string | null;
         };
         /** ScorePoint */
         ScorePoint: {
@@ -6865,6 +7137,94 @@ export interface components {
             price_when_added?: number | null;
             /** Ticker */
             ticker: string;
+        };
+        /** WatchlistPerfItem */
+        WatchlistPerfItem: {
+            /** Added At */
+            added_at?: string | null;
+            /**
+             * Base Date
+             * @description Day of the starting price
+             */
+            base_date?: string | null;
+            /** Base Price */
+            base_price?: number | null;
+            /**
+             * Base Source
+             * @description saved: the price stored when added; close: the last daily close at that time
+             */
+            base_source?: ("saved" | "close") | null;
+            /**
+             * Benchmark Change Pct
+             * @description SPY over the same span
+             */
+            benchmark_change_pct?: number | null;
+            /** Change Pct */
+            change_pct?: number | null;
+            /** Last */
+            last?: number | null;
+            /** Last Date */
+            last_date?: string | null;
+            /**
+             * Sessions
+             * @description Trading sessions since the starting price
+             */
+            sessions?: number | null;
+            /**
+             * Since First Bar
+             * @description Added before the year of history: measured from its first bar
+             * @default false
+             */
+            since_first_bar: boolean;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Vs Benchmark
+             * @description change_pct - benchmark_change_pct, in points
+             */
+            vs_benchmark?: number | null;
+        };
+        /** WatchlistPerfSummary */
+        WatchlistPerfSummary: {
+            /** Avg Change Pct */
+            avg_change_pct: number;
+            /** Beat Benchmark */
+            beat_benchmark: number;
+            best: components["schemas"]["PerfPick"];
+            /** Compared */
+            compared: number;
+            /** Count */
+            count: number;
+            /** Down */
+            down: number;
+            /** Median Change Pct */
+            median_change_pct: number;
+            /** Up */
+            up: number;
+            worst: components["schemas"]["PerfPick"];
+        };
+        /** WatchlistPerformance */
+        WatchlistPerformance: {
+            /**
+             * As Of
+             * @description Latest daily bar used
+             */
+            as_of?: string | null;
+            /**
+             * Benchmark
+             * @default SPY
+             */
+            benchmark: string;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["WatchlistPerfItem"][];
+            /** Name */
+            name?: string | null;
+            summary?: components["schemas"]["WatchlistPerfSummary"] | null;
+            /** Watchlist Id */
+            watchlist_id?: number | null;
         };
         /** WatchlistRef */
         WatchlistRef: {
@@ -9955,6 +10315,49 @@ export interface operations {
             };
         };
     };
+    journal_insights_v1_journal_insights_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalInsights"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     journal_delete_v1_journal__trade_id__delete: {
         parameters: {
             query?: never;
@@ -10520,6 +10923,49 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
+            };
+        };
+    };
+    my_referrals_v1_me_referrals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Referrals"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Invites are switched off or storage is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -12299,6 +12745,44 @@ export interface operations {
             };
         };
     };
+    scans_movers_v1_scans_latest_movers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreMovers"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     scan_get_v1_scans__scan_id__get: {
         parameters: {
             query?: never;
@@ -13065,6 +13549,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatchlistIntelligence"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    watchlist_performance_v1_watchlists__watchlist_id__performance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistPerformance"];
                 };
             };
             /** @description Not signed in */
