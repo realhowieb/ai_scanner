@@ -590,7 +590,10 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 .doc-section { margin-top: 12px; }
 .wl-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
 .demo-page .hero { max-width: 820px; }
-.demo-dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, .9fr); }
+.demo-dashboard { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .9fr); gap: 20px; align-items: start; }
+.demo-primary, .demo-secondary { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.demo-dashboard .card { min-width: 0; overflow-wrap: anywhere; }
+.demo-dashboard .row { flex-wrap: wrap; }
 .demo-table { display: grid; gap: 0; border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
 .demo-row { display: grid; grid-template-columns: .8fr 1fr minmax(140px, 1.2fr) .7fr .55fr; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line-soft); }
 .demo-row:first-child { border-top: 0; }
@@ -752,4 +755,31 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .stock-comparison { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 12px; }
   .stock-comparison > .card { flex: 0 0 85%; scroll-snap-align: start; }
   .saved-views .row-actions { align-items: stretch; }
+}
+
+/* Public entry: show concrete evidence before the longer product tour. */
+.hero.hero-with-preview { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(290px, 1fr); gap: 28px; max-width: none; align-items: center; }
+.hero-with-preview .hero-title { font-size: clamp(32px, 4.6vw, 48px); }
+.hero-signin { color: var(--text-2); padding: 10px 4px; }
+.sample-preview { gap: 12px; min-width: 0; }
+.sample-facts { display: flex; gap: 24px; margin: 0; }
+.sample-facts dt { font-size: 12px; color: var(--text-2); }
+.sample-facts dd { margin: 3px 0 0; font-family: var(--font-mono); }
+.sample-preview .cap { color: var(--text-2); }
+.sample-review-link { font-size: 14px; font-weight: 600; min-height: 40px; display: inline-flex; align-items: center; }
+.demo-page .demo-intro { max-width: none; }
+.demo-results { table-layout: auto; }
+.demo-results td, .demo-results th { white-space: normal; }
+.demo-results a[aria-current="true"] { text-decoration: underline; text-underline-offset: 4px; }
+.password-guidance { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.password-guidance p { flex: 1 1 220px; }
+.password-guidance .btn { min-height: 44px; flex: 0 0 auto; }
+.login .check { min-height: 44px; padding: 8px 10px; }
+.login .check input { flex: 0 0 18px; }
+@media (max-width: 760px) {
+  .hero.hero-with-preview { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-top: 20px; }
+  .hero-with-preview .hero-title { font-size: clamp(30px, 6vw, 38px); }
+  .sample-preview { padding: 16px; }
+  .demo-results td, .demo-results th { padding: 10px 8px; }
+  .demo-results .track { min-width: 44px; }
 }
