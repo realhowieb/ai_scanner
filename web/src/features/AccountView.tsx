@@ -10,6 +10,7 @@ import type { FormEvent } from "react";
 import { account } from "@/api/account";
 import type { EmailPrefs } from "@/api/account";
 import { Dialog } from "@/components/Dialog";
+import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
 import { Card, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
@@ -43,6 +44,7 @@ const PREFS: { key: keyof EmailPrefs; label: string; note: string }[] = [
 ];
 
 function PlanCard({ me }: { me: Me }) {
+  const [interval] = useBillingInterval();
   const { syncBilling, billingBusy, billingStatus, billingError } = useSession();
   const portal = useAction();
   const open = (flow?: "cancel") => void portal.run(async () => {
@@ -59,14 +61,20 @@ function PlanCard({ me }: { me: Me }) {
       {me.plan === "admin" ? (
         <p className="body-sm">Admin account. Every feature is on and billing doesn&apos;t apply.</p>
       ) : (
-        <div className="row-actions">
-          {me.plan === "basic" && <UpgradeButton plan="pro" />}
-          {me.plan !== "premium" && <UpgradeButton plan="premium" />}
-          {paid && (
-            <button type="button" className="btn" disabled={portal.busy} onClick={() => open()}>
-              {portal.busy ? "Opening…" : "Manage subscription"}
-            </button>
-          )}
+        <div className="stack-sm">
+          <BillingIntervalToggle />
+          <div className="row-actions">
+            {me.plan === "basic" && <UpgradeButton plan="pro" />}
+            {me.plan !== "premium" && <UpgradeButton plan="premium" />}
+            {(me.plan === "pro" || me.plan === "premium") && <UpgradeButton plan={me.plan}
+              label={`Choose ${me.plan_label} ${interval === "year" ? "yearly" : "monthly"}`} />}
+            {paid && (
+              <button type="button" className="btn" disabled={portal.busy} onClick={() => open()}>
+                {portal.busy ? "Opening…" : "Manage subscription"}
+              </button>
+            )}
+          </div>
+          {paid && <p className="cap">To change your billing interval, choose your plan above and confirm the change in Stripe.</p>}
         </div>
       )}
       <ErrorLine error={portal.error} />

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
+import { useBillingInterval } from "@/components/BillingInterval";
+
 import { ApiError, api, unwrap } from "@/api/client";
 import { freshness, etTime } from "@/lib/format";
 import { beginBilling } from "@/lib/billingReturn";
@@ -133,14 +135,15 @@ export function Locked({ title, plan, children }: { title: string; plan: "pro" |
   );
 }
 
-export function UpgradeButton({ plan }: { plan: "pro" | "premium" }) {
+export function UpgradeButton({ plan, label }: { plan: "pro" | "premium"; label?: string }) {
+  const [interval] = useBillingInterval();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<ApiError | null>(null);
   const go = async () => {
     setBusy(true);
     setErr(null);
     try {
-      const link = await unwrap(api.POST("/v1/billing/checkout", { body: { plan, interval: "month" } }));
+      const link = await unwrap(api.POST("/v1/billing/checkout", { body: { plan, interval } }));
       beginBilling(readCachedMe()?.plan ?? null, plan);
       window.location.assign(link.url);
     } catch (e) {
@@ -151,8 +154,9 @@ export function UpgradeButton({ plan }: { plan: "pro" | "premium" }) {
   return (
     <div className="upgrade">
       <button type="button" className="btn btn-primary" onClick={go} disabled={busy}>
-        {busy ? "Opening checkout…" : `Upgrade to ${plan === "pro" ? "Pro" : "Premium"}`}
+        {busy ? "Opening checkout…" : label ?? `Upgrade to ${plan === "pro" ? "Pro" : "Premium"}`}
       </button>
+      <p className="cap">{interval === "year" ? "Yearly billing" : "Monthly billing"}</p>
       {err && <p className="cap" role="alert">{err.message}{err.requestId ? ` (support code ${err.requestId})` : ""}</p>}
     </div>
   );
