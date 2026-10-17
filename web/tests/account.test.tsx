@@ -62,6 +62,45 @@ const user = () => userEvent.setup();
 const wrap = (ui: React.ReactNode, m: Schemas["Me"]) => render(<SessionProvider initialMe={m}>{ui}</SessionProvider>);
 
 describe("Account", () => {
+  it("sends the selected yearly interval to checkout", async () => {
+    routes.unshift(on("POST", "/v1/billing/checkout", () => jsonResponse({ url: "https://checkout.stripe.com/yearly", mode: "checkout" })));
+    const u = user();
+    wrap(<AccountView />, me("basic"));
+    expect(screen.getByRole("radio", { name: "Monthly" })).toBeChecked();
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    await u.click(screen.getByRole("button", { name: "Upgrade to Premium" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/yearly"));
+    expect(calls.find((c) => c.path === "/v1/billing/checkout")?.body).toEqual({ plan: "premium", interval: "year" });
+  });
+
+  it("allows an existing Premium subscriber to choose yearly billing for the same plan", async () => {
+    routes.unshift(on("POST", "/v1/billing/checkout", () => jsonResponse({ url: "https://billing.stripe.com/yearly", mode: "portal" })));
+    const u = user();
+    wrap(<AccountView />, me("premium"));
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    await u.click(screen.getByRole("button", { name: "Choose Premium yearly" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://billing.stripe.com/yearly"));
+    expect(calls.find((c) => c.path === "/v1/billing/checkout")?.body).toEqual({ plan: "premium", interval: "year" });
+  });
+
+  it("keeps monthly as the default and explains unavailable yearly checkout without substituting monthly", async () => {
+    routes.unshift(on("POST", "/v1/billing/checkout", (b) => (b as { interval: string }).interval === "year"
+      ? jsonResponse({ detail: "Yearly billing isn't available yet." }, 400)
+      : jsonResponse({ url: "https://checkout.stripe.com/monthly", mode: "checkout" })));
+    const u = user();
+    wrap(<AccountView />, me("basic"));
+    await u.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/monthly"));
+    expect(calls.find((c) => c.path === "/v1/billing/checkout")?.body).toEqual({ plan: "pro", interval: "month" });
+    assign.mockReset();
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    await u.click(screen.getByRole("button", { name: "Upgrade to Premium" }));
+    expect(await screen.findByText("Yearly billing isn't available yet.")).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    expect(calls.filter((c) => c.path === "/v1/billing/checkout").map((c) => c.body)).toEqual([
+      { plan: "pro", interval: "month" }, { plan: "premium", interval: "year" },
+    ]);
+  });
   it("Free: identity, plan from /v1/me, what is included and both upgrades", async () => {
     wrap(<AccountView />, me("basic"));
     expect(screen.getByRole("heading", { name: "Account" })).toBeInTheDocument();

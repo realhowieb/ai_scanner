@@ -108,6 +108,24 @@ describe("landing and pricing", () => {
     expect((await screen.findAllByText("$40/mo")).length).toBeGreaterThan(0);
   });
 
+  it("switches pricing cards and comparison to yearly, and remembers the choice", async () => {
+    serve({ "GET /v1/plans": jsonResponse(PLANS), "POST /v1/events": new Response(null, { status: 202 }) });
+    const u = userEvent.setup();
+    const view = render(<PricingPage />);
+    await screen.findAllByText("$25/mo");
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    expect(screen.getByRole("radio", { name: "Yearly" })).toBeChecked();
+    expect(screen.getAllByText("$250/yr")).toHaveLength(2);
+    expect(screen.getAllByText("$400/yr")).toHaveLength(2);
+    expect(screen.getByRole("table")).toHaveTextContent("$250/yr");
+    view.unmount();
+    render(<PricingPage />);
+    expect(await screen.findByRole("radio", { name: "Yearly" })).toBeChecked();
+    expect(screen.getAllByText("$400/yr")).toHaveLength(2);
+    await u.click(screen.getByRole("radio", { name: "Monthly" }));
+    expect(screen.getAllByText("$25/mo")).toHaveLength(2);
+  });
+
   it("offers a frontend-only demo with sample product state", () => {
     render(<DemoPage />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("See HSF with polished sample data.");

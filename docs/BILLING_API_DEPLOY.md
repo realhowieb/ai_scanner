@@ -78,6 +78,13 @@ suspending the old service.
 
 ## Returning from Stripe on a Mac
 
+Account and Plans & Pricing offer a Monthly / Yearly selector. The choice is
+remembered for this browser session and passed to checkout or the plan-change
+portal. Paid subscribers can also choose their current plan with a different
+interval. Configure both yearly price IDs on the API and include the prices in
+Stripe's portal configuration. Customers confirm the amount and any proration
+in Stripe before the change takes effect.
+
 macOS may open Stripe in Safari outside an installed HSF web app. Embedded API
 sessions return to `/billing/return`, which explains how to switch back or open
 the account in the browser. No Streamlit restore token is added to these web
