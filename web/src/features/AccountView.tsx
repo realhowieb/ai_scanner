@@ -4,7 +4,7 @@
 // existing Stripe flow (checkout / customer portal), email settings, password, sign
 // out and account deletion. Every change is shown only after the server confirms it.
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { account } from "@/api/account";
@@ -45,10 +45,15 @@ const PREFS: { key: keyof EmailPrefs; label: string; note: string }[] = [
 ];
 
 function BillingDetails({ me }: { me: Me }) {
-  const { billingRevision } = useSession();
+  const { billingRevision, reload } = useSession();
   const state = useApi(`billing-status:${me.email}`, (signal) => account.billingStatus(signal), billingRevision);
   const close = useAction();
   const data = state.data;
+  useEffect(() => {
+    // A recovery worker can update the tier while this window is already open.
+    // Reload /me rather than deriving entitlements from billing fields.
+    if (data?.plan && data.plan !== me.plan) reload();
+  }, [data?.plan, me.plan, reload]);
   if (state.error && !data) return <ErrorState error={state.error} onRetry={state.reload} what="billing details" />;
   if (!data) return <Skeleton rows={2} label="Loading billing details" />;
   const cost = data.amount != null && data.currency ? new Intl.NumberFormat("en-US", {

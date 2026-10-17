@@ -63,6 +63,14 @@ const user = () => userEvent.setup();
 const wrap = (ui: React.ReactNode, m: Schemas["Me"]) => render(<SessionProvider initialMe={m}>{ui}</SessionProvider>);
 
 describe("Account", () => {
+  it("refreshes the account tier when billing recovery changed it in the background", async () => {
+    routes.unshift(on("GET", "/v1/billing/status", () => jsonResponse({ status: "canceled", plan: "basic", sync_state: "confirmed", message: "Account is on Starter" })),
+      on("GET", "/v1/me", () => jsonResponse({ ...me("basic"), email: me("premium").email })));
+    wrap(<AccountView />, me("premium"));
+    const plan = screen.getByRole("region", { name: "Plan" });
+    expect(await within(plan).findByText("Starter")).toBeInTheDocument();
+    await waitFor(() => expect(within(plan).queryByRole("button", { name: "Manage subscription" })).not.toBeInTheDocument());
+  });
   it("shows the confirmed billing interval and renewal date independently of the next checkout choice", async () => {
     routes.unshift(on("GET", "/v1/billing/status", () => jsonResponse({ status: "active", plan: "pro", interval: "month",
       amount: 2500, currency: "usd", renewal_at: "2026-11-16T12:00:00Z", checked_at: "2026-10-16T12:00:00Z",
