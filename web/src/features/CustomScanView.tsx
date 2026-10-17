@@ -188,7 +188,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
         onApply={(v) => {
           if (!("universe" in v)) return;
           const allowed = UNIVERSES.find((u) => u.id === v.universe);
-          if ((allowed?.feature && !can(allowed.feature)) || (v.session === "premarket" && !can("can_premarket")) || (v.session === "afterhours" && !can("can_afterhours"))) {
+          if ((allowed?.feature && !can(allowed.feature)) || (v.unusual && !can("can_unusual_volume")) || (v.gap && !can("can_scan_nasdaq")) || (v.session === "premarket" && !can("can_premarket")) || (v.session === "afterhours" && !can("can_afterhours"))) {
             setFormErr("This saved view uses settings outside your current plan. Choose another view or upgrade."); return;
           }
           setUniverse(v.universe ?? "sp500"); setTicker(v.ticker ?? ""); setWatchlistId(v.watchlist_id ? String(v.watchlist_id) : "");

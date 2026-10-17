@@ -3,7 +3,7 @@ import datetime as dt
 import unittest
 from unittest import mock
 
-from tests.test_api_v1 import ApiTestCase
+from tests.test_api_v1 import DEPS, ApiTestCase
 
 
 class WorkspaceRoutes(ApiTestCase):
@@ -55,9 +55,9 @@ class WorkspaceRoutes(ApiTestCase):
         retry.assert_called_once_with("pro@example.com", "not-mine")
 
 
-class QuietHoursTests(unittest.TestCase):
+class QuietHoursPolicyTests(unittest.TestCase):
     def test_overnight_local_time_and_daylight_saving(self):
-        from api.workspace import quiet_at
+        from billing_service.notification_preferences import quiet_at
         q = {"enabled": True, "start": "22:00", "end": "07:00", "timezone": "America/Los_Angeles"}
         for when, expected in [("2026-07-01T06:00:00+00:00", True), ("2026-07-01T14:00:00+00:00", False),
                                ("2026-01-01T07:00:00+00:00", True), ("2026-01-01T15:00:00+00:00", False)]:
@@ -65,6 +65,9 @@ class QuietHoursTests(unittest.TestCase):
         self.assertFalse(quiet_at({**q, "start": "07:00"}))
         self.assertFalse(quiet_at({**q, "enabled": False}))
 
+
+@unittest.skipUnless(DEPS, "needs API test dependencies")
+class QuietHoursDeliveryTests(unittest.TestCase):
     def test_quiet_hours_suppress_push_and_alert_email(self):
         from api import webpush
         with mock.patch("api.webpush.enabled", return_value=True), \

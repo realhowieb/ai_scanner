@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { StockSearch } from "@/components/StockSearch";
+import { CustomScanView } from "@/features/CustomScanView";
 import { CompareStocksView } from "@/features/CompareStocksView";
 import { NotificationDelivery } from "@/features/NotificationDelivery";
 import { OperationsView } from "@/features/OperationsView";
@@ -126,4 +127,18 @@ it("shows support codes, provider failures and shared scan queue counts", async 
   await screen.findByText(/web-code-123/);
   expect(screen.getByText(/2 queued/)).toBeInTheDocument();
   expect(screen.getByText(/Alpaca: Needs attention/)).toBeInTheDocument();
+});
+
+
+it("refuses saved custom filters that are outside the account's current plan", async () => {
+  preferences.custom_views = [{ name: "Pro volume", universe: "sp500", ticker: "", watchlist_id: null,
+    session: "regular", top_n: 25, min_price: null, max_price: null, min_dollar_vol: null, unusual: true,
+    gap: false, min_gap: null, score_all: false }];
+  const create = vi.fn();
+  render(<SessionProvider initialMe={me("basic")}><CustomScanView client={{ list: async () => [], create, get: vi.fn(), cancel: vi.fn() }} /></SessionProvider>);
+  await screen.findByRole("option", { name: "Pro volume" });
+  fireEvent.change(screen.getByLabelText("Saved views"), { target: { value: "Pro volume" } });
+  expect(screen.getByRole("alert")).toHaveTextContent("outside your current plan");
+  expect(screen.getByRole("checkbox", { name: /Unusual volume/ })).not.toBeChecked();
+  expect(create).not.toHaveBeenCalled();
 });
