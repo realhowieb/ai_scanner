@@ -47,6 +47,7 @@ def _make_psycopg2_mock(*, db_reachable: bool = False) -> types.ModuleType:
 
 def _load_billing_module(env_overrides: dict[str, str] | None = None, *, db_reachable: bool = False):
     """Import billing_service.main with all external deps mocked."""
+    import fastapi  # keep HTTPException identity stable outside sys.modules isolation
     for mod in list(sys.modules):
         if mod.startswith("billing_service"):
             del sys.modules[mod]
@@ -68,7 +69,12 @@ def _load_billing_module(env_overrides: dict[str, str] | None = None, *, db_reac
     with patch.dict(sys.modules, {"stripe": stripe_mock, "psycopg2": psycopg2_mock}):
         with patch.dict("os.environ", env):
             sys.modules.pop("billing_service.main", None)
+            from billing_fakes import MemoryStore
+
             import billing_service.main as bm
+            from billing_service.engine import Engine
+
+            bm._billing_engine = Engine(bm, MemoryStore(bm))
             return bm
 
 
@@ -96,22 +102,21 @@ def _stripe_event(event_type: str, data: dict, *, event_id: str = "evt_test") ->
 
 def _webhook(module, event: dict):
     module.stripe.Webhook.construct_event.return_value = event
+    if getattr(module, "_event_fixture", False):
+        # Lifecycle fixtures explicitly model the current Stripe API response.
+        # Separate ordering tests supply a conflicting response instead.
+        data = event.get("data", {}).get("object", {})
+        kind = event["type"]
+        sub = {**data, "status": data.get("status", "canceled" if kind.endswith("deleted") else "active")}
+        sub.setdefault("items", {"data": [{"price": {"id": "price_pro_fake"}}]})
+        if kind.startswith("checkout."):
+            sub = {**sub, "id": data.get("subscription"), **module.stripe.Subscription.retrieve.return_value}
+        module.stripe.Subscription.list.return_value = {"data": [sub], "has_more": False}
     return _client(module).post(
         "/webhook",
         content=b"{}",
         headers={"content-type": "application/json", "stripe-signature": "test_signature"},
     )
-
-
-@contextmanager
-def _idempotency_db(*, processed: bool = False):
-    cursor = MagicMock()
-    cursor.__enter__.return_value = cursor
-    cursor.fetchone.return_value = (1,) if processed else None
-    connection = MagicMock()
-    connection.__enter__.return_value = connection
-    connection.cursor.return_value = cursor
-    yield connection
 
 
 @unittest.skipUnless(_FASTAPI_AVAILABLE, "fastapi not installed in this environment")
@@ -319,6 +324,7 @@ class BillingServiceCheckoutTest(unittest.TestCase):
                     "http://hsf-web-v1.onrender.com/?checkout=success",
                     "https://hsf-web-v1.onrender.com.evil.example/"):
             self.bm.stripe.checkout.Session.create.reset_mock()
+            self.bm._billing_engine.store.intents.clear()
             response = self._checkout_with(success_url=bad)
             self.assertEqual(response.status_code, 200)
             kwargs = self.bm.stripe.checkout.Session.create.call_args.kwargs
@@ -345,6 +351,7 @@ class BillingServiceCheckoutTest(unittest.TestCase):
         self.bm.STRIPE_PRICE_PREMIUM_YEARLY = "price_premium_yearly"
         for plan, pid in (("pro", "price_pro_yearly"), ("premium", "price_premium_yearly")):
             with self.subTest(plan=plan):
+                self.bm._billing_engine.store.intents.clear()
                 self.assertEqual(self._checkout_interval(plan, "year").status_code, 200)
                 kwargs = self.bm.stripe.checkout.Session.create.call_args.kwargs
                 self.assertEqual(kwargs["line_items"], [{"price": pid, "quantity": 1}])
@@ -535,15 +542,10 @@ class BillingServiceWebhookLifecycleTest(unittest.TestCase):
     def setUp(self):
         self.bm = _configured_module()
         self.bm._set_user_plan_by_email = MagicMock()
-        self.bm._mark_event_processed = MagicMock()
-        self.bm._is_event_processed = MagicMock(return_value=False)
-
-        @contextmanager
-        def db_conn():
-            with _idempotency_db() as connection:
-                yield connection
-
-        self.bm._db_conn = db_conn
+        self.bm._event_fixture = True
+        self.bm._get_username_by_customer = MagicMock(return_value=None)
+        self.bm._get_user_by_email = MagicMock(return_value={"tier": "pro", "stripe_customer_id": "cus_test"})
+        self.bm.stripe.Customer.retrieve.return_value = {"email": "member@example.com"}
 
     def test_checkout_completion_grants_pro_from_configured_price(self):
         self.bm.stripe.Subscription.retrieve.return_value = {
@@ -630,8 +632,8 @@ class BillingServiceWebhookLifecycleTest(unittest.TestCase):
             ),
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["action"], "cancel_scheduled_keep_tier")
-        self.bm._set_user_plan_by_email.assert_not_called()
+        self.assertTrue(self.bm._billing_engine.store.snapshots["member@example.com"]["cancel_at_period_end"])
+        self.assertEqual(self.bm._set_user_plan_by_email.call_args.kwargs["tier"], "pro")
 
     def test_effective_cancel_downgrades_to_free_entitlements(self):
         from ui.app_session import compute_entitlements
@@ -651,7 +653,7 @@ class BillingServiceWebhookLifecycleTest(unittest.TestCase):
         self.assertFalse(free["can_scan_nasdaq"])
         self.assertFalse(free["can_ai_notes"])
 
-    def test_unknown_price_fails_closed_to_basic(self):
+    def test_unknown_price_preserves_plan_and_requests_retry(self):
         self.bm.stripe.Customer.retrieve.return_value = {"email": "member@example.com"}
         response = _webhook(
             self.bm,
@@ -664,20 +666,20 @@ class BillingServiceWebhookLifecycleTest(unittest.TestCase):
                 },
             ),
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.bm._set_user_plan_by_email.call_args.kwargs["tier"], "basic")
+        self.assertEqual(response.status_code, 503)
+        self.bm._set_user_plan_by_email.assert_not_called()
 
     def test_missing_customer_mapping_and_database_write_failure_do_not_grant(self):
         self.bm.stripe.Customer.retrieve.return_value = {"email": ""}
         event = _stripe_event(
             "customer.subscription.deleted", {"id": "sub_test", "customer": "cus_unknown"}
         )
-        self.assertEqual(_webhook(self.bm, event).status_code, 500)
+        self.assertEqual(_webhook(self.bm, event).status_code, 503)
         self.bm._set_user_plan_by_email.assert_not_called()
 
         self.bm.stripe.Customer.retrieve.return_value = {"email": "member@example.com"}
         self.bm._set_user_plan_by_email.side_effect = RuntimeError("write failed")
-        self.assertEqual(_webhook(self.bm, event).status_code, 500)
+        self.assertEqual(_webhook(self.bm, event).status_code, 503)
 
     def test_subscription_events_find_the_account_by_customer_id_not_email(self):
         # P1-53: the customer's Stripe email changed to someone else's address;
@@ -706,7 +708,7 @@ class BillingServiceWebhookLifecycleTest(unittest.TestCase):
         )
         self.bm.stripe.Customer.retrieve.return_value = {"email": "victim@example.com"}
         event = _stripe_event("customer.subscription.deleted", {"id": "sub_x", "customer": "cus_other"})
-        self.assertEqual(_webhook(self.bm, event).status_code, 500)
+        self.assertEqual(_webhook(self.bm, event).status_code, 503)
         self.bm._set_user_plan_by_email.assert_not_called()
 
     def test_email_fallback_applies_to_an_unlinked_account(self):
@@ -719,14 +721,14 @@ class BillingServiceWebhookLifecycleTest(unittest.TestCase):
         self.assertEqual(_webhook(self.bm, event).status_code, 200)
         self.assertEqual(self.bm._set_user_plan_by_email.call_args.kwargs["email"], "member@example.com")
 
-    def test_customer_lookup_failure_returns_500_without_granting(self):
+    def test_customer_lookup_failure_returns_retry_without_granting(self):
         self.bm._get_username_by_customer = MagicMock(side_effect=RuntimeError("db down"))
         event = _stripe_event("customer.subscription.deleted", {"id": "sub_x", "customer": "cus_test"})
-        self.assertEqual(_webhook(self.bm, event).status_code, 500)
+        self.assertEqual(_webhook(self.bm, event).status_code, 503)
         self.bm._set_user_plan_by_email.assert_not_called()
 
     def test_duplicate_event_is_skipped_without_reapplying_tier(self):
-        self.bm._is_event_processed.return_value = True
+        self.bm._billing_engine.store.events.add("evt_test")
         response = _webhook(
             self.bm,
             _stripe_event("customer.subscription.deleted", {"id": "sub_test", "customer": "cus_test"}),
@@ -740,7 +742,7 @@ class BillingServiceWebhookLifecycleTest(unittest.TestCase):
             self.bm,
             _stripe_event("checkout.session.completed", {"id": "cs_bad", "metadata": {}}),
         )
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 503)
         self.bm._set_user_plan_by_email.assert_not_called()
 
 

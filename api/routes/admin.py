@@ -92,6 +92,13 @@ def register(app: FastAPI) -> None:
     def admin_providers(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
         return admin.providers()
 
+    @get("/v1/admin/billing", models.AdminBilling, "Billing mode, price checks and webhook/sync diagnostics; no secrets")
+    def admin_billing(a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        from api import billing, ratelimit
+
+        ratelimit.check("billing_diagnostics", _user(a))
+        return _act(billing.diagnostics)
+
     @get("/v1/admin/activity", models.AdminActivity, "Recent scan errors, sign-in attempts and AI usage (30 days)")
     def admin_activity(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
         return _act(lambda: {"scan_errors": admin.scan_errors(), "login_attempts": admin.login_attempts(),

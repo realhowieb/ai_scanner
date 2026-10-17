@@ -61,6 +61,10 @@ async function handle(input: Request | string, init?: RequestInit): Promise<Resp
     incidents: [], email: { status: "HEALTHY", day: "2026-10-14", jobs: [{ job: "digest", label: "Morning digest", status: "HEALTHY", detail: "sent 3" }] } });
   if (path === "/v1/admin/providers") return jsonResponse({ checked_at: "2026-10-14T12:00:00Z", earnings_cache: { last_refresh: null, dated_rows: 10 },
     checks: [{ name: "Database", status: "ok", detail: "neon", ms: 5 }, { name: "Billing service", status: "error", detail: "down", ms: null }] });
+  if (path === "/v1/admin/billing") return jsonResponse({ mode: "test", prices_configured: { STRIPE_PRICE_PRO: true },
+    prices_valid: { STRIPE_PRICE_PRO: true }, webhook_configured: true, webhook_check_available: true,
+    last_webhook_at: "2026-10-16T12:00:00Z", failed_syncs: 1,
+    webhook_failures: [{ event_type: "customer.subscription.updated", code: "configuration", at: "2026-10-16T12:00:00Z" }] });
   if (req.method === "GET" && path === "/v1/admin/earnings-refresh") return jsonResponse({ state: "idle" });
   if (req.method === "POST" && path === "/v1/admin/earnings-refresh") return jsonResponse({ state: "done", symbols: 600, dated: 420, finished_at: "2026-10-14T12:00:00Z" });
   if (path === "/v1/admin/analytics") return jsonResponse(analytics);
@@ -156,6 +160,9 @@ describe("Admin page", () => {
     await u.click(screen.getByRole("tab", { name: "Health" }));
     expect(await screen.findByText("All slots ran")).toBeInTheDocument();
     expect(screen.getByText("Morning digest")).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Check billing" }));
+    expect(await screen.findByText("PRO: Ready")).toBeInTheDocument();
+    expect(screen.getByText(/customer.subscription.updated: configuration/)).toBeInTheDocument();
     expect(calls.some((c) => c.path === "/v1/admin/providers")).toBe(false);
     await u.click(screen.getByRole("button", { name: "Run checks" }));
     expect(await screen.findByText("Billing service")).toBeInTheDocument();

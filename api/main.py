@@ -13,6 +13,7 @@ import functools
 import inspect
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -366,6 +367,10 @@ def _module_app():
     init_api_monitoring()
     _warm_caches()
     _start_realtime_alerts()
+    if os.getenv("BILLING_MODE", "external").strip().lower() == "embedded":
+        from billing_service.main import start_reconciliation_worker
+
+        start_reconciliation_worker()
     return app
 
 

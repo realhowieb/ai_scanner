@@ -98,6 +98,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Billing mode, price checks and webhook/sync diagnostics; no secrets */
+        get: operations["admin_billing_v1_admin_billing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/db-check": {
         parameters: {
             query?: never;
@@ -725,6 +742,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/billing/checkout/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Billing Checkout Cancel
+         * @description Expire only this account's unfinished checkout, without canceling a subscription.
+         */
+        post: operations["billing_checkout_cancel_v1_billing_checkout_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/billing/portal": {
         parameters: {
             query?: never;
@@ -739,6 +776,26 @@ export interface paths {
          * @description Stripe Customer Portal: payment method, invoices, plan, cancellation (flow=cancel).
          */
         post: operations["billing_portal_v1_billing_portal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Billing Status
+         * @description The account's last confirmed billing status. Does not contact Stripe.
+         */
+        get: operations["billing_status_v1_billing_status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2140,6 +2197,35 @@ export interface components {
             /** Target */
             target?: string | null;
         };
+        /** AdminBilling */
+        AdminBilling: {
+            /**
+             * Failed Syncs
+             * @default 0
+             */
+            failed_syncs: number;
+            /** Last Webhook At */
+            last_webhook_at?: string | null;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "test" | "live" | "unknown" | "external";
+            /** Prices Configured */
+            prices_configured: {
+                [key: string]: boolean;
+            };
+            /** Prices Valid */
+            prices_valid: {
+                [key: string]: boolean;
+            };
+            /** Webhook Check Available */
+            webhook_check_available: boolean;
+            /** Webhook Configured */
+            webhook_configured: boolean;
+            /** Webhook Failures */
+            webhook_failures?: components["schemas"]["BillingFailure"][];
+        };
         /** AdminCheck */
         AdminCheck: {
             /** Detail */
@@ -3046,6 +3132,15 @@ export interface components {
             /** Volume */
             volume?: number | null;
         };
+        /** BillingFailure */
+        BillingFailure: {
+            /** At */
+            at: string;
+            /** Code */
+            code: string;
+            /** Event Type */
+            event_type: string;
+        };
         /** BillingLink */
         BillingLink: {
             /**
@@ -3058,6 +3153,52 @@ export interface components {
              * @description Stripe-hosted page to open in the browser
              */
             url: string;
+        };
+        /** BillingStatus */
+        BillingStatus: {
+            /** Amount */
+            amount?: number | null;
+            /**
+             * Cancel At Period End
+             * @default false
+             */
+            cancel_at_period_end: boolean;
+            /** Cancellation At */
+            cancellation_at?: string | null;
+            /** Checked At */
+            checked_at?: string | null;
+            /**
+             * Checkout Pending
+             * @default false
+             */
+            checkout_pending: boolean;
+            /** Checkout Url */
+            checkout_url?: string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Grace Ends At */
+            grace_ends_at?: string | null;
+            /** Interval */
+            interval?: ("month" | "year") | null;
+            /** Message */
+            message: string;
+            /** Plan */
+            plan?: ("basic" | "pro" | "premium" | "admin") | null;
+            /** Renewal At */
+            renewal_at?: string | null;
+            /**
+             * Status
+             * @default unknown
+             */
+            status: string;
+            /**
+             * Sync State
+             * @default pending
+             * @enum {string}
+             */
+            sync_state: "confirmed" | "pending" | "needs_attention" | "unavailable";
+            /** Test Mode */
+            test_mode?: boolean | null;
         };
         /** Brief */
         Brief: {
@@ -6762,6 +6903,47 @@ export interface operations {
             };
         };
     };
+    admin_billing_v1_admin_billing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBilling"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     admin_db_check_v1_admin_db_check_post: {
         parameters: {
             query?: never;
@@ -8647,6 +8829,49 @@ export interface operations {
             };
         };
     };
+    billing_checkout_cancel_v1_billing_checkout_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Payment processing */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     billing_portal_v1_billing_portal_post: {
         parameters: {
             query?: never;
@@ -8701,6 +8926,42 @@ export interface operations {
             };
         };
     };
+    billing_status_v1_billing_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingStatus"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     billing_sync_v1_billing_sync_post: {
         parameters: {
             query?: never;
@@ -8716,7 +8977,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Message"];
+                    "application/json": components["schemas"]["BillingStatus"];
                 };
             };
             /** @description Not signed in */

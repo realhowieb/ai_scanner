@@ -21,6 +21,41 @@ class Health(BaseModel):
     ok: bool
 
 
+class BillingStatus(BaseModel):
+    status: str = "unknown"
+    plan: Optional[Literal["basic", "pro", "premium", "admin"]] = None
+    interval: Optional[Literal["month", "year"]] = None
+    amount: Optional[int] = None
+    currency: Optional[str] = None
+    renewal_at: Optional[str] = None
+    cancellation_at: Optional[str] = None
+    cancel_at_period_end: bool = False
+    checked_at: Optional[str] = None
+    test_mode: Optional[bool] = None
+    sync_state: Literal["confirmed", "pending", "needs_attention", "unavailable"] = "pending"
+    message: str
+    grace_ends_at: Optional[str] = None
+    checkout_pending: bool = False
+    checkout_url: Optional[str] = None
+
+
+class BillingFailure(BaseModel):
+    event_type: str
+    code: str
+    at: str
+
+
+class AdminBilling(BaseModel):
+    mode: Literal["test", "live", "unknown", "external"]
+    prices_configured: Dict[str, bool]
+    prices_valid: Dict[str, bool]
+    webhook_configured: bool
+    webhook_check_available: bool
+    last_webhook_at: Optional[str] = None
+    failed_syncs: int = 0
+    webhook_failures: List[BillingFailure] = Field(default_factory=list)
+
+
 class Ready(BaseModel):
     ok: bool
     database: Literal["ok"]

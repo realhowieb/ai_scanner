@@ -90,6 +90,9 @@ if not STRIPE_SECRET_KEY:
     raise RuntimeError("Missing STRIPE_SECRET_KEY env var")
 
 stripe.api_key = STRIPE_SECRET_KEY
+stripe.max_network_retries = 1
+if hasattr(stripe, "RequestsClient"):
+    stripe.default_http_client = stripe.RequestsClient(timeout=15)
 print(
     "[billing_service] starting | "
     f"prices: pro={'set' if bool(STRIPE_PRICE_PRO) else 'missing'}, "
@@ -175,43 +178,6 @@ def _db_status() -> dict:
     except Exception as e:
         status["error"] = str(e)[:200]
     return status
-
-
-def _ensure_processed_events_table(conn) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS stripe_processed_events (
-                event_id TEXT PRIMARY KEY,
-                event_type TEXT,
-                processed_at TIMESTAMPTZ DEFAULT NOW()
-            )
-            """
-        )
-    conn.commit()
-
-
-def _is_event_processed(conn, event_id: str) -> bool:
-    """Return True if this Stripe event_id was already handled (idempotency guard)."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM stripe_processed_events WHERE event_id = %s LIMIT 1",
-            (event_id,),
-        )
-        return cur.fetchone() is not None
-
-
-def _mark_event_processed(conn, event_id: str, event_type: str) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO stripe_processed_events (event_id, event_type)
-            VALUES (%s, %s)
-            ON CONFLICT (event_id) DO NOTHING
-            """,
-            (event_id, event_type),
-        )
-    conn.commit()
 
 
 def _record_paid_conversion(email: str, plan: str, *, stripe_event_id: str | None = None) -> None:
@@ -398,45 +364,56 @@ def _price_to_plan(price_id: str) -> str:
     return "basic"
 
 
-def sync_account_subscription(email: str) -> dict:
-    """Read Stripe for this authenticated account's stored customer only.
+_billing_engine = None
+_reconciliation_thread = None
 
-    Webhooks remain the primary source of updates. This recovery path changes
-    no Stripe subscription and never infers access from a return URL or amount.
-    Unknown prices and ambiguous subscriptions leave the current tier intact.
-    """
-    email = _validate_email(email)
-    try:
-        user = _get_user_by_email(email)
-        if (user or {}).get("tier") == "admin":
-            return {"message": "Admin access is managed by HSF and does not require a paid subscription."}
-        customer_id = (user or {}).get("stripe_customer_id")
-        if not customer_id:
-            return {"message": "No linked subscription yet. If you just paid, wait a moment and refresh again."}
-        subscriptions = stripe.Subscription.list(customer=customer_id, status="all", limit=100)
-        active = [s for s in subscriptions.get("data", []) if s.get("status") in {"active", "trialing"}]
-        if subscriptions.get("has_more") or len(active) > 1:
-            raise HTTPException(409, "Multiple subscriptions need review. Contact support to confirm your plan.")
-        if not active:
-            return {"message": "No active subscription confirmed. If you just paid, wait a moment and refresh again."}
-        subscription = active[0]
-        if subscription.get("customer") != customer_id:
-            raise HTTPException(502, "Subscription account could not be verified.")
-        items = (subscription.get("items") or {}).get("data") or []
-        if len(items) != 1:
-            raise HTTPException(409, "This subscription needs review. Contact support to confirm your plan.")
-        price_id = (items[0].get("price") or {}).get("id") or ""
-        plan = _price_to_plan(price_id)
-        if plan not in {"pro", "premium"}:
-            raise HTTPException(409, "Stripe's subscription price is not configured in HSF. Contact support to sync your plan.")
-        _set_user_plan_by_email(email=email, tier=plan, stripe_customer_id=customer_id,
-                               stripe_subscription_id=subscription.get("id"), stripe_price_id=price_id)
-        return {"message": "Subscription checked with Stripe. Your account now shows the confirmed plan."}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        _log.warning("subscription sync failed: %s", type(exc).__name__)
-        raise HTTPException(502, "Subscription status is temporarily unavailable. Please try again.") from exc
+
+def start_reconciliation_worker():
+    """Hourly recovery for missed deliveries. DB leases prevent duplicate work."""
+    import threading
+
+    global _reconciliation_thread
+    if os.getenv("BILLING_MODE", "external").strip().lower() != "embedded":
+        return
+    if os.getenv("BILLING_RECONCILIATION_ENABLED", "1").strip() == "0":
+        return
+    if _reconciliation_thread and _reconciliation_thread.is_alive():
+        return
+
+    def run():
+        wake = threading.Event()
+        while True:
+            try:
+                result = billing_engine().reconcile_due()
+                _log.info("billing reconciliation: checked=%s failed=%s", result["checked"], result["failed"])
+            except Exception as exc:
+                _log.warning("billing reconciliation unavailable: %s", type(exc).__name__)
+            wake.wait(3600)
+
+    _reconciliation_thread = threading.Thread(target=run, name="billing-reconciliation", daemon=True)
+    _reconciliation_thread.start()
+
+
+def billing_engine():
+    global _billing_engine
+    if _billing_engine is None:
+        import sys
+        try:
+            from billing_service.engine import Engine
+            from billing_service.state import PostgresStore
+        except ImportError:  # standalone billing service with a flat Render root
+            from engine import Engine
+            from state import PostgresStore
+        _billing_engine = Engine(sys.modules[__name__], PostgresStore(_db_conn))
+    return _billing_engine
+
+
+def sync_account_subscription(email: str) -> dict:
+    return billing_engine().sync(_validate_email(email))
+
+
+def billing_status(email: str) -> dict:
+    return billing_engine().status(_validate_email(email))
 
 
 def _is_legacy_price(price_id: str) -> bool:
@@ -598,6 +575,8 @@ _WEBHOOK_EVENTS = (
     "checkout.session.completed",
     "customer.subscription.updated",
     "customer.subscription.deleted",
+    "invoice.paid",
+    "invoice.payment_failed",
 )
 
 
@@ -740,6 +719,22 @@ def create_checkout_session(payload: dict, request: Request):
 
 
 def checkout_for_account(email: str, payload: dict):
+    _require_env("STRIPE_PRICE_PRO", "STRIPE_PRICE_PREMIUM", "APP_SUCCESS_URL", "APP_CANCEL_URL", "DATABASE_URL")
+    if payload.get("interval") == "year" and not (
+        STRIPE_PRICE_PRO_YEARLY if payload.get("plan") == "pro" else STRIPE_PRICE_PREMIUM_YEARLY
+    ):
+        raise HTTPException(400, "Yearly billing isn't available yet.")
+    try:
+        return billing_engine().checkout(_validate_email(email), payload)
+    except LookupError as exc:
+        raise HTTPException(404, "No app user exists for this email. Please sign up before upgrading.") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, "Checkout is temporarily unavailable. Please try again.") from exc
+
+
+def _create_checkout_for_account(email: str, payload: dict, *, user=None, idempotency_key=None, expires_at=None):
     """
     Called only after the HTTP adapter or API has authenticated the account.
 
@@ -790,11 +785,12 @@ def checkout_for_account(email: str, payload: dict):
     else:
         price_id = STRIPE_PRICE_PRO if plan == "pro" else STRIPE_PRICE_PREMIUM
 
-    try:
-        user = _get_user_by_email(email)
-    except Exception as e:
-        _log.warning("checkout user lookup failed: %s", type(e).__name__)
-        raise HTTPException(503, "Account lookup is temporarily unavailable. Please try again.")
+    if user is None:
+        try:
+            user = _get_user_by_email(email)
+        except Exception as e:
+            _log.warning("checkout user lookup failed: %s", type(e).__name__)
+            raise HTTPException(503, "Account lookup is temporarily unavailable. Please try again.")
     if not user:
         raise HTTPException(404, "No app user exists for this email. Please sign up before upgrading.")
     customer_id = user.get("stripe_customer_id") if user else None
@@ -803,14 +799,17 @@ def checkout_for_account(email: str, payload: dict):
     # Send them to Stripe Billing Portal to upgrade/downgrade/cancel on the existing subscription.
     if customer_id:
         try:
-            subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
-            if subs and subs.get("data"):
+            subs = stripe.Subscription.list(customer=customer_id, status="all", limit=100)
+            if subs.get("has_more"):
+                raise HTTPException(409, "Subscription history needs review before changing plans.")
+            current = [sub for sub in subs.get("data", []) if sub.get("status") not in {"canceled", "incomplete_expired"}]
+            if current:
                 # P2-48: open Stripe's "confirm this plan change" screen for the
                 # requested plan and send the customer straight back to the app
                 # when they confirm (no "Return to site" click). Any problem ->
                 # the plain portal, exactly as before.
                 portal = None
-                flow = _plan_change_flow(subs["data"][0], price_id, portal_return_url, interval=interval)
+                flow = _plan_change_flow(current[0], price_id, portal_return_url, interval=interval)
                 if flow:
                     try:
                         portal = stripe.billing_portal.Session.create(
@@ -833,8 +832,15 @@ def checkout_for_account(email: str, payload: dict):
             raise HTTPException(502, "Subscription management is temporarily unavailable. Please try again.")
 
     try:
+        options = {}
+        if idempotency_key:
+            options["idempotency_key"] = idempotency_key
+        if expires_at:
+            options["expires_at"] = expires_at
         session = stripe.checkout.Session.create(
+            **options,
             mode="subscription",
+            client_reference_id=hashlib.sha256(email.encode()).hexdigest(),
             customer=customer_id or None,
             customer_email=None if customer_id else email,
             line_items=[{"price": price_id, "quantity": 1}],
@@ -847,7 +853,8 @@ def checkout_for_account(email: str, payload: dict):
                 "interval": interval,
             },
         )
-        return {"checkout_url": session.url, "mode": "checkout"}
+        session_id = getattr(session, "id", None)
+        return {"checkout_url": session.url, "mode": "checkout", "session_id": session_id if isinstance(session_id, str) else None}
     except Exception as e:
         # Surface the message so curl shows something useful.
         _log.warning("create-checkout-session failed: %s", type(e).__name__)
@@ -913,142 +920,5 @@ async def stripe_webhook(request: Request):
 
 
 def process_webhook(payload: bytes, sig: Optional[str]):
-    if not STRIPE_WEBHOOK_SECRET:
-        raise HTTPException(500, "Missing STRIPE_WEBHOOK_SECRET env var")
-    _require_env("DATABASE_URL")
-
-    try:
-        event = stripe.Webhook.construct_event(payload=payload, sig_header=sig, secret=STRIPE_WEBHOOK_SECRET)
-    except Exception as e:
-        raise HTTPException(400, f"Webhook signature verification failed: {e}")
-
-    etype = event.get("type")
-    event_id = event.get("id", "")
-    data = event.get("data", {}).get("object", {})
-
-    # Idempotency: skip already-processed events (Stripe retries on non-2xx).
-    if DATABASE_URL and event_id:
-        try:
-            with _db_conn() as conn:
-                _ensure_processed_events_table(conn)
-                if _is_event_processed(conn, event_id):
-                    _log.info("Skipping already-processed event %s (%s)", event_id, etype)
-                    return JSONResponse({"received": True, "type": etype, "note": "already_processed"})
-        except Exception as _idem_err:
-            _log.warning("Idempotency check failed for %s: %s", event_id, _idem_err)
-
-    # 1) Initial checkout completion
-    if etype == "checkout.session.completed":
-        raw_email = (
-            (data.get("metadata", {}) or {}).get("user_email")
-            or (data.get("customer_details") or {}).get("email")
-            or data.get("customer_email")
-            or ""
-        )
-        try:
-            email = _validate_email(raw_email)
-        except ValueError as exc:
-            _log.warning("checkout.session.completed: %s", exc)
-            raise HTTPException(500, str(exc))
-        customer_id = data.get("customer")
-        subscription_id = data.get("subscription")
-
-        # Find the price from the subscription
-        try:
-            sub = stripe.Subscription.retrieve(subscription_id, expand=["items.data.price"])
-            price_id = sub["items"]["data"][0]["price"]["id"]
-            plan = _price_to_plan(price_id)
-        except Exception:
-            price_id = None
-            plan = (data.get("metadata", {}) or {}).get("requested_plan") or "basic"
-            plan = plan.strip().lower()
-        if plan not in {"pro", "premium"}:
-            raise HTTPException(500, f"Could not determine paid plan for checkout session {data.get('id')}")
-
-        try:
-            _set_user_plan_by_email(
-                email=email,
-                tier=plan,
-                stripe_customer_id=customer_id,
-                stripe_subscription_id=subscription_id,
-                stripe_price_id=price_id,
-            )
-            _record_paid_conversion(email, plan, stripe_event_id=event_id)
-        except Exception as e:
-            raise HTTPException(500, f"DB update failed: {e}")
-
-    # 2) Subscription updates (upgrade/downgrade, cancellation scheduling, etc.)
-    elif etype == "customer.subscription.updated":
-        subscription_id = data.get("id")
-        customer_id = data.get("customer")
-
-        status = (data.get("status") or "").strip().lower()
-        cancel_at_period_end = bool(data.get("cancel_at_period_end"))
-
-        # The account that pays: matched by Stripe customer id, not by email (P1-53).
-        email = _account_for_customer(customer_id, "subscription update")
-
-        # Immediate cancellation -> downgrade to basic now
-        if status == "canceled":
-            try:
-                _set_user_plan_by_email(
-                    email=email,
-                    tier="basic",
-                    stripe_customer_id=customer_id,
-                    stripe_subscription_id=subscription_id,
-                    stripe_price_id=None,
-                )
-            except Exception as e:
-                raise HTTPException(500, f"DB update failed: {e}")
-            return JSONResponse({"received": True, "type": etype, "action": "downgraded_basic_immediate_cancel"})
-
-        # Cancel scheduled at period end -> keep current tier until Stripe sends subscription.deleted
-        if cancel_at_period_end:
-            return JSONResponse({"received": True, "type": etype, "action": "cancel_scheduled_keep_tier"})
-
-        # Otherwise: active subscription update -> map price to plan
-        price_id = None
-        try:
-            items = data.get("items", {}).get("data", [])
-            if items:
-                price_id = items[0].get("price", {}).get("id")
-        except Exception:
-            price_id = None
-
-        plan = _price_to_plan(price_id or "")
-        try:
-            _set_user_plan_by_email(
-                email=email,
-                tier=plan,
-                stripe_customer_id=customer_id,
-                stripe_subscription_id=subscription_id,
-                stripe_price_id=price_id,
-            )
-            _record_paid_conversion(email, plan, stripe_event_id=event_id)
-        except Exception as e:
-            raise HTTPException(500, f"DB update failed: {e}")
-
-    # 3) Subscription cancelled → downgrade to Basic (unless admin)
-    elif etype == "customer.subscription.deleted":
-        customer_id = data.get("customer")
-        email = _account_for_customer(customer_id, "subscription deletion")
-        try:
-            _set_user_plan_by_email(
-                email=email,
-                tier="basic",
-                stripe_customer_id=customer_id,
-                stripe_subscription_id=data.get("id"),
-                stripe_price_id=None,
-            )
-        except Exception as e:
-            raise HTTPException(500, f"DB update failed: {e}")
-
-    # Mark the event processed so retries are skipped.
-    if DATABASE_URL and event_id:
-        try:
-            with _db_conn() as conn:
-                _mark_event_processed(conn, event_id, etype or "")
-        except Exception as _mark_err:
-            _log.warning("Failed to mark event %s processed: %s", event_id, _mark_err)
-
-    return JSONResponse({"received": True, "type": etype})
+    _require_env("STRIPE_WEBHOOK_SECRET", "DATABASE_URL")
+    return billing_engine().webhook(payload, sig)
