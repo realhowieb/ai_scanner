@@ -3550,6 +3550,16 @@ export interface components {
             /** Watchlist Id */
             watchlist_id?: number | null;
         };
+        /** DailyBarClose */
+        DailyBarClose: {
+            /** Close */
+            close: number;
+            /**
+             * Session
+             * @description Provider daily-bar session date; the session may still be in progress
+             */
+            session: string;
+        };
         /** DataFreshness */
         DataFreshness: {
             /** Calendar Covered */
@@ -6078,6 +6088,14 @@ export interface components {
         };
         /** Sparklines */
         Sparklines: {
+            /**
+             * Last Bar
+             * @description Latest finite daily-bar value and its source session; omitted when undated. Not a live quote.
+             * @default {}
+             */
+            last_bar: {
+                [key: string]: components["schemas"]["DailyBarClose"];
+            };
             /**
              * Series
              * @description Ticker -> up to 21 daily closes, oldest first; the last is the session in progress during market hours. Tickers without bars are left out

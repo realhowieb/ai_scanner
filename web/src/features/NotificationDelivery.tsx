@@ -12,6 +12,7 @@ import { etTime } from "@/lib/format";
 
 function QuietHoursForm({ initial }: { initial: Schemas["QuietHours"] }) {
   const [hours, setHours] = useState(initial);
+  const zones = [...new Set([initial.timezone ?? "America/New_York", "UTC", ...(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles"])])];
   const [saved, setSaved] = useState(false);
   const act = useAction();
   return <form className="stack-sm" onSubmit={(e) => { e.preventDefault(); void act.run(async () => {
@@ -19,10 +20,10 @@ function QuietHoursForm({ initial }: { initial: Schemas["QuietHours"] }) {
   }); }}>
     <label><input type="checkbox" checked={hours.enabled ?? false} onChange={(e) => { setHours({ ...hours, enabled: e.target.checked }); setSaved(false); }} /> Enable quiet hours</label>
     <div className="row-actions">
-      <label className="field">From<input type="time" required value={hours.start ?? "22:00"} onChange={(e) => setHours({ ...hours, start: e.target.value })} /></label>
-      <label className="field">Until<input type="time" required value={hours.end ?? "07:00"} onChange={(e) => setHours({ ...hours, end: e.target.value })} /></label>
+      <label className="field">From<input type="time" required value={hours.start ?? "22:00"} onChange={(e) => { setHours({ ...hours, start: e.target.value }); setSaved(false); }} /></label>
+      <label className="field">Until<input type="time" required value={hours.end ?? "07:00"} onChange={(e) => { setHours({ ...hours, end: e.target.value }); setSaved(false); }} /></label>
     </div>
-    <label className="field">Time zone<input required value={hours.timezone ?? "America/New_York"} placeholder="America/New_York" maxLength={64} onChange={(e) => setHours({ ...hours, timezone: e.target.value })} /></label>
+    <label className="field">Time zone<select required value={hours.timezone ?? "America/New_York"} onChange={(e) => { setHours({ ...hours, timezone: e.target.value }); setSaved(false); }}>{zones.map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}</select></label>
     <p className="cap">Suppresses browser pushes and alert emails during this interval; alerts remain in Recently fired. Skipped messages are not sent later. Equal start and end times disable the interval.</p>
     <div><button className="btn btn-sm" disabled={act.busy}>Save quiet hours</button></div>
     {saved && <p className="cap" role="status">Quiet hours saved.</p>}
@@ -38,6 +39,7 @@ export function NotificationDelivery({ events = [] }: { events?: Schemas["AlertE
       {prefs.data && <QuietHoursForm key={JSON.stringify(prefs.data.quiet_hours)} initial={prefs.data.quiet_hours ?? { enabled: false, start: "22:00", end: "07:00", timezone: "America/New_York" }} />}
       <ErrorLine error={prefs.error} />
     </Card>
+    <details className="delivery-diagnostics"><summary>Delivery diagnostics</summary><div className="stack-sm">
     <Card title="Alert email delivery" id="email-delivery">
       <p className="cap">Recent rule email statuses. Failed rule emails are retried automatically by the alert worker.</p>
       <ul className="stack-sm">{events.filter((e) => e.delivery?.email).map((e) => <li key={e.event_id}>
@@ -58,5 +60,6 @@ export function NotificationDelivery({ events = [] }: { events?: Schemas["AlertE
         })}>Retry notification</button>}
       </li>)}</ul>
     </Card>
+    </div></details>
   </>;
 }

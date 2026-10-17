@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PublicHeader, PublicFooter } from "@/features/Landing";
 
 export const metadata: Metadata = { title: "How HSF works" };
 
@@ -24,20 +25,20 @@ const SECTIONS: [string, string][] = [
 
 export default function HowHsfWorks() {
   return (
-    <main className="doc">
+    <div className="pub"><PublicHeader /><main id="main" className="doc">
       <article className="card stack-sm">
-        <p className="brand brand-lg">HSFinest<span>.AI</span></p>
         <h1 className="h1">How HSF works</h1>
         <p className="strong">Turn the whole market into a short list.</p>
         <p className="body-sm">HSF scans a broad universe of tradable U.S.-listed stocks throughout the trading day. It ranks the setups that stand out, shows the technical evidence behind each one, and tracks how they change through the session. HSF is a research tool: it helps you decide what deserves a closer look, and leaves the decision to you.</p>
-        {SECTIONS.map(([h, body]) => (
-          <section key={h} className="stack-sm doc-section">
+        <nav aria-label="On this page" className="chips">{SECTIONS.map(([h], i) => <a className="chip" key={h} href={`#method-${i}`}>{h}</a>)}</nav>
+        {SECTIONS.map(([h, body], i) => (
+          <section key={h} id={`method-${i}`} className="stack-sm doc-section">
             <h2 className="h2">{h}</h2>
             <p className="body-sm">{body}</p>
           </section>
         ))}
-        <p className="cap"><Link href="/today">← Back to HSF</Link></p>
+        <p className="cap"><Link href="/">← Back to HSF</Link></p>
       </article>
-    </main>
+    </main><PublicFooter /></div>
   );
 }

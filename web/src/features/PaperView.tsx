@@ -210,6 +210,9 @@ function Activity({ tick }: { tick: number }) {
           <span><strong>{act.data.positions_available === false ? "Unavailable" : money(act.data.summary?.unrealized_pl)}</strong> open P/L</span>
         </div>
       </Card>
+      {positions.length === 0 && orders.length === 0 && act.data.positions_available !== false ? <Card title="No paper activity yet" id="paper-empty">
+        <p>No open paper positions. No paper orders yet.</p><p className="cap">Start with a stock in the <Link href="/scanner">Scanner</Link>, review its evidence, then use the paper order form to practice with simulated money.</p>
+      </Card> : <>
       <Card title="Positions" id="positions">
         {act.data.positions_available === false ? <p className="cap">Alpaca didn&apos;t return positions just now. <button type="button" className="link-btn" onClick={act.reload}>Try again</button></p>
           : positions.length === 0 ? <Empty title="No open paper positions." />
@@ -259,7 +262,7 @@ function Activity({ tick }: { tick: number }) {
             </table>
           </div>
         )}
-      </Card>
+      </Card></>}
     </>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import { tabKey } from "@/lib/tabs";
 
 // The signed-out front door: what HSF does (the classic landing's copy, ui/product_copy.py),
 // real product screenshots, and plans and prices from GET /v1/plans, the same source as
@@ -37,11 +38,11 @@ const TRUST: [string, string][] = [
 ];
 const VIEWS = [
   { id: "scanner", tab: "Scanner", title: "Ranked opportunities", text: "Thousands of symbols. One focused shortlist.",
-    src: "/landing/scanner-showcase.webp", w: 1578, h: 997, alt: "HSF Scanner showing ranked opportunities, HSF Scores, statuses, and why the leading setup ranked" },
-  { id: "day", tab: "Day Trader", title: "Stair-steppers", text: "Analyze smooth intraday momentum across multiple confirmation windows.",
-    src: "/landing/day-trader-stair-stepper.webp", w: 1556, h: 1011, alt: "HSF Day Trader stair-stepper controls and ranked one-minute trend results" },
+    src: "/landing/scanner-current.jpg", w: 1425, h: 1715, alt: "HSF Scanner showing ranked opportunities, HSF Scores, statuses, and why the leading setup ranked" },
+  { id: "day", tab: "Day Trader", title: "Day Trader", text: "Review intraday candidates, scores and market context.",
+    src: "/landing/day-current.jpg", w: 1425, h: 1456, alt: "Current HSF Day Trader interface with sample intraday candidates and scores" },
   { id: "brief", tab: "Market Brief", title: "Market Brief", text: "Know the market environment before evaluating the setup.",
-    src: "/landing/market-brief-showcase.webp", w: 1536, h: 1024, alt: "HSF Market Brief showing market regime, index performance, breadth and alerts" },
+    src: "/landing/brief-current.jpg", w: 1425, h: 1516, alt: "Current HSF Market Brief with sample indexes, breadth, sectors and earnings" },
 ] as const;
 
 const VISIT_KEY = "hsf-landing-visit";
@@ -94,12 +95,12 @@ function Showcase() {
   return (
     <section className="card flush showcase" aria-labelledby="showcase-title">
       <div className="showcase-head">
-        <p className="eyebrow">Actual product views</p>
+        <p className="eyebrow">Current product views</p>
         <h2 id="showcase-title" className="h2">What HSF surfaces, and why</h2>
       </div>
-      <div className="showcase-tabs" role="tablist" aria-label="Product views">
+      <div className="showcase-tabs" role="tablist" onKeyDown={tabKey} aria-label="Product views">
         {VIEWS.map((x) => (
-          <button key={x.id} type="button" role="tab" id={`tab-${x.id}`} aria-selected={view === x.id} aria-controls="showcase-panel"
+          <button key={x.id} type="button" role="tab" tabIndex={view === x.id ? 0 : -1} id={`tab-${x.id}`} aria-selected={view === x.id} aria-controls="showcase-panel"
             className="showcase-tab" onClick={() => setView(x.id)}>{x.tab}</button>
         ))}
       </div>
@@ -108,11 +109,12 @@ function Showcase() {
           <p className="strong">{v.title}</p>
           <p className="body-sm">{v.text}</p>
         </figcaption>
-        {/* Phones get a crop of the left of the shot, so its text stays readable at phone width. */}
+        {/* Use a separately captured mobile layout on phones; retain the full desktop capture. */}
         <picture>
-          <source media="(max-width: 760px)" srcSet={v.src.replace(".webp", "-phone.webp")} />
+          <source media="(max-width: 760px)" srcSet={v.src.replace("-current.jpg", "-mobile-current.jpg")} />
           <Image src={v.src} alt={v.alt} width={v.w} height={v.h} className="showcase-img" priority={v.id === "scanner"} unoptimized />
         </picture>
+        <p className="cap">Current interface with illustrative sample data, not live prices. <a href={v.src} target="_blank" rel="noopener">Open full screenshot</a> · <Link href="/demo">Try the interactive demo</Link></p>
       </figure>
     </section>
   );
@@ -123,9 +125,23 @@ function cell(v: unknown) {
   return v ? <span className="up" aria-label="Included">✓</span> : <span className="muted" aria-label="Not included">—</span>;
 }
 
+export function annualValue(monthly: string, yearly: string): string | null {
+  const amount = (s: string) => s.startsWith("$") ? Number(s.match(/^\$([\d,.]+)/)?.[1]?.replaceAll(",", "")) : NaN;
+  const m = amount(monthly), y = amount(yearly);
+  if (!(m > 0 && y > 0 && y < m * 12)) return null;
+  return `$${(y / 12).toFixed(2)}/mo equivalent · save ${Math.round((1 - y / (m * 12)) * 100)}% vs monthly`;
+}
+
+function summaryHighlights(id: string, highlights: string[]): string[] {
+  if (id === "basic") return highlights.slice(0, 5);
+  const priority = id === "pro" ? /^(\d+ alerts?$)|email|nasdaq|day trader|historical/i : /^(\d+ alerts?$)|AI |early breakout|full-market|alpaca/i;
+  return [...highlights.filter((h) => priority.test(h)), ...highlights.filter((h) => !priority.test(h))].slice(0, 5);
+}
+
 /** Plan cards, and with `table` the full comparison, from GET /v1/plans. */
 export function PlansSection({ table = false }: { table?: boolean }) {
   const [interval] = useBillingInterval();
+  const [mobilePlan, setMobilePlan] = useState("pro");
   const plans = useApi<Plans>("plans", (signal) => unwrap(publicApi.GET("/v1/plans", { signal })));
   if (plans.error && !plans.data) return <ErrorState error={plans.error} onRetry={plans.reload} what="plans and prices" />;
   if (!plans.data) return <Skeleton rows={6} label="Loading plans" />;
@@ -141,14 +157,17 @@ export function PlansSection({ table = false }: { table?: boolean }) {
               <h3 id={`plan-${t.id}`} className="h2">{t.name}</h3>
               <p className="plan-price mono">{price(t)}</p>
               {t.yearly_price && <p className="cap">{interval === "month"
-                ? `or ${t.yearly_price} (two months free)` : `${t.price} with monthly billing`}</p>}
+                ? `or ${t.yearly_price} with yearly billing` : `${t.price} with monthly billing`}</p>}
               {interval === "year" && t.id !== "basic" && !t.yearly_price && <p className="cap">Yearly pricing is not available for this plan.</p>}
+              {interval === "year" && t.yearly_price && annualValue(t.price, t.yearly_price) && <p className="cap">{annualValue(t.price, t.yearly_price)}</p>}
               <p className="body-sm">{t.tagline}</p>
             </div>
             <ul className="bullets">
               {t.id !== "basic" && <li className="cap">Everything in {t.id === "pro" ? tiers[0]!.name : tiers[1]!.name}, plus:</li>}
-              {t.highlights.map((h) => <li key={h}>{h}</li>)}
+              {summaryHighlights(t.id, t.highlights).map((h) => <li key={h}>{h}</li>)}
             </ul>
+            {t.highlights.length > 5 && <details><summary>All plan features</summary><ul className="bullets">{t.highlights.filter((h) => !summaryHighlights(t.id, t.highlights).includes(h)).map((h) => <li key={h}>{h}</li>)}</ul></details>}
+            {t.id === "pro" && <p className="cap">Highlighted for custom scans and intraday research.</p>}
             <SignupLink surface={`plan_${t.id}`} className={t.id === "pro" ? "btn btn-primary" : "btn"}>
               {t.id === "basic" ? "Start free" : `Start free, upgrade to ${t.name}`}
             </SignupLink>
@@ -157,7 +176,9 @@ export function PlansSection({ table = false }: { table?: boolean }) {
       </div>
       <p className="cap">Every account starts on {tiers[0]!.name}. Upgrade from Account after you verify your email; payments run through Stripe and you can cancel any time.</p>
       {table && (
-        <div className="table-wrap">
+        <><div className="only-narrow card stack-sm"><label className="field">Compare a plan<select value={mobilePlan} onChange={(e) => setMobilePlan(e.target.value)}>{tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+          <dl className="kv">{rows.map((r) => <div key={r.label}><dt>{r.label}</dt><dd>{cell(r[mobilePlan as "basic" | "pro" | "premium"])}</dd></div>)}</dl>
+        </div><div className="table-wrap only-wide">
           <table className="table compare">
             <caption className="sr-only">What each plan includes</caption>
             <thead>
@@ -173,7 +194,7 @@ export function PlansSection({ table = false }: { table?: boolean }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </div></>
       )}
     </div>
   );

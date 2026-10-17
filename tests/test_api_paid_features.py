@@ -83,7 +83,9 @@ class ExportTests(PaidApiTestCase):
 
         ratelimit.reset()
         wl = {"id": 3, "name": "Main", "is_default": True, "items": [{"ticker": "AAPL", "note": "x"}]}
-        with mock.patch("api.user_data.list_watchlists", return_value=[{"id": 3, "name": "Main"}]), \
+        with mock.patch("api.workspace.preferences", return_value={}), \
+                mock.patch("api.alert_delivery.recent", return_value=[]), \
+                mock.patch("api.user_data.list_watchlists", return_value=[{"id": 3, "name": "Main"}]), \
                 mock.patch("api.user_data.get_watchlist", return_value=wl), \
                 mock.patch("api.user_data.list_alerts", return_value=[{"id": 1, "ticker": "AAPL"}]), \
                 mock.patch("api.alert_rules.list_rules", return_value=[]), \

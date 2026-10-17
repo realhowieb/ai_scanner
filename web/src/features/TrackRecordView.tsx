@@ -143,12 +143,12 @@ function Research() {
       {d.summary && Object.keys(d.summary).length > 0 && (
         <Card title="First read" id="first-read">
           <div className="metric-strip" aria-label="Track record summary">
-            <span><strong>{metric(d.summary.best_ranking, "—")}</strong> best slice</span>
+            <span><strong>{metric(d.summary.best_ranking, "—")}</strong> highest observed average</span>
             <span><strong>{numMetric(d.summary.best_horizon_days) ? `${numMetric(d.summary.best_horizon_days)}d` : "—"}</strong> horizon</span>
             <span><strong>{pct(numMetric(d.summary.best_avg_excess_return) != null ? numMetric(d.summary.best_avg_excess_return)! * 100 : null)}</strong> excess</span>
             <span><strong>{metric(d.summary.ready_horizons, 0)}</strong> ready</span>
           </div>
-          <p className="cap">{String(metric(d.summary.read, "Use sample size first, then compare average excess return and win rate."))}</p>
+          <p className="cap">Selected from the available historical slices; this is not an independently validated result. Compare every horizon and its sample size below.</p>
         </Card>
       )}
       <section aria-label="Ranking" className="filters">
@@ -208,8 +208,8 @@ export function TrackRecordView() {
       </section>
       {can("can_track_record") ? (
         <>
-          <OutcomeEvidence />
-          <section className="stack" aria-label="Ranking study">
+          <nav className="chips" aria-label="Research sections"><a className="chip" href="#overall-record">Overall record</a><a className="chip" href="#ranking-study">Ranking study</a></nav><div id="overall-record"><OutcomeEvidence /></div>
+          <section id="ranking-study" className="stack" aria-label="Ranking study">
             <h2 className="h2">Ranking study</h2>
             <p className="cap">A separate, narrower study: only each saved scan&apos;s top names under one ranking. It is not the full HSF record above.</p>
             <Research />

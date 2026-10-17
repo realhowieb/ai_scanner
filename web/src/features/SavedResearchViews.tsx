@@ -22,7 +22,7 @@ export function SavedResearchViews({ kind, current, onApply, disabled = false }:
       : { custom_views: next as Schemas["CustomView"][] });
     return true;
   });
-  return <div className="stack-sm saved-views">
+  return <details className="saved-views filter-panel"><summary>Saved views{selected ? ` · ${selected}` : ""}</summary><div className="stack-sm table-display-settings">
     <div className="row-actions">
       <label className="inline-field">Saved views
         <select value={selected} disabled={disabled || !prefs.data || act.busy} onChange={(e) => {
@@ -39,5 +39,5 @@ export function SavedResearchViews({ kind, current, onApply, disabled = false }:
     </div>
     <p className="cap">Up to 20 views saved to your account. Saving an existing name replaces it.</p>
     <ErrorLine error={prefs.error ?? act.error} />
-  </div>;
+  </div></details>;
 }

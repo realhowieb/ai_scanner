@@ -4154,6 +4154,25 @@
     "title": "CustomView",
     "type": "object"
    },
+   "DailyBarClose": {
+    "properties": {
+     "close": {
+      "title": "Close",
+      "type": "number"
+     },
+     "session": {
+      "description": "Provider daily-bar session date; the session may still be in progress",
+      "title": "Session",
+      "type": "string"
+     }
+    },
+    "required": [
+     "close",
+     "session"
+    ],
+    "title": "DailyBarClose",
+    "type": "object"
+   },
    "DataFreshness": {
     "properties": {
      "calendar_covered": {
@@ -10597,6 +10616,15 @@
    },
    "Sparklines": {
     "properties": {
+     "last_bar": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/DailyBarClose"
+      },
+      "default": {},
+      "description": "Latest finite daily-bar value and its source session; omitted when undated. Not a live quote.",
+      "title": "Last Bar",
+      "type": "object"
+     },
      "series": {
       "additionalProperties": {
        "items": {

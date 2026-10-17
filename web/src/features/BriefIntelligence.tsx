@@ -25,7 +25,7 @@ export function MarketPulse({ b }: { b: Brief }) {
   const dec = b.breadth?.decliners;
   const validBreadth = finite(adv) && finite(dec) && adv >= 0 && dec >= 0 && adv + dec > 0;
   return <Card title="Market Pulse" id="pulse" className="brief-pulse">
-    <Freshness at={b.snapshot_time} label="Snapshot" />
+    <Freshness at={b.snapshot_time} label="Snapshot" stale={b.freshness?.state === "stale" ? true : b.freshness?.state === "fresh" ? false : undefined} />
     <div className="brief-indexes">
       {b.market.map((m) => <div className="index-tile" key={m.label}>
         <span className="cap">{m.label}</span>

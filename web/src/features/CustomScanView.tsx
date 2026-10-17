@@ -197,7 +197,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
           setUnusual(v.unusual ?? false); setGap(v.gap ?? false); setMinGap(v.min_gap == null ? "" : String(v.min_gap)); setScoreAll(v.score_all ?? false);
           setFormErr(null);
         }} />
-      <div className="split">
+      <div className="split custom-scan-layout">
         <form className="card col-side form" onSubmit={submit} aria-label="Scan settings">
           <fieldset disabled={active || scan.starting}>
             <legend className="h2">What to scan</legend>
@@ -235,7 +235,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
                 <span>Score every ticker, not only setups</span></label>
             )}
 
-            <legend className="h2 mt">Session</legend>
+            <h2 className="h2 mt">Session</h2>
             <div className="seg-group" role="radiogroup" aria-label="Session">
               {SESSIONS.map((s) => {
                 const locked = !!s.feature && !can(s.feature);
@@ -248,11 +248,11 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
               })}
             </div>
 
-            <legend className="h2 mt">Filters</legend>
+            <details className="advanced-scan"><summary>Advanced filters</summary><p className="cap">Blank fields use the scanner’s server defaults. Set a value to override them.</p>
             <div className="grid2">
-              <label className="field"><span>Min price ($)</span><input inputMode="decimal" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder="Default" /></label>
-              <label className="field"><span>Max price ($)</span><input inputMode="decimal" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="Default" /></label>
-              <label className="field"><span>Min dollar volume</span><input inputMode="numeric" value={minDollarVol} onChange={(e) => setMinDollarVol(e.target.value)} placeholder="Default" /></label>
+              <label className="field"><span>Min price ($)</span><input inputMode="decimal" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder="Server default" /></label>
+              <label className="field"><span>Max price ($)</span><input inputMode="decimal" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="Server default" /></label>
+              <label className="field"><span>Min dollar volume</span><input inputMode="numeric" value={minDollarVol} onChange={(e) => setMinDollarVol(e.target.value)} placeholder="Server default" /></label>
               <label className="field"><span>Results</span>
                 <select value={Math.min(topN, maxRows)} onChange={(e) => setTopN(Number(e.target.value))}>
                   {TOP_N.map((n) => <option key={n} value={n} disabled={n > maxRows}>{n}{n > maxRows ? " (upgrade)" : ""}</option>)}
@@ -267,9 +267,11 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
               <input type="checkbox" checked={gap} disabled={!can("can_scan_nasdaq")} onChange={(e) => setGap(e.target.checked)} />
               <span>Gap filter{can("can_scan_nasdaq") ? "" : " · Pro"}</span>
             </label>
-            {gap && <label className="field"><span>Min gap (%)</span><input inputMode="decimal" value={minGap} onChange={(e) => setMinGap(e.target.value)} placeholder="Default" /></label>}
+            {gap && <label className="field"><span>Min gap (%)</span><input inputMode="decimal" value={minGap} onChange={(e) => setMinGap(e.target.value)} placeholder="Server default" /></label>}
+            </details>
           </fieldset>
           {formErr && <p className="form-error" role="alert">{formErr}</p>}
+          <div className="scan-submit">
           <div className="metric-strip" aria-label="Scan preview">
             <span><strong>{scanEstimate}</strong> source</span>
             <span><strong>{Math.min(topN, maxRows)}</strong> max rows</span>
@@ -278,6 +280,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
           <button type="submit" className="btn btn-primary btn-block" disabled={active || scan.starting || !!scan.retryInS}>
             {scan.starting ? "Starting…" : active ? "Scan running…" : scan.retryInS ? `Try again in ${scan.retryInS}s` : "Start scan"}
           </button>
+          </div>
         </form>
 
         <div className="col-main stack" ref={statusRef}>
@@ -295,7 +298,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
           {err?.status === 409 && job && <p className="notice" role="status">You already had a scan running. Showing that one.</p>}
 
           {!job && !err && (
-            <Card><Empty title="Choose a list and start a scan.">Results are ranked by HSF Score and saved to your scan history.</Empty></Card>
+            <Card title="Your scan preview" id="scan-preview"><p className="strong">{scanEstimate} · {session} session · up to {Math.min(topN, maxRows)} results</p><p className="cap">{universe === "ticker" ? `Ticker: ${ticker || "choose a ticker"}` : universe === "watchlist" ? `Watchlist: ${selectedList?.name || "choose a list"}` : "Results will be ranked by HSF Score and saved to your scan history."}</p><p className="cap">{universe === "ticker" ? "A single ticker is the quickest scan." : "Large lists can take a few minutes. You can leave while the scan runs."}</p></Card>
           )}
           {job && active && <Card title="Scan in progress"><Progress job={job} onCancel={() => void scan.cancel()} cancelling={scan.cancelling} /></Card>}
           {job && job.status === "failed" && job.error === CANCELLED && (
