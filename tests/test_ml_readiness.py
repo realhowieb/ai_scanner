@@ -190,6 +190,20 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(fi["recent_scan_join_rate"], 0.5)
         self.assertEqual(fi["scan_join_status"]["ONLY_LATER_SCANS"], 1)
 
+    def test_scan_id_link_and_model_version_from_the_scan_inference(self):
+        a = opp(1, "AAA", "2026-10-06T16:40:00")
+        a["raw_signal"]["source_scan_id"] = ts("2026-10-06T16:35:00").isoformat()
+        a["raw_signal"]["models"] = {"prebreakout": {"status": "captured",
+                                                     "loaded_artifact": {"version": "prebreakout-xgb-v16"}}}
+        b = opp(2, "BBB", "2026-10-06T16:40:00")
+        b["raw_signal"]["models_prebreakout_version"] = "prebreakout-xgb-v16"   # slim readiness projection
+        c = opp(3, "CCC", "2026-10-06T16:40:00")
+        c["raw_signal"]["models"] = {"prebreakout": {"status": "unavailable", "reason": "model_unavailable"}}
+        scans = [scan("AAA", "2026-10-06T16:35:00", written="2026-10-06T16:40:04")]   # own scan, written after
+        fi = mr.build_report([a, b, c], scans, now=NOW)["feature_integrity"]
+        self.assertEqual(fi["scan_join_status"].get("MATCHED"), 1)
+        self.assertAlmostEqual(fi["recent_model_version_rate"], round(2 / 3, 4))
+
     def test_api_view_has_no_tickers_or_row_ids(self):
         rows, scans = synthetic(days=20)
         view = mr.api_view(mr.build_report(rows, scans, now=NOW))

@@ -86,7 +86,9 @@ RECOVERABLE = (PREMATURE_LABEL_WRITE, DATA_PROVIDER_FAILURE, MATURATION_JOB_MISS
 CATEGORIES = (TRAINING_ELIGIBLE, NOT_CERTIFIED) + NOT_YET + FAILED
 
 # raw_signal keys a freeze must write for the served-model provenance gate (none is written today).
-MODEL_VERSION_KEYS = ("prebreakout_model_version", "model_version")
+# Top-level keys first; then the version the scan's own inference recorded in
+# raw_signal.models.prebreakout.loaded_artifact (flattened by the slim readiness read).
+MODEL_VERSION_KEYS = ("prebreakout_model_version", "model_version", "models_prebreakout_version")
 
 # ---- States --------------------------------------------------------------------------------------------
 NOT_READY, COLLECTING, NEAR_READY, READY = "NOT_READY", "COLLECTING", "NEAR_READY", "READY"
@@ -207,6 +209,10 @@ def model_version_of(row: Mapping[str, Any]) -> Optional[str]:
     for k in MODEL_VERSION_KEYS:
         if raw.get(k):
             return str(raw[k])
+    pb = (raw.get("models") or {}).get("prebreakout") if isinstance(raw.get("models"), dict) else None
+    art = pb.get("loaded_artifact") if isinstance(pb, dict) and pb.get("status") == "captured" else None
+    if isinstance(art, dict) and art.get("version"):
+        return str(art["version"])
     return None
 
 

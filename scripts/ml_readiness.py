@@ -133,7 +133,8 @@ def join_diagnosis(rows: List[Dict[str, Any]], scans: List[Dict[str, Any]]) -> D
     delays, gaps, same_scan = [], [], 0
     statuses = defaultdict(int)
     for r in rows:
-        _scan, info = rd.match_scan_observation(r["ticker"], r["fired_at"], by_symbol)
+        _scan, info = rd.match_scan_observation(r["ticker"], r["fired_at"], by_symbol,
+                                                source_scan_id=rd.source_scan_id_of(r))
         statuses[info["status"]] += 1
         if info["status"] != rd.JOIN_FUTURE_ONLY:
             continue
