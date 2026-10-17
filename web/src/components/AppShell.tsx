@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import type { FormEvent, ReactNode, RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 
+import { StockSearch } from "@/components/StockSearch";
 import { InstallHint } from "@/components/InstallHint";
 import { useSession } from "@/session/SessionProvider";
 
@@ -91,7 +92,6 @@ export function backLabel(prev: string | null): string | null {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const router = useRouter();
   const [trail, setTrail] = useState<{ prev: string | null; cur: string | null }>({ prev: null, cur: null });
   useEffect(() => {
     // Query strings are read here, not with useSearchParams, so the shell needs no Suspense boundary.
@@ -100,26 +100,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     setTrail((t) => (t.cur && t.cur.split("?")[0] === path ? { ...t, cur: here } : { prev: t.cur, cur: here }));
   }, [path]);
   const { me, signOut } = useSession();
-  const [q, setQ] = useState("");
-  const [bad, setBad] = useState(false);
   const [menu, setMenu] = useState(false);
   const accountBox = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => setMenu(false), []);
   useDismiss(menu, closeMenu, accountBox, path);
 
-  const search = (e: FormEvent) => {
-    e.preventDefault();
-    const t = q.trim().toUpperCase();
-    if (!TICKER_RE.test(t)) {
-      setBad(true);
-      return;
-    }
-    setBad(false);
-    setQ("");
-    setMenu(false);
-    (document.activeElement as HTMLElement | null)?.blur();
-    router.push(`/stocks/${encodeURIComponent(t)}`);
-  };
 
   return (
     <div className="shell">
@@ -133,14 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             ))}
             <MoreMenu items={[...NAV.filter((n) => n.mid), ...NAV.filter((n) => !n.top)]} path={path} id="more-desk" className="" />
           </nav>
-          <form role="search" onSubmit={search} className="search">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-            <label htmlFor="ticker-search" className="sr-only">Search ticker</label>
-            <input id="ticker-search" type="search" placeholder="Ticker" value={q} maxLength={10} autoComplete="off"
-              aria-invalid={bad || undefined} aria-describedby={bad ? "ticker-search-err" : undefined}
-              onChange={(e) => { setQ(e.target.value); setBad(false); }} />
-            {bad && <span id="ticker-search-err" className="sr-only">Enter a ticker symbol like AAPL</span>}
-          </form>
+          <StockSearch compact />
           <div className="account" ref={accountBox}>
             <button type="button" className="btn" aria-expanded={menu} aria-haspopup="true"
               aria-label={me ? `${me.plan_label} · Account` : undefined} onClick={() => setMenu((m) => !m)}>

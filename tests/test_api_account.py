@@ -3,7 +3,7 @@ email preferences, billing links, per-IP limits.
 
 The web app's account functions are mocked at their module boundary (db.users,
 db.password_reset, db.email_verification, db.email_prefs, ui.email_utils,
-ui.checkout, ui.auth_sessions), so these tests check the API's wiring and rules
+services.billing, ui.auth_sessions), so these tests check the API's wiring and rules
 against the same functions the Streamlit pages call.
 """
 import json
@@ -257,7 +257,7 @@ class PrefsAndBillingTests(AccountApiTestCase):
         r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
         self.assertEqual(r.status_code, 403)
         self.verified.add("pro@example.com")
-        with mock.patch("ui.checkout.create_checkout_url",
+        with mock.patch("services.billing.create_checkout_url",
                         return_value=("https://checkout.stripe.com/c/pay/cs_test_1", None)) as m:
             r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "premium", "interval": "year"})
         self.assertEqual(r.json(), {"url": "https://checkout.stripe.com/c/pay/cs_test_1", "mode": "checkout"})
@@ -268,7 +268,7 @@ class PrefsAndBillingTests(AccountApiTestCase):
         """A failed lookup is a 503 with its own code, distinct from the 403 for an unverified email."""
         self.verified.add("pro@example.com")                      # verified, but the lookup can't say so
         self.verification_down = True
-        with mock.patch("ui.checkout.create_checkout_url") as m:
+        with mock.patch("services.billing.create_checkout_url") as m:
             r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
         self.assertEqual(r.status_code, 503)
         self.assertEqual(r.json()["code"], "verification_unavailable")
@@ -283,14 +283,14 @@ class PrefsAndBillingTests(AccountApiTestCase):
     def test_checkout_blocked_when_the_verification_module_fails(self):
         self.verified.add("pro@example.com")
         with mock.patch("db.email_verification.email_verification_status", side_effect=ImportError("psycopg")), \
-                mock.patch("ui.checkout.create_checkout_url") as m:
+                mock.patch("services.billing.create_checkout_url") as m:
             r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
         self.assertEqual(r.status_code, 503)
         m.assert_not_called()
 
     def test_billing_failures_never_leak_details(self):
         self.verified.add("pro@example.com")
-        with mock.patch("ui.checkout.create_checkout_url", return_value=(None, "sk_live_secret stack trace")):
+        with mock.patch("services.billing.create_checkout_url", return_value=(None, "sk_live_secret stack trace")):
             r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
         self.assertEqual(r.status_code, 502)
         self.assertNotIn("sk_live", r.text)
@@ -302,7 +302,7 @@ class PrefsAndBillingTests(AccountApiTestCase):
             calls.append((url, json, headers))
             return mock.Mock(status_code=200, json=lambda: {"portal_url": "https://billing.stripe.com/p/session/x"})
 
-        with mock.patch("ui.checkout.billing_auth_headers", return_value={"X-HSF-Auth": "billing-token"}), \
+        with mock.patch("services.billing.billing_auth_headers", return_value={"X-HSF-Auth": "billing-token"}), \
                 mock.patch("requests.post", side_effect=fake_post):
             r = self.client.post("/v1/billing/portal", headers=self.h, json={"flow": "cancel"})
         self.assertEqual(r.json(), {"url": "https://billing.stripe.com/p/session/x", "mode": "portal"})
@@ -310,11 +310,11 @@ class PrefsAndBillingTests(AccountApiTestCase):
         self.assertTrue(url.endswith("/create-portal-session"))
         self.assertEqual((body["email"], body.get("flow"), headers), ("pro@example.com", "cancel", {"X-HSF-Auth": "billing-token"}))
 
-        with mock.patch("ui.checkout.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
+        with mock.patch("services.billing.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
                 mock.patch("requests.post", return_value=mock.Mock(status_code=400)):
             r = self.client.post("/v1/billing/portal", headers=self.h, json={})
         self.assertEqual(r.status_code, 404)
-        with mock.patch("ui.checkout.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
+        with mock.patch("services.billing.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
                 mock.patch("requests.post", return_value=mock.Mock(status_code=500)):
             r = self.client.post("/v1/billing/portal", headers=self.h, json={})
         self.assertEqual(r.status_code, 502)

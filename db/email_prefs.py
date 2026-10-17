@@ -81,6 +81,13 @@ def get_prefs(user: Any) -> Dict[str, bool]:
 
 
 def wants_email(user: Any, kind: str) -> bool:
+    if kind == "alerts":
+        try:
+            from api.workspace import is_quiet
+            if is_quiet(str(user)):
+                return False
+        except Exception:
+            pass
     return bool(get_prefs(user).get(kind, True))
 
 

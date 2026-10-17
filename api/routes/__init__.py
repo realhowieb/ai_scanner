@@ -23,8 +23,10 @@ def register_all(app: FastAPI) -> None:
         research,
         scans,
         trading,
+        workspace,
     )
 
+    workspace.register(app)
     auth.register(app)
     data.register(app)
     account.register(app)

@@ -28,7 +28,12 @@ def build_export(user: str, me: Dict[str, Any]) -> Dict[str, Any]:
 
         return list_trades(user, limit=JOURNAL_LIMIT)
 
+    from api.alert_delivery import recent
+    from api.workspace import preferences
+
     sections: Dict[str, Callable[[], Any]] = {
+        "research_preferences": lambda: preferences(user),
+        "notification_deliveries": lambda: recent(user),
         "watchlists": watchlists,
         "price_alerts": lambda: user_data.list_alerts(user),
         "alert_rules": lambda: alert_rules.list_rules(user),

@@ -3,6 +3,7 @@ import importlib.util
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 DEPS = all(importlib.util.find_spec(m) for m in ("fastapi", "httpx", "jwt"))
@@ -22,6 +23,7 @@ class EmbeddedBillingTest(unittest.TestCase):
                                  refresh_ttl_s=3600, cors_origins=())
         self.billing = _configured_module()
         package = types.ModuleType("billing_service")
+        package.__path__ = [str(Path(__file__).resolve().parents[1] / "billing_service")]
         package.main = self.billing
         modules = patch.dict(sys.modules, {"billing_service": package, "billing_service.main": self.billing})
         modules.start()

@@ -732,3 +732,24 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 .delta-chip.down { color: var(--down); background: rgba(255, 122, 122, .1); border-color: #5a2a2a; }
 .wl-spark { display: inline-flex; margin-left: auto; }
 .wl-spark + .wl-act { margin-left: 12px; }
+
+/* Daily research controls */
+.stock-search { position: relative; }
+.stock-suggestions { position: absolute; top: 100%; left: 0; right: 0; min-width: 260px; z-index: 80; background: var(--surface, #111820); border: 1px solid var(--line, #263444); border-radius: 10px; max-height: 340px; overflow: auto; list-style: none; padding: 6px; }
+.stock-suggestions button { display: block; width: 100%; text-align: left; padding: 10px; background: transparent; color: inherit; border: 0; cursor: pointer; }
+.stock-suggestions [aria-selected="true"], .stock-suggestions button:hover, .stock-suggestions button:focus-visible { background: #22384a; }
+.search-input { display: flex; flex: 1; min-width: 0; }
+.table-display-settings { padding: 16px; }
+.stock-suggestions span { font-size: .85em; }
+.saved-views input { max-width: 230px; }
+.scanner-results { display: grid; gap: 16px; }
+.scanner-results [hidden] { display: none !important; }
+.is-compact .table td, .is-compact .table th { padding-top: 8px; padding-bottom: 8px; }
+.is-compact .setup-card { padding: 10px; }
+.stock-comparison { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; align-items: start; }
+.stock-comparison .kv > div { min-height: 42px; }
+@media (max-width: 600px) {
+  .stock-comparison { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 12px; }
+  .stock-comparison > .card { flex: 0 0 85%; scroll-snap-align: start; }
+  .saved-views .row-actions { align-items: stretch; }
+}

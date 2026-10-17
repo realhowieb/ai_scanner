@@ -1,6 +1,8 @@
 """One cached existing health snapshot; no request-time history/Actions queries."""
 import datetime as dt
+import threading
 import time
+from collections import deque
 
 from analytics.operations import summary
 from api.today import _cached
@@ -37,3 +39,29 @@ def get_summary(now=None):
     out['refresh_failed'] = snapshot['refresh_failed']
     out['stale'] = out['stale'] or out['refresh_failed']
     return out
+
+
+_lock = threading.Lock()
+_requests: deque = deque(maxlen=1000)
+_providers: deque = deque(maxlen=100)
+
+
+def record_request(rid: str, method: str, route: str, status: int, ms: float) -> None:
+    with _lock:
+        _requests.append({"request_id": rid, "method": method, "route": route, "status": status,
+                          "ms": round(ms, 1), "at": dt.datetime.now(dt.timezone.utc).isoformat()})
+
+
+def record_provider(name: str, ok: bool, ms: float) -> None:
+    with _lock:
+        _providers.append({"name": name, "ok": ok, "ms": round(ms, 1), "at": dt.datetime.now(dt.timezone.utc).isoformat()})
+
+
+def snapshot(query: str = "", problems_only: bool = False) -> dict:
+    with _lock:
+        rows, providers = list(reversed(_requests)), list(reversed(_providers))
+    matches = [r for r in rows if (not problems_only or r["status"] >= 400 or r["ms"] >= 1000)
+               and query.casefold() in f'{r["request_id"]} {r["route"]} {r["status"]}'.casefold()]
+    return {"scope": "This API process since its last restart; up to 1,000 requests.", "requests": matches[:100],
+            "providers": providers[:20], "total": len(rows),
+            "errors": sum(r["status"] >= 500 for r in rows), "slow": sum(r["ms"] >= 1000 for r in rows)}

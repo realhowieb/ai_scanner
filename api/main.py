@@ -113,6 +113,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 status = response.status_code
         finally:
             route = request.scope.get("route")
+            from api.operations import record_request
+
+            record_request(rid, request.method, getattr(route, "path", None) or "unmatched",
+                           status, (time.perf_counter() - t0) * 1000)
             access_log.info(json.dumps({
                 "request_id": rid, "method": request.method,
                 "route": getattr(route, "path", None) or "unmatched", "status": status,
