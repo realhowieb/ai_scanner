@@ -81,7 +81,22 @@ it("bounds polling when Stripe has not confirmed the requested upgrade", async (
 });
 
 it("gives a Mac web app user a return instruction and an account link", () => {
+  fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ detail: "no session" }, 401)));
   render(<BillingReturn />);
   expect(screen.getByText(/switch back to its window/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Open account and refresh plan" })).toHaveAttribute("href", "/account?billing=return");
+});
+
+it("names the account this browser is signed in to, so a different account is obvious", async () => {
+  fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ...original, email: "other@example.com" })));
+  render(<BillingReturn />);
+  expect(await screen.findByRole("status")).toHaveTextContent("Signed in here as other@example.com");
+  expect(screen.getByRole("button", { name: "sign out here" })).toBeInTheDocument();
+});
+
+it("shows no account note when this browser is signed out", async () => {
+  fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ detail: "no session" }, 401)));
+  render(<BillingReturn />);
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
 });
