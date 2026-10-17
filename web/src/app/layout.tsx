@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
 import { ErrorReporter } from "@/components/ErrorReporter";
+import { NativeApp } from "@/components/NativeApp";
 import { OfflineReady } from "@/components/OfflineReady";
 
 import "./globals.css";
@@ -50,6 +51,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <ErrorReporter />
         <OfflineReady />
+        <NativeApp />
         {children}
       </body>
     </html>

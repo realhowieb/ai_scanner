@@ -12895,6 +12895,12 @@
       "title": "Allowed",
       "type": "boolean"
      },
+     "apns_enabled": {
+      "default": false,
+      "description": "The server can push to the iPhone app (APNs key set); the app registers with POST /v1/me/devices",
+      "title": "Apns Enabled",
+      "type": "boolean"
+     },
      "enabled": {
       "description": "False until the server has VAPID keys",
       "title": "Enabled",
