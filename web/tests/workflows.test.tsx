@@ -272,6 +272,7 @@ describe("Alerts", () => {
   it("validates with the server's rules before sending; shows duplicates and server 422s", async () => {
     const u = user();
     wrap(<AlertsView />);
+    await u.click(screen.getByRole("button", { name: "New alert" }));
     const form = await screen.findByRole("button", { name: "Create alert" });
     await u.selectOptions(screen.getByLabelText("Alert type"), "price");
     await u.type(screen.getByLabelText("Ticker"), "NVDA");
@@ -285,6 +286,7 @@ describe("Alerts", () => {
     await u.click(form);
     expect(await screen.findByText("NVDA price rises above $999,999")).toBeInTheDocument();
     expect(screen.getByText("Using 1 of 5 on your Pro plan")).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "New alert" }));
 
     await u.selectOptions(screen.getByLabelText("Alert type"), "price");
     await u.type(screen.getByLabelText("Ticker"), "NVDA");
@@ -297,6 +299,7 @@ describe("Alerts", () => {
   it("starts each type with the web's default threshold (breakout 8, move 5)", async () => {
     const u = user();
     wrap(<AlertsView />);
+    await u.click(screen.getByRole("button", { name: "New alert" }));
     await screen.findByRole("button", { name: "Create alert" });
     expect(screen.getByLabelText("Breakout Score at or above")).toHaveValue("8");
     await u.selectOptions(screen.getByLabelText("Alert type"), "move");
@@ -309,6 +312,7 @@ describe("Alerts", () => {
     api.alertRows.push({ id: 7, type: "rvol", ticker: "TSLA", threshold: 2, direction: null, watchlist_only: false, enabled: true, last_fired_at: null, created_at: new Date().toISOString() });
     const u = user();
     wrap(<AlertsView />);
+    await u.click(await screen.findByRole("tab", { name: "Rules" }));
     await u.click(await screen.findByRole("button", { name: "Turn off: TSLA trades at 2× its average volume" }));
     expect(await screen.findByRole("button", { name: "Turn on: TSLA trades at 2× its average volume" })).toBeInTheDocument();
     expect(api.alertRows[0]!.enabled).toBe(false);
@@ -322,6 +326,7 @@ describe("Alerts", () => {
     api.fail("PATCH", /^\/v1\/alerts\/8$/, 503);
     const u = user();
     wrap(<AlertsView />);
+    await u.click(await screen.findByRole("tab", { name: "Rules" }));
     await u.click(await screen.findByRole("button", { name: /Turn off: AMD/ }));
     expect(await screen.findByText(/unavailable/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Turn off: AMD/ })).toBeInTheDocument();
@@ -332,22 +337,27 @@ describe("Alerts", () => {
     api = fakeApi({ alertLimit: 1, emailEnabled: false });
     api.alertRows.push({ id: 1, type: "watchlist", ticker: null, threshold: null, direction: null, watchlist_only: false, enabled: true, last_fired_at: null, created_at: "" });
     wrap(<AlertsView />, "basic");
+    await user().click(screen.getByRole("button", { name: "New alert" }));
     expect(await screen.findByText("You're using all 1 alert on your plan.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create alert" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Upgrade to Pro" }).length).toBeGreaterThan(0);
-    expect(screen.getByText("Email alerts are part of Pro.")).toBeInTheDocument();
+    await user().click(screen.getByRole("button", { name: "Close" }));
+    await user().click(screen.getByRole("tab", { name: "Delivery" }));
+    expect(screen.getByText("Email alerts are part of Pro.")).toBeVisible();
   });
 
   it("email delivery toggle saves the preference; push is not promised; empty history", async () => {
     const u = user();
     wrap(<AlertsView />);
+    await u.click(await screen.findByRole("tab", { name: "Delivery" }));
     const box = await screen.findByRole("checkbox", { name: /Email me when an alert fires/ });
     expect(box).toBeChecked();
     await u.click(box);
     await waitFor(() => expect(api.prefs.alerts).toBe(false));
     await waitFor(() => expect(screen.getByRole("checkbox", { name: /Email me when an alert fires/ })).not.toBeChecked());
-    expect(screen.getByText("Browser notifications depend on your device and browser permissions.")).toBeInTheDocument();
-    expect(screen.getByText("Nothing has fired yet.")).toBeInTheDocument();
+    expect(screen.getByText("Browser notifications depend on this device’s permissions.")).toBeInTheDocument();
+    await u.click(screen.getByRole("tab", { name: "Activity" }));
+    expect(screen.getByText("Nothing has fired yet.")).toBeVisible();
   });
 
   it("a mutation that finds the session expired hands over to sign-in once", async () => {
@@ -357,6 +367,7 @@ describe("Alerts", () => {
     api.fail("PATCH", /^\/v1\/alerts\/9$/, 401, { detail: "Your session has ended. Sign in again.", code: "session_expired" });
     const u = user();
     wrap(<AlertsView />);
+    await u.click(await screen.findByRole("tab", { name: "Rules" }));
     await u.click(await screen.findByRole("button", { name: /Turn off: AMD/ }));
     await waitFor(() => expect(expired).toHaveBeenCalledTimes(1));
   });
@@ -366,6 +377,7 @@ describe("before the matching API is deployed", () => {
   it("explains instead of breaking when GET /v1/alerts/types doesn't exist yet", async () => {
     api.fail("GET", /^\/v1\/alerts\/types$/, 404, { detail: "Not Found" });
     wrap(<AlertsView />);
+    await user().click(screen.getByRole("button", { name: "New alert" }));
     expect(await screen.findByRole("note")).toHaveTextContent("needs the latest HSF API");
     expect(screen.getByText("No alerts yet.")).toBeInTheDocument();
   });

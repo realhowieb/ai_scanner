@@ -134,7 +134,7 @@ describe("Admin page", () => {
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText("25.0%")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Scans per day: Scheduled 42, User 7/ })).toBeInTheDocument();
-    expect(screen.getByText("SCAN_MISSED")).toBeInTheDocument();
+    expect(screen.getByText("scan missed")).toBeInTheDocument();
     await u.selectOptions(screen.getByRole("combobox", { name: "Period" }), "90");
     await waitFor(() => expect(calls.some((c) => c.path === "/v1/admin/analytics" && c.method === "GET")).toBe(true));
   });

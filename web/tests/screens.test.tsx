@@ -45,7 +45,7 @@ describe("Scanner", () => {
     fetchMock.mockResolvedValue(jsonResponse(latest()));
     render(<SessionProvider initialMe={me("basic")}><ScannerView /></SessionProvider>);
     expect(await screen.findAllByRole("link", { name: "AAA" })).not.toHaveLength(0);
-    expect(screen.getByRole("heading", { name: "AAA leads the latest HSF-ranked scan." })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review AAA" })).toHaveAttribute("href", "/stocks/AAA");
     expect(screen.getByText("More filters")).toBeInTheDocument();
     expect(screen.getAllByRole("group", { name: "Setup type" })).toHaveLength(1); // chips sit outside the folded filters
     expect(screen.queryByRole("columnheader", { name: "PreBreakout" })).not.toBeInTheDocument();
@@ -72,7 +72,7 @@ describe("Scanner", () => {
     fetchMock.mockResolvedValue(jsonResponse(latest({ total: 0, scan_total: 100, limited: false, max_results: 200, setups: [] })));
     render(<SessionProvider initialMe={me("premium")}><ScannerView /></SessionProvider>);
     expect(await screen.findByText(/100 setups ranked · 0 PreBreakout/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "0 PreBreakout setups of 100 ranked" })).toBeInTheDocument();
+    expect(screen.getByText(/No setups/)).toBeInTheDocument();
   });
 
   it("locks PreBreakout below Premium without asking the API", async () => {

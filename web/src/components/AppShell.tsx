@@ -85,6 +85,7 @@ const SECTIONS: [string, string][] = [
 export function backLabel(prev: string | null): string | null {
   const base = prev?.split("?")[0];
   if (!base) return null;
+  if (base === "/stocks/compare") return "Back to comparison";
   if (base.startsWith("/stocks/")) return "Back to the previous stock";
   const hit = SECTIONS.find(([p]) => base === p || base.startsWith(`${p}/`));
   return hit ? `Back to ${hit[1]}` : "Back";

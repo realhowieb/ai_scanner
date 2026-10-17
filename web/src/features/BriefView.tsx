@@ -4,7 +4,7 @@
 // movement since the previous snapshot, movers, golden crosses), the earnings calendar
 // (Pro) and an AI narrative (Premium, on request). Everything comes from /v1/brief,
 // /v1/earnings and /v1/ai/brief-narrative; sections the API leaves empty say so.
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { DataFreshness } from "@/features/DataFreshness";
 import { api, unwrap } from "@/api/client";
@@ -80,6 +80,7 @@ function SectorHeat({ sectors }: { sectors: { sector?: unknown; chg_pct?: unknow
 }
 
 function Earnings() {
+  const [expanded, setExpanded] = useState(false);
   const { can } = useSession();
   const allowed = can("can_earnings");
   const e = useApi(allowed ? "earnings:7" : null, (signal) => unwrap(api.GET("/v1/earnings", { params: { query: { days: 7 } }, signal })));
@@ -91,16 +92,18 @@ function Earnings() {
         : e.data.length === 0 ? <Empty title="No earnings on file for the next 7 days." />
         : (
           <ul className="rows">
-            {e.data.slice(0, 40).map((r) => (
-              <li key={`${r.ticker}-${r.earnings_date}`} className="row">
+            {(expanded ? e.data : e.data.slice(0, 5)).map((r, i, shown) => (
+              <Fragment key={`${r.ticker}-${r.earnings_date}`}>
+              {(i === 0 || shown[i - 1]?.earnings_date !== r.earnings_date) && <li className="cap strong earnings-date">{r.days_until === 0 ? "Today" : r.days_until === 1 ? "Tomorrow" : shortDate(r.earnings_date)}</li>}
+              <li className="row">
                 <TickerLink ticker={r.ticker} />
-                <span className="cap grow">{r.days_until === 0 ? "Today" : r.days_until === 1 ? "Tomorrow" : shortDate(r.earnings_date)}</span>
+                <span className="grow" />
                 {r.time && <Pill>{r.time === "bmo" ? "Before open" : r.time === "amc" ? "After close" : r.time.toUpperCase()}</Pill>}
-              </li>
+              </li></Fragment>
             ))}
           </ul>
         )}
-      {allowed && e.data && e.data.length > 40 && <p className="cap">Showing the first 40 of {e.data.length}.</p>}
+      {allowed && e.data && e.data.length > 5 && <button type="button" className="btn btn-sm" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>{expanded ? "Show fewer earnings" : `View all ${e.data.length} earnings`}</button>}
     </Card>
   );
 }
@@ -132,6 +135,7 @@ function BriefBody({ b }: { b: Brief }) {
         <div className="brief-center">
           <MarketPulse b={b} />
           <OpportunityRadar b={b} />
+          {can("can_ai_notes") && <Narrative />}
         </div>
         <div className="brief-left">
             <Card title="Top movers" id="gainers"><MoverBars gainers={b.gainers} losers={b.losers} /></Card>
@@ -147,7 +151,6 @@ function BriefBody({ b }: { b: Brief }) {
           <Card title="Golden crosses" id="gc">
             {b.golden_crosses.length ? <div className="chips">{b.golden_crosses.map((t) => <TickerLink key={t} ticker={t} />)}</div> : <p className="cap">None today.</p>}
           </Card>
-          {can("can_ai_notes") && <Narrative />}
           <details><summary>Model details</summary>
           <Card title="Breakout scores" id="bo">
             {b.top_breakout_scores.length ? (

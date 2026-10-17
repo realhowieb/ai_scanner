@@ -24,7 +24,7 @@ const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : 
 const QUALITY: Record<string, string> = { INSUFFICIENT: "Insufficient", LIMITED: "Limited", MODERATE: "Moderate", STRONG: "Strong" };
 
 export function Quality({ q }: { q: string }) {
-  return <Pill tone={q === "INSUFFICIENT" || q === "LIMITED" ? "warn" : undefined}>{QUALITY[q] ?? q} evidence</Pill>;
+  return <Pill tone={q === "INSUFFICIENT" || q === "LIMITED" ? "warn" : undefined}>{QUALITY[q] ?? q} sample coverage</Pill>;
 }
 
 function range(r: { start?: string | null; end?: string | null }): string {
@@ -55,7 +55,7 @@ function MetricHead({ first }: { first: string }) {
         <th scope="col" className="num">Median vs SPY</th>
         <th scope="col" className="num">Beat SPY</th>
         <th scope="col" className="num hide-narrow">Up</th>
-        <th scope="col" className="num hide-narrow">Avg MFE / MAE</th>
+        <th scope="col" className="num hide-narrow">Avg best / worst move</th>
       </tr>
     </thead>
   );
@@ -71,6 +71,7 @@ function SummaryCard({ s }: { s: OutcomeSummary }) {
         {" "}{s.matured_observations} have a {s.horizon}-trading-day outcome, {s.pending_observations} are still pending
         {s.unavailable_observations ? ` and ${s.unavailable_observations} had no price data` : ""}. No filters applied.
       </p>
+      <p className="cap">Sample coverage describes the number of observations, not performance or predictive reliability. Best / worst move (MFE / MAE) measures the largest rise and drawdown during the holding period, not a realized trade result.</p>
       <dl className="kv">
         <div><dt>Median return</dt><dd className={`mono ${tone(m.median_return)}`}>{signed(m.median_return)}</dd></div>
         <div><dt>Median vs SPY</dt><dd className={`mono ${tone(m.median_excess_return)}`}>{signed(m.median_excess_return)}</dd></div>

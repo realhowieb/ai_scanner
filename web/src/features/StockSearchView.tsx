@@ -20,10 +20,11 @@ export function StockSearchView() {
         <div>
           <h1 className="h1">Stock Intelligence</h1>
           <Link href="/stocks/compare" className="btn btn-sm">Compare stocks</Link>
-          <p className="cap">Start with the names HSF already ranked, then open one ticker for the deeper read.</p>
+          <p className="cap">Search a company or ticker, or review a name from the latest ranked scan.</p>
         </div>
       </section>
-      <Card title="Top setups to review" id="top" aside={scan.data?.scan_at ? <Freshness at={scan.data.scan_at} /> : undefined}>
+      <Card title="Open a ticker" id="ticker-search"><StockSearch /></Card>
+      <Card title="Top setups to review" id="top" aside={scan.data?.scan_at ? <Freshness at={scan.data.scan_at} stale={scan.data.stale} /> : undefined}>
         {scan.error && !scan.data ? <ErrorState error={scan.error} onRetry={scan.reload} what="the latest scan" />
           : !scan.data ? <Skeleton rows={6} label="Loading the latest scan" />
           : scan.data.setups.length === 0 ? <Empty title="No ranked setups in the latest scan." />
@@ -49,9 +50,6 @@ export function StockSearchView() {
               </ul>
             </div>
           )}
-      </Card>
-      <Card title="Open a ticker" id="ticker-search">
-        <StockSearch />
       </Card>
     </div>
   );

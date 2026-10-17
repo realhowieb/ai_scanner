@@ -22,7 +22,7 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
-import { DailySpark, useDailySparks } from "./Sparks";
+import { DailySpark, useDailyBars } from "./Sparks";
 
 const NOTE_MAX = 500;
 const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
@@ -242,6 +242,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const legacy = !!detail.data && detail.data.scan_at === undefined;
   const scan = useApi(legacy ? "wl-scan" : null, (signal) => unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: 200 } }, signal })));
   const [byScore, setByScore] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -255,11 +256,12 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
     if (!legacy) return new Map((detail.data?.items ?? []).filter((i) => i.latest).map((i) => [i.ticker, i.latest!]));
     return new Map((scan.data?.setups ?? []).map((s) => [s.ticker, s]));
   }, [legacy, detail.data, scan.data]);
-  const series = useDailySparks((detail.data?.items ?? []).map((i) => i.ticker));
+  const daily = useDailyBars((detail.data?.items ?? []).map((i) => i.ticker));
 
   if (detail.error && !detail.data) return <ErrorState error={detail.error} onRetry={detail.reload} what="this watchlist" />;
   if (!detail.data || detail.loading && detail.data.id !== id) return <Skeleton rows={5} label="Loading watchlist" />;
   const w: WatchlistDetail = detail.data;
+  const series = daily?.series ?? {};
   const scanAt = legacy ? scan.data?.scan_at : w.scan_at;
   const stale = legacy ? scan.data?.stale : w.stale;
   const items = byScore ? [...w.items].sort((a, b) => (scores.get(b.ticker)?.score ?? -1) - (scores.get(a.ticker)?.score ?? -1)) : w.items;
@@ -277,7 +279,8 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           <span><strong>{attention}</strong> need attention</span>
           <span><strong>{notes}</strong> with notes</span>
         </div>
-        <AddTickers wl={w.id} onAdded={reload} />
+        <button type="button" className="btn only-narrow" aria-expanded={manageOpen || !w.items.length} aria-controls="watchlist-tools" onClick={() => setManageOpen((v) => !v)}>Add tickers or manage list</button>
+        <div id="watchlist-tools" className={`watchlist-tools${manageOpen || !w.items.length ? " is-open" : ""}`}><AddTickers wl={w.id} onAdded={reload} />
         <div className="row-actions wl-manage" aria-label="Watchlist management">
           <button type="button" className="btn" onClick={() => { ren.clear(); setRenaming(true); }}>Rename</button>
           <button type="button" className="btn" disabled={w.is_default || act.busy}
@@ -286,7 +289,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           </button>
           <button type="button" className="btn btn-danger-outline" onClick={() => setDeleting(true)}>Delete</button>
         </div>
-        <ErrorLine error={act.error} />
+        <ErrorLine error={act.error} /></div>
       </Card>
 
       <WatchlistChangesCard id={w.id} />
@@ -307,6 +310,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           <ul className="wl-items">
             {items.map((it) => {
               const s = scores.get(it.ticker);
+              const bar = daily?.last_bar?.[it.ticker];
               const rank = !legacy ? it.latest?.rank : undefined;
               return (
                 <li key={it.ticker} className="wl-item">
@@ -335,6 +339,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                         {rank && <span>#{rank}{w.scan_total ? ` of ${w.scan_total}` : ""}</span>}
                       </>
                     )}
+                    {!s && bar && <span className="mono">{price(bar.close)} <span className="cap">daily bar {shortDate(bar.session)} · may be in progress; not live</span></span>}
                     {intelBy.get(it.ticker) && <IntelFacts x={intelBy.get(it.ticker)!} />}
                     {it.added_at && <span>Added {shortDate(it.added_at)}{it.price_when_added ? ` at ${price(it.price_when_added)}` : ""}</span>}
                   </div>
@@ -395,7 +400,8 @@ export function WatchlistsView() {
             <button type="button" className="btn btn-primary" onClick={() => { create.clear(); setCreating(true); }}>Create your first watchlist</button>
           </Empty></Card>
         ) : (
-          <div className="split">
+          <div className="split watchlists-split">
+            <label className="field only-narrow">Current watchlist<select value={selected?.id ?? ""} onChange={(e) => select(Number(e.target.value))}>{all.map((w) => <option key={w.id} value={w.id}>{w.name}{w.is_default ? " · Default" : ""} ({w.symbol_count})</option>)}</select></label>
             <nav className="col-side card wl-nav" aria-label="Your watchlists">
               <ul className="pick-list">
                 {all.map((w) => (
@@ -427,7 +433,7 @@ export function WatchlistsView() {
           select(wl.id);
           return true;
         }} />
-      <p className="cap">Changes here also show in the classic app (it may take up to 2 minutes there). <Link href="/alerts">Alerts</Link> can watch these lists.</p>
+      <p className="cap">Lists sync to your account. <Link href="/alerts">Alerts</Link> can watch these lists.</p>
     </div>
   );
 }

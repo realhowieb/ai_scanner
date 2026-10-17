@@ -19,7 +19,8 @@ const PERIODS = [[7, "7 days"], [30, "30 days"], [90, "90 days"], [365, "1 year"
 export function frac(v: number | null | undefined, signed = false): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   const p = v * 100;
-  return `${signed && p > 0 ? "+" : ""}${p.toFixed(1)}%`;
+  const rounded = Number(p.toFixed(signed && Math.abs(p) < 0.1 ? 3 : 1));
+  return `${signed && rounded > 0 ? "+" : ""}${rounded.toFixed(signed && Math.abs(p) > 0 && Math.abs(p) < 0.1 ? 3 : 1)}%`;
 }
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -164,20 +165,20 @@ function Product({ a }: { a: Schemas["AdminAnalytics"] }) {
         <p className="cap">Scheduled scans have no account; user scans are account-scoped runs.</p>
       </Card>
       <Card title="Recorded conversion events" id="conversions">
-        <Tiles items={[["Signup events", fmt(c.signups)], ["Paid-conversion events", fmt(c.paid)], ["Recorded signup to paid", frac(c.signup_to_paid)]]} />
+        <Tiles items={[["Unique signup accounts", fmt(c.signups)], ["Unique paid accounts", fmt(c.paid)], ["Recorded signup to paid", frac(c.signup_to_paid)]]} />
         {c.destinations.length > 0 && <HBars label="Paid destination" rows={c.destinations.map((d) => [d.plan, d.users])} />}
-        <p className="cap">Only recorded paid-conversion events count. Plan changes are not inferred from current plans, because there is no complete history of them.</p>
+        <p className="cap">Counts cover the selected period and deduplicate accounts. The rate measures accounts with both signup and payment recorded in that period; destination bars count events. Only recorded paid-conversion events count. Plan changes are not inferred from current plans, because there is no complete history of them.</p>
       </Card>
-      <Card title="Autonomous Recovery" id="recovery">
+      <details className="research-section"><summary>Recovery history</summary><Card title="Autonomous Recovery" id="recovery">
         {a.recovery.length === 0 ? <p className="cap">No Autonomous Recovery events recorded.</p> : (
           <div className="table-wrap"><table className="table">
             <thead><tr><th scope="col">Started</th><th scope="col">Incident</th><th scope="col">Action</th><th scope="col">Result</th></tr></thead>
             <tbody>{a.recovery.map((r, i) => (
-              <tr key={`${r.started_at}-${i}`}><td className="cap">{etTime(r.started_at)}</td><td>{r.incident}</td><td>{r.action}</td><td>{r.result}</td></tr>
+              <tr key={`${r.started_at}-${i}`}><td className="cap">{etTime(r.started_at)}</td><td>{r.incident?.replaceAll("_", " ").toLowerCase()}</td><td>{r.action?.replaceAll("_", " ").toLowerCase()}</td><td>{r.result?.replaceAll("_", " ").toLowerCase()}</td></tr>
             ))}</tbody>
           </table></div>
         )}
-      </Card>
+      </Card></details>
     </>
   );
 }
@@ -197,7 +198,7 @@ function cell(g: Group | undefined, metric: Metric, minN: number): { text: strin
 
 function Heatmap({ groups, metric, minN, rowLabel }: { groups: Group[]; metric: Metric; minN: number; rowLabel: string }) {
   const rows = [...new Set(groups.map((g) => g.key ?? "(none)"))];
-  const cols = [...new Set(groups.map((g) => g.column ?? "(none)"))].sort();
+  const cols = [...new Set(groups.map((g) => g.column ?? "(none)"))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   if (groups.length === 0) return <p className="cap">No matured observations for this matrix yet.</p>;
   const at = (r: string, c: string) => groups.find((g) => (g.key ?? "(none)") === r && (g.column ?? "(none)") === c);
   return (
@@ -215,7 +216,7 @@ function Select({ label, value, options, onChange }: { label: string; value: str
     <label className="field"><span>{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">All</option>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        {[...options].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
     </label>
   );
@@ -293,7 +294,7 @@ function StairStepper({ days }: { days: number }) {
           {d.observations === 0 ? <Empty title="No Stair-Stepper outcomes have matured in this period." /> : (
             <div className="stack-sm">
               <label className="field"><span>Outcome horizon</span>
-                <select value={horizon} onChange={(e) => setHorizon(e.target.value)}>{d.horizons.map((h) => <option key={h} value={h}>{h}</option>)}</select>
+                <select value={horizon} onChange={(e) => setHorizon(e.target.value)}>{[...d.horizons].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((h) => <option key={h} value={h}>{h}</option>)}</select>
               </label>
               <div className="table-wrap"><table className="table">
                 <thead><tr><th scope="col">Window (bars)</th><th scope="col" className="num">Observations</th><th scope="col" className="num">Matured</th><th scope="col" className="num">Positive</th>
@@ -340,12 +341,13 @@ function MlReadiness() {
   return useView("admin-ml-readiness", (signal) => unwrap(api.GET("/v1/admin/ml-readiness", { signal })), "ML v4 readiness", (m) => (
     <Card title="ML v4 readiness" id="ml" aside={`Computed ${etTime(m.generated_at)}`}>
       <p><StatusPill status={m.status} /> {m.recommendation}</p>
+      {m.blocking_reasons.length > 0 && <p className="notice">Review required: {m.blocking_reasons.join("; ")}</p>}
       <Tiles items={[["Matured signal-days", fmt(m.matured_signal_days)], ["Trading-day coverage", fmt(m.matured_trading_days)],
         ["Unique symbols", fmt(m.matured_symbols)], ["Outcome coverage (recent)", frac(m.outcome_coverage_recent)], ["Walk-forward folds", fmt(m.walk_forward_folds)]]} />
       <div className="table-wrap"><table className="table">
         <thead><tr><th scope="col">Gate</th><th scope="col" className="hide-narrow">Kind</th><th scope="col">Value</th><th scope="col">Needs</th><th scope="col">Progress</th></tr></thead>
-        <tbody>{m.gates.map((g) => (
-          <tr key={g.gate}><th scope="row">{g.gate}{g.why ? <div className="cap">{g.why}</div> : null}</th><td className="cap hide-narrow">{g.kind}</td>
+        <tbody>{[...m.gates].sort((a, b) => Number(b.status !== "PASS") - Number(a.status !== "PASS")).map((g) => (
+          <tr key={g.gate}><th scope="row">{g.gate.replaceAll("_", " ")}{g.why ? <details><summary>Why this gate?</summary><p className="cap">{g.why}</p></details> : null}</th><td className="cap hide-narrow">{g.kind}</td>
             <td className="mono">{typeof g.value === "number" ? fmt(Math.round(g.value * 1000) / 1000) : String(g.value ?? "—")}</td><td className="mono">{g.needs}</td>
             <td><div className="scorebar"><div className="track" aria-hidden="true"><div className="fill" style={{ width: `${Math.min(100, g.progress * 100)}%` }} /></div>
               <StatusPill status={g.status} /></div></td></tr>
@@ -363,9 +365,9 @@ export function ResearchTab() {
     <div className="stack">
       <div className="inline-form"><Period days={days} onChange={setDays} /></div>
       <Signals key={days} days={days} />
-      <Evidence days={days} />
-      <StairStepper days={days} />
-      <MlReadiness />
+      <details className="research-section"><summary>Research evidence</summary><Evidence days={days} /></details>
+      <details className="research-section"><summary>Stair-Stepper evidence</summary><StairStepper days={days} /></details>
+      <details className="research-section"><summary>ML v4 readiness and validation gates</summary><MlReadiness /></details>
     </div>
   );
 }

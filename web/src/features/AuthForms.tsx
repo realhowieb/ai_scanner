@@ -9,6 +9,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
+import { PasswordField } from "@/components/PasswordField";
 import { messageFrom, newRequestId } from "@/api/client";
 import { WAKING_UP, useSlow } from "@/components/ui";
 import { captureAttribution, track } from "@/lib/funnel";
@@ -32,7 +33,7 @@ export async function postAuth(path: string, body: unknown): Promise<Outcome> {
 
 const errorOf = (o: Outcome) => (o.status === 0 ? String(o.body?.detail) : messageFrom(o.body, o.status)) + (o.status >= 500 && o.requestId ? ` Support code: ${o.requestId}` : "");
 
-function Shell({ title, children }: { title: string; children: ReactNode }) {
+export function AuthShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="card narrow login">
       <Link href="/" className="brand brand-lg" aria-label="HSFinest.AI home">HSFinest<span>.AI</span></Link>
@@ -73,7 +74,7 @@ export function SignupForm() {
   };
   return (
     <form onSubmit={submit} noValidate>
-      <Shell title="Create your account">
+      <AuthShell title="Create your account">
         <p className="cap">Starter plan, free. Upgrade any time from Account.</p>
         <label className="field"><span>Email</span>
           <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -104,7 +105,7 @@ export function SignupForm() {
         {slow && <p className="cap" role="status">{WAKING_UP}</p>}
         <p className="cap">Next, you&apos;ll open Today. We&apos;ll email a verification link so you can upgrade and receive email alerts.</p>
         <p className="cap login-links">Already have an account? <Link href="/login">Sign in</Link></p>
-      </Shell>
+      </AuthShell>
     </form>
   );
 }
@@ -125,7 +126,7 @@ export function ForgotPasswordForm() {
   };
   return (
     <form onSubmit={submit} noValidate>
-      <Shell title="Reset your password">
+      <AuthShell title="Reset your password">
         {sent ? <p className="notice" role="status">{sent}</p> : (
           <>
             <p className="cap">We&apos;ll email you a link to set a new password.</p>
@@ -137,7 +138,7 @@ export function ForgotPasswordForm() {
           </>
         )}
         <p className="cap login-links"><Link href="/login">Back to sign in</Link></p>
-      </Shell>
+      </AuthShell>
     </form>
   );
 }
@@ -161,15 +162,15 @@ export function ResetPasswordForm() {
   };
   if (!token) {
     return (
-      <Shell title="Reset link missing">
+      <AuthShell title="Reset link missing">
         <p className="body-sm">Open the link from the reset email, or ask for a new one.</p>
         <Link href="/forgot-password" className="btn btn-primary btn-block">Send a new link</Link>
-      </Shell>
+      </AuthShell>
     );
   }
   return (
     <form onSubmit={submit} noValidate>
-      <Shell title="Set a new password">
+      <AuthShell title="Set a new password">
         {done ? (
           <>
             <p className="notice" role="status">{done} You&apos;ve been signed out everywhere.</p>
@@ -177,18 +178,15 @@ export function ResetPasswordForm() {
           </>
         ) : (
           <>
-            <label className="field"><span>New password</span>
-              <input type="password" autoComplete="new-password" required value={pw} onChange={(e) => setPw(e.target.value)} placeholder="At least 10 characters" />
-            </label>
-            <label className="field"><span>Repeat new password</span>
-              <input type="password" autoComplete="new-password" required value={pw2} onChange={(e) => setPw2(e.target.value)} />
-            </label>
+            <p className="cap">Use at least 10 characters. Avoid common passwords, repeated patterns, and your name or email.</p>
+            <PasswordField label="New password" autoComplete="new-password" required value={pw} onChange={(e) => setPw(e.target.value)} />
+            <PasswordField label="Repeat new password" autoComplete="new-password" required value={pw2} onChange={(e) => setPw2(e.target.value)} aria-invalid={!!pw2 && pw !== pw2 || undefined} />
             {!!pw2 && pw !== pw2 && <p className="form-error">The passwords don&apos;t match.</p>}
             {error && <p className="form-error" role="alert">{error} <Link href="/forgot-password">Get a new link</Link></p>}
             <button type="submit" className="btn btn-primary btn-block" disabled={busy || !pw || pw !== pw2}>{busy ? "Saving…" : "Set password"}</button>
           </>
         )}
-      </Shell>
+      </AuthShell>
     </form>
   );
 }
@@ -204,12 +202,12 @@ export function VerifyEmail() {
       setState(o.ok ? { ok: true, text: String(o.body?.message ?? "Email verified.") } : { ok: false, text: errorOf(o) }));
   }, [token]);
   return (
-    <Shell title="Verify your email">
+    <AuthShell title="Verify your email">
       {!token ? <p className="body-sm">Open the link from the verification email. Signed in, you can send a new one from Account.</p>
         : !state ? <p className="cap" role="status">Checking your link…</p>
         : state.ok ? <p className="notice" role="status">{state.text} You can upgrade and get email alerts now.</p>
         : <p className="form-error" role="alert">{state.text} Signed in, you can send a new link from Account.</p>}
       <div className="row-actions"><Link href="/today" className="btn btn-primary">Open HSF</Link><Link href="/account">Account</Link></div>
-    </Shell>
+    </AuthShell>
   );
 }

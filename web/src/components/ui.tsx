@@ -15,7 +15,7 @@ import { checkout } from "@/lib/checkout";
 export function Card({ title, aside, children, id, className = "" }: { title?: ReactNode; aside?: ReactNode; children: ReactNode; id?: string; className?: string }) {
   const hid = id ? `${id}-h` : undefined;
   return (
-    <section className={`card ${className}`} aria-labelledby={hid}>
+    <section id={id} className={`card ${className}`} aria-labelledby={hid}>
       {(title || aside) && (
         <div className="card-head">
           {title && <h2 className="h2" id={hid}>{title}</h2>}
@@ -50,13 +50,14 @@ export function Pill({ children, tone }: { children: ReactNode; tone?: "warn" | 
 }
 
 /** `staleCheck` is off for session scans (last evening's after-hours scan is meant to be hours old). */
-/** `stale` from the API (a missed scheduled scan) wins over the age rule when it's known. */
+/** Only an explicit server missed-slot flag labels a scan delayed. */
 export function Freshness({ at, label = "Scan", staleCheck = true, stale }: { at: string | null | undefined; label?: string; staleCheck?: boolean; stale?: boolean | null }) {
   const raw = freshness(at);
-  const f = !staleCheck ? { ...raw, stale: false } : stale === null || stale === undefined ? raw : { ...raw, stale };
+  // Age describes a snapshot; only a missed-slot flag establishes a delayed scan.
+  const f = { ...raw, stale: staleCheck && stale === true };
   return (
     <span className={`fresh${f.stale ? " stale" : ""}`} title={at ? new Date(at).toISOString() : undefined}>
-      {label} {etTime(at)} · {f.label}{f.stale ? " · Stale" : ""}
+      {label} {etTime(at)} · {f.label} · {f.stale ? "Scan delayed" : stale === false ? "On schedule" : "Saved snapshot"}
     </span>
   );
 }
