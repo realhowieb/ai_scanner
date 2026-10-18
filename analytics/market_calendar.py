@@ -91,6 +91,17 @@ def expected_scan_slots(d: _dt.date) -> List[_dt.datetime]:
     return [_dt.datetime(d.year, d.month, d.day, h, m, tzinfo=UTC) for h, m in SCAN_SLOTS_UTC]
 
 
+def snapshot_scan_slots(d: _dt.date) -> List[_dt.datetime]:
+    """Expected scan slots on `d` that fall in regular hours.
+
+    Only regular-session scans save a Scanner snapshot; pre-market and
+    after-hours slots run their own session scan and freeze nothing. The split
+    moves with daylight saving time and early closes, so it is computed per day.
+    """
+    o, c = session_bounds_utc(d)
+    return [s for s in expected_scan_slots(d) if o <= s < c]
+
+
 def next_expected_scan(now: _dt.datetime, *, horizon_days: int = 10) -> Optional[_dt.datetime]:
     d = now.astimezone(ET).date()
     for i in range(horizon_days):

@@ -242,7 +242,7 @@ def _probe_billing() -> Dict[str, Any]:
             return {"name": "Billing service", "status": "error", "detail": "Embedded billing check failed.", "ms": None}
     import requests
 
-    base = (os.getenv("BILLING_API_BASE") or "https://ai-scanner-h2c8.onrender.com").strip().rstrip("/")
+    base = (os.getenv("BILLING_API_BASE") or "https://hsf-api-v1.onrender.com/billing").strip().rstrip("/")
     try:
         r, ms = _timed(lambda: requests.get(f"{base}/health", timeout=float(os.getenv("BILLING_HEALTH_TIMEOUT", "5"))))
         ok = r.status_code == 200
