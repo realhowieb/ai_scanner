@@ -174,8 +174,18 @@ class ReportTests(unittest.TestCase):
                  for i in range(5)]
         col = mr.build_report(brief + scanner + short, [], now=NOW)["collection"]
         self.assertEqual(col["partial_snapshots"], 1)  # only the 5-row Scanner snapshot
-        self.assertEqual(col["expected_observations_per_trading_day"],
-                         len(mr.mc.SCAN_SLOTS_UTC) * mr.SCANNER_TOP_N_PER_SNAPSHOT)
+        # Only the 3 regular-hours slots save a snapshot (EDT: 13:35, 16:35, 19:35 UTC).
+        self.assertEqual(col["expected_observations_per_trading_day"], 3 * mr.SCANNER_TOP_N_PER_SNAPSHOT)
+
+    def test_missing_windows_count_only_regular_hours_slots(self):
+        rows = [opp(1, "AAA", "2026-10-01T13:40:00"), opp(2, "BBB", "2026-10-01T16:40:00"),
+                opp(3, "CCC", "2026-10-01T19:40:00")]
+        col = mr.build_report(rows, [], now=ts("2026-10-02T00:00:00"))["collection"]
+        msw = col["missing_scan_windows"]
+        self.assertEqual((msw["count"], msw["of"]), (0, 3))
+        for slot in ("12:35", "20:35", "21:35"):   # pre-market / after-hours: no snapshot expected
+            self.assertEqual(msw["per_slot"][slot]["expected"], 0)
+        self.assertEqual(msw["per_slot"]["16:35"], {"expected": 1, "with_snapshot": 1})
 
     def test_lookahead_and_recorded_before_timestamp_are_pit_violations(self):
         row = {**opp(1, "AAA", "2026-10-01T16:40:00"), "created_at": ts("2026-10-01T10:00:00")}
@@ -356,6 +366,17 @@ class MlReadinessApiTests(ApiTestCase):
         item = spec["paths"]["/v1/ml/readiness"]
         self.assertEqual(set(item), {"get"})
         self.assertTrue(item["get"]["x-internal"])
+
+
+class SnapshotSlotTests(unittest.TestCase):
+    def hhmm(self, d):
+        return [s.strftime("%H:%M") for s in mr.mc.snapshot_scan_slots(d)]
+
+    def test_regular_hours_slots_follow_dst_and_early_closes(self):
+        self.assertEqual(self.hhmm(dt.date(2026, 10, 16)), ["13:35", "16:35", "19:35"])   # EDT
+        self.assertEqual(self.hhmm(dt.date(2026, 11, 9)), ["16:35", "19:35", "20:35"])    # EST
+        self.assertEqual(self.hhmm(dt.date(2026, 11, 27)), ["16:35"])                     # 13:00 ET close
+        self.assertEqual(self.hhmm(dt.date(2026, 10, 17)), [])                            # Saturday
 
 
 if __name__ == "__main__":

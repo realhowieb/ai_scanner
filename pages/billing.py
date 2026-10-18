@@ -11,7 +11,7 @@ from requests import exceptions as req_exc
 # Config
 # =========================
 
-BILLING_API_BASE = (os.getenv("BILLING_API_BASE") or "https://ai-scanner-h2c8.onrender.com").strip().rstrip("/")
+BILLING_API_BASE = (os.getenv("BILLING_API_BASE") or "https://hsf-api-v1.onrender.com/billing").strip().rstrip("/")
 
 # Render free/idle services can cold-start
 HEALTH_TIMEOUT_S = float(os.getenv("BILLING_HEALTH_TIMEOUT", "3"))
