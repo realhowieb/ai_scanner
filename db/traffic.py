@@ -54,6 +54,7 @@ class Metrics:
     fetch_ms: float = 0
     connections_opened: int = 0
     connections_reused: int = 0
+    connection_pings: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
     cache_stale_hits: int = 0
