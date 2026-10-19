@@ -31,8 +31,11 @@ from api import devices, models, routes, store, user_data
 # Re-exported: tests and older callers reach these through api.main.
 from api.deps import _account_cache, _recent_account, current_account, entitlements_for, forget_account  # noqa: F401
 from api.etag import ETagMiddleware
+from api.memory import rss_mb, tune_allocator
 from api.scans import json_safe
 from api.settings import Settings, load_settings
+
+tune_allocator()  # cap malloc arenas before any worker thread starts (api/memory.py)
 
 log = logging.getLogger("hsf_api")
 access_log = logging.getLogger("hsf_api.access")
@@ -121,7 +124,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 "request_id": rid, "method": request.method,
                 "route": getattr(route, "path", None) or "unmatched", "status": status,
                 "db_traffic": db_metrics.snapshot(),
-                "ms": round((time.perf_counter() - t0) * 1000, 1)}))
+                "ms": round((time.perf_counter() - t0) * 1000, 1), "rss_mb": rss_mb()}))
         response.headers["X-Request-ID"] = rid
         return response
 
