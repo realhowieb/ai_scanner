@@ -1648,6 +1648,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest quotes
+         * @description Each ticker's latest trade and change vs the previous close, for the Watchlists Refresh.
+         */
+        get: operations["quotes_v1_quotes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/research/coverage": {
         parameters: {
             query?: never;
@@ -4156,6 +4176,47 @@ export interface components {
             source?: string | null;
             /** Ticker */
             ticker: string;
+        };
+        /** LatestQuote */
+        LatestQuote: {
+            /**
+             * At
+             * @description Time of that trade (ISO, UTC)
+             */
+            at?: string | null;
+            /**
+             * Chg Pct
+             * @description Percent vs prev_close
+             */
+            chg_pct?: number | null;
+            /**
+             * Last
+             * @description Latest trade price (the day's close after the session ends)
+             */
+            last: number;
+            /**
+             * Prev Close
+             * @description The close the change is measured from
+             */
+            prev_close?: number | null;
+        };
+        /**
+         * LatestQuotes
+         * @description Latest trades from the quote provider, shared for about a minute. Tickers without a quote are left out.
+         */
+        LatestQuotes: {
+            /**
+             * Feed
+             * @description Provider feed: 'iex' (one exchange) or 'sip' (all exchanges)
+             */
+            feed?: string | null;
+            /**
+             * Quotes
+             * @default {}
+             */
+            quotes: {
+                [key: string]: components["schemas"]["LatestQuote"];
+            };
         };
         /** LatestScan */
         LatestScan: {
@@ -12147,6 +12208,45 @@ export interface operations {
             };
             /** @description Pro feature */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    quotes_v1_quotes_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated; the first 50 are returned */
+                symbols: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestQuotes"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -411,6 +411,76 @@ def daily_closes(tickers: List[str]) -> Dict[str, Any]:
         return {"series": {}, "last_bar": {}}
 
 
+QUOTE_MAX = 50
+QUOTE_TTL_S = 60
+quote_cache = TTLCache(max_entries=64)
+
+
+def _trade_day(stamp: Any) -> Optional[str]:
+    """The New York calendar day of a provider timestamp (UTC ISO), or None."""
+    if not isinstance(stamp, str) or not stamp:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+
+        when = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=dt.timezone.utc)
+        return when.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    except ValueError:
+        return None
+
+
+def latest_quotes(tickers: List[str]) -> Dict[str, Any]:
+    """Latest trade per ticker from the quote provider (Alpaca snapshots), for the Watchlists
+    Refresh. Change is against the close before the trade's session, so a pre-market trade
+    is compared with the last regular close. One provider call per distinct ticker set,
+    shared for QUOTE_TTL_S; an empty answer (no keys, provider down) is not cached."""
+    syms = sorted({str(t).strip().upper() for t in tickers if str(t).strip()})[:QUOTE_MAX]
+    if not syms:
+        return {"quotes": {}, "feed": None}
+
+    def load() -> Dict[str, Any]:
+        from market_data import _get_alpaca_data_feed, fetch_alpaca_snapshots
+
+        snaps = fetch_alpaca_snapshots(syms) or {}
+        out: Dict[str, Any] = {}
+        for t in syms:
+            snap = snaps.get(t)
+            if not isinstance(snap, dict):
+                continue
+            trade = snap.get("latestTrade") or {}
+            day = snap.get("dailyBar") or {}
+            prev = snap.get("prevDailyBar") or {}
+            last = _num(trade.get("p"))
+            at = trade.get("t") if isinstance(trade.get("t"), str) else None
+            if last is None:
+                last, at = _num(day.get("c")), day.get("t") if isinstance(day.get("t"), str) else None
+            if last is None:
+                continue
+            # Before the open, dailyBar is still the last finished session: that is the base.
+            trade_day, bar_day = _trade_day(at), _trade_day(day.get("t"))
+            base_bar = day if trade_day and bar_day and trade_day > bar_day else prev
+            base = _num(base_bar.get("c"))
+            out[t] = {"last": round(last, 4), "prev_close": base,
+                      "chg_pct": round((last - base) / base * 100.0, 2) if base else None, "at": at}
+        feed = None
+        try:
+            feed = str(_get_alpaca_data_feed()).strip().lower() or None
+        except Exception:
+            pass
+        return {"quotes": out, "feed": feed}
+
+    key = ("quotes", tuple(syms))
+    try:
+        res = quote_cache.get(key, load, ttl_s=QUOTE_TTL_S)
+    except Exception:
+        return {"quotes": {}, "feed": None}
+    if not res.get("quotes"):
+        quote_cache.clear_key(key)
+    return res
+
+
 SCORE_HISTORY_RUNS = 24  # about eight sessions of full-market scans
 score_cache = TTLCache(max_entries=SCORE_HISTORY_RUNS * 2)
 
