@@ -17,12 +17,12 @@ import { api, unwrap } from "@/api/client";
 import { alertRules, parseTickers, watchlists } from "@/api/userData";
 import type { WatchlistDetail, WatchlistIntelItem } from "@/api/userData";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
-import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, RefreshStatus, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
-import { DailySpark, useDailyBars } from "./Sparks";
+import { DailySpark, useDailyBarsState } from "./Sparks";
 import { WatchlistPerformanceCard } from "./WatchlistPerformance";
 
 const NOTE_MAX = 500;
@@ -257,7 +257,13 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
     if (!legacy) return new Map((detail.data?.items ?? []).filter((i) => i.latest).map((i) => [i.ticker, i.latest!]));
     return new Map((scan.data?.setups ?? []).map((s) => [s.ticker, s]));
   }, [legacy, detail.data, scan.data]);
-  const daily = useDailyBars((detail.data?.items ?? []).map((i) => i.ticker));
+  const bars = useDailyBarsState((detail.data?.items ?? []).map((i) => i.ticker));
+  const daily = bars.data;
+  // Refresh re-reads the list (with each ticker's latest scan row), its changes and the
+  // daily bars in place. Scores change only when a new scan has run; the API shares daily
+  // bars for up to 15 minutes, so this is not a live quote.
+  const refreshing = detail.refreshing || intel.refreshing || bars.refreshing || (legacy && scan.refreshing);
+  const refresh = () => { detail.reload(); intel.reload(); bars.reload(); if (legacy) scan.reload(); };
 
   if (detail.error && !detail.data) return <ErrorState error={detail.error} onRetry={detail.reload} what="this watchlist" />;
   if (!detail.data || detail.loading && detail.data.id !== id) return <Skeleton rows={5} label="Loading watchlist" />;
@@ -296,14 +302,25 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
       <WatchlistChangesCard id={w.id} />
 
       <Card title="Tickers" id="wl-items" aside={scanAt ? <Freshness at={scanAt} label="HSF Scores from the scan" stale={stale} /> : undefined}>
-        {w.items.length > 1 && (
-          <div className="seg-group sort-toggle" role="radiogroup" aria-label="Sort tickers">
-            {([[false, "A to Z"], [true, "HSF Score"]] as const).map(([v, label]) => (
-              <label key={label} className={`seg${byScore === v ? " on" : ""}`}>
-                <input type="radio" className="sr-only" name={`wl-sort-${w.id}`} checked={byScore === v} onChange={() => setByScore(v)} />{label}
-              </label>
-            ))}
+        {w.items.length > 0 && (
+          <div className="wl-toolbar">
+            {w.items.length > 1 && (
+              <div className="seg-group sort-toggle" role="radiogroup" aria-label="Sort tickers">
+                {([[false, "A to Z"], [true, "HSF Score"]] as const).map(([v, label]) => (
+                  <label key={label} className={`seg${byScore === v ? " on" : ""}`}>
+                    <input type="radio" className="sr-only" name={`wl-sort-${w.id}`} checked={byScore === v} onChange={() => setByScore(v)} />{label}
+                  </label>
+                ))}
+              </div>
+            )}
+            <button type="button" className="btn wl-refresh" onClick={refresh} disabled={refreshing} aria-label={`Refresh prices and scores for ${w.name}`}>
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
           </div>
+        )}
+        {w.items.length > 0 && (
+          <RefreshStatus updatedAt={detail.updatedAt} refreshing={refreshing} error={detail.error} onRetry={refresh}
+            sourceNote="Daily-bar prices can be up to 15 minutes old. Scores change when a new scan runs." />
         )}
         {w.items.length === 0 ? (
           <Empty title="No tickers yet.">Add some above, or use Save to watchlist on the Scanner or a stock page.</Empty>

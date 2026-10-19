@@ -550,6 +550,9 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 .chart .bar-down { fill: var(--down); }
 .ai-text { white-space: pre-wrap; }
 .sort-toggle { align-self: flex-start; }
+.wl-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.wl-toolbar .sort-toggle { align-self: auto; }
+.wl-toolbar .wl-refresh { margin-left: auto; }
 .index-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 /* Brief columns are independent stacks: supporting card heights cannot leave
    holes between the primary intelligence panels. DOM order prioritizes phones. */

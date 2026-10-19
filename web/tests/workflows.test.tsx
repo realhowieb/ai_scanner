@@ -145,6 +145,24 @@ describe("Watchlists", () => {
     await u.click(screen.getByLabelText("HSF Score"));
     expect(order()).toEqual(["NVDA", "AAPL", "ZZZ"]);
   });
+
+  it("Refresh re-reads the list, its scores and daily bars in place", async () => {
+    const scan = [{ ticker: "AAPL", score: 81, last: 201.5 }];
+    api = fakeApi({ scanState: true, scan });
+    api.seedList("Main", ["AAPL", "ZZZ"]);
+    const u = user();
+    wrap(<WatchlistsView />);
+    expect(await screen.findByLabelText("HSF Score 81")).toBeInTheDocument();
+    const lists = api.count("GET", /^\/v1\/watchlists\/\d+$/);
+    const bars = api.count("GET", /^\/v1\/sparklines/);
+    scan[0]!.score = 88;                       // a new scan has run since the page loaded
+    await u.click(screen.getByRole("button", { name: "Refresh prices and scores for Main" }));
+    expect(await screen.findByLabelText("HSF Score 88")).toBeInTheDocument();
+    expect(api.count("GET", /^\/v1\/watchlists\/\d+$/)).toBe(lists + 1);
+    expect(api.count("GET", /^\/v1\/sparklines/)).toBe(bars + 1);
+    expect(screen.getByRole("heading", { name: /Main/ })).toBeInTheDocument(); // no full reload
+    expect(screen.getByText(/Last checked .*Daily-bar prices can be up to 15 minutes old/)).toBeInTheDocument();
+  });
 });
 
 describe("Watchlist Intelligence", () => {
