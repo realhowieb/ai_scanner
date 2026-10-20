@@ -1,0 +1,55 @@
+name: Purge unmasked scan logs (one-off)
+
+# P2-27: Scheduled Market Scans runs before a9a9705 (2026-09-28 16:58 UTC) printed
+# full recipient email addresses, and this repo's Actions logs are public. This
+# deletes the logs of those runs; the run records (date, result) stay. Deleting a
+# log can't be undone. Owner approved 2026-10-20. Logs GitHub already expired
+# (90-day retention) are counted as "gone". Remove this file after it has run.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only count the runs, delete nothing"
+        type: boolean
+        default: true
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Delete logs of runs before the masking fix
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          CUTOFF: "2026-09-28T17:00:00Z"
+        run: |
+          set -euo pipefail
+          ids=$(gh api --paginate \
+            "repos/$REPO/actions/workflows/scheduled-scans.yml/runs?created=%3C$CUTOFF&per_page=100" \
+            --jq '.workflow_runs[].id')
+          total=$(printf '%s\n' "$ids" | grep -c . || true)
+          echo "Runs created before $CUTOFF: $total"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run: nothing deleted."
+            exit 0
+          fi
+          deleted=0; gone=0; failed=0
+          for id in $ids; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+              -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/actions/runs/$id/logs" || true)
+            case "$code" in
+              204) deleted=$((deleted+1)) ;;
+              404|410) gone=$((gone+1)) ;;
+              *) failed=$((failed+1)); echo "run $id: HTTP ${code:-error}" ;;
+            esac
+          done
+          echo "Deleted: $deleted, already gone: $gone, failed: $failed"
+          echo "Deleted $deleted logs ($gone already expired, $failed failed) of $total runs before $CUTOFF." >> "$GITHUB_STEP_SUMMARY"
+          [ "$failed" -eq 0 ]

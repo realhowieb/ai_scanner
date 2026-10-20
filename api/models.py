@@ -1532,6 +1532,28 @@ class AdminRecoveryEvent(BaseModel):
     result: Optional[str] = None
 
 
+class AdminFunnelStep(BaseModel):
+    key: str
+    label: str
+    users: int
+    of_signups: Optional[float] = Field(None, description="Fraction of the period's sign-ups that reached this step")
+
+
+class AdminFunnelSource(BaseModel):
+    source: str
+    signed_up: int
+    verified: int
+    engaged: int
+    paid: int
+
+
+class AdminFunnel(BaseModel):
+    steps: List[AdminFunnelStep]
+    by_source: List[AdminFunnelSource] = []
+    invite_trials: int = Field(0, description="Accounts in the period with a free Pro trial from an invite")
+    unavailable: List[str] = Field([], description="Steps that failed to load and count as zero")
+
+
 class AdminAnalytics(BaseModel):
     loaded_at: Optional[str] = None
     days: int
@@ -1543,6 +1565,7 @@ class AdminAnalytics(BaseModel):
     scans_daily: List[AdminScansDay]
     conversions: AdminConversions
     recovery: List[AdminRecoveryEvent]
+    funnel: Optional[AdminFunnel] = Field(None, description="Sign-up funnel for accounts created in the period")
 
 
 class AdminPerfGroup(BaseModel):

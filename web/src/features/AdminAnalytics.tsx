@@ -155,6 +155,7 @@ function Product({ a }: { a: Schemas["AdminAnalytics"] }) {
         <Line label="Total users" days={days} values={a.users_daily.map((d) => d.total)} />
         <p className="cap">{fmt(a.users_daily.reduce((s, d) => s + d.new, 0))} new in this period.</p>
       </Card>
+      {a.funnel && <Funnel f={a.funnel} days={a.days} />}
       <Card title="Current plan distribution" id="plans" aside="Active accounts">
         <HBars label="Accounts by plan" rows={a.plans.map((p) => [p.plan, p.users])} />
       </Card>
@@ -180,6 +181,32 @@ function Product({ a }: { a: Schemas["AdminAnalytics"] }) {
         )}
       </Card></details>
     </>
+  );
+}
+
+/** Sign-up funnel: how far the period's new accounts got, overall and by sign-up source. */
+function Funnel({ f, days }: { f: Schemas["AdminFunnel"]; days: number }) {
+  return (
+    <Card title="Sign-up funnel" id="funnel" aside={`Accounts created in the last ${days} days`}>
+      <HBars label="Accounts reaching each step" rows={f.steps.map((s) => [s.label, s.users, s.key === "signed_up" ? undefined : frac(s.of_signups)])} />
+      {f.by_source.length > 0 && (
+        <div className="table-wrap"><table className="table">
+          <caption className="cap">By sign-up source</caption>
+          <thead><tr><th scope="col">Source</th>{f.steps.map((s) => <th key={s.key} scope="col" className="num">{s.label}</th>)}</tr></thead>
+          <tbody>{f.by_source.map((r) => (
+            <tr key={r.source}><th scope="row">{r.source}</th>
+              <td className="num mono">{fmt(r.signed_up)}</td><td className="num mono">{fmt(r.verified)}</td>
+              <td className="num mono">{fmt(r.engaged)}</td><td className="num mono">{fmt(r.paid)}</td></tr>
+          ))}</tbody>
+        </table></div>
+      )}
+      <p className="cap">
+        Each step counts accounts, not events. &ldquo;Saved a stock or alert&rdquo; means a stock on a watchlist or any alert.
+        &ldquo;Pays for Pro&rdquo; needs a live Pro or Premium subscription; {fmt(f.invite_trials)} of these accounts got free Pro from an invite, which doesn&rsquo;t count as paid.
+        Admin accounts are left out.
+      </p>
+      {f.unavailable.length > 0 && <p className="cap">Couldn&rsquo;t load {f.unavailable.join(", ")}; those count as zero.</p>}
+    </Card>
   );
 }
 

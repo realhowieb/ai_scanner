@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Dict, Literal, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -105,13 +105,18 @@ def register(app: FastAPI) -> None:
 
     @app.post("/v1/auth/verify-email", response_model=models.Message,
               responses={400: {"description": "Invalid or expired link"}})
-    def verify_email(body: TokenBody, _l: None = Depends(ratelimit.limit("verify"))) -> Dict[str, Any]:
+    def verify_email(body: TokenBody, background: BackgroundTasks,
+                     _l: None = Depends(ratelimit.limit("verify"))) -> Dict[str, Any]:
         """Confirm an email address with the token from the verification link. An account that
-        signed up with an invite link starts the free Pro month for both people here."""
+        signed up with an invite link starts the free Pro month for both people here. The
+        welcome email (once per account) goes out after the response."""
         from api import referrals
+        from services.lifecycle_emails import send_welcome
 
         email = acct.verify_email(body.token)
-        if referrals.reward_on_verify(email):
+        rewarded = referrals.reward_on_verify(email)
+        background.add_task(send_welcome, email)
+        if rewarded:
             forget_account(email)
             return {"message": f"Email verified. You and your friend each get {referrals.reward_days()} days of Pro."
                     if referrals.reward_days() else "Email verified."}
