@@ -266,3 +266,76 @@ def stats(user_id: str) -> Dict[str, int]:
         return {"signed_up": int(row[0] or 0), "verified": int(row[1] or 0)}
     finally:
         _close(conn, sq)
+
+
+# ---- lifecycle email log (services/lifecycle_emails.py) ------------------------------------------
+# One row per email sent, so each one goes out once: ("welcome", "") at the first verify,
+# ("trial_ending", <until_at>) per trial end (a trial extended to a new end can get a new one).
+@schema_once
+def _ensure_lifecycle_schema(conn, is_sqlite: bool) -> None:
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS hsf_lifecycle_emails (
+            user_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            ref TEXT NOT NULL,
+            sent_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, kind, ref)
+        )""")
+    conn.commit()
+    cur.close()
+
+
+def _lifecycle_connect() -> Tuple[Any, bool]:
+    conn, sq = _connect()
+    _ensure_lifecycle_schema(conn, sq)
+    return conn, sq
+
+
+def claim_email(user_id: str, kind: str, ref: str = "") -> bool:
+    """Reserve an email before sending it. False when it was already sent (or claimed by
+    another run at the same moment), so two jobs never send the same email twice."""
+    conn, sq = _lifecycle_connect()
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute(_sql("INSERT INTO hsf_lifecycle_emails (user_id, kind, ref, sent_at) "
+                             "VALUES (%s, %s, %s, %s)", sq), (user_id.strip().lower(), kind, ref, _iso(_now())))
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            return False
+    finally:
+        _close(conn, sq)
+
+
+def release_email(user_id: str, kind: str, ref: str = "") -> None:
+    """Undo a claim when the send failed, so the next run tries again."""
+    conn, sq = _lifecycle_connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(_sql("DELETE FROM hsf_lifecycle_emails WHERE user_id = %s AND kind = %s AND ref = %s", sq),
+                    (user_id.strip().lower(), kind, ref))
+        conn.commit()
+    finally:
+        _close(conn, sq)
+
+
+def grants_ending(within: dt.timedelta) -> list:
+    """[(user_id, until_at text)] for free Pro that is still running and ends within `within`."""
+    now = _now()
+    conn, sq = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(_sql("SELECT user_id, until_at FROM hsf_plan_grants WHERE tier = 'pro' "
+                         "AND until_at > %s AND until_at <= %s ORDER BY until_at", sq),
+                    (_iso(now), _iso(now + within)))
+        rows = cur.fetchall() or []
+    finally:
+        _close(conn, sq)
+    out = []
+    for row in rows:
+        vals = tuple(row.values()) if isinstance(row, dict) else tuple(row)
+        out.append((str(vals[0]), str(vals[1])))
+    return out
