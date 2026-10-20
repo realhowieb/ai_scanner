@@ -764,7 +764,8 @@ export interface paths {
         /**
          * Verify Email
          * @description Confirm an email address with the token from the verification link. An account that
-         *     signed up with an invite link starts the free Pro month for both people here.
+         *     signed up with an invite link starts the free Pro month for both people here. The
+         *     welcome email (once per account) goes out after the response.
          */
         post: operations["verify_email_v1_auth_verify_email_post"];
         delete?: never;
