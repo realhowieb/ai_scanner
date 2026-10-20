@@ -7389,6 +7389,12 @@ export interface components {
              */
             allowed: boolean;
             /**
+             * Apns Enabled
+             * @description The server can push to the iPhone app (APNs key set); the app registers with POST /v1/me/devices
+             * @default false
+             */
+            apns_enabled: boolean;
+            /**
              * Enabled
              * @description False until the server has VAPID keys
              */

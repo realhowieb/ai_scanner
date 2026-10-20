@@ -11,6 +11,7 @@ import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import { isNativeApp } from "@/lib/homeScreen";
 import { currentPushState, disablePush, enablePush } from "@/lib/webPush";
 import type { PushState } from "@/lib/webPush";
 import { groupFired } from "@/lib/alertEvents";
@@ -116,6 +117,8 @@ const PUSH_COPY: Record<PushState, string> = {
   on: "",
 };
 
+const NATIVE_DENIED = "Notifications are off for HSF. Turn them on in Settings > Notifications > HSF, then come back.";
+
 /** Browser notifications for every alert that fires (price alerts and alert rules). Hidden
  * until the server has its push keys; part of Pro. */
 export function PushToggle() {
@@ -127,17 +130,19 @@ export function PushToggle() {
     currentPushState().then((s) => live && setState(s), () => live && setState("unsupported"));
     return () => { live = false; };
   }, []);
-  if (!cfg.data?.enabled || state === null) return null;
-  if (cfg.data.allowed === false) {
+  const native = isNativeApp();
+  const data = cfg.data;
+  if (!data || !(native ? data.apns_enabled : data.enabled) || state === null) return null;
+  if (data.allowed === false) {
     return state === "unsupported" ? null : (
       <div className="stack-sm">
-        <p className="body-sm">Browser notifications are part of Pro.</p>
+        <p className="body-sm">{native ? "Alert notifications" : "Browser notifications"} are part of Pro.</p>
         <UpgradeButton plan="pro" />
       </div>
     );
   }
-  if (!cfg.data.public_key) return null;
-  const key = cfg.data.public_key;
+  if (!native && !data.public_key) return null;
+  const key = data.public_key ?? "";
   const on = state === "on";
   const change = (next: boolean) => void act.run(async () => {
     setState(next ? await enablePush(key) : (await disablePush(), "off"));
@@ -148,9 +153,9 @@ export function PushToggle() {
       <label className="check">
         <input type="checkbox" checked={on} disabled={act.busy || state === "unsupported"}
           onChange={(e) => change(e.target.checked)} />
-        <span>Notify me in this browser when an alert fires{act.busy ? " (saving…)" : ""}</span>
+        <span>Notify me {native ? "on this iPhone" : "in this browser"} when an alert fires{act.busy ? " (saving…)" : ""}</span>
       </label>
-      {PUSH_COPY[state] && <p className="cap">{PUSH_COPY[state]}</p>}
+      {PUSH_COPY[state] && <p className="cap">{native && state === "denied" ? NATIVE_DENIED : PUSH_COPY[state]}</p>}
       <ErrorLine error={act.error} />
     </div>
   );
