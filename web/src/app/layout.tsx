@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { ErrorReporter } from "@/components/ErrorReporter";
 import { OfflineReady } from "@/components/OfflineReady";
+import { STALE_BUILD_SCRIPT } from "@/lib/staleBuild";
 
 import "./globals.css";
 
@@ -47,6 +48,10 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${sora.variable} ${plex.variable} ${mono.variable}`}>
+      <head>
+        {/* Reloads once when a deploy left this page pointing at files that are gone. */}
+        <script dangerouslySetInnerHTML={{ __html: STALE_BUILD_SCRIPT }} />
+      </head>
       <body>
         <ErrorReporter />
         <OfflineReady />
