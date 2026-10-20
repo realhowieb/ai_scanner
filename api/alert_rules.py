@@ -17,6 +17,11 @@ api.watchlist_intel.market_observation):
                                                   tickers that aren't in the scan
     RANK_IMPROVED                                 transition: HSF rank moved up >= threshold places
                                                   since the last scan this rule saw
+    SCAN_MATCH                                    scan alert (Pro): saved Scanner filters on the whole
+                                                  market (HSF Score >= threshold, plus optional setup,
+                                                  price range and relative volume in `value` as JSON).
+                                                  Fires once per scan that brings new matching
+                                                  stocks, listing them in one alert
 
 "Last seen" is persisted per (rule, ticker) in hsf_alert_rule_state, so a crossing
 fires once (77 -> 82 crosses 80; 83 -> 84 doesn't) and re-evaluating an observation
@@ -85,7 +90,18 @@ RULE_TYPES: Dict[str, Dict[str, Any]] = {
                       "label": "HSF rank improves by",
                       "description": "Fires when the ticker moves up at least your number of places in the HSF "
                                      "ranking since the last scan."},
+    "SCAN_MATCH": {"operator": "new_matches", "kind": EDGE, "threshold": (0.0, 100.0), "default": 75.0,
+                   "value": True, "scope": "market", "entitlement": "can_scan_alerts", "plan": "Pro",
+                   "cooldown": 0, "label": "New scanner matches",
+                   "description": "Saves your Scanner filters and checks them after every market scan. Fires when "
+                                  "stocks that weren't matching on the previous scan now match, listing them in "
+                                  "one alert."},
 }
+MARKET = "*"  # state/target key for market-wide rules (SCAN_MATCH)
+SCAN_SIGNALS = ("breakout", "gapper", "golden_cross", "gainer", "prebreakout")
+SCAN_FILTER_KEYS = ("name", "setup", "min_price", "max_price", "min_rvol")
+SCAN_MATCH_LIST_MAX = 1000  # matches remembered per rule between scans
+SCAN_MATCH_NAMES_IN_MESSAGE = 8
 CHANNELS = ("in_app", "email")
 CHANNEL_ENTITLEMENT = {"email": "can_email_alerts"}
 DEFAULT_COOLDOWN = {LEVEL: 86400, EDGE: 3600}
@@ -110,9 +126,116 @@ def rule_types(entitlements: Dict[str, bool]) -> List[Dict[str, Any]]:
                     "operator": spec["operator"], "kind": spec["kind"],
                     "threshold": ({"min": thr[0], "max": thr[1], "default": spec.get("default")} if thr else None),
                     "takes_value": bool(spec.get("value")),
-                    "default_cooldown_seconds": DEFAULT_COOLDOWN[spec["kind"]],
+                    "scope": spec.get("scope", "symbol"),
+                    "default_cooldown_seconds": _default_cooldown(spec),
                     "available": _allowed(spec, entitlements)})
     return out
+
+
+def _default_cooldown(spec: Dict[str, Any]) -> int:
+    return int(spec["cooldown"]) if "cooldown" in spec else DEFAULT_COOLDOWN[spec["kind"]]
+
+
+def _market(spec_or_rule: Dict[str, Any]) -> bool:
+    spec = RULE_TYPES.get(str(spec_or_rule.get("rule_type") or "")) if "rule_type" in spec_or_rule else spec_or_rule
+    return bool(spec and spec.get("scope") == "market")
+
+
+def parse_scan_filters(value: Any) -> Dict[str, Any]:
+    """SCAN_MATCH filters from the rule's `value` (JSON object). Unknown keys are
+    rejected; every key is optional. Raises RuleError on bad input."""
+    if value is None or not str(value).strip():
+        return {}
+    try:
+        raw = json.loads(str(value))
+    except ValueError as e:
+        raise RuleError("Scan filters must be a JSON object.") from e
+    if not isinstance(raw, dict):
+        raise RuleError("Scan filters must be a JSON object.")
+    bad = [k for k in raw if k not in SCAN_FILTER_KEYS]
+    if bad:
+        raise RuleError(f"Unknown scan filter: {', '.join(sorted(bad))}. Use: {', '.join(SCAN_FILTER_KEYS)}.")
+    out: Dict[str, Any] = {}
+    name = str(raw.get("name") or "").strip()[:60]
+    if name:
+        out["name"] = name
+    setup = str(raw.get("setup") or "").strip().lower()
+    if setup:
+        if setup not in SCAN_SIGNALS:
+            raise RuleError(f"Setup must be one of: {', '.join(SCAN_SIGNALS)}.")
+        out["setup"] = setup
+    for k, lo, hi in (("min_price", 0.0, 1e6), ("max_price", 0.0, 1e6), ("min_rvol", 0.0, 1000.0)):
+        v = raw.get(k)
+        if v is None or v == "":
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError) as e:
+            raise RuleError(f"{k} must be a number.") from e
+        if not (lo <= f <= hi) or f != f:
+            raise RuleError(f"{k} must be between {lo:g} and {hi:g}.")
+        out[k] = f
+    if "min_price" in out and "max_price" in out and out["min_price"] > out["max_price"]:
+        raise RuleError("min_price must not exceed max_price.")
+    return out
+
+
+def _scan_value(filters: Dict[str, Any]) -> Optional[str]:
+    return json.dumps(filters, sort_keys=True, separators=(",", ":")) if filters else None
+
+
+def scan_matches(obs: Dict[str, Any], rule: Dict[str, Any], *, premium: bool) -> List[str]:
+    """Tickers in the latest scan's ranked setups that pass a SCAN_MATCH rule, best
+    rank first. Uses the same canonical per-ticker view as every other rule."""
+    from api import watchlist_intel
+
+    f = parse_scan_filters(rule.get("value"))
+    min_score = float(rule.get("threshold") or 0)
+    hits: List[Tuple[int, str]] = []
+    for t in obs.get("ranked") or {}:
+        v = watchlist_intel.ticker_view(obs, t, premium=premium)
+        score = v.get("hsf_score")
+        if not v.get("ranked") or score is None or score < min_score:
+            continue
+        if f.get("setup"):
+            setup = str(v.get("setup") or "").lower()
+            if f["setup"] != setup and f["setup"] not in [s.lower() for s in v.get("signals") or []]:
+                continue
+        p = v.get("price")
+        if "min_price" in f and (p is None or p < f["min_price"]):
+            continue
+        if "max_price" in f and (p is None or p > f["max_price"]):
+            continue
+        if "min_rvol" in f and (v.get("rvol") is None or v["rvol"] < f["min_rvol"]):
+            continue
+        hits.append((int(v.get("rank") or 10**9), t.upper()))
+    return [t for _, t in sorted(hits)]
+
+
+def check_scan(matches: Sequence[str], state: Optional[Dict[str, Any]]
+               ) -> Tuple[bool, List[str], Dict[str, Any]]:
+    """(fires, new tickers best rank first, new state) for a SCAN_MATCH rule. The first
+    scan a rule sees only records its baseline."""
+    state = state or {}
+    keep = list(matches)[:SCAN_MATCH_LIST_MAX]
+    new_state = {"last_value": float(len(matches)), "last_flag": True, "last_text": json.dumps(keep)}
+    if not state.get("observation_id"):
+        return False, [], new_state
+    try:
+        before = set(json.loads(state.get("last_text") or "[]"))
+    except ValueError:
+        before = set()
+    fresh = [t for t in matches if t not in before]
+    return bool(fresh), fresh, new_state
+
+
+def scan_message(rule: Dict[str, Any], fresh: Sequence[str]) -> str:
+    f = parse_scan_filters(rule.get("value"))
+    name = f.get("name") or "your scan alert"
+    shown = ", ".join(fresh[:SCAN_MATCH_NAMES_IN_MESSAGE])
+    more = f" and {len(fresh) - SCAN_MATCH_NAMES_IN_MESSAGE} more" if len(fresh) > SCAN_MATCH_NAMES_IN_MESSAGE else ""
+    noun = "stock matches" if len(fresh) == 1 else "stocks match"
+    return f"{len(fresh)} new {noun} {name}: {shown}{more}"
 
 
 def _allowed(spec: Dict[str, Any], entitlements: Dict[str, bool]) -> bool:
@@ -148,7 +271,12 @@ def validate(entitlements: Dict[str, bool], *, rule_type: str, threshold: Option
         plan = spec.get("plan", "Premium")
         raise RuleForbidden(f"{spec['label']} alerts are {'part of Pro' if plan == 'Pro' else 'a Premium feature'}.")
     out: Dict[str, Any] = {}
-    if not partial:
+    market = _market(spec)
+    if not partial and market:
+        if ticker or watchlist_id is not None:
+            raise RuleError(f"{spec['label']} alerts watch the whole market: leave ticker and watchlist_id empty.")
+        out.update(ticker=None, watchlist_id=None, rule_type=str(rule_type).upper(), operator=spec["operator"])
+    elif not partial:
         t = normalize_watchlist_ticker(ticker) if ticker else ""
         if ticker and not t:
             raise RuleError("Enter a valid ticker symbol.")
@@ -170,7 +298,13 @@ def validate(entitlements: Dict[str, bool], *, rule_type: str, threshold: Option
     if value is not None:
         if not spec.get("value"):
             raise RuleError("This rule type takes no value.")
-        out["value"] = str(value).strip()[:40] or None
+        if market:
+            filters = parse_scan_filters(value)
+            if filters.get("setup") == "prebreakout" and not entitlements.get("can_early_breakout"):
+                raise RuleForbidden("PreBreakout scan alerts are a Premium feature.")
+            out["value"] = _scan_value(filters)
+        else:
+            out["value"] = str(value).strip()[:40] or None
     elif not partial and spec.get("value"):
         out["value"] = None
     if delivery_channels is not None or not partial:
@@ -188,7 +322,7 @@ def validate(entitlements: Dict[str, bool], *, rule_type: str, threshold: Option
             raise RuleError(f"cooldown_seconds must be between 0 and {MAX_COOLDOWN_S}.")
         out["cooldown_seconds"] = int(cooldown_seconds)
     elif not partial:
-        out["cooldown_seconds"] = DEFAULT_COOLDOWN[spec["kind"]]
+        out["cooldown_seconds"] = _default_cooldown(spec)
     if not partial:
         out.setdefault("threshold", None)
         out.setdefault("value", None)
@@ -391,6 +525,42 @@ def _cooling(state: Optional[Dict[str, Any]], cooldown_s: int, now: dt.datetime)
     return (now - t).total_seconds() < cooldown_s
 
 
+def _evaluate_market_rule(r: Dict[str, Any], obs: Dict[str, Any], st: Optional[Dict[str, Any]], now_s: str,
+                          now: dt.datetime) -> Optional[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]]:
+    """SCAN_MATCH: (new state, event or None); None when this rule already saw the scan
+    or its saved filters can't be read (the rule is skipped, never the pass)."""
+    from api import watchlist_intel
+
+    obs_id = obs["observation_id"]
+    if st and st.get("observation_id") == obs_id:
+        return None
+    try:
+        matches = scan_matches(obs, r, premium=r["_premium"])
+    except RuleError:
+        return None
+    fires, fresh, new = check_scan(matches, st)
+    last_trig = (st or {}).get("last_triggered_at")
+    if fires and _cooling(st, int(r["cooldown_seconds"]), now):
+        fires = False
+    state = {"rule_id": r["id"], "ticker": MARKET, **new, "observation_id": obs_id,
+             "last_triggered_at": now_s if fires else last_trig}
+    if not fires:
+        return state, None
+    top = watchlist_intel.ticker_view(obs, fresh[0], premium=r["_premium"])
+    event = {
+        "user_id": r["user_id"], "rule_id": r["id"], "watchlist_id": None,
+        "ticker": fresh[0], "rule_type": r["rule_type"], "operator": r["operator"],
+        "threshold": r.get("threshold"), "trigger_value": float(len(fresh)), "previous_value": None,
+        "hsf_score": top.get("hsf_score"), "setup": top.get("setup"),
+        "message": scan_message(r, fresh), "observation_id": obs_id,
+        "market_data_as_of": watchlist_intel._iso(obs["scan_at"]), "triggered_at": now_s,
+        "delivery": {c: "pending" if c != "in_app" else "delivered" for c in r["delivery_channels"]},
+        "_channels": r["delivery_channels"], "_tier": r["_tier"],
+        "_email_verified": r.get("owner_email_verified"),
+    }
+    return state, event
+
+
 def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Dict[str, Any]] = None,
                   deliver: bool = True) -> Dict[str, Any]:
     """One evaluation pass. Idempotent: a rule that already saw this observation is skipped,
@@ -429,6 +599,18 @@ def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Di
     views: Dict[Tuple[str, bool], Dict[str, Any]] = {}
     new_states, events, evaluated, triggered = [], [], set(), set()
     for r in rules:
+        if _market(r):
+            ev = _evaluate_market_rule(r, obs, states.get((r["id"], MARKET)), now_s, now)
+            if ev is None:
+                continue
+            evaluated.add(r["id"])
+            result["evaluated"] += 1
+            state, event = ev
+            new_states.append(state)
+            if event is not None:
+                triggered.add(r["id"])
+                events.append(event)
+            continue
         if r.get("watchlist_id"):
             tickers = wl.get(int(r["watchlist_id"]))
             if tickers is None:  # watchlist deleted or not the owner's: nothing to watch

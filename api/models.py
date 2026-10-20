@@ -653,6 +653,8 @@ class AlertRuleType(BaseModel):
     kind: Literal["level", "transition"]
     threshold: Optional[RuleThreshold] = None
     takes_value: bool = Field(description="SETUP_APPEARED: optional setup name, e.g. Breakout")
+    scope: Literal["symbol", "market"] = Field(
+        default="symbol", description="symbol: set a ticker or watchlist_id; market: the whole market (SCAN_MATCH)")
     default_cooldown_seconds: int
     available: bool = Field(description="False when the plan doesn't include it")
 

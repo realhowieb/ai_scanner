@@ -23,9 +23,13 @@ UPGRADE_MESSAGES = {
     "can_scan_history": (
         "Pro adds scan history and historical research so you can compare current opportunities with prior runs."
     ),
+    "can_scan_alerts": (
+        "Pro adds scan alerts: save scanner filters once and HSF tells you when new stocks match after each scan."
+    ),
     "can_track_record": ("Pro adds historical research so you can inspect how prior HSF observations evolved."),
     "can_ai_notes": (
-        "Premium adds AI scan summaries and results chat, plus setup notes on each result, for a deeper research workflow."
+        "Premium adds AI scan summaries and results chat, setup notes on each result and watchlist rundowns, "
+        "for a deeper research workflow."
     ),
     "can_early_breakout": (
         "Premium adds Early Breakout candidate research for investigating setups before they fully form."
