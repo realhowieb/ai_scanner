@@ -62,6 +62,9 @@ export const outcomes = {
   summary: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/summary", { signal })),
   scores: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/scores", { signal })),
   horizons: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/horizons", { signal })),
+  /** Past HSF signals like one stock's current reading: same setup (when known) and score within ±5. */
+  similar: (q: { setup?: string | null; min_score: number; max_score: number }, signal?: AbortSignal) =>
+    unwrap(api.GET("/v1/outcomes/horizons", { params: { query: { setup: q.setup || undefined, min_score: q.min_score, max_score: q.max_score } }, signal })),
   setups: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/setups", { signal })),
   symbol: (ticker: string, signal?: AbortSignal) =>
     unwrap(api.GET("/v1/outcomes/symbols/{ticker}", { params: { path: { ticker }, query: { page_size: 1 } }, signal })),

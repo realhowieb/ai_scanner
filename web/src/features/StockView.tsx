@@ -14,7 +14,7 @@ import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, setupLabel, shortDate } from "@/lib/format";
 
 import { SnapshotTime } from "./SnapshotTime";
-import { SymbolEvidence } from "./OutcomeEvidence";
+import { SimilarSetups, SymbolEvidence } from "./OutcomeEvidence";
 import { describeAlert } from "./AlertForm";
 import { PriceAlertButton } from "./PriceAlert";
 import { PriceChart, type ChartEvent } from "./PriceChart";
@@ -88,7 +88,7 @@ function DecisionSnapshot({ s }: { s: Stock }) {
 
 function Historical({ s }: { s: Stock }) {
   if (s.historical_locked) {
-    return <Locked title="Historical research is part of Pro" plan="pro">How past HSF readings in this score range played out, and this ticker&apos;s own record.</Locked>;
+    return <Locked title="Historical research is part of Pro" plan="pro">How past HSF readings in this score range played out, how similar past setups moved over 1, 3 and 5 days, and this ticker&apos;s own record.</Locked>;
   }
   const ctx = s.historical_context as { bucket?: string; positive_rate?: number; n?: number; confidence?: string; sufficient?: boolean } | null | undefined;
   const sum = s.history_summary as { observations?: number; matured?: number; positive?: number } | null | undefined;
@@ -107,6 +107,9 @@ function Historical({ s }: { s: Stock }) {
       )}
       {coh && coh.follow_through_rate !== null && coh.follow_through_rate !== undefined && (
         <p className="body-sm">Similar states ({coh.status}, HSF {coh.score_band}, {coh.horizon}): {coh.comparable} observations, {Math.round(coh.follow_through_rate * 100)}% persisted or strengthened ({String(coh.evidence_strength || "early").toLowerCase()} sample coverage; not a performance rating).</p>
+      )}
+      {s.hsf_score != null && Number.isFinite(s.hsf_score) && (
+        <SimilarSetups score={s.hsf_score} setup={s.primary_setup} setupName={s.primary_setup ? setupLabel(s.primary_setup) : undefined} />
       )}
     </div>
   );

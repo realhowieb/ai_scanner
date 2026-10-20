@@ -25,6 +25,7 @@ import { useApi } from "@/hooks/useApi";
 import { etTime, num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
 import { DailySpark, useDailyBarsState } from "./Sparks";
+import { WatchlistAINote } from "./WatchlistAINote";
 import { WatchlistPerformanceCard } from "./WatchlistPerformance";
 
 const NOTE_MAX = 500;
@@ -166,7 +167,7 @@ function WatchlistRules({ wl, onChanged }: { wl: number; onChanged: () => void }
   const add = useAction();
   const rm = useAction();
   if (rules.error || types.error || !rules.data || !types.data) return null; // an API without rules: no card
-  const available = types.data.filter((t) => t.available);
+  const available = types.data.filter((t) => t.available && t.scope !== "market");
   const spec = available.find((t) => t.type === type) ?? available[0];
   if (!spec) return null;
   const mine = rules.data.rules.filter((r) => r.watchlist_id === wl);
@@ -388,6 +389,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
         {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? `Score, setup and rank are from that scan. ${hasQuotes ? "Price and change are the latest trade vs the previous close." : "Price and change are from that scan, not live quotes."} The rank is the ticker's place among the scan's ranked setups.` : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
       </Card>
 
+      <WatchlistAINote id={w.id} name={w.name} empty={w.items.length === 0} />
       <WatchlistPerformanceCard id={w.id} version={w.items.length} />
 
       <WatchlistRules wl={w.id} onChanged={intel.reload} />

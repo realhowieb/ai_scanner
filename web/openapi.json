@@ -2953,14 +2953,14 @@
      "value": {
       "anyOf": [
        {
-        "maxLength": 40,
+        "maxLength": 300,
         "type": "string"
        },
        {
         "type": "null"
        }
       ],
-      "description": "SETUP_APPEARED: only this setup (optional)",
+      "description": "SETUP_APPEARED: only this setup (optional). SCAN_MATCH: JSON filters, any of name, setup, min_price, max_price, min_rvol",
       "title": "Value"
      },
      "watchlist_id": {
@@ -3012,6 +3012,16 @@
      },
      "operator": {
       "title": "Operator",
+      "type": "string"
+     },
+     "scope": {
+      "default": "symbol",
+      "description": "symbol: set a ticker or watchlist_id; market: the whole market (SCAN_MATCH)",
+      "enum": [
+       "symbol",
+       "market"
+      ],
+      "title": "Scope",
       "type": "string"
      },
      "takes_value": {
@@ -3107,7 +3117,7 @@
      "value": {
       "anyOf": [
        {
-        "maxLength": 40,
+        "maxLength": 300,
         "type": "string"
        },
        {
@@ -15285,6 +15295,70 @@
     "summary": "AI scan summary (Premium)"
    }
   },
+  "/v1/ai/watchlists/{watchlist_id}/note": {
+   "post": {
+    "description": "A short plain-English rundown of what changed on one of your watchlists since the\nprevious market scan (score and rank moves, new or lost setups, volume, earnings within\na week), from the latest saved scan only. text is null when the list is empty or no\nscan exists. Cached per watchlist and scan.",
+    "operationId": "ai_watchlist_note_v1_ai_watchlists__watchlist_id__note_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIText"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "AI rundown of a watchlist (Premium)"
+   }
+  },
   "/v1/alerts": {
    "get": {
     "operationId": "alerts_v1_alerts_get",
@@ -15667,7 +15741,7 @@
     "summary": "Your alert rules"
    },
    "post": {
-    "description": "Set exactly one of `ticker` or `watchlist_id`. Rules count toward the plan's alert\nlimit together with ticker alerts.",
+    "description": "Set exactly one of `ticker` or `watchlist_id` (neither for market-wide types such as\nSCAN_MATCH). Rules count toward the plan's alert limit together with ticker alerts.",
     "operationId": "alert_rule_create_v1_alerts_rules_post",
     "requestBody": {
      "content": {

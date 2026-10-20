@@ -12,6 +12,7 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useSession } from "@/session/SessionProvider";
 
 import { SavedResearchViews } from "./SavedResearchViews";
+import { ScanAlertButton } from "./ScanAlert";
 import { SetupTable } from "./SetupTable";
 
 export const SIGNALS = [
@@ -135,6 +136,7 @@ export function ScannerView() {
       <div className="scanner-toolbar">
       <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100 }}
         onApply={(v) => { if ("signal" in v) set({ signal: v.signal ?? "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25, page: 1 }); }} />
+      <ScanAlertButton setup={f.signal} minScore={f.minScore} setupLabel={SIGNALS.find((s) => s.id === f.signal)?.label} />
       <details className="filter-panel" open={moreActive}>
         <summary>
           <span className="strong">More filters</span>
