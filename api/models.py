@@ -928,6 +928,19 @@ class Sparklines(BaseModel):
     series: Dict[str, List[float]] = Field(default={}, description="Ticker -> up to 21 daily closes, oldest first; the last is the session in progress during market hours. Tickers without bars are left out")
 
 
+class LatestQuote(BaseModel):
+    last: float = Field(description="Latest trade price (the day's close after the session ends)")
+    prev_close: Optional[float] = Field(default=None, description="The close the change is measured from")
+    chg_pct: Optional[float] = Field(default=None, description="Percent vs prev_close")
+    at: Optional[str] = Field(default=None, description="Time of that trade (ISO, UTC)")
+
+
+class LatestQuotes(BaseModel):
+    """Latest trades from the quote provider, shared for about a minute. Tickers without a quote are left out."""
+    quotes: Dict[str, LatestQuote] = {}
+    feed: Optional[str] = Field(default=None, description="Provider feed: 'iex' (one exchange) or 'sip' (all exchanges)")
+
+
 class ScorePoint(BaseModel):
     time: Optional[str] = Field(default=None, description="The full-market scan (ISO)")
     score: Optional[int] = Field(default=None, description="HSF Score in that scan, as the Scanner shows it; null when not ranked")

@@ -5528,6 +5528,83 @@
     "title": "JournalTrade",
     "type": "object"
    },
+   "LatestQuote": {
+    "properties": {
+     "at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Time of that trade (ISO, UTC)",
+      "title": "At"
+     },
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Percent vs prev_close",
+      "title": "Chg Pct"
+     },
+     "last": {
+      "description": "Latest trade price (the day's close after the session ends)",
+      "title": "Last",
+      "type": "number"
+     },
+     "prev_close": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The close the change is measured from",
+      "title": "Prev Close"
+     }
+    },
+    "required": [
+     "last"
+    ],
+    "title": "LatestQuote",
+    "type": "object"
+   },
+   "LatestQuotes": {
+    "description": "Latest trades from the quote provider, shared for about a minute. Tickers without a quote are left out.",
+    "properties": {
+     "feed": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Provider feed: 'iex' (one exchange) or 'sip' (all exchanges)",
+      "title": "Feed"
+     },
+     "quotes": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/LatestQuote"
+      },
+      "default": {},
+      "title": "Quotes",
+      "type": "object"
+     }
+    },
+    "title": "LatestQuotes",
+    "type": "object"
+   },
    "LatestScan": {
     "properties": {
      "freshness": {
@@ -20121,6 +20198,57 @@
      }
     ],
     "summary": "Pre-market gappers (Pro)"
+   }
+  },
+  "/v1/quotes": {
+   "get": {
+    "description": "Each ticker's latest trade and change vs the previous close, for the Watchlists Refresh.",
+    "operationId": "quotes_v1_quotes_get",
+    "parameters": [
+     {
+      "description": "Comma-separated; the first 50 are returned",
+      "in": "query",
+      "name": "symbols",
+      "required": true,
+      "schema": {
+       "description": "Comma-separated; the first 50 are returned",
+       "maxLength": 2000,
+       "title": "Symbols",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LatestQuotes"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Latest quotes"
    }
   },
   "/v1/research/coverage": {

@@ -8,6 +8,8 @@
 // rather than a made-up quote. GET /v1/watchlists/{id}/intelligence adds what changed since
 // the previous scan (score, rank), PreBreakout (Premium), RVOL and alert counts; all of it
 // is computed by the API, and an API without that route just leaves those facts out.
+// GET /v1/quotes gives each ticker's latest trade (Alpaca, shared about a minute), shown in
+// place of the scan's price; without it the scan price or the daily bar is shown, labelled.
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -17,15 +19,16 @@ import { api, unwrap } from "@/api/client";
 import { alertRules, parseTickers, watchlists } from "@/api/userData";
 import type { WatchlistDetail, WatchlistIntelItem } from "@/api/userData";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
-import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, RefreshStatus, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
-import { num, pct, price, setupLabel, shortDate } from "@/lib/format";
+import { etTime, num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
-import { DailySpark, useDailyBars } from "./Sparks";
+import { DailySpark, useDailyBarsState } from "./Sparks";
 import { WatchlistPerformanceCard } from "./WatchlistPerformance";
 
 const NOTE_MAX = 500;
+const tone = (v: number | null | undefined) => ((v ?? 0) > 0 ? "up" : (v ?? 0) < 0 ? "down" : "");
 const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 
 type NameProps = {
@@ -257,7 +260,17 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
     if (!legacy) return new Map((detail.data?.items ?? []).filter((i) => i.latest).map((i) => [i.ticker, i.latest!]));
     return new Map((scan.data?.setups ?? []).map((s) => [s.ticker, s]));
   }, [legacy, detail.data, scan.data]);
-  const daily = useDailyBars((detail.data?.items ?? []).map((i) => i.ticker));
+  const bars = useDailyBarsState((detail.data?.items ?? []).map((i) => i.ticker));
+  const daily = bars.data;
+  const tickerKey = [...new Set((detail.data?.items ?? []).map((i) => i.ticker))].sort().slice(0, 50).join(",");
+  const quotes = useApi(tickerKey ? `wl-quotes:${tickerKey}` : null, (signal) =>
+    unwrap(api.GET("/v1/quotes", { params: { query: { symbols: tickerKey } }, signal })));
+  const quoteBy = quotes.data?.quotes ?? {};
+  // Refresh re-reads the list (with each ticker's latest scan row), its changes, the latest
+  // trades and the daily bars in place. Prices are the provider's latest trade (shared by the
+  // API for about a minute); scores change only when a new scan has run.
+  const refreshing = detail.refreshing || intel.refreshing || bars.refreshing || quotes.refreshing || (legacy && scan.refreshing);
+  const refresh = () => { detail.reload(); intel.reload(); bars.reload(); quotes.reload(); if (legacy) scan.reload(); };
 
   if (detail.error && !detail.data) return <ErrorState error={detail.error} onRetry={detail.reload} what="this watchlist" />;
   if (!detail.data || detail.loading && detail.data.id !== id) return <Skeleton rows={5} label="Loading watchlist" />;
@@ -269,6 +282,8 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const ranked = w.items.filter((i) => scores.has(i.ticker)).length;
   const attention = w.items.filter((i) => scores.get(i.ticker)?.fading || (intelBy.get(i.ticker)?.score_change ?? 0) < 0).length;
   const notes = w.items.filter((i) => i.note).length;
+  const hasQuotes = Object.keys(quoteBy).length > 0;
+  const feed = quotes.data?.feed === "iex" ? " Prices come from one exchange (IEX), so they can differ slightly from the consolidated price." : "";
 
   return (
     <div className="stack">
@@ -296,14 +311,26 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
       <WatchlistChangesCard id={w.id} />
 
       <Card title="Tickers" id="wl-items" aside={scanAt ? <Freshness at={scanAt} label="HSF Scores from the scan" stale={stale} /> : undefined}>
-        {w.items.length > 1 && (
-          <div className="seg-group sort-toggle" role="radiogroup" aria-label="Sort tickers">
-            {([[false, "A to Z"], [true, "HSF Score"]] as const).map(([v, label]) => (
-              <label key={label} className={`seg${byScore === v ? " on" : ""}`}>
-                <input type="radio" className="sr-only" name={`wl-sort-${w.id}`} checked={byScore === v} onChange={() => setByScore(v)} />{label}
-              </label>
-            ))}
+        {w.items.length > 0 && (
+          <div className="wl-toolbar">
+            {w.items.length > 1 && (
+              <div className="seg-group sort-toggle" role="radiogroup" aria-label="Sort tickers">
+                {([[false, "A to Z"], [true, "HSF Score"]] as const).map(([v, label]) => (
+                  <label key={label} className={`seg${byScore === v ? " on" : ""}`}>
+                    <input type="radio" className="sr-only" name={`wl-sort-${w.id}`} checked={byScore === v} onChange={() => setByScore(v)} />{label}
+                  </label>
+                ))}
+              </div>
+            )}
+            <button type="button" className="btn wl-refresh" onClick={refresh} disabled={refreshing} aria-label={`Refresh prices and scores for ${w.name}`}>
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
           </div>
+        )}
+        {w.items.length > 0 && (
+          <RefreshStatus updatedAt={detail.updatedAt} refreshing={refreshing} error={detail.error} onRetry={refresh}
+            sourceNote={hasQuotes ? `Prices are the latest trade, up to a minute old.${feed} Scores change when a new scan runs.`
+              : "Live prices aren't available right now; daily-bar prices can be up to 15 minutes old. Scores change when a new scan runs."} />
         )}
         {w.items.length === 0 ? (
           <Empty title="No tickers yet.">Add some above, or use Save to watchlist on the Scanner or a stock page.</Empty>
@@ -312,6 +339,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
             {items.map((it) => {
               const s = scores.get(it.ticker);
               const bar = daily?.last_bar?.[it.ticker];
+              const q = quoteBy[it.ticker];
               const rank = !legacy ? it.latest?.rank : undefined;
               return (
                 <li key={it.ticker} className="wl-item">
@@ -333,14 +361,20 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                     </span>
                   </div>
                   <div className="wl-facts">
-                    {s && (
+                    {q ? (
+                      <>
+                        <span className="mono">{price(q.last)}</span>
+                        <span className={`mono ${tone(q.chg_pct)}`}>{pct(q.chg_pct)}</span>
+                        <span className="cap">{q.at ? `last trade ${etTime(q.at)}` : "latest trade"}</span>
+                      </>
+                    ) : s ? (
                       <>
                         <span className="mono">{price(s.last)}</span>
-                        <span className={`mono ${(s.chg_pct ?? 0) > 0 ? "up" : (s.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(s.chg_pct)}</span>
-                        {rank && <span>#{rank}{w.scan_total ? ` of ${w.scan_total}` : ""}</span>}
+                        <span className={`mono ${tone(s.chg_pct)}`}>{pct(s.chg_pct)}</span>
+                        <span className="cap">at the scan</span>
                       </>
-                    )}
-                    {!s && bar && <span className="mono">{price(bar.close)} <span className="cap">daily bar {shortDate(bar.session)} · may be in progress; not live</span></span>}
+                    ) : bar ? <span className="mono">{price(bar.close)} <span className="cap">daily bar {shortDate(bar.session)} · may be in progress; not live</span></span> : null}
+                    {s && rank && <span>#{rank}{w.scan_total ? ` of ${w.scan_total}` : ""}</span>}
                     {intelBy.get(it.ticker) && <IntelFacts x={intelBy.get(it.ticker)!} />}
                     {it.added_at && <span>Added {shortDate(it.added_at)}{it.price_when_added ? ` at ${price(it.price_when_added)}` : ""}</span>}
                   </div>
@@ -351,7 +385,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           </ul>
         )}
         {legacy && scan.data && <p className="cap">Scores and prices are from that scan, only for tickers among your plan&apos;s top {scan.data.max_results} ranked setups. Not live quotes.</p>}
-        {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? "Score, setup, price and change are from that scan, not live quotes. The rank is the ticker's place among the scan's ranked setups." : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
+        {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? `Score, setup and rank are from that scan. ${hasQuotes ? "Price and change are the latest trade vs the previous close." : "Price and change are from that scan, not live quotes."} The rank is the ticker's place among the scan's ranked setups.` : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
       </Card>
 
       <WatchlistPerformanceCard id={w.id} version={w.items.length} />
