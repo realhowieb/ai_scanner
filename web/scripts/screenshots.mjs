@@ -24,7 +24,7 @@ for (const [size, viewport] of [["desktop", { width: 1440, height: 1000 }], ["mo
   await page.goto(`${BASE}/today`);
   await page.waitForURL(/\/login/);
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/today/);
   const cookies = await ctx.cookies();
