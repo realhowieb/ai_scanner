@@ -16,6 +16,8 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
 
+import { describeScanAlert } from "./ScanAlert";
+
 /** The unit after a rule's number, so "1" reads as a day and "2" as a volume multiple. */
 export function thresholdUnit(type: string): string {
   if (type === "EARNINGS_SOON") return "days";
@@ -24,9 +26,10 @@ export function thresholdUnit(type: string): string {
   return "";
 }
 
-const PLAN_OF: Record<string, "pro" | "premium"> = { EARNINGS_SOON: "pro", PREBREAKOUT_ACTIVE: "premium" };
+const PLAN_OF: Record<string, "pro" | "premium"> = { EARNINGS_SOON: "pro", SCAN_MATCH: "pro", PREBREAKOUT_ACTIVE: "premium" };
 
 export function describeRule(r: Pick<AlertRule, "rule_type" | "threshold" | "value">, types: AlertRuleType[]): string {
+  if (r.rule_type === "SCAN_MATCH") return `New scanner matches (${describeScanAlert(r.threshold, r.value)})`;
   const t = types.find((x) => x.type === r.rule_type);
   const base = (t?.label ?? r.rule_type).replace(/ \(days\)$/, "");
   const unit = thresholdUnit(r.rule_type);
@@ -87,12 +90,13 @@ export function SmartAlerts({ ticker, onChanged }: { ticker?: string; onChanged?
     || !Array.isArray(rules.data?.capabilities?.delivery_channels)) return null;
   if (!rules.data) return null;
   const all = types.data;
-  const available = all.filter((t) => t.available);
+  // Market-wide types (scan alerts) are made from the Scanner, not this per-ticker form.
+  const available = all.filter((t) => t.available && t.scope !== "market");
   const spec = available.find((t) => t.type === type) ?? available[0];
   const locked = all.filter((t) => !t.available);
   const emailAllowed = rules.data.capabilities.delivery_channels.includes("email");
   const listName = (id: number | null | undefined) => lists.data?.find((w) => w.id === id)?.name ?? "a watchlist";
-  const mine = rules.data.rules.filter((r) => (ticker ? r.ticker === ticker.toUpperCase() : true));
+  const mine = rules.data.rules.filter((r) => (ticker ? r.ticker === ticker.toUpperCase() && r.rule_type !== "SCAN_MATCH" : true));
   const full = rules.data.used >= rules.data.limit;
   const wl = listId ?? lists.data?.find((w) => w.is_default)?.id ?? lists.data?.[0]?.id ?? null;
   const changed = () => { rules.reload(); onChanged?.(); };
@@ -131,7 +135,7 @@ export function SmartAlerts({ ticker, onChanged }: { ticker?: string; onChanged?
         <ul className="alert-list">
           {mine.map((r) => (
             <RuleRow key={r.id} r={r} types={all} emailAllowed={emailAllowed} onChanged={changed}
-              scope={r.ticker ?? `Every stock on ${listName(r.watchlist_id)}`} />
+              scope={r.rule_type === "SCAN_MATCH" ? "Scan alert" : r.ticker ?? `Every stock on ${listName(r.watchlist_id)}`} />
           ))}
         </ul>
       ) : <p className="cap">{ticker ? `No smart alerts on ${ticker} yet.` : "No smart alerts yet."}</p>}
@@ -190,6 +194,7 @@ export function SmartAlerts({ ticker, onChanged }: { ticker?: string; onChanged?
           <UpgradeButton plan={locked.some((t) => PLAN_OF[t.type] === "pro") ? "pro" : "premium"} />
         </div>
       )}
+      {!ticker && <p className="cap">Scan alerts: set filters on the <Link href="/scanner">Scanner</Link>, then choose &ldquo;Alert me on new matches&rdquo;.</p>}
       {ticker && <p className="cap">Fired alerts show on <Link href="/alerts">Alerts</Link>.</p>}
     </Card>
   );

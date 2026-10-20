@@ -21,6 +21,7 @@ FEATURE_MIN_TIER: dict[str, str] = {
     "can_paper_trade": "premium",
     "can_email_alerts": "pro",  # in-app alerts are open to all; email is Pro+
     "can_day_trader": "pro",  # live intraday monitor (pages/day_trader.py)
+    "can_scan_alerts": "pro",  # saved scanner filters that alert on new matches (SCAN_MATCH rules)
     "can_diagnostics": "admin",
     "can_admin_panel": "admin",
 }

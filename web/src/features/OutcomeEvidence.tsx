@@ -218,6 +218,51 @@ export function OutcomeEvidence() {
 }
 
 /** Stock page: how earlier HSF signals for this ticker turned out (5-day window). */
+/** Stock page (Pro): how past HSF signals like this one did at 1, 3 and 5 trading days.
+ * "Like this one" = same primary setup and an HSF Score within 5 points. Descriptive only. */
+export function similarRange(score: number): { min_score: number; max_score: number } {
+  return { min_score: Math.max(0, Math.round(score) - 5), max_score: Math.min(100, Math.round(score) + 5) };
+}
+
+export function SimilarSetups({ score, setup, setupName }: { score: number; setup?: string | null; setupName?: string }) {
+  const range = similarRange(score);
+  const key = `outcomes:similar:${setup ?? ""}:${range.min_score}-${range.max_score}`;
+  const r = useApi(key, (signal) => outcomes.similar({ setup, ...range }, signal));
+  if (r.error && !r.data) return null;
+  if (!r.data) return <p className="cap">Loading similar past setups…</p>;
+  return <SimilarTable d={r.data} what={`${setup ? `${setupName ?? setup} setups` : "HSF signals"} scoring ${range.min_score}–${range.max_score}`} />;
+}
+
+export function SimilarTable({ d, what }: { d: OutcomeHorizons; what: string }) {
+  const matured = Math.max(0, ...d.horizons.map((h) => h.matured_count));
+  if (matured === 0) return <p className="body-sm">No matured past {what} yet.</p>;
+  return (
+    <div className="stack-sm similar-setups">
+      <p className="body-sm"><strong>Similar past setups:</strong> how earlier {what} moved afterwards.</p>
+      <div className="table-wrap">
+        <table className="table">
+          <thead><tr>
+            <th scope="col">Held for</th><th scope="col" className="num">Matured</th><th scope="col" className="num">Median return</th>
+            <th scope="col" className="num">Median vs SPY</th><th scope="col" className="num">Finished up</th>
+          </tr></thead>
+          <tbody>
+            {d.horizons.map((h) => (
+              <tr key={h.horizon} className={h.evidence_quality === "INSUFFICIENT" ? "row-muted" : undefined}>
+                <th scope="row" className="row-h">{h.horizon} day{h.horizon === 1 ? "" : "s"}</th>
+                <td className="num mono">{h.matured_count}</td>
+                <td className={`num mono ${tone(h.median_return)}`}>{signed(h.median_return)}</td>
+                <td className={`num mono ${tone(h.median_excess_return)}`}>{signed(h.median_excess_return)}</td>
+                <td className="num mono">{share(h.win_rate)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="cap">Past signals only, before costs; greyed rows have too few to read as evidence. Not a forecast.</p>
+    </div>
+  );
+}
+
 export function SymbolEvidence({ ticker }: { ticker: string }) {
   const r = useApi(`outcomes:symbol:${ticker}`, (signal) => outcomes.symbol(ticker, signal));
   if (r.error && !r.data) return null;   // the older context above still renders

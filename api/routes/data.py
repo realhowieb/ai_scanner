@@ -58,7 +58,9 @@ class AlertRuleCreate(BaseModel):
     ticker: Optional[str] = Field(default=None, max_length=12, description="One ticker, or set watchlist_id")
     watchlist_id: Optional[int] = Field(default=None, ge=1, description="Every symbol on this watchlist")
     threshold: Optional[float] = None
-    value: Optional[str] = Field(default=None, max_length=40, description="SETUP_APPEARED: only this setup (optional)")
+    value: Optional[str] = Field(default=None, max_length=300, description=(
+        "SETUP_APPEARED: only this setup (optional). SCAN_MATCH: JSON filters, any of "
+        "name, setup, min_price, max_price, min_rvol"))
     delivery_channels: Optional[List[Literal["in_app", "email"]]] = Field(
         default=None, max_length=2, description="Default in_app; email is Pro+")
     cooldown_seconds: Optional[int] = Field(default=None, ge=0, le=7 * 86400,
@@ -68,7 +70,7 @@ class AlertRuleCreate(BaseModel):
 
 class AlertRuleUpdate(BaseModel):
     threshold: Optional[float] = None
-    value: Optional[str] = Field(default=None, max_length=40)
+    value: Optional[str] = Field(default=None, max_length=300)
     enabled: Optional[bool] = None
     delivery_channels: Optional[List[Literal["in_app", "email"]]] = Field(default=None, min_length=1, max_length=2)
     cooldown_seconds: Optional[int] = Field(default=None, ge=0, le=7 * 86400)
@@ -369,8 +371,8 @@ def register(app: FastAPI) -> None:
                          409: {"description": "You already have this rule"},
                          422: {"description": "Invalid rule"}})
     def alert_rule_create(body: AlertRuleCreate, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        """Set exactly one of `ticker` or `watchlist_id`. Rules count toward the plan's alert
-        limit together with ticker alerts."""
+        """Set exactly one of `ticker` or `watchlist_id` (neither for market-wide types such as
+        SCAN_MATCH). Rules count toward the plan's alert limit together with ticker alerts."""
         from api import alert_rules
 
         with _rule_errors():

@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from api import models, ratelimit, user_data
-from api.deps import _AUTH, TICKER, _user, current_account, require_feature
+from api.deps import _AUTH, TICKER, _user, current_account, entitlements_for, require_feature
 from api.scans import json_safe
 
 
@@ -67,6 +67,17 @@ def register(app: FastAPI) -> None:
         isn't in it."""
         user = _premium(account)
         return ai.ticker_note(user, ticker.strip().upper())
+
+    @app.post("/v1/ai/watchlists/{watchlist_id}/note", response_model=models.AIText, responses=_AI,
+              summary="AI rundown of a watchlist (Premium)")
+    def ai_watchlist_note(watchlist_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """A short plain-English rundown of what changed on one of your watchlists since the
+        previous market scan (score and rank moves, new or lost setups, volume, earnings within
+        a week), from the latest saved scan only. text is null when the list is empty or no
+        scan exists. Cached per watchlist and scan."""
+        user = _premium(account)
+        wl = user_data.get_watchlist(user, watchlist_id)
+        return json_safe(ai.watchlist_note(user, wl, entitlements_for(account)["entitlements"]))
 
     @app.get("/v1/ai/brief-narrative", response_model=models.AIText, responses=_AI,
              summary="AI Market Brief narrative (Premium)")

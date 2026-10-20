@@ -455,6 +455,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ai/watchlists/{watchlist_id}/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * AI rundown of a watchlist (Premium)
+         * @description A short plain-English rundown of what changed on one of your watchlists since the
+         *     previous market scan (score and rank moves, new or lost setups, volume, earnings within
+         *     a week), from the latest saved scan only. text is null when the list is empty or no
+         *     scan exists. Cached per watchlist and scan.
+         */
+        post: operations["ai_watchlist_note_v1_ai_watchlists__watchlist_id__note_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/alerts": {
         parameters: {
             query?: never;
@@ -546,8 +569,8 @@ export interface paths {
         put?: never;
         /**
          * Create an alert rule
-         * @description Set exactly one of `ticker` or `watchlist_id`. Rules count toward the plan's alert
-         *     limit together with ticker alerts.
+         * @description Set exactly one of `ticker` or `watchlist_id` (neither for market-wide types such as
+         *     SCAN_MATCH). Rules count toward the plan's alert limit together with ticker alerts.
          */
         post: operations["alert_rule_create_v1_alerts_rules_post"];
         delete?: never;
@@ -3192,7 +3215,7 @@ export interface components {
             ticker?: string | null;
             /**
              * Value
-             * @description SETUP_APPEARED: only this setup (optional)
+             * @description SETUP_APPEARED: only this setup (optional). SCAN_MATCH: JSON filters, any of name, setup, min_price, max_price, min_rvol
              */
             value?: string | null;
             /**
@@ -3221,6 +3244,13 @@ export interface components {
             label: string;
             /** Operator */
             operator: string;
+            /**
+             * Scope
+             * @description symbol: set a ticker or watchlist_id; market: the whole market (SCAN_MATCH)
+             * @default symbol
+             * @enum {string}
+             */
+            scope: "symbol" | "market";
             /**
              * Takes Value
              * @description SETUP_APPEARED: optional setup name, e.g. Breakout
@@ -8710,6 +8740,79 @@ export interface operations {
                 "application/json": components["schemas"]["AISummaryBody"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIText"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scan not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Daily AI limit or hourly request limit reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI call failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ai_watchlist_note_v1_ai_watchlists__watchlist_id__note_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
