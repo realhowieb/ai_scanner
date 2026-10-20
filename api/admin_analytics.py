@@ -128,7 +128,58 @@ def _product(days: int, now: Optional[dt.datetime]) -> Dict[str, Any]:
         },
         "recovery": [{"started_at": _iso(r.get("started_at")), "incident": r.get("incident_id"),
                       "action": r.get("action"), "result": r.get("result")} for r in data.get("recovery") or []],
+        "funnel": _funnel(days),
     }
+
+
+# ---- sign-up funnel ------------------------------------------------------------------------------
+FUNNEL_STEPS = (("signed_up", "Signed up"), ("verified", "Verified email"),
+                ("engaged", "Saved a stock or alert"), ("paid", "Pays for Pro"))
+SOURCE_LABELS = {"reddit": "Reddit", "direct": "Direct", "other_unknown": "Other"}
+
+
+def _funnel(days: int) -> Optional[Dict[str, Any]]:
+    """The sign-up funnel for the period, or None when it can't be loaded (the rest of
+    the dashboard still shows)."""
+    try:
+        from db.admin_analytics import load_signup_funnel
+
+        return signup_funnel(load_signup_funnel(days=days))
+    except Exception:
+        return None
+
+
+def signup_funnel(data: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """Counts per step for accounts created in the period, overall and by sign-up source.
+    `paid` means a live subscription on Pro or Premium (a free invite trial is not paid)."""
+    if not data.get("available"):
+        return None
+    from ui.acquisition import user_hash
+
+    sources = data.get("sources") or {}
+    totals: Counter = Counter()
+    by_source: Dict[str, Counter] = defaultdict(Counter)
+    trials = 0
+    for a in data.get("accounts") or []:
+        reached = {
+            "signed_up": True,
+            "verified": bool(a.get("verified")),
+            "engaged": bool(a.get("engaged")),
+            "paid": bool(a.get("has_subscription")) and ar.normalize_plan(a.get("tier")) in {"pro", "premium"},
+        }
+        src = SOURCE_LABELS.get(sources.get(user_hash(a.get("user")) or "", ""), "Not recorded")
+        for key, hit in reached.items():
+            if hit:
+                totals[key] += 1
+                by_source[src][key] += 1
+        trials += bool(a.get("trial"))
+    first = totals["signed_up"]
+    steps = [{"key": k, "label": label, "users": totals[k],
+              "of_signups": (totals[k] / first) if first else None} for k, label in FUNNEL_STEPS]
+    rows = [{"source": s, **{k: c[k] for k, _ in FUNNEL_STEPS}}
+            for s, c in sorted(by_source.items(), key=lambda kv: (-kv[1]["signed_up"], kv[0]))]
+    return {"steps": steps, "by_source": rows, "invite_trials": trials,
+            "unavailable": sorted((data.get("errors") or {}).keys())}
 
 
 def _systems(data: Mapping[str, Any]) -> List[Dict[str, Any]]:

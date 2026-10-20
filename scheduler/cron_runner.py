@@ -1178,6 +1178,15 @@ def main():
         print(f"[cron] morning digest failed: {_redact(e)}")
         _capture(e)
 
+    # "Your free Pro ends in N days" emails (each trial end once). Best-effort.
+    try:
+        from services.lifecycle_emails import run_trial_reminders
+
+        print(f"[lifecycle] trial reminders: {run_trial_reminders()}")
+    except Exception as e:
+        print(f"[cron] trial reminders failed: {_redact(e)}")
+        _capture(e)
+
     # Nightly-equivalent maintenance (throttled once/day). Best-effort.
     try:
         _purge_old_login_attempts()

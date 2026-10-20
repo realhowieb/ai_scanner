@@ -191,6 +191,17 @@
       "title": "Days",
       "type": "integer"
      },
+     "funnel": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/AdminFunnel"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Sign-up funnel for accounts created in the period"
+     },
      "loaded_at": {
       "anyOf": [
        {
@@ -965,6 +976,78 @@
     "title": "AdminEvidenceReadiness",
     "type": "object"
    },
+   "AdminFunnel": {
+    "properties": {
+     "by_source": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/AdminFunnelSource"
+      },
+      "title": "By Source",
+      "type": "array"
+     },
+     "invite_trials": {
+      "default": 0,
+      "description": "Accounts in the period with a free Pro trial from an invite",
+      "title": "Invite Trials",
+      "type": "integer"
+     },
+     "steps": {
+      "items": {
+       "$ref": "#/components/schemas/AdminFunnelStep"
+      },
+      "title": "Steps",
+      "type": "array"
+     },
+     "unavailable": {
+      "default": [],
+      "description": "Steps that failed to load and count as zero",
+      "items": {
+       "type": "string"
+      },
+      "title": "Unavailable",
+      "type": "array"
+     }
+    },
+    "required": [
+     "steps"
+    ],
+    "title": "AdminFunnel",
+    "type": "object"
+   },
+   "AdminFunnelSource": {
+    "properties": {
+     "engaged": {
+      "title": "Engaged",
+      "type": "integer"
+     },
+     "paid": {
+      "title": "Paid",
+      "type": "integer"
+     },
+     "signed_up": {
+      "title": "Signed Up",
+      "type": "integer"
+     },
+     "source": {
+      "title": "Source",
+      "type": "string"
+     },
+     "verified": {
+      "title": "Verified",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "source",
+     "signed_up",
+     "verified",
+     "engaged",
+     "paid"
+    ],
+    "title": "AdminFunnelSource",
+    "type": "object"
+   },
    "AdminFunnelStage": {
     "properties": {
      "count": {
@@ -992,6 +1075,41 @@
      "count"
     ],
     "title": "AdminFunnelStage",
+    "type": "object"
+   },
+   "AdminFunnelStep": {
+    "properties": {
+     "key": {
+      "title": "Key",
+      "type": "string"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "of_signups": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Fraction of the period's sign-ups that reached this step",
+      "title": "Of Signups"
+     },
+     "users": {
+      "title": "Users",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "key",
+     "label",
+     "users"
+    ],
+    "title": "AdminFunnelStep",
     "type": "object"
    },
    "AdminHealth": {
@@ -16182,7 +16300,7 @@
   },
   "/v1/auth/verify-email": {
    "post": {
-    "description": "Confirm an email address with the token from the verification link. An account that\nsigned up with an invite link starts the free Pro month for both people here.",
+    "description": "Confirm an email address with the token from the verification link. An account that\nsigned up with an invite link starts the free Pro month for both people here. The\nwelcome email (once per account) goes out after the response.",
     "operationId": "verify_email_v1_auth_verify_email_post",
     "requestBody": {
      "content": {
