@@ -167,3 +167,71 @@ def load_admin_data(
             conn.close()
         except Exception:
             pass
+
+
+def load_signup_funnel(days: int = 30) -> dict[str, Any]:
+    """Accounts created in the last `days` and how far each got: verified its email,
+    saved a watchlist stock or an alert, pays for Pro/Premium; plus its sign-up source.
+    Read-only; each step that fails to load is listed in `errors` and counts as empty."""
+    conn = get_neon_conn()
+    if conn is None:
+        return {"available": False, "errors": {"database": "unavailable"}}
+    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=max(1, int(days)))
+    errors: dict[str, str] = {}
+
+    def users_in(sql: str, names: list[str], key: str) -> set[str]:
+        if not names:
+            return set()
+        rows, error = _query(conn, sql, (names,))
+        if error:
+            errors[key] = error
+        return {str(_value(r, "u", 0) or "").strip().lower() for r in rows}
+
+    try:
+        rows, error = _query(
+            conn,
+            "SELECT lower(username) AS u, tier, stripe_subscription_id, email_verified, is_admin "
+            "FROM users WHERE created_at >= %s ORDER BY created_at DESC LIMIT %s",
+            (since, MAX_USERS),
+        )
+        if error:
+            return {"available": False, "errors": {"users": error}}
+        accounts = []
+        for row in rows:
+            name = str(_value(row, "u", 0) or "")
+            if "@" not in name or bool(_value(row, "is_admin", 4)):
+                continue
+            accounts.append({"user": name, "tier": _value(row, "tier", 1),
+                             "has_subscription": bool(_value(row, "stripe_subscription_id", 2)),
+                             "verified": bool(_value(row, "email_verified", 3))})
+        names = [a["user"] for a in accounts]
+        engaged = (
+            users_in("SELECT DISTINCT lower(w.user_id) AS u FROM watchlists w "
+                     "JOIN watchlist_items i ON i.watchlist_id = w.id WHERE lower(w.user_id) = ANY(%s)",
+                     names, "watchlists")
+            | users_in("SELECT DISTINCT lower(user_id) AS u FROM user_alerts WHERE lower(user_id) = ANY(%s)",
+                       names, "alerts")
+            | users_in("SELECT DISTINCT lower(user_id) AS u FROM hsf_alert_rules WHERE lower(user_id) = ANY(%s)",
+                       names, "alert_rules")
+        )
+        trials = users_in("SELECT DISTINCT lower(user_id) AS u FROM hsf_plan_grants "
+                          "WHERE tier = 'pro' AND lower(user_id) = ANY(%s)", names, "trials")
+        src_rows, error = _query(
+            conn,
+            "SELECT user_hash, source FROM acquisition_events "
+            "WHERE event_name = 'signup_completed' AND occurred_at >= %s LIMIT %s",
+            (since, MAX_EVENTS),
+        )
+        if error:
+            errors["sources"] = error
+        sources = {str(_value(r, "user_hash", 0)): str(_value(r, "source", 1) or "")
+                   for r in src_rows if _value(r, "user_hash", 0)}
+        for a in accounts:
+            a["engaged"] = a["user"] in engaged
+            a["trial"] = a["user"] in trials
+        return {"available": True, "accounts": accounts, "sources": sources, "errors": errors}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass

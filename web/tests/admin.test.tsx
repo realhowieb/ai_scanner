@@ -30,6 +30,9 @@ const analytics = {
   scans_daily: [8, 9, 10, 11, 12, 13, 14].map((d) => ({ day: day(d), scheduled: 6, user: 1 })),
   conversions: { signups: 4, paid: 1, signup_to_paid: 0.25, destinations: [{ plan: "Pro", users: 1 }, { plan: "Premium", users: 0 }] },
   recovery: [{ started_at: "2026-10-13T12:00:00Z", incident: "SCAN_MISSED", action: "rerun scan", result: "recovered" }],
+  funnel: { steps: [{ key: "signed_up", label: "Signed up", users: 13, of_signups: 1 }, { key: "verified", label: "Verified email", users: 9, of_signups: 9 / 13 },
+    { key: "engaged", label: "Saved a stock or alert", users: 5, of_signups: 5 / 13 }, { key: "paid", label: "Pays for Pro", users: 2, of_signups: 2 / 13 }],
+  by_source: [{ source: "Reddit", signed_up: 13, verified: 9, engaged: 5, paid: 2 }], invite_trials: 3, unavailable: [] },
 };
 const group = (key: string, column: string, n: number, median: number) => ({ key, column, n, matured: n, sufficient: n >= 30,
   positive_rate: 0.6, average_return: median, median_return: median, average_mfe: 0.05, average_mae: -0.02 });
@@ -135,6 +138,10 @@ describe("Admin page", () => {
     expect(screen.getByText("25.0%")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Scans per day: Scheduled 42, User 7/ })).toBeInTheDocument();
     expect(screen.getByText("scan missed")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sign-up funnel" })).toBeInTheDocument();
+    expect(screen.getByText("69.2%")).toBeInTheDocument();
+    expect(screen.getByRole("rowheader", { name: "Reddit" })).toBeInTheDocument();
+    expect(screen.getByText(/3 of these accounts got free Pro from an invite/)).toBeInTheDocument();
     await u.selectOptions(screen.getByRole("combobox", { name: "Period" }), "90");
     await waitFor(() => expect(calls.some((c) => c.path === "/v1/admin/analytics" && c.method === "GET")).toBe(true));
   });

@@ -2352,6 +2352,8 @@ export interface components {
             conversions: components["schemas"]["AdminConversions"];
             /** Days */
             days: number;
+            /** @description Sign-up funnel for accounts created in the period */
+            funnel?: components["schemas"]["AdminFunnel"] | null;
             /** Loaded At */
             loaded_at?: string | null;
             overview: components["schemas"]["AdminOverview"];
@@ -2588,6 +2590,41 @@ export interface components {
             /** Trading Days Preferred */
             trading_days_preferred?: unknown | null;
         };
+        /** AdminFunnel */
+        AdminFunnel: {
+            /**
+             * By Source
+             * @default []
+             */
+            by_source: components["schemas"]["AdminFunnelSource"][];
+            /**
+             * Invite Trials
+             * @description Accounts in the period with a free Pro trial from an invite
+             * @default 0
+             */
+            invite_trials: number;
+            /** Steps */
+            steps: components["schemas"]["AdminFunnelStep"][];
+            /**
+             * Unavailable
+             * @description Steps that failed to load and count as zero
+             * @default []
+             */
+            unavailable: string[];
+        };
+        /** AdminFunnelSource */
+        AdminFunnelSource: {
+            /** Engaged */
+            engaged: number;
+            /** Paid */
+            paid: number;
+            /** Signed Up */
+            signed_up: number;
+            /** Source */
+            source: string;
+            /** Verified */
+            verified: number;
+        };
         /** AdminFunnelStage */
         AdminFunnelStage: {
             /** Count */
@@ -2596,6 +2633,20 @@ export interface components {
             pct?: number | null;
             /** Stage */
             stage: string;
+        };
+        /** AdminFunnelStep */
+        AdminFunnelStep: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Of Signups
+             * @description Fraction of the period's sign-ups that reached this step
+             */
+            of_signups?: number | null;
+            /** Users */
+            users: number;
         };
         /** AdminHealth */
         AdminHealth: {
