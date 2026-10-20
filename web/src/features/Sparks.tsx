@@ -5,11 +5,15 @@ import { useApi } from "@/hooks/useApi";
 import { num, price } from "@/lib/format";
 
 /** Daily closes per ticker (up to 21, oldest first) from /v1/sparklines; one request per ticker set. */
-export function useDailyBars(tickers: string[]) {
+/** The daily-bars request with its load state, so a page can refresh it on demand. */
+export function useDailyBarsState(tickers: string[]) {
   const syms = [...new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean))].sort().slice(0, 50).join(",");
-  const res = useApi(syms ? `spark-daily:${syms}` : null, (signal) =>
+  return useApi(syms ? `spark-daily:${syms}` : null, (signal) =>
     unwrap(api.GET("/v1/sparklines", { params: { query: { symbols: syms } }, signal })));
-  return res.data;
+}
+
+export function useDailyBars(tickers: string[]) {
+  return useDailyBarsState(tickers).data;
 }
 
 export function useDailySparks(tickers: string[]): Record<string, number[]> {

@@ -36,6 +36,50 @@ class ScanRadarTest(unittest.TestCase):
             self.assertIsNone(_scan_radar())
 
 
+
+class LatestQuotesTest(unittest.TestCase):
+    def setUp(self):
+        api.scans.quote_cache.clear()
+
+    @staticmethod
+    def _snap(price, trade_t, day_c, day_t, prev_c):
+        return {"latestTrade": {"p": price, "t": trade_t}, "dailyBar": {"c": day_c, "t": day_t},
+                "prevDailyBar": {"c": prev_c, "t": "2026-10-16T04:00:00Z"}}
+
+    def test_one_call_per_set_change_vs_previous_close(self):
+        snaps = {"AAA": self._snap(110.0, "2026-10-19T19:59:00Z", 110.0, "2026-10-19T04:00:00Z", 100.0)}
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snaps) as fetch, \
+                mock.patch("market_data._get_alpaca_data_feed", return_value="iex"):
+            out = api.scans.latest_quotes(["aaa", "ZZZ"])
+            api.scans.latest_quotes(["ZZZ", "AAA"])
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(fetch.call_args.args[0], ["AAA", "ZZZ"])
+        self.assertEqual(out["quotes"]["AAA"]["chg_pct"], 10.0)
+        self.assertEqual(out["quotes"]["AAA"]["at"], "2026-10-19T19:59:00Z")
+        self.assertNotIn("ZZZ", out["quotes"])
+        self.assertEqual(out["feed"], "iex")
+
+    def test_premarket_trade_is_measured_from_the_last_finished_session(self):
+        # 8:30 ET on Oct 20; the daily bar is still Oct 19's (close 110).
+        snaps = {"AAA": self._snap(121.0, "2026-10-20T12:30:00Z", 110.0, "2026-10-19T04:00:00Z", 100.0)}
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snaps):
+            out = api.scans.latest_quotes(["AAA"])
+        self.assertEqual(out["quotes"]["AAA"]["prev_close"], 110.0)
+        self.assertEqual(out["quotes"]["AAA"]["chg_pct"], 10.0)
+
+    def test_late_evening_trade_stays_on_its_new_york_day(self):
+        # 7:30 PM ET in winter is the next day in UTC; still the Dec 1 session.
+        snaps = {"AAA": self._snap(105.0, "2026-12-02T00:30:00Z", 104.0, "2026-12-01T05:00:00Z", 100.0)}
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snaps):
+            out = api.scans.latest_quotes(["AAA"])
+        self.assertEqual(out["quotes"]["AAA"]["prev_close"], 100.0)
+
+    def test_empty_answer_is_not_cached(self):
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value={}) as fetch:
+            self.assertEqual(api.scans.latest_quotes(["AAA"])["quotes"], {})
+            api.scans.latest_quotes(["AAA"])
+        self.assertEqual(fetch.call_count, 2)
+
 if __name__ == "__main__":
     unittest.main()
 

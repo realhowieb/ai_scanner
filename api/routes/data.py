@@ -133,6 +133,15 @@ def register(app: FastAPI) -> None:
 
         return json_safe(daily_closes(symbols.split(",")))
 
+    @app.get("/v1/quotes", response_model=models.LatestQuotes, responses=_AUTH, summary="Latest quotes")
+    def quotes(account: Dict[str, Any] = Depends(current_account),
+               symbols: str = Query(..., max_length=2000, description="Comma-separated; the first 50 are returned")
+               ) -> Dict[str, Any]:
+        """Each ticker's latest trade and change vs the previous close, for the Watchlists Refresh."""
+        from api.scans import latest_quotes
+
+        return json_safe(latest_quotes(symbols.split(",")))
+
     @app.get("/v1/stocks/{ticker}/score-history", response_model=models.ScoreHistory, responses=_AUTH)
     def stock_score_history(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """The ticker's HSF Score in each recent full-market scan, with the Scanner's scores."""
