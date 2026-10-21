@@ -184,6 +184,12 @@ We send these explicit events only, after successful API actions where relevant:
 | `watchlist_stock_added` | none | Adding tickers to a watchlist succeeded |
 | `alert_created` | `kind` | A price, technical, HSF or scan alert was created |
 | `signup_completed` | none | Signup returned a successful session |
+| `watchlist_deleted`, `watchlist_stock_removed` | none | Removal succeeded |
+| `alert_enabled_changed` | `enabled` | Alert or rule enable/disable succeeded |
+| `alert_deleted` | none | Alert or rule removal succeeded |
+| `custom_scan_started` | `universe`, `session` | API accepted a scan request |
+| `journal_trade_logged`, `journal_trade_closed` | none | Journal action succeeded |
+| `checkout_started` | `plan`, `interval` | Checkout URL returned successfully |
 
 Suggested PostHog funnel: `scanner_viewed` → `stock_viewed` →
 `watchlist_stock_added` → `alert_created`. For retention, measure browsers returning
@@ -201,3 +207,26 @@ When configured, Account → Usage privacy lets users disable analytics in this
 browser. Do Not Track and Global Privacy Control also disable collection. Test
 with a dedicated development project and synthetic data before enabling in
 production; browser/ad blocking may reduce observed event counts.
+
+
+The Next.js browser instrumentation hook and action events share one lazy,
+privacy-gated initializer. Missing keys are supported in development and production.
+Tests use a blank key globally; analytics tests override it with a dummy key.
+
+### Optional operational logs
+
+`POSTHOG_LOGS_ENABLED=1` explicitly enables server-side API proxy lifecycle logs
+using the configured public project key and ingestion region. The default is off.
+This setting is independent of the browser usage preference: it sends only HTTP
+method/status and fixed lifecycle messages with service name `hsf-web`, without
+URLs, bodies, account details or credentials. There is no global logger exporter.
+Logging/export failures do not block API responses. Browser error tracking remains
+disabled; the existing error reporting behavior is preserved.
+
+The setup wizard created the [usage dashboard](https://us.posthog.com/project/679220/dashboard/2241150)
+and a [setup notebook](https://us.posthog.com/project/679220/notebooks/9c8820e560fe).
+The notebook records the wizard's generated snapshot; the reviewed implementation
+preserves anonymous tracking and makes operational logs optional as described here.
+Production environment configuration and live delivery still need verification
+after an authorized deployment. AI observability in the upstream API and source-map
+uploads are outside this frontend integration.

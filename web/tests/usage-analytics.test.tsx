@@ -131,3 +131,52 @@ it("drops an action queued before sign-out and resets an SDK that finishes loadi
   expect(ph.reset).toHaveBeenCalledWith(true);
   expect(ph.capture).not.toHaveBeenCalled();
 });
+
+it("shares initialization between the Next browser hook and explicit events", async () => {
+  await import("../instrumentation-client");
+  const a = await import("@/lib/usageAnalytics");
+  a.captureUsage("scanner_viewed");
+  await waitFor(() => expect(ph.capture).toHaveBeenCalledTimes(1));
+  expect(ph.init).toHaveBeenCalledTimes(1);
+});
+
+it("allows the Next browser hook to load without a configured key", async () => {
+  vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "");
+  await import("../instrumentation-client");
+  expect(ph.init).not.toHaveBeenCalled();
+});
+
+it("keeps expanded metadata bounded and removes private values", async () => {
+  const { sanitizeUsage } = await import("@/lib/usageAnalytics");
+  expect(sanitizeUsage({ uuid: "fixture", event: "custom_scan_started", properties: {
+    universe: "watchlist", session: "regular", enabled: false, ticker: "NVDA", price: 100, email: "private@example.com",
+  } })?.properties).toEqual({ universe: "watchlist", session: "regular", enabled: false, $process_person_profile: false });
+  expect(sanitizeUsage({ uuid: "fixture", event: "checkout_started", properties: {
+    universe: "Private portfolio", session: "private", plan: "email@example.com", interval: "invalid",
+  } })?.properties).toEqual({ $process_person_profile: false });
+});
+
+it("records removal actions only after successful API responses", async () => {
+  const fake = fakeApi();
+  const list = fake.seedList("Private", ["NVDA"]);
+  vi.stubGlobal("fetch", fake.fetch);
+  const { watchlists } = await import("@/api/userData");
+  await watchlists.removeTicker(list.id, "NVDA");
+  await watchlists.remove(list.id);
+  await waitFor(() => expect(ph.capture).toHaveBeenCalledTimes(2));
+  expect(ph.capture.mock.calls.map(([event, properties]) => [event, properties])).toEqual([
+    ["watchlist_stock_removed", {}], ["watchlist_deleted", {}],
+  ]);
+  await expect(watchlists.remove(list.id)).rejects.toThrow();
+  expect(ph.capture).toHaveBeenCalledTimes(2);
+});
+
+it("tracks the rule-update path used by the UI without recording other edits", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(new Response("{}", { status: 200 }))));
+  const { alertRules } = await import("@/api/userData");
+  await alertRules.update(123, { enabled: false });
+  await waitFor(() => expect(ph.capture).toHaveBeenCalledTimes(1));
+  expect(ph.capture).toHaveBeenCalledWith("alert_enabled_changed", { enabled: false }, undefined);
+  await alertRules.update(123, { threshold: 90 });
+  expect(ph.capture).toHaveBeenCalledTimes(1);
+});

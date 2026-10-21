@@ -5,9 +5,17 @@ import { posthogHost } from "./posthogConfig";
 
 export const USAGE_PREFERENCE_EVENT = "hsf-usage-preference";
 const PREFERENCE = "hsf-usage-disabled";
-const EVENTS = new Set(["page_viewed", "scanner_viewed", "stock_viewed", "watchlist_created", "watchlist_stock_added", "alert_created", "signup_completed"]);
-export type UsageEvent = "page_viewed" | "scanner_viewed" | "stock_viewed" | "watchlist_created" | "watchlist_stock_added" | "alert_created" | "signup_completed";
-type UsageProperties = { route?: string; kind?: "price" | "technical" | "hsf" | "scan" };
+const EVENTS = new Set(["page_viewed", "scanner_viewed", "stock_viewed", "watchlist_created", "watchlist_stock_added", "watchlist_deleted", "watchlist_stock_removed", "alert_created", "alert_enabled_changed", "alert_deleted", "custom_scan_started", "journal_trade_logged", "journal_trade_closed", "checkout_started", "signup_completed"]);
+export type UsageEvent = "page_viewed" | "scanner_viewed" | "stock_viewed" | "watchlist_created" | "watchlist_stock_added" | "watchlist_deleted" | "watchlist_stock_removed" | "alert_created" | "alert_enabled_changed" | "alert_deleted" | "custom_scan_started" | "journal_trade_logged" | "journal_trade_closed" | "checkout_started" | "signup_completed";
+type UsageProperties = {
+  route?: string;
+  kind?: "price" | "technical" | "hsf" | "scan";
+  enabled?: boolean;
+  plan?: "pro" | "premium";
+  interval?: "month" | "year";
+  universe?: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker";
+  session?: "regular" | "premarket" | "afterhours";
+};
 const ROUTES = new Set(["/", "/demo", "/methodology", "/pricing", "/signup", "/today", "/brief", "/scanner", "/scanner/custom", "/scanner/history", "/compare", "/watchlists", "/alerts", "/track-record", "/day-trader", "/journal", "/paper-trading", "/account"]);
 let sdk: PostHog | null = null;
 let clientPromise: Promise<PostHog | null> | null = null;
@@ -45,11 +53,20 @@ export function sanitizeUsage(event: CaptureResult | null): CaptureResult | null
   }
   const kind = event.properties.kind;
   if (typeof kind === "string" && ["price", "technical", "hsf", "scan"].includes(kind)) safe.kind = kind;
+  if (typeof event.properties.enabled === "boolean") safe.enabled = event.properties.enabled;
+  const plan = event.properties.plan;
+  if (plan === "pro" || plan === "premium") safe.plan = plan;
+  const interval = event.properties.interval;
+  if (interval === "month" || interval === "year") safe.interval = interval;
+  const universe = event.properties.universe;
+  if (typeof universe === "string" && ["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker"].includes(universe)) safe.universe = universe;
+  const session = event.properties.session;
+  if (typeof session === "string" && ["regular", "premarket", "afterhours"].includes(session)) safe.session = session;
   safe.$process_person_profile = false;
   return { uuid: event.uuid, event: event.event, properties: safe, ...(event.timestamp ? { timestamp: event.timestamp } : {}) };
 }
 
-function client(): Promise<PostHog | null> {
+export function initializeUsageAnalytics(): Promise<PostHog | null> {
   if (!usageAllowed()) return Promise.resolve(null);
   // Retain the shared promise after successful initialization too: clearing it
   // in a settlement callback opens another window for newer actions to overtake
@@ -81,8 +98,8 @@ function client(): Promise<PostHog | null> {
 export function captureUsage(event: UsageEvent, properties: UsageProperties = {}): void {
   if (!usageAllowed()) return;
   const generation = identityGeneration;
-  void client().then((ph) => {
-    if (ph && usageAllowed() && generation === identityGeneration) ph.capture(event, properties, event === "signup_completed" ? { send_instantly: true } : undefined);
+  void initializeUsageAnalytics().then((ph) => {
+    if (ph && usageAllowed() && generation === identityGeneration) ph.capture(event, properties, (event === "signup_completed" || event === "checkout_started") ? { send_instantly: true } : undefined);
   }).catch(() => undefined);
 }
 

@@ -19,9 +19,9 @@ or authentication decisions changed. No deployment or account creation occurred.
 ## Usage analytics
 
 - PostHog JS 1.438.13 initializes only with a configured public project key and
-  allowed browser privacy settings. No real project key has been configured.
+  allowed browser privacy settings. The wizard configured a local ignored environment file; production configuration is unverified.
 - Explicit events cover page categories, Scanner/stock research, successful
-  watchlist actions, alert creation and signup completion.
+  watchlist and alert actions, accepted custom scans, journal actions, checkout starts and signup completion.
 - No identity calls, account fields, symbols, watchlist names, notes, form values,
   raw URLs, query strings or referrers are sent. An outbound allowlist removes SDK
   enrichment and top-level person properties. Anonymous identifiers support
@@ -34,7 +34,7 @@ or authentication decisions changed. No deployment or account creation occurred.
 
 ## Verification
 
-- 46 frontend test files / 362 tests passed.
+- 48 frontend test files / 379 tests passed, including initialization ordering, optional startup, metadata allowlists and log failure isolation.
 - Type checking, lint and production build passed.
 - Desktop 1440×1000 and phone 390×844 local browser checks passed: Canvas rendered,
   keyboard session selection, wheel zoom, range selection, overlay controls, no
@@ -60,6 +60,26 @@ The local gallery and compact browser results remain under
 
 Set `NEXT_PUBLIC_POSTHOG_KEY` to the public project key and
 `NEXT_PUBLIC_POSTHOG_HOST` to the US or EU ingestion host, then rebuild the web app.
-Do not supply a personal API key. No PostHog dashboards have been provisioned;
-`web/README.md` documents the events and suggested funnel/retention reports.
+Do not supply a personal API key. The wizard created a [usage dashboard](https://us.posthog.com/project/679220/dashboard/2241150) and [setup notebook](https://us.posthog.com/project/679220/notebooks/9c8820e560fe).
+`web/README.md` documents the final events and suggested funnel/retention reports.
 Cross-device attribution and session replay are intentionally unavailable.
+
+
+## Wizard reconciliation
+
+The generated setup was reviewed before commit. Restored consent-gated SDK
+initialization, anonymous identifiers, the outbound property allowlist, optional
+startup without keys and the existing error reporter/CSP. Email identification,
+automatic exception capture and broader script/worker permissions were not retained.
+The browser instrumentation hook shares the original ordered initialization promise.
+
+Operational method/status logs are available only with `POSTHOG_LOGS_ENABLED=1`
+(default off), with best-effort export and no global provider registration. This
+server setting is independent of the browser usage preference. Tests disable
+analytics globally to prevent local project credentials from sending test activity.
+The local wizard helper files remain on disk and are excluded from the PR.
+
+Live production delivery, deployment environment settings, upstream AI observability
+and error source-map uploads remain unverified/outside this change. The wizard
+notebook describes its generated snapshot; this document describes the reviewed
+implementation. No production deployment was performed.
