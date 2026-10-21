@@ -13,7 +13,7 @@ type UsageProperties = {
   enabled?: boolean;
   plan?: "pro" | "premium";
   interval?: "month" | "year";
-  universe?: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker";
+  universe?: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker" | "earnings";
   session?: "regular" | "premarket" | "afterhours";
 };
 const ROUTES = new Set(["/", "/demo", "/methodology", "/pricing", "/signup", "/today", "/brief", "/scanner", "/scanner/custom", "/scanner/history", "/compare", "/watchlists", "/alerts", "/track-record", "/day-trader", "/journal", "/paper-trading", "/account"]);
@@ -59,7 +59,7 @@ export function sanitizeUsage(event: CaptureResult | null): CaptureResult | null
   const interval = event.properties.interval;
   if (interval === "month" || interval === "year") safe.interval = interval;
   const universe = event.properties.universe;
-  if (typeof universe === "string" && ["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker"].includes(universe)) safe.universe = universe;
+  if (typeof universe === "string" && ["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"].includes(universe)) safe.universe = universe;
   const session = event.properties.session;
   if (typeof session === "string" && ["regular", "premarket", "afterhours"].includes(session)) safe.session = session;
   safe.$process_person_profile = false;
