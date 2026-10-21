@@ -38,7 +38,8 @@ class SummaryTests(unittest.TestCase):
     def test_wrap_uses_it_and_escapes_html(self):
         import scheduler.evening_wrap as ew
 
-        src = open(ew.__file__).read()
+        with open(ew.__file__, encoding="utf-8") as source:
+            src = source.read()
         self.assertIn("return summarize_fired(seen, max_items=8)", src)
         self.assertIn("_html.escape(m)", src)
 
