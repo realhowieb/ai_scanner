@@ -120,6 +120,24 @@ def _split_flag(label: Any) -> tuple:
     return m.group(1), int(m.group(2)) if m.group(2) else None
 
 
+def _brief_freshness(snapshot_time: Any) -> Dict[str, Any]:
+    """Freshness for the Brief's scan, with the run's own market-data and completion
+    times (api.today.run_freshness, as Today shows). The Brief data carries only the
+    saved time, so without the run its market-data time would always read unavailable."""
+    from analytics.data_freshness import describe, timestamp
+
+    try:
+        from api.today import market_runs, run_freshness
+
+        saved = timestamp(snapshot_time)
+        for run in market_runs()[:5]:
+            if saved is not None and timestamp(run.get("created_at")) == saved:
+                return run_freshness(run)
+    except Exception:  # unknown times stay unknown; never fail the Brief
+        pass
+    return describe(snapshot_time)
+
+
 def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     from analytics.data_freshness import describe
     from ui.entitlement_view import redact_prebreakout_rows
@@ -144,7 +162,7 @@ def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     return {
         "available": True,
         "snapshot_time": d.get("snapshot_time"),
-        'freshness': describe(d.get('snapshot_time'), market_data_at=d.get('market_data_at')),
+        'freshness': _brief_freshness(d.get('snapshot_time')),
         "phase": core["phase"],
         "market": [{"label": lbl, "last": last, "chg_pct": chg} for lbl, last, chg in d.get("market_close") or []],
         "breadth": {"advancers": breadth[0], "decliners": breadth[1]} if breadth else None,
