@@ -237,6 +237,16 @@ def list_jobs(username: str, limit: int = 10) -> List[Dict[str, Any]]:
                     "ORDER BY created_at DESC LIMIT %s", (username, int(limit)), fetch=True)
 
 
+def latest_earnings_job(username: str, max_age_s: int = 3600) -> Optional[Dict[str, Any]]:
+    """The user's newest complete earnings-universe scan that finished within max_age_s, with
+    its result: the Earnings tab fills unranked reporters' scores from it."""
+    rows = _execute("SELECT id, result, finished_at FROM api_scan_jobs WHERE username = %s "
+                    "AND universe = 'earnings' AND status = 'complete' "
+                    "AND finished_at > NOW() - make_interval(secs => %s) "
+                    "ORDER BY finished_at DESC LIMIT 1", (username, int(max_age_s)), fetch=True)
+    return rows[0] if rows else None
+
+
 def cancel_job(username: str, job_id: str) -> Optional[Dict[str, Any]]:
     """Cancel your queued or running scan. Returns the job (unchanged when it had
     already finished), or None when it isn't yours."""

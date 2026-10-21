@@ -145,8 +145,18 @@ def register(app: FastAPI) -> None:
         ent = entitlements_for(account)
         if window != "today" and not ent["entitlements"].get("can_earnings"):
             raise HTTPException(403, "The earnings week ahead is a Pro feature.")
+        user = _user(account)
+        custom = None
+        if include_unranked:
+            try:   # scores from the user's earnings scan this past hour; none on any error
+                from api.scan_jobs import latest_earnings_job
+
+                custom = latest_earnings_job(user)
+            except Exception:
+                custom = None
         return json_safe(earnings_scan(ent["entitlements"], ent["tier"], window=window, time=time,
-                                       include_unranked=include_unranked, watched=_watched_tickers(_user(account))))
+                                       include_unranked=include_unranked, watched=_watched_tickers(user),
+                                       custom=custom))
 
     @app.get("/v1/scans/latest/movers", response_model=models.ScoreMovers, responses=_AUTH,
              summary="Biggest HSF Score moves since the previous scan")

@@ -311,6 +311,9 @@ class EarningsSetup(BaseModel):
     days_until: int = Field(description="Days from today's ET date")
     time: Optional[str] = Field(default=None, description="bmo (before open) / amc (after close) / … when known")
     on_watchlist: bool = False
+    score_source: Optional[Literal["scan", "custom"]] = Field(
+        default=None, description="scan: the latest market scan ranked it; custom: scored by your recent earnings "
+                                  "scan (custom_scan_at); null: not scored (last/chg_pct/gap_pct are live quotes)")
 
 
 class EarningsScan(BaseModel):
@@ -323,6 +326,8 @@ class EarningsScan(BaseModel):
     total: int = Field(description="Ranked setups that report in the window, before the plan cap")
     unranked_total: int = Field(description="Names that report in the window but did not rank in the scan")
     max_results: int
+    custom_scan_id: Optional[str] = Field(default=None, description="Your earnings scan whose scores fill unranked names")
+    custom_scan_at: Optional[str] = Field(default=None, description="When that scan finished (ISO)")
     limited: bool
     setups: List[EarningsSetup] = []
 
@@ -976,6 +981,7 @@ class LatestQuote(BaseModel):
     last: float = Field(description="Latest trade price (the day's close after the session ends)")
     prev_close: Optional[float] = Field(default=None, description="The close the change is measured from")
     chg_pct: Optional[float] = Field(default=None, description="Percent vs prev_close")
+    gap_pct: Optional[float] = Field(default=None, description="Today's open vs prev_close (null before the open)")
     at: Optional[str] = Field(default=None, description="Time of that trade (ISO, UTC)")
 
 

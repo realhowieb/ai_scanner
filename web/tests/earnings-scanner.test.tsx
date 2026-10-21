@@ -100,6 +100,24 @@ describe("Earnings scanner", () => {
     expect(replace).toHaveBeenCalledWith("/scanner?signal=earnings&etime=bmo&all=1&when=tomorrow", { scroll: false });
   });
 
+  it("fills unranked rows with live prices and scores from your earnings scan", async () => {
+    search = new URLSearchParams("signal=earnings&all=1");
+    earnings = () => jsonResponse(scan([
+      row("IBM", "2026-10-21", 0, { score: 50 }),
+      row("ABT", "2026-10-21", 0, { ranked: false, rank: null, score: 44, primary_setup: "momentum", rvol: 2.2, score_source: "custom", last: 120.5 }),
+      row("BKR", "2026-10-21", 0, { ranked: false, rank: null, score: null, primary_setup: null, score_source: null, last: 41.25, chg_pct: 1.2 }),
+    ], { window: "today", unranked_total: 2, custom_scan_at: "2026-10-21T19:30:00Z", custom_scan_id: "f".repeat(32) }));
+    wrap("pro");
+    const table = await screen.findByRole("table");
+    const abt = within(table).getByText("ABT").closest("tr")!;
+    expect(within(abt).getByText("Your scan")).toBeInTheDocument();
+    expect(within(abt).getByText("44")).toBeInTheDocument();
+    const bkr = within(table).getByText("BKR").closest("tr")!;
+    expect(within(bkr).getByText("$41.25")).toBeInTheDocument();
+    expect(within(bkr).getByRole("link", { name: "Score it" })).toHaveAttribute("href", "/scanner/custom?universe=earnings&when=today&start=1");
+    expect(screen.getByText(/scored by your earnings scan at 3:30 PM ET/)).toBeInTheDocument();
+  });
+
   it("describes earnings scan alerts", () => {
     expect(describeScanAlert(0, '{"earnings":"today"}')).toBe("HSF 0+, reporting today");
   });

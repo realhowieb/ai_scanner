@@ -66,6 +66,14 @@ class LatestQuotesTest(unittest.TestCase):
             out = api.scans.latest_quotes(["AAA"])
         self.assertEqual(out["quotes"]["AAA"]["prev_close"], 110.0)
         self.assertEqual(out["quotes"]["AAA"]["chg_pct"], 10.0)
+        self.assertIsNone(out["quotes"]["AAA"]["gap_pct"])          # not open yet: no gap
+
+    def test_gap_is_todays_open_vs_previous_close(self):
+        snap = self._snap(110.0, "2026-10-19T19:59:00Z", 110.0, "2026-10-19T04:00:00Z", 100.0)
+        snap["dailyBar"]["o"] = 104.0
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value={"AAA": snap}):
+            out = api.scans.latest_quotes(["AAA"])
+        self.assertEqual(out["quotes"]["AAA"]["gap_pct"], 4.0)
 
     def test_late_evening_trade_stays_on_its_new_york_day(self):
         # 7:30 PM ET in winter is the next day in UTC; still the Dec 1 session.
