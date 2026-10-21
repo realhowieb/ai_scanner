@@ -272,6 +272,21 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             return JSONResponse({**body, "ok": False}, status_code=503)
         return body
 
+    async def _cap_threads() -> None:
+        """Requests run on a shared thread pool, and each busy thread keeps its own warm
+        database connection and memory. Starlette's default is 40; HSF_API_THREADS
+        (default 24) keeps connections and memory in check on a 512 MB instance."""
+        import anyio.to_thread
+
+        try:
+            n = int(os.environ.get("HSF_API_THREADS", "24").strip() or 24)
+        except ValueError:
+            n = 24
+        if n > 0:
+            anyio.to_thread.current_default_thread_limiter().total_tokens = n
+
+    app.router.on_startup.append(_cap_threads)
+
     routes.register_all(app)
     from api import billing
 
@@ -364,6 +379,8 @@ def _start_realtime_alerts() -> None:
 def _module_app():
     """Module-level app for `uvicorn api.main:app` (settings from the environment).
     Importing never raises, so tests can import create_app without the secret."""
+    # One stuck query mustn't hold a request thread forever (db/engine.py). Jobs keep no limit.
+    os.environ.setdefault("HSF_DB_STATEMENT_TIMEOUT_MS", "30000")
     try:
         app = create_app()
     except RuntimeError as e:
