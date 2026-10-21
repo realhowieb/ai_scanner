@@ -38,7 +38,7 @@ it("normalizes out-of-order sessions, duplicates and missing OHLC without changi
 
 it("renders interactive candles, volume, signal and cross markers with preserved controls and cleanup", async () => {
   const { unmount } = render(<PriceChart bars={bars} events={[{ date: bars[40]!.date, label: "Breakout" }]} earningsDate="2026-08-05" volumeFeed="iex" />);
-  const image = await screen.findByRole("img", { name: /Interactive daily price/ });
+  const image = await screen.findByRole("group", { name: /Interactive daily price/ });
   expect(lc.createChart).toHaveBeenCalledTimes(1);
   expect(lc.createChart.mock.calls[0]![1]).toMatchObject({ layout: { attributionLogo: true }, handleScroll: { vertTouchDrag: false } });
   expect(lc.series[0]!.setData.mock.lastCall![0]).toHaveLength(91);
@@ -68,5 +68,5 @@ it("keeps the keyboard-accessible SVG if the interactive renderer fails", async 
   render(<PriceChart bars={bars} />);
   await waitFor(() => expect(lc.createChart).toHaveBeenCalled());
   expect(screen.getByRole("img", { name: /^Daily price/ })).toHaveAttribute("tabindex", "0");
-  expect(screen.queryByRole("img", { name: /Interactive daily price/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: /Interactive daily price/ })).not.toBeInTheDocument();
 });

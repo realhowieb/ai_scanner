@@ -1,69 +1,43 @@
 "use client";
 
-// Accessible modal: role="dialog" + aria-modal, focus moves in on open and back to
-// the opener on close, Tab stays inside, Escape and the backdrop close it.
-import { useEffect, useId, useRef } from "react";
+// Accessible modal built on Radix Dialog, styled with our own .backdrop/.dialog classes.
+// Radix moves focus in, keeps Tab inside, hides the page behind from screen readers,
+// stops it scrolling, and closes on Escape or a click outside. Focus goes back to
+// whatever opened it (we open dialogs from plain buttons, not Radix triggers).
+import { Dialog as Radix } from "radix-ui";
+import { useRef } from "react";
 import type { ReactNode } from "react";
-
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function Dialog({ open, title, onClose, children, footer }: {
   open: boolean; title: string; onClose: () => void; children: ReactNode; footer?: ReactNode;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const opener = useRef<Element | null>(null);
-  const titleId = useId();
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
-
-  useEffect(() => {
-    if (!open) return;
-    opener.current = document.activeElement;
-    const box = ref.current;
-    const first = box?.querySelector<HTMLElement>("[data-autofocus]") || box?.querySelector<HTMLElement>(FOCUSABLE);
-    first?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== "Tab" || !box) return;
-      const items = Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (!items.length) return;
-      const firstEl = items[0]!;
-      const lastEl = items[items.length - 1]!;
-      if (e.shiftKey && document.activeElement === firstEl) {
-        e.preventDefault();
-        lastEl.focus();
-      } else if (!e.shiftKey && document.activeElement === lastEl) {
-        e.preventDefault();
-        firstEl.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      (opener.current as HTMLElement | null)?.focus?.();
-    };
-  }, [open]);
-
-  if (!open) return null;
+  const opener = useRef<HTMLElement | null>(null);
   return (
-    <div className="backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref}>
-        <div className="dialog-head">
-          <h2 className="h2" id={titleId}>{title}</h2>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-          </button>
-        </div>
-        <div className="dialog-body">{children}</div>
-        {footer && <div className="dialog-foot">{footer}</div>}
-      </div>
-    </div>
+    <Radix.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <Radix.Portal>
+        <Radix.Overlay className="backdrop">
+          <Radix.Content className="dialog" aria-describedby={undefined}
+            onOpenAutoFocus={(e) => {
+              opener.current = document.activeElement as HTMLElement | null;
+              const preferred = (e.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>("[data-autofocus]");
+              if (preferred) { e.preventDefault(); preferred.focus(); }
+            }}
+            onCloseAutoFocus={(e) => {
+              const back = opener.current;
+              if (back?.isConnected) { e.preventDefault(); back.focus(); }
+            }}>
+            <div className="dialog-head">
+              <Radix.Title className="h2">{title}</Radix.Title>
+              <Radix.Close className="icon-btn" aria-label="Close">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              </Radix.Close>
+            </div>
+            <div className="dialog-body">{children}</div>
+            {footer && <div className="dialog-foot">{footer}</div>}
+          </Radix.Content>
+        </Radix.Overlay>
+      </Radix.Portal>
+    </Radix.Root>
   );
 }
 

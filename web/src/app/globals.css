@@ -927,3 +927,22 @@ summary:focus-visible, .table-wrap:focus-visible { outline: 2px solid var(--acce
 .lightweight-chart-frame { position: relative; }
 .chart-earnings-date { position: absolute; top: 8px; bottom: 22px; width: 1px; border-left: 1px dashed var(--gold); pointer-events: none; }
 .chart-earnings-date span { position: absolute; right: 4px; top: 0; color: var(--gold); font-size: 11px; }
+
+/* Radix menus: the popper wrapper places the menu, so drop the old absolute offsets. */
+[data-radix-popper-content-wrapper] > .menu { position: static; inset: auto; }
+.menu-item[data-highlighted] { background: var(--raise); color: var(--text); outline: none; }
+.menu-item:focus-visible { outline: 2px solid var(--accent, #6ea8ff); outline-offset: -2px; }
+.hint-btn { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-left: 2px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--muted); cursor: pointer; vertical-align: middle; }
+.hint-btn:hover, .hint-btn[data-state="open"] { color: var(--text); background: var(--raise); }
+.hint-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hint-pop { z-index: 30; max-width: min(300px, calc(100vw - 24px)); padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.4); color: var(--text-2); font-weight: 400; text-transform: none; letter-spacing: normal; text-align: left; white-space: normal; }
+.hint-pop:focus { outline: none; }
+.hint-title { margin: 0 0 4px; font-weight: 600; font-size: 13px; color: var(--text); }
+.hint-arrow { fill: var(--card); }
+.column-order { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-width: 360px; }
+.column-order li { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 8px; }
+.column-order li:hover { background: var(--raise); }
+.column-order .icon-btn:disabled { opacity: .35; cursor: default; }
+
+/* Links inside running text are underlined, so they don't rely on colour alone (WCAG 1.4.1). */
+p a:not(.btn), figcaption a { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }

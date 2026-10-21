@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import type { ReactNode, RefObject } from "react";
+import { DropdownMenu } from "radix-ui";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { StockSearch } from "@/components/StockSearch";
 import { InstallHint } from "@/components/InstallHint";
@@ -24,48 +25,38 @@ const NAV = [
 
 const isActive = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
 
-/** Closes an open menu on Escape (focus back to its button), a click outside it, or a route change. */
-export function useDismiss(open: boolean, close: () => void, box: RefObject<HTMLElement | null>, path: string) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      close();
-      box.current?.querySelector<HTMLElement>("[aria-haspopup]")?.focus();
-    };
-    const onDown = (e: PointerEvent) => { if (box.current && !box.current.contains(e.target as Node)) close(); };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onDown);
-    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("pointerdown", onDown); };
-  }, [open, close, box]);
+/** Keeps a controlled menu closed after the route changes. */
+function useCloseOnNavigate(close: () => void, path: string) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- close on navigation only
   useEffect(() => close(), [path]);
 }
 
 type NavItem = { href: string; label: string; mid?: boolean };
 
-function MoreMenu({ items, path, id, className }: { items: NavItem[]; path: string; id: string; className: string }) {
+// Menus use Radix DropdownMenu: arrow keys, Home/End and type-ahead move between items,
+// Escape closes and returns focus to the button. Rendered in place (no portal) so the
+// menu stays inside its nav landmark; modal={false} keeps the page usable while it is open.
+function MoreMenu({ items, path, id, className, side = "bottom" }: { items: NavItem[]; path: string; id: string; className: string; side?: "top" | "bottom" }) {
   const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
-  useDismiss(open, close, box, path);
+  useCloseOnNavigate(close, path);
   // A `mid` item is in the bar on wide screens, so it only marks More where it has moved under it.
   const active = items.some((n) => !n.mid && isActive(path, n.href));
   const activeMid = items.some((n) => n.mid && isActive(path, n.href));
   return (
-    <div className={`more ${className}`} ref={box}>
-      <button type="button" className="navlink more-btn" aria-expanded={open} aria-haspopup="true" aria-controls={id}
-        data-active={active || undefined} data-active-mid={activeMid || undefined} onClick={() => setOpen((o) => !o)}>
-        More<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
-      </button>
-      {open && (
-        <div className="menu more-menu" role="menu" id={id}>
+    <div className={`more ${className}`}>
+      <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
+        <DropdownMenu.Trigger className="navlink more-btn" data-active={active || undefined} data-active-mid={activeMid || undefined}>
+          More<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content className="menu more-menu" id={id} side={side} align={side === "top" ? "end" : "start"} sideOffset={6} collisionPadding={8}>
           {items.map((n) => (
-            <Link key={n.href} role="menuitem" href={n.href} className={`menu-item${n.mid ? " more-mid" : ""}`} aria-current={isActive(path, n.href) ? "page" : undefined}
-              onClick={() => setOpen(false)}>{n.label}</Link>
+            <DropdownMenu.Item key={n.href} asChild>
+              <Link href={n.href} className={`menu-item${n.mid ? " more-mid" : ""}`} aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}</Link>
+            </DropdownMenu.Item>
           ))}
-        </div>
-      )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
     </div>
   );
 }
@@ -102,9 +93,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [path]);
   const { me, signOut } = useSession();
   const [menu, setMenu] = useState(false);
-  const accountBox = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => setMenu(false), []);
-  useDismiss(menu, closeMenu, accountBox, path);
+  useCloseOnNavigate(closeMenu, path);
 
 
   return (
@@ -120,23 +110,22 @@ export function AppShell({ children }: { children: ReactNode }) {
             <MoreMenu items={[...NAV.filter((n) => n.mid), ...NAV.filter((n) => !n.top)]} path={path} id="more-desk" className="" />
           </nav>
           <StockSearch compact />
-          <div className="account" ref={accountBox}>
-            <button type="button" className="btn" aria-expanded={menu} aria-haspopup="true"
-              aria-label={me ? `${me.plan_label} · Account` : undefined} onClick={() => setMenu((m) => !m)}>
-              {me ? <>{me.plan_label}<span className="hide-narrow">&nbsp;· Account</span></> : "Account"}
-            </button>
-            {menu && (
-              <div className="menu" role="menu">
-                {me && <p className="cap menu-email">{me.email}</p>}
-                <Link role="menuitem" href="/account" className="menu-item" onClick={() => setMenu(false)}>Account &amp; billing</Link>
-                <Link role="menuitem" href="/journal" className="menu-item" onClick={() => setMenu(false)}>Journal</Link>
-                <Link role="menuitem" href="/account#invite-h" className="menu-item" onClick={() => setMenu(false)}>Invite a friend</Link>
-                <Link role="menuitem" href="/paper" className="menu-item" onClick={() => setMenu(false)}>Paper trading</Link>
-                <Link role="menuitem" href="/pricing" className="menu-item" onClick={() => setMenu(false)}>Plans and pricing</Link>
-                {me?.is_admin && <Link role="menuitem" href="/admin" className="menu-item" onClick={() => setMenu(false)}>Admin</Link>}
-                <button role="menuitem" type="button" className="menu-item" onClick={() => void signOut()}>Sign out</button>
-              </div>
-            )}
+          <div className="account">
+            <DropdownMenu.Root open={menu} onOpenChange={setMenu} modal={false}>
+              <DropdownMenu.Trigger className="btn" aria-label={me ? `${me.plan_label} · Account` : undefined}>
+                {me ? <>{me.plan_label}<span className="hide-narrow">&nbsp;· Account</span></> : "Account"}
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content className="menu" align="end" sideOffset={6} collisionPadding={8}>
+                {me && <DropdownMenu.Label className="cap menu-email">{me.email}</DropdownMenu.Label>}
+                <DropdownMenu.Item asChild><Link href="/account" className="menu-item">Account &amp; billing</Link></DropdownMenu.Item>
+                <DropdownMenu.Item asChild><Link href="/journal" className="menu-item">Journal</Link></DropdownMenu.Item>
+                <DropdownMenu.Item asChild><Link href="/account#invite-h" className="menu-item">Invite a friend</Link></DropdownMenu.Item>
+                <DropdownMenu.Item asChild><Link href="/paper" className="menu-item">Paper trading</Link></DropdownMenu.Item>
+                <DropdownMenu.Item asChild><Link href="/pricing" className="menu-item">Plans and pricing</Link></DropdownMenu.Item>
+                {me?.is_admin && <DropdownMenu.Item asChild><Link href="/admin" className="menu-item">Admin</Link></DropdownMenu.Item>}
+                <DropdownMenu.Item className="menu-item" onSelect={() => void signOut()}>Sign out</DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
           </div>
         </div>
       </header>
@@ -144,7 +133,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {NAV.filter((n) => n.tab).map((n) => (
           <Link key={n.href} href={n.href} className="tab" aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}</Link>
         ))}
-        <MoreMenu items={NAV.filter((n) => !n.tab).map(({ href, label }) => ({ href, label }))} path={path} id="more-tab" className="tab-more" />
+        <MoreMenu items={NAV.filter((n) => !n.tab).map(({ href, label }) => ({ href, label }))} path={path} id="more-tab" className="tab-more" side="top" />
       </nav>
       <InstallHint />
       <main id="main" className="main"><PreviousPage.Provider value={trail.prev}>{children}</PreviousPage.Provider></main>
