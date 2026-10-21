@@ -31,6 +31,10 @@ PREBREAKOUT_SIGNAL_MIN = 50.0   # PreBreakoutProb% at/above this = model confirm
 GAP_SIGNAL_MIN = 2.0            # |gap %| at/above this = a gap
 GAINER_SIGNAL_MIN = 2.0         # day % at/above this = positive momentum
 FADING_SIGNAL_MAX = -2.0        # day % at/below this = fading/reversal
+# The Scanner's PreBreakout tab and PreBreakout scan alerts list the model's strongest
+# names in each scan. The calibrated % rarely reaches PREBREAKOUT_SIGNAL_MIN (the map
+# tops out near 33%), so a fixed % cut leaves the tab empty; the in-scan rank does not.
+PREBREAKOUT_TOP_N = 10
 
 
 def _num(v) -> Optional[float]:
@@ -105,6 +109,24 @@ def _add_prob_rank(opps: List[Dict[str, Any]]) -> None:
             continue
         better = sum(1 for v in scored if v > raw)   # ties share the better rank
         o["prob_rank"] = max(1, math.ceil(100 * (better + 1) / n))
+
+
+def prebreakout_picks(opps, n: int = PREBREAKOUT_TOP_N) -> List[Dict[str, Any]]:
+    """The model's n strongest names in one scan, strongest first.
+
+    Orders by the raw model score (what prob_rank is built from), then the
+    calibrated %, then the HSF order. Unscored names never qualify.
+    """
+    def key(item):
+        i, o = item
+        raw, prob = _num(o.get("prob_raw")), _num(o.get("prob"))
+        rank = _num(o.get("prob_rank"))
+        return (-(raw if raw is not None else -1.0), rank if rank is not None else 1e9,
+                -(prob if prob is not None else -1.0), i)
+
+    scored = [(i, o) for i, o in enumerate(opps)
+              if _num(o.get("prob_raw")) is not None or _num(o.get("prob")) is not None]
+    return [o for _, o in sorted(scored, key=key)[:max(0, int(n))]]
 
 
 def _ticker_of(row: Dict[str, Any]) -> str:

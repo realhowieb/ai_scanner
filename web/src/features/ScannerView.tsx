@@ -133,6 +133,8 @@ export function ScannerView() {
         })}
       </div>
 
+      {f.signal === "prebreakout" && premium && <p className="cap">The PreBreakout model&apos;s 10 strongest names in this scan, in HSF order. Sort by PreBreakout to put the highest % first.</p>}
+
       <div className="scanner-toolbar">
       <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100 }}
         onApply={(v) => { if ("signal" in v) set({ signal: v.signal ?? "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25, page: 1 }); }} />
