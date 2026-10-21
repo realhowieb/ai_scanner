@@ -4044,6 +4044,16 @@ export interface components {
         /** EarningsScan */
         EarningsScan: {
             /**
+             * Custom Scan At
+             * @description When that scan finished (ISO)
+             */
+            custom_scan_at?: string | null;
+            /**
+             * Custom Scan Id
+             * @description Your earnings scan whose scores fill unranked names
+             */
+            custom_scan_id?: string | null;
+            /**
              * End
              * @description Last ET day of the window (YYYY-MM-DD)
              */
@@ -4137,6 +4147,11 @@ export interface components {
              * @description HSF Score; null when the name did not rank in the scan
              */
             score?: number | null;
+            /**
+             * Score Source
+             * @description scan: the latest market scan ranked it; custom: scored by your recent earnings scan (custom_scan_at); null: not scored (last/chg_pct/gap_pct are live quotes)
+             */
+            score_source?: ("scan" | "custom") | null;
             /**
              * Signals
              * @default []
@@ -4409,6 +4424,11 @@ export interface components {
              * @description Percent vs prev_close
              */
             chg_pct?: number | null;
+            /**
+             * Gap Pct
+             * @description Today's open vs prev_close (null before the open)
+             */
+            gap_pct?: number | null;
             /**
              * Last
              * @description Latest trade price (the day's close after the session ends)

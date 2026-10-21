@@ -155,10 +155,12 @@ def earnings_tickers(window: str, now: Optional[dt.datetime] = None) -> List[str
 
 def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "today",
                   time: Optional[str] = None, include_unranked: bool = False,
-                  watched: Optional[set] = None, now: Optional[dt.datetime] = None) -> Dict[str, Any]:
+                  watched: Optional[set] = None, custom: Optional[Dict[str, Any]] = None,
+                  now: Optional[dt.datetime] = None) -> Dict[str, Any]:
     """Setups in the latest market scan that report earnings in `window` (ET days), joined with
     the earnings calendar. Soonest day first, then HSF Score. With include_unranked, names that
-    report but did not rank in the scan follow each day's ranked names (no score)."""
+    report but did not rank in the scan follow each day's ranked names: scored from `custom`
+    (the user's recent earnings custom scan job) when it has them, else with live quotes only."""
     from analytics.data_freshness import describe
     from db.earnings import fetch_earnings_this_week
     from ui.entitlement_view import redact_prebreakout_rows
@@ -197,22 +199,50 @@ def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "to
         if key in calendar and key not in seen:
             seen.add(key)
             ranked.append({**_scan_row(o), "rank": i + 1, "ranked": True, **earnings_fields(calendar[key], key)})
-    unranked = [{"ticker": e["ticker"], "score": None, "rank": None, "ranked": False, "signals": [],
-                 **earnings_fields(e, key)} for key, e in calendar.items() if key not in seen]
+    for r in ranked:
+        r["score_source"] = "scan"
+    scored: Dict[str, Dict[str, Any]] = {}
+    for o in ((custom or {}).get("result") or {}).get("setups") or []:
+        k = _ticker_key(o.get("ticker"))
+        if k and k not in scored:
+            scored[k] = o
+    unranked = []
+    for key, e in calendar.items():
+        if key in seen:
+            continue
+        o = scored.get(key)
+        row = ({**_scan_row(o), "score_source": "custom"} if o else {"score": None, "signals": [], "score_source": None})
+        unranked.append({**row, "ticker": e["ticker"], "rank": None, "ranked": False, **earnings_fields(e, key)})
 
     def order(row: Dict[str, Any]) -> Any:
         return (row["earnings_date"], not row["ranked"], -(row.get("score") or 0), row["ticker"])
 
     rows = sorted(ranked[:cap], key=order)
     if include_unranked:
-        rows = sorted(rows + sorted(unranked, key=order)[:cap], key=order)
+        extra = sorted(unranked, key=order)[:cap]
+        _fill_quotes([r for r in extra if r.get("last") is None])
+        rows = sorted(rows + extra, key=order)
     out = {**base, "total": len(ranked), "unranked_total": len(unranked), "limited": len(ranked) > cap,
            "setups": rows}
+    if custom and scored:
+        out.update(custom_scan_id=custom.get("id"), custom_scan_at=_iso(custom.get("finished_at")))
     if not runs:
         return {**out, "scan_at": None, "stale": None, "freshness": describe(None)}
     return {**out, "scan_at": _iso(runs[0]["created_at"]),
             "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
             "freshness": run_freshness(runs[0])}
+
+
+def _fill_quotes(rows: List[Dict[str, Any]]) -> None:
+    """Live last / change / gap for rows the scan never priced, QUOTE_MAX tickers per provider
+    call (each set cached like the Watchlists Refresh). No quote leaves the row as it is."""
+    for i in range(0, len(rows), QUOTE_MAX):
+        chunk = rows[i:i + QUOTE_MAX]
+        quotes = latest_quotes([r["ticker"] for r in chunk]).get("quotes") or {}
+        for r in chunk:
+            q = quotes.get(str(r["ticker"]).strip().upper())
+            if q:
+                r.update(last=q.get("last"), chg_pct=q.get("chg_pct"), gap_pct=q.get("gap_pct"))
 
 
 MOVERS_MAX = 10
@@ -573,8 +603,11 @@ def latest_quotes(tickers: List[str]) -> Dict[str, Any]:
             trade_day, bar_day = _trade_day(at), _trade_day(day.get("t"))
             base_bar = day if trade_day and bar_day and trade_day > bar_day else prev
             base = _num(base_bar.get("c"))
+            # A gap exists only once today's session has opened (dailyBar is today's bar).
+            opened = _num(day.get("o")) if base_bar is prev else None
             out[t] = {"last": round(last, 4), "prev_close": base,
-                      "chg_pct": round((last - base) / base * 100.0, 2) if base else None, "at": at}
+                      "chg_pct": round((last - base) / base * 100.0, 2) if base else None,
+                      "gap_pct": round((opened - base) / base * 100.0, 2) if base and opened else None, "at": at}
         feed = None
         try:
             feed = str(_get_alpaca_data_feed()).strip().lower() or None

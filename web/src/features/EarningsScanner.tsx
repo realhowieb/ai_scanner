@@ -84,13 +84,27 @@ function ScoreReporters({ f, count }: { f: EarningsFilters; count: number }) {
   return (
     <div className="row-actions earn-score">
       <span className="cap">{count} stock{count === 1 ? "" : "s"} report{count === 1 ? "s" : ""} {f.when === "week" ? "in the next 7 days" : f.when} but {count === 1 ? "isn't" : "aren't"} in the latest scan&apos;s ranking.</span>
-      <Link className="btn btn-sm" href={`/scanner/custom?universe=earnings&when=${f.when}&start=1`}>Score every reporter</Link>
+      <Link className="btn btn-sm" href={scoreHref(f)}>Score every reporter</Link>
     </div>
   );
 }
 
 function Tags({ r }: { r: Row }) {
   return <>{r.on_watchlist && <> <Pill>Watchlist</Pill></>}{r.fading && <> <Pill tone="warn">Fading</Pill></>}</>;
+}
+
+const scoreHref = (f: EarningsFilters) => `/scanner/custom?universe=earnings&when=${f.when}&start=1`;
+/** Scored by the market scan or by the user's own earnings scan. */
+const hasScore = (r: Row) => r.score !== null && r.score !== undefined;
+
+function SetupCell({ r, f }: { r: Row; f: EarningsFilters }) {
+  if (r.ranked) return <Pill>{setupLabel(r.primary_setup)}</Pill>;
+  if (hasScore(r)) return <><Pill>{setupLabel(r.primary_setup)}</Pill> <span className="pill earn-yours" title="Scored by your earnings scan">Your scan</span></>;
+  return <><span className="cap">Not ranked</span> <Link className="earn-score-link" href={scoreHref(f)}>Score it</Link></>;
+}
+
+function timeOf(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }) + " ET";
 }
 
 /** Window, timing and ranked-only controls. */
@@ -140,7 +154,7 @@ export function EarningsResults({ f, pro, res, onClear }: {
       <Card><Empty title={`No ${f.all ? "stocks" : "ranked setups"} report ${f.when === "week" ? "in the next 7 days" : window}${f.time ? ` ${(TIME_LABEL[f.time] ?? "").toLowerCase()}` : ""}.`}>
         {!f.all && data.unranked_total > 0
           ? <><p>{data.unranked_total} stock{data.unranked_total === 1 ? "" : "s"} report but didn&apos;t rank in the latest scan. <button type="button" className="btn btn-sm" onClick={onClear}>Show all reporters</button></p>
-            <p><Link className="btn btn-sm" href={`/scanner/custom?universe=earnings&when=${f.when}&start=1`}>Score every reporter</Link></p></>
+            <p><Link className="btn btn-sm" href={scoreHref(f)}>Score every reporter</Link></p></>
           : <p>Dates come from the earnings calendar, which refreshes every day.</p>}
       </Empty></Card>
     );
@@ -165,12 +179,12 @@ export function EarningsResults({ f, pro, res, onClear }: {
                   <tr key={r.ticker}>
                     <td><TickerLink ticker={r.ticker} /><Tags r={r} /></td>
                     <td><When time={r.time} /></td>
-                    <td>{r.ranked ? <Pill>{setupLabel(r.primary_setup)}</Pill> : <span className="cap">Not ranked</span>}</td>
-                    <td>{r.ranked ? <ScoreBar score={r.score} /> : <span className="cap">—</span>}</td>
+                    <td><SetupCell r={r} f={f} /></td>
+                    <td>{hasScore(r) ? <ScoreBar score={r.score} /> : <span className="cap">—</span>}</td>
                     <td className="num mono">{price(r.last)}</td>
                     <td className={`num mono ${(r.chg_pct ?? 0) > 0 ? "up" : (r.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(r.chg_pct)}</td>
                     <td className="num mono">{pct(r.gap_pct)}</td>
-                    <td>{r.ranked ? <RvolMeter rvol={r.rvol} /> : null}</td>
+                    <td>{hasScore(r) ? <RvolMeter rvol={r.rvol} /> : null}</td>
                     <td className="num"><SaveToWatchlistButton ticker={r.ticker} compact /></td>
                   </tr>
                 ))}
@@ -192,15 +206,18 @@ export function EarningsResults({ f, pro, res, onClear }: {
                       <span className="grow" />
                       <SaveToWatchlistButton ticker={r.ticker} compact />
                     </div>
-                    {r.ranked ? (
-                      <dl className="sc-facts">
+                    <dl className="sc-facts">
+                      {hasScore(r) && <>
                         <div><dt>HSF</dt><dd><ScoreBadge score={r.score} /></dd></div>
                         <div><dt>Setup</dt><dd>{setupLabel(r.primary_setup)}</dd></div>
-                        <div><dt>Last</dt><dd className="mono">{price(r.last)}</dd></div>
-                        <div><dt>Chg</dt><dd className={`mono ${(r.chg_pct ?? 0) > 0 ? "up" : (r.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(r.chg_pct)}</dd></div>
-                        <div><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>
-                      </dl>
-                    ) : <p className="cap">Reports, but didn&apos;t rank in the latest scan.</p>}
+                      </>}
+                      <div><dt>Last</dt><dd className="mono">{price(r.last)}</dd></div>
+                      <div><dt>Chg</dt><dd className={`mono ${(r.chg_pct ?? 0) > 0 ? "up" : (r.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(r.chg_pct)}</dd></div>
+                      {hasScore(r) && <div><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>}
+                    </dl>
+                    {!r.ranked && (hasScore(r)
+                      ? <p className="cap">Scored by your earnings scan.</p>
+                      : <p className="cap">Reports, but didn&apos;t rank in the latest scan. <Link href={scoreHref(f)}>Score it</Link></p>)}
                   </li>
                 ))}
               </ul>
@@ -210,7 +227,8 @@ export function EarningsResults({ f, pro, res, onClear }: {
       </section>
       <p className="cap">
         Ranked setups are stocks in the latest scan that report {f.when === "week" ? "in the next 7 days" : window}, soonest first, then by HSF Score.
-        {f.all ? " All reporters adds stocks that report but didn't rank." : ""} Dates and times come from the earnings calendar and can move.
+        {f.all ? " All reporters adds stocks that report but didn't rank, with live prices." : ""}
+        {f.all && data.custom_scan_at ? ` Rows marked Your scan were scored by your earnings scan at ${timeOf(data.custom_scan_at)}.` : ""} Dates and times come from the earnings calendar and can move.
       </p>
       <ScoreReporters f={f} count={data.unranked_total} />
       {data.limited && (
