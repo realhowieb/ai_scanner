@@ -52,3 +52,21 @@ export function RvolMeter({ rvol }: { rvol: number | null | undefined }) {
     </span>
   );
 }
+
+/** PreBreakout: the calibrated % plus a bar for where the model score sits in this scan
+ * (full bar = top of the scan). Calibration gives many names the same %, so the bar tells them apart. */
+export function PreBreakoutMeter({ prob, rank }: { prob: number | null | undefined; rank: number | null | undefined }) {
+  if (prob === null || prob === undefined || !Number.isFinite(prob)) return <span className="mono">—</span>;
+  const pctText = `${Math.round(prob)}%`;
+  if (rank === null || rank === undefined || !Number.isFinite(rank)) return <span className="mono">{pctText}</span>;
+  const r = Math.max(1, Math.min(100, Math.round(rank)));
+  const strength = 101 - r;
+  const what = `PreBreakout ${pctText}. Model score in the top ${r}% of this scan's setups`;
+  return (
+    <span className="rvol pb-meter" title={what} aria-label={what}>
+      <span className="rvol-track" aria-hidden="true"><span className={`rvol-fill${r <= 10 ? " hot" : ""}`} style={{ width: `${Math.max(3, strength)}%` }} /></span>
+      <span className="mono" aria-hidden="true">{pctText}</span>
+      {r <= 10 && <span className="cap" aria-hidden="true">top {r}%</span>}
+    </span>
+  );
+}

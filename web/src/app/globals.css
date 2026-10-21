@@ -261,7 +261,9 @@ select, .field input { min-height: 40px; border-radius: 8px; background: var(--b
 .today-personal { display: flex; flex-direction: column; gap: 24px; }
 .leader-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 14px; padding: 10px 14px; margin-bottom: 8px; border: 1px solid #1f456b; border-radius: 10px; background: #0f1c2b; }
 .setup-card { gap: 8px; padding: 12px 14px; }
-.sc-top { display: flex; align-items: center; gap: 10px; }
+.sc-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sc-top .pill { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-top .spark { flex-shrink: 1; min-width: 40px; }
 .sc-facts { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; }
 .sc-facts > div { display: flex; align-items: baseline; gap: 6px; }
 .sc-facts dt { font-size: 12px; color: var(--muted); }
@@ -455,6 +457,8 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 }
 
 @media (max-width: 760px) {
+  .status-strip { padding: 8px 12px; gap: 4px 12px; }
+  .status-strip .status-extra, .data-fresh .wide-text { display: none; }
   .main { padding: 18px 14px 24px; }
   .foot { padding: 16px; }
   .card { padding: 16px; }
@@ -534,7 +538,6 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
   .h1 { font-size: 25px; }
   .btn { min-height: 42px; white-space: normal; text-align: center; }
   .phase { width: 100%; border-radius: 12px; }
-  .status-strip { align-items: flex-start; flex-direction: column; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
   .tile-value { font-size: 22px; }
   .rc-facts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -553,6 +556,8 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 .wl-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
 .wl-toolbar .sort-toggle { align-self: auto; }
 .wl-toolbar .wl-refresh { margin-left: auto; }
+.wl-toolbar .wl-status { flex: 1 1 260px; min-width: 0; }
+.wl-toolbar .wl-status p { margin: 0; }
 .index-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 /* Brief columns are independent stacks: supporting card heights cannot leave
    holes between the primary intelligence panels. DOM order prioritizes phones. */
@@ -748,7 +753,7 @@ a.pill:hover { color: var(--text); border-color: #34465f; }
 .table-display-settings { padding: 16px; }
 .stock-suggestions span { font-size: .85em; }
 .saved-views input { max-width: 230px; }
-.scanner-results { display: grid; gap: 16px; }
+.scanner-results { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .scanner-results [hidden] { display: none !important; }
 .is-compact .table td, .is-compact .table th { padding-top: 8px; padding-bottom: 8px; }
 .is-compact .setup-card { padding: 10px; }

@@ -8,10 +8,10 @@ import { DEFAULT_COLUMNS, TablePreferences } from "./TablePreferences";
 
 import type { Schemas } from "@/api/client";
 import { Pill, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
-import { num, pct, price, probWithRank, setupLabel } from "@/lib/format";
+import { num, pct, price, setupLabel } from "@/lib/format";
 
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
-import { DailySpark, RvolMeter, useDailySparks } from "./Sparks";
+import { DailySpark, PreBreakoutMeter, RvolMeter, useDailySparks } from "./Sparks";
 
 type Row = Schemas["ScanSetup"];
 
@@ -44,7 +44,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               <th scope="col">{numbered ? "#" : <span className="sr-only">Row</span>}</th><th scope="col">Ticker</th><th scope="col" hidden={!visible("setup")}>Setup</th>
               <th scope="col" className="w30">HSF Score</th>{sparks && <th scope="col" hidden={!visible("spark")}>20 sessions</th>}<th scope="col" hidden={!visible("last")} className="num">Last</th>
               <th scope="col" hidden={!visible("change")} className="num">Chg %</th><th scope="col" hidden={!visible("gap")} className="num">Gap %</th>
-              <th scope="col" hidden={!visible("rvol")}>RVOL</th>{premium && <th scope="col" hidden={!visible("prob")} className="num">PreBreakout</th>}
+              <th scope="col" hidden={!visible("rvol")}>RVOL</th>{premium && <th scope="col" hidden={!visible("prob")} title="PreBreakout probability, with a bar for where the model ranks the name in this scan (full bar = top). Names in the top 10% are labelled.">PreBreakout</th>}
               <th scope="col"><span className="sr-only">Save</span></th>
             </tr>
           </thead>
@@ -60,7 +60,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
                 <td hidden={!visible("change")} className={`num mono ${(r.chg_pct ?? 0) > 0 ? "up" : (r.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(r.chg_pct)}</td>
                 <td hidden={!visible("gap")} className="num mono">{pct(r.gap_pct)}</td>
                 <td hidden={!visible("rvol")}><RvolMeter rvol={r.rvol} /></td>
-                {premium && <td hidden={!visible("prob")} className="num mono">{probWithRank(r.prob, r.prob_rank)}</td>}
+                {premium && <td hidden={!visible("prob")}><PreBreakoutMeter prob={r.prob} rank={r.prob_rank} /></td>}
                 <td className="num"><SaveToWatchlistButton ticker={r.ticker} compact /></td>
               </tr>
             ))}
@@ -86,7 +86,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               <div hidden={!visible("change")}><dt>Chg</dt><dd className={`mono ${(r.chg_pct ?? 0) > 0 ? "up" : (r.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(r.chg_pct)}</dd></div>
               <div hidden={!visible("gap")}><dt>Gap</dt><dd className="mono">{pct(r.gap_pct)}</dd></div>
               <div hidden={!visible("rvol")}><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>
-              {premium && <div hidden={!visible("prob")}><dt>PreBreakout</dt><dd className="mono">{probWithRank(r.prob, r.prob_rank)}</dd></div>}
+              {premium && <div hidden={!visible("prob")}><dt>PreBreakout</dt><dd><PreBreakoutMeter prob={r.prob} rank={r.prob_rank} /></dd></div>}
             </dl>
           </li>
         ))}

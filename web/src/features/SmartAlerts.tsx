@@ -73,7 +73,8 @@ function RuleRow({ r, types, scope, emailAllowed, onChanged }: {
   );
 }
 
-export function SmartAlerts({ ticker, onChanged }: { ticker?: string; onChanged?: () => void }) {
+/** `folded`: the form stays behind one "Add smart alert" button (stock pages, where the card sits in the side column). */
+export function SmartAlerts({ ticker, onChanged, folded = false }: { ticker?: string; onChanged?: () => void; folded?: boolean }) {
   const rules = useApi("alert-rules", (signal) => alertRules.list(signal));
   const types = useApi("alert-rule-types", (signal) => alertRules.types(signal));
   const lists = useApi("watchlists", (signal) => watchlists.list(signal));
@@ -84,6 +85,7 @@ export function SmartAlerts({ ticker, onChanged }: { ticker?: string; onChanged?
   const [listId, setListId] = useState<number | null>(null);
   const [email, setEmail] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
+  const [open, setOpen] = useState(!folded);
   const add = useAction();
 
   if (rules.error || types.error || !Array.isArray(types.data) || !Array.isArray(rules.data?.rules)
@@ -118,6 +120,7 @@ export function SmartAlerts({ ticker, onChanged }: { ticker?: string; onChanged?
       return true;
     });
     if (ok) {
+      if (folded) setOpen(false);
       setAdded(`${onList ? listName(wl) : sym}: ${describeRule({ rule_type: spec.type, threshold: value ?? null, value: null }, all)}`);
       setThreshold("");
       if (!ticker) setTarget("");
@@ -129,8 +132,8 @@ export function SmartAlerts({ ticker, onChanged }: { ticker?: string; onChanged?
   return (
     <Card title={ticker ? `Smart alerts on ${ticker}` : "Smart alerts"} id="smart"
       aside={`${rules.data.used} of ${rules.data.limit} alerts in use`}>
-      <p className="cap">Alerts on what HSF sees, not just price: score crossings, new setups, volume spikes, rank jumps
-        and earnings heads-ups. Checked after each market scan.</p>
+      {open && <p className="cap">Alerts on what HSF sees, not just price: score crossings, new setups, volume spikes, rank jumps
+        and earnings heads-ups. Checked after each market scan.</p>}
       {mine.length > 0 ? (
         <ul className="alert-list">
           {mine.map((r) => (
@@ -142,6 +145,13 @@ export function SmartAlerts({ ticker, onChanged }: { ticker?: string; onChanged?
 
       {full ? (
         <p className="cap">You&apos;re using every alert on your plan. Delete or turn one off to add another.</p>
+      ) : spec && !open ? (
+        <div className="stack-sm">
+          {added && <p className="notice" role="status">Added: {added}.</p>}
+          <div className="row-actions">
+            <button type="button" className="btn" onClick={() => setOpen(true)} aria-expanded={false}>Add smart alert</button>
+          </div>
+        </div>
       ) : spec && (
         <form className="stack-sm" onSubmit={submit} aria-label="New smart alert">
           {!ticker && (
@@ -183,12 +193,13 @@ export function SmartAlerts({ ticker, onChanged }: { ticker?: string; onChanged?
           <p className="cap">{spec.description}</p>
           <div className="row-actions">
             <button type="submit" className="btn" disabled={add.busy || !canSubmit}>{add.busy ? "Adding…" : "Add smart alert"}</button>
+            {folded && <button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button>}
           </div>
           <ErrorLine error={add.error} />
           {added && <p className="notice" role="status">Added: {added}.</p>}
         </form>
       )}
-      {locked.length > 0 && (
+      {open && locked.length > 0 && (
         <div className="stack-sm">
           <p className="cap">On a higher plan: {locked.map((t) => `${t.label.replace(/ \(days\)$/, "")} (${PLAN_OF[t.type] === "pro" ? "Pro" : "Premium"})`).join(", ")}.</p>
           <UpgradeButton plan={locked.some((t) => PLAN_OF[t.type] === "pro") ? "pro" : "premium"} />

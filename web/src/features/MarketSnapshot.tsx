@@ -28,10 +28,10 @@ export function StatusStrip({ market, snapshot }: { market: Today["market"]; sna
   return (
     <section className="status-strip" aria-label="Market data status">
       <DataFreshness info={market.freshness} />
-      <span className="status-scope">Full U.S. market</span>
-      <span>{scanAt ? <>Last scan {etTime(scanAt)}{age ? ` (${age})` : ""}</> : "Latest market scan unavailable"}</span>
-      {snapshot?.universe_symbols ? <span>Universe {snapshot.universe_symbols.toLocaleString("en-US")} tradable stocks</span> : null}
-      {snapshot?.ranked_count ? <span>{snapshot.ranked_count.toLocaleString("en-US")} ranked setups</span> : null}
+      <span className="status-scope status-extra">Full U.S. market</span>
+      <span className="status-extra">{scanAt ? <>Last scan {etTime(scanAt)}{age ? ` (${age})` : ""}</> : "Latest market scan unavailable"}</span>
+      {snapshot?.universe_symbols ? <span className="status-extra">Universe {snapshot.universe_symbols.toLocaleString("en-US")} tradable stocks</span> : null}
+      {snapshot?.ranked_count ? <span className="status-extra">{snapshot.ranked_count.toLocaleString("en-US")} ranked setups</span> : null}
       {status && (
         <span className={`status-level lvl-${status.level}`}>
           <span aria-hidden="true">{STATUS_SHAPES[status.level] ?? "○"}</span> System: {status.label}
