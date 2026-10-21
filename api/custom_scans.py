@@ -6,6 +6,8 @@ by disabling widgets, which an API client can't be trusted to do):
 
   universe   sp500 (every plan) · nasdaq, combo (Pro+) · us_market (Premium+)
              · watchlist (your own) · ticker (every plan)
+             · earnings: stocks reporting in earnings_window (today every plan;
+               tomorrow / week Pro, like the Earnings tab)
   rows       top_n up to the plan's Scanner rows (Starter 25, Pro 100, Premium 200)
   sessions   premarket / afterhours: Pro+ (outside that session the web scans
              the regular session instead, and so does this)
@@ -22,7 +24,9 @@ from __future__ import annotations
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-UNIVERSES = ("sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker")
+UNIVERSES = ("sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings")
+EARNINGS_LABELS = {"today": "today", "tomorrow": "tomorrow", "week": "next 7 days"}     # scan labels
+EARNINGS_WHEN = {"today": "today", "tomorrow": "tomorrow", "week": "in the next 7 days"}  # sentences
 MARKET = {"sp500": "SP500", "nasdaq": "NASDAQ", "combo": "COMBO", "us_market": "US_MARKET"}
 LABELS = {"sp500": "SP500", "nasdaq": "NASDAQ", "combo": "Combo", "us_market": "US Market"}
 UNIVERSE_FEATURE = {"sp500": "can_scan_sp500", "nasdaq": "can_scan_nasdaq",
@@ -61,6 +65,9 @@ def plan_scan(req: Dict[str, Any], *, entitlements: Dict[str, bool], tier: str, 
         raise ValueError("ticker is required for a ticker scan.")
     if universe == "watchlist" and not req.get("watchlist_id"):
         raise ValueError("watchlist_id is required for a watchlist scan.")
+    window = req.get("earnings_window") or "today"
+    if universe == "earnings" and window != "today":
+        _need(ent, "can_earnings", "Scanning tomorrow's or this week's earnings is part of Pro.")
 
     top_n = f.get("top_n")
     top_n = min(25, max_results) if top_n is None else int(top_n)
@@ -93,6 +100,7 @@ def plan_scan(req: Dict[str, Any], *, entitlements: Dict[str, bool], tier: str, 
         "universe": universe,
         "ticker": (req.get("ticker") or "").strip().upper() or None,
         "watchlist_id": req.get("watchlist_id"),
+        "earnings_window": window if universe == "earnings" else None,
         "score_all": bool(req.get("score_all")),
         "profile": f.get("profile") or "regular",
         "session_requested": session,
@@ -121,6 +129,16 @@ def _resolve_tickers(p: Dict[str, Any], username: str) -> List[str]:
 
     if p["universe"] == "ticker":
         return [p["ticker"]]
+    if p["universe"] == "earnings":
+        from api.scans import earnings_tickers
+
+        try:
+            tickers = sanitize_universe_symbols(earnings_tickers(p["earnings_window"]))
+        except Exception as e:
+            raise ScanFailed("The earnings calendar isn't available right now. Try again in a few minutes.") from e
+        if not tickers:
+            raise ScanFailed(f"No stocks report {EARNINGS_WHEN[p['earnings_window']]} in the earnings calendar.")
+        return tickers
     if p["universe"] == "watchlist":
         from api import user_data
 
@@ -167,6 +185,8 @@ def _label(p: Dict[str, Any], n: int) -> str:
         return f"Search: {p['ticker']}"
     if p["universe"] == "watchlist":
         return f"Watchlist ({n} tickers)" + (" · all" if p["score_all"] else "")
+    if p["universe"] == "earnings":
+        return f"Earnings {EARNINGS_LABELS[p['earnings_window']]} ({n} tickers)" + (" · all" if p["score_all"] else "")
     return LABELS[p["universe"]]
 
 
@@ -184,7 +204,7 @@ def run_scan(p: Dict[str, Any], username: str, report: Callable[[Dict[str, Any]]
     label = _label(p, len(tickers))
     report({"phase": "scanning", "symbols": len(tickers)})
 
-    bypass = p["universe"] == "watchlist" and p["score_all"]   # web: "score all" ignores the screens
+    bypass = p["universe"] in ("watchlist", "earnings") and p["score_all"]   # web: "score all" ignores the screens
     started = time.perf_counter()
     df = run_manual_scan_execution(
         runner=run_breakout_scan, tickers=tickers,
@@ -204,8 +224,11 @@ def run_scan(p: Dict[str, Any], username: str, report: Callable[[Dict[str, Any]]
     _save_run(df, label, username, duration)
     opps = redact_prebreakout_rows(top_setups(df, n=100_000), allowed=p["early_breakout"])
     rows = [_scan_row(o) for o in opps]
+    total = len(rows)
+    if p["universe"] == "earnings":   # up to a few hundred names: the plan's row cap applies
+        rows = rows[:p["max_results"]]
     return json_safe({"label": label, "session": p["session"], "symbols_scanned": len(tickers),
-                      "duration_s": round(duration, 1), "total": len(rows), "setups": rows})
+                      "duration_s": round(duration, 1), "total": total, "setups": rows})
 
 
 def _save_run(df: Any, label: str, username: str, duration: float) -> None:

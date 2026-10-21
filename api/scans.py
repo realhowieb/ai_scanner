@@ -132,6 +132,27 @@ def _earnings_time(raw: Any) -> Optional[str]:
     return t or None
 
 
+def earnings_tickers(window: str, now: Optional[dt.datetime] = None) -> List[str]:
+    """Every symbol in the earnings calendar that reports in `window` (ET days), soonest first."""
+    from db.earnings import fetch_earnings_this_week
+
+    lo, hi = EARNINGS_WINDOWS[window]
+    today = _et_date(now)
+    start, end = today + dt.timedelta(days=lo), today + dt.timedelta(days=hi)
+    rows = []
+    for r in fetch_earnings_this_week(days_ahead=hi - lo, start=start) or []:
+        d = r.get("earnings_date")
+        d = d.date() if isinstance(d, dt.datetime) else d
+        sym = str(r.get("symbol") or "").strip().upper()
+        if sym and isinstance(d, dt.date) and start <= d <= end:
+            rows.append((d, sym))
+    out: List[str] = []
+    for _, sym in sorted(rows):
+        if sym not in out:
+            out.append(sym)
+    return out
+
+
 def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "today",
                   time: Optional[str] = None, include_unranked: bool = False,
                   watched: Optional[set] = None, now: Optional[dt.datetime] = None) -> Dict[str, Any]:
