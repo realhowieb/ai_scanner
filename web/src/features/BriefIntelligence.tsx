@@ -23,6 +23,8 @@ export function MarketPulse({ b }: { b: Brief }) {
   const weakest = sectors.reduce<(typeof sectors)[number] | undefined>((a, s) => !a || Number(s.chg_pct) < Number(a.chg_pct) ? s : a, undefined);
   const adv = b.breadth?.advancers;
   const dec = b.breadth?.decliners;
+  const scores = b.opportunities.map((o) => o.score).filter(finite);
+  const topScore = scores.length ? Math.max(...scores) : null;
   const validBreadth = finite(adv) && finite(dec) && adv >= 0 && dec >= 0 && adv + dec > 0;
   return <Card title="Market Pulse" id="pulse" className="brief-pulse">
     <Freshness at={b.snapshot_time} label="Snapshot" stale={b.freshness?.state === "stale" ? true : b.freshness?.state === "fresh" ? false : undefined} />
@@ -43,7 +45,7 @@ export function MarketPulse({ b }: { b: Brief }) {
     </section>}
     <h3 className="h3">HSF Market Intelligence</h3>
     <dl className="brief-counts">
-      <div><dt>HSF 80+ in Radar</dt><dd>{b.opportunities.filter((o) => finite(o.score) && o.score >= 80).length}</dd></div>
+      <div><dt>Top HSF Score</dt><dd>{topScore ?? "—"}</dd></div>
       {!b.prebreakout_locked && <div><dt>PreBreakout picks shown</dt><dd>{b.prebreakout_picks.length}</dd></div>}
       <div><dt>Golden crosses shown</dt><dd>{b.golden_crosses.length}</dd></div>
     </dl>
