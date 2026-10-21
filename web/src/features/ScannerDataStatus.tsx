@@ -31,7 +31,8 @@ export function ScannerDataStatus({ info, scanAt, stale, checkedAt, refreshing, 
   const asOf = info?.market_data_at;
   const savedAt = info?.last_successful_scan_at ?? scanAt;
   const checked = checkedAt ? new Date(checkedAt).toISOString() : info?.checked_at;
-  const age = ageLabel(asOf ?? savedAt, info?.checked_at ?? checked);
+  // The browser's own check time: an unchanged answer (304) keeps the server's older checked_at.
+  const age = ageLabel(asOf ?? savedAt, checked);
   const time = (value?: string | null) => value ? etTime(value) : "Unavailable";
   return <section className={`scanner-data-status${delayed ? " is-delayed" : ""}`} aria-label="Scanner data status">
     <details>
