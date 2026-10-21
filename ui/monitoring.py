@@ -73,6 +73,9 @@ def init_sentry(component: str = "app") -> bool:
             dsn=dsn,
             # Errors only — no performance tracing (avoids overhead/cost).
             traces_sample_rate=0.0,
+            send_default_pii=False,
+            include_local_variables=False,
+            max_request_body_size="never",
             environment=os.getenv("SENTRY_ENV", "production"),
             release=os.getenv("SENTRY_RELEASE") or None,
             before_send=_before_send,

@@ -19,6 +19,15 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(fetch(event.request).catch(async () => (await caches.match(OFFLINE_URL)) || Response.error()));
 });
 
+// Notification targets must stay inside this app, including after a worker update.
+function notificationUrl(value) {
+  try {
+    if (typeof value !== "string" || !value.startsWith("/")) return "/alerts";
+    const url = new URL(value, self.location.origin);
+    return url.origin === self.location.origin ? url.pathname + url.search + url.hash : "/alerts";
+  } catch { return "/alerts"; }
+}
+
 self.addEventListener("push", (event) => {
   let msg = {};
   try {
@@ -26,7 +35,8 @@ self.addEventListener("push", (event) => {
   } catch {
     msg = { body: event.data ? event.data.text() : "" };
   }
-  const url = typeof msg.url === "string" && msg.url.startsWith("/") ? msg.url : "/alerts";
+  if (!msg || typeof msg !== "object") msg = {};
+  const url = notificationUrl(msg.url);
   event.waitUntil(self.registration.showNotification(msg.title || "HSF alert", {
     body: msg.body || "One of your alerts fired.",
     tag: msg.tag || "hsf-alert",
@@ -38,7 +48,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = new URL((event.notification.data && event.notification.data.url) || "/alerts", self.location.origin).href;
+  const url = new URL(notificationUrl(event.notification.data && event.notification.data.url), self.location.origin).href;
   event.waitUntil((async () => {
     const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const c of open) {
