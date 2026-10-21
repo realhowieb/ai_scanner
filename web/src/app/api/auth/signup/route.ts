@@ -1,8 +1,8 @@
 import { signup } from "@/server/auth";
-import { upstream } from "@/server/upstream";
+import { upstreamFor } from "@/server/upstream";
 
 export const dynamic = "force-dynamic";
 
 export function POST(req: Request): Promise<Response> {
-  return signup(req, upstream);
+  return signup(req, upstreamFor(req));
 }
