@@ -1,4 +1,6 @@
 // Watchlist and alert calls, through the typed client.
+import { captureUsage } from "@/lib/usageAnalytics";
+
 import { api, unwrap } from "./client";
 import type { Schemas } from "./client";
 
@@ -24,17 +26,30 @@ const wid = (id: number) => ({ params: { path: { watchlist_id: id } } });
 export const watchlists = {
   list: (signal?: AbortSignal) => unwrap(api.GET("/v1/watchlists", { signal })),
   get: (id: number, signal?: AbortSignal) => unwrap(api.GET("/v1/watchlists/{watchlist_id}", { ...wid(id), signal })),
-  create: (name: string, makeDefault = false) =>
-    unwrap(api.POST("/v1/watchlists", { body: { name, make_default: makeDefault } })),
+  create: async (name: string, makeDefault = false) => {
+    const result = await unwrap(api.POST("/v1/watchlists", { body: { name, make_default: makeDefault } }));
+    captureUsage("watchlist_created");
+    return result;
+  },
   rename: (id: number, name: string) =>
     unwrap(api.PATCH("/v1/watchlists/{watchlist_id}", { ...wid(id), body: { name, make_default: false } })),
   makeDefault: (id: number) =>
     unwrap(api.PATCH("/v1/watchlists/{watchlist_id}", { ...wid(id), body: { make_default: true } as Schemas["WatchlistUpdate"] })),
-  remove: (id: number) => unwrap(api.DELETE("/v1/watchlists/{watchlist_id}", wid(id))),
-  addTickers: (id: number, tickers: string[]) =>
-    unwrap(api.POST("/v1/watchlists/{watchlist_id}/tickers", { ...wid(id), body: { tickers } })),
-  removeTicker: (id: number, ticker: string) =>
-    unwrap(api.DELETE("/v1/watchlists/{watchlist_id}/tickers/{ticker}", { params: { path: { watchlist_id: id, ticker } } })),
+  remove: async (id: number) => {
+    const result = await unwrap(api.DELETE("/v1/watchlists/{watchlist_id}", wid(id)));
+    captureUsage("watchlist_deleted");
+    return result;
+  },
+  addTickers: async (id: number, tickers: string[]) => {
+    const result = await unwrap(api.POST("/v1/watchlists/{watchlist_id}/tickers", { ...wid(id), body: { tickers } }));
+    captureUsage("watchlist_stock_added");
+    return result;
+  },
+  removeTicker: async (id: number, ticker: string) => {
+    const result = await unwrap(api.DELETE("/v1/watchlists/{watchlist_id}/tickers/{ticker}", { params: { path: { watchlist_id: id, ticker } } }));
+    captureUsage("watchlist_stock_removed");
+    return result;
+  },
   intelligence: (id: number, signal?: AbortSignal) =>
     unwrap(api.GET("/v1/watchlists/{watchlist_id}/intelligence", { ...wid(id), signal })),
   changes: (id: number, signal?: AbortSignal) =>
@@ -51,20 +66,47 @@ export const alerts = {
   list: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts", { signal })),
   types: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/types", { signal })),
   events: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/events", { params: { query: { limit: 20 } }, signal })),
-  create: (body: AlertCreate) => unwrap(api.POST("/v1/alerts", { body: body as Schemas["AlertCreate"] })),
-  setEnabled: (id: number, enabled: boolean) =>
-    unwrap(api.PATCH("/v1/alerts/{alert_id}", { params: { path: { alert_id: id } }, body: { enabled } })),
-  remove: (id: number) => unwrap(api.DELETE("/v1/alerts/{alert_id}", { params: { path: { alert_id: id } } })),
+  create: async (body: AlertCreate) => {
+    const result = await unwrap(api.POST("/v1/alerts", { body: body as Schemas["AlertCreate"] }));
+    captureUsage("alert_created", { kind: body.type === "price" ? "price" : "technical" });
+    return result;
+  },
+  setEnabled: async (id: number, enabled: boolean) => {
+    const result = await unwrap(api.PATCH("/v1/alerts/{alert_id}", { params: { path: { alert_id: id } }, body: { enabled } }));
+    captureUsage("alert_enabled_changed", { enabled });
+    return result;
+  },
+  remove: async (id: number) => {
+    const result = await unwrap(api.DELETE("/v1/alerts/{alert_id}", { params: { path: { alert_id: id } } }));
+    captureUsage("alert_deleted");
+    return result;
+  },
 };
 
 // Alert rules: conditions on HSF intelligence, evaluated by the server (never here).
 export const alertRules = {
   list: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/rules", { signal })),
   types: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/rules/types", { signal })),
-  create: (body: AlertRuleCreate) => unwrap(api.POST("/v1/alerts/rules", { body })),
-  update: (id: number, body: AlertRuleUpdate) =>
-    unwrap(api.PATCH("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } }, body })),
-  remove: (id: number) => unwrap(api.DELETE("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } } })),
+  create: async (body: AlertRuleCreate) => {
+    const result = await unwrap(api.POST("/v1/alerts/rules", { body }));
+    captureUsage("alert_created", { kind: body.rule_type === "SCAN_MATCH" ? "scan" : "hsf" });
+    return result;
+  },
+  update: async (id: number, body: AlertRuleUpdate) => {
+    const result = await unwrap(api.PATCH("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } }, body }));
+    if (typeof body.enabled === "boolean") captureUsage("alert_enabled_changed", { enabled: body.enabled });
+    return result;
+  },
+  setEnabled: async (id: number, enabled: boolean) => {
+    const result = await unwrap(api.PATCH("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } }, body: { enabled } }));
+    captureUsage("alert_enabled_changed", { enabled });
+    return result;
+  },
+  remove: async (id: number) => {
+    const result = await unwrap(api.DELETE("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } } }));
+    captureUsage("alert_deleted");
+    return result;
+  },
 };
 
 export const insights = {

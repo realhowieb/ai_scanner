@@ -137,7 +137,7 @@ describe("Day Trader live refresh", () => {
     try {
       render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
       await waitFor(() => expect(tickers()).toEqual(["AAA", "BBB"]));
-      expect(screen.getByRole("status")).toHaveTextContent(/Live · updated \d+s ago/);
+      expect(screen.getByRole("status")).toHaveTextContent(/Live · checked \d+s ago/);
       await vi.advanceTimersByTimeAsync(DT_REFRESH_MS + 50);
       await waitFor(() => expect(tickers()).toEqual(["BBB", "AAA"]));
       expect(screen.getByLabelText("up 1 place")).toBeInTheDocument();
@@ -219,7 +219,7 @@ describe("Day Trader live refresh", () => {
     try {
       render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
       await waitFor(() => expect(tickers()).toEqual(["AAA"]));
-      expect(screen.getByRole("status")).toHaveTextContent(/updated [0-2]s ago/);
+      expect(screen.getByRole("status")).toHaveTextContent(/checked [0-2]s ago/);
       await vi.advanceTimersByTimeAsync(DT_REFRESH_MS / 2);
       expect(n).toBe(1);
       await vi.advanceTimersByTimeAsync(DT_REFRESH_MS);

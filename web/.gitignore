@@ -4,3 +4,7 @@ next-env.d.ts
 *.tsbuildinfo
 .env*.local
 screenshots/
+
+# Local wizard helpers and resumable setup state
+.claude/
+.posthog-wizard-cache/

@@ -9,6 +9,7 @@ import { useBillingInterval } from "@/components/BillingInterval";
 import { ApiError } from "@/api/client";
 import { freshness, etTime } from "@/lib/format";
 import { beginBilling } from "@/lib/billingReturn";
+import { captureUsage } from "@/lib/usageAnalytics";
 import { readCachedMe } from "@/session/meCache";
 import { checkout } from "@/lib/checkout";
 
@@ -146,6 +147,7 @@ export function UpgradeButton({ plan, label }: { plan: "pro" | "premium"; label?
     setErr(null);
     try {
       const link = await checkout(plan, interval);
+      captureUsage("checkout_started", { plan, interval });
       beginBilling(readCachedMe()?.plan ?? null, plan);
       window.location.assign(link.url);
     } catch (e) {

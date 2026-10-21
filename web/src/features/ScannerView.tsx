@@ -12,6 +12,9 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useSession } from "@/session/SessionProvider";
 
 import { EarningsControls, EarningsResults, EARNINGS_WHEN, earningsLocked, readEarningsFilters, useEarningsScan } from "./EarningsScanner";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { DEFAULT_COLUMNS, TablePreferences } from "./TablePreferences";
+
 import { SavedResearchViews } from "./SavedResearchViews";
 import { ScanAlertButton } from "./ScanAlert";
 import { SetupTable } from "./SetupTable";
@@ -62,6 +65,7 @@ export function ScannerView() {
   const router = useRouter();
   const path = usePathname();
   const { can } = useSession();
+  const preferences = useWorkspace();
   const f = readFilters(new URLSearchParams(sp.toString()));
   const premium = can("can_early_breakout");
   const pro = can("can_earnings");
@@ -109,7 +113,7 @@ export function ScannerView() {
 
 
   return (
-    <div className="stack">
+    <div className="stack scanner-page">
       <section className="page-head">
         <div>
           <h1 className="h1">Scanner</h1>
@@ -147,7 +151,7 @@ export function ScannerView() {
       {earnings && <EarningsControls f={ef} pro={pro} set={set} />}
       {f.signal === "prebreakout" && premium && <p className="cap">The PreBreakout model&apos;s 10 strongest names in this scan, in HSF order. Sort by PreBreakout to put the highest % first.</p>}
 
-      <div className="scanner-toolbar">
+      <div className="scanner-toolbar" role="group" aria-label="Scanner tools">
       <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, when: ef.when, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100 }}
         onApply={(v) => { if ("signal" in v) set({ ...resetAll, signal: v.signal ?? "", when: v.signal === "earnings" ? (v.when ?? "") : "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25 }); }} />
       <ScanAlertButton setup={scanSignal} minScore={f.minScore} earnings={earnings && !earningsLocked(ef, pro) ? ef.when : undefined}
@@ -175,6 +179,7 @@ export function ScannerView() {
           </label>
         </section>
       </details>
+      {preferences.data && <TablePreferences key={JSON.stringify(preferences.data.table)} initial={preferences.data.table ?? { columns: [...DEFAULT_COLUMNS], compact: false }} premium={premium} />}
       </div>
 
       {earnings ? (
@@ -197,7 +202,7 @@ export function ScannerView() {
         </Empty></Card>
       ) : data ? (
         <section className={`card flush${loading || refreshing ? " dim" : ""}`} aria-busy={loading || refreshing}>
-          <SetupTable rows={data.setups} offset={offset} premium={premium} numbered={sort === "score"} sparks />
+          <SetupTable rows={data.setups} offset={offset} premium={premium} numbered={sort === "score"} sparks displayControls={false} />
         </section>
       ) : null}
 

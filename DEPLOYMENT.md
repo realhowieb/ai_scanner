@@ -78,7 +78,7 @@ secrets for scheduled jobs). The old Streamlit `st.secrets` file is no longer re
 - `SMTP_PASS` — Resend API key
 - `SMTP_FROM` — From address, e.g. `alerts@ai.hsfinest.com`
 - `SMTP_FROM_NAME` — optional display name (default: `HSF Alerts`)
-- `APP_BASE_URL` — full URL of the app, e.g. `https://hsfinestai.streamlit.app`
+- `APP_BASE_URL` — full URL of the app, e.g. `https://app.hsfinest.com`
 - `RESET_TOKEN_TTL_MINUTES` — how long reset links are valid (default: 30)
 
 ### Billing service

@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Schemas } from "@/api/client";
 import { compact, etDate, pct, price, shortDate } from "@/lib/format";
 
+import { chartBars, emaCrosses } from "@/lib/chartBars";
+import { InteractivePriceChart } from "./InteractivePriceChart";
+export { emaCrosses } from "@/lib/chartBars";
+
 type Bar = Schemas["Bar"];
+const NO_EVENTS: ChartEvent[] = [];
 /** Something that happened on a session, marked on the chart (an HSF signal firing). */
 export type ChartEvent = { date: string; label: string };
 
@@ -24,21 +29,6 @@ const OVERLAYS = [
 ] as const;
 type OverlayKey = (typeof OVERLAYS)[number]["key"];
 const MAX_EARNINGS_SLOTS = 10;
-
-type Cross = { i: number; kind: "golden" | "death" };
-
-/** Where EMA 9 crosses EMA 21: the scanner's golden cross (up) and death cross (down). */
-export function emaCrosses(bars: Bar[]): Cross[] {
-  const out: Cross[] = [];
-  for (let i = 1; i < bars.length; i++) {
-    const a = bars[i - 1]!, b = bars[i]!;
-    if (a.ema9 == null || a.ema21 == null || b.ema9 == null || b.ema21 == null) continue;
-    const prev = a.ema9 - a.ema21, curr = b.ema9 - b.ema21;
-    if (prev <= 0 && curr > 0) out.push({ i, kind: "golden" });
-    else if (prev >= 0 && curr < 0) out.push({ i, kind: "death" });
-  }
-  return out;
-}
 
 /** Round price levels (1, 2, 2.5 or 5 x 10^k apart) covering [min, max]. */
 export function niceTicks(min: number, max: number, count = 5): { ticks: number[]; decimals: number } {
@@ -81,7 +71,7 @@ function sessionsBetween(last: string, target: string): number {
 /** Daily candles plus volume (completed sessions only): EMA 9/21 with their golden and
  * death crosses, optional SMA 20/50, HSF signal days, the next earnings date, a range
  * picker and a crosshair readout. Not a live chart. */
-export function PriceChart({ bars, events = [], earningsDate, volumeFeed }: {
+export function PriceChart({ bars, events = NO_EVENTS, earningsDate, volumeFeed }: {
   bars: Bar[];
   /** "iex": volume counts IEX exchange trades only, a small share of all U.S. volume. */
   volumeFeed?: string | null;
@@ -89,7 +79,7 @@ export function PriceChart({ bars, events = [], earningsDate, volumeFeed }: {
   /** Next earnings date (YYYY-MM-DD), drawn past the last bar when it's close. */
   earningsDate?: string | null;
 }) {
-  const all = bars.filter((b) => Number.isFinite(b.close));
+  const all = useMemo(() => chartBars(bars), [bars]);
   const ranges = RANGES.filter((_r, k) => k === 0 || all.length > RANGES[k - 1]![1]);
   const [rangePick, setRange] = useState<RangeKey | null>(null);
   const [on, setOn] = useState<Record<OverlayKey, boolean>>({ ema: true, sma20: false, sma50: false });
@@ -103,12 +93,17 @@ export function PriceChart({ bars, events = [], earningsDate, volumeFeed }: {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  if (all.length < 2) return null;
 
   const fallback = W < NARROW_W ? "3M" : "6M";
   const range = ranges.find(([k]) => k === rangePick) ?? ranges.find(([k]) => k === fallback) ?? ranges[ranges.length - 1]!;
   const off = Math.max(0, all.length - range[1]);
-  const data = all.slice(off);
+  const data = useMemo(() => all.slice(off), [all, off]);
+  const [interactive, setInteractive] = useState(false);
+  const hoverDate = useCallback((date: string | null) => {
+    const i = date ? data.findIndex((bar) => bar.date === date) : -1;
+    setHover(i >= 0 ? i : null);
+  }, [data]);
+  if (all.length < 2) return null;
   const last = data[data.length - 1]!;
   const first = data[0]!;
 
@@ -174,7 +169,7 @@ export function PriceChart({ bars, events = [], earningsDate, volumeFeed }: {
     const i = Math.floor((px - PAD.l) / step);
     setHover(i >= 0 && i < data.length ? i : null);
   };
-  const onKey = (e: KeyboardEvent<SVGSVGElement>) => {
+  const onKey = (e: KeyboardEvent<Element>) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
     const cur = hover ?? data.length - 1;
@@ -208,7 +203,14 @@ export function PriceChart({ bars, events = [], earningsDate, volumeFeed }: {
         {shown.volume != null && <span>{volumeFeed === "iex" ? "IEX vol" : "Vol"} {compact(shown.volume)}</span>}
         {notes.map((n) => <span key={n} className="rd-note">{n}</span>)}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" tabIndex={0} onKeyDown={onKey}
+      <div className={`interactive-price${interactive ? " is-ready" : ""}`}
+        role="img" tabIndex={interactive ? 0 : -1} aria-hidden={!interactive}
+        aria-label={`Interactive daily price from ${etDate(first.date)} to ${etDate(last.date)}, last close ${price(last.close)}. Drag to pan, pinch or scroll to zoom. Arrow keys step through sessions.`}
+        onKeyDown={onKey} onBlur={() => setHover(null)}>
+        <InteractivePriceChart bars={data} events={events} overlays={on} earningsDate={earningsDate}
+          onReady={setInteractive} onHover={hoverDate} selectedDate={hover != null ? data[hover]?.date : null} />
+      </div>
+      <svg style={interactive ? { display: "none" } : undefined} aria-hidden={interactive} viewBox={`0 0 ${W} ${H}`} role="img" tabIndex={interactive ? -1 : 0} onKeyDown={onKey}
         aria-label={`Daily price from ${etDate(first.date)} to ${etDate(last.date)}, last close ${price(last.close)}. Arrow keys step through sessions.`}
         onPointerMove={(e: PointerEvent<SVGSVGElement>) => pick(e.clientX, e.currentTarget)}
         onPointerDown={(e: PointerEvent<SVGSVGElement>) => pick(e.clientX, e.currentTarget)}
@@ -279,12 +281,14 @@ export function PriceChart({ bars, events = [], earningsDate, volumeFeed }: {
         <div className="chart-legend" aria-hidden="true">
           {on.ema && <span><i className="mk x-golden">▲</i>Golden cross</span>}
           {on.ema && <span><i className="mk x-death">▼</i>Death cross</span>}
-          {events.length > 0 && <span><i className="mk sig">◆</i>HSF signal</span>}
+          {events.length > 0 && <span><i className="mk sig">{interactive ? "●" : "◆"}</i>HSF signal</span>}
           {showEarn && <span><i className="mk earn">┆</i>Earnings</span>}
         </div>
       )}
       <figcaption className="cap">
-        {data.length} daily bars, {etDate(first.date)} to {etDate(last.date)}.{hasEma ? (lastGolden ? ` Last golden cross ${shortDate(all[lastGolden.i]!.date)} (${all.length - 1 - lastGolden.i === 0 ? "latest session" : `${all.length - 1 - lastGolden.i} sessions ago`}).` : " No recent golden cross.") : ""} End-of-day prices, not live.{volumeFeed === "iex" ? " Volume counts IEX exchange trades only, a small share of all U.S. volume." : ""}
+        {interactive && <span className="chart-help">Drag to pan · Pinch or scroll to zoom · Arrow keys read sessions. </span>}
+        {data.length} daily bars, {etDate(first.date)} to {etDate(last.date)}.{hasEma ? (lastGolden ? ` Last golden cross ${shortDate(all[lastGolden.i]!.date)} (${all.length - 1 - lastGolden.i === 0 ? "latest session" : `${all.length - 1 - lastGolden.i} sessions ago`}).` : " No recent golden cross.") : ""} End-of-day prices, not live.{earningsDate ? ` Next earnings ${shortDate(earningsDate)}.` : ""}{volumeFeed === "iex" ? " Volume counts IEX exchange trades only, a small share of all U.S. volume." : ""}
+        {" "}<a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a> · <a href="/licenses/lightweight-charts.txt" target="_blank" rel="noreferrer">License</a>
       </figcaption>
     </figure>
   );

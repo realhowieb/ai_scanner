@@ -13,6 +13,7 @@ import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, RefreshStatus, Skelet
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price } from "@/lib/format";
+import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
 
 import { JournalInsightsCard } from "./JournalInsights";
@@ -35,7 +36,7 @@ function LogTrade({ onDone }: { onDone: () => void }) {
     ev.preventDefault();
     if (!valid) return;
     const ok = await act.run(async () => { await unwrap(api.POST("/v1/journal", { body: { ticker: t, entry_price: e, shares: n } })); return true; });
-    if (ok) { setTicker(""); setEntry(""); setShares(""); onDone(); }
+    if (ok) { captureUsage("journal_trade_logged"); setTicker(""); setEntry(""); setShares(""); onDone(); }
   };
   return (
     <form className="inline-form" onSubmit={submit} aria-label="Log a trade">
@@ -70,7 +71,7 @@ function Row({ t, pro, onChanged }: { t: Trade; pro: boolean; onChanged: () => v
           </div>
         )}
         <Dialog open={closing} title={`Close ${t.ticker}`} onClose={() => setClosing(false)}>
-          <form className="stack-sm" onSubmit={(e) => { e.preventDefault(); if (Number(exit) > 0) void close.run(async () => { await unwrap(api.POST("/v1/journal/{trade_id}/close", { ...tid(t.id), body: { exit_price: Number(exit) } })); setClosing(false); onChanged(); return true; }); }}>
+          <form className="stack-sm" onSubmit={(e) => { e.preventDefault(); if (Number(exit) > 0) void close.run(async () => { await unwrap(api.POST("/v1/journal/{trade_id}/close", { ...tid(t.id), body: { exit_price: Number(exit) } })); captureUsage("journal_trade_closed"); setClosing(false); onChanged(); return true; }); }}>
             <label className="field"><span>Exit price ($)</span><input inputMode="decimal" value={exit} onChange={(e) => setExit(e.target.value)} data-autofocus /></label>
             <ErrorLine error={close.error} />
             <div className="row-actions end"><button type="button" className="btn" onClick={() => setClosing(false)}>Cancel</button>

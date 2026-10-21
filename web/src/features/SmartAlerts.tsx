@@ -50,7 +50,7 @@ function RuleRow({ r, types, scope, emailAllowed, onChanged }: {
       <div className="grow stack-xs">
         <span className="strong">{label}</span>
         <span className="cap">
-          {r.last_triggered_at ? `Last fired ${etTime(r.last_triggered_at)}` : "Hasn't fired yet"}
+          {r.last_evaluated_at ? `Last evaluated ${etTime(r.last_evaluated_at)}` : "No evaluation recorded yet"} · {r.last_triggered_at ? `Last fired ${etTime(r.last_triggered_at)}` : "Hasn't fired yet"}
           {email ? " · Email on" : ""}
         </span>
         <ErrorLine error={act.error} />

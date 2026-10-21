@@ -2,6 +2,7 @@
 
 import type { ApiError, Schemas } from "@/api/client";
 import { RefreshStatus } from "@/components/ui";
+import { scheduledSession } from "@/lib/researchTime";
 import { etTime } from "@/lib/format";
 
 function ageLabel(at: string | null | undefined, checked: string | null | undefined): string | null {
@@ -31,6 +32,7 @@ export function ScannerDataStatus({ info, scanAt, stale, checkedAt, refreshing, 
   const asOf = info?.market_data_at;
   const savedAt = info?.last_successful_scan_at ?? scanAt;
   const checked = checkedAt ? new Date(checkedAt).toISOString() : info?.checked_at;
+  const sessionNote = scheduledSession(savedAt, checked, info?.state === "fresh" && !delayed);
   // The browser's own check time: an unchanged answer (304) keeps the server's older checked_at.
   const age = ageLabel(asOf ?? savedAt, checked);
   const time = (value?: string | null) => value ? etTime(value) : "Unavailable";
@@ -38,7 +40,9 @@ export function ScannerDataStatus({ info, scanAt, stale, checkedAt, refreshing, 
     <details>
       <summary>
         <span className="scanner-data-badge">{label}</span>
-        <span className="scanner-data-time">{asOf ? `Snapshot prices as of ${time(asOf)}` : savedAt ? `Saved scan ${time(savedAt)} · Price time unavailable` : "Snapshot time unavailable"}{age && ` · ${age}`}</span>
+        <span className="scanner-data-time">{asOf ? `Snapshot prices as of ${time(asOf)}` : savedAt ? `Saved scan ${time(savedAt)} · Price time unavailable` : "Snapshot time unavailable"}{age && ` · ${age}`}
+          {sessionNote && <span className="cap scanner-session-note">{sessionNote}</span>}
+        </span>
         <span className="scanner-data-details">Details</span>
       </summary>
       <div className="scanner-data-body">

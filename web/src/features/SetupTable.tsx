@@ -19,7 +19,7 @@ type Row = Schemas["ScanSetup"];
 /** `numbered` = rows are in HSF rank order, so the position is the rank; off for other sort orders. */
 /** The PreBreakout column shows only on Premium; other plans get one note under the rows instead of "Premium" per row. */
 /** `sparks` adds each ticker's 20-session sparkline: for current scans only, not saved history. */
-export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false }: { rows: Row[]; offset?: number; premium: boolean; numbered?: boolean; sparks?: boolean }) {
+export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true }: { rows: Row[]; offset?: number; premium: boolean; numbered?: boolean; sparks?: boolean; displayControls?: boolean }) {
   const prefs = useWorkspace();
   const [selected, setSelected] = useState<string[]>([]);
   const table = prefs.data?.table;
@@ -30,7 +30,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   const series = useDailySparks(sparks && visible("spark") ? rows.map((r) => r.ticker) : []);
   return (
     <div className={sparks && table?.compact ? "scanner-results is-compact" : "scanner-results"}>
-      {sparks && prefs.data && <TablePreferences key={JSON.stringify(table)} initial={table ?? { columns: [...DEFAULT_COLUMNS], compact: false }} premium={premium} />}
+      {sparks && displayControls && prefs.data && <TablePreferences key={JSON.stringify(table)} initial={table ?? { columns: [...DEFAULT_COLUMNS], compact: false }} premium={premium} />}
       {sparks && selected.length > 0 && <div className="row-actions compare-actions">
         <span className="cap">Select 2–4 stocks to compare · {selected.length} selected</span>
         {selected.length >= 2 && <Link className="btn btn-sm" href={`/stocks/compare?symbols=${encodeURIComponent(selected.join(","))}`}>Compare selected</Link>}

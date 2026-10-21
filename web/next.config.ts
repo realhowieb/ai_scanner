@@ -1,13 +1,16 @@
 import type { NextConfig } from "next";
+import { posthogHost } from "./src/lib/posthogConfig";
 
-// The browser only ever talks to this origin (the BFF), so connect-src can be 'self'.
+const analyticsOrigin = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim() ? ` ${posthogHost(process.env.NEXT_PUBLIC_POSTHOG_HOST)}` : "";
+
+// Product data stays same-origin. Optional analytics may contact its configured ingestion origin.
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'" + (process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""),
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self'" + analyticsOrigin,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
