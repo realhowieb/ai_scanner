@@ -81,10 +81,18 @@ export function freshness(iso: string | null | undefined, nowMs = Date.now()): {
   return { label: `Updated ${a}`, stale: (minutesSince(iso, nowMs) ?? 0) >= STALE_AFTER_MIN };
 }
 
-export function greeting(iso: string, nowMs = Date.now()): string {
-  void nowMs;
-  const h = Number(new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", hour: "numeric", hour12: false }));
+/**
+ * "Good morning" for the viewer's own clock. Leave `timeZone` out to use the
+ * browser's time zone; market times elsewhere stay in ET.
+ */
+export function greeting(nowMs = Date.now(), timeZone?: string): string {
+  const h = Number(new Date(nowMs).toLocaleString("en-US", { timeZone, hour: "numeric", hourCycle: "h23" }));
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
+
+/** "Wednesday, October 21" on the viewer's own calendar (browser time zone unless given). */
+export function localDate(nowMs = Date.now(), timeZone?: string): string {
+  return new Date(nowMs).toLocaleDateString("en-US", { timeZone, weekday: "long", month: "long", day: "numeric" });
 }
 
 export const SETUP_LABELS: Record<string, string> = {
