@@ -1,5 +1,7 @@
 "use client";
 
+import { captureUsage } from "@/lib/usageAnalytics";
+
 // Sign-up, password reset and email verification, so none of them needs the classic
 // app. They post to this site's /api/auth/* routes; tokens from sign-up go straight
 // into HttpOnly cookies on the server. The reset and verify pages live at the same
@@ -67,6 +69,7 @@ export function SignupForm() {
     track("signup_started", "signup_form");
     const o = await postAuth("signup", { email, username, password: pw, accept_terms: agree, attribution });
     if (o.ok) {
+      captureUsage("signup_completed");
       // A full page load: the new session's cookies are already set.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/today");

@@ -379,9 +379,13 @@ function Live() {
   }, [all, filters, sort, held]);
   const [showAll, setShowAll] = useState(false);
   const shownRows = showAll ? rows : rows.slice(0, 15);
-  const candidate = (value: unknown) => {
+  const candidate = (side: "long" | "short", value: unknown) => {
     const row = all.find((r) => r.ticker === value);
-    return row ? ` · DT ${row.day_trade_score == null ? "—" : Math.round(row.day_trade_score)} · ${row.dt_quality ?? "unrated"}` : "";
+    const hasStrong = all.some((r) => r.dt_direction === (side === "long" ? "bullish" : "bearish") && r.dt_quality === "strong" && !flagged(r));
+    if (!row) return <span>{hasStrong ? `See ${side} setups for candidates` : `No strong ${side} setup`}</span>;
+    const quality = row.dt_quality;
+    const strong = quality === "strong" && !flagged(row);
+    return <span className="dt-candidate">{!strong && !hasStrong && <>No strong {side} setup · </>}<strong>{row.ticker}</strong> {strong ? `top ${side} candidate` : `highest-ranked ${side}`} · DT {row.day_trade_score == null ? "—" : Math.round(row.day_trade_score)} · {quality ?? "unrated"}</span>;
   };
   const listRef = useRef<HTMLElement>(null);
   useSlide(listRef, rows.map((r) => r.ticker).join(","));
@@ -400,6 +404,7 @@ function Live() {
 
   return (
     <>
+      <DayTraderHeading state={d?.state} />
       <section className="filters" aria-label="Source">
         <label className="inline-field">Symbols
           <select value={source} onChange={(e) => setSource(e.target.value as Source)}>
@@ -411,7 +416,7 @@ function Live() {
         {d && (live
           ? failed
             ? <span className="cap dt-live dt-stale" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Couldn&apos;t refresh, retrying · checked {etTime(d.as_of)}</span>
-            : <span className="cap dt-live" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Live · updated {ago}s ago</span>
+            : <span className="cap dt-live" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Live · checked {ago}s ago</span>
           : <span className="cap">{STATE[d.state] ?? d.state} · checked {etTime(d.as_of)}{trading ? " · paused while this tab is hidden" : ""}</span>)}
         {trading && <button type="button" className="btn btn-sm" aria-pressed={!!held} onClick={togglePause}
           title="Keep rows in place while you work; prices still update">{held ? "Resume order" : "Pause order"}</button>}
@@ -422,13 +427,13 @@ function Live() {
           <span><strong>{metric(d.summary?.strong, all.filter((r) => r.dt_quality === "strong").length)}</strong> strong</span>
           <span><strong>{metric(d.summary?.developing, all.filter((r) => r.dt_quality === "developing").length)}</strong> developing</span>
           <span><strong>{metric(d.summary?.flagged, all.filter((r) => (r.quote_flags ?? []).length).length)}</strong> flagged</span>
-          <span><strong>{metric(d.summary?.best_long, "—")}</strong> top long candidate{candidate(d.summary?.best_long)}</span>
-          <span><strong>{metric(d.summary?.best_short, "—")}</strong> top short candidate{candidate(d.summary?.best_short)}</span>
+          {candidate("long", d.summary?.best_long)}
+          {candidate("short", d.summary?.best_short)}
         </div>
       )}
       {d && all.length > 0 && <FilterBar f={filters} set={setFilters} shown={rows.length} total={all.length} narrow={narrow} />}
       {d?.state === "premarket" && all.length > 0 && <p className="cap">Pre-market: Chg % is the latest trade today vs yesterday&apos;s close, and Volume and VWAP count pre-market trading only.{source.startsWith("movers") ? " Movers lists today's pre-market gappers until the open." : ""}</p>}
-      {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: last prices can be from an earlier session. Checked time is the request time, not the last trade time. Chg % and DT score use the regular session; AH shows the move since the close. Candidate highlights are relative rankings, not minimum-quality guarantees.</p>}
+      {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: last prices can be from an earlier session. Checked time is the request time, not the last trade time. The API does not supply the session date or individual trade timestamps; they cannot be verified here. Chg % and DT score use the regular session; AH shows the move since the close. Candidate highlights are relative rankings, not minimum-quality guarantees.</p>}
       {dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />
         : !d ? <Skeleton rows={8} label="Loading live quotes" />
         : all.length === 0 && d.state === "premarket" && source.startsWith("movers") && d.symbols.length === 0
@@ -534,17 +539,20 @@ function Live() {
   );
 }
 
+function DayTraderHeading({ state }: { state?: Data["state"] }) {
+  return <section className="page-head"><div><h1 className="h1">Day Trader</h1>
+    <p className="cap">{state === "closed" ? "Last-session intraday rankings · market closed."
+      : state === "afterhours" ? "Completed-session rankings with after-hours prices."
+      : state === "premarket" ? "Pre-market quotes ranked by day-trade score."
+      : state === "open" ? "Live intraday quotes ranked by day-trade score."
+      : "Intraday quotes and rankings for the current market session."}</p>
+  </div></section>;
+}
+
 export function DayTraderView() {
   const { can } = useSession();
-  return (
-    <div className="stack">
-      <section className="page-head">
-        <div>
-          <h1 className="h1">Day Trader</h1>
-          <p className="cap">Live intraday quotes ranked by day-trade score.</p>
-        </div>
-      </section>
-      {can("can_day_trader") ? <Live /> : <Card><Locked title="Day Trader is part of Pro" plan="pro">Live quotes, VWAP and relative volume for movers or your watchlist, refreshed through the session.</Locked></Card>}
-    </div>
-  );
+  return <div className="stack">{can("can_day_trader") ? <Live /> : <>
+    <DayTraderHeading />
+    <Card><Locked title="Day Trader is part of Pro" plan="pro">Live quotes, VWAP and relative volume for movers or your watchlist, refreshed through the session.</Locked></Card>
+  </>}</div>;
 }

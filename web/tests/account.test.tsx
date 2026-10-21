@@ -311,7 +311,7 @@ describe("Track record: HSF evidence (Outcome Intelligence)", () => {
 
   it("stock page line: matured count, SPY beats, medians, no forecast", () => {
     render(<SymbolLine d={oc.symbol as Schemas["OutcomeSymbol"]} />);
-    expect(screen.getByText(/1 matured signal for AAA/)).toHaveTextContent("1 of 1 beat SPY over 5 trading days. Median return +4.00%, median vs SPY +3.00%.");
+    expect(screen.getByText(/1 matured signal for AAA/)).toHaveTextContent("1 of 1 beat SPY over 5 trading days. Median 5-trading-day return +4.00%, median vs SPY +3.00%.");
     expect(screen.getByText(/not a forecast/)).toBeInTheDocument();
   });
 });

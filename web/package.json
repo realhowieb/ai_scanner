@@ -2,7 +2,7 @@
   "name": "hsf-web",
   "version": "0.1.0",
   "private": true,
-  "description": "HSF Web v2: Next.js frontend over the HSF API (P1-58). Runs beside the Streamlit app.",
+  "description": "HSF Web v2: Next.js frontend over the HSF API (P1-58). Current web UI at app.hsfinest.com.",
   "engines": {
     "node": ">=20.9.0"
   },
@@ -18,8 +18,14 @@
     "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
+    "@opentelemetry/api-logs": "^0.223.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.300.0",
+    "@opentelemetry/resources": "^3.0.0",
+    "@opentelemetry/sdk-logs": "^3.0.0",
+    "lightweight-charts": "^5.2.1",
     "next": "16.4.0",
     "openapi-fetch": "0.17.0",
+    "posthog-js": "^1.438.13",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1"

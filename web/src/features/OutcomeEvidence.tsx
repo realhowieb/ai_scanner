@@ -274,13 +274,13 @@ export function SymbolEvidence({ ticker }: { ticker: string }) {
 export function SymbolLine({ d }: { d: OutcomeSymbol }) {
   const h = d.horizons.find((x) => x.horizon === 5) ?? d.horizons[d.horizons.length - 1];
   if (!h || h.sample_size === 0) return <p className="body-sm">No earlier HSF signals for {d.ticker}.</p>;
-  if (h.matured_count === 0) return <p className="body-sm">{d.ticker}: {h.sample_size} earlier HSF signal{h.sample_size === 1 ? "" : "s"}, none matured yet.</p>;
+  if (h.matured_count === 0) return <p className="body-sm">{d.ticker}: {h.sample_size} earlier HSF signal{h.sample_size === 1 ? "" : "s"}, none matured yet (waiting for {h.horizon}-trading-day outcomes).</p>;
   return (
     <div className="stack-sm">
       <p className="body-sm">
         <strong>Historical HSF evidence:</strong> {h.matured_count} matured signal{h.matured_count === 1 ? "" : "s"} for {d.ticker} ({range(d.date_range)}).
-        {h.benchmark_count > 0 && <> {h.benchmark_beat_count} of {h.benchmark_count} beat SPY over 5 trading days.</>}
-        {" "}Median return {signed(h.median_return)}{h.benchmark_count > 0 && <>, median vs SPY {signed(h.median_excess_return)}</>}.
+        {h.benchmark_count > 0 && <> {h.benchmark_beat_count} of {h.benchmark_count} beat SPY over {h.horizon} trading days.</>}
+        {" "}Median {h.horizon}-trading-day return {signed(h.median_return)}{h.benchmark_count > 0 && <>, median vs SPY {signed(h.median_excess_return)}</>}.
         {h.pending_count > 0 && <> {h.pending_count} still pending.</>}
       </p>
       <p className="cap"><Quality q={h.evidence_quality} /> Past signals only; not a forecast.</p>

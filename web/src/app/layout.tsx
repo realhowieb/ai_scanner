@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
+import { UsageAnalytics } from "@/components/UsageAnalytics";
 import { ErrorReporter } from "@/components/ErrorReporter";
 import { OfflineReady } from "@/components/OfflineReady";
 import { STALE_BUILD_SCRIPT } from "@/lib/staleBuild";
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: STALE_BUILD_SCRIPT }} />
       </head>
       <body>
+        <UsageAnalytics />
         <ErrorReporter />
         <OfflineReady />
         {children}

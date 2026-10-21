@@ -252,6 +252,9 @@ function WatchlistChangesCard({ id }: { id: number }) {
   if (changes.error || !changes.data) return null;
   const data = changes.data;
   const s = data.summary ?? {};
+  if (data.changes.length === 0 && data.alerts.length === 0 && data.headline.length === 0 && !Number(s.total_changes)) {
+    return <p className="cap watchlist-quiet" role="status">{data.has_baseline ? "No major watchlist changes since the previous scan." : "Changes appear after two scans include this list."}</p>;
+  }
   return (
     <Card title="Since last scan" id="wl-changes" aside={data.has_baseline ? undefined : "Waiting for a baseline"}>
       <div className="metric-strip" aria-label="Watchlist changes summary">
@@ -332,17 +335,22 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           <span><strong>{attention}</strong> need attention</span>
           <span><strong>{notes}</strong> with notes</span>
         </div>
-        <button type="button" className="btn only-narrow" aria-expanded={manageOpen || !w.items.length} aria-controls="watchlist-tools" onClick={() => setManageOpen((v) => !v)}>Add tickers or manage list</button>
-        <div id="watchlist-tools" className={`watchlist-tools${manageOpen || !w.items.length ? " is-open" : ""}`}><AddTickers wl={w.id} onAdded={reload} />
-        <div className="row-actions wl-manage" aria-label="Watchlist management">
-          <button type="button" className="btn" onClick={() => { ren.clear(); setRenaming(true); }}>Rename</button>
-          <button type="button" className="btn" disabled={w.is_default || act.busy}
-            onClick={() => void act.run(async () => { await watchlists.makeDefault(w.id); reload(); return true; })}>
-            {w.is_default ? "Default list" : "Make default"}
-          </button>
-          <button type="button" className="btn btn-danger-outline" onClick={() => setDeleting(true)}>Delete</button>
+        <div className="row-actions watchlist-actions">
+          <button type="button" className="btn" aria-expanded={manageOpen || !w.items.length} aria-controls="watchlist-add" onClick={() => setManageOpen((v) => !v)}>Add tickers</button>
+          <details className="watchlist-management">
+            <summary>Manage list</summary>
+            <div className="row-actions wl-manage" aria-label="Watchlist management">
+              <button type="button" className="btn" onClick={() => { ren.clear(); setRenaming(true); }}>Rename</button>
+              <button type="button" className="btn" disabled={w.is_default || act.busy}
+                onClick={() => void act.run(async () => { await watchlists.makeDefault(w.id); reload(); return true; })}>
+                {w.is_default ? "Default list" : "Make default"}
+              </button>
+              <button type="button" className="btn btn-danger-outline" onClick={() => setDeleting(true)}>Delete</button>
+            </div>
+            <ErrorLine error={act.error} />
+          </details>
         </div>
-        <ErrorLine error={act.error} /></div>
+        <div id="watchlist-add" hidden={!manageOpen && w.items.length > 0}><AddTickers wl={w.id} onAdded={reload} /></div>
       </Card>
 
       <WatchlistChangesCard id={w.id} />

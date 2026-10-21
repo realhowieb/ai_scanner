@@ -131,6 +131,7 @@ export function AlertForm({ types, prefill, lockType = false, onCreated, submitL
         <label className="check"><input type="checkbox" checked={watchlistOnly} onChange={(e) => setWatchlistOnly(e.target.checked)} />
           <span>Only tickers on my watchlists</span></label>
       )}
+      <p className="notice" aria-label="Rule preview">{validate(spec, ticker, threshold, dir) ? "Complete the fields to preview this alert." : describeAlert({ type: spec.type, ticker: ticker.trim().toUpperCase() || "Choose a ticker", threshold: threshold.trim() && Number.isFinite(Number(threshold)) ? Number(threshold) : null, direction: dir, watchlist_only: watchlistOnly })}</p>
       {invalid && <p className="form-error" role="alert">{invalid}</p>}
       <ErrorLine error={act.error} />
       <div className="row-actions">
