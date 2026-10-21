@@ -348,8 +348,29 @@ class ScanAndStockApiTests(DataApiBase):
             self.assertEqual([s["ticker"] for s in amc["setups"]], [b])
             tomorrow = self.client.get("/v1/scans/latest/earnings?window=tomorrow", headers=self.h).json()
             self.assertEqual((tomorrow["start"], [s["ticker"] for s in tomorrow["setups"]]), (day(1).isoformat(), [b]))
-            every = self.client.get("/v1/scans/latest/earnings?include_unranked=true", headers=self.h).json()
-            self.assertEqual([(s["ticker"], s["ranked"], s["score"]) for s in every["setups"]][1:], [("ZZZQ", False, None)])
+            quotes = {"quotes": {"ZZZQ": {"last": 12.5, "chg_pct": 2.0, "gap_pct": 1.5}}, "feed": "iex"}
+            with mock.patch("api.scans.latest_quotes", return_value=quotes) as q, \
+                    mock.patch("api.scan_jobs.latest_earnings_job", return_value=None):
+                every = self.client.get("/v1/scans/latest/earnings?include_unranked=true", headers=self.h).json()
+            self.assertEqual(q.call_args.args, (["ZZZQ"],))          # only rows the scan never priced
+            self.assertEqual([(s["ticker"], s["ranked"], s["score"], s["score_source"], s["last"], s["gap_pct"])
+                              for s in every["setups"]][1:], [("ZZZQ", False, None, None, 12.5, 1.5)])
+            self.assertEqual(every["setups"][0]["score_source"], "scan")
+            self.assertIsNone(every["custom_scan_at"])
+            # A recent earnings custom scan scores the names the market scan didn't rank.
+            job = {"id": "f" * 32, "finished_at": dt.datetime(2026, 10, 21, 20, 0, tzinfo=UTC),
+                   "result": {"setups": [{"ticker": "ZZZQ", "score": 57, "primary_setup": "breakout", "last": 13.0,
+                                          "chg_pct": 3.0, "gap_pct": 0.5, "rvol": 2.1, "signals": ["breakout"]},
+                                         {"ticker": a, "score": 1}]}}
+            with mock.patch("api.scans.latest_quotes", return_value=quotes) as q, \
+                    mock.patch("api.scan_jobs.latest_earnings_job", return_value=job):
+                scored = self.client.get("/v1/scans/latest/earnings?include_unranked=true", headers=self.h).json()
+            q.assert_not_called()
+            z = scored["setups"][1]
+            self.assertEqual((z["ticker"], z["ranked"], z["score"], z["score_source"], z["primary_setup"], z["last"], z["rvol"]),
+                             ("ZZZQ", False, 57, "custom", "breakout", 13.0, 2.1))
+            self.assertNotEqual(scored["setups"][0]["score"], 1)      # a ranked row keeps the market scan's score
+            self.assertEqual((scored["custom_scan_id"], scored["custom_scan_at"]), ("f" * 32, "2026-10-21T20:00:00+00:00"))
             self.assertTrue(all(s["prob"] is None and "prebreakout" not in s["signals"] for s in week["setups"]))
             with mock.patch("api.scans.max_results_for", return_value=2):
                 capped = self.client.get("/v1/scans/latest/earnings?window=week", headers=self.h).json()

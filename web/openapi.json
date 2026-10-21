@@ -5040,6 +5040,30 @@
    },
    "EarningsScan": {
     "properties": {
+     "custom_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "When that scan finished (ISO)",
+      "title": "Custom Scan At"
+     },
+     "custom_scan_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Your earnings scan whose scores fill unranked names",
+      "title": "Custom Scan Id"
+     },
      "end": {
       "description": "Last ET day of the window (YYYY-MM-DD)",
       "title": "End",
@@ -5258,6 +5282,22 @@
       ],
       "description": "HSF Score; null when the name did not rank in the scan",
       "title": "Score"
+     },
+     "score_source": {
+      "anyOf": [
+       {
+        "enum": [
+         "scan",
+         "custom"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "scan: the latest market scan ranked it; custom: scored by your recent earnings scan (custom_scan_at); null: not scored (last/chg_pct/gap_pct are live quotes)",
+      "title": "Score Source"
      },
      "signals": {
       "default": [],
@@ -5957,6 +5997,18 @@
       ],
       "description": "Percent vs prev_close",
       "title": "Chg Pct"
+     },
+     "gap_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Today's open vs prev_close (null before the open)",
+      "title": "Gap Pct"
      },
      "last": {
       "description": "Latest trade price (the day's close after the session ends)",
