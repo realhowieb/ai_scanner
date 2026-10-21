@@ -218,6 +218,17 @@ class ScenarioTests(unittest.TestCase):
         self.assertEqual(r["system_status"], "ACTION_REQUIRED")
         self.assertEqual(r["incidents"][0]["incident_id"], "database:DATABASE_UNAVAILABLE")
 
+    def test_10b_api_memory_warning(self):
+        b = baseline()
+        b["api_ready"] = {"status": 200, "rss_mb": 380.0, "rss_peak_mb": 431.5, "memory_limit_mb": 512.0,
+                          "memory_warn_mb": 400.0, "memory_warning": True}
+        r = run(b)
+        db = r["subsystems"]["database"]
+        self.assertEqual(db["status"], "DEGRADED")
+        self.assertIn("database:API_MEMORY_HIGH", [i["incident_id"] for i in r["incidents"]])
+        b["api_ready"]["memory_warning"] = False
+        self.assertEqual(run(b)["subsystems"]["database"]["status"], "HEALTHY")
+
     def test_11_transient_429_recovered(self):
         b = baseline()
         b["maturation_report"]["alpaca_429_count"] = 2

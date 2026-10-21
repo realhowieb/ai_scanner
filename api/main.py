@@ -31,7 +31,7 @@ from api import devices, models, routes, store, user_data
 # Re-exported: tests and older callers reach these through api.main.
 from api.deps import _account_cache, _recent_account, current_account, entitlements_for, forget_account  # noqa: F401
 from api.etag import ETagMiddleware
-from api.memory import rss_mb, tune_allocator
+from api.memory import memory_status, rss_mb, tune_allocator
 from api.scans import json_safe
 from api.settings import Settings, load_settings
 
@@ -267,7 +267,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         except Exception:  # scan freshness is informational
             pass
         body = {"ok": True, "database": "ok", "db_ping_ms": db_ms, "latest_scan_at": latest,
-                "scan_age_minutes": age, **fresh}
+                "scan_age_minutes": age, **fresh, **memory_status()}
         if strict and fresh["stale"]:
             return JSONResponse({**body, "ok": False}, status_code=503)
         return body
