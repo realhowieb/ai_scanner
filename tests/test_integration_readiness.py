@@ -1,7 +1,14 @@
 import json
 from unittest import mock
 
-import pytest
+# The core-runtime job uses unittest without development dependencies. These
+# pytest checks run in the required web job with the full API dependencies.
+try:
+    import pytest
+except ImportError as exc:
+    import unittest
+
+    raise unittest.SkipTest("pytest integration checks run in the web CI job") from exc
 
 from scripts.integration_readiness import configuration_report, public_probe
 

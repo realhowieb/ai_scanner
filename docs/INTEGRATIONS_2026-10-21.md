@@ -29,6 +29,7 @@ The saved **Research to alert activation** insight now tracks `scanner_viewed` â
 `watchlist_stock_added` â†’ `alert_created` within 14 days; weekly repeat `scanner_viewed` visits
 measure browser retention, not account retention. Avoid a scanner-to-signup
 conversion interpretation: signup may precede authenticated Scanner access.
+Duplicate or invalid-only watchlist additions do not count as activation events.
 
 Read-only production checks during this task found web/API liveness healthy,
 no PostHog ingestion origin in the live web CSP, and a PostHog project banner
@@ -113,7 +114,7 @@ never sends analytics, errors, notifications, emails, AI requests, or trades.
 ## Verification
 
 - Backend integration/guardrail tests: 88 passed, 1 skipped, 4 subtests passed.
-- Frontend: 49 test files / 388 tests passed; type checking, lint and production build passed.
+- Frontend: 49 test files / 389 tests passed; type checking, lint and production build passed.
 - CI runs the backend notification/monitoring suite with actual API dependencies.
 - No scoring, rankings, outcome calculations, authentication, billing, plan access,
   user watchlists or existing alert rules changed.
