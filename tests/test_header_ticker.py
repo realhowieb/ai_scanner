@@ -4,7 +4,7 @@ from __future__ import annotations
 import importlib.util
 import unittest
 
-_DEPS = importlib.util.find_spec("streamlit") is not None and importlib.util.find_spec("pandas") is not None
+_DEPS = True and importlib.util.find_spec("pandas") is not None
 
 
 @unittest.skipUnless(_DEPS, "header tape needs streamlit + pandas")

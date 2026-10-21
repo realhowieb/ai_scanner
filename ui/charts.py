@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import pandas as pd
-import streamlit as st
+
+from utils.st_compat import st
 
 # plotly and yfinance are deliberately NOT imported at module scope: this
 # module loads during app boot via app.py's import chain, and both libraries

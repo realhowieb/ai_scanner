@@ -50,13 +50,13 @@ afterEach(() => vi.unstubAllGlobals());
 
 it("saves scanner views to the account and reloads them after remount", async () => {
   const apply = vi.fn();
-  const first = render(<SavedResearchViews kind="scanner_views" current={{ name: "", min: 60, signal: "breakout", size: 25, sort: "score" }} onApply={apply} />);
+  const first = render(<SavedResearchViews kind="scanner_views" current={{ name: "", min: 60, signal: "breakout", size: 25, sort: "score", when: "today" }} onApply={apply} />);
   await waitFor(() => expect(screen.getByLabelText("Saved views")).toBeEnabled());
   fireEvent.change(screen.getByLabelText("View name"), { target: { value: "Morning" } });
   fireEvent.click(screen.getByText("Save view"));
   await waitFor(() => expect(patches).toHaveLength(1));
   first.unmount(); clearApiCache();
-  render(<SavedResearchViews kind="scanner_views" current={{ name: "", min: 0, signal: "", size: 25, sort: "score" }} onApply={apply} />);
+  render(<SavedResearchViews kind="scanner_views" current={{ name: "", min: 0, signal: "", size: 25, sort: "score", when: "today" }} onApply={apply} />);
   await screen.findByRole("option", { name: "Morning" });
   fireEvent.change(screen.getByLabelText("Saved views"), { target: { value: "Morning" } });
   expect(apply).toHaveBeenCalledWith(expect.objectContaining({ min: 60, signal: "breakout" }));

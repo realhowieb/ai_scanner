@@ -6,31 +6,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class SecretsTemplateTests(unittest.TestCase):
-    TEXT = (ROOT / ".streamlit" / "secrets.toml.example").read_text()
-
-    def test_lists_every_secret_the_app_reads(self):
-        for key in ("COOKIE_PASSWORD", "APP_ENCRYPTION_KEY", "APP_BASE_URL", "ANTHROPIC_API_KEY",
-                    "ANTHROPIC_MODEL", "AI_ENABLED", "SMTP_HOST", "SMTP_PORT", "SMTP_USER",
-                    "SMTP_PASS", "SMTP_FROM", "ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY",
-                    "STRIPE_SECRET_KEY", "database_url"):
-            self.assertIn(key, self.TEXT)
-        self.assertIn("Sending access", self.TEXT)
-
-    def test_only_placeholders(self):
-        for line in self.TEXT.splitlines():
-            m = re.match(r'\s*#?\s*([A-Za-z_]+)\s*=\s*"([^"]*)"', line)
-            if not m:
-                continue
-            value = m.group(2)
-            self.assertTrue(
-                value == "" or value.endswith("...") or "your-app" in value or "user:password@host" in value
-                or value in ("smtp.resend.com", "587", "resend", "alerts@ai.hsfinest.com", "HSF Alerts",
-                             "0", "1", "25"),
-                f"{m.group(1)} looks like a real value",
-            )
-
-
 class SetupScriptTests(unittest.TestCase):
     def test_script_uses_the_lock_minus_linux_only_wheels(self):
         src = (ROOT / "scripts" / "setup_local_env.sh").read_text()

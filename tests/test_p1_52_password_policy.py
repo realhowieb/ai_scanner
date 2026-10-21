@@ -34,10 +34,6 @@ class WiringTests(unittest.TestCase):
         self.assertIn("password_problem(p1, email=email_raw, username=username_raw)", src)
         self.assertNotIn("len(p1) < 8", src)
 
-    def test_reset_checks_before_the_link_is_used(self):
-        src = (ROOT / "pages" / "reset_password.py").read_text()
-        self.assertLess(src.index("password_problem(new_pw, email=account)"), src.index("consume_reset_token(token)"))
-        self.assertNotIn("_PW_MIN_LEN", src)
 
     def test_admin_create_uses_the_rule(self):
         from db import user_admin

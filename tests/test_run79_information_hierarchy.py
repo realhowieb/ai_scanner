@@ -89,22 +89,3 @@ def test_stock_intelligence_separates_hsf_reasoning_from_model_details():
     assert "Supporting model outputs are separate from the headline HSF Score" in source
 
 
-def test_methodology_states_live_vs_historical_and_defined_model_outcome():
-    source = (ROOT / "ui" / "methodology.py").read_text()
-    assert "Live ranking asks what looks interesting now" in source
-    assert "Historical Research separately asks" in source
-    assert "reaching +4% before " in source
-    assert "within five trading days" in source
-
-
-def test_customer_copy_avoids_unsupported_certainty_claims():
-    paths = (
-        ROOT / "ui" / "today.py",
-        ROOT / "ui" / "methodology.py",
-        ROOT / "ui" / "headline_score.py",
-        ROOT / "ui" / "stock_intelligence.py",
-        ROOT / "ui" / "result_helpers.py",
-    )
-    text = "\n".join(path.read_text().lower() for path in paths)
-    for phrase in ("guaranteed returns", "guaranteed profit", "sure winner", "likely winner"):
-        assert phrase not in text

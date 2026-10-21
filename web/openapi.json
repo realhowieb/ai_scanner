@@ -5027,6 +5027,271 @@
     "title": "EarningsItem",
     "type": "object"
    },
+   "EarningsScan": {
+    "properties": {
+     "end": {
+      "description": "Last ET day of the window (YYYY-MM-DD)",
+      "title": "End",
+      "type": "string"
+     },
+     "freshness": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/DataFreshness"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "limited": {
+      "title": "Limited",
+      "type": "boolean"
+     },
+     "max_results": {
+      "title": "Max Results",
+      "type": "integer"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan At"
+     },
+     "setups": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/EarningsSetup"
+      },
+      "title": "Setups",
+      "type": "array"
+     },
+     "stale": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stale"
+     },
+     "start": {
+      "description": "First ET day of the window (YYYY-MM-DD)",
+      "title": "Start",
+      "type": "string"
+     },
+     "total": {
+      "description": "Ranked setups that report in the window, before the plan cap",
+      "title": "Total",
+      "type": "integer"
+     },
+     "unranked_total": {
+      "description": "Names that report in the window but did not rank in the scan",
+      "title": "Unranked Total",
+      "type": "integer"
+     },
+     "window": {
+      "enum": [
+       "today",
+       "tomorrow",
+       "week"
+      ],
+      "title": "Window",
+      "type": "string"
+     }
+    },
+    "required": [
+     "window",
+     "start",
+     "end",
+     "total",
+     "unranked_total",
+     "max_results",
+     "limited"
+    ],
+    "title": "EarningsScan",
+    "type": "object"
+   },
+   "EarningsSetup": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "days_until": {
+      "description": "Days from today's ET date",
+      "title": "Days Until",
+      "type": "integer"
+     },
+     "earnings_date": {
+      "description": "YYYY-MM-DD",
+      "title": "Earnings Date",
+      "type": "string"
+     },
+     "fading": {
+      "default": false,
+      "title": "Fading",
+      "type": "boolean"
+     },
+     "gap_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gap Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "n_signals": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "N Signals"
+     },
+     "on_watchlist": {
+      "default": false,
+      "title": "On Watchlist",
+      "type": "boolean"
+     },
+     "primary_setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Primary Setup"
+     },
+     "prob": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "PreBreakout model output; null below Premium",
+      "title": "Prob"
+     },
+     "rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Position in the latest scan's HSF ranking",
+      "title": "Rank"
+     },
+     "ranked": {
+      "default": true,
+      "title": "Ranked",
+      "type": "boolean"
+     },
+     "rvol": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rvol"
+     },
+     "score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "HSF Score; null when the name did not rank in the scan",
+      "title": "Score"
+     },
+     "signals": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "bmo (before open) / amc (after close) / \u2026 when known",
+      "title": "Time"
+     }
+    },
+    "required": [
+     "ticker",
+     "earnings_date",
+     "days_until"
+    ],
+    "title": "EarningsSetup",
+    "type": "object"
+   },
    "EmailBody": {
     "properties": {
      "email": {
@@ -9527,9 +9792,69 @@
       "description": "Latest market scan (ISO); null when none",
       "title": "Latest Scan At"
      },
+     "memory_limit_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The instance's memory limit (MB)",
+      "title": "Memory Limit Mb"
+     },
+     "memory_warn_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "memory_warning turns on at this peak (MB)",
+      "title": "Memory Warn Mb"
+     },
+     "memory_warning": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The peak reached memory_warn_mb: close to the limit, where Render restarts the API",
+      "title": "Memory Warning"
+     },
      "ok": {
       "title": "Ok",
       "type": "boolean"
+     },
+     "rss_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "API memory in use now (MB)",
+      "title": "Rss Mb"
+     },
+     "rss_peak_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Highest API memory seen since the last restart (MB)",
+      "title": "Rss Peak Mb"
      },
      "scan_age_minutes": {
       "anyOf": [
@@ -10669,7 +10994,8 @@
        "gapper",
        "golden_cross",
        "gainer",
-       "prebreakout"
+       "prebreakout",
+       "earnings"
       ],
       "title": "Signal",
       "type": "string"
@@ -10694,6 +11020,17 @@
        "prob"
       ],
       "title": "Sort",
+      "type": "string"
+     },
+     "when": {
+      "default": "today",
+      "description": "Earnings window (signal earnings)",
+      "enum": [
+       "today",
+       "tomorrow",
+       "week"
+      ],
+      "title": "When",
       "type": "string"
      }
     },
@@ -21392,6 +21729,99 @@
      }
     ],
     "summary": "Scans Latest"
+   }
+  },
+  "/v1/scans/latest/earnings": {
+   "get": {
+    "description": "Setups in the latest market scan that report earnings in the window, soonest first,\nthen by HSF Score, up to the plan's row cap.",
+    "operationId": "scans_earnings_v1_scans_latest_earnings_get",
+    "parameters": [
+     {
+      "description": "today (free), tomorrow or week = today + 7 days (Pro)",
+      "in": "query",
+      "name": "window",
+      "required": false,
+      "schema": {
+       "default": "today",
+       "description": "today (free), tomorrow or week = today + 7 days (Pro)",
+       "enum": [
+        "today",
+        "tomorrow",
+        "week"
+       ],
+       "title": "Window",
+       "type": "string"
+      }
+     },
+     {
+      "description": "Before open or after close only",
+      "in": "query",
+      "name": "time",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "bmo",
+          "amc"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Before open or after close only",
+       "title": "Time"
+      }
+     },
+     {
+      "description": "Also list names that report but did not rank",
+      "in": "query",
+      "name": "include_unranked",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Also list names that report but did not rank",
+       "title": "Include Unranked",
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/EarningsScan"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Earnings scanner"
    }
   },
   "/v1/scans/latest/movers": {

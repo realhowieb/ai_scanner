@@ -8,7 +8,7 @@ they stay reachable by their email-link URLs (and from Settings). Never raises.
 from __future__ import annotations
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 

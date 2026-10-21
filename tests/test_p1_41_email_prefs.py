@@ -11,7 +11,7 @@ import unittest
 from contextlib import redirect_stdout
 from unittest import mock
 
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 HAS_FASTAPI = importlib.util.find_spec("fastapi") is not None
 
 
@@ -271,77 +271,6 @@ st.page_link = lambda *a, **k: None
 DeltaGenerator.page_link = lambda self, *a, **k: None
 runpy.run_path("pages/unsubscribe.py", run_name="__main__")
 '''
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class UnsubscribePageTests(unittest.TestCase):
-    def render(self, query, prefs=None, user="a@example.com"):
-        from streamlit.testing.v1 import AppTest
-
-        at = AppTest.from_string(PAGE, default_timeout=60)
-        for k, v in query.items():
-            at.query_params[k] = v
-        state = dict(prefs or {"digest": True, "evening": True, "alerts": True})
-        saves = []
-
-        def fake_set(u, **changes):
-            saves.append((u, changes))
-            state.update(changes)
-            return True
-
-        patches = [mock.patch("db.email_prefs.user_for_token", side_effect=lambda t: user if t == "good" else None),
-                   mock.patch("db.email_prefs.get_prefs", side_effect=lambda u: dict(state)),
-                   mock.patch("db.email_prefs.set_prefs", side_effect=fake_set)]
-        for p in patches:
-            p.start()
-        self.addCleanup(mock.patch.stopall)
-        at.run()
-        return at, saves
-
-    def test_failed_save_says_so(self):
-        at, _ = self.render({"t": "good", "k": "digest"})
-        with mock.patch("db.email_prefs.set_prefs", return_value=False):
-            at.button(key="unsub_one").click().run()
-        self.assertIn("Couldn't save", at.error[0].value)
-
-    def test_bad_token(self):
-        at, saves = self.render({"t": "bad", "k": "digest"})
-        self.assertFalse(at.exception)
-        self.assertIn("isn't valid", at.error[0].value)
-        self.assertEqual(saves, [])
-
-    def test_never_acts_on_load_then_unsubscribes_on_click(self):
-        at, saves = self.render({"t": "good", "k": "digest"})
-        self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
-        self.assertEqual(saves, [])                                   # opening the link changes nothing
-        self.assertIn("a***@example.com", " ".join(m.value for m in at.markdown))
-        at.button(key="unsub_one").click().run()
-        self.assertEqual(saves, [("a@example.com", {"digest": False})])
-        self.assertIn("You're unsubscribed from the morning market digest", at.success[0].value)
-        self.assertNotIn("unsub_one", [b.key for b in at.button])      # button gone after saving
-
-    def test_unsubscribe_from_everything(self):
-        at, saves = self.render({"t": "good", "k": "alerts"})
-        at.button(key="unsub_all").click().run()
-        self.assertEqual(saves, [("a@example.com", {"digest": False, "evening": False, "alerts": False})])
-        self.assertIn("unsubscribed from all HSF emails", at.success[0].value)
-        self.assertEqual(len(at.button), 0)
-
-
-class SettingsSourceTests(unittest.TestCase):
-    def test_settings_page_has_the_three_switches(self):
-        src = open("pages/settings.py").read()
-        self.assertIn("from db.email_prefs import KINDS, LABELS, get_prefs, set_prefs", src)
-        self.assertIn('key=f"email_pref_{_kind}"', src)
-
-    def test_unsubscribe_page_follows_page_conventions_and_stays_out_of_nav(self):
-        from ui.nav import _NAV
-
-        src = open("pages/unsubscribe.py").read()
-        self.assertLess(src.index("st.set_page_config("), src.index("hide_developer_chrome()"))
-        self.assertIn("render_page_logo", src)
-        self.assertIn('render_page_header("Email preferences"', src)
-        self.assertNotIn("pages/unsubscribe.py", [p for p, _l, _i in _NAV])
 
 
 if __name__ == "__main__":

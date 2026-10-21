@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar
 import pandas as pd
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except ModuleNotFoundError:
     from types import SimpleNamespace as _NS
     st = _NS(  # type: ignore[assignment]

@@ -1,3 +1,9 @@
 # Optional integrations kept in the full deploy profile.
 alpaca-py<1
 anthropic>=0.69.0,<1
+# Parquet export for scripts/research_dataset.py. Not in core: pandas imports pyarrow
+# whenever it is installed, which cost the API and scheduled jobs ~30 MB of memory.
+# pyarrow 25.0.0 is suspected of a segfault regression in
+# pandas_compat.convert_column (faulthandler traces land there on clean-dtype
+# frames, intermittent per container). Hold the 23.x line until a fixed 25.x/26 ships.
+pyarrow>=23.0.1,<24

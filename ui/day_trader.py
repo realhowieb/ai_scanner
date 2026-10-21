@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover - pandas may be absent in minimal envs
     pd = None  # type: ignore[assignment]
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover - headless envs; pure helpers still work
     st = None  # type: ignore[assignment]
 

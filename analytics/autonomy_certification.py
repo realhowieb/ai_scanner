@@ -824,9 +824,9 @@ def gate_s_anti_peeking(extra_artifacts: Optional[List[Path]] = None) -> Dict[st
     bad = {k: sh.forbidden_keys(v) + sh.forbidden_text(json.dumps(v, default=str)) for k, v in docs.items()}
     md = sh.render_markdown(h) + rc.render_plan_md(out["plan"]) + rc.render_escalation_md(out["escalation"])
     bad["markdown"] = sh.forbidden_text(md)
-    # The Streamlit view only renders the (already audited) model; audit its source text too.
-    view_src = (ROOT / "ui" / "system_health_view.py").read_text()
-    bad["streamlit view source"] = sh.forbidden_text(view_src) + [
+    # The web admin view only renders the (already audited) model; audit its source text too.
+    view_src = (ROOT / "web" / "src" / "features" / "AdminView.tsx").read_text()
+    bad["admin view source"] = sh.forbidden_text(view_src) + [
         t for t in ("win_rate", "mean_return", "spearman", "mfe_mean", "effect_size") if t in view_src]
     for p in extra_artifacts or []:
         if p.exists():

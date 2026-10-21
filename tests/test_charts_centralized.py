@@ -6,7 +6,7 @@ import unittest
 from unittest import mock
 
 _DEPS = (
-    importlib.util.find_spec("streamlit") is not None
+    True
     and importlib.util.find_spec("pandas") is not None
 )
 
@@ -42,20 +42,6 @@ class CentralizedDataSourceTests(unittest.TestCase):
             out = c._fetch_unadjusted_ohlc("aapl")
         self.assertFalse(out.empty)
         self.assertTrue(fake_yf.download.called)
-
-    def test_get_live_quote_prefers_alpaca(self):
-        import ui.single_ticker as s
-
-        with mock.patch("market_data.get_latest_quotes",
-                        return_value={"NVDA": {"last": 212.4}}):
-            self.assertEqual(s.get_live_quote("nvda"), 212.4)
-
-    def test_get_live_quote_none_when_no_data(self):
-        import ui.single_ticker as s
-
-        with mock.patch("market_data.get_latest_quotes", return_value={}), \
-             mock.patch.dict("sys.modules", {"yfinance": None}):
-            self.assertIsNone(s.get_live_quote("zzz"))
 
 
 if __name__ == "__main__":

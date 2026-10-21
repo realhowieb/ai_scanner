@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except ImportError:  # pragma: no cover - exercised by lean CI/test environments
     class _StreamlitFallback:
         @staticmethod

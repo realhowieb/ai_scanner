@@ -49,7 +49,7 @@ def _clear_note() -> None:
 def last_failure_for_admin() -> str | None:
     """P2-32: why the last resend failed — only for admins, else None."""
     try:
-        import streamlit as st
+        from utils.st_compat import st
 
         if not st.session_state.get("is_admin"):
             return None
@@ -84,7 +84,7 @@ def require_verified_for_upgrade(email: str, *, key_suffix: str = "") -> bool:
     When unverified, renders a notice + "resend verification" button and
     returns False so the caller blocks the upgrade.
     """
-    import streamlit as st
+    from utils.st_compat import st
 
     if not email:
         return True

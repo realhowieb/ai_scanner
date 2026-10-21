@@ -314,6 +314,48 @@ class ScanAndStockApiTests(DataApiBase):
             capped = self.client.get("/v1/scans/latest", headers=self.h).json()
         self.assertEqual((len(capped["setups"]), capped["limited"]), (2, True))
 
+    def test_earnings_scanner_joins_the_scan_with_the_calendar(self):
+        from api.scans import _et_date
+
+        top = [s["ticker"] for s in self.client.get("/v1/scans/latest", headers=self.h).json()["setups"]]
+        a, b, c = top[0], top[1], top[2]
+        today = _et_date()
+        day = lambda n: today + dt.timedelta(days=n)
+        cal = [{"symbol": a, "earnings_date": day(0), "earnings_time": "BMO"},
+               {"symbol": b, "earnings_date": day(1), "earnings_time": "amc"},
+               {"symbol": c, "earnings_date": day(5), "earnings_time": None},
+               {"symbol": "ZZZQ", "earnings_date": day(0), "earnings_time": "AMC"},
+               {"symbol": "OLD", "earnings_date": day(-1), "earnings_time": "AMC"}]
+        wid = self.client.post("/v1/watchlists", json={"name": "Mine"}, headers=self.h).json()["id"]
+        self.client.post(f"/v1/watchlists/{wid}/tickers", json={"tickers": [b]}, headers=self.h)
+        free = self.auth(self.login("free@example.com").json()["access_token"])
+        with mock.patch("db.earnings.fetch_earnings_this_week", return_value=cal) as f:
+            r = self.client.get("/v1/scans/latest/earnings", headers=free)
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(f.call_args.kwargs, {"days_ahead": 0, "start": today})
+            out = r.json()
+            self.assertEqual([s["ticker"] for s in out["setups"]], [a])
+            self.assertEqual((out["setups"][0]["time"], out["setups"][0]["days_until"], out["setups"][0]["rank"]),
+                             ("bmo", 0, 1))
+            self.assertEqual((out["total"], out["unranked_total"]), (1, 1))
+            for w in ("tomorrow", "week"):
+                self.assertEqual(self.client.get(f"/v1/scans/latest/earnings?window={w}", headers=free).status_code, 403)
+            week = self.client.get("/v1/scans/latest/earnings?window=week", headers=self.h).json()
+            self.assertEqual([s["ticker"] for s in week["setups"]], [a, b, c])          # soonest first
+            self.assertEqual([s["on_watchlist"] for s in week["setups"]], [False, True, False])
+            self.assertEqual(f.call_args.kwargs, {"days_ahead": 7, "start": today})
+            amc = self.client.get("/v1/scans/latest/earnings?window=week&time=amc", headers=self.h).json()
+            self.assertEqual([s["ticker"] for s in amc["setups"]], [b])
+            tomorrow = self.client.get("/v1/scans/latest/earnings?window=tomorrow", headers=self.h).json()
+            self.assertEqual((tomorrow["start"], [s["ticker"] for s in tomorrow["setups"]]), (day(1).isoformat(), [b]))
+            every = self.client.get("/v1/scans/latest/earnings?include_unranked=true", headers=self.h).json()
+            self.assertEqual([(s["ticker"], s["ranked"], s["score"]) for s in every["setups"]][1:], [("ZZZQ", False, None)])
+            self.assertTrue(all(s["prob"] is None and "prebreakout" not in s["signals"] for s in week["setups"]))
+            with mock.patch("api.scans.max_results_for", return_value=2):
+                capped = self.client.get("/v1/scans/latest/earnings?window=week", headers=self.h).json()
+            self.assertEqual((len(capped["setups"]), capped["total"], capped["limited"]), (2, 3, True))
+        self.assertEqual(self.client.get("/v1/scans/latest/earnings?window=month", headers=self.h).status_code, 422)
+
     def test_latest_scan_counts_the_whole_scan_beside_the_filtered_total(self):
         whole = self.client.get("/v1/scans/latest", headers=self.h).json()
         self.assertEqual(whole["scan_total"], whole["total"])
@@ -429,6 +471,14 @@ class ReliabilityTests(DataApiBase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(ping.call_count, 2)
         self.assertIsInstance(r.json()["db_ping_ms"], float)
+
+    def test_readyz_reports_memory_and_warns_at_the_line(self):
+        with mock.patch("api.store.ping"), mock.patch("api.today.market_runs", return_value=[]), \
+                mock.patch("api.memory._peak_mb", 450.0), mock.patch.dict("os.environ", {"HSF_MEMORY_WARN_MB": "400"}):
+            body = self.client.get("/readyz").json()
+        self.assertEqual(body["memory_limit_mb"], 512.0)
+        self.assertGreaterEqual(body["rss_peak_mb"], 450.0)
+        self.assertTrue(body["memory_warning"])
 
     def test_get_answers_carry_an_etag_and_revalidate_to_304(self):
         r = self.client.get("/v1/watchlists", headers=self.h)

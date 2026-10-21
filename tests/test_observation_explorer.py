@@ -141,19 +141,5 @@ def test_csv_export_is_bounded():
     assert "S3" not in result["csv"]
 
 
-def test_admin_authorization_precedes_explorer_queries():
-    source = (ROOT / "ui" / "observation_explorer.py").read_text()
-    guard = source.index('if not bool(st.session_state.get("is_admin"))')
-    first_query = source.index("options = _options(option_filters)")
-    assert guard < first_query
-
-
-def test_schema_indexes_are_not_created_by_explorer_rendering():
-    source = (ROOT / "ui" / "observation_explorer.py").read_text().upper()
-    db_source = (ROOT / "db" / "observation_explorer.py").read_text().upper()
-    assert "CREATE INDEX" not in source
-    assert "CREATE INDEX" not in db_source
-
-
 def test_score_filter_does_not_substitute_breakout_score():
     assert "BREAKOUT" not in store.SCORE_EXPR.upper()

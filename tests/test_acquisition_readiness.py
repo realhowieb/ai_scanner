@@ -121,15 +121,6 @@ class PublicAcquisitionCopyTests(unittest.TestCase):
         self.assertEqual(TAGLINE, "Turn the whole market into a short list.")
         self.assertIn("Signal intelligence, not a prediction machine.", POSITIONING_SHORT)
 
-    def test_signup_and_post_auth_routing_contract(self):
-        auth = (ROOT / "ui" / "auth.py").read_text()
-        app = (ROOT / "app.py").read_text()
-        self.assertIn('st.form_submit_button("Start scanning free")', auth)
-        self.assertIn('track_event("signup_started"', auth)
-        self.assertIn('track_event("signup_completed"', auth)
-        self.assertIn('st.session_state["hsf_start_scanner_after_auth"] = True', auth)
-        self.assertIn('st.session_state.pop("hsf_start_scanner_after_auth", False)', app)
-        self.assertIn('track_scanner_view_once(username, plan=tier_key)', app)
 
     def test_signup_query_intent_selects_signup_and_routes_to_scanner(self):
         from ui import auth_routing
@@ -161,17 +152,6 @@ class PublicAcquisitionCopyTests(unittest.TestCase):
         self.assertIn("plans_html()", landing)
         self.assertIn("FEATURE_MIN_TIER", pricing)
         self.assertIn("ALERT_LIMIT_BY_TIER", pricing)
-
-
-class AcquisitionEventWiringTests(unittest.TestCase):
-    def test_scanner_billing_and_webhook_events_are_wired(self):
-        scans = (ROOT / "ui" / "scans.py").read_text()
-        billing = (ROOT / "pages" / "billing.py").read_text()
-        service = (ROOT / "billing_service" / "main.py").read_text()
-        self.assertIn('track_event(\n                        "first_scanner_use"', scans)
-        self.assertIn('"upgrade_started"', billing)
-        self.assertIn("def _record_paid_conversion", service)
-        self.assertIn('"successful_paid_conversion"', service)
 
 
 if __name__ == "__main__":

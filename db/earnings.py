@@ -595,17 +595,18 @@ def mark_earnings_refreshed_today(refresh_key: str, *, conn=None) -> None:
 # UI helpers (read-only)
 # -------------------------
 
-def fetch_earnings_this_week(*, conn=None, days_ahead: int = 7):
+def fetch_earnings_this_week(*, conn=None, days_ahead: int = 7, start: Optional[date] = None):
     """Return upcoming earnings rows for the next N days (inclusive).
 
-    This is DB-only (no Yahoo calls). Intended for UI panels.
+    This is DB-only (no Yahoo calls). Intended for UI panels. `start` (default: today in
+    UTC) lets callers count days from the market's own date instead.
 
     Returns: list[dict] with keys: symbol, earnings_date, earnings_time, updated_at
     """
     c = _get_conn(conn)
     ensure_earnings_table(c)
 
-    utc_today = datetime.now(timezone.utc).date()
+    utc_today = start or datetime.now(timezone.utc).date()
     end_day = utc_today.fromordinal(utc_today.toordinal() + max(0, int(days_ahead)))
 
     sql = """

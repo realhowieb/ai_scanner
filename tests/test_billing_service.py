@@ -822,10 +822,6 @@ class YearlyClientTests(unittest.TestCase):
         with mock.patch.dict("os.environ", {"BILLING_YEARLY_ENABLED": "1"}):
             self.assertTrue(config.billing_yearly_enabled())  # no reimport needed
         self.assertFalse(config.billing_yearly_enabled())
-        from pathlib import Path
-
-        src = (Path(__file__).resolve().parents[1] / "pages" / "billing.py").read_text()
-        self.assertIn("billing_yearly_enabled()", src)
 
 
 

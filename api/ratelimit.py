@@ -6,7 +6,10 @@ instance count; the per-account limits in the database still apply.
 """
 from __future__ import annotations
 
+import hmac
+import ipaddress
 import math
+import os
 import threading
 import time
 from collections import deque
@@ -35,8 +38,8 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "delete_account": (5, 3600), # per account: password attempts on DELETE /v1/me
     "events": (120, 3600),       # per IP: anonymous funnel events from the web landing page
     "unsubscribe": (30, 600),    # per IP: token lookups on the emailed unsubscribe link
-    "client_errors": (30, 600),
-    "export": (10, 3600),        # per account: "Download my data"  # per IP: crash reports from the web app
+    "client_errors": (30, 600),  # per IP: crash reports from the web app
+    "export": (10, 3600),        # per account: "Download my data"
 }
 _MAX_KEYS = 50_000  # bound memory if someone sprays many addresses
 
@@ -44,10 +47,30 @@ _hits: Dict[Tuple[str, str], Deque[float]] = {}
 _lock = threading.Lock()
 
 
+def _trusted_proxy_ip(request: Request) -> Optional[str]:
+    """The visitor address the web server forwards (web/src/server/clientAddress.ts).
+    Trusted only when the call carries HSF_PROXY_SECRET, which only the web server
+    knows; otherwise every visitor of the website would share the web server's limit."""
+    secret = os.environ.get("HSF_PROXY_SECRET", "").strip()
+    if not secret:
+        return None
+    given = request.headers.get("x-hsf-proxy-key", "")
+    if not given or not hmac.compare_digest(given.encode(), secret.encode()):
+        return None
+    try:
+        return str(ipaddress.ip_address(request.headers.get("x-hsf-client-ip", "").strip()))
+    except ValueError:
+        return None
+
+
 def client_ip(request: Request) -> str:
-    """The caller's address. Render's proxy appends the real client address as the
-    LAST X-Forwarded-For entry; earlier entries come from the client and can be
-    forged, so they are ignored."""
+    """The caller's address. Calls relayed by the web server use the visitor address
+    it forwards (see _trusted_proxy_ip). Otherwise Render's proxy appends the real
+    client address as the LAST X-Forwarded-For entry; earlier entries come from the
+    client and can be forged, so they are ignored."""
+    relayed = _trusted_proxy_ip(request)
+    if relayed:
+        return relayed
     xff = request.headers.get("x-forwarded-for", "")
     if xff.strip():
         return xff.split(",")[-1].strip()[:64]

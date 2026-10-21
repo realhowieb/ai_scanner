@@ -12,7 +12,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | Method | Path | Auth | What |
 |---|---|---|---|
 | GET | `/healthz` | none | Liveness only (no database call). Use as the Render health check. |
-| GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring; 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
+| GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring and the API's memory (`rss_mb`, `rss_peak_mb`, `memory_warning`); 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
 | POST | `/v1/auth/login` | none | `{"email","password","client"?}` → `access_token` (15 min), `refresh_token` (30 days). Same accounts and passwords as the web app. 10 failed attempts in 10 minutes → 429. |
 | POST | `/v1/auth/refresh` | none | `{"refresh_token"}` → a new pair. Each refresh token works once. A retry within 30 s of rotating (lost response, two refreshes at once) gets another pair; a later replay, or one after logout, is treated as theft and revokes every session of that account. |
 | POST | `/v1/auth/logout` | none | `{"refresh_token","push_token"?}` → 204, token revoked; with `push_token`, that device stops getting this account's pushes. |
@@ -31,6 +31,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | POST | `/v1/billing/portal` | Bearer | `{"flow"?: "cancel"}` → Stripe Customer Portal URL (404 when there's no subscription yet). |
 | GET | `/v1/today` | Bearer | Market phase, Before the open (this morning's pre-market movers, 8:35-10:30 ET), Top setups, After the close, last session recap. Pre/after-hours movers are Pro+ (`locked: true` below Pro); Premium model fields are redacted below Premium. Each section fails on its own (`errors` lists it). |
 | GET | `/v1/scans/latest` | Bearer | The latest market scan's HSF setups, ranked as in the Scanner. `limit` (≤200), `offset`, `min_score`, `signal`. A plan sees its Scanner row cap (Free 25, Pro 100, Premium 200; `limited: true` when the cap hides some). PreBreakout (`prob`, `signal=prebreakout`) is Premium. |
+| GET | `/v1/scans/latest/earnings` | Bearer | Earnings scanner: latest-scan setups that report earnings in `window` (`today` free; `tomorrow`, `week` = today + 7 ET days are Pro, 403 otherwise), soonest day first then HSF Score, with `time` (bmo/amc), `on_watchlist` and the scan row fields. `time=bmo|amc` filters; `include_unranked=true` adds names that report but did not rank (`score: null`). Plan row cap as above. |
 | POST | `/v1/scans` | Bearer | Start a **custom scan** (the web's Custom Scan page) → **202** with a job: `{"universe": "sp500"\|"nasdaq"\|"combo"\|"us_market"\|"watchlist"\|"ticker", "ticker"?, "watchlist_id"?, "score_all"?, "filters"?: {min_price, max_price, min_dollar_vol, min_gap, apply_gap_filter, unusual_volume, session, profile, top_n, max_nasdaq, max_combo}}`. Plan rules are enforced here (403): NASDAQ/Combo Pro+, US market Premium+, `top_n` ≤ plan rows, pre-market/after-hours/unusual volume/gap filter Pro+, Pro ticker caps ≤ 4,000 / 6,000, Premium scans the full lists. One scan per account at a time (409 with the running `scan_id`), 30 per hour (429), 503 + `Retry-After` when the service is busy (10 active scans across all accounts, admitted atomically across API instances). |
 | GET | `/v1/scans/{scan_id}` | Bearer | Poll every 2–5 s: `status` `queued` → `running` (with `progress.phase` and `progress.symbols`) → `complete` (`result.setups`, same rows as `/v1/scans/latest`) or `failed` (`error`, safe to show). 404 when not yours. |
 | GET | `/v1/scans` | Bearer | Your recent custom scans (newest first, no rows; kept 7 days). |
@@ -215,6 +216,11 @@ Environment variables:
 | `APP_ENCRYPTION_KEY` | Same as the web app. Needed to store paper-trading keys (`POST /v1/paper/account`); without it paper trading answers 503. |
 | `API_SCAN_WORKERS` | Optional, default 1 (max 4): custom scans that run at once. Raise only with more memory (a US market scan holds thousands of price histories). |
 | `APP_BASE_URL`, `BILLING_API_BASE` | Optional; default to the production web app and billing service. |
+| `HSF_PROXY_SECRET` | Random secret, **same value on hsf-web-v1**. The web server sends each visitor's address with it, so the per-address sign-in and sign-up limits apply per visitor instead of to the web server as a whole. Unset on either side = the old behaviour. |
+| `HSF_API_DOCS` | Optional. `/docs` and `/openapi.json` are off on Render; `1` turns them back on. The web client's contract comes from `scripts/export_openapi.py`, not the live service. |
+| `HSF_API_THREADS` | Optional, default 24: request threads (each keeps a warm database connection). |
+| `HSF_DB_STATEMENT_TIMEOUT_MS` | Optional, default 30000 in the API (jobs have no limit): Postgres cancels one query after this long. |
+| `HSF_MEMORY_LIMIT_MB`, `HSF_MEMORY_WARN_MB` | Optional, default 512 and 400. `/readyz` reports `rss_mb`, `rss_peak_mb` and `memory_warning`; the nightly health report warns (`API_MEMORY_HIGH`) once the peak since the last restart reaches the warning line. |
 
 The service won't start without `API_JWT_SECRET` (uvicorn logs
 "HSF API not started: API_JWT_SECRET must be set…" and exits). Changing it signs every app
@@ -223,10 +229,12 @@ user out once (access tokens stop verifying; refresh tokens still work).
 The free plan sleeps after 15 minutes idle; move to Starter before the app has
 real users.
 
-Memory: the API idles at about 90 MB. The first custom scan loads the PreBreakout
-model libraries (xgboost, scikit-learn), which adds about 230 MB for the life of
-the process, before the scan's own price data. Watch the service's memory graph
-after the first scans; a 512 MB instance has little headroom for a US market scan.
+Memory: after importing everything it serves, the API holds about 140 MB before
+caches fill (202 MB before the Streamlit app and pyarrow were removed, 2026-10-21).
+The first custom scan loads the PreBreakout model libraries (xgboost, scikit-learn),
+about 80 MB more for the life of the process, plus the model and the scan's own
+price data. `/readyz` shows memory now and the peak since restart, and the nightly
+health report warns at 400 of 512 MB.
 
 ## Acceptance journey
 

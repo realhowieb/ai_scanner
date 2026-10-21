@@ -33,7 +33,8 @@ class StrictModel(BaseModel):
 
 class ScannerView(StrictModel):
     name: str = Field(min_length=1, max_length=60)
-    signal: Literal["", "breakout", "gapper", "golden_cross", "gainer", "prebreakout"] = ""
+    signal: Literal["", "breakout", "gapper", "golden_cross", "gainer", "prebreakout", "earnings"] = ""
+    when: Literal["today", "tomorrow", "week"] = Field(default="today", description="Earnings window (signal earnings)")
     min: Literal[0, 40, 60, 75] = 0
     sort: Literal["score", "chg_pct", "gap_pct", "rvol", "prob"] = "score"
     size: Literal[25, 50, 100] = 25

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 
-import streamlit as st
+from utils.st_compat import st
 
 
 def is_login_locked() -> bool:

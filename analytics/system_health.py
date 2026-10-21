@@ -671,7 +671,20 @@ def eval_workflows(workflows: Optional[Mapping[str, Optional[Sequence[Mapping[st
                      action="none" if not f else f[0]["recommended_action"], metrics={"workflows": rows})
 
 
-def eval_database(probe: Optional[Mapping[str, Any]], now: _dt.datetime) -> Dict[str, Any]:
+def api_memory_finding(api: Optional[Mapping[str, Any]], now: _dt.datetime) -> Optional[Dict[str, Any]]:
+    """WARNING when the API's memory peak since its last restart reached its warning line
+    (HSF_MEMORY_WARN_MB, default 400 of 512 MB on Render Starter)."""
+    if not api or not api.get("memory_warning"):
+        return None
+    return finding("API_MEMORY_HIGH", "WARNING",
+                   f"API memory peaked at {api.get('rss_peak_mb')} MB of {api.get('memory_limit_mb')} MB",
+                   evidence={k: api.get(k) for k in ("rss_mb", "rss_peak_mb", "memory_limit_mb", "memory_warn_mb")},
+                   detected_at=now, human="WATCH",
+                   action="check what grew (custom scans, caches) before Render restarts the API for memory")
+
+
+def eval_database(probe: Optional[Mapping[str, Any]], now: _dt.datetime,
+                  api: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     if probe is None:
         return unknown("database probe did not run")
     f: List[Dict[str, Any]] = []
@@ -697,6 +710,9 @@ def eval_database(probe: Optional[Mapping[str, Any]], now: _dt.datetime) -> Dict
     if nulls:
         f.append(finding("REQUIRED_FIELD_NULLS", "WARNING", "required research fields have unexpected nulls",
                          evidence=nulls, detected_at=now, action="inspect recent captures"))
+    mem = api_memory_finding(api, now)
+    if mem:
+        f.append(mem)
     return subsystem("HEALTHY", detail="HEALTHY" if not f else f[0]["code"],
                      reason=f"connected, {lat} ms", observed=lat, expected=f"< {DB_LATENCY_WARN_MS} ms",
                      last_updated=probe.get("latest_observation_created_at"), findings=f,
@@ -756,7 +772,7 @@ def evaluate(inputs: Mapping[str, Any]) -> Dict[str, Any]:
         "cohort_parity": lambda: eval_cohort_parity(inputs.get("parity"), inputs.get("readiness"), now),
         "forward_evidence": lambda: eval_forward_evidence(inputs.get("readiness"), now),
         "workflows": lambda: eval_workflows(inputs.get("workflows"), now),
-        "database": lambda: eval_database(inputs.get("db_probe"), now),
+        "database": lambda: eval_database(inputs.get("db_probe"), now, inputs.get("api_ready")),
         "artifact_freshness": lambda: eval_artifacts(inputs.get("artifacts"), now),
     }
     subs: Dict[str, Dict[str, Any]] = {}

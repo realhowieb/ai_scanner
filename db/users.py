@@ -6,7 +6,7 @@ from typing import Any, Dict
 import pandas as pd
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except ModuleNotFoundError:
     from types import SimpleNamespace as _NS
     def _noop_cache(**_kw):
@@ -16,17 +16,6 @@ except ModuleNotFoundError:
 
 from .engine import get_neon_conn
 from .schema import ensure_neon_login_attempts_schema, ensure_neon_users_schema
-
-# Optional: auth library + hasher for seeding hashed passwords
-try:
-    import streamlit_authenticator as stauth
-except Exception:
-    stauth = None
-
-try:
-    from streamlit_authenticator.utilities.hasher import Hasher as SAHasher
-except Exception:
-    SAHasher = None
 
 try:
     import bcrypt
@@ -101,13 +90,7 @@ def seed_neon_users_from_local() -> None:
                 raw_pwd = cfg["password"]
                 hashed_pwd = raw_pwd
                 try:
-                    if SAHasher is not None:
-                        # New-style hasher (utilities.hasher.Hasher)
-                        hashed_pwd = SAHasher([raw_pwd]).generate()[0]
-                    elif stauth is not None and hasattr(stauth, "Hasher"):
-                        # Legacy stauth.Hasher if available
-                        hashed_pwd = stauth.Hasher([raw_pwd]).generate()[0]
-                    elif bcrypt is not None:
+                    if bcrypt is not None:
                         hashed_pwd = bcrypt.hashpw(raw_pwd.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
                 except Exception:
                     # Never seed a plain-text fallback password.

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Dict, Optional
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:
     class _StShim:
         @staticmethod
@@ -75,7 +75,7 @@ def _load_admin_users() -> set[str]:
     """
     raw: str | None = None
     try:
-        import streamlit as _st
+        from utils.st_compat import st as _st
         raw = _st.secrets.get("ADMIN_USERS") or _st.secrets.get("admin_users")
     except Exception:
         pass
@@ -142,7 +142,7 @@ def require_min_tier(tier_or_key, required: str, feature_name: str) -> bool:
 
     # Lazy import to avoid hard dependency at module load time
     try:
-        import streamlit as st  # type: ignore
+        from utils.st_compat import st
     except Exception:
         return False
 

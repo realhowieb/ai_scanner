@@ -29,7 +29,7 @@ def alpaca_secret(key: str, default: Optional[str] = None) -> Optional[str]:
     if env_val:
         return env_val
     try:  # pragma: no cover - depends on app vs headless context
-        import streamlit as st  # type: ignore
+        from utils.st_compat import st
 
         secrets = getattr(st, "secrets", None)
         if secrets is not None:
