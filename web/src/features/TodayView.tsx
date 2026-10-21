@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 
 import type { Schemas } from "@/api/client";
 import { Card, Empty, Freshness, Locked, Pill, RANKED_MIN, ResearchNotice, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
-import { etDate, etTime, greeting, pct, price, setupLabel } from "@/lib/format";
+import { etTime, greeting, localDate, pct, price, setupLabel } from "@/lib/format";
 
 import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
 import { ScoreMoversCard } from "./ScoreMovers";
@@ -25,6 +25,25 @@ const PHASES: Record<string, { label: string; note: string; tone: string }> = {
 };
 
 const CHIP_LIMIT = 5;
+
+// The greeting follows the viewer's clock, which only the browser knows. The
+// server render (and first hydration pass) uses the scan time in ET, then the
+// client swaps in local time. The minute bucket keeps the snapshot stable.
+const noSubscribe = () => () => undefined;
+const clientMinute = () => Math.floor(Date.now() / 60000);
+const serverMinute = () => null;
+
+function Greeting({ asOf }: { asOf: string }) {
+  const minute = useSyncExternalStore(noSubscribe, clientMinute, serverMinute);
+  const nowMs = minute === null ? Date.parse(asOf) || 0 : minute * 60000;
+  const tz = minute === null ? "America/New_York" : undefined;
+  return (
+    <div>
+      <p className="cap">{localDate(nowMs, tz)}</p>
+      <h1 className="h1">{greeting(nowMs, tz)}</h1>
+    </div>
+  );
+}
 
 /** Recap names arrive as "VST (53)"; each chip opens that stock. */
 /** `move` marks a list of names that rose into (up) or dropped out of (down) the ranked list. */
@@ -216,10 +235,7 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
   return (
     <div className="stack">
       <section className="page-head">
-        <div>
-          <p className="cap">{etDate(data.as_of)}</p>
-          <h1 className="h1">{greeting(data.as_of)}</h1>
-        </div>
+        <Greeting asOf={data.as_of} />
         <div className={`phase phase-${phase.tone}`}>
           <span className="dot" aria-hidden="true" />
           <span className="strong">{phase.label}</span>

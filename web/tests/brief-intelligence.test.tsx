@@ -18,7 +18,7 @@ describe("Brief intelligence", () => {
     expect(screen.getByText("-1.00%")).toBeInTheDocument();
     expect(screen.getByText("+2.00%")).toBeInTheDocument();
     expect(screen.getByText(/75% advancing/)).toBeInTheDocument();
-    expect(screen.getByText("HSF 80+ in Radar").nextSibling).toHaveTextContent("1");
+    expect(screen.getByText("Top HSF Score").nextSibling).toHaveTextContent("81");
     expect(screen.queryByText("PreBreakout picks shown")).not.toBeInTheDocument();
     expect(screen.getByText("Energy")).toBeInTheDocument();
     expect(screen.getByText(/Snapshot Oct 7/)).toBeInTheDocument();

@@ -136,3 +136,24 @@ class SparklineAndScoreHistoryTest(unittest.TestCase):
             out = api.scans.daily_closes(["AAA"])
         self.assertEqual(out["series"]["AAA"], [10.0, 11.0])
         self.assertEqual(out["last_bar"], {})
+
+
+class BriefFreshnessTest(unittest.TestCase):
+    def test_uses_the_matching_runs_market_data_time(self):
+        from api.market import _brief_freshness
+
+        run = {"id": 7, "created_at": "2026-10-21T13:39:55+00:00"}
+        info = {"state": "fresh", "market_data_at": "2026-10-21T13:36:12+00:00"}
+        with mock.patch("api.today.market_runs", return_value=[run]), \
+                mock.patch("api.today.run_freshness", return_value=info) as rf:
+            self.assertEqual(_brief_freshness("2026-10-21T13:39:55Z"), info)
+        rf.assert_called_once_with(run)
+
+    def test_no_matching_run_leaves_market_data_unknown(self):
+        from api.market import _brief_freshness
+
+        with mock.patch("api.today.market_runs", return_value=[{"id": 1, "created_at": "2026-10-20T20:39:00Z"}]):
+            info = _brief_freshness("2026-10-21T13:39:55Z")
+        self.assertIsNone(info["market_data_at"])
+        with mock.patch("api.today.market_runs", side_effect=RuntimeError("db down")):
+            self.assertEqual(_brief_freshness(None)["state"], "unavailable")
