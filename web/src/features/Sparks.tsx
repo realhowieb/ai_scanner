@@ -63,7 +63,7 @@ export function PreBreakoutMeter({ prob, rank }: { prob: number | null | undefin
   const strength = 101 - r;
   const what = `PreBreakout ${pctText}. Model score in the top ${r}% of this scan's setups`;
   return (
-    <span className="rvol pb-meter" title={what} aria-label={what}>
+    <span className="rvol pb-meter" role="img" title={what} aria-label={what}>
       <span className="rvol-track" aria-hidden="true"><span className={`rvol-fill${r <= 10 ? " hot" : ""}`} style={{ width: `${Math.max(3, strength)}%` }} /></span>
       <span className="mono" aria-hidden="true">{pctText}</span>
       {r <= 10 && <span className="cap" aria-hidden="true">top {r}%</span>}

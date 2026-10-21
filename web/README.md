@@ -109,6 +109,14 @@ BASE_URL=https://<web v2> HSF_TEST_EMAIL=<test account> HSF_TEST_PASSWORD_FILE=<
   [HSF_TEST_EMAIL_2=<second test account>] OUT_DIR=screenshots node scripts/journey.mjs
 ```
 
+An accessibility check (axe-core, WCAG 2.1 A and AA) signs in and scans Today, Scanner,
+a stock page, Watchlists, Alerts, Day Trader and Account at desktop and phone sizes. It
+fails on any critical or serious problem and lists the rest; Live acceptance runs it daily:
+
+```
+BASE_URL=https://<web v2> HSF_TEST_EMAIL=<test account> HSF_TEST_PASSWORD_FILE=<file> npm run a11y
+```
+
 After a deploy, `BASE_URL=https://<web v2> node scripts/beta-smoke.mjs` checks health,
 security headers, redirects and the BFF without an account (add `HSF_TEST_EMAIL` and
 `HSF_TEST_PASSWORD_FILE` for cookie flags and signed-in timings).

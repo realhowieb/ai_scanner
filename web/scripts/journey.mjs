@@ -135,6 +135,7 @@ await step("watchlist: ticker listed, note saved, invalid and duplicate tickers 
   await page.getByLabel(`Note for ${ticker}`).fill("e2e note: watch the breakout level");
   await page.getByRole("button", { name: "Save note" }).click();
   await page.getByText("e2e note: watch the breakout level").waitFor();
+  await page.getByRole("button", { name: "Add tickers" }).click(); // the add form opens from a button once the list has tickers
   await page.getByLabel("Add tickers").fill(`${ticker} NOT_A_TICKER!!`);
   await page.getByRole("button", { name: "Add", exact: true }).click();
   const status = await page.getByRole("status").filter({ hasText: /Already in the list|Not valid/ }).first().textContent();
@@ -148,7 +149,7 @@ await step("alerts page: capacity, turn off", async () => {
   await page.waitForURL(/\/alerts/);
   await rulesTab(page);
   await page.getByText(`${ticker} price rises above $${SHOWN}`).waitFor();
-  const capacity = await page.getByText(/Using \d+ of \d+ on your/).textContent();
+  const capacity = await page.getByLabel("Alert summary").textContent();
   await page.getByRole("button", { name: `Turn off: ${ticker} price rises above $${SHOWN}` }).click();
   await page.getByRole("button", { name: `Turn on: ${ticker} price rises above $${SHOWN}` }).waitFor();
   await shot(page, "journey-5-alerts");
@@ -215,6 +216,7 @@ await step("clean up: delete the alert and the watchlist (confirmed)", async () 
   await page.getByRole("button", { name: `Delete: ${ticker} price rises above $${SHOWN}` }).waitFor({ state: "detached" });
   await page.goto(watchlistUrl);
   await page.getByRole("heading", { name: new RegExp(RUN) }).waitFor();
+  await page.getByText("Manage list").click(); // Delete sits under the Manage list disclosure
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete watchlist" }).click();
   await page.getByText(RUN).first().waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});

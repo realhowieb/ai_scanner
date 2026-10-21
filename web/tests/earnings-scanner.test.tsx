@@ -71,6 +71,30 @@ describe("Earnings scanner", () => {
     expect(urls().find((u) => u.pathname.endsWith("/v1/scans/latest"))!.searchParams.has("signal")).toBe(false);
   });
 
+  it("sorts by a header within each report day, then back to HSF order", async () => {
+    search = new URLSearchParams("signal=earnings&when=week");
+    earnings = () => jsonResponse(scan([
+      row("AAA", "2026-10-21", 0, { score: 80, chg_pct: 1 }),
+      row("BBB", "2026-10-21", 0, { score: 70, chg_pct: 5 }),
+      row("CCC", "2026-10-22", 1, { score: 60, chg_pct: -2 }),
+      row("DDD", "2026-10-22", 1, { score: 50, chg_pct: 3 }),
+    ]));
+    wrap("pro");
+    const table = await screen.findByRole("table");
+    const order = () => within(table).getAllByRole("link").map((l) => l.textContent);
+    expect(order()).toEqual(["AAA", "BBB", "CCC", "DDD"]);
+    const u = userEvent.setup();
+    const chg = within(table).getByRole("button", { name: /^Chg %/ });
+    await u.click(chg);
+    expect(order()).toEqual(["BBB", "AAA", "DDD", "CCC"]); // high to low, days kept together
+    expect(within(table).getByRole("columnheader", { name: /Chg %/ })).toHaveAttribute("aria-sort", "descending");
+    await u.click(chg);
+    expect(order()).toEqual(["AAA", "BBB", "CCC", "DDD"]);
+    expect(within(table).getByRole("columnheader", { name: /Chg %/ })).toHaveAttribute("aria-sort", "ascending");
+    await u.click(chg);
+    expect(within(table).getByRole("columnheader", { name: /Chg %/ })).toHaveAttribute("aria-sort", "none");
+  });
+
   it("keeps today free and locks the week ahead on Starter without calling the API", async () => {
     search = new URLSearchParams("signal=earnings&when=week");
     wrap("basic");
