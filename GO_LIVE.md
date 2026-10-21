@@ -144,7 +144,7 @@ The page shows only whether values are set and what is wrong; it never shows key
 
 - [ ] Watch **Admin → Diagnostics → AI feature usage** to see what users actually use
 - [ ] Watch scan-error Slack alerts
-- [ ] Consider adding error monitoring (Sentry) — the one real ops gap
+- [ ] Configure and verify the existing Sentry integration; see [integration setup](docs/INTEGRATIONS_2026-10-21.md)
 - [ ] Once stable, `pip freeze` from the deploy env → exact-version lockfile
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

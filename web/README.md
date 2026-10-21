@@ -138,7 +138,8 @@ Environment variables:
 | `WEB_BETA_ALLOWED_EMAILS` | Optional, comma-separated: only these accounts can sign in (invite-only beta). Unset = every HSF account. |
 | `NODE_VERSION` | `22` (optional; `.node-version` already says 22) |
 
-No secrets are needed: the frontend holds no API keys, and the session cookies are
+Optional analytics uses a public project key; private service credentials stay on
+the API. Session cookies are
 set per user. It must be served over https (Render does this), because the
 `__Host-` cookies require it. The free plan sleeps after 15 idle minutes; use Starter
 before real users depend on it. Confirm the domain target, deployed commit, and API configuration before each
@@ -230,3 +231,7 @@ preserves anonymous tracking and makes operational logs optional as described he
 Production environment configuration and live delivery still need verification
 after an authorized deployment. AI observability in the upstream API and source-map
 uploads are outside this frontend integration.
+
+
+For per-service PostHog keys, browser push, Sentry and AI monitoring setup, see
+[the integration guide](../docs/INTEGRATIONS_2026-10-21.md).

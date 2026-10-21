@@ -6,6 +6,8 @@ callers get (text, error) and nothing raises.
 """
 from __future__ import annotations
 
+from observability.ai import generation
+
 _MISCONFIGURED = "AI is not configured (missing ANTHROPIC_API_KEY)."
 
 
@@ -91,12 +93,14 @@ def ask_claude(
             api_key=ANTHROPIC_API_KEY,
             timeout=AI_REQUEST_TIMEOUT_SECONDS,
         )
-        resp = client.messages.create(
-            model=model or ANTHROPIC_MODEL,
-            max_tokens=max_tokens,
-            system=_guard_system(system, feature),
-            messages=[{"role": "user", "content": user}],
-        )
+        with generation(feature, model or ANTHROPIC_MODEL) as span:
+            resp = client.messages.create(
+                model=model or ANTHROPIC_MODEL,
+                max_tokens=max_tokens,
+                system=_guard_system(system, feature),
+                messages=[{"role": "user", "content": user}],
+            )
+            span.response = resp
         text = _guard_text("".join(b.text for b in resp.content if b.type == "text").strip(), feature)
         if text and username:
             try:
@@ -159,12 +163,14 @@ def ask_claude_chat(
             api_key=ANTHROPIC_API_KEY,
             timeout=AI_REQUEST_TIMEOUT_SECONDS,
         )
-        resp = client.messages.create(
-            model=model or ANTHROPIC_MODEL,
-            max_tokens=max_tokens,
-            system=_guard_system(system, feature),
-            messages=messages,
-        )
+        with generation(feature, model or ANTHROPIC_MODEL) as span:
+            resp = client.messages.create(
+                model=model or ANTHROPIC_MODEL,
+                max_tokens=max_tokens,
+                system=_guard_system(system, feature),
+                messages=messages,
+            )
+            span.response = resp
         text = _guard_text("".join(b.text for b in resp.content if b.type == "text").strip(), feature)
         if text and username:
             try:
