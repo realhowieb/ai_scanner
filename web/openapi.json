@@ -9792,9 +9792,69 @@
       "description": "Latest market scan (ISO); null when none",
       "title": "Latest Scan At"
      },
+     "memory_limit_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The instance's memory limit (MB)",
+      "title": "Memory Limit Mb"
+     },
+     "memory_warn_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "memory_warning turns on at this peak (MB)",
+      "title": "Memory Warn Mb"
+     },
+     "memory_warning": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The peak reached memory_warn_mb: close to the limit, where Render restarts the API",
+      "title": "Memory Warning"
+     },
      "ok": {
       "title": "Ok",
       "type": "boolean"
+     },
+     "rss_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "API memory in use now (MB)",
+      "title": "Rss Mb"
+     },
+     "rss_peak_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Highest API memory seen since the last restart (MB)",
+      "title": "Rss Peak Mb"
      },
      "scan_age_minutes": {
       "anyOf": [

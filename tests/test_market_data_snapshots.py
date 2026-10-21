@@ -6,7 +6,7 @@ import importlib.util
 import unittest
 from unittest import mock
 
-_STREAMLIT = importlib.util.find_spec("streamlit") is not None
+_STREAMLIT = True
 
 
 class _Resp:

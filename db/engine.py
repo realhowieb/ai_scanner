@@ -6,7 +6,7 @@ from pathlib import Path
 from db.traffic import connect_options, count
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover - depends on optional UI dependency
     class _StreamlitShim:
         secrets: dict = {}
@@ -99,6 +99,28 @@ def _warm_ping_s() -> float:
         return 30.0
 
 
+def statement_timeout_ms() -> int:
+    """HSF_DB_STATEMENT_TIMEOUT_MS: longest one query may run on a warm connection before
+    Postgres cancels it (0 = no limit, the default for jobs). The API sets 30000 at start so
+    one stuck query can't hold a request thread forever."""
+    try:
+        return max(0, int(os.environ.get("HSF_DB_STATEMENT_TIMEOUT_MS", "0").strip() or 0))
+    except ValueError:
+        return 0
+
+
+def _fresh_transaction(conn) -> None:
+    """End any dangling transaction. With a statement timeout, also start the next one with
+    SET LOCAL in the same round trip. SET LOCAL lasts only for that transaction, so it is
+    safe on Neon's pooled (PgBouncer transaction mode) connections; a helper that commits
+    and keeps going runs its later transactions without the limit."""
+    ms = statement_timeout_ms()
+    if ms:
+        conn.execute(f"ROLLBACK; BEGIN; SET LOCAL statement_timeout = {ms:d}")
+    else:
+        conn.rollback()
+
+
 def _checkout_warm(url: str):
     """Return a warm per-thread connection, reconnecting when stale."""
     import psycopg
@@ -112,6 +134,8 @@ def _checkout_warm(url: str):
                 conn.execute("SELECT 1")
                 conn.rollback()
                 count(connection_pings=1)
+            if statement_timeout_ms():
+                _fresh_transaction(conn)
             _pool_local.used_at = now
             count(connections_reused=1)
             return _WarmConn(conn)
@@ -123,6 +147,8 @@ def _checkout_warm(url: str):
             _pool_local.conn = None
     real = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_connect_timeout(), **connect_options())
     count(connections_opened=1)
+    if statement_timeout_ms():
+        _fresh_transaction(real)
     _pool_local.conn = real
     _pool_local.used_at = now
     return _WarmConn(real)

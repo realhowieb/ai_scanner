@@ -8,7 +8,8 @@ from typing import Callable
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-import streamlit as st
+
+from utils.st_compat import st
 
 
 def _upgrade_button(label: str, plan: str, key: str) -> None:
@@ -167,7 +168,7 @@ def render_sidebar_upgrade_card(
     """Show the primary Pro upgrade path for Starter users in the sidebar."""
     try:
         # Admins never see the upgrade card regardless of tier_obj key.
-        import streamlit as _st
+        from utils.st_compat import st as _st
         if _st.session_state.get("is_admin"):
             return
         if has_min_tier(tier_obj, "pro"):

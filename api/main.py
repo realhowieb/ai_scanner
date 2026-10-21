@@ -31,7 +31,7 @@ from api import devices, models, routes, store, user_data
 # Re-exported: tests and older callers reach these through api.main.
 from api.deps import _account_cache, _recent_account, current_account, entitlements_for, forget_account  # noqa: F401
 from api.etag import ETagMiddleware
-from api.memory import rss_mb, tune_allocator
+from api.memory import memory_status, rss_mb, tune_allocator
 from api.scans import json_safe
 from api.settings import Settings, load_settings
 
@@ -72,10 +72,34 @@ class _ReleasingRoute(APIRoute):
 
 READYZ_RETRY_S = 2.0
 
+# Sent on every answer. The API speaks JSON to the web server and the phone app, so
+# nothing it returns should be sniffed as another type, framed, or leak a referrer.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=31536000",
+}
+
+
+def docs_enabled() -> bool:
+    """/docs and /openapi.json list every endpoint, admin ones included. They're on for
+    local work and off on Render unless HSF_API_DOCS=1. The web client's copy of the
+    contract comes from scripts/export_openapi.py, not from the live service."""
+    raw = os.environ.get("HSF_API_DOCS", "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return os.environ.get("RENDER", "").strip().lower() != "true"
+
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     settings = settings or load_settings()
+    docs = docs_enabled()
     app = FastAPI(title="HSFinest.AI API", version="1.0.0",
+                  docs_url="/docs" if docs else None, redoc_url="/redoc" if docs else None,
+                  openapi_url="/openapi.json" if docs else None,
                   responses={422: {"model": models.ValidationErrorResponse, "description": "Invalid request fields"}})
     from fastapi.exceptions import RequestValidationError
     from starlette.exceptions import HTTPException
@@ -126,6 +150,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 "db_traffic": db_metrics.snapshot(),
                 "ms": round((time.perf_counter() - t0) * 1000, 1), "rss_mb": rss_mb()}))
         response.headers["X-Request-ID"] = rid
+        for k, v in SECURITY_HEADERS.items():
+            response.headers.setdefault(k, v)
         return response
 
     @app.exception_handler(store.DatabaseUnavailable)
@@ -141,8 +167,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         pass
 
     @app.get("/", include_in_schema=False)
-    def root() -> RedirectResponse:
-        return RedirectResponse("/docs")
+    def root() -> Any:
+        if docs:
+            return RedirectResponse("/docs")
+        return {"ok": True, "service": "HSFinest.AI API"}
 
     @app.get("/healthz", response_model=models.Health)
     def healthz() -> Dict[str, bool]:
@@ -267,10 +295,25 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         except Exception:  # scan freshness is informational
             pass
         body = {"ok": True, "database": "ok", "db_ping_ms": db_ms, "latest_scan_at": latest,
-                "scan_age_minutes": age, **fresh}
+                "scan_age_minutes": age, **fresh, **memory_status()}
         if strict and fresh["stale"]:
             return JSONResponse({**body, "ok": False}, status_code=503)
         return body
+
+    async def _cap_threads() -> None:
+        """Requests run on a shared thread pool, and each busy thread keeps its own warm
+        database connection and memory. Starlette's default is 40; HSF_API_THREADS
+        (default 24) keeps connections and memory in check on a 512 MB instance."""
+        import anyio.to_thread
+
+        try:
+            n = int(os.environ.get("HSF_API_THREADS", "24").strip() or 24)
+        except ValueError:
+            n = 24
+        if n > 0:
+            anyio.to_thread.current_default_thread_limiter().total_tokens = n
+
+    app.router.on_startup.append(_cap_threads)
 
     routes.register_all(app)
     from api import billing
@@ -369,6 +412,8 @@ def _module_app():
     except RuntimeError as e:
         log.error("HSF API not started: %s", e)
         return _failing_app(f"HSF API not started: {e}")
+    # One stuck query mustn't hold a request thread forever (db/engine.py). Jobs keep no limit.
+    os.environ.setdefault("HSF_DB_STATEMENT_TIMEOUT_MS", "30000")
     from api.monitoring import init_api_monitoring
 
     init_api_monitoring()

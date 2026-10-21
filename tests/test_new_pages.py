@@ -9,28 +9,6 @@ class NewPagesTests(unittest.TestCase):
     def _src(self, name: str) -> str:
         return Path(f"pages/{name}").read_text()
 
-    def test_all_new_pages_login_gated(self):
-        for name in ("journal.py", "watchlists.py", "settings.py", "admin.py"):
-            src = self._src(name)
-            self.assertIn('st.session_state.get("username")', src, name)
-            self.assertIn("st.stop()", src, name)
-            self.assertIn('st.page_link("app.py"', src, name)
-
-    def test_journal_reuses_panel(self):
-        src = self._src("journal.py")
-        self.assertIn("render_journal_panel", src)
-        self.assertIn("list_trades", src)          # empty-state check
-
-    def test_watchlists_reuses_panel(self):
-        self.assertIn("render_watchlists_panel", self._src("watchlists.py"))
-
-    def test_settings_surfaces_account_and_connections(self):
-        src = self._src("settings.py")
-        self.assertIn("render_connect_panel", src)
-        self.assertIn("pages/billing.py", src)
-        self.assertIn("tier_key", src)
-        self.assertIn("pages/reset_password.py", src)   # grouped under Settings
-        self.assertIn("pages/verify_email.py", src)
 
     def test_custom_nav_excludes_auth_utility_pages(self):
         from ui.nav import _NAV
@@ -51,12 +29,6 @@ class NewPagesTests(unittest.TestCase):
                                   "Stock Intelligence"])
         self.assertIn("My Stocks", [label for _p, label, _i in _NAV])
         self.assertNotIn("pages/alerts.py", [p for p, _l, _i in _NAV])   # alerts live in My Stocks
-
-    def test_admin_console_is_a_dedicated_authorization_gated_page(self):
-        src = self._src("admin.py")
-        self.assertIn('st.session_state.get("is_admin")', src)
-        self.assertIn("render_admin_page", src)
-        self.assertIn("Admin Console is only available", src)
 
 
 if __name__ == "__main__":

@@ -37,22 +37,5 @@ class AskClaudeChatGuardTest(unittest.TestCase):
         self.assertIn("usage limit", err)
 
 
-@unittest.skipUnless(_PANDAS_AVAILABLE, "ai_insights requires pandas")
-class TriageTest(unittest.TestCase):
-    def test_no_rows(self):
-        from ui.ai_insights import triage_scan_errors
-        text, err = triage_scan_errors([])
-        self.assertIsNone(text)
-        self.assertIn("No errors", err)
-
-    def test_triage_calls_claude(self):
-        from ui import ai_insights
-        rows = [("2026-06-25", "scan", "u@x.com", 5, "TimeoutError", "provider timed out")]
-        with patch("ui.ai.ask_claude", return_value=("Likely provider timeouts.", None)):
-            text, err = ai_insights.triage_scan_errors(rows)
-        self.assertIsNone(err)
-        self.assertIn("timeout", text.lower())
-
-
 if __name__ == "__main__":
     unittest.main()

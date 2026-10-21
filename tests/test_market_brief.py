@@ -48,13 +48,6 @@ class MarketBriefTests(unittest.TestCase):
         with mock.patch.object(mb, "_brief_scan_df", return_value=None):
             self.assertIsNone(mb._compute_brief())
 
-    def test_brief_page_is_login_gated(self):
-        from pathlib import Path
-
-        src = Path("pages/brief.py").read_text()
-        self.assertIn("render_market_brief", src)
-        self.assertIn('st.session_state.get("username")', src)
-
 
 class MarketBriefExtrasTests(unittest.TestCase):
     def test_base_ticker_strips_earnings_flag(self):

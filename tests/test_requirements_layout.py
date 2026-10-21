@@ -42,7 +42,7 @@ class RequirementsLayoutTests(unittest.TestCase):
         lock_lines = _read_lines("requirements.lock")
         pinned = {line.split("==", 1)[0].lower() for line in lock_lines if "==" in line}
 
-        for pkg in {"numpy", "pandas", "pyarrow", "streamlit", "xgboost", "scikit-learn", "joblib"}:
+        for pkg in {"numpy", "pandas", "pyarrow", "xgboost", "scikit-learn", "joblib"}:
             self.assertIn(pkg, pinned, f"{pkg} missing from requirements.lock")
         # Constraints files must be plain pins (no includes, no local paths).
         for line in lock_lines:
@@ -59,9 +59,7 @@ class RequirementsLayoutTests(unittest.TestCase):
     def test_core_requirements_keep_scanner_runtime_deps(self):
         core = _pkg_names("requirements-core.txt")
 
-        # Streamlit stays exactly pinned; others checked by package name so
-        # version-spec changes (e.g. adding upper bounds) don't break the test.
-        self.assertIn("streamlit==1.54.0", set(_read_lines("requirements-core.txt")))
+        # Checked by package name so version-spec changes don't break the test.
         for pkg in {"pandas", "numpy", "yfinance", "requests", "sqlalchemy", "psycopg"}:
             self.assertIn(pkg, core)
 
@@ -77,11 +75,13 @@ class RequirementsLayoutTests(unittest.TestCase):
             self.assertNotIn(conflicting, core)
             self.assertNotIn(conflicting, optional)
 
-    def test_pyproject_streamlit_pin_matches_core_requirements(self):
-        # requirements-core.txt is the deploy pin; pyproject must not drift from it.
-        core_pin = next(line for line in _read_lines("requirements-core.txt") if line.startswith("streamlit=="))
-        text = (ROOT / "pyproject.toml").read_text()
-        self.assertIn(f'"{core_pin}"', text)
+    def test_streamlit_is_gone(self):
+        # The Streamlit app was retired on 2026-10-21; its packages must not creep back in.
+        lock = {line.split("==", 1)[0].lower() for line in _read_lines("requirements.lock") if "==" in line}
+        for name in ("requirements-core.txt", "requirements-ml.txt", "requirements-extended.txt", "api/requirements.txt"):
+            self.assertFalse({p for p in _pkg_names(name) if p.startswith("streamlit")}, name)
+        self.assertFalse({p for p in lock if "streamlit" in p or p in ("altair", "plotly", "pillow")})
+        self.assertNotIn("streamlit", (ROOT / "pyproject.toml").read_text().lower().split("[project.optional-dependencies]")[0])
 
     def test_pyproject_keeps_heavy_deps_optional(self):
         text = (ROOT / "pyproject.toml").read_text()

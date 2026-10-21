@@ -1,11 +1,10 @@
 [project]
 name = "ai-scanner"
 version = "0.2.0"
-description = "AI-powered stock market scanner with Streamlit, PostgreSQL, and scheduling"
+description = "AI-powered stock market scanner: API, scheduled scans and PostgreSQL"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "streamlit==1.54.0",
     "pandas>=2.0",
     "numpy>=1.23",
     "yfinance>=0.2.27",
@@ -15,11 +14,7 @@ dependencies = [
     "html5lib",
     "beautifulsoup4",
     "SQLAlchemy>=2.0",
-    "plotly",
-    "streamlit-authenticator>=0.4.0",
     "bcrypt",
-    "streamlit-autorefresh",
-    "streamlit-cookies-manager>=0.2.0",
     "psycopg[binary]>=3.2"
 ]
 
@@ -54,7 +49,6 @@ packages = [
     "services",
     "db",
     "jobs",
-    "pages",
     "scan",
     "scheduler",
     "ui",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List
 
-import streamlit as st
+from utils.st_compat import st
 
 
 @st.cache_data(show_spinner=False, ttl=6 * 3600)

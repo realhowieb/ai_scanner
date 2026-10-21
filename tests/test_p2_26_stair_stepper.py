@@ -14,7 +14,7 @@ from analytics.stair_step import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 START = datetime(2026, 9, 25, 14, 0, tzinfo=timezone.utc)   # Fri 10:00 ET
 
 
@@ -101,48 +101,6 @@ SCRIPT = '''
 from ui.stair_stepper import render_stair_steppers
 render_stair_steppers(["AAA", "BBB", "CCC"])
 '''
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class RenderTests(unittest.TestCase):
-    def run_page(self, fetched, click=True):
-        from streamlit.testing.v1 import AppTest
-
-        at = AppTest.from_string(SCRIPT, default_timeout=60)
-        with mock.patch("ui.stair_stepper._cached_bars", side_effect=fetched) as fetch, \
-                mock.patch(
-                    "analytics.stair_step_research.capture_qualifying_observations"
-                ):
-            at.run()
-            if click:
-                at.button(key="ss_run").click().run()
-        return at, fetch
-
-    def test_nothing_fetched_until_the_button_is_clicked(self):
-        at, fetch = self.run_page(lambda s: {}, click=False)
-        self.assertFalse(at.exception)
-        fetch.assert_not_called()
-
-    def test_lists_only_matching_symbols(self):
-        data = {"AAA": bars(stair()),
-                "BBB": bars([100 + 0.6 * math.sin(i / 2.0) for i in range(45)]),
-                "CCC": bars(stair(n=10))}
-        at, _ = self.run_page(lambda s: data)
-        self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
-        df = at.dataframe[0].value
-        self.assertEqual(list(df["Ticker"]), ["AAA"])
-        self.assertIn("Not enough 1-minute data to judge (1): CCC", " ".join(c.value for c in at.caption))
-
-    def test_provider_error_shows_a_message(self):
-        def boom(s):
-            raise RuntimeError("alpaca down")
-        at, _ = self.run_page(boom)
-        self.assertFalse(at.exception)
-        self.assertIn("Couldn't load 1-minute bars", at.warning[0].value)
-
-    def test_no_match_says_so(self):
-        at, _ = self.run_page(lambda s: {"AAA": bars(stair(per_bar=-0.03))})
-        self.assertIn("No symbols match", at.info[0].value)
 
 
 class WiringTests(unittest.TestCase):

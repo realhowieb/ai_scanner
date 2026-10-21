@@ -9,7 +9,7 @@ from unittest import mock
 from analytics import market_calendar as mc
 from analytics import system_health as sh
 
-_STREAMLIT = importlib.util.find_spec("streamlit") is not None
+_STREAMLIT = True
 UTC = dt.timezone.utc
 WED = dt.datetime(2026, 9, 30, 23, 50, tzinfo=UTC)      # trading day, after all cycles
 
@@ -217,6 +217,17 @@ class ScenarioTests(unittest.TestCase):
         r = run(b)
         self.assertEqual(r["system_status"], "ACTION_REQUIRED")
         self.assertEqual(r["incidents"][0]["incident_id"], "database:DATABASE_UNAVAILABLE")
+
+    def test_10b_api_memory_warning(self):
+        b = baseline()
+        b["api_ready"] = {"status": 200, "rss_mb": 380.0, "rss_peak_mb": 431.5, "memory_limit_mb": 512.0,
+                          "memory_warn_mb": 400.0, "memory_warning": True}
+        r = run(b)
+        db = r["subsystems"]["database"]
+        self.assertEqual(db["status"], "DEGRADED")
+        self.assertIn("database:API_MEMORY_HIGH", [i["incident_id"] for i in r["incidents"]])
+        b["api_ready"]["memory_warning"] = False
+        self.assertEqual(run(b)["subsystems"]["database"]["status"], "HEALTHY")
 
     def test_11_transient_429_recovered(self):
         b = baseline()
@@ -491,21 +502,6 @@ class StoreAndScriptTests(unittest.TestCase):
         self.assertIn(r["system_status"], ("UNKNOWN", "ACTION_REQUIRED"))
         self.assertTrue(inputs["collection_errors"])
         self.assertEqual(r["subsystems"]["workflows"]["status"], "UNKNOWN")
-
-    @unittest.skipUnless(_STREAMLIT, "ui.system_health_view imports streamlit")
-    def test_streamlit_view_renders_same_model(self):
-        from ui import system_health_view as view
-        r = run(baseline())
-        calls = []
-        fake = mock.MagicMock()
-        fake.columns.side_effect = lambda n: [mock.MagicMock() for _ in range(n if isinstance(n, int) else len(n))]
-        fake.markdown.side_effect = lambda s, **k: calls.append(s)
-        fake.caption.side_effect = lambda s, **k: calls.append(s)
-        with mock.patch.object(view, "st", fake):
-            view.render_system_health(r)
-        text = " ".join(str(c) for c in calls)
-        self.assertIn("System Health", text)
-        self.assertEqual(sh.forbidden_text(text), [])
 
 
 if __name__ == "__main__":

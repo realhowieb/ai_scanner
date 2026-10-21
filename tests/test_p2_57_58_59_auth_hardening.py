@@ -9,7 +9,7 @@ from unittest import mock
 from tests.repo_files import python_files
 
 ROOT = Path(__file__).resolve().parents[1]
-_STREAMLIT = importlib.util.find_spec("streamlit") is not None
+_STREAMLIT = True
 
 
 class _FakeSessionsDB:

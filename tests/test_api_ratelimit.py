@@ -50,3 +50,24 @@ class RateLimitTests(unittest.TestCase):
             ratelimit.check("signup", "user", now=3598.5)
         self.assertEqual(caught.exception.headers["Retry-After"], "2")
         ratelimit.check("signup", "user", now=3600.5)
+
+
+@unittest.skipUnless(DEPS, "needs FastAPI")
+class ProxyClientIpTests(unittest.TestCase):
+    """The web server forwards each visitor's address with a shared secret, so one busy
+    website doesn't share a single sign-in limit across all of its visitors."""
+
+    def _req(self, headers):
+        from starlette.requests import Request
+
+        raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+        return Request({"type": "http", "headers": raw, "client": ("10.0.0.1", 1)})
+
+    def test_forwarded_address_needs_the_secret(self):
+        h = {"X-Forwarded-For": "198.51.100.7", "X-HSF-Client-IP": "203.0.113.9", "X-HSF-Proxy-Key": "s3cret"}
+        with patch.dict("os.environ", {"HSF_PROXY_SECRET": "s3cret"}):
+            self.assertEqual(ratelimit.client_ip(self._req(h)), "203.0.113.9")
+            self.assertEqual(ratelimit.client_ip(self._req({**h, "X-HSF-Proxy-Key": "wrong"})), "198.51.100.7")
+            self.assertEqual(ratelimit.client_ip(self._req({**h, "X-HSF-Client-IP": "nope"})), "198.51.100.7")
+        with patch.dict("os.environ", {"HSF_PROXY_SECRET": ""}):
+            self.assertEqual(ratelimit.client_ip(self._req(h)), "198.51.100.7")

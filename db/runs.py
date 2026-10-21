@@ -10,7 +10,7 @@ from .engine import get_neon_conn, get_sqlite_conn
 from .schema import ensure_neon_runs_schema, ensure_sqlite_runs_schema
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except ImportError:  # pragma: no cover - allows scheduler/headless imports without Streamlit
     class _StreamlitShim:
         @staticmethod

@@ -49,14 +49,6 @@ class ParseSymbolsTests(unittest.TestCase):
     def test_parse_dedupes_and_uppercases(self):
         self.assertEqual(_parse_symbols("aapl, TSLA,aapl\nnvda"), ["AAPL", "TSLA", "NVDA"])
 
-    def test_day_trader_page_does_not_load_watchlists_before_render(self):
-        from pathlib import Path
-
-        source = Path("pages/day_trader.py").read_text()
-        self.assertIn("_session_watch_tickers()", source)
-        self.assertNotIn("from db.watchlists import", source)
-        self.assertNotIn("list_watchlists(", source)
-        self.assertNotIn("get_watchlist_tickers(", source)
 
     def test_day_trader_panel_renders_header_before_market_data_import(self):
         from pathlib import Path

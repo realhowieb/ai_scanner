@@ -50,19 +50,6 @@ class TestRequireMinTier(unittest.TestCase):
     def test_returns_true_when_tier_sufficient(self):
         self.assertTrue(require_min_tier("premium", "pro", "Test Feature"))
 
-    def test_returns_false_and_shows_warning_when_insufficient(self):
-        # require_min_tier does a lazy `import streamlit as st` inside the function
-        # so we patch the streamlit module directly.
-        import sys
-        mock_st = MagicMock()
-        with patch.dict(sys.modules, {"streamlit": mock_st}):
-            result = require_min_tier("basic", "pro", "NASDAQ Scan")
-            self.assertFalse(result)
-            mock_st.warning.assert_called_once()
-            warning_text = mock_st.warning.call_args[0][0]
-            self.assertIn("NASDAQ Scan", warning_text)
-            self.assertIn("Pro", warning_text)
-
 
 class TestGetUserTier(unittest.TestCase):
     def test_basic_user_gets_basic_tier(self):

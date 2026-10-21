@@ -472,6 +472,14 @@ class ReliabilityTests(DataApiBase):
         self.assertEqual(ping.call_count, 2)
         self.assertIsInstance(r.json()["db_ping_ms"], float)
 
+    def test_readyz_reports_memory_and_warns_at_the_line(self):
+        with mock.patch("api.store.ping"), mock.patch("api.today.market_runs", return_value=[]), \
+                mock.patch("api.memory._peak_mb", 450.0), mock.patch.dict("os.environ", {"HSF_MEMORY_WARN_MB": "400"}):
+            body = self.client.get("/readyz").json()
+        self.assertEqual(body["memory_limit_mb"], 512.0)
+        self.assertGreaterEqual(body["rss_peak_mb"], 450.0)
+        self.assertTrue(body["memory_warning"])
+
     def test_get_answers_carry_an_etag_and_revalidate_to_304(self):
         r = self.client.get("/v1/watchlists", headers=self.h)
         self.assertEqual(r.status_code, 200)

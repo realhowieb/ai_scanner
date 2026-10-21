@@ -128,12 +128,5 @@ class NonEmailRecipientTests(unittest.TestCase):
         self.assertIn("email address", fake_st.caption.call_args.args[0])
 
 
-class AdminUsersTierPickerTests(unittest.TestCase):
-    def test_stored_tier_stays_selected(self):
-        src = (ROOT / "ui" / "admin_users.py").read_text()
-        self.assertIn("tier_options.index(current_tier)", src)
-        self.assertNotIn('row["tier"] if row["tier"] in ["basic", "pro", "premium"] else "basic"', src)
-
-
 if __name__ == "__main__":
     unittest.main()

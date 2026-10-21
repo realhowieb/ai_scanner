@@ -136,16 +136,5 @@ class WatchlistInputTests(unittest.TestCase):
                          ["AMD", "NVDA"])
 
 
-class ImportSafetyTests(unittest.TestCase):
-    def test_core_modules_import_cleanly(self):
-        # importing must define code, not execute DB/network side effects
-        import analytics.intelligence_performance  # noqa: F401
-        import analytics.opportunity_outcomes  # noqa: F401
-        import config_validation  # noqa: F401
-        import db.opportunity_outcomes  # noqa: F401
-        import ui.intelligence_alerts_ui  # noqa: F401
-        self.assertTrue(True)
-
-
 if __name__ == "__main__":
     unittest.main()

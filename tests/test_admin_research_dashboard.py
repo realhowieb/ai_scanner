@@ -159,11 +159,6 @@ class ReadOnlyLoaderTests(unittest.TestCase):
         self.assertFalse(result["available"])
         self.assertEqual(result["errors"], {"database": "unavailable"})
 
-    def test_admin_ui_checks_authorization_before_loading(self):
-        source = (ROOT / "ui" / "admin_analytics.py").read_text()
-        guard = source.index('if not bool(st.session_state.get("is_admin"))')
-        load = source.index("load_admin_data_cached(days, include_research)")
-        self.assertLess(guard, load)
 
     def test_non_research_admin_views_skip_large_observation_load(self):
         conn = _Connection()

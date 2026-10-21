@@ -276,7 +276,7 @@ def summarize_results(
 
 # ----------------------------- Streamlit render ------------------------------
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 

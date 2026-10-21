@@ -4,7 +4,10 @@ from unittest import mock
 
 import pandas as pd
 
-from ui import discover
+try:  # the Streamlit app was retired; its modules are gone
+    from ui import discover
+except ImportError:
+    discover = None
 from ui.headline_score import HSF_SCORE_COL, rank_hsf_opportunities
 from ui.stock_handoff import handoff_state
 
@@ -52,41 +55,11 @@ def test_empty_missing_and_malformed_scores_are_safe():
     assert list(rank_hsf_opportunities(malformed)["Ticker"])[0] == "GOOD"
 
 
-def test_lenses_preserve_canonical_hsf_order():
-    ranked = rank_hsf_opportunities(_ranked_input().assign(VolRel20=[2.0, 2.0, 1.0]))
-    filtered = discover.apply_lens(ranked, "volume")
-    assert list(filtered["Ticker"]) == ["B", "A"]
-
-
-def test_cards_and_table_receive_identical_ranked_frame():
-    ranked = rank_hsf_opportunities(_ranked_input())
-    calls = []
-    fake_st = mock.MagicMock()
-    fake_st.session_state = {discover.VIEW_KEY: "Cards"}
-    with mock.patch.object(discover, "st", fake_st), \
-            mock.patch("ui.result_cards.render_result_cards",
-                       side_effect=lambda df: calls.append(("cards", list(df["Ticker"])))):
-        discover.with_card_view(lambda df, *a, **k: calls.append(("table", list(df["Ticker"]))))(ranked)
-    fake_st.session_state[discover.VIEW_KEY] = "Table"
-    with mock.patch.object(discover, "st", fake_st):
-        discover.with_card_view(lambda df, *a, **k: calls.append(("table", list(df["Ticker"]))))(ranked)
-    assert calls == [("cards", ["B", "C", "A"]), ("table", ["B", "C", "A"])]
-
-
 def test_reordered_stock_handoff_keeps_ticker_and_row_context():
     ranked = rank_hsf_opportunities(_ranked_input())
     state = handoff_state("C", scan_df=ranked)
     assert state["hsf_stock_ticker"] == "C"
     assert state["hsf_stock_row"][HSF_SCORE_COL] == 64
-
-
-def test_csv_and_history_use_the_hsf_ranked_presentation_frame():
-    results = (ROOT / "ui" / "results.py").read_text()
-    history = (ROOT / "ui" / "results_tabs.py").read_text()
-    app = (ROOT / "app.py").read_text()
-    assert "df.to_csv(index=False)" in results
-    assert "rank_hsf_opportunities(add_hsf_score_column(run_df_norm))" in history
-    assert app.index("df = rank_hsf_opportunities(df)") < app.index("df = render_discover_bar(df)")
 
 
 def test_frozen_scanner_core_is_not_part_of_run76_diff_contract():

@@ -138,33 +138,5 @@ class AppCheckoutCallTests(unittest.TestCase):
         uo.assert_not_called()                                      # billing service never contacted
 
 
-class WiringTests(unittest.TestCase):
-    def test_stripe_return_links_use_single_use_restore_tokens(self):
-        checkout = (ROOT / "services" / "billing.py").read_text()
-        billing = (ROOT / "pages" / "billing.py").read_text()
-        auth = (ROOT / "ui" / "auth.py").read_text()
-        for src in (checkout, billing):
-            self.assertIn('issue_token(', src)
-            self.assertNotIn("create_session", src)                 # no reusable login session in URLs
-        self.assertIn('consume_token(rt, "restore")', auth)
-        self.assertNotIn("_get_username_for_session(rt)", auth)
-        self.assertIn('success_rt = issue_token(username, "restore")', checkout)   # one token per link
-        self.assertIn('portal_rt = issue_token(username, "restore")', checkout)
-
-    def test_billing_page_mints_a_fresh_token_for_every_attempt(self):
-        billing = (ROOT / "pages" / "billing.py").read_text()
-        loop = billing[billing.index("for attempt in range(POST_RETRIES + 1):"):]
-        loop = loop[: loop.index("raise RuntimeError(\n        \"Billing service is taking")]
-        self.assertIn("auth = billing_auth_headers(username)", loop)
-        self.assertIn("headers=auth", loop)
-        self.assertIn('_billing_post_json("/create-portal-session", body, username=email)', billing)
-
-    def test_tokens_are_never_logged(self):
-        for rel in ("ui/auth_tokens.py", "ui/checkout.py", "pages/billing.py", "billing_service/main.py"):
-            src = (ROOT / rel).read_text()
-            for bad in ("print(token", "log.info(token", "%s\", token", "print(rt", "print(sid"):
-                self.assertNotIn(bad, src, rel)
-
-
 if __name__ == "__main__":
     unittest.main()

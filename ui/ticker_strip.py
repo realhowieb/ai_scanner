@@ -9,7 +9,7 @@ from html import escape
 from typing import Iterable, Mapping
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover - headless envs
     st = None  # type: ignore[assignment]
 

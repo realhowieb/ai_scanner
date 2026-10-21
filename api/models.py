@@ -66,6 +66,12 @@ class Ready(BaseModel):
     scan_age_minutes: Optional[float] = None
     stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")
     expected_scan_at: Optional[str] = Field(default=None, description="When stale: the missed scan slot (ISO)")
+    rss_mb: Optional[float] = Field(default=None, description="API memory in use now (MB)")
+    rss_peak_mb: Optional[float] = Field(default=None, description="Highest API memory seen since the last restart (MB)")
+    memory_limit_mb: Optional[float] = Field(default=None, description="The instance's memory limit (MB)")
+    memory_warn_mb: Optional[float] = Field(default=None, description="memory_warning turns on at this peak (MB)")
+    memory_warning: Optional[bool] = Field(default=None, description=(
+        "The peak reached memory_warn_mb: close to the limit, where Render restarts the API"))
 
 
 class TokenPair(BaseModel):

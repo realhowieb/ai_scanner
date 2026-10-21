@@ -16,7 +16,7 @@ SCORE_EPOCH = date(2026, 7, 1)
 def _get(name: str, default: str|None=None):
     # 1) Streamlit secrets if present, 2) env, 3) default
     try:
-        import streamlit as st
+        from utils.st_compat import st
         if "secrets" in dir(st) and st.secrets is not None:
             val = st.secrets.get(name)
             if val is not None:
@@ -51,7 +51,7 @@ def _get_any(names: tuple[str, ...], default: str | None = None):
 
 def _get_db_url() -> str:
     try:
-        import streamlit as st
+        from utils.st_compat import st
         nested = st.secrets["neon"]["database_url"]  # type: ignore[index]
         if nested:
             return str(nested)

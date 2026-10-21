@@ -7,7 +7,7 @@ changes production weights — this is evidence, not a tuning knob. Shows honest
 from __future__ import annotations
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Sequence, Tuple
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 

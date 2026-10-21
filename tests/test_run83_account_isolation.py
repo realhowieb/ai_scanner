@@ -20,7 +20,7 @@ from ui.app_session import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 
 A, B = "alice@example.com", "bob@example.com"
 A_ROWS = [{"ticker": "ALICEPICK", "last": 12.3, "chg_pct": 4.2}]
@@ -92,13 +92,6 @@ class BoundaryTests(unittest.TestCase):
         for key in ("active_watchlist_quote_rows", "_watchlist_prior_rows", "_loaded_user_settings",
                     "_portal_url", "_cancel_portal_url", "dt_watch_baseline", "latest_results_df", "pt_secret"):
             self.assertIn(key, ACCOUNT_SESSION_KEYS, key)
-
-    def test_app_enforces_the_boundary_before_any_page_switch(self):
-        app = (ROOT / "app.py").read_text()
-        boundary = app.index("enforce_account_boundary(st.session_state, username)")
-        self.assertLess(app.index("if not authed:"), boundary)
-        self.assertLess(boundary, app.index('st.session_state.get("hsf_after_login_page")'))
-        self.assertLess(boundary, app.index("should_land_on_today(st.session_state, username)"))
 
 
 def a_then_b(*, via_logout: bool) -> SS:

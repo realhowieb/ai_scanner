@@ -6,8 +6,8 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-HAS_ST = importlib.util.find_spec("streamlit") is not None
 HAS_BCRYPT = importlib.util.find_spec("bcrypt") is not None
+HAS_ST = HAS_BCRYPT  # ui.auth needs bcrypt (absent in the lightweight smoke job)
 
 
 class FakeCookieManager:
@@ -29,7 +29,7 @@ class FakeCookieManager:
         return self.get(k, default)
 
 
-@unittest.skipUnless(HAS_ST, "needs streamlit")
+@unittest.skipUnless(HAS_ST, "ui.auth needs bcrypt")
 class P2_20_SessionCookieTests(unittest.TestCase):
     def test_clearing_blanks_the_cookie_so_the_next_visit_has_no_session(self):
         from ui import auth
@@ -85,7 +85,7 @@ class P2_40_DeactivatedTests(unittest.TestCase):
             self.assertIsNone(inactive_login.inactive_password("a@x.com"))
         self.assertIsNone(inactive_login.inactive_password(""))
 
-    @unittest.skipUnless(HAS_ST, "needs streamlit")
+    @unittest.skipUnless(HAS_ST, "ui.auth needs bcrypt")
     def test_message_only_after_the_right_password(self):
         from ui import auth
 
@@ -152,11 +152,10 @@ class P2_32_FailureReasonTests(unittest.TestCase):
             self.assertFalse(email_utils._send_smtp("a@x.com", "s", "t", "h"))
         self.assertEqual(self.ef.last()[0], "sender_rejected")
 
-    @unittest.skipUnless(HAS_ST, "needs streamlit")
+    @unittest.skipUnless(HAS_ST, "ui.auth needs bcrypt")
     def test_only_admins_see_the_reason(self):
-        import streamlit as st
-
         from ui import email_verification_gate as gate
+        from utils.st_compat import st
 
         with mock.patch("db.email_verification.create_verification_token", return_value=None):
             self.assertFalse(gate._resend_verification("a@x.com"))

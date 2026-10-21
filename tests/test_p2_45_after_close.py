@@ -9,7 +9,7 @@ import pandas as pd
 
 from ui import after_close as ac
 
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 UTC = dt.timezone.utc
 MON_8PM_ET = dt.datetime(2026, 9, 29, 0, 0, tzinfo=UTC)       # Mon 20:00 ET
 TUE_8AM_ET = dt.datetime(2026, 9, 29, 12, 0, tzinfo=UTC)      # Tue 08:00 ET (premarket)
@@ -70,56 +70,10 @@ class MoversTests(unittest.TestCase):
 
 SCRIPT = '''
 import datetime as dt
-import streamlit as st
+from utils.st_compat import st
 from ui.after_close import render_after_close
 render_after_close(now=dt.datetime.fromisoformat(st.session_state["now"]))
 '''
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class CardTests(unittest.TestCase):
-    def render(self, tier, now=MON_8PM_ET, df=MoversTests.DF):
-        from streamlit.testing.v1 import AppTest
-
-        at = AppTest.from_string(SCRIPT, default_timeout=60)
-        at.session_state["now"] = now.isoformat()
-        at.session_state["tier_key"] = tier
-        at.session_state["entitlements"] = {"can_day_trader": tier in ("pro", "premium")}
-        patches = [mock.patch("db.runs.list_runs", return_value=RUNS),
-                   mock.patch("ui.market_scans.safe_run_df", return_value=df),
-                   mock.patch("ui.headline_score.hsf_scores_by_ticker", return_value={"BBB": 61}),
-                   mock.patch("streamlit.page_link")]
-        started = [p.start() for p in patches]
-        self.addCleanup(mock.patch.stopall)
-        at.run()
-        self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
-        return at, started[0]
-
-    def text(self, at):
-        return " ".join(m.value for m in at.markdown) + " " + " ".join(c.value for c in at.caption)
-
-    def test_pro_sees_movers_as_of_the_scan(self):
-        at, _ = self.render("pro")
-        t = self.text(at)
-        self.assertIn("After the close", t)
-        self.assertIn("**BBB** -10.00% after hours ($18.00) · HSF Score **61**", t)
-        self.assertIn("**AAA** +5.00% after hours ($10.50)", t)
-        self.assertIn("As of the 5:35 PM ET postmarket scan", t)
-        self.assertNotIn("CCC", t)
-
-    def test_free_sees_a_pro_note_and_no_data_is_loaded(self):
-        at, list_runs = self.render("basic")
-        self.assertIn("Pro shows tonight's biggest after-hours movers", self.text(at))
-        self.assertNotIn("BBB", self.text(at))
-        list_runs.assert_not_called()
-
-    def test_hidden_during_market_hours(self):
-        at, _ = self.render("pro", now=TUE_NOON_ET)
-        self.assertNotIn("After the close", self.text(at))
-
-    def test_scan_without_after_hours_columns(self):
-        at, _ = self.render("pro", df=pd.DataFrame([{"Ticker": "A", "Last": 1.0}]))
-        self.assertIn("No after-hours moves of 0.5% or more in the 5:35 PM ET postmarket scan", self.text(at))
 
 
 class WiringTests(unittest.TestCase):

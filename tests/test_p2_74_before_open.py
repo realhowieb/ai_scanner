@@ -12,7 +12,7 @@ from scan import headless_common as hc
 from ui import before_open as bo
 from ui import scan_providers as sp
 
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 UTC = dt.timezone.utc
 TUE = dt.date(2026, 9, 29)
 TUE_840_ET = dt.datetime(2026, 9, 29, 12, 40, tzinfo=UTC)     # after the 8:35 scan, before the open
@@ -158,68 +158,10 @@ class MoversTests(unittest.TestCase):
 
 SCRIPT = '''
 import datetime as dt
-import streamlit as st
+from utils.st_compat import st
 from ui.before_open import render_before_open
 render_before_open(now=dt.datetime.fromisoformat(st.session_state["now"]))
 '''
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class CardTests(unittest.TestCase):
-    def render(self, tier, now=TUE_840_ET, df=DF):
-        from streamlit.testing.v1 import AppTest
-
-        at = AppTest.from_string(SCRIPT, default_timeout=60)
-        at.session_state["now"] = now.isoformat()
-        at.session_state["tier_key"] = tier
-        at.session_state["entitlements"] = {"can_day_trader": tier in ("pro", "premium")}
-        patches = [mock.patch("db.runs.list_runs", return_value=RUNS),
-                   mock.patch("ui.market_scans.safe_run_df", return_value=df),
-                   mock.patch("ui.headline_score.hsf_scores_by_ticker", return_value={"BBB": 61}),
-                   mock.patch("streamlit.page_link")]
-        started = [p.start() for p in patches]
-        self.addCleanup(mock.patch.stopall)
-        at.run()
-        self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
-        return at, started[0]
-
-    def text(self, at):
-        return " ".join(m.value for m in at.markdown) + " " + " ".join(c.value for c in at.caption)
-
-    def test_pro_sees_movers_as_of_the_scan(self):
-        t = self.text(self.render("pro")[0])
-        self.assertIn("Before the open", t)
-        self.assertIn("**BBB** -10.00% pre-market ($18.00) · HSF Score **61**", t)
-        self.assertIn("**AAA** +6.00% pre-market ($10.60)", t)
-        self.assertIn("As of the 8:35 AM ET pre-market scan", t)
-        self.assertNotIn("CCC", t)
-        self.assertNotIn("DDD", t)
-
-    def test_free_sees_a_pro_note_and_no_movers(self):
-        at, _ = self.render("basic")
-        self.assertIn("Pro shows this morning's biggest pre-market movers", self.text(at))
-        self.assertNotIn("BBB", self.text(at))
-
-    def test_free_note_waits_for_this_mornings_scan(self):
-        at, _ = self.render("basic", now=TUE_830_ET)   # before the 8:35 scan
-        self.assertNotIn("Before the open", self.text(at))
-
-    def test_after_the_open_it_is_this_mornings_movers_until_1030(self):
-        t = self.text(self.render("pro", now=TUE_1000_ET)[0])
-        self.assertIn("This morning's pre-market movers", t)
-        self.assertNotIn("Before the open", t)
-        self.assertIn("**BBB** -10.00% pre-market", t)
-        self.assertIn("As of the 8:35 AM ET pre-market scan", t)
-
-    def test_hidden_from_1030_and_on_weekends(self):
-        for now in (TUE_1030_ET, TUE_NOON_ET, SAT):
-            t = self.text(self.render("pro", now=now)[0])
-            self.assertNotIn("Before the open", t)
-            self.assertNotIn("pre-market movers", t)
-
-    def test_scan_without_premarket_columns(self):
-        at, _ = self.render("pro", df=pd.DataFrame([{"Ticker": "A", "Last": 1.0}]))
-        self.assertIn("No pre-market moves of 0.5% or more in the 8:35 AM ET pre-market scan", self.text(at))
 
 
 class WiringTests(unittest.TestCase):

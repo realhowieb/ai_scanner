@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from ui.account_card import account_name, plan_card
 
 ROOT = Path(__file__).resolve().parents[1]
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 
 CTA = {"basic": "Upgrade to Pro", "pro": "Upgrade to Premium", "premium": None, "admin": None}
 LABEL = {"basic": "Starter", "pro": "Pro", "premium": "Premium", "admin": "Admin"}
@@ -86,23 +86,6 @@ class ArchitectureTests(unittest.TestCase):
                        "get_neon_conn", "compute_entitlements"):
             self.assertNotIn(lookup, src, lookup)
 
-    def test_every_page_path_uses_the_shared_card(self):
-        nav = (ROOT / "ui" / "nav.py").read_text()
-        self.assertIn("render_account_card(key_suffix=key_suffix", nav)
-        profile = (ROOT / "ui" / "app_user_profile.py").read_text()
-        self.assertIn("render_account_card(key_suffix=\"sidebar\")", profile)
-        self.assertNotIn('"Log out", key="logout_button"', profile)
-
-    def test_no_other_sidebar_plan_or_upgrade_card_rendering(self):
-        hits = []
-        for path in [*(ROOT / "ui").glob("*.py"), *(ROOT / "pages").glob("*.py"), ROOT / "app.py"]:
-            if path.name in ("account_card.py", "app_runtime.py"):
-                continue          # the card itself; app_runtime keeps the unused legacy card for import safety
-            for i, line in enumerate(path.read_text().splitlines(), 1):
-                if re.search(r"sidebar\.markdown\(f?\"\*\*Plan:\*\*|You're on (Free|Starter|Pro|Premium)\"", line):
-                    hits.append(f"{path.name}:{i}")
-        self.assertEqual(hits, [])
-
 
 CAPTURE = '''
 import runpy, streamlit as st
@@ -130,76 +113,6 @@ def card_signature(at):
     caps = [c.value for c in sb.caption if "alerts" in c.value or "Discover" in c.value or "enabled" in c.value]
     buttons = [b.label for b in sb.button]
     return tuple(card_md), tuple(caps), tuple(b for b in buttons if b.startswith(("Upgrade", "Log out")))
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class CrossPageCardTests(unittest.TestCase):
-    def render_page(self, page, tier):
-        from streamlit.testing.v1 import AppTest
-
-        at = AppTest.from_string(CAPTURE % str(ROOT / page), default_timeout=120)
-        for k, v in {"username": "realtest123@example.com", "display_name": "realtest123", "tier_key": tier,
-                     "tier": SimpleNamespace(key=tier, name=tier.upper()), "is_admin": tier == "admin",
-                     "entitlements": dict(_flags(tier))}.items():
-            at.session_state[k] = v
-        at.run()
-        return at
-
-    def expected(self, tier):
-        c = plan_card(tier, is_admin=tier == "admin")
-        buttons = ((c["cta_label"],) if c["cta_label"] else ()) + ("Log out",)
-        return c, buttons
-
-    def test_same_card_on_every_page_for_every_tier(self):
-        for tier in ("basic", "pro", "premium", "admin"):
-            c, buttons = self.expected(tier)
-            sigs = {}
-            for name, page in PAGES.items():
-                at = self.render_page(page, tier)
-                self.assertFalse(at.exception, (name, tier, [str(e.value)[:200] for e in at.exception]))
-                sig = card_signature(at)
-                sigs[name] = sig
-                self.assertIn(f"**Plan:** `{c['label']}`", sig[0], (name, tier))
-                self.assertEqual(sig[2], buttons, (name, tier))
-                links = at.session_state["_links"]
-                self.assertEqual("Compare all plans" in links, bool(c["compare"]), (name, tier))
-            self.assertEqual(len(set(sigs.values())), 1, (tier, sigs))
-
-    def test_scanner_renders_the_identical_card(self):
-        import test_run83b_scanner_state as scanner
-
-        for tier in ("basic", "pro", "premium"):
-            c, buttons = self.expected(tier)
-            at = scanner.run_app(tier=tier, session={"display_name": "realtest123"})
-            self.assertFalse(at.exception, [str(e.value)[:200] for e in at.exception])
-            sig = card_signature(at)
-            self.assertIn(f"**Plan:** `{c['label']}`", sig[0], tier)
-            self.assertIn(f"**{c['headline']}**", sig[0], tier)
-            self.assertEqual(sig[2], buttons, tier)
-            page = self.render_page("pages/today.py", tier)
-            self.assertEqual(card_signature(page)[0][1:], sig[0][1:], tier)   # same card (name source aside)
-
-    def test_card_never_touches_the_database(self):
-        from unittest import mock
-
-        from streamlit.testing.v1 import AppTest
-
-        script = '''
-import streamlit as st
-from ui.account_card import render_account_card
-with st.sidebar:
-    render_account_card()
-'''
-        boom = mock.Mock(side_effect=AssertionError("account card must not look anything up"))
-        at = AppTest.from_string(script, default_timeout=60)
-        at.session_state["username"] = "realtest123@example.com"
-        at.session_state["tier_key"] = "pro"
-        with mock.patch("auth.tier_sync.resolve_user_tier", boom), \
-             mock.patch("ui.user_lookup.load_user_map", boom), mock.patch("db.engine.get_neon_conn", boom):
-            at.run()
-        boom.assert_not_called()
-        self.assertFalse(at.exception, [str(e.value)[:200] for e in at.exception])
-        self.assertIn("**Plan:** `Pro`", [m.value for m in at.sidebar.markdown])
 
 
 if __name__ == "__main__":

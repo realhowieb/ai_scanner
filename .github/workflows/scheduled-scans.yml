@@ -51,7 +51,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          # Match the Streamlit Cloud runtime and the requirements.lock platform
+          # Match the Render runtime and the requirements.lock platform
           # so the cron runs the exact same dependency stack as the app.
           python-version: '3.13'
           cache: 'pip'
@@ -90,7 +90,7 @@ jobs:
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
           # SMTP (Resend) so the alert evaluator can email users from the cron.
-          # These are a SEPARATE secret store from Streamlit Cloud — set them in
+          # These are a SEPARATE secret store from Render — set them in
           # GitHub → Settings → Secrets and variables → Actions.
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}

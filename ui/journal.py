@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
-import streamlit as st
+from utils.st_compat import st
 
 
 def _live_prices(tickers) -> Dict[str, float]:
