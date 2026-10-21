@@ -5,6 +5,8 @@ hsf-api-v1), a Next.js web app (`web/`, Render hsf-web-v1), scheduled market sca
 and emails on GitHub Actions, Neon/Postgres storage and Stripe billing. The old
 Streamlit app was retired on 2026-10-21.
 
+For the current frontend, routes, local setup and checks, see [web/README.md](web/README.md).
+
 User guide:
 
 - [HS Finest AI App Tutorial](APP_TUTORIAL.md)

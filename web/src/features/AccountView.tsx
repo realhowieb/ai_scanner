@@ -20,6 +20,8 @@ import { etDate, etTime } from "@/lib/format";
 import { FEATURE_PLAN, signOut, useSession } from "@/session/SessionProvider";
 import type { Me } from "@/session/SessionProvider";
 
+import { UsageAnalyticsPreference } from "@/components/UsageAnalytics";
+
 import { InviteFriendCard } from "./InviteFriend";
 
 /** What each entitlement means to a customer. Unknown flags are not shown. */
@@ -358,6 +360,7 @@ export function AccountView() {
           <ProfileCard me={me} />
           <PasswordCard />
           <DownloadData />
+          <UsageAnalyticsPreference />
           <details className="danger-zone"><summary>Danger zone</summary><DeleteAccount /></details>
         </div>
       </div>

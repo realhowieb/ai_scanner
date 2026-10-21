@@ -10,6 +10,7 @@ import { Card, Empty, ErrorState, UpgradeButton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { CANCELLED, useScanJob } from "@/hooks/useScanJob";
 import type { ScanApi, ScanCreate, ScanJob } from "@/hooks/useScanJob";
+import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
 
 import { SavedResearchViews } from "./SavedResearchViews";
@@ -167,7 +168,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
     statusRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }, [job?.scan_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setFormErr(null);
     const t = ticker.trim().toUpperCase();
@@ -184,7 +185,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
       ...(gap ? { apply_gap_filter: true, ...(optNum(minGap) !== undefined ? { min_gap: optNum(minGap) } : {}) } : {}),
     };
     startedHere.current = true;
-    void scan.start({
+    const started = await scan.start({
       universe,
       ...(universe === "ticker" ? { ticker: t } : {}),
       ...(universe === "watchlist" ? { watchlist_id: Number(watchlistId) } : {}),
@@ -192,6 +193,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
       ...((universe === "ticker" || universe === "watchlist" || universe === "earnings") && scoreAll ? { score_all: true } : {}),
       filters,
     });
+    if (started) captureUsage("custom_scan_started", { universe, session });
   };
 
   // The Earnings tab's "Score every reporter" button lands here with the window and start=1.

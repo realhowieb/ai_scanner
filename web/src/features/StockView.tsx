@@ -14,6 +14,8 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, setupLabel, shortDate } from "@/lib/format";
 
+import { stateHorizon } from "@/lib/researchTime";
+
 import { SnapshotTime } from "./SnapshotTime";
 import { SimilarSetups, SymbolEvidence } from "./OutcomeEvidence";
 import { describeAlert } from "./AlertForm";
@@ -169,20 +171,29 @@ function Historical({ s, ranked }: { s: Stock; ranked: boolean }) {
   const sum = s.history_summary as { observations?: number; matured?: number; positive?: number } | null | undefined;
   const coh = s.outcome_cohort as { status?: string; score_band?: string; horizon?: string; comparable?: number; follow_through_rate?: number | null; evidence_strength?: string } | null | undefined;
   return (
-    <div className="stack-sm">
-      <SymbolEvidence ticker={s.ticker} />
-      {!ctx && !sum && !coh ? null : <p className="cap">Descriptive research on saved scans. Not a forecast and not evidence that a setup will work.</p>}
-      {ctx && (ctx.sufficient && ctx.positive_rate !== undefined ? (
-        <p className="body-sm">HSF {ctx.bucket}: {Math.round(ctx.positive_rate * 100)}% of past readings reached +4% within 5 days (n={ctx.n}, {String(ctx.confidence || "unspecified").toLowerCase().replace(/\s*confidence$/, "")} sample confidence).</p>
-      ) : (
-        <p className="body-sm">HSF {ctx.bucket}: still building history{ctx.n ? ` (n=${ctx.n})` : ""}.</p>
-      ))}
-      {sum && !!sum.observations && (
-        <p className="body-sm">This ticker: {sum.observations} earlier HSF observation{sum.observations === 1 ? "" : "s"}, {sum.matured} matured, {sum.positive} positive (observations, not trades).</p>
-      )}
-      {coh && coh.follow_through_rate !== null && coh.follow_through_rate !== undefined && (
-        <p className="body-sm">Similar states ({coh.status}, HSF {coh.score_band}, {coh.horizon}): {coh.comparable} observations, {Math.round(coh.follow_through_rate * 100)}% persisted or strengthened ({String(coh.evidence_strength || "early").toLowerCase()} sample coverage; not a performance rating).</p>
-      )}
+    <div className="stack historical-evidence">
+      <section aria-label="Ticker signal history" className="stack-sm">
+        <h3 className="strong">Ticker signal history</h3>
+        <SymbolEvidence ticker={s.ticker} />
+        <p className="cap">Signals group saved readings into one record per ticker per entry day. They can differ from the individual observation counts below.</p>
+      </section>
+      {sum && sum.observations != null && <section aria-label="Saved ticker observations" className="stack-sm">
+        <h3 className="strong">Saved ticker observations</h3>
+        <p className="body-sm">{s.ticker}: {sum.observations} saved scan observations · {sum.matured ?? "Unavailable"} matured · {sum.positive ?? "Unavailable"} reached +4% within 5 trading days.</p>
+        <p className="cap">Individual saved readings, including multiple readings on a day. Counts come from this ticker’s stored history, which can cover a different period from the grouped signal record. A pending reading is not a negative outcome.</p>
+      </section>}
+      {ctx && <section aria-label="Price outcomes by score range" className="stack-sm">
+        <h3 className="strong">Price outcomes by score range</h3>
+        {ctx.sufficient && ctx.positive_rate != null ? <p className="body-sm">HSF {ctx.bucket}: {Math.round(ctx.positive_rate * 100)}% reached +4% within 5 trading days · {ctx.n ?? "Unavailable"} matured observations across tickers.</p>
+          : <p className="body-sm">HSF {ctx.bucket}: still building history · {ctx.n ?? "Unavailable"} matured observations.</p>}
+        <p className="cap">Measures the largest price rise over 5 trading days; a 5-day return is used when that rise is unavailable. This is not a realized trading win rate.{ctx.confidence ? ` Sample coverage: ${String(ctx.confidence).toLowerCase().replace(/\s*confidence$/, "")}.` : ""}</p>
+      </section>}
+      {coh && coh.follow_through_rate != null && <section aria-label="Setup persistence" className="stack-sm">
+        <h3 className="strong">Setup persistence</h3>
+        <p className="body-sm">{Math.round(coh.follow_through_rate * 100)}% persisted or strengthened · {coh.comparable ?? "Unavailable"} comparable observations with {coh.status} status and HSF {coh.score_band}.</p>
+        <p className="cap">Compared with {stateHorizon(coh.horizon)}. This measures HSF state, not price return. Elapsed hours include weekends and holidays.{coh.evidence_strength ? ` Sample coverage: ${String(coh.evidence_strength).toLowerCase()}; this describes sample size, not predictive reliability.` : ""}</p>
+      </section>}
+      <p className="cap">These records use different units, cohorts and horizons. They are descriptive research, not forecasts or evidence that this setup will work.</p>
       {ranked && s.hsf_score != null && Number.isFinite(s.hsf_score) && (
         <SimilarSetups score={s.hsf_score} setup={s.primary_setup} setupName={s.primary_setup ? setupLabel(s.primary_setup) : undefined} />
       )}
