@@ -6,8 +6,8 @@ without loading Streamlit (about 35 MB in the API, plus plotly and pyarrow):
 
 - `st.cache_data(ttl=..., max_entries=...)` is a real in-process cache that behaves like
   Streamlit's outside a Streamlit app: parameters whose names start with "_" are left
-  out of the key, every caller gets its own copy of the value (pickled, as Streamlit
-  does, so mutating a cached DataFrame can't change the cache), and `fn.clear()` /
+  out of the key, every caller gets its own deep copy of the value (as Streamlit's
+  pickled copies did, so mutating a cached DataFrame can't change the cache), and `fn.clear()` /
   `st.cache_data.clear()` empty it. `st.cache_resource` shares the object instead.
 - `st.session_state` is one process-wide dict, as Streamlit's is without a running app.
 - `st.secrets` is empty; settings come from the environment.
@@ -92,18 +92,10 @@ class _Cached:
         return (_freeze(args), _freeze(kwargs))
 
     def _store(self, value: Any) -> Any:
-        if not self._copy:
-            return value
-        try:
-            return ("p", pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL))
-        except Exception:
-            return ("d", copy.deepcopy(value))
+        return copy.deepcopy(value) if self._copy else value
 
     def _load(self, stored: Any) -> Any:
-        if not self._copy:
-            return stored
-        kind, payload = stored
-        return pickle.loads(payload) if kind == "p" else copy.deepcopy(payload)
+        return copy.deepcopy(stored) if self._copy else stored
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         key = self._key(args, kwargs)
