@@ -13,6 +13,8 @@ import { useApi } from "@/hooks/useApi";
 import { disablePush } from "@/lib/webPush";
 import { BILLING_STARTED, beginBilling, finishBilling, pendingBilling } from "@/lib/billingReturn";
 
+import { resetUsageIdentity } from "@/lib/usageAnalytics";
+
 import { clearCachedMe, readCachedMe, subscribeCachedMe, writeCachedMe } from "./meCache";
 
 export type Me = Schemas["Me"];
@@ -48,6 +50,7 @@ type Ctx = {
 const SessionContext = createContext<Ctx | null>(null);
 
 export async function signOut(): Promise<void> {
+  resetUsageIdentity();
   finishBilling();
   clearCachedMe();
   // A signed-out browser must stop getting this account's alerts; never hold sign-out up for it.
