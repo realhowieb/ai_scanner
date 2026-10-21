@@ -7,7 +7,7 @@ import { useState } from "react";
 import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { AIText } from "@/components/AIText";
-import { Card, ErrorLine, Locked, UpgradeButton } from "@/components/ui";
+import { Card, ErrorLine, Locked } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
@@ -23,7 +23,6 @@ export function WatchlistAINote({ id, name, empty }: { id: number; name: string;
         <Locked title="AI watchlist rundowns are part of Premium" plan="premium">
           A short plain-English summary of what changed on your list since the last scan: score and rank moves, new setups, volume and earnings this week.
         </Locked>
-        <UpgradeButton plan="premium" />
       </Card>
     );
   }

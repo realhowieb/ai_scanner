@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { FormEvent, MouseEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
+import { alertRules } from "@/api/userData";
 import type { Schemas } from "@/api/client";
 import { backLabel, usePreviousPage } from "@/components/AppShell";
 import { AIText } from "@/components/AIText";
@@ -86,7 +87,81 @@ function DecisionSnapshot({ s }: { s: Stock }) {
   );
 }
 
-function Historical({ s }: { s: Stock }) {
+/** Price facts from the cached daily bars, for names the latest scan didn't rank. */
+export function barFacts(bars: Stock["bars"]) {
+  const last = bars.at(-1);
+  const prev = bars.at(-2);
+  if (!last) return null;
+  const dayChange = prev && prev.close ? ((last.close - prev.close) / prev.close) * 100 : null;
+  const sma50 = last.sma50 ?? (bars.length >= 50 ? bars.slice(-50).reduce((a, b) => a + b.close, 0) / 50 : null);
+  const vs50 = sma50 ? ((last.close - sma50) / sma50) * 100 : null;
+  const high = Math.max(...bars.map((b) => b.high ?? b.close));
+  const fromHigh = Number.isFinite(high) && high > 0 ? ((last.close - high) / high) * 100 : null;
+  return { dayChange, vs50, fromHigh, sessions: bars.length };
+}
+
+function earningsText(days: number | null | undefined): string {
+  if (days === null || days === undefined || days < 0) return "None on the HSF calendar";
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `In ${days} days`;
+}
+
+const signed = (v: number | null) => (v === null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
+const tone = (v: number | null) => (v === null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
+
+/** One tap: a "New HSF setup" smart alert on this ticker, so the user hears when it gets ranked. */
+function RankedAlertButton({ ticker, onAdded }: { ticker: string; onAdded: () => void }) {
+  const rules = useApi("alert-rules", (signal) => alertRules.list(signal));
+  const act = useAction();
+  const [done, setDone] = useState(false);
+  const sym = ticker.toUpperCase();
+  const has = done || (rules.data?.rules ?? []).some((r) => r.rule_type === "SETUP_APPEARED" && r.ticker === sym);
+  if (rules.error || !rules.data) return null;
+  if (has) return <p className="cap" role="status">You&apos;ll get an alert when {sym} becomes a ranked setup. Manage it on <Link href="/alerts">Alerts</Link>.</p>;
+  if (rules.data.used >= rules.data.limit) return <p className="cap">All your alerts are in use. Free one on <Link href="/alerts">Alerts</Link> to get told when {sym} gets ranked.</p>;
+  const add = () => void act.run(async () => {
+    await alertRules.create({ rule_type: "SETUP_APPEARED", ticker: sym, enabled: true, delivery_channels: ["in_app"] });
+    setDone(true);
+    rules.reload();
+    onAdded();
+    return true;
+  });
+  return (
+    <>
+      <button type="button" className="btn" onClick={add} disabled={act.busy}>{act.busy ? "Adding…" : `Alert me if ${sym} gets ranked`}</button>
+      <ErrorLine error={act.error} />
+    </>
+  );
+}
+
+/** For names the latest scan didn't rank: what we know from price, instead of empty HSF fields. */
+function UnrankedSnapshot({ s, onAlert }: { s: Stock; onAlert: () => void }) {
+  const f = barFacts(s.bars);
+  const highLabel = f && f.sessions >= 100 ? "From 6-month high" : f ? `From ${f.sessions}-day high` : "";
+  const why = s.in_latest_scan
+    ? `${s.ticker} was scanned at ${s.scan_at ? etTime(s.scan_at) : "the latest scan"} but didn't qualify as an HSF setup.`
+    : `${s.ticker} wasn't among the ranked setups in the latest market scan${s.scan_at ? ` (${etTime(s.scan_at)})` : ""}.`;
+  const lastReading = s.from_history && s.hsf_score != null
+    ? ` Its last recorded HSF reading was ${s.hsf_score}${s.status ? ` (${s.status[0]}${s.status.slice(1).toLowerCase()})` : ""}.`
+    : s.hsf_score == null ? " HSF has no recorded score for it." : "";
+  return (
+    <Card title="Not in today's ranked setups" id="snapshot" className="snapshot-card unranked-card">
+      <p className="body-sm">{why}{lastReading} HSF ranks a stock when a setup like a breakout, gap or golden cross shows up.</p>
+      {f && (
+        <div className="tiles snapshot-tiles">
+          <div className="tile"><span className="cap">Last session</span><p className={`tile-value small mono ${tone(f.dayChange)}`}>{signed(f.dayChange)}</p></div>
+          <div className="tile"><span className="cap">vs 50-day average</span><p className={`tile-value small mono ${tone(f.vs50)}`}>{signed(f.vs50)}</p></div>
+          <div className="tile"><span className="cap">{highLabel}</span><p className="tile-value small mono">{signed(f.fromHigh)}</p></div>
+          <div className="tile"><span className="cap">Next earnings</span><p className="tile-value small">{earningsText(s.earnings_days)}</p></div>
+        </div>
+      )}
+      <div className="row-actions"><RankedAlertButton ticker={s.ticker} onAdded={onAlert} /></div>
+    </Card>
+  );
+}
+
+function Historical({ s, ranked }: { s: Stock; ranked: boolean }) {
   if (s.historical_locked) {
     return <Locked title="Historical research is part of Pro" plan="pro">How past HSF readings in this score range played out, how similar past setups moved over 1, 3 and 5 days, and this ticker&apos;s own record.</Locked>;
   }
@@ -108,7 +183,7 @@ function Historical({ s }: { s: Stock }) {
       {coh && coh.follow_through_rate !== null && coh.follow_through_rate !== undefined && (
         <p className="body-sm">Similar states ({coh.status}, HSF {coh.score_band}, {coh.horizon}): {coh.comparable} observations, {Math.round(coh.follow_through_rate * 100)}% persisted or strengthened ({String(coh.evidence_strength || "early").toLowerCase()} sample coverage; not a performance rating).</p>
       )}
-      {s.hsf_score != null && Number.isFinite(s.hsf_score) && (
+      {ranked && s.hsf_score != null && Number.isFinite(s.hsf_score) && (
         <SimilarSetups score={s.hsf_score} setup={s.primary_setup} setupName={s.primary_setup ? setupLabel(s.primary_setup) : undefined} />
       )}
     </div>
@@ -196,6 +271,9 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
   const compMax = Math.max(1, ...comps.map(([, v]) => Math.abs(v)));
   const noScore = s.hsf_score === null || s.hsf_score === undefined;
   const lastBar = s.bars.at(-1);
+  const ranked = s.in_latest_scan && s.has_setup;
+  const [rulesVersion, setRulesVersion] = useState(0);
+  const alertAdded = () => { setRulesVersion((v) => v + 1); onChanged?.(); };
 
   return (
     <div className="stack">
@@ -223,15 +301,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
         </div>
       </section>
 
-      {!s.in_latest_scan && (
-        <p className="banner" role="status">
-          {s.ticker} wasn&apos;t in the latest market scan{s.scan_at ? ` (${etTime(s.scan_at)})` : ""}.
-          {s.from_history ? " The score below is from its last recorded HSF observation." : noScore ? " HSF has no recorded score for it." : ""}
-        </p>
-      )}
-      {s.in_latest_scan && !s.has_setup && <p className="notice" role="status">Scanned, but it didn&apos;t qualify as an HSF setup in the latest scan.</p>}
-
-      <DecisionSnapshot s={s} />
+      {ranked ? <DecisionSnapshot s={s} /> : <UnrankedSnapshot s={s} onAlert={alertAdded} />}
 
       <div className="split stock-split">
         <div className="col-main">
@@ -244,11 +314,11 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
               <List items={s.reasons.slice(1)} empty="" />
             </Card>
           )}
-          <div className="grid2">
+          {ranked && <div className="grid2">
             <Card title="Risks" id="risks" className="risks-card"><List items={s.risks} empty="No risk details returned by this scan. This is not an all-clear." /></Card>
             <Card title="What to watch" id="watch" className="watch-card"><List items={s.watch_next} empty="Nothing specific to watch yet." /></Card>
-          </div>
-          <Card title="Historical context" id="hist"><Historical s={s} /></Card>
+          </div>}
+          <Card title="Historical context" id="hist"><Historical s={s} ranked={ranked} /></Card>
           {s.in_latest_scan && s.has_setup && (
             <Card title="Trade plan" id="plan">
               {pro ? <TradePlan s={s} /> : <Locked title="Trade plans are part of Pro" plan="pro">Entry, stop, targets and position size from your account size and risk.</Locked>}
@@ -273,6 +343,8 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             )}
           </Card>
 
+          <ScoreHistory ticker={s.ticker} />
+
           {comps.length > 0 && (
             <Card title="Score components" id="comps">
               <ul className="comps">
@@ -285,14 +357,14 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             </Card>
           )}
 
-          <Card title="Signals" id="signals">
+          {(ranked || s.signals.length > 0) && <Card title="Signals" id="signals">
             {s.signals.length ? <div className="chips">{s.signals.map((g) => <Pill key={g}>{setupLabel(g)}</Pill>)}</div> : <p className="cap">No active signals.</p>}
             <dl className="kv">
               <div><dt>Breakout score</dt><dd className="mono">{s.breakout_score != null && Number.isFinite(s.breakout_score) ? s.breakout_score.toFixed(1) : "—"}</dd></div>
               <div><dt>PreBreakout</dt><dd className="mono">{premium ? probPct(s.prob) : <Pill tone="gold">Premium</Pill>}</dd></div>
               <div><dt>Earnings</dt><dd className="mono">{s.earnings_days === null || s.earnings_days === undefined ? "—" : s.earnings_days === 0 ? "Today" : `in ${s.earnings_days}d`}</dd></div>
             </dl>
-          </Card>
+          </Card>}
 
           <Card title="Your lists and alerts" id="mine">
             {s.watchlists.length ? <div className="chips">{s.watchlists.map((w) => <Link key={w.id} href={`/watchlists?id=${w.id}`} className="pill">{w.name}</Link>)}</div> : <p className="cap">Not on your watchlists.</p>}
@@ -302,9 +374,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             <Link href={`/stocks/compare?symbols=${encodeURIComponent(s.ticker)}`} className="cap">Compare {s.ticker} with other stocks →</Link>
           </Card>
 
-          <SmartAlerts ticker={s.ticker} onChanged={onChanged} />
-
-          <ScoreHistory ticker={s.ticker} />
+          <SmartAlerts key={rulesVersion} ticker={s.ticker} onChanged={onChanged} folded />
         </aside>
       </div>
     </div>

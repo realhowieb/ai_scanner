@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
 import { api, unwrap } from "@/api/client";
+import type { Schemas } from "@/api/client";
 import { alertRules, parseTickers, watchlists } from "@/api/userData";
 import type { WatchlistDetail, WatchlistIntelItem } from "@/api/userData";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
@@ -25,6 +26,7 @@ import { useApi } from "@/hooks/useApi";
 import { etTime, num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
 import { DailySpark, useDailyBarsState } from "./Sparks";
+import { StarterWatchlistButton } from "./Starters";
 import { WatchlistAINote } from "./WatchlistAINote";
 import { WatchlistPerformanceCard } from "./WatchlistPerformance";
 
@@ -216,6 +218,35 @@ function WatchlistRules({ wl, onChanged }: { wl: number; onChanged: () => void }
   );
 }
 
+type Change = Schemas["WatchlistChange"];
+const titleCase = (v: string) => v.charAt(0) + v.slice(1).toLowerCase();
+
+/** One readable chip per change the count includes, e.g. "BRZE score 88 → 76" and "BRZE Strong → Watch". */
+function describeChange(c: Change): string {
+  const from = c.previous_score, to = c.current_score;
+  const scores = from != null && to != null ? ` ${Math.round(from)} → ${Math.round(to)}` : "";
+  switch (c.event_type) {
+    case "NEW_OPPORTUNITY": return `${c.ticker} newly ranked${to != null ? ` at ${Math.round(to)}` : ""}`;
+    case "DROPPED": return `${c.ticker} left the ranked list`;
+    case "RISING": return `${c.ticker} score${scores || " rising"}`;
+    case "FALLING": return `${c.ticker} score${scores || " falling"}`;
+    case "FADING": return `${c.ticker} fading`;
+    case "STATUS_UPGRADE":
+    case "STATUS_DOWNGRADE":
+      return c.previous_status && c.current_status ? `${c.ticker} ${titleCase(c.previous_status)} → ${titleCase(c.current_status)}`
+        : `${c.ticker} status ${c.event_type === "STATUS_UPGRADE" ? "up" : "down"}`;
+    case "SIGNAL_ADDED": return `${c.ticker} new signal${c.signal ? `: ${c.signal.replace(/_/g, " ")}` : ""}`;
+    case "SIGNAL_REMOVED": return `${c.ticker} lost signal${c.signal ? `: ${c.signal.replace(/_/g, " ")}` : ""}`;
+    default: return `${c.ticker} ${c.event_type.replace(/_/g, " ").toLowerCase()}`;
+  }
+}
+
+function changeTone(t: string): "up" | "down" | undefined {
+  if (t === "NEW_OPPORTUNITY" || t === "RISING" || t === "STATUS_UPGRADE" || t === "SIGNAL_ADDED") return "up";
+  if (t === "DROPPED" || t === "FALLING" || t === "STATUS_DOWNGRADE" || t === "SIGNAL_REMOVED" || t === "FADING") return "down";
+  return undefined;
+}
+
 function WatchlistChangesCard({ id }: { id: number }) {
   const changes = useApi(`wl-changes:${id}`, (signal) => watchlists.changes(id, signal));
   if (changes.error || !changes.data) return null;
@@ -230,7 +261,12 @@ function WatchlistChangesCard({ id }: { id: number }) {
         <span><strong>{metric(s.falling, 0)}</strong> falling</span>
         <span><strong>{metric(s.alerts, data.alerts.length)}</strong> alerts</span>
       </div>
-      {data.headline.length ? (
+      {data.changes.length ? (
+        <div className="chips">
+          {data.changes.slice(0, 12).map((c, i) => <Pill key={`${c.ticker}-${c.event_type}-${i}`} tone={changeTone(c.event_type)}>{describeChange(c)}</Pill>)}
+          {data.changes.length > 12 && <span className="cap">+{data.changes.length - 12} more</span>}
+        </div>
+      ) : data.headline.length ? (
         <div className="chips">
           {data.headline.slice(0, 8).map((h) => <Pill key={`${h.ticker}-${h.event_type}`}>{h.ticker} {h.event_type.replace(/_/g, " ").toLowerCase()}</Pill>)}
         </div>
@@ -323,15 +359,15 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                 ))}
               </div>
             )}
+            <div className="wl-status">
+              <RefreshStatus updatedAt={detail.updatedAt} refreshing={refreshing} error={detail.error} onRetry={refresh}
+                sourceNote={hasQuotes ? `Prices are the latest trade, up to a minute old.${feed} Scores change when a new scan runs.`
+                  : "Live prices aren't available right now; daily-bar prices can be up to 15 minutes old. Scores change when a new scan runs."} />
+            </div>
             <button type="button" className="btn wl-refresh" onClick={refresh} disabled={refreshing} aria-label={`Refresh prices and scores for ${w.name}`}>
               {refreshing ? "Refreshing…" : "Refresh"}
             </button>
           </div>
-        )}
-        {w.items.length > 0 && (
-          <RefreshStatus updatedAt={detail.updatedAt} refreshing={refreshing} error={detail.error} onRetry={refresh}
-            sourceNote={hasQuotes ? `Prices are the latest trade, up to a minute old.${feed} Scores change when a new scan runs.`
-              : "Live prices aren't available right now; daily-bar prices can be up to 15 minutes old. Scores change when a new scan runs."} />
         )}
         {w.items.length === 0 ? (
           <Empty title="No tickers yet.">Add some above, or use Save to watchlist on the Scanner or a stock page.</Empty>
@@ -436,7 +472,12 @@ export function WatchlistsView() {
         lists.loading && !lists.data ? <Skeleton rows={5} label="Loading watchlists" /> :
         all.length === 0 ? (
           <Card><Empty title="No watchlists yet.">
-            <button type="button" className="btn btn-primary" onClick={() => { create.clear(); setCreating(true); }}>Create your first watchlist</button>
+            <div className="stack-sm">
+              <StarterWatchlistButton onDone={(id) => { lists.reload(); select(id); }} />
+              <div className="row-actions">
+                <button type="button" className="btn" onClick={() => { create.clear(); setCreating(true); }}>Create an empty watchlist</button>
+              </div>
+            </div>
           </Empty></Card>
         ) : (
           <div className="split watchlists-split">

@@ -27,9 +27,9 @@ describe("data freshness", () => {
   });
   it("uses the server's session-aware state rather than clock age", () => {
     const { rerender } = render(<DataFreshness info={{ ...info, state: "fresh" }} />);
-    expect(screen.getByText("Data freshness: On schedule")).toBeInTheDocument();
+    expect(screen.getByLabelText("Data freshness")).toHaveTextContent("Data freshness: On schedule");
     rerender(<DataFreshness info={{ ...info, state: "stale" }} />);
-    expect(screen.getByText("Data freshness: Scan delayed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Data freshness")).toHaveTextContent("Data freshness: Scan delayed");
   });
   it("supports older API responses without freshness metadata", () => {
     render(<DataFreshness />);

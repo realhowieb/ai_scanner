@@ -37,7 +37,7 @@ describe("Watchlists", () => {
   it("empty state → create the first list; a duplicate name is refused inside the dialog", async () => {
     const u = user();
     wrap(<WatchlistsView />);
-    await u.click(await screen.findByRole("button", { name: "Create your first watchlist" }));
+    await u.click(await screen.findByRole("button", { name: "Create an empty watchlist" }));
     const dlg = screen.getByRole("dialog", { name: "New watchlist" });
     expect(within(dlg).getByLabelText("Name")).toHaveFocus();
     await u.type(within(dlg).getByLabelText("Name"), "Breakouts");
