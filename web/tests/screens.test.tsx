@@ -149,6 +149,30 @@ describe("Custom scan controls follow server entitlements", () => {
   });
 });
 
+describe("Custom scan of earnings reporters", () => {
+  const started = (body: unknown) => ({ ...(body as object) });
+  it("starts from the Earnings tab's link with the window and every reporter scored", async () => {
+    search = new URLSearchParams("universe=earnings&when=week&start=1");
+    fetchMock.mockResolvedValue(jsonResponse(latest({ max_results: 100 })));
+    const create = vi.fn(async (body: unknown): Promise<never> => { throw new Error(`stop ${typeof body}`); });
+    render(<SessionProvider initialMe={me("pro")}><CustomScanView client={{ ...idle, create }} /></SessionProvider>);
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(started(create.mock.calls[0]![0])).toMatchObject({ universe: "earnings", earnings_window: "week", score_all: true });
+    expect(screen.getByRole("radio", { name: "Stocks reporting earnings" })).toBeChecked();
+  });
+
+  it("locks tomorrow and the week on Starter and never auto-starts them", async () => {
+    search = new URLSearchParams("universe=earnings&when=week&start=1");
+    fetchMock.mockResolvedValue(jsonResponse(latest({ max_results: 25 })));
+    const create = vi.fn();
+    render(<SessionProvider initialMe={me("basic")}><CustomScanView client={{ ...idle, create }} /></SessionProvider>);
+    expect(screen.getByRole("radio", { name: /Next 7 days · Pro/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Today" })).toBeEnabled();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
 describe("Custom scan waiting and cancel", () => {
   const queuedJob = (createdAgoS: number): Schemas["ScanJob"] => ({
     scan_id: "d".repeat(32), status: "queued", universe: "sp500",

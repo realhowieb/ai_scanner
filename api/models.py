@@ -749,9 +749,10 @@ class ScanProgress(BaseModel):
 
 class ScanParams(BaseModel):
     """The parameters the scan actually used (after plan rules)."""
-    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker"]
+    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"]
     ticker: Optional[str] = None
     watchlist_id: Optional[int] = None
+    earnings_window: Optional[Literal["today", "tomorrow", "week"]] = None
     score_all: bool = False
     profile: Literal["regular", "aggressive", "conservative"]
     session_requested: Literal["regular", "premarket", "afterhours"]

@@ -4148,6 +4148,16 @@
    "CustomView": {
     "additionalProperties": false,
     "properties": {
+     "earnings_window": {
+      "default": "today",
+      "enum": [
+       "today",
+       "tomorrow",
+       "week"
+      ],
+      "title": "Earnings Window",
+      "type": "string"
+     },
      "gap": {
       "default": false,
       "title": "Gap",
@@ -4253,7 +4263,8 @@
        "combo",
        "us_market",
        "watchlist",
-       "ticker"
+       "ticker",
+       "earnings"
       ],
       "title": "Universe",
       "type": "string"
@@ -10273,12 +10284,29 @@
    },
    "ScanCreate": {
     "properties": {
+     "earnings_window": {
+      "anyOf": [
+       {
+        "enum": [
+         "today",
+         "tomorrow",
+         "week"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "For universe=earnings: today (default, every plan), tomorrow or week = next 7 days (Pro)",
+      "title": "Earnings Window"
+     },
      "filters": {
       "$ref": "#/components/schemas/ScanFilters"
      },
      "score_all": {
       "default": false,
-      "description": "Watchlist only: score every symbol, ignoring the screens (as on the web)",
+      "description": "Watchlist and earnings: score every symbol, ignoring the screens (as on the web)",
       "title": "Score All",
       "type": "boolean"
      },
@@ -10296,14 +10324,15 @@
       "title": "Ticker"
      },
      "universe": {
-      "description": "sp500 (every plan) \u00b7 nasdaq, combo (Pro+) \u00b7 us_market (Premium+) \u00b7 watchlist (one of yours) \u00b7 ticker (one symbol)",
+      "description": "sp500 (every plan) \u00b7 nasdaq, combo (Pro+) \u00b7 us_market (Premium+) \u00b7 watchlist (one of yours) \u00b7 ticker (one symbol) \u00b7 earnings (stocks reporting in earnings_window)",
       "enum": [
        "sp500",
        "nasdaq",
        "combo",
        "us_market",
        "watchlist",
-       "ticker"
+       "ticker",
+       "earnings"
       ],
       "title": "Universe",
       "type": "string"
@@ -10594,6 +10623,22 @@
       "title": "Apply Gap Filter",
       "type": "boolean"
      },
+     "earnings_window": {
+      "anyOf": [
+       {
+        "enum": [
+         "today",
+         "tomorrow",
+         "week"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Earnings Window"
+     },
      "full_lists": {
       "description": "True for Premium/admin: NASDAQ and Combo scan the full lists",
       "title": "Full Lists",
@@ -10697,7 +10742,8 @@
        "combo",
        "us_market",
        "watchlist",
-       "ticker"
+       "ticker",
+       "earnings"
       ],
       "title": "Universe",
       "type": "string"

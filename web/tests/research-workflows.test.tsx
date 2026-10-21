@@ -133,7 +133,7 @@ it("shows support codes, provider failures and shared scan queue counts", async 
 it("refuses saved custom filters that are outside the account's current plan", async () => {
   preferences.custom_views = [{ name: "Pro volume", universe: "sp500", ticker: "", watchlist_id: null,
     session: "regular", top_n: 25, min_price: null, max_price: null, min_dollar_vol: null, unusual: true,
-    gap: false, min_gap: null, score_all: false }];
+    gap: false, min_gap: null, score_all: false, earnings_window: "today" }];
   const create = vi.fn();
   render(<SessionProvider initialMe={me("basic")}><CustomScanView client={{ list: async () => [], create, get: vi.fn(), cancel: vi.fn() }} /></SessionProvider>);
   await screen.findByRole("option", { name: "Pro volume" });
