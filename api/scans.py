@@ -88,7 +88,13 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     scan_total = len(opps)
     if min_score:
         opps = [o for o in opps if int(o.get("score") or 0) >= int(min_score)]
-    if signal:
+    if signal == "prebreakout":
+        # The model's strongest names this scan, kept in HSF order (see PREBREAKOUT_TOP_N).
+        from ui.results_intelligence import prebreakout_picks
+
+        picked = {id(o) for o in prebreakout_picks(opps)}
+        opps = [o for o in opps if id(o) in picked]
+    elif signal:
         opps = [o for o in opps if signal in (o.get("signals") or [])]
     visible = opps[:cap]
     if sort != "score":
