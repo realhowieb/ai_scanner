@@ -42,13 +42,19 @@ it("initializes once with automatic collection disabled and only the selected re
     disable_external_dependency_loading: true, capture_exceptions: false, save_referrer: false, save_campaign_params: false });
 });
 
-it("preserves event order when another action arrives as the SDK finishes initializing", async () => {
+it.each([0, 1, 2, 3, 4, 5])("preserves event order through SDK initialization settlement (microtask depth %i)", async (depth) => {
   const a = await import("@/lib/usageAnalytics");
   ph.init.mockImplementationOnce(() => {
     // The SDK is ready by the time this runs, but the original loader promise
     // still has settlement callbacks to finish. A ready-SDK shortcut must not
     // let this action overtake the one that started loading.
-    queueMicrotask(() => a.captureUsage("watchlist_stock_added"));
+    const later = (remaining: number): void => {
+      queueMicrotask(() => {
+        if (remaining > 0) later(remaining - 1);
+        else a.captureUsage("watchlist_stock_added");
+      });
+    };
+    later(depth);
   });
   a.captureUsage("watchlist_created");
   await waitFor(() => expect(ph.capture).toHaveBeenCalledTimes(2));

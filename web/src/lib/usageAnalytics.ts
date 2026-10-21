@@ -10,7 +10,7 @@ export type UsageEvent = "page_viewed" | "scanner_viewed" | "stock_viewed" | "wa
 type UsageProperties = { route?: string; kind?: "price" | "technical" | "hsf" | "scan" };
 const ROUTES = new Set(["/", "/demo", "/methodology", "/pricing", "/signup", "/today", "/brief", "/scanner", "/scanner/custom", "/scanner/history", "/compare", "/watchlists", "/alerts", "/track-record", "/day-trader", "/journal", "/paper-trading", "/account"]);
 let sdk: PostHog | null = null;
-let loading: Promise<PostHog | null> | null = null;
+let clientPromise: Promise<PostHog | null> | null = null;
 let identityGeneration = 0;
 
 export function analyticsConfigured(): boolean {
@@ -51,13 +51,12 @@ export function sanitizeUsage(event: CaptureResult | null): CaptureResult | null
 
 function client(): Promise<PostHog | null> {
   if (!usageAllowed()) return Promise.resolve(null);
-  // Every action during initialization must wait on the same promise. The SDK
-  // becomes ready before that promise settles; taking a shortcut then would
-  // allow a newer action to overtake the one that started loading.
-  if (loading) return loading;
-  if (sdk) return Promise.resolve(sdk);
+  // Retain the shared promise after successful initialization too: clearing it
+  // in a settlement callback opens another window for newer actions to overtake
+  // older ones. Only failed initialization is cleared so a later action can retry.
+  if (clientPromise) return clientPromise;
   const initGeneration = identityGeneration;
-  if (!loading) loading = import("posthog-js").then(({ default: posthog }) => {
+  clientPromise = import("posthog-js").then(({ default: posthog }) => {
     if (!usageAllowed()) return null;
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
       api_host: posthogHost(process.env.NEXT_PUBLIC_POSTHOG_HOST),
@@ -74,8 +73,8 @@ function client(): Promise<PostHog | null> {
     if (initGeneration !== identityGeneration) posthog.reset(true);
     sdk = posthog;
     return sdk;
-  }).catch(() => null).finally(() => { loading = null; });
-  return loading;
+  }).catch(() => null).finally(() => { if (!sdk) clientPromise = null; });
+  return clientPromise;
 }
 
 /** Best effort: analytics must never delay or reject a successful product action. */
