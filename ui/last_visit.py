@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Any, Optional, Set, Tuple
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 

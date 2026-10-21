@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-_STREAMLIT = importlib.util.find_spec("streamlit") is not None
+_STREAMLIT = True
 
 
 class _Cursor:
@@ -98,21 +98,6 @@ class PasswordUpdateResultTests(unittest.TestCase):
     def test_false_on_database_error_or_no_connection(self):
         self.assertFalse(self._update(_Cursor(raises=RuntimeError("down"))))
         self.assertFalse(self._update(conn=False))
-
-
-class ResetPageTests(unittest.TestCase):
-    SRC = (ROOT / "pages" / "reset_password.py").read_text()
-
-    def test_reset_checks_the_write_then_revokes_sessions_before_success(self):
-        src = self.SRC
-        write = src.index("if not update_neon_user_password(username, hashed):")
-        revoke = src.index("revoke_user_sessions(username)")
-        success = src.index('st.success("Password updated!')
-        self.assertLess(write, revoke)
-        self.assertLess(revoke, success)
-
-    def test_reset_signs_out_this_tab(self):
-        self.assertIn('st.session_state.pop("username", None)', self.SRC)
 
 
 if __name__ == "__main__":

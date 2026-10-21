@@ -27,7 +27,7 @@ import html
 from typing import Any, Dict, Mapping, Optional, Sequence
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 

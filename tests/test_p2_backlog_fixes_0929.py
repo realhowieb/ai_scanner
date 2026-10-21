@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 HAS_BCRYPT = importlib.util.find_spec("bcrypt") is not None
 
 
@@ -154,9 +154,8 @@ class P2_32_FailureReasonTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_ST, "needs streamlit")
     def test_only_admins_see_the_reason(self):
-        import streamlit as st
-
         from ui import email_verification_gate as gate
+        from utils.st_compat import st
 
         with mock.patch("db.email_verification.create_verification_token", return_value=None):
             self.assertFalse(gate._resend_verification("a@x.com"))

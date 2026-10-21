@@ -17,11 +17,11 @@ describe("visitor address for the API's per-address limits", () => {
     const seen: Headers[] = [];
     const up = async (_p: string, init: RequestInit) => { seen.push(new Headers(init.headers)); return new Response("{}"); };
     await withClientAddress(req("203.0.113.9"), up, "s3cret")("/v1/auth/login", { method: "POST", headers: { "x-request-id": "abc12345" } });
-    expect(seen[0].get(CLIENT_IP_HEADER)).toBe("203.0.113.9");
-    expect(seen[0].get(PROXY_KEY_HEADER)).toBe("s3cret");
-    expect(seen[0].get("x-request-id")).toBe("abc12345");
+    expect(seen[0]!.get(CLIENT_IP_HEADER)).toBe("203.0.113.9");
+    expect(seen[0]!.get(PROXY_KEY_HEADER)).toBe("s3cret");
+    expect(seen[0]!.get("x-request-id")).toBe("abc12345");
     await withClientAddress(req("203.0.113.9"), up, "")("/v1/auth/login", { method: "POST" });
-    expect(seen[1].get(CLIENT_IP_HEADER)).toBeNull();
-    expect(seen[1].get(PROXY_KEY_HEADER)).toBeNull();
+    expect(seen[1]!.get(CLIENT_IP_HEADER)).toBeNull();
+    expect(seen[1]!.get(PROXY_KEY_HEADER)).toBeNull();
   });
 });

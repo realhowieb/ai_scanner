@@ -72,14 +72,6 @@ def test_admin_only_capabilities_are_not_customer_benefits():
     assert "retrain" not in text
 
 
-def test_signed_out_and_billing_use_same_shared_plan_renderer():
-    landing = (ROOT / "ui" / "landing.py").read_text()
-    billing = (ROOT / "pages" / "billing.py").read_text()
-    assert "plans_html()" in landing
-    assert "from ui.pricing import pricing_markdown" in billing
-    assert "from ui.pricing import benefits_markdown" in billing
-
-
 def test_pro_is_the_only_featured_plan_and_free_copy_is_truthful():
     html = plans_html()
     assert html.count('class="hsf-plan featured"') == 1

@@ -78,35 +78,5 @@ class HsfScoreColumnTests(unittest.TestCase):
         self.assertIn("Breakout score (model input): 42.00", hs.breakout_score_help(42.0))
 
 
-class WiringTests(unittest.TestCase):
-    def test_app_adds_the_column_after_why(self):
-        app = (ROOT / "app.py").read_text()
-        self.assertLess(app.index("df = add_why_column(df)"), app.index("df = add_hsf_score_column(df)"))
-        self.assertLess(app.index("df = add_hsf_score_column(df)"),
-                        app.index("df = rank_hsf_opportunities(df)"))
-        self.assertLess(app.index("df = rank_hsf_opportunities(df)"),
-                        app.index("df = render_discover_bar(df)"))
-
-    def test_detail_cards_lead_with_hsf_score(self):
-        src = (ROOT / "ui" / "results.py").read_text()
-        self.assertEqual(src.count('c1.metric("HSF Score", hsf_metric_text(r0)'), 4)
-        self.assertNotIn('c1.metric("BreakoutScore"', src)
-        self.assertEqual(src.count("model_details_view("), 2)     # interactive grid + static table
-
-    def test_copy_no_longer_sells_breakout_score_as_the_headline(self):
-        self.assertNotIn("Breakout Score (technical setup quality)", (ROOT / "ui" / "auth.py").read_text())
-        self.assertIn("Latest full-market ranking (HSF Score)", (ROOT / "ui" / "pricing.py").read_text())
-        self.assertIn("Breakout score map (model detail)", (ROOT / "ui" / "score_map.py").read_text())
-
-    @unittest.skipUnless(importlib.util.find_spec("streamlit"), "needs streamlit")
-    def test_column_config_labels(self):
-        from ui.result_helpers import results_column_config
-
-        cfg = results_column_config()
-        self.assertIn(hs.HSF_SCORE_COL, cfg)
-        self.assertEqual(cfg["BreakoutScore"]["label"], "Breakout score")
-        self.assertIn("not a probability of profit", cfg[hs.HSF_SCORE_COL]["help"])
-
-
 if __name__ == "__main__":
     unittest.main()

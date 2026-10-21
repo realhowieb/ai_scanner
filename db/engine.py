@@ -6,7 +6,7 @@ from pathlib import Path
 from db.traffic import connect_options, count
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover - depends on optional UI dependency
     class _StreamlitShim:
         secrets: dict = {}

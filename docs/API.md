@@ -12,7 +12,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | Method | Path | Auth | What |
 |---|---|---|---|
 | GET | `/healthz` | none | Liveness only (no database call). Use as the Render health check. |
-| GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring; 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
+| GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring and the API's memory (`rss_mb`, `rss_peak_mb`, `memory_warning`); 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
 | POST | `/v1/auth/login` | none | `{"email","password","client"?}` → `access_token` (15 min), `refresh_token` (30 days). Same accounts and passwords as the web app. 10 failed attempts in 10 minutes → 429. |
 | POST | `/v1/auth/refresh` | none | `{"refresh_token"}` → a new pair. Each refresh token works once. A retry within 30 s of rotating (lost response, two refreshes at once) gets another pair; a later replay, or one after logout, is treated as theft and revokes every session of that account. |
 | POST | `/v1/auth/logout` | none | `{"refresh_token","push_token"?}` → 204, token revoked; with `push_token`, that device stops getting this account's pushes. |
@@ -215,6 +215,11 @@ Environment variables:
 | `APP_ENCRYPTION_KEY` | Same as the web app. Needed to store paper-trading keys (`POST /v1/paper/account`); without it paper trading answers 503. |
 | `API_SCAN_WORKERS` | Optional, default 1 (max 4): custom scans that run at once. Raise only with more memory (a US market scan holds thousands of price histories). |
 | `APP_BASE_URL`, `BILLING_API_BASE` | Optional; default to the production web app and billing service. |
+| `HSF_PROXY_SECRET` | Random secret, **same value on hsf-web-v1**. The web server sends each visitor's address with it, so the per-address sign-in and sign-up limits apply per visitor instead of to the web server as a whole. Unset on either side = the old behaviour. |
+| `HSF_API_DOCS` | Optional. `/docs` and `/openapi.json` are off on Render; `1` turns them back on. The web client's contract comes from `scripts/export_openapi.py`, not the live service. |
+| `HSF_API_THREADS` | Optional, default 24: request threads (each keeps a warm database connection). |
+| `HSF_DB_STATEMENT_TIMEOUT_MS` | Optional, default 30000 in the API (jobs have no limit): Postgres cancels one query after this long. |
+| `HSF_MEMORY_LIMIT_MB`, `HSF_MEMORY_WARN_MB` | Optional, default 512 and 400. `/readyz` reports `rss_mb`, `rss_peak_mb` and `memory_warning`; the nightly health report warns (`API_MEMORY_HIGH`) once the peak since the last restart reaches the warning line. |
 
 The service won't start without `API_JWT_SECRET` (uvicorn logs
 "HSF API not started: API_JWT_SECRET must be set…" and exits). Changing it signs every app
@@ -223,10 +228,12 @@ user out once (access tokens stop verifying; refresh tokens still work).
 The free plan sleeps after 15 minutes idle; move to Starter before the app has
 real users.
 
-Memory: the API idles at about 90 MB. The first custom scan loads the PreBreakout
-model libraries (xgboost, scikit-learn), which adds about 230 MB for the life of
-the process, before the scan's own price data. Watch the service's memory graph
-after the first scans; a 512 MB instance has little headroom for a US market scan.
+Memory: after importing everything it serves, the API holds about 140 MB before
+caches fill (202 MB before the Streamlit app and pyarrow were removed, 2026-10-21).
+The first custom scan loads the PreBreakout model libraries (xgboost, scikit-learn),
+about 80 MB more for the life of the process, plus the model and the scan's own
+price data. `/readyz` shows memory now and the peak since restart, and the nightly
+health report warns at 400 of 512 MB.
 
 ## Acceptance journey
 

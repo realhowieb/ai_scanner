@@ -160,7 +160,7 @@ def run_breakout_scan(
     """
     # Optional: Streamlit diagnostics
     try:
-        import streamlit as st  # type: ignore
+        from utils.st_compat import st
     except Exception:
         st = None  # type: ignore[assignment]
 

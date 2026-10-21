@@ -1,9 +1,9 @@
 import re
 
 import bcrypt
-import streamlit as st
 
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
+from utils.st_compat import st
 
 try:  # optional: a mid-redeploy import race must never block sign-in
     from ui.landing import render_signed_out_details, render_signed_out_hero

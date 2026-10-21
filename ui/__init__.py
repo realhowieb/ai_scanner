@@ -1,19 +1,16 @@
-"""UI package for ai_scanner.
+"""Shared helpers from the old Streamlit app that the API and scheduled jobs still use.
 
-This package contains all user-interface related modules:
-    - pages:     Streamlit page definitions / page router
-    - universe:  Universe loaders + filtering + liquidity helpers
-    - auth:      Authentication UI
-    - charts:    UI-level wrappers around chart rendering (if needed)
+The Streamlit app itself was retired on 2026-10-21; `st` in these modules comes from
+utils/st_compat.py, not from Streamlit.
 """
 
 import importlib
 
-__all__ = ["pages", "universe", "auth", "charts", "ai_notes"]
+__all__ = ["universe", "auth", "charts"]
 
 
 def __getattr__(name: str):
-    """Lazily expose UI submodules without import-time Streamlit side effects."""
+    """Lazily expose submodules."""
     if name not in __all__:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     module = importlib.import_module(f"{__name__}.{name}")

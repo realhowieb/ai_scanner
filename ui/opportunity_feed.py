@@ -86,7 +86,7 @@ def render_opportunity_feed(
 ) -> None:
     """Render the feed. No-op (returns) when Streamlit is unavailable."""
     try:
-        import streamlit as st
+        from utils.st_compat import st
     except Exception:
         return
 

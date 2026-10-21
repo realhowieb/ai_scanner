@@ -5,10 +5,10 @@ import time
 from typing import List
 
 import pandas as pd
-import streamlit as st
 
 from ui.safe_errors import report_error as _report_error
 from ui.universe_db import db_get_universe, db_upsert_universe, try_import
+from utils.st_compat import st
 
 try:
     import requests

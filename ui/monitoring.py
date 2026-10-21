@@ -49,7 +49,7 @@ def _get_dsn() -> str | None:
         return dsn
     # Streamlit secrets (app context only); guarded — no secrets file in cron.
     try:
-        import streamlit as st  # type: ignore
+        from utils.st_compat import st
 
         val = st.secrets.get("SENTRY_DSN")  # may raise if no secrets
         return str(val) if val else None

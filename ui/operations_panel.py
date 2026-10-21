@@ -36,7 +36,7 @@ def operations_html(report):
 
 
 def render_operations_panel(summary):
-    import streamlit as st
+    from utils.st_compat import st
     if not bool(st.session_state.get('is_admin')):
         return
     st.markdown(operations_html(summary), unsafe_allow_html=True)

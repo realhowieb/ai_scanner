@@ -3,7 +3,7 @@ name: System Health
 # Run 59 — HSF autonomous research & operations health control plane.
 # READ-ONLY with respect to the experiment: builds one health model from existing
 # telemetry, uploads system_health.{json,md}, and appends one snapshot to the
-# separate operational table hsf_system_health (for the Streamlit view and trend
+# separate operational table hsf_system_health (for the web admin view and trend
 # comparison). No self-healing, no effectiveness statistics (anti-peeking).
 #
 # Cadence: after the final scan + maturation cycles of each trading day, plus a

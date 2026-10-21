@@ -5,7 +5,7 @@ import json
 import unittest
 from unittest import mock
 
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 HAS_BCRYPT = importlib.util.find_spec("bcrypt") is not None
 
 
@@ -99,61 +99,10 @@ class ActionRecordingTests(unittest.TestCase):
 
 
 SCRIPT = '''
-import streamlit as st
+from utils.st_compat import st
 from ui.admin_users import render_admin_users_panel
 render_admin_users_panel("me@example.com", set(), "ok")
 '''
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class PanelTests(unittest.TestCase):
-    ROWS = [{"username": "me@example.com", "full_name": "Me", "tier": "premium", "is_active": True,
-             "is_admin": True, "email_verified": True, "created_at": None},
-            {"username": "a@example.com", "full_name": "A", "tier": "basic", "is_active": True,
-             "is_admin": False, "email_verified": True, "created_at": None}]
-
-    def render(self, events=None, action=None):
-        import pandas as pd
-        from streamlit.testing.v1 import AppTest
-
-        at = AppTest.from_string(SCRIPT, default_timeout=60)
-        at.session_state["is_admin"] = True
-        base = pd.DataFrame([{k: r[k] for k in ("username", "full_name", "tier", "is_active", "created_at")}
-                             for r in self.ROWS])
-        rec = Recorder()
-        with mock.patch("ui.admin_users.fetch_all_users", return_value=base), \
-             mock.patch("db.user_admin.fetch_users_for_admin", return_value=self.ROWS), \
-             mock.patch("db.admin_audit.recent_admin_events", return_value=events or []), \
-             mock.patch("db.admin_audit.record_admin_event", side_effect=rec), \
-             mock.patch("ui.admin_users.get_neon_conn", return_value=mock.MagicMock()):
-            at.run()
-            at.checkbox(key="enable_admin_users").check().run()
-            if action:
-                action(at)
-        self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
-        return at, rec
-
-    def test_update_user_records_only_what_changed(self):
-        def change_tier(at):
-            next(sb for sb in at.selectbox if sb.label == "Select user to edit").set_value("a@example.com").run()
-            next(sb for sb in at.selectbox if sb.label == "Tier" and "admin" not in sb.options
-                 and sb.value == "basic" and sb.key != "create_user_tier").set_value("pro").run()
-            next(b for b in at.button if b.label == "Update User").click().run()
-
-        _, rec = self.render(action=change_tier)
-        self.assertEqual(rec.events, [("me@example.com", "update_user", "a@example.com", {"tier": ["basic", "pro"]})])
-
-    def test_recent_actions_table(self):
-        at, _ = self.render(events=[{"at": "2026-09-28 22:00", "actor": "me@example.com", "action": "grant_admin",
-                                     "target": "a@example.com", "detail": {}}])
-        self.assertIn("🧾 Recent admin actions", [s.value for s in at.subheader])
-        df = at.dataframe[-1].value
-        self.assertEqual(list(df["Action"]), ["grant admin"])
-        self.assertEqual(list(df["Account"]), ["a@example.com"])
-
-    def test_empty_log_says_so(self):
-        at, _ = self.render()
-        self.assertIn("No admin actions recorded yet.", [c.value for c in at.caption])
 
 
 if __name__ == "__main__":

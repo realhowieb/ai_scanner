@@ -32,7 +32,7 @@ def _plan(req, tier, session="regular"):
                      max_results=max_results_for(tier), now_session=session)
 
 
-@unittest.skipUnless(importlib.util.find_spec("streamlit"), "needs the app's modules")
+@unittest.skipUnless(True, "needs the app's modules")
 class PlanRuleTests(unittest.TestCase):
     def test_universes_by_plan(self):
         from api.custom_scans import PlanError

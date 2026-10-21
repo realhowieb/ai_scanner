@@ -18,7 +18,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 
 DATA = {
     "gappers": [{"ticker": "AKAM", "gap_pct": 12.8, "chg_pct": 3.1}, {"ticker": "GRAL", "gap_pct": -3.0, "chg_pct": 1.9}],
@@ -51,94 +51,12 @@ def _flags(tier):
     return compute_entitlements(tier_obj=SimpleNamespace(key=tier, name=tier.upper()), is_admin=False)
 
 
-def render(tier):
-    """Render Market Brief for `tier`; returns (AppTest, claude_calls)."""
-    from streamlit.testing.v1 import AppTest
-
-    calls = []
-
-    def fake_claude(**kw):
-        calls.append(kw.get("feature"))
-        return "AI TEXT", None
-
-    ctx = {"sufficient": True, "bucket": "70-79", "positive_rate": 0.3, "n": 10, "confidence": "low"}
-    outcomes = {"completed": 5, "pending": 1, "hit_rate": 0.4, "avg_winner": 3.0, "avg_loser": -2.0}
-    at = AppTest.from_string(SCRIPT, default_timeout=120)
-    for k, v in {"username": "realtest123@example.com", "tier_key": tier, "is_admin": False,
-                 "tier": SimpleNamespace(key=tier, name=tier.upper()), "entitlements": dict(_flags(tier))}.items():
-        at.session_state[k] = v
-    with mock.patch("ui.market_brief._brief_cached", mock.Mock(return_value=DATA)), \
-         mock.patch("analytics.hsf_calibration.historical_context", return_value=ctx), \
-         mock.patch("db.signal_outcomes.summarize_recent_outcomes", return_value=outcomes), \
-         mock.patch("db.signal_outcomes.summarize_outcomes_by_type", return_value=[]), \
-         mock.patch("ui.ai.is_configured", return_value=True), \
-         mock.patch("ui.ai.ask_claude", side_effect=fake_claude), \
-         mock.patch("market_data.get_latest_quotes", return_value={}), \
-         mock.patch("market_data.build_day_trader_metrics", return_value=[]):
-        at.run()
-    return at, calls
-
-
 def text(at):
     parts = []
     for coll in (at.markdown, at.caption, at.info, at.subheader, at.metric, at.expander):
         for e in coll:
             parts.append(str(getattr(e, "value", "") or getattr(e, "label", "")))
     return "\n".join(parts)
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class MarketBriefGatingTests(unittest.TestCase):
-    def test_free_sees_no_premium_or_pro_research(self):
-        at, calls = render("basic")
-        self.assertFalse(at.exception, [str(e.value)[:200] for e in at.exception])
-        t = text(at)
-        self.assertNotIn("### 🧠 PreBreakout picks", t)
-        self.assertNotRegex(t, r"TWLO · \$275")                      # candidate list not shown
-        self.assertIn("PreBreakout candidates", t)                   # one-line Premium note instead
-        self.assertNotIn("AI take", t)
-        self.assertNotIn("📊 Historical context", t)
-        self.assertNotIn("flagged-signal outcomes", t)
-        self.assertEqual(calls, [])                                   # no Claude spend on Free
-        self.assertNotRegex(t, r"prebreakout \+|\+ prebreakout")       # Standouts tags hidden
-
-    def test_pro_gets_historical_research_but_not_premium(self):
-        at, calls = render("pro")
-        self.assertFalse(at.exception, [str(e.value)[:200] for e in at.exception])
-        t = text(at)
-        self.assertIn("📊 Historical context", t)
-        self.assertIn("flagged-signal outcomes", t)
-        self.assertNotIn("### 🧠 PreBreakout picks", t)
-        self.assertNotIn("AI take", t)
-        self.assertEqual(calls, [])
-
-    def test_premium_gets_everything(self):
-        at, calls = render("premium")
-        self.assertFalse(at.exception, [str(e.value)[:200] for e in at.exception])
-        t = text(at)
-        self.assertIn("### 🧠 PreBreakout picks", t)
-        self.assertIn("AI take", t)
-        self.assertIn("📊 Historical context", t)
-        self.assertIn("opportunity_ai_take", calls)
-        self.assertIn("market_brief_narrative", calls)
-
-    def test_scoreboard_is_gone_for_everyone(self):
-        for tier in ("basic", "pro", "premium"):
-            t = text(render(tier)[0])
-            self.assertNotIn("Yesterday's brief", t, tier)
-            self.assertNotIn("how it did", t, tier)
-
-    def test_hsf_scores_are_identical_for_every_plan(self):
-        scores = {}
-        for tier in ("basic", "pro", "premium"):
-            scores[tier] = re.findall(r"(\w+) — HSF Score (\d+)", text(render(tier)[0]))
-        self.assertTrue(scores["basic"])
-        self.assertEqual(scores["basic"], scores["pro"])
-        self.assertEqual(scores["basic"], scores["premium"])
-
-    def test_predictive_edge_note_appears_once(self):
-        t = text(render("premium")[0])
-        self.assertLessEqual(t.count("not a predictive edge"), 1)
 
 
 class EmailAndSourceTests(unittest.TestCase):

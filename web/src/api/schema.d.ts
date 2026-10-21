@@ -5772,8 +5772,33 @@ export interface components {
              * @description Latest market scan (ISO); null when none
              */
             latest_scan_at?: string | null;
+            /**
+             * Memory Limit Mb
+             * @description The instance's memory limit (MB)
+             */
+            memory_limit_mb?: number | null;
+            /**
+             * Memory Warn Mb
+             * @description memory_warning turns on at this peak (MB)
+             */
+            memory_warn_mb?: number | null;
+            /**
+             * Memory Warning
+             * @description The peak reached memory_warn_mb: close to the limit, where Render restarts the API
+             */
+            memory_warning?: boolean | null;
             /** Ok */
             ok: boolean;
+            /**
+             * Rss Mb
+             * @description API memory in use now (MB)
+             */
+            rss_mb?: number | null;
+            /**
+             * Rss Peak Mb
+             * @description Highest API memory seen since the last restart (MB)
+             */
+            rss_peak_mb?: number | null;
             /** Scan Age Minutes */
             scan_age_minutes?: number | null;
             /**

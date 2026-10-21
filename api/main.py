@@ -407,13 +407,13 @@ def _start_realtime_alerts() -> None:
 def _module_app():
     """Module-level app for `uvicorn api.main:app` (settings from the environment).
     Importing never raises, so tests can import create_app without the secret."""
-    # One stuck query mustn't hold a request thread forever (db/engine.py). Jobs keep no limit.
-    os.environ.setdefault("HSF_DB_STATEMENT_TIMEOUT_MS", "30000")
     try:
         app = create_app()
     except RuntimeError as e:
         log.error("HSF API not started: %s", e)
         return _failing_app(f"HSF API not started: {e}")
+    # One stuck query mustn't hold a request thread forever (db/engine.py). Jobs keep no limit.
+    os.environ.setdefault("HSF_DB_STATEMENT_TIMEOUT_MS", "30000")
     from api.monitoring import init_api_monitoring
 
     init_api_monitoring()

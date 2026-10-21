@@ -5,7 +5,7 @@ import importlib.util
 import unittest
 from unittest.mock import MagicMock, patch
 
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 
 
 class EmailIsVerifiedTest(unittest.TestCase):
@@ -30,9 +30,8 @@ class EmailIsVerifiedTest(unittest.TestCase):
 @unittest.skipUnless(HAS_ST, "needs streamlit")
 class UpgradeGateTest(unittest.TestCase):
     def _gate(self, **status):
-        import streamlit as st
-
         from ui import email_verification_gate as g
+        from utils.st_compat import st
         with patch("db.email_verification.email_verification_status", **status), \
                 patch.object(st, "warning") as warn, patch.object(st, "button", return_value=False) as button:
             allowed = g.require_verified_for_upgrade("u@x.com", key_suffix="t")

@@ -39,7 +39,6 @@ __all__ = [
     "run_premarket_headless",
     "run_postmarket_headless",
     "run_sp500_headless",
-    "render_app",
 ]
 
 __version__ = "0.2.0"
@@ -60,13 +59,13 @@ _ensure_repo_root_on_path()
 # ---------- Namespace shims for local development ----------
 # If running locally without `pip install -e .`, map top-level packages like
 # `ui/`, `db/`, etc. into the `ai_scanner.*` namespace so imports like
-# `import ai_scanner.ui.pages_main` still work.
+# `import ai_scanner.db.engine` still work.
 for _name in ("ui", "db", "data", "scan", "scheduler", "logging_utils"):
     try:
         # If submodule isn't already registered under ai_scanner, alias it
         if f"{__name__}.{_name}" not in sys.modules:
             _mod = import_module(_name)
-            # Mirror its __path__ so subimports (e.g., pages_main) resolve
+            # Mirror its __path__ so subimports resolve
             sys.modules[f"{__name__}.{_name}"] = _mod
     except Exception:
         # It's fine if a local package doesn't exist; we only alias what we find
@@ -106,13 +105,6 @@ def lazy_submodule(name: str) -> Any:
 
 
 # ---------- Forwarded convenience functions (lazy) ----------
-# UI entrypoint forwarder for diagnostic probe/launch
-def render_app(*args: Any, **kwargs: Any):
-    """Forward to ai_scanner.ui.pages.render_app (lazy)."""
-    fn: Callable[..., Any] = _lazy("ui.pages", "render_app")  # type: ignore[assignment]
-    return fn(*args, **kwargs)
-
-
 def get_engine(*args: Any, **kwargs: Any):
     """Return a SQLAlchemy engine from ai_scanner.db.engine.get_engine.
 

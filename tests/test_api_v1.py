@@ -131,9 +131,9 @@ class HealthAndSettingsTests(ApiTestCase):
         self.assertIn("max-age=", r.headers["strict-transport-security"])
 
     def test_docs_are_hidden_on_render(self):
-        from api.main import create_app
-
         import os
+
+        from api.main import create_app
 
         with mock.patch.dict(os.environ, {"RENDER": "true", "HSF_API_DOCS": ""}):
             app = create_app(self.client.app.state.settings)

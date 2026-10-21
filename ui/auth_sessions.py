@@ -8,7 +8,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-import streamlit as st
+from utils.st_compat import st
 
 try:
     from streamlit_cookies_manager import EncryptedCookieManager

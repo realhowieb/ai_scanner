@@ -154,9 +154,8 @@ def model_details_view(df: Any, *, key: str) -> Any:
     """Render the model-details toggle (only when such columns exist) and
     return df limited to the visible columns. Never raises."""
     try:
-        import streamlit as st
-
         from ui.entitlement_view import redact_prebreakout_frame
+        from utils.st_compat import st
 
         ent = st.session_state.get("entitlements") or {}
         df = redact_prebreakout_frame(df, allowed=bool(ent.get("can_early_breakout")))

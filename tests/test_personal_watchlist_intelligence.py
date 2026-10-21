@@ -117,17 +117,6 @@ class PersonalWatchlistIntelligenceTests(unittest.TestCase):
         for token in forbidden:
             self.assertNotIn(token, source)
 
-    def test_ui_wires_personal_watchlist_without_replacing_management(self):
-        page = (ROOT / "pages" / "watchlists.py").read_text()
-        results = (ROOT / "ui" / "results.py").read_text()
-        result_filter = (ROOT / "ui" / "result_watchlist_filter.py").read_text()
-        brief = (ROOT / "ui" / "market_brief.py").read_text()
-        self.assertIn("render_personal_watchlist", page)
-        self.assertIn("render_watchlists_panel", page)
-        self.assertIn("apply_watchlist_result_view", results)
-        self.assertIn("Watchlist only", result_filter)
-        self.assertIn("_render_watchlist_opportunity_matches", brief)
-
 
 if __name__ == "__main__":
     unittest.main()

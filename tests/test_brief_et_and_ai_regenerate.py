@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 
 
 class EtStampTests(unittest.TestCase):
@@ -28,27 +28,10 @@ class EtStampTests(unittest.TestCase):
 
 SCRIPT = '''
 import pandas as pd
-import streamlit as st
+from utils.st_compat import st
 from ui.ai_summary import render_ai_summary
 render_ai_summary(pd.DataFrame([{"Ticker": "AAA", "BreakoutScore": 50.0}]), context="t")
 '''
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class RegenerateTests(unittest.TestCase):
-    def test_after_generating_only_regenerate_shows(self):
-        from streamlit.testing.v1 import AppTest
-
-        at = AppTest.from_string(SCRIPT, default_timeout=30)
-        with mock.patch("ui.ai_summary.generate_scan_summary", return_value=("**Summary text**", None)):
-            at.run()
-            [gen] = [b for b in at.button if "Generate AI summary" in b.label]
-            gen.click().run()
-        self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
-        labels = [b.label for b in at.button]
-        self.assertIn("🔄 Regenerate", labels)
-        self.assertFalse(any("Generate AI summary" in lbl for lbl in labels))
-        self.assertIn("**Summary text**", [m.value for m in at.markdown])
 
 
 if __name__ == "__main__":
