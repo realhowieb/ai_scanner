@@ -13,7 +13,12 @@ import { ErrorLine, Locked, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 
-export type ScanFilters = { name?: string; setup?: string; min_price?: number; max_price?: number; min_rvol?: number };
+export type ScanEarnings = "today" | "tomorrow" | "week";
+export type ScanFilters = { name?: string; setup?: string; min_price?: number; max_price?: number; min_rvol?: number; earnings?: ScanEarnings };
+
+const EARNINGS_NAMES: Record<ScanEarnings, string> = {
+  today: "reporting today", tomorrow: "reporting tomorrow", week: "reporting in the next 7 days",
+};
 
 const SETUP_NAMES: Record<string, string> = {
   breakout: "Breakout", gapper: "Gapper", golden_cross: "Golden cross", gainer: "Gainer", prebreakout: "PreBreakout",
@@ -34,6 +39,7 @@ export function describeScanAlert(threshold: number | null | undefined, value: s
   const f = parseScanFilters(value);
   const parts = [`HSF ${threshold ?? 0}+`];
   if (f.setup) parts.push(SETUP_NAMES[f.setup] ?? f.setup);
+  if (f.earnings) parts.push(EARNINGS_NAMES[f.earnings] ?? f.earnings);
   if (f.min_price != null && f.max_price != null) parts.push(`$${f.min_price} to $${f.max_price}`);
   else if (f.min_price != null) parts.push(`$${f.min_price}+`);
   else if (f.max_price != null) parts.push(`under $${f.max_price}`);
@@ -46,7 +52,7 @@ const num = (s: string): number | undefined => {
   return s.trim() !== "" && Number.isFinite(v) && v >= 0 ? v : undefined;
 };
 
-export function ScanAlertButton({ setup, minScore, setupLabel }: { setup: string; minScore: number; setupLabel?: string }) {
+export function ScanAlertButton({ setup, minScore, setupLabel, earnings }: { setup: string; minScore: number; setupLabel?: string; earnings?: ScanEarnings }) {
   const [open, setOpen] = useState(false);
   const types = useApi(open ? "alert-rule-types" : null, (signal) => alertRules.types(signal));
   const rules = useApi(open ? "alert-rules" : null, (signal) => alertRules.list(signal));
@@ -62,7 +68,7 @@ export function ScanAlertButton({ setup, minScore, setupLabel }: { setup: string
   const emailAllowed = !!rules.data?.capabilities.delivery_channels.includes("email");
   const close = () => { setOpen(false); setDone(null); };
   const filters: ScanFilters = {
-    ...(name.trim() ? { name: name.trim() } : {}), ...(setup ? { setup } : {}),
+    ...(name.trim() ? { name: name.trim() } : {}), ...(setup ? { setup } : {}), ...(earnings ? { earnings } : {}),
     ...(num(minPrice) !== undefined ? { min_price: num(minPrice) } : {}),
     ...(num(maxPrice) !== undefined ? { max_price: num(maxPrice) } : {}),
     ...(num(minRvol) !== undefined ? { min_rvol: num(minRvol) } : {}),
@@ -103,7 +109,7 @@ export function ScanAlertButton({ setup, minScore, setupLabel }: { setup: string
             </div>
           ) : (
             <form className="stack-sm" onSubmit={submit} aria-label="New scan alert">
-              <p className="cap">Watches the whole market for {setupLabel && setup ? `${setupLabel} setups` : "ranked setups"} at HSF Score {minScore}+. After each scan you get one alert listing the stocks that newly match. Using {rules.data.used} of {rules.data.limit} alerts.</p>
+              <p className="cap">Watches the whole market for {setupLabel && setup ? `${setupLabel} setups` : "ranked setups"}{earnings ? ` ${EARNINGS_NAMES[earnings]}` : ""} at HSF Score {minScore}+. After each scan you get one alert listing the stocks that newly match. Using {rules.data.used} of {rules.data.limit} alerts.</p>
               <label className="field"><span>Name (optional)</span>
                 <input value={name} maxLength={60} placeholder="My breakouts" onChange={(e) => setName(e.target.value)} data-autofocus /></label>
               <div className="inline-form">

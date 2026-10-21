@@ -20,10 +20,11 @@ class ScanFilterTests(unittest.TestCase):
         f = self.ar.parse_scan_filters('{"name": " Big breakouts ", "setup": "Breakout", "min_price": "5", "min_rvol": 2}')
         self.assertEqual(f, {"name": "Big breakouts", "setup": "breakout", "min_price": 5.0, "min_rvol": 2.0})
         self.assertEqual(self.ar.parse_scan_filters(None), {})
+        self.assertEqual(self.ar.parse_scan_filters('{"earnings": "Week"}'), {"earnings": "week"})
 
     def test_bad_filters_are_rejected(self):
         for bad in ('[1]', 'nope', '{"sector": "tech"}', '{"setup": "moonshot"}', '{"min_price": -1}',
-                    '{"min_price": 10, "max_price": 5}', '{"min_rvol": "x"}'):
+                    '{"min_price": 10, "max_price": 5}', '{"min_rvol": "x"}', '{"earnings": "month"}'):
             with self.subTest(bad=bad), self.assertRaises(self.ar.RuleError):
                 self.ar.parse_scan_filters(bad)
 
@@ -126,3 +127,27 @@ class ScanAlertEvaluatorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_earnings_filter_keeps_names_that_report(self):
+        self.ar._earnings_cache.clear()
+        self.addCleanup(self.ar._earnings_cache.clear)
+        self.rule("a@x.com", 0, json.dumps({"name": "Reporting", "earnings": "today"}))
+        cal = [{"symbol": "BRKB", "earnings_date": dt.date(2026, 10, 21)}, {"symbol": "CCC", "earnings_date": None}]
+        with mock.patch("db.earnings.fetch_earnings_this_week", return_value=cal) as f:
+            self.ar.evaluate_once(NOW, observation=observation(1, {}))
+            self.ar.evaluate_once(NOW + dt.timedelta(hours=1), observation=observation(
+                2, {"BRK-B": opp(80, 1), "CCC": opp(90, 2), "DDD": opp(70, 3)}))
+        self.assertEqual([e["ticker"] for e in self.db.events()], ["BRK-B"])
+        self.assertEqual(f.call_args.kwargs["days_ahead"], 0)
+        self.assertEqual(f.call_count, 1)   # the calendar is read once, then cached
+
+    def test_earnings_calendar_down_skips_only_that_rule(self):
+        self.ar._earnings_cache.clear()
+        self.addCleanup(self.ar._earnings_cache.clear)
+        self.rule("a@x.com", 0, json.dumps({"earnings": "week"}))
+        self.rule("a@x.com", 0, None)
+        with mock.patch("db.earnings.fetch_earnings_this_week", side_effect=RuntimeError("down")):
+            self.ar.evaluate_once(NOW, observation=observation(1, {}))
+            r = self.ar.evaluate_once(NOW + dt.timedelta(hours=1), observation=observation(2, {"AAA": opp(80, 1)}))
+        self.assertEqual(r["triggered"], 1)
