@@ -80,6 +80,20 @@ class AlertUpdate(BaseModel):
     enabled: bool
 
 
+def _watched_tickers(user: str) -> set:
+    """Every ticker on the user's watchlists, for row tags; empty when the lists can't be read."""
+    try:
+        from db import watchlists as wl
+
+        out: set = set()
+        for w in wl.list_watchlists(user)[:20]:
+            out.update(wl.get_watchlist_tickers(int(w["id"]), user))
+        return out
+    except Exception:  # a tag is not worth failing the page
+        log.warning("earnings scan: watchlists unavailable", exc_info=True)
+        return set()
+
+
 def register(app: FastAPI) -> None:
     # ---- step 5: scans and stock detail ----
     @app.get("/v1/today/me", response_model=models.TodayPersonal, responses=_AUTH, summary="Today: your sections")
@@ -115,6 +129,24 @@ def register(app: FastAPI) -> None:
             raise HTTPException(403, "PreBreakout is a Premium feature.")
         return latest_scan(ent["entitlements"], ent["tier"], limit=limit, offset=offset,
                            min_score=min_score, signal=signal, sort=sort)
+
+    @app.get("/v1/scans/latest/earnings", response_model=models.EarningsScan,
+             responses={**_AUTH, 403: {"description": "Pro feature"}}, summary="Earnings scanner")
+    def scans_earnings(account: Dict[str, Any] = Depends(current_account),
+                       window: Literal["today", "tomorrow", "week"] = Query(
+                           "today", description="today (free), tomorrow or week = today + 7 days (Pro)"),
+                       time: Optional[Literal["bmo", "amc"]] = Query(None, description="Before open or after close only"),
+                       include_unranked: bool = Query(False, description="Also list names that report but did not rank")
+                       ) -> Dict[str, Any]:
+        """Setups in the latest market scan that report earnings in the window, soonest first,
+        then by HSF Score, up to the plan's row cap."""
+        from api.scans import earnings_scan
+
+        ent = entitlements_for(account)
+        if window != "today" and not ent["entitlements"].get("can_earnings"):
+            raise HTTPException(403, "The earnings week ahead is a Pro feature.")
+        return json_safe(earnings_scan(ent["entitlements"], ent["tier"], window=window, time=time,
+                                       include_unranked=include_unranked, watched=_watched_tickers(_user(account))))
 
     @app.get("/v1/scans/latest/movers", response_model=models.ScoreMovers, responses=_AUTH,
              summary="Biggest HSF Score moves since the previous scan")

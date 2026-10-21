@@ -1893,6 +1893,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/scans/latest/earnings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Earnings scanner
+         * @description Setups in the latest market scan that report earnings in the window, soonest first,
+         *     then by HSF Score, up to the plan's row cap.
+         */
+        get: operations["scans_earnings_v1_scans_latest_earnings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/scans/latest/movers": {
         parameters: {
             query?: never;
@@ -4011,6 +4032,117 @@ export interface components {
             /**
              * Time
              * @description bmo / amc / … when known
+             */
+            time?: string | null;
+        };
+        /** EarningsScan */
+        EarningsScan: {
+            /**
+             * End
+             * @description Last ET day of the window (YYYY-MM-DD)
+             */
+            end: string;
+            freshness?: components["schemas"]["DataFreshness"] | null;
+            /** Limited */
+            limited: boolean;
+            /** Max Results */
+            max_results: number;
+            /** Scan At */
+            scan_at?: string | null;
+            /**
+             * Setups
+             * @default []
+             */
+            setups: components["schemas"]["EarningsSetup"][];
+            /** Stale */
+            stale?: boolean | null;
+            /**
+             * Start
+             * @description First ET day of the window (YYYY-MM-DD)
+             */
+            start: string;
+            /**
+             * Total
+             * @description Ranked setups that report in the window, before the plan cap
+             */
+            total: number;
+            /**
+             * Unranked Total
+             * @description Names that report in the window but did not rank in the scan
+             */
+            unranked_total: number;
+            /**
+             * Window
+             * @enum {string}
+             */
+            window: "today" | "tomorrow" | "week";
+        };
+        /** EarningsSetup */
+        EarningsSetup: {
+            /** Chg Pct */
+            chg_pct?: number | null;
+            /**
+             * Days Until
+             * @description Days from today's ET date
+             */
+            days_until: number;
+            /**
+             * Earnings Date
+             * @description YYYY-MM-DD
+             */
+            earnings_date: string;
+            /**
+             * Fading
+             * @default false
+             */
+            fading: boolean;
+            /** Gap Pct */
+            gap_pct?: number | null;
+            /** Last */
+            last?: number | null;
+            /** N Signals */
+            n_signals?: number | null;
+            /**
+             * On Watchlist
+             * @default false
+             */
+            on_watchlist: boolean;
+            /** Primary Setup */
+            primary_setup?: string | null;
+            /**
+             * Prob
+             * @description PreBreakout model output; null below Premium
+             */
+            prob?: number | null;
+            /**
+             * Rank
+             * @description Position in the latest scan's HSF ranking
+             */
+            rank?: number | null;
+            /**
+             * Ranked
+             * @default true
+             */
+            ranked: boolean;
+            /** Rvol */
+            rvol?: number | null;
+            /**
+             * Score
+             * @description HSF Score; null when the name did not rank in the scan
+             */
+            score?: number | null;
+            /**
+             * Signals
+             * @default []
+             */
+            signals: string[];
+            /** Status */
+            status?: string | null;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Time
+             * @description bmo (before open) / amc (after close) / … when known
              */
             time?: string | null;
         };
@@ -6242,7 +6374,7 @@ export interface components {
              * @default
              * @enum {string}
              */
-            signal: "" | "breakout" | "gapper" | "golden_cross" | "gainer" | "prebreakout";
+            signal: "" | "breakout" | "gapper" | "golden_cross" | "gainer" | "prebreakout" | "earnings";
             /**
              * Size
              * @default 25
@@ -6255,6 +6387,13 @@ export interface components {
              * @enum {string}
              */
             sort: "score" | "chg_pct" | "gap_pct" | "rvol" | "prob";
+            /**
+             * When
+             * @description Earnings window (signal earnings)
+             * @default today
+             * @enum {string}
+             */
+            when: "today" | "tomorrow" | "week";
         };
         /** ScoreHistory */
         ScoreHistory: {
@@ -12984,6 +13123,56 @@ export interface operations {
             };
             /** @description Not signed in */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    scans_earnings_v1_scans_latest_earnings_get: {
+        parameters: {
+            query?: {
+                /** @description today (free), tomorrow or week = today + 7 days (Pro) */
+                window?: "today" | "tomorrow" | "week";
+                /** @description Before open or after close only */
+                time?: ("bmo" | "amc") | null;
+                /** @description Also list names that report but did not rank */
+                include_unranked?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EarningsScan"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

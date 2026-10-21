@@ -99,7 +99,10 @@ RULE_TYPES: Dict[str, Dict[str, Any]] = {
 }
 MARKET = "*"  # state/target key for market-wide rules (SCAN_MATCH)
 SCAN_SIGNALS = ("breakout", "gapper", "golden_cross", "gainer", "prebreakout")
-SCAN_FILTER_KEYS = ("name", "setup", "min_price", "max_price", "min_rvol")
+SCAN_FILTER_KEYS = ("name", "setup", "min_price", "max_price", "min_rvol", "earnings")
+SCAN_EARNINGS = ("today", "tomorrow", "week")  # only names that report then (ET days; week = next 7)
+EARNINGS_CACHE_S = 300
+_earnings_cache: Dict[Tuple[str, str], Tuple[float, frozenset]] = {}
 SCAN_MATCH_LIST_MAX = 1000  # matches remembered per rule between scans
 SCAN_MATCH_NAMES_IN_MESSAGE = 8
 CHANNELS = ("in_app", "email")
@@ -164,6 +167,11 @@ def parse_scan_filters(value: Any) -> Dict[str, Any]:
         if setup not in SCAN_SIGNALS:
             raise RuleError(f"Setup must be one of: {', '.join(SCAN_SIGNALS)}.")
         out["setup"] = setup
+    earnings = str(raw.get("earnings") or "").strip().lower()
+    if earnings:
+        if earnings not in SCAN_EARNINGS:
+            raise RuleError(f"earnings must be one of: {', '.join(SCAN_EARNINGS)}.")
+        out["earnings"] = earnings
     for k, lo, hi in (("min_price", 0.0, 1e6), ("max_price", 0.0, 1e6), ("min_rvol", 0.0, 1000.0)):
         v = raw.get(k)
         if v is None or v == "":
@@ -184,6 +192,28 @@ def _scan_value(filters: Dict[str, Any]) -> Optional[str]:
     return json.dumps(filters, sort_keys=True, separators=(",", ":")) if filters else None
 
 
+def _reporting(window: str) -> frozenset:
+    """Ticker keys (letters and digits only) that report earnings in `window`, cached for a
+    few minutes so one alert pass reads the calendar once."""
+    from api.scans import EARNINGS_WINDOWS, _et_date, _ticker_key
+    from db.earnings import fetch_earnings_this_week
+
+    lo, hi = EARNINGS_WINDOWS[window]
+    start = _et_date() + dt.timedelta(days=lo)
+    key = (start.isoformat(), window)
+    hit = _earnings_cache.get(key)
+    if hit and time.monotonic() - hit[0] < EARNINGS_CACHE_S:
+        return hit[1]
+    try:
+        rows = fetch_earnings_this_week(days_ahead=hi - lo, start=start) or []
+    except Exception as e:  # skip earnings rules this pass, never the whole pass
+        raise RuleError("The earnings calendar is unavailable.") from e
+    keys = frozenset(_ticker_key(r.get("symbol")) for r in rows if r.get("earnings_date") is not None)
+    _earnings_cache.clear()
+    _earnings_cache[key] = (time.monotonic(), keys)
+    return keys
+
+
 def scan_matches(obs: Dict[str, Any], rule: Dict[str, Any], *, premium: bool) -> List[str]:
     """Tickers in the latest scan's ranked setups that pass a SCAN_MATCH rule, best
     rank first. Uses the same canonical per-ticker view as every other rule."""
@@ -192,6 +222,7 @@ def scan_matches(obs: Dict[str, Any], rule: Dict[str, Any], *, premium: bool) ->
     f = parse_scan_filters(rule.get("value"))
     min_score = float(rule.get("threshold") or 0)
     hits: List[Tuple[int, str]] = []
+    reporting = _reporting(f["earnings"]) if f.get("earnings") else None
     for t in obs.get("ranked") or {}:
         v = watchlist_intel.ticker_view(obs, t, premium=premium)
         score = v.get("hsf_score")
@@ -208,6 +239,11 @@ def scan_matches(obs: Dict[str, Any], rule: Dict[str, Any], *, premium: bool) ->
             continue
         if "min_rvol" in f and (v.get("rvol") is None or v["rvol"] < f["min_rvol"]):
             continue
+        if reporting is not None:
+            from api.scans import _ticker_key
+
+            if _ticker_key(t) not in reporting:
+                continue
         hits.append((int(v.get("rank") or 10**9), t.upper()))
     return [t for _, t in sorted(hits)]
 

@@ -286,6 +286,41 @@ class LatestScan(BaseModel):
     setups: List[ScanSetup] = []
 
 
+class EarningsSetup(BaseModel):
+    ticker: str
+    score: Optional[int] = Field(default=None, description="HSF Score; null when the name did not rank in the scan")
+    rank: Optional[int] = Field(default=None, description="Position in the latest scan's HSF ranking")
+    ranked: bool = True
+    primary_setup: Optional[str] = None
+    status: Optional[str] = None
+    n_signals: Optional[int] = None
+    signals: List[str] = []
+    fading: bool = False
+    last: Optional[float] = None
+    chg_pct: Optional[float] = None
+    gap_pct: Optional[float] = None
+    rvol: Optional[float] = None
+    prob: Optional[float] = Field(default=None, description="PreBreakout model output; null below Premium")
+    earnings_date: str = Field(description="YYYY-MM-DD")
+    days_until: int = Field(description="Days from today's ET date")
+    time: Optional[str] = Field(default=None, description="bmo (before open) / amc (after close) / … when known")
+    on_watchlist: bool = False
+
+
+class EarningsScan(BaseModel):
+    window: Literal["today", "tomorrow", "week"]
+    start: str = Field(description="First ET day of the window (YYYY-MM-DD)")
+    end: str = Field(description="Last ET day of the window (YYYY-MM-DD)")
+    freshness: Optional[DataFreshness] = None
+    scan_at: Optional[str] = None
+    stale: Optional[bool] = None
+    total: int = Field(description="Ranked setups that report in the window, before the plan cap")
+    unranked_total: int = Field(description="Names that report in the window but did not rank in the scan")
+    max_results: int
+    limited: bool
+    setups: List[EarningsSetup] = []
+
+
 class ScoreMover(BaseModel):
     ticker: str
     score: int = Field(description="HSF Score in the latest scan")

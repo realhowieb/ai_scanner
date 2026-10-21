@@ -11,6 +11,7 @@ import { useApi } from "@/hooks/useApi";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useSession } from "@/session/SessionProvider";
 
+import { EarningsControls, EarningsResults, EARNINGS_WHEN, earningsLocked, readEarningsFilters, useEarningsScan } from "./EarningsScanner";
 import { SavedResearchViews } from "./SavedResearchViews";
 import { ScanAlertButton } from "./ScanAlert";
 import { SetupTable } from "./SetupTable";
@@ -22,6 +23,7 @@ export const SIGNALS = [
   { id: "golden_cross", label: "Golden cross" },
   { id: "gainer", label: "Gainer" },
   { id: "prebreakout", label: "PreBreakout", feature: "can_early_breakout" },
+  { id: "earnings", label: "Earnings" },
 ] as const;
 const MIN_SCORES = [0, 40, 60, 75];
 const PAGE_SIZES = [25, 50, 100];
@@ -34,7 +36,7 @@ export const SORTS = [
 ] as const;
 type Sort = (typeof SORTS)[number]["id"];
 
-type Signal = "golden_cross" | "breakout" | "prebreakout" | "gapper" | "gainer";
+type Signal = "golden_cross" | "breakout" | "prebreakout" | "gapper" | "gainer" | "earnings";
 
 export function readFilters(sp: URLSearchParams) {
   const sig = sp.get("signal") || "";
@@ -62,14 +64,19 @@ export function ScannerView() {
   const { can } = useSession();
   const f = readFilters(new URLSearchParams(sp.toString()));
   const premium = can("can_early_breakout");
+  const pro = can("can_earnings");
   const lockedSignal = f.signal === "prebreakout" && !premium;
+  const earnings = f.signal === "earnings";
+  const ef = readEarningsFilters(new URLSearchParams(sp.toString()));
+  const earn = useEarningsScan(ef, earnings && !earningsLocked(ef, pro));
+  const scanSignal = earnings ? "" : f.signal;
   const offset = (f.page - 1) * f.size;
 
   const sort: Sort = f.sort === "prob" && !premium ? "score" : f.sort;
-  const key = lockedSignal ? null : `scan:${f.signal}:${f.minScore}:${f.size}:${f.page}:${sort}`;
+  const key = lockedSignal ? null : `scan:${scanSignal}:${f.minScore}:${f.size}:${f.page}:${sort}`;
   const { data, error, loading, refreshing, updatedAt, reload } = useApi(key, (signal) =>
     unwrap(api.GET("/v1/scans/latest", {
-      params: { query: { limit: f.size, offset, min_score: f.minScore, ...(f.signal ? { signal: f.signal } : {}), ...(sort !== "score" ? { sort } : {}) } },
+      params: { query: { limit: f.size, offset, min_score: f.minScore, ...(scanSignal ? { signal: scanSignal } : {}), ...(sort !== "score" ? { sort } : {}) } },
       signal,
     })));
   useAutoRefresh(reload, { enabled: key !== null });
@@ -77,7 +84,7 @@ export function ScannerView() {
   const set = (patch: Record<string, string | number>) => {
     const next = new URLSearchParams(sp.toString());
     for (const [k, v] of Object.entries(patch)) {
-      if (v === "" || v === 0 || (k === "page" && v === 1) || (k === "size" && v === 25) || (k === "sort" && v === "score")) next.delete(k);
+      if (v === "" || v === 0 || (k === "page" && v === 1) || (k === "when" && v === "today") || (k === "size" && v === 25) || (k === "sort" && v === "score")) next.delete(k);
       else next.set(k, String(v));
     }
     if (!("page" in patch)) next.delete("page");
@@ -94,7 +101,11 @@ export function ScannerView() {
   const scanTotal = data ? (data.scan_total ?? data.total) : 0;
   const filterName = f.signal ? SIGNALS.find((s) => s.id === f.signal)?.label : f.minScore ? `at HSF Score ${f.minScore}+` : "";
   const filtered = Boolean(data && filterName && scanTotal !== data.total);
-  const countText = data ? `${plural(scanTotal)} ranked${filtered ? ` · ${data.total} ${filterName}` : ""}` : "";
+  const earnWindow = ef.when === "week" ? "in the next 7 days" : EARNINGS_WHEN.find((w) => w.id === ef.when)!.label.toLowerCase();
+  const countText = !data ? "" : earnings
+    ? `${plural(scanTotal)} ranked${earn.data ? ` · ${earn.data.total} report ${earnWindow}` : ""}`
+    : `${plural(scanTotal)} ranked${filtered ? ` · ${data.total} ${filterName}` : ""}`;
+  const resetAll = { signal: "", min: 0, sort: "score", size: 25, page: 1, when: "", etime: "", all: 0 };
 
 
   return (
@@ -107,7 +118,7 @@ export function ScannerView() {
           </p>
         </div>
         <div className="row-actions scanner-actions">
-          <button type="button" className="btn" onClick={reload} disabled={lockedSignal || loading || refreshing}>Refresh results</button>
+          <button type="button" className="btn" onClick={() => { reload(); if (earnings) earn.reload(); }} disabled={lockedSignal || loading || refreshing}>Refresh results</button>
           <Link href="/scanner/history" className="btn">Scan history</Link>
           <Link href="/scanner/custom" className="btn btn-primary">Custom scan</Link>
         </div>
@@ -116,10 +127,10 @@ export function ScannerView() {
         checkedAt={updatedAt} refreshing={refreshing} error={error} reload={reload} />}
       {(f.signal || f.minScore || f.sort !== "score" || f.size !== 25 || f.page !== 1) && <div className="row-actions">
         <span className="cap">Current view: {SIGNALS.find((s) => s.id === f.signal)?.label} · score {f.minScore}+ · {SORTS.find((s) => s.id === f.sort)?.label} · {f.size} rows</span>
-        <button type="button" className="btn btn-sm" onClick={() => set({ signal: "", min: 0, sort: "score", size: 25, page: 1 })}>Reset view</button>
+        <button type="button" className="btn btn-sm" onClick={() => set(resetAll)}>Reset view</button>
       </div>}
 
-      {leader && <p className="scanner-leader cap"><Link href={`/stocks/${encodeURIComponent(leader.ticker)}`}>Review {leader.ticker}</Link> · HSF {leader.score} · leads the current ranked view</p>}
+      {leader && !earnings && <p className="scanner-leader cap"><Link href={`/stocks/${encodeURIComponent(leader.ticker)}`}>Review {leader.ticker}</Link> · HSF {leader.score} · leads the current ranked view</p>}
 
       <div className="chips scanner-chips" role="group" aria-label="Setup type">
         {SIGNALS.map((s) => {
@@ -133,10 +144,13 @@ export function ScannerView() {
         })}
       </div>
 
+      {earnings && <EarningsControls f={ef} pro={pro} set={set} />}
+
       <div className="scanner-toolbar">
-      <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100 }}
-        onApply={(v) => { if ("signal" in v) set({ signal: v.signal ?? "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25, page: 1 }); }} />
-      <ScanAlertButton setup={f.signal} minScore={f.minScore} setupLabel={SIGNALS.find((s) => s.id === f.signal)?.label} />
+      <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, when: ef.when, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100 }}
+        onApply={(v) => { if ("signal" in v) set({ ...resetAll, signal: v.signal ?? "", when: v.signal === "earnings" ? (v.when ?? "") : "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25 }); }} />
+      <ScanAlertButton setup={scanSignal} minScore={f.minScore} earnings={earnings && !earningsLocked(ef, pro) ? ef.when : undefined}
+        setupLabel={SIGNALS.find((s) => s.id === f.signal)?.label} />
       <details className="filter-panel" open={moreActive}>
         <summary>
           <span className="strong">More filters</span>
@@ -162,7 +176,9 @@ export function ScannerView() {
       </details>
       </div>
 
-      {lockedSignal ? (
+      {earnings ? (
+        <EarningsResults f={ef} pro={pro} res={earn} onClear={() => set({ all: 1 })} />
+      ) : lockedSignal ? (
         <Card><Locked title="PreBreakout is part of Premium" plan="premium">The PreBreakout model ranks names before they break out, with its probability.</Locked></Card>
       ) : error && !data ? (
         <ErrorState error={error} onRetry={reload} what="the Scanner" />
@@ -184,6 +200,7 @@ export function ScannerView() {
         </section>
       ) : null}
 
+      {!earnings && <>
       {data && sort !== "score" && <p className="cap">Sorted by {SORTS.find((x) => x.id === sort)!.label.toLowerCase()} within your plan&apos;s top {Math.min(data.total, data.max_results)} HSF-ranked setups.</p>}
       {data && data.limited && (
         <div className="cap-note" role="note">
@@ -200,6 +217,7 @@ export function ScannerView() {
         </nav>
       )}
       {data && data.setups.length > 0 && <AIScanPanel />}
+      </>}
     </div>
   );
 }

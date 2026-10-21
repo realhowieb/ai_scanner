@@ -876,3 +876,11 @@ summary:focus-visible, .table-wrap:focus-visible { outline: 2px solid var(--acce
 @media (max-width: 760px) { .showcase-img { height: 680px; } }
 
 .dt-scroll { max-height: 65vh; }
+
+/* Earnings scanner (Scanner > Earnings) */
+.earn-controls { gap: 8px 12px; }
+.earn-time { white-space: nowrap; }
+.pill.earn-bmo { border-color: #2d5a78; color: var(--accent-2); }
+.pill.earn-amc { border-color: var(--gold-line); color: var(--amber); }
+.earn-table .earn-day th { background: var(--raise); color: var(--text-2); font-size: 13px; font-weight: 600; text-align: left; padding: 8px 14px; }
+.earn-day-h { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 12px 4px 6px; }

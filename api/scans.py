@@ -104,6 +104,90 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             "setups": [_scan_row(o) for o in visible[offset:offset + limit]]}
 
 
+# ---- Earnings scanner ---------------------------------------------------------------------------
+# Day offsets from today's ET date, inclusive. Today is free; the others need can_earnings (Pro).
+EARNINGS_WINDOWS = {"today": (0, 0), "tomorrow": (1, 1), "week": (0, 7)}
+EARNINGS_TIMES = ("bmo", "amc")
+
+
+def _ticker_key(ticker: Any) -> str:
+    """BRK-B, BRK.B and BRKB match: the calendar stores symbols without separators."""
+    return "".join(ch for ch in str(ticker or "").upper() if ch.isalnum())
+
+
+def _et_date(now: Optional[dt.datetime] = None) -> dt.date:
+    from zoneinfo import ZoneInfo
+
+    return (now or dt.datetime.now(dt.timezone.utc)).astimezone(ZoneInfo("America/New_York")).date()
+
+
+def _earnings_time(raw: Any) -> Optional[str]:
+    t = str(raw or "").strip().lower()
+    return t or None
+
+
+def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "today",
+                  time: Optional[str] = None, include_unranked: bool = False,
+                  watched: Optional[set] = None, now: Optional[dt.datetime] = None) -> Dict[str, Any]:
+    """Setups in the latest market scan that report earnings in `window` (ET days), joined with
+    the earnings calendar. Soonest day first, then HSF Score. With include_unranked, names that
+    report but did not rank in the scan follow each day's ranked names (no score)."""
+    from analytics.data_freshness import describe
+    from db.earnings import fetch_earnings_this_week
+    from ui.entitlement_view import redact_prebreakout_rows
+
+    cap = max_results_for(tier)
+    lo, hi = EARNINGS_WINDOWS[window]
+    today = _et_date(now)
+    start, end = today + dt.timedelta(days=lo), today + dt.timedelta(days=hi)
+    base = {"window": window, "start": start.isoformat(), "end": end.isoformat(), "max_results": cap}
+
+    calendar: Dict[str, Dict[str, Any]] = {}
+    for r in fetch_earnings_this_week(days_ahead=hi - lo, start=start) or []:
+        d = r.get("earnings_date")
+        if isinstance(d, dt.datetime):
+            d = d.date()
+        key = _ticker_key(r.get("symbol"))
+        if not key or not isinstance(d, dt.date) or not (start <= d <= end):
+            continue
+        t = _earnings_time(r.get("earnings_time"))
+        if time and t != time:
+            continue
+        calendar[key] = {"ticker": str(r.get("symbol")).strip().upper(), "earnings_date": d, "time": t}
+
+    watched_keys = {_ticker_key(t) for t in watched or ()}
+
+    def earnings_fields(e: Dict[str, Any], key: str) -> Dict[str, Any]:
+        return {"earnings_date": e["earnings_date"].isoformat(), "days_until": (e["earnings_date"] - today).days,
+                "time": e["time"], "on_watchlist": key in watched_keys}
+
+    runs = market_runs()
+    opps = (redact_prebreakout_rows(run_opportunities(int(runs[0]["id"])),
+                                    allowed=bool(entitlements.get("can_early_breakout"))) if runs else [])
+    ranked, seen = [], set()
+    for i, o in enumerate(opps):
+        key = _ticker_key(o.get("ticker"))
+        if key in calendar and key not in seen:
+            seen.add(key)
+            ranked.append({**_scan_row(o), "rank": i + 1, "ranked": True, **earnings_fields(calendar[key], key)})
+    unranked = [{"ticker": e["ticker"], "score": None, "rank": None, "ranked": False, "signals": [],
+                 **earnings_fields(e, key)} for key, e in calendar.items() if key not in seen]
+
+    def order(row: Dict[str, Any]) -> Any:
+        return (row["earnings_date"], not row["ranked"], -(row.get("score") or 0), row["ticker"])
+
+    rows = sorted(ranked[:cap], key=order)
+    if include_unranked:
+        rows = sorted(rows + sorted(unranked, key=order)[:cap], key=order)
+    out = {**base, "total": len(ranked), "unranked_total": len(unranked), "limited": len(ranked) > cap,
+           "setups": rows}
+    if not runs:
+        return {**out, "scan_at": None, "stale": None, "freshness": describe(None)}
+    return {**out, "scan_at": _iso(runs[0]["created_at"]),
+            "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
+            "freshness": run_freshness(runs[0])}
+
+
 MOVERS_MAX = 10
 
 
