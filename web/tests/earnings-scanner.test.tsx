@@ -84,6 +84,7 @@ describe("Earnings scanner", () => {
     wrap("basic");
     expect(await screen.findByText("No ranked setups report today.")).toBeInTheDocument();
     expect(earnCalls()[0]!.searchParams.get("window")).toBe("today");
+    expect(screen.getByRole("link", { name: "Score every reporter" })).toHaveAttribute("href", "/scanner/custom?universe=earnings&when=today&start=1");
     await userEvent.setup().click(screen.getByRole("button", { name: "Show all reporters" }));
     expect(replace).toHaveBeenCalledWith("/scanner?signal=earnings&all=1", { scroll: false });
   });

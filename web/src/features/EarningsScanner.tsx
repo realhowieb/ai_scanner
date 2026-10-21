@@ -78,6 +78,17 @@ function When({ time }: { time: string | null | undefined }) {
   return <span className={`pill earn-time${time === "bmo" ? " earn-bmo" : time === "amc" ? " earn-amc" : ""}`}>{label}</span>;
 }
 
+/** Runs a custom scan on every stock reporting in the window, so the unranked ones get an HSF Score too. */
+function ScoreReporters({ f, count }: { f: EarningsFilters; count: number }) {
+  if (count <= 0) return null;
+  return (
+    <div className="row-actions earn-score">
+      <span className="cap">{count} stock{count === 1 ? "" : "s"} report{count === 1 ? "s" : ""} {f.when === "week" ? "in the next 7 days" : f.when} but {count === 1 ? "isn't" : "aren't"} in the latest scan&apos;s ranking.</span>
+      <Link className="btn btn-sm" href={`/scanner/custom?universe=earnings&when=${f.when}&start=1`}>Score every reporter</Link>
+    </div>
+  );
+}
+
 function Tags({ r }: { r: Row }) {
   return <>{r.on_watchlist && <> <Pill>Watchlist</Pill></>}{r.fading && <> <Pill tone="warn">Fading</Pill></>}</>;
 }
@@ -128,7 +139,8 @@ export function EarningsResults({ f, pro, res, onClear }: {
     return (
       <Card><Empty title={`No ${f.all ? "stocks" : "ranked setups"} report ${f.when === "week" ? "in the next 7 days" : window}${f.time ? ` ${(TIME_LABEL[f.time] ?? "").toLowerCase()}` : ""}.`}>
         {!f.all && data.unranked_total > 0
-          ? <p>{data.unranked_total} stock{data.unranked_total === 1 ? "" : "s"} report but didn&apos;t rank in the latest scan. <button type="button" className="btn btn-sm" onClick={onClear}>Show all reporters</button></p>
+          ? <><p>{data.unranked_total} stock{data.unranked_total === 1 ? "" : "s"} report but didn&apos;t rank in the latest scan. <button type="button" className="btn btn-sm" onClick={onClear}>Show all reporters</button></p>
+            <p><Link className="btn btn-sm" href={`/scanner/custom?universe=earnings&when=${f.when}&start=1`}>Score every reporter</Link></p></>
           : <p>Dates come from the earnings calendar, which refreshes every day.</p>}
       </Empty></Card>
     );
@@ -200,6 +212,7 @@ export function EarningsResults({ f, pro, res, onClear }: {
         Ranked setups are stocks in the latest scan that report {f.when === "week" ? "in the next 7 days" : window}, soonest first, then by HSF Score.
         {f.all ? " All reporters adds stocks that report but didn't rank." : ""} Dates and times come from the earnings calendar and can move.
       </p>
+      <ScoreReporters f={f} count={data.unranked_total} />
       {data.limited && (
         <div className="cap-note" role="note">
           <p>Your plan shows the top <b>{data.max_results}</b> of <b>{data.total}</b> ranked setups that report in this window.</p>

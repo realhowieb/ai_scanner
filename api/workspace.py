@@ -42,7 +42,8 @@ class ScannerView(StrictModel):
 
 class CustomView(StrictModel):
     name: str = Field(min_length=1, max_length=60)
-    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker"] = "sp500"
+    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"] = "sp500"
+    earnings_window: Literal["today", "tomorrow", "week"] = "today"
     ticker: str = Field(default="", max_length=10, pattern=r"^$|^[A-Za-z][A-Za-z0-9.\-]{0,9}$")
     watchlist_id: int | None = Field(default=None, ge=1)
     session: Literal["regular", "premarket", "afterhours"] = "regular"

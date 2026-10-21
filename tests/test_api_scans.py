@@ -221,6 +221,17 @@ class ScanRouteTests(ApiTestCase):
         self.assertEqual(r.status_code, 202, r.text)
         self.assertEqual(r.json()["params"]["ticker"], "BRK.B")
 
+    def test_earnings_scans_today_free_week_pro(self):
+        r = self.post("free@example.com", {"universe": "earnings", "score_all": True})
+        self.assertEqual(r.status_code, 202, r.text)
+        self.assertEqual((r.json()["params"]["universe"], r.json()["params"]["earnings_window"]), ("earnings", "today"))
+        self.jobs[r.json()["scan_id"]]["status"] = "complete"
+        for w in ("tomorrow", "week"):
+            self.assertEqual(self.post("free@example.com", {"universe": "earnings", "earnings_window": w}).status_code, 403)
+        r = self.post("pro@example.com", {"universe": "earnings", "earnings_window": "week"})
+        self.assertEqual((r.status_code, r.json()["params"]["earnings_window"]), (202, "week"))
+        self.assertEqual(self.post("prem@example.com", {"universe": "earnings", "earnings_window": "month"}).status_code, 422)
+
     def test_validation_and_auth(self):
         self.assertEqual(self.client.post("/v1/scans", json={"universe": "sp500"}).status_code, 401)
         self.assertEqual(self.post("pro@example.com", {"universe": "everything"}).status_code, 422)
@@ -254,7 +265,7 @@ class ScanRouteTests(ApiTestCase):
         for code in ("202", "403", "409", "429", "503"):
             self.assertIn(code, post["responses"])
         universe = spec["components"]["schemas"]["ScanCreate"]["properties"]["universe"]
-        self.assertEqual(set(universe["enum"]), {"sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker"})
+        self.assertEqual(set(universe["enum"]), {"sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"})
 
 
 def _fake_prices(tickers, **_k):
@@ -486,3 +497,42 @@ class TimestampTests(unittest.TestCase):
         aware = dt.datetime(2026, 10, 6, 9, 35, tzinfo=dt.timezone(dt.timedelta(hours=-4)))
         self.assertEqual(json_safe(aware), "2026-10-06T09:35:00-04:00")
         self.assertEqual(json_safe(dt.date(2026, 10, 6)), "2026-10-06")
+
+
+@unittest.skipUnless(importlib.util.find_spec("streamlit") and HAS_PANDAS, "needs the app's modules")
+class EarningsUniverseTests(unittest.TestCase):
+    def test_scores_every_reporter_and_caps_rows_to_the_plan(self):
+        import datetime as dt
+
+        import pandas as pd
+
+        from api import custom_scans
+        from api.scans import _et_date
+
+        today = _et_date()
+        cal = [{"symbol": "TSLA", "earnings_date": today, "earnings_time": "amc"},
+               {"symbol": "IBM", "earnings_date": today, "earnings_time": "amc"},
+               {"symbol": "LATE", "earnings_date": today + dt.timedelta(days=3), "earnings_time": None}]
+        params = _plan({"universe": "earnings", "score_all": True}, "basic")
+        df = pd.DataFrame([{"Ticker": "TSLA"}, {"Ticker": "IBM"}])
+        opps = [{"ticker": f"T{i}", "score": 90 - i, "signals": []} for i in range(30)]
+        with mock.patch("db.earnings.fetch_earnings_this_week", return_value=cal) as f, \
+                mock.patch("scan.execution.run_manual_scan_execution", return_value=df) as run, \
+                mock.patch("ui.market_scans.top_setups", return_value=opps), \
+                mock.patch("db.runs.save_run"):
+            res = custom_scans.run_scan(params, "free@example.com", lambda _p: None)
+        self.assertEqual(f.call_args.kwargs, {"days_ahead": 0, "start": today})
+        kw = run.call_args.kwargs
+        self.assertEqual(sorted(kw["tickers"]), ["IBM", "TSLA"])
+        self.assertEqual((kw["min_price"], kw["min_dollar_vol"], kw["unusual_volume"]), (0.0, 0.0, False))  # screens off
+        self.assertEqual(res["label"], "Earnings today (2 tickers) · all")
+        self.assertEqual((res["total"], len(res["setups"])), (30, 25))         # Starter's row cap
+
+    def test_empty_calendar_fails_with_a_safe_message(self):
+        from api import custom_scans
+        from api.scan_jobs import ScanFailed
+
+        params = _plan({"universe": "earnings", "earnings_window": "week"}, "pro")
+        with mock.patch("db.earnings.fetch_earnings_this_week", return_value=[]):
+            with self.assertRaisesRegex(ScanFailed, "No stocks report in the next 7 days"):
+                custom_scans.run_scan(params, "pro@example.com", lambda _p: None)

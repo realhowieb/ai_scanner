@@ -3709,6 +3709,12 @@ export interface components {
         /** CustomView */
         CustomView: {
             /**
+             * Earnings Window
+             * @default today
+             * @enum {string}
+             */
+            earnings_window: "today" | "tomorrow" | "week";
+            /**
              * Gap
              * @default false
              */
@@ -3750,7 +3756,7 @@ export interface components {
              * @default sp500
              * @enum {string}
              */
-            universe: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker";
+            universe: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker" | "earnings";
             /**
              * Unusual
              * @default false
@@ -6105,10 +6111,15 @@ export interface components {
         };
         /** ScanCreate */
         ScanCreate: {
+            /**
+             * Earnings Window
+             * @description For universe=earnings: today (default, every plan), tomorrow or week = next 7 days (Pro)
+             */
+            earnings_window?: ("today" | "tomorrow" | "week") | null;
             filters?: components["schemas"]["ScanFilters"];
             /**
              * Score All
-             * @description Watchlist only: score every symbol, ignoring the screens (as on the web)
+             * @description Watchlist and earnings: score every symbol, ignoring the screens (as on the web)
              * @default false
              */
             score_all: boolean;
@@ -6119,10 +6130,10 @@ export interface components {
             ticker?: string | null;
             /**
              * Universe
-             * @description sp500 (every plan) · nasdaq, combo (Pro+) · us_market (Premium+) · watchlist (one of yours) · ticker (one symbol)
+             * @description sp500 (every plan) · nasdaq, combo (Pro+) · us_market (Premium+) · watchlist (one of yours) · ticker (one symbol) · earnings (stocks reporting in earnings_window)
              * @enum {string}
              */
-            universe: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker";
+            universe: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker" | "earnings";
             /**
              * Watchlist Id
              * @description For universe=watchlist
@@ -6248,6 +6259,8 @@ export interface components {
         ScanParams: {
             /** Apply Gap Filter */
             apply_gap_filter: boolean;
+            /** Earnings Window */
+            earnings_window?: ("today" | "tomorrow" | "week") | null;
             /**
              * Full Lists
              * @description True for Premium/admin: NASDAQ and Combo scan the full lists
@@ -6299,7 +6312,7 @@ export interface components {
              * Universe
              * @enum {string}
              */
-            universe: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker";
+            universe: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker" | "earnings";
             /** Unusual Volume */
             unusual_volume: boolean;
             /** Watchlist Id */
