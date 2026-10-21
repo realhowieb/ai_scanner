@@ -145,6 +145,7 @@ export function ScannerView() {
       </div>
 
       {earnings && <EarningsControls f={ef} pro={pro} set={set} />}
+      {f.signal === "prebreakout" && premium && <p className="cap">The PreBreakout model&apos;s 10 strongest names in this scan, in HSF order. Sort by PreBreakout to put the highest % first.</p>}
 
       <div className="scanner-toolbar">
       <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, when: ef.when, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100 }}

@@ -223,12 +223,23 @@ def scan_matches(obs: Dict[str, Any], rule: Dict[str, Any], *, premium: bool) ->
     min_score = float(rule.get("threshold") or 0)
     hits: List[Tuple[int, str]] = []
     reporting = _reporting(f["earnings"]) if f.get("earnings") else None
+    picks = None
+    if f.get("setup") == "prebreakout":
+        # Same names as the Scanner's PreBreakout tab: the model's strongest this scan.
+        from ui.results_intelligence import prebreakout_picks
+
+        ranked = obs.get("ranked") or {}
+        top = {id(o) for o in prebreakout_picks(list(ranked.values()))} if premium else set()
+        picks = {str(t).upper() for t, o in ranked.items() if id(o) in top}
     for t in obs.get("ranked") or {}:
         v = watchlist_intel.ticker_view(obs, t, premium=premium)
         score = v.get("hsf_score")
         if not v.get("ranked") or score is None or score < min_score:
             continue
-        if f.get("setup"):
+        if picks is not None:
+            if t.upper() not in picks:
+                continue
+        elif f.get("setup"):
             setup = str(v.get("setup") or "").lower()
             if f["setup"] != setup and f["setup"] not in [s.lower() for s in v.get("signals") or []]:
                 continue
