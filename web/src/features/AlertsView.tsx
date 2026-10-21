@@ -2,7 +2,7 @@
 import { tabKey } from "@/lib/tabs";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { alerts, alertRules, emailPrefs } from "@/api/userData";
@@ -122,11 +122,14 @@ const PUSH_COPY: Record<PushState, string> = {
 export function PushToggle() {
   const cfg = useApi("web-push-config", (signal) => unwrap(api.GET("/v1/web-push/config", { signal })));
   const [state, setState] = useState<PushState | null>(null);
+  const descriptionId = useId();
   const act = useAction();
   useEffect(() => {
     let live = true;
-    currentPushState().then((s) => live && setState(s), () => live && setState("unsupported"));
-    return () => { live = false; };
+    const refresh = () => void currentPushState().then((s) => live && setState(s), () => live && setState("unsupported"));
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { live = false; window.removeEventListener("focus", refresh); };
   }, []);
   if (!cfg.data?.enabled || state === null) return null;
   if (cfg.data.allowed === false) {
@@ -147,11 +150,11 @@ export function PushToggle() {
   return (
     <div className="stack-sm">
       <label className="check">
-        <input type="checkbox" checked={on} disabled={act.busy || state === "unsupported"}
+        <input type="checkbox" checked={on} aria-describedby={descriptionId} disabled={act.busy || state === "unsupported" || state === "denied"}
           onChange={(e) => change(e.target.checked)} />
         <span>Notify me in this browser when an alert fires{act.busy ? " (saving…)" : ""}</span>
       </label>
-      {PUSH_COPY[state] && <p className="cap">{PUSH_COPY[state]}</p>}
+      <p className="cap" id={descriptionId}>{PUSH_COPY[state] || "Uses your existing alert rules and quiet hours. Turn this on separately in each browser. Delivery depends on your browser and device settings."}</p>
       <ErrorLine error={act.error} />
     </div>
   );

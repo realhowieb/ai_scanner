@@ -204,7 +204,7 @@ export function PriceChart({ bars, events = NO_EVENTS, earningsDate, volumeFeed 
         {notes.map((n) => <span key={n} className="rd-note">{n}</span>)}
       </div>
       <div className={`interactive-price${interactive ? " is-ready" : ""}`}
-        role="img" tabIndex={interactive ? 0 : -1} aria-hidden={!interactive}
+        role="group" aria-roledescription="chart" tabIndex={interactive ? 0 : -1} aria-hidden={!interactive}
         aria-label={`Interactive daily price from ${etDate(first.date)} to ${etDate(last.date)}, last close ${price(last.close)}. Drag to pan, pinch or scroll to zoom. Arrow keys step through sessions.`}
         onKeyDown={onKey} onBlur={() => setHover(null)}>
         <InteractivePriceChart bars={data} events={events} overlays={on} earningsDate={earningsDate}

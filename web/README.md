@@ -109,6 +109,14 @@ BASE_URL=https://<web v2> HSF_TEST_EMAIL=<test account> HSF_TEST_PASSWORD_FILE=<
   [HSF_TEST_EMAIL_2=<second test account>] OUT_DIR=screenshots node scripts/journey.mjs
 ```
 
+An accessibility check (axe-core, WCAG 2.1 A and AA) signs in and scans Today, Scanner,
+a stock page, Watchlists, Alerts, Day Trader and Account at desktop and phone sizes. It
+fails on any critical or serious problem and lists the rest; Live acceptance runs it daily:
+
+```
+BASE_URL=https://<web v2> HSF_TEST_EMAIL=<test account> HSF_TEST_PASSWORD_FILE=<file> npm run a11y
+```
+
 After a deploy, `BASE_URL=https://<web v2> node scripts/beta-smoke.mjs` checks health,
 security headers, redirects and the BFF without an account (add `HSF_TEST_EMAIL` and
 `HSF_TEST_PASSWORD_FILE` for cookie flags and signed-in timings).
@@ -138,7 +146,8 @@ Environment variables:
 | `WEB_BETA_ALLOWED_EMAILS` | Optional, comma-separated: only these accounts can sign in (invite-only beta). Unset = every HSF account. |
 | `NODE_VERSION` | `22` (optional; `.node-version` already says 22) |
 
-No secrets are needed: the frontend holds no API keys, and the session cookies are
+Optional analytics uses a public project key; private service credentials stay on
+the API. Session cookies are
 set per user. It must be served over https (Render does this), because the
 `__Host-` cookies require it. The free plan sleeps after 15 idle minutes; use Starter
 before real users depend on it. Confirm the domain target, deployed commit, and API configuration before each
@@ -230,3 +239,7 @@ preserves anonymous tracking and makes operational logs optional as described he
 Production environment configuration and live delivery still need verification
 after an authorized deployment. AI observability in the upstream API and source-map
 uploads are outside this frontend integration.
+
+
+For per-service PostHog keys, browser push, Sentry and AI monitoring setup, see
+[the integration guide](../docs/INTEGRATIONS_2026-10-21.md).

@@ -122,3 +122,11 @@ A third service on Render. Setup, endpoints and its env vars
 - `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` — extended market data
 - `SHOW_DIAGNOSTICS=1` — enable scan diagnostics panel by default
 - `SESSION_TTL_DAYS` — override default 14-day session lifetime
+
+
+### Analytics, monitoring and browser notifications
+
+See [the integration guide](docs/INTEGRATIONS_2026-10-21.md) for the separate
+web/API settings, privacy boundaries, readiness command and delivery verification.
+PostHog browser keys must be set before a web rebuild; server monitoring and push
+keys belong on the Python API service.

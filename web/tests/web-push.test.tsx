@@ -82,3 +82,44 @@ describe("browser notifications toggle", () => {
     expect(sub).toBeNull();
   });
 });
+
+it("rolls back a new subscription when API registration fails", async () => {
+  const { enablePush } = await import("@/lib/webPush");
+  vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ detail: "Unavailable" }, 503)));
+  await expect(enablePush(SERVER_POINT)).rejects.toThrow();
+  expect(sub).toBeNull();
+});
+
+it("preserves an existing subscription when registration refresh fails", async () => {
+  const { enablePush } = await import("@/lib/webPush");
+  await enablePush(SERVER_POINT);
+  const existing = sub;
+  vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ detail: "Unavailable" }, 503)));
+  await expect(enablePush(SERVER_POINT)).rejects.toThrow();
+  expect(sub).toBe(existing);
+});
+
+it("keeps the toggle on when browser unsubscribe fails", async () => {
+  const { enablePush } = await import("@/lib/webPush");
+  await enablePush(SERVER_POINT);
+  sub!.unsubscribe = async () => { throw new Error("Browser unsubscribe failed"); };
+  render(<PushToggle />);
+  const box = await screen.findByRole("checkbox", { name: /Notify me in this browser/ });
+  await waitFor(() => expect(box).toBeChecked());
+  await userEvent.click(box);
+  expect(await screen.findByText(/Couldn’t turn off browser notifications/)).toBeInTheDocument();
+  expect(box).toBeChecked();
+  expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+});
+
+it("explains blocked permissions and refreshes them when the browser regains focus", async () => {
+  Object.defineProperty(Notification, "permission", { configurable: true, value: "denied" });
+  render(<PushToggle />);
+  const box = await screen.findByRole("checkbox", { name: /Notify me in this browser/ });
+  expect(box).toBeDisabled();
+  expect(box).toHaveAccessibleDescription(/blocked for this site/);
+  Object.defineProperty(Notification, "permission", { configurable: true, value: "granted" });
+  window.dispatchEvent(new Event("focus"));
+  await waitFor(() => expect(box).toBeEnabled());
+  expect(box).toHaveAccessibleDescription(/existing alert rules and quiet hours/);
+});

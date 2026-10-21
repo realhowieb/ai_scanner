@@ -1,7 +1,8 @@
 name: Live acceptance
 
 # Beta prerequisites: the API journey with writes (scripts/api_acceptance.py) and the
-# signed-in browser journey (web/scripts/journey.mjs) against the live services.
+# signed-in browser journey (web/scripts/journey.mjs) against the live services, plus an
+# axe accessibility check of the main pages (web/scripts/a11y.mjs; fails on critical/serious).
 # Both use dedicated test accounts from repository secrets and delete what they create
 # (records named zz-acceptance-* / zz-e2e-*; alerts use a threshold that can't fire).
 #   ACC_PRO_EMAIL / ACC_PRO_PASSWORD     required for the write checks and the browser journey
@@ -119,6 +120,15 @@ jobs:
           export HSF_TEST_PASSWORD_FILE="$RUNNER_TEMP/pw1"
           if [ -f "$RUNNER_TEMP/pw2" ]; then export HSF_TEST_PASSWORD_FILE_2="$RUNNER_TEMP/pw2"; fi
           node scripts/journey.mjs
+
+      - name: Accessibility check (axe, WCAG A/AA, desktop + phone)
+        if: env.HAS_ACCOUNT == 'true'
+        env:
+          BASE_URL: ${{ env.WEB_BASE_URL }}
+          HSF_TEST_EMAIL: ${{ secrets.ACC_PRO_EMAIL }}
+        run: |
+          export HSF_TEST_PASSWORD_FILE="$RUNNER_TEMP/pw1"
+          node scripts/a11y.mjs
 
       - name: Journey blocked
         if: env.HAS_ACCOUNT != 'true'

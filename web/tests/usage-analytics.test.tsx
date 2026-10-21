@@ -180,3 +180,17 @@ it("tracks the rule-update path used by the UI without recording other edits", a
   await alertRules.update(123, { threshold: 90 });
   expect(ph.capture).toHaveBeenCalledTimes(1);
 });
+
+
+it("does not count duplicate or invalid-only additions as activation", async () => {
+  const fake = fakeApi();
+  const list = fake.seedList("Private", ["NVDA"]);
+  vi.stubGlobal("fetch", fake.fetch);
+  const { watchlists } = await import("@/api/userData");
+  await watchlists.addTickers(list.id, ["NVDA"]);
+  await watchlists.addTickers(list.id, ["not a ticker"]);
+  expect(ph.capture).not.toHaveBeenCalled();
+  await watchlists.addTickers(list.id, ["AMD"]);
+  await waitFor(() => expect(ph.capture).toHaveBeenCalledTimes(1));
+  expect(ph.capture).toHaveBeenCalledWith("watchlist_stock_added", {}, undefined);
+});

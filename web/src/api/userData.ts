@@ -42,7 +42,7 @@ export const watchlists = {
   },
   addTickers: async (id: number, tickers: string[]) => {
     const result = await unwrap(api.POST("/v1/watchlists/{watchlist_id}/tickers", { ...wid(id), body: { tickers } }));
-    captureUsage("watchlist_stock_added");
+    if (result.added.length > 0) captureUsage("watchlist_stock_added");
     return result;
   },
   removeTicker: async (id: number, ticker: string) => {
