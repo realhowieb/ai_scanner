@@ -49,9 +49,13 @@ export function sanitizeUsage(event: CaptureResult | null): CaptureResult | null
   return { uuid: event.uuid, event: event.event, properties: safe, ...(event.timestamp ? { timestamp: event.timestamp } : {}) };
 }
 
-async function client(): Promise<PostHog | null> {
-  if (!usageAllowed()) return null;
-  if (sdk) return sdk;
+function client(): Promise<PostHog | null> {
+  if (!usageAllowed()) return Promise.resolve(null);
+  // Every action during initialization must wait on the same promise. The SDK
+  // becomes ready before that promise settles; taking a shortcut then would
+  // allow a newer action to overtake the one that started loading.
+  if (loading) return loading;
+  if (sdk) return Promise.resolve(sdk);
   const initGeneration = identityGeneration;
   if (!loading) loading = import("posthog-js").then(({ default: posthog }) => {
     if (!usageAllowed()) return null;

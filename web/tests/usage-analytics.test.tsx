@@ -42,6 +42,21 @@ it("initializes once with automatic collection disabled and only the selected re
     disable_external_dependency_loading: true, capture_exceptions: false, save_referrer: false, save_campaign_params: false });
 });
 
+it("preserves event order when another action arrives as the SDK finishes initializing", async () => {
+  const a = await import("@/lib/usageAnalytics");
+  ph.init.mockImplementationOnce(() => {
+    // The SDK is ready by the time this runs, but the original loader promise
+    // still has settlement callbacks to finish. A ready-SDK shortcut must not
+    // let this action overtake the one that started loading.
+    queueMicrotask(() => a.captureUsage("watchlist_stock_added"));
+  });
+  a.captureUsage("watchlist_created");
+  await waitFor(() => expect(ph.capture).toHaveBeenCalledTimes(2));
+  expect(ph.capture.mock.calls.map(([event]) => event)).toEqual([
+    "watchlist_created", "watchlist_stock_added",
+  ]);
+});
+
 it("strips SDK URLs, person properties, tokens in URLs and product data before sending", async () => {
   const { sanitizeUsage, usageRoute } = await import("@/lib/usageAnalytics");
   const event = { uuid: "test-event", event: "stock_viewed", $set: { email: "private@example.com" }, $set_once: { note: "private" }, properties: { distinct_id: "anonymous-123", route: "/stocks/NVDA?token=secret",
