@@ -10,6 +10,7 @@ import { etDate, etTime, greeting, pct, price, setupLabel } from "@/lib/format";
 
 import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
 import { ScoreMoversCard } from "./ScoreMovers";
+import { StarterWatchlistButton } from "./Starters";
 
 type Today = Schemas["Today"];
 type SessionCard = Schemas["SessionCard"];
@@ -91,12 +92,17 @@ function NewSince({ data }: { data: Schemas["NewSince"] }) {
 
 const MISSING_LIMIT = 20;
 
-function YourWatchlist({ data }: { data: Schemas["WatchlistToday"] }) {
+function YourWatchlist({ data, top, onChanged }: { data: Schemas["WatchlistToday"]; top: string[]; onChanged?: () => void }) {
   const s = data.summary;
   return (
     <Card title="Your watchlist" id="wl" aside={data.watchlist_id ? <Link href={`/watchlists?id=${data.watchlist_id}`}>{data.name}</Link> : undefined}>
       {!data.watchlist_id || (data.in_scan.length === 0 && data.missing.length === 0) ? (
-        <Empty title="Your watchlist is empty.">Add names from the Scanner or a stock page.</Empty>
+        <Empty title="Your watchlist is empty.">
+          <div className="stack-sm">
+            <p>Add names from the Scanner or a stock page, or start with today&apos;s leaders.</p>
+            {onChanged && <StarterWatchlistButton tickers={top} listId={data.watchlist_id} onDone={onChanged} />}
+          </div>
+        </Empty>
       ) : (
         <>
           {s && <p className="cap">{s.tracked} across all watchlists · {s.needs_attention} need attention · {s.strengthening} strengthening · {s.fading} fading</p>}
@@ -179,7 +185,7 @@ function FirstRunGuide({ top }: { top: Today["top_setups"] }) {
 }
 
 /** `mine` is the signed-in sections (GET /v1/today/me); they load separately and never hold up the page. */
-export function TodayView({ data, mine, mineFailed = false, side, lead }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode; lead?: ReactNode }) {
+export function TodayView({ data, mine, mineFailed = false, side, lead, onMineChanged }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode; lead?: ReactNode; onMineChanged?: () => void }) {
   const failed = new Set(data.errors.map((e) => e.section));
   const mineErr = new Set(mine?.errors.map((e) => e.section) ?? (mineFailed ? ["new_since", "watchlist"] : []));
   const phase = PHASES[data.market.phase] ?? PHASES.closed!;
@@ -203,7 +209,7 @@ export function TodayView({ data, mine, mineFailed = false, side, lead }: { data
   const personal = (
     <div className="today-personal">
       {mineErr.has("new_since") ? <SectionFailed name="New since your last visit" /> : mine?.new_since && <NewSince data={mine.new_since} />}
-      {mineErr.has("watchlist") ? <SectionFailed name="Your watchlist" /> : mine?.watchlist && <YourWatchlist data={mine.watchlist} />}
+      {mineErr.has("watchlist") ? <SectionFailed name="Your watchlist" /> : mine?.watchlist && <YourWatchlist data={mine.watchlist} top={[...(top?.setups ?? []), ...also].map((r) => r.ticker)} onChanged={onMineChanged} />}
     </div>
   );
 

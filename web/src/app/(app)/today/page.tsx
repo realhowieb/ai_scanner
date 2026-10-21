@@ -32,7 +32,7 @@ export default function TodayPage() {
         : loading && !data ? <Skeleton rows={8} label="Loading Today" />
         : data ? <TodayView data={data} mine={mine.data} mineFailed={!!mine.error && !mine.data}
             side={<EarningsCard tickers={tickers} watched={watched} />}
-            lead={data.market.phase === "premarket" ? <GappersCard /> : undefined} /> : null}
+            lead={data.market.phase === "premarket" ? <GappersCard /> : undefined} onMineChanged={mine.reload} /> : null}
     </div>
   );
 }

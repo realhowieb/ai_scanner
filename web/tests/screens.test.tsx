@@ -98,8 +98,11 @@ describe("Scanner", () => {
       setup("AAA", 88, { prob: 13.1, prob_rank: 5 }), setup("BBB", 70, { prob: 13.1, prob_rank: 60 }),
     ] })));
     render(<SessionProvider initialMe={me("premium")}><ScannerView /></SessionProvider>);
-    expect((await screen.findAllByText("13% · top 5%")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("13% · top 60%").length).toBeGreaterThan(0);
+    expect((await screen.findAllByLabelText("PreBreakout 13%. Model score in the top 5% of this scan's setups")).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("PreBreakout 13%. Model score in the top 60% of this scan's setups").length).toBeGreaterThan(0);
+    // Only top-10% names get a "top N%" label next to the bar.
+    expect(screen.getAllByText("top 5%").length).toBeGreaterThan(0);
+    expect(screen.queryByText("top 60%")).not.toBeInTheDocument();
   });
 
   it("shows a service outage with the support code and a retry", async () => {
@@ -199,17 +202,29 @@ describe("Stock Intelligence", () => {
   });
 
   it("explains the historical fallback when the ticker isn't in the latest scan", () => {
-    render(<StockView s={stock({ in_latest_scan: false, from_history: true })} premium={false} />);
-    expect(screen.getByRole("status")).toHaveTextContent("wasn't in the latest market scan");
-    expect(screen.getByRole("status")).toHaveTextContent("last recorded HSF observation");
+    render(<StockView s={stock({ in_latest_scan: false, from_history: true, status: "CAUTION", hsf_score: 5, reasons: [], risks: ["CAUTION status"] })} premium={false} />);
+    expect(screen.getByRole("heading", { name: "Not in today's ranked setups" })).toBeInTheDocument();
+    expect(screen.getByText(/wasn't among the ranked setups in the latest market scan/)).toHaveTextContent("last recorded HSF reading was 5 (Caution)");
     expect(screen.getByText(/from the last recorded observation/)).toBeInTheDocument();
+    // No empty decision fields, risk boxes or score-band lookups for an unranked name.
+    expect(screen.queryByText("No reason recorded.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Risks" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Decision snapshot" })).not.toBeInTheDocument();
+  });
+
+  it("shows price facts from daily bars for an unranked name", () => {
+    const bars = Array.from({ length: 60 }, (_, i) => ({ date: `2026-08-${String((i % 28) + 1).padStart(2, "0")}`, close: 100 + i, high: 101 + i }));
+    bars[59] = { ...bars[59]!, close: 150, high: 150 };
+    render(<StockView s={stock({ in_latest_scan: false, from_history: false, hsf_score: null, status: null, bars, earnings_days: 3 })} premium={false} />);
+    expect(screen.getByText("Last session")).toBeInTheDocument();
+    expect(screen.getByText("vs 50-day average")).toBeInTheDocument();
+    expect(screen.getByText("From 60-day high")).toBeInTheDocument();
+    expect(screen.getByText("In 3 days")).toBeInTheDocument();
   });
 
   it("shows a plain state when HSF has no score at all", () => {
     render(<StockView s={stock({ in_latest_scan: false, has_setup: false, hsf_score: null, status: null, price: null, signals: [], score_components: null })} premium={false} />);
-    expect(screen.getByRole("status")).toHaveTextContent("HSF has no recorded score");
-    expect(screen.getAllByText("Not ranked").length).toBeGreaterThan(0);
-    expect(screen.getByText(/watch AAA, set a price alert/)).toBeInTheDocument();
+    expect(screen.getByText(/HSF has no recorded score/)).toBeInTheDocument();
     expect(screen.getByText("No HSF Score")).toBeInTheDocument();
   });
 

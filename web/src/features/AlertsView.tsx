@@ -21,6 +21,7 @@ import { useSession } from "@/session/SessionProvider";
 import { NotificationDelivery } from "./NotificationDelivery";
 import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
 import { SmartAlerts } from "./SmartAlerts";
+import { StarterAlerts } from "./Starters";
 
 function AlertRow({ a, onChanged }: { a: Alert; onChanged: () => void }) {
   const toggle = useAction();
@@ -183,7 +184,8 @@ export function AlertsView() {
       </div>
       <div className="chips" role="tablist" onKeyDown={tabKey} aria-label="Alert views">{(["activity", "rules", "delivery"] as const).map((v) =>
         <button type="button" role="tab" tabIndex={view === v ? 0 : -1} id={`alert-tab-${v}`} aria-controls={`alert-panel-${v}`} aria-selected={view === v} className="chip" key={v} onClick={() => setView(v)}>{v[0]!.toUpperCase() + v.slice(1)}</button>)}</div>
-      <section id="alert-panel-activity" role="tabpanel" aria-labelledby="alert-tab-activity" hidden={view !== "activity"}>
+      <section id="alert-panel-activity" role="tabpanel" aria-labelledby="alert-tab-activity" hidden={view !== "activity"} className="stack">
+        {data.alerts.length === 0 && <StarterAlerts onDone={(label) => { setCreated(label); reload(); }} />}
         <Card title="Recently fired" id="events">{events.error ? <ErrorLine error={events.error} /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> : events.data.length === 0 ? <Empty title="Nothing has fired yet.">Create an alert using New alert or from a stock page.</Empty> : <ul className="fired-list">{groupFired(events.data).map((item) => <FiredRowItem key={item.key} item={item} />)}</ul>}</Card>
       </section>
       <section id="alert-panel-rules" role="tabpanel" aria-labelledby="alert-tab-rules" hidden={view !== "rules"} className="stack">

@@ -9,7 +9,7 @@ export function DataFreshness({ info }: { info?: Schemas["DataFreshness"] | null
   const time = (value?: string | null) => value ? etTime(value) : "Unavailable";
   return (
     <details aria-label="Data freshness" className="data-fresh">
-      <summary><strong>Data freshness: {labels[info.state]}</strong> · Saved scan {time(info.last_successful_scan_at)}</summary>
+      <summary><strong><span className="wide-text">Data freshness: </span>{labels[info.state]}</strong> · <span className="wide-text">Saved scan </span>{time(info.last_successful_scan_at)}</summary>
       <p className="cap">Schedule status and price age are separate. Saved scan prices are not live quotes.</p>
       <div>Last successful scan (saved): {time(info.last_successful_scan_at)}</div>
       {info.scan_completed_at && <div>Scan completed: {time(info.scan_completed_at)}</div>}
