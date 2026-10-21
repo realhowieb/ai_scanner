@@ -128,14 +128,24 @@ def deployment_checks(run: Run, origin: Optional[str]) -> None:
     run.check(A, "/readyz database readiness", r.status_code == 200 and r.json().get("database") == "ok"
               if r.status_code != 404 else False, f"HTTP {r.status_code} {r.text[:80]}")
     r = run.req("GET", "/docs")
-    run.check(A, "/docs served", r.status_code == 200 and "swagger" in r.text.lower(), f"HTTP {r.status_code}")
-    r = run.req("GET", "/openapi.json")
-    spec_paths = (r.json() or {}).get("paths", {}) if r.status_code == 200 else {}
+    docs = run.req("GET", "/openapi.json")
+    hidden = r.status_code == 404 and docs.status_code == 404
+    run.check(A, "/docs hidden in production (or served when HSF_API_DOCS=1)",
+              hidden or (r.status_code == 200 and "swagger" in r.text.lower()), f"HTTP {r.status_code}")
+    if docs.status_code == 200:
+        spec, where = docs.json() or {}, "live"
+    else:  # hidden live: the committed contract is what CI keeps in step with the code
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "web", "openapi.json")) as f:
+                spec, where = json.load(f), "web/openapi.json"
+        except (OSError, ValueError):
+            spec, where = {}, "unavailable"
+    spec_paths = spec.get("paths", {})
     paths = set(spec_paths)
     missing = [p for p in REQUIRED_PATHS if p not in paths]
     missing += [f"{m.upper()} {p}" for m, p in REQUIRED_OPERATIONS if m not in (spec_paths.get(p) or {})]
-    run.check(A, "OpenAPI has every current endpoint", r.status_code == 200 and not missing,
-              f"HTTP {r.status_code}, {len(paths)} paths, missing: {missing or 'none'}")
+    run.check(A, "OpenAPI has every current endpoint", bool(paths) and not missing,
+              f"{where}, {len(paths)} paths, missing: {missing or 'none'}")
     if origin:
         r = run.req("OPTIONS", "/v1/me", headers={"Origin": origin, "Access-Control-Request-Method": "GET",
                                                  "Access-Control-Request-Headers": "authorization"})

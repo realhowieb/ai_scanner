@@ -124,6 +124,29 @@ class HealthAndSettingsTests(ApiTestCase):
         self.assertIn(r.status_code, (302, 307))
         self.assertEqual(r.headers["location"], "/docs")
 
+    def test_every_answer_carries_security_headers(self):
+        r = self.client.get("/healthz")
+        self.assertEqual(r.headers["x-content-type-options"], "nosniff")
+        self.assertEqual(r.headers["x-frame-options"], "DENY")
+        self.assertIn("max-age=", r.headers["strict-transport-security"])
+
+    def test_docs_are_hidden_on_render(self):
+        from api.main import create_app
+
+        import os
+
+        with mock.patch.dict(os.environ, {"RENDER": "true", "HSF_API_DOCS": ""}):
+            app = create_app(self.client.app.state.settings)
+        from fastapi.testclient import TestClient
+
+        c = TestClient(app)
+        self.assertEqual(c.get("/docs").status_code, 404)
+        self.assertEqual(c.get("/openapi.json").status_code, 404)
+        self.assertEqual(c.get("/").json()["ok"], True)
+        self.assertIn("/v1/me", app.openapi()["paths"])  # scripts/export_openapi.py still works
+        with mock.patch.dict(os.environ, {"RENDER": "true", "HSF_API_DOCS": "1"}):
+            self.assertEqual(TestClient(create_app(self.client.app.state.settings)).get("/openapi.json").status_code, 200)
+
     def test_short_secret_refuses_to_start(self):
         from api.settings import load_settings
 

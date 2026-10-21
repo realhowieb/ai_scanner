@@ -72,10 +72,34 @@ class _ReleasingRoute(APIRoute):
 
 READYZ_RETRY_S = 2.0
 
+# Sent on every answer. The API speaks JSON to the web server and the phone app, so
+# nothing it returns should be sniffed as another type, framed, or leak a referrer.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=31536000",
+}
+
+
+def docs_enabled() -> bool:
+    """/docs and /openapi.json list every endpoint, admin ones included. They're on for
+    local work and off on Render unless HSF_API_DOCS=1. The web client's copy of the
+    contract comes from scripts/export_openapi.py, not from the live service."""
+    raw = os.environ.get("HSF_API_DOCS", "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return os.environ.get("RENDER", "").strip().lower() != "true"
+
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     settings = settings or load_settings()
+    docs = docs_enabled()
     app = FastAPI(title="HSFinest.AI API", version="1.0.0",
+                  docs_url="/docs" if docs else None, redoc_url="/redoc" if docs else None,
+                  openapi_url="/openapi.json" if docs else None,
                   responses={422: {"model": models.ValidationErrorResponse, "description": "Invalid request fields"}})
     from fastapi.exceptions import RequestValidationError
     from starlette.exceptions import HTTPException
@@ -126,6 +150,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 "db_traffic": db_metrics.snapshot(),
                 "ms": round((time.perf_counter() - t0) * 1000, 1), "rss_mb": rss_mb()}))
         response.headers["X-Request-ID"] = rid
+        for k, v in SECURITY_HEADERS.items():
+            response.headers.setdefault(k, v)
         return response
 
     @app.exception_handler(store.DatabaseUnavailable)
@@ -141,8 +167,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         pass
 
     @app.get("/", include_in_schema=False)
-    def root() -> RedirectResponse:
-        return RedirectResponse("/docs")
+    def root() -> Any:
+        if docs:
+            return RedirectResponse("/docs")
+        return {"ok": True, "service": "HSFinest.AI API"}
 
     @app.get("/healthz", response_model=models.Health)
     def healthz() -> Dict[str, bool]:
