@@ -1,7 +1,9 @@
 import datetime as dt
+import json
 import unittest
 from unittest import mock
 
+import numpy as np
 import pandas as pd
 
 from analytics.signal_outcomes import score_signal
@@ -52,9 +54,6 @@ class SignalOutcomeTests(unittest.TestCase):
     def test_freeze_signal_writes_strict_json_for_nan_values(self):
         # Sentry PYTHON-A6: PMLast=NaN before pre-market prints made Postgres
         # reject the jsonb parameter, so the frozen alert row was lost.
-        import json
-        import numpy as np
-
         cur = mock.MagicMock()
         conn = mock.MagicMock()
         conn.cursor.return_value = cur
