@@ -425,6 +425,16 @@ def _register_telegram_webhook() -> None:
     threading.Thread(target=run, name="telegram-webhook", daemon=True).start()
 
 
+def _start_scan_watchdog() -> None:
+    """P2-80: flag (and re-run, with a token) a scan slot that didn't run (api/scan_watchdog.py)."""
+    try:
+        from api.scan_watchdog import start
+
+        start()
+    except Exception as e:  # best effort; the daily health report still catches missed slots
+        log.warning("scan watchdog failed to start: %s", type(e).__name__)
+
+
 def _module_app():
     """Module-level app for `uvicorn api.main:app` (settings from the environment).
     Importing never raises, so tests can import create_app without the secret."""
@@ -441,6 +451,7 @@ def _module_app():
     _warm_caches()
     _start_realtime_alerts()
     _register_telegram_webhook()
+    _start_scan_watchdog()
     if os.getenv("BILLING_MODE", "external").strip().lower() == "embedded":
         from billing_service.main import start_reconciliation_worker
 
