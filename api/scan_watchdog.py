@@ -127,14 +127,18 @@ def alert_content(slot: dt.datetime, status: str, redispatched: Optional[bool]) 
     return subject, text, inner
 
 
+def _requests():
+    import requests  # imported on use: some CI jobs run without it
+
+    return requests
+
+
 # ---- side effects -------------------------------------------------------------------------------
 def fetch_runs(session=None) -> Optional[List[Dict[str, Any]]]:
     """The latest scheduled-scans runs, or None when GitHub can't be read. The repo is
     public, so this works without a token (60 requests an hour; we use at most ~40 a day)."""
     try:
-        import requests
-
-        s = session or requests
+        s = session or _requests()
         headers = {"Accept": "application/vnd.github+json"}
         if _token():
             headers["Authorization"] = f"Bearer {_token()}"
@@ -155,9 +159,7 @@ def redispatch(session=None) -> Optional[bool]:
     if not _token() or os.environ.get("HSF_SCAN_WATCHDOG_REDISPATCH", "1").strip() == "0":
         return None
     try:
-        import requests
-
-        s = session or requests
+        s = session or _requests()
         r = s.post(f"{GH_API}/repos/{_repo()}/actions/workflows/{WORKFLOW}/dispatches",
                    json={"ref": "main", "inputs": {"force": "false", "session": "auto"}},
                    headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {_token()}"},
