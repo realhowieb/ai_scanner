@@ -247,6 +247,54 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
             "rows": rows}
 
 
+# Keep the shared "Top movers" table warm while the market is open, so the first visitor
+# after a quiet spell isn't the one who waits for the full rebuild (~10 s). Each pass
+# stays inside DT_MOVERS_STALE_S, so visitors get the stale-while-reloading path at worst.
+# HSF_DT_KEEP_WARM=0 (or HSF_WARM_DAY_TRADER=0) turns it off.
+DT_KEEP_WARM_S = 240
+DT_KEEP_WARM_STATES = ("premarket", "open")
+
+
+def _keep_warm_enabled() -> bool:
+    import os
+
+    return (os.environ.get("HSF_DT_KEEP_WARM", "1").strip() != "0"
+            and os.environ.get("HSF_WARM_DAY_TRADER", "1").strip() != "0")
+
+
+def keep_day_trader_warm_once(now: Optional[dt.datetime] = None) -> bool:
+    """One keep-warm pass: rebuild the movers table when the market is in a warm state.
+    Uses the clock-free time check, so a closed-market pass makes no network call."""
+    from ui import day_trader as dtm
+
+    if not _keep_warm_enabled() or dtm.market_state(now) not in DT_KEEP_WARM_STATES:
+        return False
+    day_trader("movers")
+    return True
+
+
+def start_day_trader_keep_warm() -> None:
+    """Run keep_day_trader_warm_once every DT_KEEP_WARM_S on a daemon thread (Render only)."""
+    import logging
+    import os
+    import threading
+    import time
+
+    if os.environ.get("RENDER", "").strip().lower() != "true" or not _keep_warm_enabled():
+        return
+    log = logging.getLogger("hsf_api.market")
+
+    def run() -> None:
+        while True:
+            time.sleep(DT_KEEP_WARM_S)
+            try:
+                keep_day_trader_warm_once()
+            except Exception as e:  # best effort; a visitor builds it instead
+                log.warning("day trader keep-warm failed: %s", type(e).__name__)
+
+    threading.Thread(target=run, name="day-trader-keep-warm", daemon=True).start()
+
+
 PM_GAPPERS_TTL_S = 180      # the whole-market pre-market screen (~4,000 snapshots) reloads every 3 minutes
 PM_GAPPERS_STALE_S = 600
 
@@ -278,9 +326,18 @@ def day_trader_sparklines(symbols: Sequence[str]) -> Dict[str, Any]:
     from ui.stair_stepper import MAX_CHECK, fetch_recent_minute_bars
 
     checked = _parse_symbols(",".join(symbols), MAX_CHECK)
-    bars = _cached(("dt_minute", tuple(sorted(set(checked)))), lambda: fetch_recent_minute_bars(checked),
-                   ttl_s=DT_MOVERS_TTL_S) if checked else {}
-    return {"checked": checked, "series": {s: sparkline((bars or {}).get(s) or []) for s in checked}}
+    key = tuple(sorted(set(checked)))
+
+    def load() -> Dict[str, Any]:
+        bars = _cached(("dt_minute", key), lambda: fetch_recent_minute_bars(checked), ttl_s=DT_MOVERS_TTL_S)
+        return {s: sparkline((bars or {}).get(s) or []) for s in checked}
+
+    # Sparklines are a glance: past the TTL, show the last ones while one background reload
+    # runs. Only the small series are kept stale; the raw minute bars (shared with the
+    # stair-stepper check) stay fresh-only.
+    series = _cached(("dt_sparklines", key), load, ttl_s=DT_MOVERS_TTL_S,
+                     stale_s=DT_MOVERS_STALE_S) if checked else {}
+    return {"checked": checked, "series": {s: (series or {}).get(s) or [] for s in checked}}
 
 
 def stair_steppers(symbols: Sequence[str], *, window: int, direction: str, r2_min: float,

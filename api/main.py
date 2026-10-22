@@ -425,6 +425,14 @@ def _register_telegram_webhook() -> None:
     threading.Thread(target=run, name="telegram-webhook", daemon=True).start()
 
 
+def _start_day_trader_keep_warm() -> None:
+    """Keep the Day Trader movers table warm during market hours (api.market)."""
+    try:
+        _market().start_day_trader_keep_warm()
+    except Exception as e:  # best effort; the first visitor builds it instead
+        log.warning("day trader keep-warm failed to start: %s", type(e).__name__)
+
+
 def _start_scan_watchdog() -> None:
     """P2-80: flag (and re-run, with a token) a scan slot that didn't run (api/scan_watchdog.py)."""
     try:
@@ -452,6 +460,7 @@ def _module_app():
     _start_realtime_alerts()
     _register_telegram_webhook()
     _start_scan_watchdog()
+    _start_day_trader_keep_warm()
     if os.getenv("BILLING_MODE", "external").strip().lower() == "embedded":
         from billing_service.main import start_reconciliation_worker
 
