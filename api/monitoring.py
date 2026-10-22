@@ -8,7 +8,27 @@ Sentry's default scrubbing drops Authorization and Cookie headers.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional
+
+# One JavaScript stack line: Chrome "at fn (url:line:col)" / "at url:line:col",
+# Firefox and Safari "fn@url:line:col".
+_FRAME = re.compile(r"^\s*(?:at\s+)?(?:(?P<fn>[^\s(@]+)\s+\(|(?P<fn2>[^\s@]*)@)?"
+                    r"(?P<url>https?://[^\s()]+?):(?P<line>\d+):(?P<col>\d+)\)?\s*$")
+
+
+def parse_js_stack(stack: Optional[str]) -> List[Dict[str, Any]]:
+    """Sentry frames (oldest call first) from a browser stack string. Query strings are
+    dropped so frames match the uploaded files."""
+    frames = []
+    for line in (stack or "").splitlines():
+        m = _FRAME.match(line)
+        if not m:
+            continue
+        frames.append({"function": (m.group("fn") or m.group("fn2") or "?")[:200],
+                       "abs_path": m.group("url").split("?")[0].split("#")[0][:500],
+                       "lineno": int(m.group("line")), "colno": int(m.group("col")), "in_app": True})
+    return list(reversed(frames))[-50:]
 
 
 def init_api_monitoring() -> bool:
@@ -38,6 +58,19 @@ def capture_client_error(report: Dict[str, Any], stack: Optional[str] = None) ->
                 scope.set_tag("request_id", report["request_id"])
             scope.set_context("web_error", {**report, "stack": (stack or "")[:2000] or None})
             scope.fingerprint = ["web", str(report.get("kind")), str(report.get("message"))[:120]]
-            sentry_sdk.capture_message(f"Web: {report.get('message')}", level="error")
+            frames = parse_js_stack(stack)
+            if frames and report.get("release"):
+                # A real JavaScript exception: Sentry applies the source maps uploaded for
+                # web@<commit> (web/scripts/sentry-sourcemaps.mjs) to these frames.
+                value = str(report.get("message") or "Error")
+                head = re.match(r"^([A-Za-z]*Error): ", (stack or "").lstrip())  # Chrome: "TypeError: ..."
+                kind = head.group(1) if head else "Error"
+                sentry_sdk.capture_event({
+                    "platform": "javascript", "level": "error", "release": f"web@{report['release']}",
+                    "exception": {"values": [{"type": kind, "value": value[:500],
+                                              "stacktrace": {"frames": frames}}]},
+                }, scope=scope)
+            else:
+                sentry_sdk.capture_message(f"Web: {report.get('message')}", level="error")
     except Exception:
         pass

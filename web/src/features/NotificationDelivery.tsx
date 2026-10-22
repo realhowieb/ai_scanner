@@ -30,11 +30,71 @@ function QuietHoursForm({ initial }: { initial: Schemas["QuietHours"] }) {
     <ErrorLine error={act.error} />
   </form>;
 }
+/** Telegram and Discord: every alert that fires is also posted there (Pro and above). */
+function ChatDelivery() {
+  const chats = useApi("chat-alerts", (signal) => unwrap(api.GET("/v1/me/chat-alerts", { signal })));
+  const act = useAction();
+  const [webhook, setWebhook] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const d = chats.data;
+  if (!d?.telegram || !d?.discord) return null; // not loaded, or an API without chat alerts
+  if (!d.telegram.available && !d.discord.available) return null;
+  const status = (c: Schemas["ChatDestination"]) => c.last_status ? ` · last alert ${c.last_status}${c.last_at ? ` ${etTime(c.last_at)}` : ""}` : "";
+  return (
+    <Card title="Telegram and Discord" id="chat-delivery">
+      <p className="cap">Every alert that fires is also posted to the chats you connect here, except during quiet hours.</p>
+      {!d.plan_allows ? <p className="cap">Telegram and Discord alerts are part of <a href="/pricing">Pro</a>.</p> : <div className="stack-sm">
+        {d.telegram.available && <div className="chat-row">
+          <strong>Telegram</strong>
+          {d.telegram.connected ? <>
+            <span className="cap">Connected to {d.telegram.label ?? "a chat"}{status(d.telegram)}</span>
+            <button type="button" className="btn btn-sm" disabled={act.busy} onClick={() => void act.run(async () => {
+              await unwrap(api.DELETE("/v1/me/chat-alerts/{kind}", { params: { path: { kind: "telegram" } } })); chats.reload(); return true;
+            })}>Disconnect</button>
+          </> : <button type="button" className="btn btn-sm" disabled={act.busy} onClick={() => void act.run(async () => {
+            const link = await unwrap(api.POST("/v1/me/chat-alerts/telegram", {}));
+            window.open(link.url, "_blank", "noopener,noreferrer");
+            setNote(`Telegram opened. Tap Start in the bot chat within ${link.expires_in_minutes} minutes, then refresh this page.`);
+            return true;
+          })}>Connect Telegram</button>}
+        </div>}
+        {d.discord.available && <div className="stack-sm">
+          <div className="chat-row">
+            <strong>Discord</strong>
+            {d.discord.connected && <>
+              <span className="cap">Connected to a channel webhook{status(d.discord)}</span>
+              <button type="button" className="btn btn-sm" disabled={act.busy} onClick={() => void act.run(async () => {
+                await unwrap(api.DELETE("/v1/me/chat-alerts/{kind}", { params: { path: { kind: "discord" } } })); chats.reload(); return true;
+              })}>Disconnect</button>
+            </>}
+          </div>
+          <form className="chat-row" onSubmit={(e) => { e.preventDefault(); void act.run(async () => {
+            await unwrap(api.PUT("/v1/me/chat-alerts/discord", { body: { webhook_url: webhook.trim() } }));
+            setWebhook(""); setNote("Discord connected. A test message was posted in the channel."); chats.reload(); return true;
+          }); }}>
+            <label className="field grow"><span>{d.discord.connected ? "Replace webhook URL" : "Discord channel webhook URL"}</span>
+              <input type="url" inputMode="url" autoComplete="off" placeholder="https://discord.com/api/webhooks/…" value={webhook} onChange={(e) => setWebhook(e.target.value)} />
+            </label>
+            <button className="btn btn-sm" disabled={act.busy || webhook.trim().length < 30}>Connect Discord</button>
+          </form>
+          <p className="cap">In Discord: Channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL.</p>
+        </div>}
+        {(d.telegram.connected || d.discord.connected) && <div><button type="button" className="btn btn-sm" disabled={act.busy} onClick={() => void act.run(async () => {
+          const r = await unwrap(api.POST("/v1/me/chat-alerts/test", {})); setNote(r.message); chats.reload(); return true;
+        })}>Send a test alert</button></div>}
+      </div>}
+      {note && <p className="cap" role="status">{note}</p>}
+      <ErrorLine error={act.error} />
+    </Card>
+  );
+}
+
 export function NotificationDelivery({ events = [] }: { events?: Schemas["AlertEvent"][] }) {
   const prefs = useWorkspace();
   const deliveries = useApi("push-deliveries", (signal) => unwrap(api.GET("/v1/alerts/deliveries", { signal })));
   const act = useAction();
   return <>
+    <ChatDelivery />
     <Card title="Quiet hours" id="quiet-hours">
       {prefs.data && <QuietHoursForm key={JSON.stringify(prefs.data.quiet_hours)} initial={prefs.data.quiet_hours ?? { enabled: false, start: "22:00", end: "07:00", timezone: "America/New_York" }} />}
       <ErrorLine error={prefs.error} />

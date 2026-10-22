@@ -296,6 +296,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             pass
         body = {"ok": True, "database": "ok", "db_ping_ms": db_ms, "latest_scan_at": latest,
                 "scan_age_minutes": age, **fresh, **memory_status()}
+        from api import shared_cache
+
+        kv = shared_cache.status()  # informational: the API works without Key Value
+        body["key_value"] = {"configured": kv["configured"], "ok": kv["ok"], "ping_ms": kv["ping_ms"]}
         if strict and fresh["stale"]:
             return JSONResponse({**body, "ok": False}, status_code=503)
         return body

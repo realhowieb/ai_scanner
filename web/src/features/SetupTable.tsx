@@ -15,7 +15,7 @@ import { Pill, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
 import { num, pct, price, setupLabel } from "@/lib/format";
 
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
-import { DailySpark, PreBreakoutMeter, RvolMeter, useDailySparks } from "./Sparks";
+import { DailySpark, PreBreakoutMeter, RvolMeter, useDailySparks, useNewsFlags } from "./Sparks";
 
 type Row = Schemas["ScanSetup"];
 /** Server sort ids (GET /v1/scans/latest `sort`). Every server sort is high-to-low. */
@@ -38,15 +38,23 @@ const HINTS: Record<string, [string, ReactNode]> = {
 /** What the cells need from the table's props. Cells read it from context so the column
  * definitions stay module constants: FlexRender renders cell functions as components, and a
  * new function each render would remount every cell (losing an open Save dialog, for one). */
-type Ctx = { numbered: boolean; offset: number; sparks: boolean; series: Record<string, number[]>; choose: (ticker: string) => ReactNode };
-const TableCtx = createContext<Ctx>({ numbered: true, offset: 0, sparks: false, series: {}, choose: () => null });
+type NewsFlag = Schemas["NewsFlag"];
+type Ctx = { numbered: boolean; offset: number; sparks: boolean; series: Record<string, number[]>; news: Record<string, NewsFlag>; choose: (ticker: string) => ReactNode };
+const TableCtx = createContext<Ctx>({ numbered: true, offset: 0, sparks: false, series: {}, news: {}, choose: () => null });
+
+/** "News" marker: the ticker had a story in the last 24 hours. Links to the stock page's News card. */
+function NewsMark({ ticker, flag }: { ticker: string; flag: NewsFlag | undefined }) {
+  if (!flag) return null;
+  return <Link href={`/stocks/${encodeURIComponent(ticker)}#news`} className="pill news-flag" title={flag.headline}
+    aria-label={`${ticker} news: ${flag.count} ${flag.count === 1 ? "story" : "stories"} in 24 hours. Latest: ${flag.headline}`}>News</Link>;
+}
 const useCtx = () => useContext(TableCtx);
 
 function RankHead() { return useCtx().numbered ? "#" : <span className="sr-only">Row</span>; }
 function RankCell({ row }: { row: { index: number } }) { const c = useCtx(); return c.numbered ? c.offset + row.index + 1 : ""; }
 function TickerCell({ row }: { row: { original: Row } }) {
   const c = useCtx(); const r = row.original;
-  return <>{c.sparks && c.choose(r.ticker)} <TickerLink ticker={r.ticker} />{r.fading && <> <Pill tone="warn">Fading</Pill></>}</>;
+  return <>{c.sparks && c.choose(r.ticker)} <TickerLink ticker={r.ticker} />{r.fading && <> <Pill tone="warn">Fading</Pill></>}<NewsMark ticker={r.ticker} flag={c.news[r.ticker]} /></>;
 }
 function SparkCell({ row }: { row: { original: Row } }) { const c = useCtx(); return <DailySpark points={c.series[row.original.ticker]} ticker={row.original.ticker} />; }
 
@@ -83,8 +91,9 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   const choose = (ticker: string) => <input type="checkbox" aria-label={`Compare ${ticker}`} checked={selected.includes(ticker)}
     disabled={selected.length >= 4 && !selected.includes(ticker)} onChange={() => toggle(ticker)} />;
   const series = useDailySparks(sparks && visible("spark") ? rows.map((r) => r.ticker) : []);
+  const news = useNewsFlags(sparks ? rows.map((r) => r.ticker) : []);
 
-  const ctx = { numbered, offset, sparks, series, choose };
+  const ctx = { numbered, offset, sparks, series, news, choose };
   const columnVisibility = Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium)]));
   const sorting: SortingState = sort ? [{ id: Object.keys(SERVER_SORT).find((k) => SERVER_SORT[k] === sort) ?? "score", desc: true }] : [];
   const t = useTable({
@@ -157,6 +166,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               <TickerLink ticker={r.ticker} />
               {visible("setup") && <Pill>{setupLabel(r.primary_setup)}</Pill>}
               {r.fading && <Pill tone="warn">Fading</Pill>}
+              <NewsMark ticker={r.ticker} flag={news[r.ticker]} />
               <span className="grow" />
               {sparks && visible("spark") && <DailySpark points={series[r.ticker]} ticker={r.ticker} width={72} height={22} />}
               <SaveToWatchlistButton ticker={r.ticker} compact />

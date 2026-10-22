@@ -12,6 +12,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import type { FormEvent, ReactNode } from "react";
 
 import { PasswordField } from "@/components/PasswordField";
+import { TURNSTILE_SITE_KEY, Turnstile } from "@/components/Turnstile";
 import { messageFrom, newRequestId } from "@/api/client";
 import { WAKING_UP, useSlow } from "@/components/ui";
 import { captureAttribution, track } from "@/lib/funnel";
@@ -58,6 +59,9 @@ export function SignupForm() {
   const invited = useSyncExternalStore(noSubscribe, () => !!captureAttribution().ref, () => false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const needsCaptcha = !!TURNSTILE_SITE_KEY && !captcha;
   const slow = useSlow(busy);
   const mismatch = !!pw2 && pw !== pw2;
   const submit = async (e: FormEvent) => {
@@ -67,7 +71,7 @@ export function SignupForm() {
     setError(null);
     const attribution = captureAttribution();
     track("signup_started", "signup_form");
-    const o = await postAuth("signup", { email, username, password: pw, accept_terms: agree, attribution });
+    const o = await postAuth("signup", { email, username, password: pw, accept_terms: agree, attribution, ...(captcha ? { turnstile_token: captcha } : {}) });
     if (o.ok) {
       captureUsage("signup_completed");
       // A full page load: the new session's cookies are already set.
@@ -76,6 +80,7 @@ export function SignupForm() {
       return;
     }
     setError(errorOf(o));
+    setCaptchaReset((n) => n + 1);
     setBusy(false);
   };
   return (
@@ -105,8 +110,9 @@ export function SignupForm() {
         {mismatch && <p className="form-error" id={`${fieldId}-mismatch`} role="status">The passwords don&apos;t match.</p>}
         <label className="check"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
           <span>I agree to use this tool for educational/informational purposes only.</span></label>
+        <Turnstile action="signup" onToken={setCaptcha} resetKey={captchaReset} />
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email || !username || !pw || pw !== pw2 || !agree}>
+        <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email || !username || !pw || pw !== pw2 || !agree || needsCaptcha}>
           {busy ? "Creating account…" : "Create account"}
         </button>
         {slow && <p className="cap" role="status">{WAKING_UP}</p>}
@@ -122,13 +128,15 @@ export function ForgotPasswordForm() {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const o = await postAuth("password-reset", { email });
+    const o = await postAuth("password-reset", { email, ...(captcha ? { turnstile_token: captcha } : {}) });
     if (o.ok) setSent(String(o.body?.message ?? "If that email is registered, a reset link has been sent."));
-    else setError(errorOf(o));
+    else { setError(errorOf(o)); setCaptchaReset((n) => n + 1); }
     setBusy(false);
   };
   return (
@@ -140,8 +148,9 @@ export function ForgotPasswordForm() {
             <label className="field"><span>Email</span>
               <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
+            <Turnstile action="password_reset" onToken={setCaptcha} resetKey={captchaReset} />
             {error && <p className="form-error" role="alert">{error}</p>}
-            <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email}>{busy ? "Sending…" : "Send reset link"}</button>
+            <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email || (!!TURNSTILE_SITE_KEY && !captcha)}>{busy ? "Sending…" : "Send reset link"}</button>
           </>
         )}
         <p className="cap login-links"><Link href="/login">Back to sign in</Link></p>

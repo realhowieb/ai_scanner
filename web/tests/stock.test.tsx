@@ -30,6 +30,7 @@ beforeEach(() => {
       return Promise.resolve(jsonResponse({ detail: "Not Found" }, 404));
     }
     if (path.endsWith("/v1/scans/latest")) return Promise.resolve(jsonResponse({ scan_at: null, setups: [], total: 0 }));
+    if (path.endsWith("/news") || path.endsWith("/filings")) return Promise.resolve(jsonResponse({ detail: "Not Found" }, 404));
     if (path.includes("/v1/outcomes/") || path.endsWith("/score-history")) {
       outcomeCalls.push(req.url);
       return Promise.resolve(jsonResponse({ detail: "Not Found" }, 404));

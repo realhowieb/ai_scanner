@@ -23,15 +23,16 @@ export function thresholdUnit(type: string): string {
   if (type === "EARNINGS_SOON") return "days";
   if (type === "RVOL_ABOVE") return "x volume";
   if (type === "RANK_IMPROVED") return "places";
+  if (type === "INSIDER_BUY") return "dollars";
   return "";
 }
 
-const PLAN_OF: Record<string, "pro" | "premium"> = { EARNINGS_SOON: "pro", SCAN_MATCH: "pro", PREBREAKOUT_ACTIVE: "premium" };
+const PLAN_OF: Record<string, "pro" | "premium"> = { EARNINGS_SOON: "pro", SCAN_MATCH: "pro", INSIDER_BUY: "pro", PREBREAKOUT_ACTIVE: "premium" };
 
 export function describeRule(r: Pick<AlertRule, "rule_type" | "threshold" | "value">, types: AlertRuleType[]): string {
   if (r.rule_type === "SCAN_MATCH") return `New scanner matches (${describeScanAlert(r.threshold, r.value)})`;
   const t = types.find((x) => x.type === r.rule_type);
-  const base = (t?.label ?? r.rule_type).replace(/ \(days\)$/, "");
+  const base = (t?.label ?? r.rule_type).replace(/ \((days|\$)\)$/, "");
   const unit = thresholdUnit(r.rule_type);
   const num = r.threshold != null ? ` ${r.threshold}${unit ? ` ${unit}` : ""}` : "";
   return `${base}${num}${r.value ? `: ${r.value}` : ""}`;

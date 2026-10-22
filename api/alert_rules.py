@@ -15,6 +15,10 @@ api.watchlist_intel.market_observation):
                                                   threshold days (once per earnings date; Pro).
                                                   Read from earnings_calendar, so it works for
                                                   tickers that aren't in the scan
+    INSIDER_BUY                                   heads-up: a company insider reported an open-market
+                                                  buy (SEC Form 4) worth at least threshold dollars
+                                                  (once per newest buy date; Pro). Read from EDGAR
+                                                  (api.filings), so no scan row is needed
     RANK_IMPROVED                                 transition: HSF rank moved up >= threshold places
                                                   since the last scan this rule saw
     SCAN_MATCH                                    scan alert (Pro): saved Scanner filters on the whole
@@ -86,6 +90,11 @@ RULE_TYPES: Dict[str, Dict[str, Any]] = {
                       "label": "Reports earnings within (days)", "entitlement": "can_earnings", "plan": "Pro",
                       "description": "Fires once per earnings date when the ticker reports within your number of "
                                      "days (1 = the day before). Uses the HSF earnings calendar."},
+    "INSIDER_BUY": {"operator": "insider_buy", "kind": EDGE, "threshold": (0.0, 1_000_000_000.0), "default": 0.0,
+                    "label": "Insider buys at least ($)", "entitlement": "can_insider_alerts", "plan": "Pro",
+                    "description": "Fires when a company insider (officer, director or 10% owner) reports buying "
+                                   "shares on the open market in an SEC Form 4 worth at least your amount "
+                                   "(0 = any buy). Checked after each market scan."},
     "RANK_IMPROVED": {"operator": "improves_by", "kind": EDGE, "threshold": (1.0, 10000.0), "default": 10.0,
                       "label": "HSF rank improves by",
                       "description": "Fires when the ticker moves up at least your number of places in the HSF "
@@ -102,6 +111,7 @@ SCAN_SIGNALS = ("breakout", "gapper", "golden_cross", "gainer", "prebreakout")
 SCAN_FILTER_KEYS = ("name", "setup", "min_price", "max_price", "min_rvol", "earnings")
 SCAN_EARNINGS = ("today", "tomorrow", "week")  # only names that report then (ET days; week = next 7)
 EARNINGS_CACHE_S = 300
+INSIDER_MAX_TICKERS = 150  # EDGAR lookups per pass (each cached for hours)
 _earnings_cache: Dict[Tuple[str, str], Tuple[float, frozenset]] = {}
 SCAN_MATCH_LIST_MAX = 1000  # matches remembered per rule between scans
 SCAN_MATCH_NAMES_IN_MESSAGE = 8
@@ -384,6 +394,8 @@ def check(rule: Dict[str, Any], view: Dict[str, Any], state: Optional[Dict[str, 
     (absent from the scan), so the stored state is left as it was."""
     if rule["rule_type"] == "EARNINGS_SOON":
         return _check_earnings(rule, view, state or {})
+    if rule["rule_type"] == "INSIDER_BUY":
+        return _check_insider(rule, view, state or {})
     if not view.get("present"):
         return False, None, None, None
     rt, thr = rule["rule_type"], rule.get("threshold")
@@ -443,6 +455,51 @@ def _check_earnings(rule: Dict[str, Any], view: Dict[str, Any], state: Dict[str,
                                       "last_text": date if inside else fired_for}
 
 
+def _check_insider(rule: Dict[str, Any], view: Dict[str, Any], state: Dict[str, Any]
+                   ) -> Tuple[bool, Optional[float], Optional[float], Optional[Dict[str, Any]]]:
+    """INSIDER_BUY: fires once for the newest insider buy date at or above the rule's dollar
+    amount. last_text holds the buy date it last fired for (or the baseline date the first
+    pass saw, so a rule never fires for buys filed before it was created)."""
+    date, value = view.get("insider_buy_date"), view.get("insider_buy_value")
+    seen = state.get("last_text")
+    if not view.get("insider_known"):
+        return False, None, None, None  # EDGAR unreadable this pass: keep the stored state
+    if date is None:
+        return False, None, None, {"last_value": None, "last_flag": False, "last_text": seen or "-"}
+    big_enough = float(value or 0) >= float(rule.get("threshold") or 0)
+    fires = bool(seen) and big_enough and str(date) > str(seen)
+    return fires, float(value or 0), None, {"last_value": float(value or 0), "last_flag": big_enough,
+                                            "last_text": max(str(date), str(seen or ""))}
+
+
+def insider_lookup(tickers: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+    """{ticker: insider_known, insider_buy_date, insider_buy_value, insider_buy_who} from the
+    newest open-market buy in recent Form 4s (api.filings, cached for hours). A ticker EDGAR
+    couldn't answer for is left out, so its rules keep their state."""
+    out: Dict[str, Dict[str, Any]] = {}
+    try:
+        from api import filings
+
+        if not filings.enabled():
+            return {}
+        for t in sorted({str(x).strip().upper() for x in tickers if str(x).strip()})[:INSIDER_MAX_TICKERS]:
+            f = filings.stock_filings(t)
+            if not f.get("available"):
+                continue
+            buys = [x for x in f.get("insider") or [] if x.get("type") == "Buy" and x.get("date")]
+            if not buys:
+                out[t] = {"insider_known": True, "insider_buy_date": None, "insider_buy_value": None}
+                continue
+            newest = max(x["date"] for x in buys)
+            same_day = [x for x in buys if x["date"] == newest]
+            out[t] = {"insider_known": True, "insider_buy_date": newest,
+                      "insider_buy_value": round(sum(x.get("value") or 0 for x in same_day), 2),
+                      "insider_buy_who": f"{same_day[0].get('insider')} ({same_day[0].get('role')})"}
+    except Exception as e:
+        log.warning(json.dumps({"event": "alert_rules_insider_failed", "error": type(e).__name__}))
+    return out
+
+
 def _earnings_when(view: Dict[str, Any]) -> str:
     days = int(view.get("earnings_days") or 0)
     when = "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days ({view.get('earnings_date')})"
@@ -499,6 +556,9 @@ def message_for(rule: Dict[str, Any], ticker: str, value: Optional[float], prev:
         return f"{ticker} is a new HSF setup: {view.get('setup') or 'Signal'}"
     if rt == "EARNINGS_SOON":
         return f"{ticker} reports earnings {_earnings_when(view)}"
+    if rt == "INSIDER_BUY":
+        amount = f"${value:,.0f}" if value else "shares"
+        return f"{ticker}: insider buy of {amount} reported {view.get('insider_buy_date')} by {view.get('insider_buy_who') or 'an insider'}"
     if rt == "RANK_IMPROVED":
         return f"{ticker} moved up {prev - value:.0f} places to #{value:.0f} in the HSF ranking"
     return f"{ticker} alert"
@@ -642,6 +702,12 @@ def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Di
         if r["rule_type"] == "EARNINGS_SOON":
             earn_tickers.update((wl.get(int(r["watchlist_id"])) or []) if r.get("watchlist_id") else [r["ticker"]])
     earnings = earnings_lookup(sorted(earn_tickers), now) if earn_tickers else {}
+    insider_tickers = set()
+    for r in rules:
+        if r["rule_type"] == "INSIDER_BUY":
+            insider_tickers.update((wl.get(int(r["watchlist_id"])) or []) if r.get("watchlist_id") else [r["ticker"]])
+    for t, info in (insider_lookup(sorted(insider_tickers)) if insider_tickers else {}).items():
+        earnings.setdefault(t, {}).update(info)
     now_s = now.isoformat(timespec="microseconds")
     views: Dict[Tuple[str, bool], Dict[str, Any]] = {}
     new_states, events, evaluated, triggered = [], [], set(), set()
