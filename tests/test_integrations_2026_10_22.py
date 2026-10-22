@@ -1,7 +1,7 @@
 """Six integrations: Render Key Value (shared rate limits/cache), Alpaca News, SEC EDGAR
 filings + INSIDER_BUY alerts, Telegram/Discord alert delivery, Cloudflare Turnstile and
 symbolicated web errors for Sentry. No network: every provider call is faked."""
-import time
+import importlib.util
 import unittest
 from unittest import mock
 
@@ -44,6 +44,7 @@ class BrokenRedis(FakeRedis):
         raise ConnectionError("down")
 
 
+@unittest.skipUnless(DEPS, "needs fastapi (api.ratelimit)")
 class SharedCacheTests(unittest.TestCase):
     def setUp(self):
         from api import ratelimit, shared_cache
@@ -275,6 +276,7 @@ class WebStackTests(unittest.TestCase):
         self.assertEqual(frames[1]["abs_path"], "https://hsf-web-v1.onrender.com/_next/static/chunks/a.js")
         self.assertEqual((frames[1]["lineno"], frames[1]["colno"]), (1, 2345))
 
+    @unittest.skipUnless(importlib.util.find_spec("sentry_sdk"), "needs sentry_sdk")
     def test_report_with_release_becomes_a_javascript_exception(self):
         import sentry_sdk
 
@@ -369,6 +371,7 @@ class IntegrationApiTests(AccountApiTestCase):
         handle.assert_called_once_with(upd)
 
 
+@unittest.skipUnless(DEPS, "needs fastapi (api.workspace)")
 class ChatDeliveryTests(unittest.TestCase):
     def test_alert_goes_to_each_chat_and_gone_destinations_are_removed(self):
         from api import chat_delivery
