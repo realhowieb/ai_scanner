@@ -688,7 +688,9 @@ def outcome_dataset_stamp() -> Optional[tuple]:
         _ensure_schema(conn)
         cur = conn.cursor()
         cur.execute(
-            "SELECT COUNT(*), MAX(outcome_computed_at), MAX(benchmark_computed_at) "
+            # Named columns: Neon rows are dicts, so two unnamed MAX()es would collapse into one key.
+            "SELECT COUNT(*) AS n, MAX(outcome_computed_at) AS last_outcome, "
+            "MAX(benchmark_computed_at) AS last_benchmark "
             "FROM signal_outcomes WHERE source = 'opportunity'"
         )
         row = cur.fetchone()
