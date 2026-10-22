@@ -208,8 +208,13 @@ def alpaca_start_from_period(period: str) -> str:
 # P2-29: a 150-symbol batch that still fails after its retry is re-requested in
 # pieces of this size, so one slow response doesn't drop 150 symbols. The split
 # budget bounds the extra time when Alpaca itself is down (every batch failing).
-_SPLIT_SIZE = 50
+# Pieces get a longer read timeout and a short pause between them: in Oct 2026
+# scans, 50-symbol pieces still hit the 10 s read timeout at busy times.
+_SPLIT_SIZE = 25
 _MAX_SPLIT_BATCHES = 6
+_SPLIT_TIMEOUT_S = 30.0
+_SPLIT_PAUSE_S = 1.0
+_SPLIT_TIME_BUDGET_S = 300.0
 
 
 def _failure_reason(exc: BaseException) -> str:
@@ -329,18 +334,28 @@ def download_multi_alpaca(
     start = alpaca_start_from_period(period)
     fetch = dict(timeframe=timeframe, start=start, data_feed=data_feed, timeout_s=timeout_s)
     out: Dict[str, pd.DataFrame] = {}
+    piece_fetch = dict(fetch, timeout_s=max(float(timeout_s), _SPLIT_TIMEOUT_S))
     splits_left = _MAX_SPLIT_BATCHES
+    split_deadline: float | None = None
     for chunk in chunks(symbols, 150):
         bars_by_symbol, reason = _fetch_bar_pages(url, headers, chunk, **fetch)
         if reason is not None:
-            pieces = list(chunks(chunk, _SPLIT_SIZE)) if len(chunk) > _SPLIT_SIZE and splits_left > 0 else []
+            if split_deadline is None:
+                split_deadline = time.monotonic() + _SPLIT_TIME_BUDGET_S
+            can_split = splits_left > 0 and time.monotonic() < split_deadline
+            pieces = list(chunks(chunk, _SPLIT_SIZE)) if len(chunk) > _SPLIT_SIZE and can_split else []
             if pieces:
                 splits_left -= 1
                 logger.warning("Alpaca batch of %s failed (%s); re-requesting in %s pieces",
                                len(chunk), reason, len(pieces))
             lost: list[str] = list(chunk) if not pieces else []
             for piece in pieces:
-                piece_bars, piece_reason = _fetch_bar_pages(url, headers, piece, **fetch)
+                if time.monotonic() >= split_deadline:
+                    reason = reason or "alpaca_timeout:split_budget"
+                    lost.extend(piece)
+                    continue
+                time.sleep(_SPLIT_PAUSE_S)
+                piece_bars, piece_reason = _fetch_bar_pages(url, headers, piece, **piece_fetch)
                 if piece_reason is not None:
                     reason = piece_reason
                     lost.extend(piece)

@@ -74,10 +74,15 @@ class Ready(BaseModel):
     expected_scan_at: Optional[str] = Field(default=None, description="When stale: the missed scan slot (ISO)")
     rss_mb: Optional[float] = Field(default=None, description="API memory in use now (MB)")
     rss_peak_mb: Optional[float] = Field(default=None, description="Highest API memory seen since the last restart (MB)")
+    container_mb: Optional[float] = Field(default=None, description=(
+        "Container memory now, as Render measures it (MB); rss_mb also counts shared libraries"))
+    container_peak_mb: Optional[float] = Field(default=None, description=(
+        "Highest container memory since the last restart (MB); memory_warning uses this when present"))
+    price_cache_entries: Optional[int] = Field(default=None, description="Price frames held in memory now")
     memory_limit_mb: Optional[float] = Field(default=None, description="The instance's memory limit (MB)")
     memory_warn_mb: Optional[float] = Field(default=None, description="memory_warning turns on at this peak (MB)")
     memory_warning: Optional[bool] = Field(default=None, description=(
-        "The peak reached memory_warn_mb: close to the limit, where Render restarts the API"))
+        "The peak (container_peak_mb, else rss_peak_mb) reached memory_warn_mb: close to the limit, where Render restarts the API"))
     key_value: Optional["KeyValueStatus"] = Field(default=None, description=(
         "Render Key Value (shared rate limits and lookups). Informational: without it each "
         "instance counts in memory"))

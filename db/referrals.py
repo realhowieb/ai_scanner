@@ -260,7 +260,7 @@ def stats(user_id: str) -> Dict[str, int]:
     conn, sq = _connect()
     try:
         cur = conn.cursor()
-        cur.execute(_sql("SELECT COUNT(*), COUNT(rewarded_at) FROM hsf_referrals WHERE referrer = %s", sq),
+        cur.execute(_sql("SELECT COUNT(*) AS signed_up, COUNT(rewarded_at) AS verified FROM hsf_referrals WHERE referrer = %s", sq),
                     (user_id.strip().lower(),))
         row = _one(cur) or (0, 0)
         return {"signed_up": int(row[0] or 0), "verified": int(row[1] or 0)}

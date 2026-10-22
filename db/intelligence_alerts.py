@@ -809,9 +809,11 @@ def intelligence_alert_health() -> Dict[str, Any]:
     try:
         _ensure_schema(conn)
         cur = conn.cursor()
-        cur.execute("SELECT COUNT(*), MAX(detected_at), "
-                    "COUNT(*) FILTER (WHERE delivery_status='DELIVERED'), "
-                    "COUNT(*) FILTER (WHERE delivery_status='FAILED') "
+        # Every column needs its own name: Neon rows are dicts, so unnamed
+        # COUNT(*)s would share the key "count" and collapse into one.
+        cur.execute("SELECT COUNT(*) AS total, MAX(detected_at) AS last_detected_at, "
+                    "COUNT(*) FILTER (WHERE delivery_status='DELIVERED') AS delivered, "
+                    "COUNT(*) FILTER (WHERE delivery_status='FAILED') AS failed "
                     "FROM hsf_intelligence_alerts")
         row = cur.fetchone()
         cur.close()

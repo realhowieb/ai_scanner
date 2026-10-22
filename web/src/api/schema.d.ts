@@ -6262,6 +6262,16 @@ export interface components {
         /** Ready */
         Ready: {
             /**
+             * Container Mb
+             * @description Container memory now, as Render measures it (MB); rss_mb also counts shared libraries
+             */
+            container_mb?: number | null;
+            /**
+             * Container Peak Mb
+             * @description Highest container memory since the last restart (MB); memory_warning uses this when present
+             */
+            container_peak_mb?: number | null;
+            /**
              * Database
              * @constant
              */
@@ -6295,11 +6305,16 @@ export interface components {
             memory_warn_mb?: number | null;
             /**
              * Memory Warning
-             * @description The peak reached memory_warn_mb: close to the limit, where Render restarts the API
+             * @description The peak (container_peak_mb, else rss_peak_mb) reached memory_warn_mb: close to the limit, where Render restarts the API
              */
             memory_warning?: boolean | null;
             /** Ok */
             ok: boolean;
+            /**
+             * Price Cache Entries
+             * @description Price frames held in memory now
+             */
+            price_cache_entries?: number | null;
             /**
              * Rss Mb
              * @description API memory in use now (MB)

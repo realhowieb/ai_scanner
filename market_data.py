@@ -16,6 +16,8 @@ It is intentionally written to be:
 
 from __future__ import annotations
 
+import threading
+import time
 from typing import Any, Dict, List, Optional
 
 try:
@@ -267,7 +269,73 @@ def day_trader_metric_timeframes() -> List[Dict[str, str]]:
     ]
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
+# ---- Per-symbol cache for the slow-moving daily lookups (Day Trader enrichments) ----
+# Average volume, EMA crosses and ATR/Donchian/Bollinger come from daily bars, so they
+# barely move during a session. They are cached per symbol for DAILY_ENRICH_TTL_S, so a
+# change in the movers list only fetches the new names, and the table's 10-second quote
+# refresh never re-downloads daily history. A symbol the provider returned nothing for
+# is retried after DAILY_ENRICH_MISS_TTL_S.
+DAILY_ENRICH_TTL_S = 1800.0
+DAILY_ENRICH_MISS_TTL_S = 300.0
+_DAILY_ENRICH_MAX_ENTRIES = 6000
+_daily_enrich_cache: Dict[Any, Any] = {}  # (kind, params, SYMBOL) -> (expires at, value or None)
+_daily_enrich_lock = threading.Lock()
+
+
+def clear_daily_enrich_cache() -> None:
+    with _daily_enrich_lock:
+        _daily_enrich_cache.clear()
+
+
+def _per_symbol_cached(kind: Any, symbols: List[str], fetch) -> Dict[str, Any]:
+    """{SYMBOL: value} for `symbols`, calling fetch(missing) only for symbols not cached.
+    fetch returns {SYMBOL: value or None}: None means "fetched, nothing to show" (cached
+    like a value); a symbol absent from its answer wasn't fetched and is retried sooner.
+    An empty answer (provider down) caches nothing."""
+    syms = [str(s).upper() for s in dict.fromkeys(symbols) if str(s).strip()]
+    now = time.monotonic()
+    out: Dict[str, Any] = {}
+    missing: List[str] = []
+    with _daily_enrich_lock:
+        for sym in syms:
+            hit = _daily_enrich_cache.get((kind, sym))
+            if hit and now < hit[0]:
+                if hit[1] is not None:
+                    out[sym] = hit[1]
+            else:
+                missing.append(sym)
+    if not missing:
+        return out
+    fetched = fetch(missing) or {}
+    now = time.monotonic()
+    with _daily_enrich_lock:
+        if len(_daily_enrich_cache) > _DAILY_ENRICH_MAX_ENTRIES:
+            for k in [k for k, (exp, _) in _daily_enrich_cache.items() if now >= exp]:
+                _daily_enrich_cache.pop(k, None)
+            if len(_daily_enrich_cache) > _DAILY_ENRICH_MAX_ENTRIES:
+                _daily_enrich_cache.clear()
+        for sym in missing:
+            if sym in fetched:
+                _daily_enrich_cache[(kind, sym)] = (now + DAILY_ENRICH_TTL_S, fetched[sym])
+            elif fetched:
+                _daily_enrich_cache[(kind, sym)] = (now + DAILY_ENRICH_MISS_TTL_S, None)
+    for sym in missing:
+        if fetched.get(sym) is not None:
+            out[sym] = fetched[sym]
+    return out
+
+
+def _daily_frames(symbols: List[str], period: str) -> Dict[str, Any]:
+    from data.prices import fetch_price_data_parallel
+
+    frames, _skipped = fetch_price_data_parallel(
+        [s.upper() for s in symbols],
+        period=period, interval="1d", max_workers=4, chunk_size=25,
+        timeout_s=10.0, rescue_missing=False, use_cache=True,
+    )
+    return {str(k).upper(): v for k, v in (frames or {}).items()}
+
+
 def fetch_avg_daily_volume(
     symbols: List[str],
     lookback: int = 20,
@@ -275,8 +343,8 @@ def fetch_avg_daily_volume(
 ) -> Dict[str, float]:
     """Average daily share volume over `lookback` sessions (for RVOL).
 
-    Cached for 30 minutes because the denominator moves slowly. Returns an empty
-    dict when Alpaca isn't configured — callers should treat missing keys as
+    Cached per symbol for 30 minutes because the denominator moves slowly. Returns an
+    empty dict when Alpaca isn't configured — callers should treat missing keys as
     "RVOL unavailable" rather than an error.
     """
     if not symbols:
@@ -285,28 +353,31 @@ def fetch_avg_daily_volume(
         from data.price_alpaca import download_multi_alpaca
     except Exception:
         return {}
-    try:
-        frames = download_multi_alpaca(
-            [s.upper() for s in symbols],
-            period=f"{max(lookback + 5, 25)}d",
-            interval="1d",
-            prepost=False,
-            timeout_s=15.0,
-            feed=feed or _get_alpaca_data_feed(),
-        )
-    except Exception:
-        return {}
+    feed = feed or _get_alpaca_data_feed()
 
-    out: Dict[str, float] = {}
-    for sym, frame in (frames or {}).items():
+    def fetch(syms: List[str]) -> Dict[str, Optional[float]]:
         try:
-            vol = frame["Volume"].tail(lookback)
-            avg = float(vol.mean())
-            if avg > 0:
-                out[str(sym).upper()] = avg
+            frames = download_multi_alpaca(
+                syms,
+                period=f"{max(lookback + 5, 25)}d",
+                interval="1d",
+                prepost=False,
+                timeout_s=15.0,
+                feed=feed,
+            )
         except Exception:
-            continue
-    return out
+            return {}
+        got: Dict[str, Optional[float]] = {}
+        for sym, frame in (frames or {}).items():
+            avg: Optional[float] = None
+            try:
+                avg = float(frame["Volume"].tail(lookback).mean())
+            except Exception:
+                pass
+            got[str(sym).upper()] = avg if (avg is not None and avg > 0) else None
+        return got
+
+    return _per_symbol_cached(("avg_volume", lookback, feed), symbols, fetch)
 
 
 def ema_cross_label(frame: Any) -> Optional[str]:
@@ -325,39 +396,26 @@ def ema_cross_label(frame: Any) -> Optional[str]:
 _DAILY_ENRICH_MAX = 200
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
 def fetch_ema_crosses(symbols: List[str]) -> Dict[str, str]:
     """Detect fresh daily EMA 9/21 crosses for a symbol list.
 
-    Cached separately from live snapshots because this only needs daily bars and
-    should not add repeated API pressure to the intraday monitor.
+    Cached per symbol for 30 minutes, separately from live snapshots, because this
+    only needs daily bars and should not add repeated API pressure to the intraday
+    monitor.
     """
     # Never fetch daily bars for more than a display-sized set — a hard stop
     # against any path accidentally requesting the whole universe.
     if not symbols or len(symbols) > _DAILY_ENRICH_MAX:
         return {}
-    try:
-        from data.prices import fetch_price_data_parallel
 
-        frames, _skipped = fetch_price_data_parallel(
-            [s.upper() for s in symbols],
-            period="90d",
-            interval="1d",
-            max_workers=4,
-            chunk_size=25,
-            timeout_s=10.0,
-            rescue_missing=False,
-            use_cache=True,
-        )
-    except Exception:
-        return {}
+    def fetch(syms: List[str]) -> Dict[str, Optional[str]]:
+        try:
+            frames = _daily_frames(syms, "90d")
+        except Exception:
+            return {}
+        return {sym: ema_cross_label(frame) for sym, frame in frames.items()}
 
-    out: Dict[str, str] = {}
-    for sym, frame in (frames or {}).items():
-        label = ema_cross_label(frame)
-        if label:
-            out[str(sym).upper()] = label
-    return out
+    return _per_symbol_cached(("ema_cross",), symbols, fetch)
 
 
 def _range_metrics(frame) -> Optional[Dict[str, Any]]:
@@ -465,25 +523,18 @@ def _range_metrics(frame) -> Optional[Dict[str, Any]]:
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_daily_range_metrics(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
-    """ATR/Donchian/Bollinger per symbol from daily bars. Cached like EMA crosses."""
+    """ATR/Donchian/Bollinger per symbol from daily bars. Cached per symbol like EMA crosses."""
     if not symbols or len(symbols) > _DAILY_ENRICH_MAX:
         return {}
-    try:
-        from data.prices import fetch_price_data_parallel
 
-        frames, _skipped = fetch_price_data_parallel(
-            [s.upper() for s in symbols],
-            period="150d", interval="1d", max_workers=4, chunk_size=25,
-            timeout_s=10.0, rescue_missing=False, use_cache=True,
-        )
-    except Exception:
-        return {}
-    out: Dict[str, Dict[str, Any]] = {}
-    for sym, frame in (frames or {}).items():
-        m = _range_metrics(frame)
-        if m:
-            out[str(sym).upper()] = m
-    return out
+    def fetch(syms: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
+        try:
+            frames = _daily_frames(syms, "150d")
+        except Exception:
+            return {}
+        return {sym: _range_metrics(frame) for sym, frame in frames.items()}
+
+    return _per_symbol_cached(("range",), symbols, fetch)
 
 
 # ------------------------------ Pre-market ---------------------------------

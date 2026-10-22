@@ -10229,6 +10229,30 @@
    },
    "Ready": {
     "properties": {
+     "container_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Container memory now, as Render measures it (MB); rss_mb also counts shared libraries",
+      "title": "Container Mb"
+     },
+     "container_peak_mb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Highest container memory since the last restart (MB); memory_warning uses this when present",
+      "title": "Container Peak Mb"
+     },
      "database": {
       "const": "ok",
       "title": "Database",
@@ -10314,12 +10338,24 @@
         "type": "null"
        }
       ],
-      "description": "The peak reached memory_warn_mb: close to the limit, where Render restarts the API",
+      "description": "The peak (container_peak_mb, else rss_peak_mb) reached memory_warn_mb: close to the limit, where Render restarts the API",
       "title": "Memory Warning"
      },
      "ok": {
       "title": "Ok",
       "type": "boolean"
+     },
+     "price_cache_entries": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Price frames held in memory now",
+      "title": "Price Cache Entries"
      },
      "rss_mb": {
       "anyOf": [

@@ -12,7 +12,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | Method | Path | Auth | What |
 |---|---|---|---|
 | GET | `/healthz` | none | Liveness only (no database call). Use as the Render health check. |
-| GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring and the API's memory (`rss_mb`, `rss_peak_mb`, `memory_warning`); 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
+| GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring and the API's memory (`rss_mb`, `rss_peak_mb`, `container_mb`, `container_peak_mb`, `memory_warning`, `price_cache_entries`); 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
 | POST | `/v1/auth/login` | none | `{"email","password","client"?}` → `access_token` (15 min), `refresh_token` (30 days). Same accounts and passwords as the web app. 10 failed attempts in 10 minutes → 429. |
 | POST | `/v1/auth/refresh` | none | `{"refresh_token"}` → a new pair. Each refresh token works once. A retry within 30 s of rotating (lost response, two refreshes at once) gets another pair; a later replay, or one after logout, is treated as theft and revokes every session of that account. |
 | POST | `/v1/auth/logout` | none | `{"refresh_token","push_token"?}` → 204, token revoked; with `push_token`, that device stops getting this account's pushes. |
@@ -220,7 +220,8 @@ Environment variables:
 | `HSF_API_DOCS` | Optional. `/docs` and `/openapi.json` are off on Render; `1` turns them back on. The web client's contract comes from `scripts/export_openapi.py`, not the live service. |
 | `HSF_API_THREADS` | Optional, default 24: request threads (each keeps a warm database connection). |
 | `HSF_DB_STATEMENT_TIMEOUT_MS` | Optional, default 30000 in the API (jobs have no limit): Postgres cancels one query after this long. |
-| `HSF_MEMORY_LIMIT_MB`, `HSF_MEMORY_WARN_MB` | Optional, default 512 and 400. `/readyz` reports `rss_mb`, `rss_peak_mb` and `memory_warning`; the nightly health report warns (`API_MEMORY_HIGH`) once the peak since the last restart reaches the warning line. |
+| `HSF_MEMORY_LIMIT_MB`, `HSF_MEMORY_WARN_MB` | Optional, default 512 and 400. `/readyz` reports `rss_mb`/`rss_peak_mb` (process, counts shared libraries) and `container_mb`/`container_peak_mb` (what Render measures and restarts on); `memory_warning` uses the container peak when present. The health report lists `api:API_MEMORY_HIGH` as an incident once that peak reaches the warning line (it no longer marks Database degraded). |
+| `PRICE_CACHE_MAX_ENTRIES` | Optional, default 2000 (0 = no cap). Price frames kept in memory; expired ones are swept on write. The scan workflow sets 0. |
 
 The service won't start without `API_JWT_SECRET` (uvicorn logs
 "HSF API not started: API_JWT_SECRET must be set…" and exits). Changing it signs every app
