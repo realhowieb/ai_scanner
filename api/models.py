@@ -56,6 +56,12 @@ class AdminBilling(BaseModel):
     webhook_failures: List[BillingFailure] = Field(default_factory=list)
 
 
+class KeyValueStatus(BaseModel):
+    configured: bool = Field(description="REDIS_URL is set")
+    ok: Optional[bool] = Field(default=None, description="It answered a ping; null when not configured")
+    ping_ms: Optional[float] = None
+
+
 class Ready(BaseModel):
     ok: bool
     database: Literal["ok"]
@@ -72,6 +78,9 @@ class Ready(BaseModel):
     memory_warn_mb: Optional[float] = Field(default=None, description="memory_warning turns on at this peak (MB)")
     memory_warning: Optional[bool] = Field(default=None, description=(
         "The peak reached memory_warn_mb: close to the limit, where Render restarts the API"))
+    key_value: Optional["KeyValueStatus"] = Field(default=None, description=(
+        "Render Key Value (shared rate limits and lookups). Informational: without it each "
+        "instance counts in memory"))
 
 
 class TokenPair(BaseModel):
@@ -989,6 +998,90 @@ class LatestQuotes(BaseModel):
     """Latest trades from the quote provider, shared for about a minute. Tickers without a quote are left out."""
     quotes: Dict[str, LatestQuote] = {}
     feed: Optional[str] = Field(default=None, description="Provider feed: 'iex' (one exchange) or 'sip' (all exchanges)")
+
+
+class ChatDestination(BaseModel):
+    available: bool = Field(description="Set up on the server and switched on")
+    connected: bool
+    label: Optional[str] = Field(default=None, description="Chat or channel name; never the webhook URL")
+    last_status: Optional[str] = Field(default=None, description="accepted or failed, for the latest alert")
+    last_at: Optional[str] = None
+
+
+class ChatAlerts(BaseModel):
+    telegram: ChatDestination
+    discord: ChatDestination
+    plan_allows: bool = Field(default=False, description="The plan includes chat alerts (Pro and above)")
+
+
+class TelegramLink(BaseModel):
+    url: str = Field(description="https://t.me/<bot>?start=<one-time code>")
+    expires_in_minutes: int
+
+
+class NewsItem(BaseModel):
+    id: str = ""
+    headline: str
+    summary: Optional[str] = None
+    source: Optional[str] = Field(default=None, description="e.g. benzinga")
+    author: Optional[str] = None
+    url: Optional[str] = Field(default=None, description="The story on the publisher's site (http/https only)")
+    published_at: str = Field(description="ISO, UTC")
+    symbols: List[str] = []
+
+
+class StockNews(BaseModel):
+    """Alpaca News (Benzinga feed) for one ticker."""
+    ticker: str
+    items: List[NewsItem] = []
+    available: bool = Field(description="False when news is switched off or the provider can't be reached")
+
+
+class NewsFlag(BaseModel):
+    count: int = Field(description="Stories in the window")
+    latest_at: str = Field(description="Newest story (ISO, UTC)")
+    headline: str = Field(description="Newest headline")
+
+
+class NewsFlags(BaseModel):
+    flags: Dict[str, NewsFlag] = Field(default={}, description="Only tickers with news are listed")
+    hours: int = Field(description="Look-back window in hours")
+
+
+class InsiderTrade(BaseModel):
+    insider: str
+    role: str = Field(description="Officer title, Director, 10% owner or Insider")
+    type: Literal["Buy", "Sale"] = Field(description="Open-market purchase (P) or sale (S)")
+    date: Optional[str] = None
+    shares: Optional[float] = None
+    price: Optional[float] = None
+    value: Optional[float] = Field(default=None, description="shares x price, USD")
+    url: Optional[str] = Field(default=None, description="The filing on sec.gov")
+
+
+class FilingEvent(BaseModel):
+    date: str
+    form: str = "8-K"
+    items: List[str] = Field(default=[], description="8-K item numbers, e.g. 2.02")
+    labels: List[str] = Field(default=[], description="Plain names for the items")
+    url: str
+
+
+class InsiderSummary(BaseModel):
+    buys: int
+    sales: int
+    buy_value: float
+    sale_value: float
+    days: int
+
+
+class StockFilings(BaseModel):
+    """SEC EDGAR filings for one ticker over the last 90 days."""
+    ticker: str
+    available: bool
+    insider: List[InsiderTrade] = []
+    events: List[FilingEvent] = []
+    insider_summary: InsiderSummary
 
 
 class ScorePoint(BaseModel):

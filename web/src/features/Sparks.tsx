@@ -70,3 +70,10 @@ export function PreBreakoutMeter({ prob, rank }: { prob: number | null | undefin
     </span>
   );
 }
+
+/** Tickers with a news story in the last 24 hours (Alpaca News), for the Scanner's News marker. */
+export function useNewsFlags(tickers: string[]) {
+  const syms = [...new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean))].sort().slice(0, 50).join(",");
+  return useApi(syms ? `news-flags:${syms}` : null, (signal) =>
+    unwrap(api.GET("/v1/news/flags", { params: { query: { symbols: syms } }, signal }))).data?.flags ?? {};
+}

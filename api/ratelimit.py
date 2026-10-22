@@ -1,8 +1,9 @@
 """Per-IP request limits for the public auth endpoints (P1-59 account step).
 
-In-process sliding windows: one Render instance today. Behind more than one
-instance each keeps its own counts, so the effective limit grows with the
-instance count; the per-account limits in the database still apply.
+Sliding windows. With REDIS_URL set (Render Key Value, see api/shared_cache.py) the
+counts live there, so every API instance shares one limit and a deploy doesn't reset
+them. Without it, or while Key Value can't be reached, each process counts in memory
+(one Render instance today); the per-account limits in the database still apply.
 """
 from __future__ import annotations
 
@@ -40,6 +41,8 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "unsubscribe": (30, 600),    # per IP: token lookups on the emailed unsubscribe link
     "client_errors": (30, 600),  # per IP: crash reports from the web app
     "export": (10, 3600),        # per account: "Download my data"
+    "chat_alerts": (20, 3600),   # per account: connect / test Telegram and Discord
+    "telegram_webhook": (600, 60),  # per IP: updates from Telegram (also checked by secret)
 }
 _MAX_KEYS = 50_000  # bound memory if someone sprays many addresses
 
@@ -77,9 +80,47 @@ def client_ip(request: Request) -> str:
     return (request.client.host if request.client else "unknown")[:64]
 
 
+# One atomic sliding-window step: drop hits older than the window, refuse when full,
+# otherwise record this hit. Returns {allowed, seconds until the oldest hit expires}.
+_REDIS_WINDOW = """
+local key, now, window, limit = KEYS[1], tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3])
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+if redis.call('ZCARD', key) >= limit then
+  local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+  return {0, tostring(math.ceil(tonumber(oldest[2]) + window - now))}
+end
+redis.call('ZADD', key, now, ARGV[4])
+redis.call('EXPIRE', key, math.ceil(window) + 1)
+return {1, '0'}
+"""
+
+
+def _check_shared(bucket: str, key: str) -> Optional[bool]:
+    """Count the hit in Key Value. None when Key Value isn't in use (count in memory)."""
+    from api import shared_cache
+
+    r = shared_cache.client()
+    if r is None:
+        return None
+    limit, window = LIMITS[bucket]
+    now = time.time()
+    try:
+        allowed, retry = r.eval(_REDIS_WINDOW, 1, f"{shared_cache.PREFIX}rl:{bucket}:{shared_cache.hashed(key)}",
+                                now, window, limit, f"{now:.6f}:{os.urandom(4).hex()}")
+    except Exception as e:
+        shared_cache.mark_down(e)
+        return None
+    if int(allowed):
+        return True
+    raise HTTPException(429, "Too many requests. Try again later.",
+                        headers={"Retry-After": str(max(1, int(float(retry))))})
+
+
 def check(bucket: str, key: str, *, now: Optional[float] = None) -> None:
     """Count one request; raise 429 with Retry-After when over the limit."""
     limit, window = LIMITS[bucket]
+    if now is None and _check_shared(bucket, key) is not None:
+        return
     now = time.monotonic() if now is None else now
     with _lock:
         identity = (bucket, key)

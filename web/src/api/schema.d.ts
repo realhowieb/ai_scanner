@@ -1207,6 +1207,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/chat-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Telegram and Discord alert delivery
+         * @description Whether each chat app can be used (server set up, Pro plan) and is connected.
+         */
+        get: operations["chat_alerts_v1_me_chat_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/chat-alerts/discord": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Connect a Discord channel
+         * @description Save a Discord channel webhook. A test message is posted first; the URL is never shown again.
+         */
+        put: operations["chat_discord_v1_me_chat_alerts_discord_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/chat-alerts/telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start connecting a Telegram chat
+         * @description A one-time t.me link (15 minutes). Opening it and tapping Start links that chat.
+         */
+        post: operations["chat_telegram_link_v1_me_chat_alerts_telegram_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/chat-alerts/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a test alert to connected chats */
+        post: operations["chat_test_v1_me_chat_alerts_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/chat-alerts/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Disconnect a chat app */
+        delete: operations["chat_remove_v1_me_chat_alerts__kind__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/devices": {
         parameters: {
             query?: never;
@@ -1400,6 +1494,26 @@ export interface paths {
          *     computed from persisted rows (cached 30 minutes). Never trains, scores or changes anything.
          */
         get: operations["ml_readiness_status_v1_ml_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/news/flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which tickers have news today
+         * @description Tickers with a news story in the last 24 hours, for the Scanner's News marker.
+         */
+        get: operations["news_flags_v1_news_flags_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1991,6 +2105,50 @@ export interface paths {
          *     daily bars, and your watchlists and alerts on it.
          */
         get: operations["stock_v1_stocks__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stocks/{ticker}/filings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SEC filings: insider trades and 8-K events
+         * @description Open-market insider buys and sales (Form 4) and company events (8-K) from SEC EDGAR
+         *     in the last 90 days. Shared for 3 hours. available=false when EDGAR can't be reached
+         *     or filings are switched off.
+         */
+        get: operations["stock_filings_v1_stocks__ticker__filings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stocks/{ticker}/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Company news
+         * @description Recent headlines for the ticker from Alpaca News (Benzinga), newest first, from the
+         *     last two weeks. Shared for 5 minutes. available=false when news is switched off or the
+         *     provider can't be reached.
+         */
+        get: operations["stock_news_v1_stocks__ticker__news_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3652,6 +3810,39 @@ export interface components {
             /** Tier */
             tier: string;
         };
+        /** ChatAlerts */
+        ChatAlerts: {
+            discord: components["schemas"]["ChatDestination"];
+            /**
+             * Plan Allows
+             * @description The plan includes chat alerts (Pro and above)
+             * @default false
+             */
+            plan_allows: boolean;
+            telegram: components["schemas"]["ChatDestination"];
+        };
+        /** ChatDestination */
+        ChatDestination: {
+            /**
+             * Available
+             * @description Set up on the server and switched on
+             */
+            available: boolean;
+            /** Connected */
+            connected: boolean;
+            /**
+             * Label
+             * @description Chat or channel name; never the webhook URL
+             */
+            label?: string | null;
+            /** Last At */
+            last_at?: string | null;
+            /**
+             * Last Status
+             * @description accepted or failed, for the latest alert
+             */
+            last_status?: string | null;
+        };
         /** ChatTurn */
         ChatTurn: {
             /** Content */
@@ -3692,6 +3883,11 @@ export interface components {
              * @description Page path, no query string
              */
             path?: string | null;
+            /**
+             * Release
+             * @description The web build's commit, to match uploaded source maps
+             */
+            release?: string | null;
             /** Request Id */
             request_id?: string | null;
             /** Stack */
@@ -4024,6 +4220,14 @@ export interface components {
              */
             push_token: string;
         };
+        /** DiscordBody */
+        DiscordBody: {
+            /**
+             * Webhook Url
+             * @description Discord channel webhook URL
+             */
+            webhook_url: string;
+        };
         /** EarningsItem */
         EarningsItem: {
             /** Days Until */
@@ -4167,11 +4371,6 @@ export interface components {
              */
             time?: string | null;
         };
-        /** EmailBody */
-        EmailBody: {
-            /** Email */
-            email: string;
-        };
         /** EmailPrefs */
         EmailPrefs: {
             /**
@@ -4198,6 +4397,30 @@ export interface components {
             digest?: boolean | null;
             /** Evening */
             evening?: boolean | null;
+        };
+        /** FilingEvent */
+        FilingEvent: {
+            /** Date */
+            date: string;
+            /**
+             * Form
+             * @default 8-K
+             */
+            form: string;
+            /**
+             * Items
+             * @description 8-K item numbers, e.g. 2.02
+             * @default []
+             */
+            items: string[];
+            /**
+             * Labels
+             * @description Plain names for the items
+             * @default []
+             */
+            labels: string[];
+            /** Url */
+            url: string;
         };
         /** FunnelEvent */
         FunnelEvent: {
@@ -4240,6 +4463,51 @@ export interface components {
              * @description SPY or QQQ
              */
             symbol: string;
+        };
+        /** InsiderSummary */
+        InsiderSummary: {
+            /** Buy Value */
+            buy_value: number;
+            /** Buys */
+            buys: number;
+            /** Days */
+            days: number;
+            /** Sale Value */
+            sale_value: number;
+            /** Sales */
+            sales: number;
+        };
+        /** InsiderTrade */
+        InsiderTrade: {
+            /** Date */
+            date?: string | null;
+            /** Insider */
+            insider: string;
+            /** Price */
+            price?: number | null;
+            /**
+             * Role
+             * @description Officer title, Director, 10% owner or Insider
+             */
+            role: string;
+            /** Shares */
+            shares?: number | null;
+            /**
+             * Type
+             * @description Open-market purchase (P) or sale (S)
+             * @enum {string}
+             */
+            type: "Buy" | "Sale";
+            /**
+             * Url
+             * @description The filing on sec.gov
+             */
+            url?: string | null;
+            /**
+             * Value
+             * @description shares x price, USD
+             */
+            value?: number | null;
         };
         /** Journal */
         Journal: {
@@ -4411,6 +4679,21 @@ export interface components {
             source?: string | null;
             /** Ticker */
             ticker: string;
+        };
+        /** KeyValueStatus */
+        KeyValueStatus: {
+            /**
+             * Configured
+             * @description REDIS_URL is set
+             */
+            configured: boolean;
+            /**
+             * Ok
+             * @description It answered a ping; null when not configured
+             */
+            ok?: boolean | null;
+            /** Ping Ms */
+            ping_ms?: number | null;
         };
         /** LatestQuote */
         LatestQuote: {
@@ -4660,6 +4943,74 @@ export interface components {
              * @default 0
              */
             total: number;
+        };
+        /** NewsFlag */
+        NewsFlag: {
+            /**
+             * Count
+             * @description Stories in the window
+             */
+            count: number;
+            /**
+             * Headline
+             * @description Newest headline
+             */
+            headline: string;
+            /**
+             * Latest At
+             * @description Newest story (ISO, UTC)
+             */
+            latest_at: string;
+        };
+        /** NewsFlags */
+        NewsFlags: {
+            /**
+             * Flags
+             * @description Only tickers with news are listed
+             * @default {}
+             */
+            flags: {
+                [key: string]: components["schemas"]["NewsFlag"];
+            };
+            /**
+             * Hours
+             * @description Look-back window in hours
+             */
+            hours: number;
+        };
+        /** NewsItem */
+        NewsItem: {
+            /** Author */
+            author?: string | null;
+            /** Headline */
+            headline: string;
+            /**
+             * Id
+             * @default
+             */
+            id: string;
+            /**
+             * Published At
+             * @description ISO, UTC
+             */
+            published_at: string;
+            /**
+             * Source
+             * @description e.g. benzinga
+             */
+            source?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /**
+             * Symbols
+             * @default []
+             */
+            symbols: string[];
+            /**
+             * Url
+             * @description The story on the publisher's site (http/https only)
+             */
+            url?: string | null;
         };
         /** NoteBody */
         NoteBody: {
@@ -5925,6 +6276,8 @@ export interface components {
              * @description When stale: the missed scan slot (ISO)
              */
             expected_scan_at?: string | null;
+            /** @description Render Key Value (shared rate limits and lookups). Informational: without it each instance counts in memory */
+            key_value?: components["schemas"]["KeyValueStatus"] | null;
             /**
              * Latest Scan At
              * @description Latest market scan (ISO); null when none
@@ -6062,6 +6415,16 @@ export interface components {
             new_password: string;
             /** Token */
             token: string;
+        };
+        /** ResetRequestBody */
+        ResetRequestBody: {
+            /** Email */
+            email: string;
+            /**
+             * Turnstile Token
+             * @description Cloudflare Turnstile token from the form; required when the server has Turnstile on
+             */
+            turnstile_token?: string | null;
         };
         /** RuleThreshold */
         RuleThreshold: {
@@ -6632,6 +6995,11 @@ export interface components {
             /** Password */
             password: string;
             /**
+             * Turnstile Token
+             * @description Cloudflare Turnstile token from the sign-up form; required when the server has Turnstile on
+             */
+            turnstile_token?: string | null;
+            /**
              * Username
              * @description Shown in the app; can also be used to sign in on the web
              */
@@ -6877,6 +7245,45 @@ export interface components {
              */
             watchlists: components["schemas"]["WatchlistRef"][];
         };
+        /**
+         * StockFilings
+         * @description SEC EDGAR filings for one ticker over the last 90 days.
+         */
+        StockFilings: {
+            /** Available */
+            available: boolean;
+            /**
+             * Events
+             * @default []
+             */
+            events: components["schemas"]["FilingEvent"][];
+            /**
+             * Insider
+             * @default []
+             */
+            insider: components["schemas"]["InsiderTrade"][];
+            insider_summary: components["schemas"]["InsiderSummary"];
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * StockNews
+         * @description Alpaca News (Benzinga feed) for one ticker.
+         */
+        StockNews: {
+            /**
+             * Available
+             * @description False when news is switched off or the provider can't be reached
+             */
+            available: boolean;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["NewsItem"][];
+            /** Ticker */
+            ticker: string;
+        };
         /** SymbolSuggestion */
         SymbolSuggestion: {
             /** Name */
@@ -6937,6 +7344,16 @@ export interface components {
             last: number;
             /** Symbol */
             symbol: string;
+        };
+        /** TelegramLink */
+        TelegramLink: {
+            /** Expires In Minutes */
+            expires_in_minutes: number;
+            /**
+             * Url
+             * @description https://t.me/<bot>?start=<one-time code>
+             */
+            url: string;
         };
         /** TickersBody */
         TickersBody: {
@@ -9777,7 +10194,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["EmailBody"];
+                "application/json": components["schemas"]["ResetRequestBody"];
             };
         };
         responses: {
@@ -9789,6 +10206,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Message"];
                 };
+            };
+            /** @description Security check failed (Turnstile) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid request fields */
             422: {
@@ -9910,7 +10334,7 @@ export interface operations {
                     "application/json": components["schemas"]["SignupResult"];
                 };
             };
-            /** @description Invalid input or password rule */
+            /** @description Invalid input, password rule or failed security check */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11047,6 +11471,225 @@ export interface operations {
             };
         };
     };
+    chat_alerts_v1_me_chat_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatAlerts"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    chat_discord_v1_me_chat_alerts_discord_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatAlerts"];
+                };
+            };
+            /** @description Not a Discord webhook, or Discord refused the test message */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Telegram and Discord alerts are part of Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    chat_telegram_link_v1_me_chat_alerts_telegram_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramLink"];
+                };
+            };
+            /** @description Telegram isn't set up on the server */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Telegram and Discord alerts are part of Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    chat_test_v1_me_chat_alerts_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Telegram and Discord alerts are part of Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    chat_remove_v1_me_chat_alerts__kind__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "telegram" | "discord";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     device_list_v1_me_devices_get: {
         parameters: {
             query?: never;
@@ -11629,6 +12272,45 @@ export interface operations {
             };
             /** @description Admins only */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    news_flags_v1_news_flags_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated; the first 50 are checked */
+                symbols: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsFlags"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13433,6 +14115,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StockDetail"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    stock_filings_v1_stocks__ticker__filings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ticker symbol, e.g. AAPL or BRK.B */
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockFilings"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    stock_news_v1_stocks__ticker__news_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Ticker symbol, e.g. AAPL or BRK.B */
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockNews"];
                 };
             };
             /** @description Not signed in */

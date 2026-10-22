@@ -37,6 +37,7 @@ ROWS: List[Tuple[str, Optional[str]]] = [
     ("Alerts (Breakout / Watchlist / Price)", ALERTS),
     ("Email alert delivery", "can_email_alerts"),
     ("Scan alerts: get told when new stocks match your Scanner filters", "can_scan_alerts"),
+    ("Insider-buy alerts from SEC filings", "can_insider_alerts"),
     ("CSV export & interactive results table", "can_export_csv"),
     ("Your own Nasdaq and combined-market scans", "can_scan_nasdaq"),
     ("Premarket, after-hours and unusual-volume filters", "can_premarket"),

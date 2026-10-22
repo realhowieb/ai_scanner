@@ -4002,6 +4002,82 @@
     "title": "Capabilities",
     "type": "object"
    },
+   "ChatAlerts": {
+    "properties": {
+     "discord": {
+      "$ref": "#/components/schemas/ChatDestination"
+     },
+     "plan_allows": {
+      "default": false,
+      "description": "The plan includes chat alerts (Pro and above)",
+      "title": "Plan Allows",
+      "type": "boolean"
+     },
+     "telegram": {
+      "$ref": "#/components/schemas/ChatDestination"
+     }
+    },
+    "required": [
+     "telegram",
+     "discord"
+    ],
+    "title": "ChatAlerts",
+    "type": "object"
+   },
+   "ChatDestination": {
+    "properties": {
+     "available": {
+      "description": "Set up on the server and switched on",
+      "title": "Available",
+      "type": "boolean"
+     },
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Chat or channel name; never the webhook URL",
+      "title": "Label"
+     },
+     "last_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last At"
+     },
+     "last_status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "accepted or failed, for the latest alert",
+      "title": "Last Status"
+     }
+    },
+    "required": [
+     "available",
+     "connected"
+    ],
+    "title": "ChatDestination",
+    "type": "object"
+   },
    "ChatTurn": {
     "properties": {
      "content": {
@@ -4090,6 +4166,20 @@
       ],
       "description": "Page path, no query string",
       "title": "Path"
+     },
+     "release": {
+      "anyOf": [
+       {
+        "maxLength": 64,
+        "pattern": "^[\\w.\\-]+$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The web build's commit, to match uploaded source maps",
+      "title": "Release"
      },
      "request_id": {
       "anyOf": [
@@ -4990,6 +5080,22 @@
     "title": "DeviceBody",
     "type": "object"
    },
+   "DiscordBody": {
+    "properties": {
+     "webhook_url": {
+      "description": "Discord channel webhook URL",
+      "maxLength": 400,
+      "minLength": 30,
+      "title": "Webhook Url",
+      "type": "string"
+     }
+    },
+    "required": [
+     "webhook_url"
+    ],
+    "title": "DiscordBody",
+    "type": "object"
+   },
    "EarningsItem": {
     "properties": {
      "days_until": {
@@ -5343,21 +5449,6 @@
     "title": "EarningsSetup",
     "type": "object"
    },
-   "EmailBody": {
-    "properties": {
-     "email": {
-      "maxLength": 254,
-      "minLength": 3,
-      "title": "Email",
-      "type": "string"
-     }
-    },
-    "required": [
-     "email"
-    ],
-    "title": "EmailBody",
-    "type": "object"
-   },
    "EmailPrefs": {
     "properties": {
      "alerts": {
@@ -5421,6 +5512,47 @@
      }
     },
     "title": "EmailPrefsUpdate",
+    "type": "object"
+   },
+   "FilingEvent": {
+    "properties": {
+     "date": {
+      "title": "Date",
+      "type": "string"
+     },
+     "form": {
+      "default": "8-K",
+      "title": "Form",
+      "type": "string"
+     },
+     "items": {
+      "default": [],
+      "description": "8-K item numbers, e.g. 2.02",
+      "items": {
+       "type": "string"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "labels": {
+      "default": [],
+      "description": "Plain names for the items",
+      "items": {
+       "type": "string"
+      },
+      "title": "Labels",
+      "type": "array"
+     },
+     "url": {
+      "title": "Url",
+      "type": "string"
+     }
+    },
+    "required": [
+     "date",
+     "url"
+    ],
+    "title": "FilingEvent",
     "type": "object"
    },
    "FunnelEvent": {
@@ -5510,6 +5642,125 @@
      "last"
     ],
     "title": "IndexQuote",
+    "type": "object"
+   },
+   "InsiderSummary": {
+    "properties": {
+     "buy_value": {
+      "title": "Buy Value",
+      "type": "number"
+     },
+     "buys": {
+      "title": "Buys",
+      "type": "integer"
+     },
+     "days": {
+      "title": "Days",
+      "type": "integer"
+     },
+     "sale_value": {
+      "title": "Sale Value",
+      "type": "number"
+     },
+     "sales": {
+      "title": "Sales",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "buys",
+     "sales",
+     "buy_value",
+     "sale_value",
+     "days"
+    ],
+    "title": "InsiderSummary",
+    "type": "object"
+   },
+   "InsiderTrade": {
+    "properties": {
+     "date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Date"
+     },
+     "insider": {
+      "title": "Insider",
+      "type": "string"
+     },
+     "price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price"
+     },
+     "role": {
+      "description": "Officer title, Director, 10% owner or Insider",
+      "title": "Role",
+      "type": "string"
+     },
+     "shares": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shares"
+     },
+     "type": {
+      "description": "Open-market purchase (P) or sale (S)",
+      "enum": [
+       "Buy",
+       "Sale"
+      ],
+      "title": "Type",
+      "type": "string"
+     },
+     "url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The filing on sec.gov",
+      "title": "Url"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "shares x price, USD",
+      "title": "Value"
+     }
+    },
+    "required": [
+     "insider",
+     "role",
+     "type"
+    ],
+    "title": "InsiderTrade",
     "type": "object"
    },
    "Journal": {
@@ -5970,6 +6221,43 @@
      "open"
     ],
     "title": "JournalTrade",
+    "type": "object"
+   },
+   "KeyValueStatus": {
+    "properties": {
+     "configured": {
+      "description": "REDIS_URL is set",
+      "title": "Configured",
+      "type": "boolean"
+     },
+     "ok": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "It answered a ping; null when not configured",
+      "title": "Ok"
+     },
+     "ping_ms": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ping Ms"
+     }
+    },
+    "required": [
+     "configured"
+    ],
+    "title": "KeyValueStatus",
     "type": "object"
    },
    "LatestQuote": {
@@ -6551,6 +6839,133 @@
      }
     },
     "title": "NewSince",
+    "type": "object"
+   },
+   "NewsFlag": {
+    "properties": {
+     "count": {
+      "description": "Stories in the window",
+      "title": "Count",
+      "type": "integer"
+     },
+     "headline": {
+      "description": "Newest headline",
+      "title": "Headline",
+      "type": "string"
+     },
+     "latest_at": {
+      "description": "Newest story (ISO, UTC)",
+      "title": "Latest At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "count",
+     "latest_at",
+     "headline"
+    ],
+    "title": "NewsFlag",
+    "type": "object"
+   },
+   "NewsFlags": {
+    "properties": {
+     "flags": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/NewsFlag"
+      },
+      "default": {},
+      "description": "Only tickers with news are listed",
+      "title": "Flags",
+      "type": "object"
+     },
+     "hours": {
+      "description": "Look-back window in hours",
+      "title": "Hours",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "hours"
+    ],
+    "title": "NewsFlags",
+    "type": "object"
+   },
+   "NewsItem": {
+    "properties": {
+     "author": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Author"
+     },
+     "headline": {
+      "title": "Headline",
+      "type": "string"
+     },
+     "id": {
+      "default": "",
+      "title": "Id",
+      "type": "string"
+     },
+     "published_at": {
+      "description": "ISO, UTC",
+      "title": "Published At",
+      "type": "string"
+     },
+     "source": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "e.g. benzinga",
+      "title": "Source"
+     },
+     "summary": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Summary"
+     },
+     "symbols": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Symbols",
+      "type": "array"
+     },
+     "url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The story on the publisher's site (http/https only)",
+      "title": "Url"
+     }
+    },
+    "required": [
+     "headline",
+     "published_at"
+    ],
+    "title": "NewsItem",
     "type": "object"
    },
    "NoteBody": {
@@ -9843,6 +10258,17 @@
       "description": "When stale: the missed scan slot (ISO)",
       "title": "Expected Scan At"
      },
+     "key_value": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/KeyValueStatus"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Render Key Value (shared rate limits and lookups). Informational: without it each instance counts in memory"
+     },
      "latest_scan_at": {
       "anyOf": [
        {
@@ -10132,6 +10558,34 @@
      "new_password"
     ],
     "title": "ResetConfirmBody",
+    "type": "object"
+   },
+   "ResetRequestBody": {
+    "properties": {
+     "email": {
+      "maxLength": 254,
+      "minLength": 3,
+      "title": "Email",
+      "type": "string"
+     },
+     "turnstile_token": {
+      "anyOf": [
+       {
+        "maxLength": 2048,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Cloudflare Turnstile token from the form; required when the server has Turnstile on",
+      "title": "Turnstile Token"
+     }
+    },
+    "required": [
+     "email"
+    ],
+    "title": "ResetRequestBody",
     "type": "object"
    },
    "RuleThreshold": {
@@ -11566,6 +12020,19 @@
       "title": "Password",
       "type": "string"
      },
+     "turnstile_token": {
+      "anyOf": [
+       {
+        "maxLength": 2048,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Cloudflare Turnstile token from the sign-up form; required when the server has Turnstile on",
+      "title": "Turnstile Token"
+     },
      "username": {
       "description": "Shown in the app; can also be used to sign in on the web",
       "maxLength": 40,
@@ -12110,6 +12577,73 @@
     "title": "StockDetail",
     "type": "object"
    },
+   "StockFilings": {
+    "description": "SEC EDGAR filings for one ticker over the last 90 days.",
+    "properties": {
+     "available": {
+      "title": "Available",
+      "type": "boolean"
+     },
+     "events": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/FilingEvent"
+      },
+      "title": "Events",
+      "type": "array"
+     },
+     "insider": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/InsiderTrade"
+      },
+      "title": "Insider",
+      "type": "array"
+     },
+     "insider_summary": {
+      "$ref": "#/components/schemas/InsiderSummary"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "available",
+     "insider_summary"
+    ],
+    "title": "StockFilings",
+    "type": "object"
+   },
+   "StockNews": {
+    "description": "Alpaca News (Benzinga feed) for one ticker.",
+    "properties": {
+     "available": {
+      "description": "False when news is switched off or the provider can't be reached",
+      "title": "Available",
+      "type": "boolean"
+     },
+     "items": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/NewsItem"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "available"
+    ],
+    "title": "StockNews",
+    "type": "object"
+   },
    "SymbolSuggestion": {
     "properties": {
      "name": {
@@ -12247,6 +12781,25 @@
      "last"
     ],
     "title": "TapeQuote",
+    "type": "object"
+   },
+   "TelegramLink": {
+    "properties": {
+     "expires_in_minutes": {
+      "title": "Expires In Minutes",
+      "type": "integer"
+     },
+     "url": {
+      "description": "https://t.me/<bot>?start=<one-time code>",
+      "title": "Url",
+      "type": "string"
+     }
+    },
+    "required": [
+     "url",
+     "expires_in_minutes"
+    ],
+    "title": "TelegramLink",
     "type": "object"
    },
    "TickersBody": {
@@ -16642,7 +17195,7 @@
      "content": {
       "application/json": {
        "schema": {
-        "$ref": "#/components/schemas/EmailBody"
+        "$ref": "#/components/schemas/ResetRequestBody"
        }
       }
      },
@@ -16658,6 +17211,9 @@
        }
       },
       "description": "Successful Response"
+     },
+     "400": {
+      "description": "Security check failed (Turnstile)"
      },
      "422": {
       "content": {
@@ -16785,7 +17341,7 @@
       "description": "Successful Response"
      },
      "400": {
-      "description": "Invalid input or password rule"
+      "description": "Invalid input, password rule or failed security check"
      },
      "409": {
       "description": "Email or username taken"
@@ -18044,6 +18600,222 @@
     "summary": "Your plan's watchlist and alert limits"
    }
   },
+  "/v1/me/chat-alerts": {
+   "get": {
+    "description": "Whether each chat app can be used (server set up, Pro plan) and is connected.",
+    "operationId": "chat_alerts_v1_me_chat_alerts_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChatAlerts"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Telegram and Discord alert delivery"
+   }
+  },
+  "/v1/me/chat-alerts/discord": {
+   "put": {
+    "description": "Save a Discord channel webhook. A test message is posted first; the URL is never shown again.",
+    "operationId": "chat_discord_v1_me_chat_alerts_discord_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DiscordBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChatAlerts"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Not a Discord webhook, or Discord refused the test message"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Telegram and Discord alerts are part of Pro"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Connect a Discord channel"
+   }
+  },
+  "/v1/me/chat-alerts/telegram": {
+   "post": {
+    "description": "A one-time t.me link (15 minutes). Opening it and tapping Start links that chat.",
+    "operationId": "chat_telegram_link_v1_me_chat_alerts_telegram_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TelegramLink"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Telegram isn't set up on the server"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Telegram and Discord alerts are part of Pro"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Start connecting a Telegram chat"
+   }
+  },
+  "/v1/me/chat-alerts/test": {
+   "post": {
+    "operationId": "chat_test_v1_me_chat_alerts_test_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Telegram and Discord alerts are part of Pro"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Send a test alert to connected chats"
+   }
+  },
+  "/v1/me/chat-alerts/{kind}": {
+   "delete": {
+    "operationId": "chat_remove_v1_me_chat_alerts__kind__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "kind",
+      "required": true,
+      "schema": {
+       "enum": [
+        "telegram",
+        "discord"
+       ],
+       "title": "Kind",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Disconnect a chat app"
+   }
+  },
   "/v1/me/devices": {
    "get": {
     "operationId": "device_list_v1_me_devices_get",
@@ -18641,6 +19413,57 @@
     ],
     "x-audience": "admin research-only",
     "x-internal": true
+   }
+  },
+  "/v1/news/flags": {
+   "get": {
+    "description": "Tickers with a news story in the last 24 hours, for the Scanner's News marker.",
+    "operationId": "news_flags_v1_news_flags_get",
+    "parameters": [
+     {
+      "description": "Comma-separated; the first 50 are checked",
+      "in": "query",
+      "name": "symbols",
+      "required": true,
+      "schema": {
+       "description": "Comma-separated; the first 50 are checked",
+       "maxLength": 2000,
+       "title": "Symbols",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NewsFlags"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Which tickers have news today"
    }
   },
   "/v1/outcomes/horizons": {
@@ -22174,6 +22997,120 @@
      }
     ],
     "summary": "Stock"
+   }
+  },
+  "/v1/stocks/{ticker}/filings": {
+   "get": {
+    "description": "Open-market insider buys and sales (Form 4) and company events (8-K) from SEC EDGAR\nin the last 90 days. Shared for 3 hours. available=false when EDGAR can't be reached\nor filings are switched off.",
+    "operationId": "stock_filings_v1_stocks__ticker__filings_get",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StockFilings"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "SEC filings: insider trades and 8-K events"
+   }
+  },
+  "/v1/stocks/{ticker}/news": {
+   "get": {
+    "description": "Recent headlines for the ticker from Alpaca News (Benzinga), newest first, from the\nlast two weeks. Shared for 5 minutes. available=false when news is switched off or the\nprovider can't be reached.",
+    "operationId": "stock_news_v1_stocks__ticker__news_get",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 10,
+       "maximum": 10,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StockNews"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Company news"
    }
   },
   "/v1/stocks/{ticker}/plan": {

@@ -32,6 +32,8 @@ class SignupBody(BaseModel):
     client: Optional[str] = Field(default=None, max_length=80)
     attribution: Optional[Dict[str, str]] = Field(
         default=None, description="Web sign-ups: first-visit utm_* tags and referrer, for the acquisition funnel")
+    turnstile_token: Optional[str] = Field(default=None, max_length=2048, description=(
+        "Cloudflare Turnstile token from the sign-up form; required when the server has Turnstile on"))
 
 
 class TokenBody(BaseModel):
@@ -40,6 +42,11 @@ class TokenBody(BaseModel):
 
 class EmailBody(BaseModel):
     email: str = Field(min_length=3, max_length=254)
+
+
+class ResetRequestBody(EmailBody):
+    turnstile_token: Optional[str] = Field(default=None, max_length=2048, description=(
+        "Cloudflare Turnstile token from the form; required when the server has Turnstile on"))
 
 
 class ResetConfirmBody(BaseModel):
@@ -89,11 +96,14 @@ def register(app: FastAPI) -> None:
             raise HTTPException(503, "Your invite link isn't available right now. Try again later.") from e
 
     @app.post("/v1/auth/signup", response_model=models.SignupResult, status_code=201,
-              responses={400: {"description": "Invalid input or password rule"}, 409: {"description": "Email or username taken"},
+              responses={400: {"description": "Invalid input, password rule or failed security check"}, 409: {"description": "Email or username taken"},
                          429: {"description": "Too many sign-ups from this address"}})
     def signup(body: SignupBody, request: Request, _l: None = Depends(ratelimit.limit("signup"))) -> Dict[str, Any]:
         """Create a Starter (free) account (same rules as the web form) and sign in. A verification
         email is sent; verifying is needed to upgrade and for alert emails."""
+        from api import turnstile
+
+        turnstile.verify(body.turnstile_token, ratelimit.client_ip(request), action="signup")
         res = acct.signup(body.email, body.password, body.username, body.accept_terms)
         if body.attribution is not None:
             _track(body.attribution, "signup_completed", username=res["email"], plan="basic")
@@ -136,9 +146,14 @@ def register(app: FastAPI) -> None:
         return {"message": "Verification email sent. Check your inbox (and spam)."}
 
     @app.post("/v1/auth/password-reset", response_model=models.Message, status_code=202,
-              responses={429: {"description": "Too many requests from this address"}})
-    def password_reset(body: EmailBody, _l: None = Depends(ratelimit.limit("password_reset"))) -> Dict[str, Any]:
+              responses={400: {"description": "Security check failed (Turnstile)"},
+                         429: {"description": "Too many requests from this address"}})
+    def password_reset(body: ResetRequestBody, request: Request,
+                       _l: None = Depends(ratelimit.limit("password_reset"))) -> Dict[str, Any]:
         """Email a reset link. Same answer whether or not the account exists."""
+        from api import turnstile
+
+        turnstile.verify(body.turnstile_token, ratelimit.client_ip(request), action="password_reset")
         acct.request_password_reset(body.email)
         return {"message": _RESET_SENT}
 
