@@ -1,7 +1,7 @@
 "use client";
 import { tabKey } from "@/lib/tabs";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useEffect, useId, useState } from "react";
 
 import { api, unwrap } from "@/api/client";

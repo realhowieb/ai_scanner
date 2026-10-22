@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { alertRules, watchlists } from "@/api/userData";
 import type { AlertRuleType, AlertType } from "@/api/userData";
 import { TICKER_RE } from "@/components/AppShell";

@@ -3,7 +3,7 @@
 // Scan alerts (Pro): save the Scanner's current filters as a market-wide alert rule
 // (SCAN_MATCH). The server checks it after every market scan and fires when stocks that
 // weren't matching on the previous scan now match. Optional price and volume limits.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useState } from "react";
 import type { FormEvent } from "react";
 

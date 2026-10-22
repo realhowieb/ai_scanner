@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { usePathname } from "next/navigation";
 import { DropdownMenu } from "radix-ui";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";

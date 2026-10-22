@@ -17,13 +17,13 @@ Message = Dict[str, Any]
 MAX_BODY_BYTES = 8 * 1024 * 1024  # larger answers pass through untouched
 
 
-# Today and the latest scan stamp every answer with the request time, so their hash never
-# repeated and they never got a 304. For the hash only: request-time "checked_at" values
+# Today, the latest scan, the Brief and the earnings scanner stamp every answer with the
+# request time, so their hash never repeated and they never got a 304. For the hash only: request-time "checked_at" values
 # are dropped, and Today's top-level "as_of" counts only to the hour (its greeting follows
 # it). The body sent is unchanged; a 304 keeps the caller's earlier copy.
 _CHECKED_AT = re.compile(rb'"checked_at":"[^"]*"')
 _TOP_AS_OF = re.compile(rb'^\{"as_of":"([0-9-]{10}T[0-9]{2})[^"]*"')
-CLOCK_STAMPED = {"/v1/today", "/v1/scans/latest"}
+CLOCK_STAMPED = {"/v1/today", "/v1/scans/latest", "/v1/brief", "/v1/scans/latest/earnings"}
 
 
 def hash_view(path: str, body: bytes) -> bytes:

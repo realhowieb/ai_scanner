@@ -4,7 +4,7 @@
 // API, stored encrypted and never sent back), place whole-share market buys after an
 // explicit confirmation, and see positions and the order feed. No real money moves;
 // orders are imported into the Journal.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";

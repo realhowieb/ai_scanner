@@ -6,7 +6,7 @@ import { tabKey } from "@/lib/tabs";
 // the Billing page. No performance claims. Records the anonymous funnel events the
 // classic app records, with the visitor's utm tags.
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 

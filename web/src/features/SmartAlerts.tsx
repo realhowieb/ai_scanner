@@ -5,7 +5,7 @@
 // One card lists every rule with on/off, email and delete; its form adds a rule for a
 // ticker or a whole watchlist. On a stock page the card is locked to that ticker.
 // An API without the rule routes shows no card.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useState } from "react";
 import type { FormEvent } from "react";
 

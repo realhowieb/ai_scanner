@@ -2,7 +2,7 @@
 
 // Scan history (Pro): your own saved scans (/v1/runs) and one saved scan's ranked rows
 // (/v1/runs/{id}), shown with the same table as the Scanner.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { Fragment, useState } from "react";
 
 import { api, unwrap } from "@/api/client";
