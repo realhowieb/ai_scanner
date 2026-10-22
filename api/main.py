@@ -408,6 +408,23 @@ def _start_realtime_alerts() -> None:
         log.warning("realtime alerts worker failed to start: %s", str(e)[:120])
 
 
+def _register_telegram_webhook() -> None:
+    """Point the Telegram bot at this API once it's deployed (no-op until the TELEGRAM_* settings exist)."""
+    if os.environ.get("RENDER", "").strip().lower() != "true":
+        return
+    import threading
+
+    def run() -> None:
+        try:
+            from api.chat_delivery import register_telegram_webhook
+
+            register_telegram_webhook()
+        except Exception as e:  # best effort; Telegram linking just stays unavailable
+            log.warning("telegram webhook registration failed: %s", type(e).__name__)
+
+    threading.Thread(target=run, name="telegram-webhook", daemon=True).start()
+
+
 def _module_app():
     """Module-level app for `uvicorn api.main:app` (settings from the environment).
     Importing never raises, so tests can import create_app without the secret."""
@@ -423,6 +440,7 @@ def _module_app():
     init_api_monitoring()
     _warm_caches()
     _start_realtime_alerts()
+    _register_telegram_webhook()
     if os.getenv("BILLING_MODE", "external").strip().lower() == "embedded":
         from billing_service.main import start_reconciliation_worker
 

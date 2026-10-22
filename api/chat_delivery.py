@@ -1,8 +1,10 @@
 """Alerts in Telegram and Discord, next to email and browser push (Pro and above).
 
 Telegram: the owner creates a bot with @BotFather and sets TELEGRAM_BOT_TOKEN,
-TELEGRAM_BOT_USERNAME and TELEGRAM_WEBHOOK_SECRET on the API, then runs
-scripts/telegram_set_webhook.py once. A user taps "Connect Telegram", which opens
+TELEGRAM_BOT_USERNAME and TELEGRAM_WEBHOOK_SECRET on the API. On each start the API points
+the bot at its own /v1/telegram/webhook (register_telegram_webhook; the URL comes from
+HSF_PUBLIC_API_URL or Render's RENDER_EXTERNAL_URL), so no manual step is needed;
+scripts/telegram_set_webhook.py does the same by hand. A user taps "Connect Telegram", which opens
 t.me/<bot>?start=<one-time code>; Telegram posts that /start to /v1/telegram/webhook
 and the chat is linked. /stop in the chat unlinks it.
 
@@ -166,6 +168,38 @@ def handle_telegram_update(update: Dict[str, Any]) -> None:
     elif command == "/stop":
         _run("DELETE FROM hsf_chat_destinations WHERE kind = 'telegram' AND target = %s", (str(chat_id),))
         send_telegram(str(chat_id), "Alerts turned off for this chat. Reconnect any time from Alerts → Delivery.")
+
+
+def register_telegram_webhook(*, client=None) -> bool:
+    """Point the bot at this API's webhook with the shared secret. Called once at start-up;
+    setWebhook is idempotent, so a changed secret or URL is picked up on the next deploy.
+    Pending updates are kept. Never logs the token."""
+    if not (enabled() and telegram_ready()):
+        return False
+    base = (os.environ.get("HSF_PUBLIC_API_URL", "") or os.environ.get("RENDER_EXTERNAL_URL", "")).strip().rstrip("/")
+    if not base.startswith("https://"):
+        log.warning(json.dumps({"event": "telegram_webhook_skipped", "reason": "no https base url"}))
+        return False
+    import httpx
+
+    token = os.environ["TELEGRAM_BOT_TOKEN"].strip()
+    own = client is None
+    client = client or httpx.Client(timeout=10.0)
+    try:
+        r = client.post(f"{TELEGRAM_API}/bot{token}/setWebhook",
+                        json={"url": f"{base}/v1/telegram/webhook",
+                              "secret_token": os.environ["TELEGRAM_WEBHOOK_SECRET"].strip(),
+                              "allowed_updates": ["message"]})
+        ok = r.status_code == 200 and bool((r.json() or {}).get("ok"))
+    except Exception as e:
+        log.warning(json.dumps({"event": "telegram_webhook_failed", "error": type(e).__name__}))
+        return False
+    finally:
+        if own:
+            client.close()
+    log.info(json.dumps({"event": "telegram_webhook_set" if ok else "telegram_webhook_failed",
+                         "status": r.status_code, "url": f"{base}/v1/telegram/webhook"}))
+    return ok
 
 
 # ---- sending -----------------------------------------------------------------------------------------
