@@ -3,7 +3,7 @@
 // The link in every HSF email (/unsubscribe?t=…&k=…). Works signed out: the token names
 // the account. Opening the page changes nothing (email scanners open links); a person
 // has to press a button.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 

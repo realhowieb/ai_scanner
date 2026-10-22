@@ -3,7 +3,7 @@
 // Account: identity, plan and what it includes (from /v1/me only), billing through the
 // existing Stripe flow (checkout / customer portal), email settings, password, sign
 // out and account deletion. Every change is shown only after the server confirms it.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { PasswordField } from "@/components/PasswordField";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";

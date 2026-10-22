@@ -10,7 +10,7 @@
 // is computed by the API, and an API without that route just leaves those facts out.
 // GET /v1/quotes gives each ticker's latest trade (Alpaca, shared about a minute), shown in
 // place of the scan's price; without it the scan price or the daily bar is shown, labelled.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";

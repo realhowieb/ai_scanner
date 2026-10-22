@@ -64,6 +64,42 @@ function cachedData(key: string): { data: unknown; at: number } | undefined {
   return hit;
 }
 
+// Several components on one page often ask for the same key at once (the Scanner's table,
+// saved views and column settings all read research preferences). A first load joins a
+// request for that key that is already on its way instead of sending another; it is
+// cancelled only when every component waiting on it has gone. A reload always asks again.
+type Flight = { promise: Promise<unknown>; ctl: AbortController; waiting: number };
+const inflight = new Map<string, Flight>();
+
+function share<T>(id: string, load: (signal: AbortSignal) => Promise<T>, fresh: boolean): { promise: Promise<T>; leave: () => void } {
+  let flight = fresh ? undefined : inflight.get(id);
+  if (!flight) {
+    const ctl = new AbortController();
+    const started: Flight = { promise: Promise.resolve(), ctl, waiting: 0 };
+    started.promise = load(ctl.signal).finally(() => {
+      if (inflight.get(id) === started) inflight.delete(id);
+    });
+    started.promise.catch(() => {});
+    inflight.set(id, started);
+    flight = started;
+  }
+  const joined = flight;
+  joined.waiting += 1;
+  let left = false;
+  return {
+    promise: joined.promise as Promise<T>,
+    leave: () => {
+      if (left) return;
+      left = true;
+      joined.waiting -= 1;
+      if (joined.waiting === 0) {
+        joined.ctl.abort();
+        if (inflight.get(id) === joined) inflight.delete(id);
+      }
+    },
+  };
+}
+
 function remember(key: string, data: unknown): void {
   cache.delete(key); // re-insert so the Map's order is least recently written first
   cache.set(key, { data, at: Date.now() });
@@ -90,17 +126,18 @@ export function useApi<T>(
 
   useEffect(() => {
     if (token === null || key === null) return;
-    const ctl = new AbortController();
-    loadRef.current(ctl.signal).then(
+    let aborted = false;
+    const flight = share(JSON.stringify([epoch, key, refreshVersion]), loadRef.current, tick > 0);
+    flight.promise.then(
       (data) => {
         syncOwner();
-        if (ctl.signal.aborted || epoch !== generation) return;
+        if (aborted || epoch !== generation) return;
         remember(key, data);
         setRes({ token, key, generation: epoch, updatedAt: Date.now(), data, error: null });
       },
       (e: unknown) => {
         syncOwner();
-        if (ctl.signal.aborted || epoch !== generation || (e instanceof DOMException && e.name === "AbortError")) return;
+        if (aborted || epoch !== generation || (e instanceof DOMException && e.name === "AbortError")) return;
         const error = e instanceof ApiError ? e : new ApiError(0, "Something went wrong.", null, null, null);
         setRes((prev) => ({
           token, key, generation: epoch,
@@ -110,7 +147,12 @@ export function useApi<T>(
         }));
       },
     );
-    return () => ctl.abort();
+    return () => {
+      aborted = true;
+      flight.leave();
+    };
+    // tick and refreshVersion are part of token
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, key, epoch]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
