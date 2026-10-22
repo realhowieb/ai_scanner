@@ -48,9 +48,9 @@ alert rules) also posts to connected chats, except during quiet hours.
   is never returned by the API.
 - Telegram setup (once): message @BotFather → `/newbot` → copy the token. Set the three
   `TELEGRAM_*` variables on `hsf-api-v1` (`TELEGRAM_WEBHOOK_SECRET` = 32+ random letters
-  and digits), then run
-  `python scripts/telegram_set_webhook.py https://hsf-api-v1.onrender.com` with the same
-  token and secret. Users tap **Connect Telegram**, which opens the bot with a one-time
+  and digits). On its next start the API points the bot at its own
+  `/v1/telegram/webhook` (URL from `HSF_PUBLIC_API_URL`, else Render's `RENDER_EXTERNAL_URL`);
+  `scripts/telegram_set_webhook.py` does the same by hand. Users tap **Connect Telegram**, which opens the bot with a one-time
   code (15 minutes); `/stop` in the chat disconnects.
 - Tables `hsf_chat_destinations` and `hsf_chat_link_codes` are created on first use.
 

@@ -373,6 +373,30 @@ class IntegrationApiTests(AccountApiTestCase):
 
 @unittest.skipUnless(DEPS, "needs fastapi (api.workspace)")
 class ChatDeliveryTests(unittest.TestCase):
+    def test_bot_is_pointed_at_this_api_on_start(self):
+        from api import chat_delivery
+
+        posted = []
+
+        class Client:
+            def post(self, url, json=None):
+                posted.append((url, json))
+                return mock.Mock(status_code=200, json=lambda: {"ok": True})
+
+        env = {"TELEGRAM_BOT_TOKEN": "123:abc", "TELEGRAM_BOT_USERNAME": "HSFBot",
+               "TELEGRAM_WEBHOOK_SECRET": "s" * 32, "RENDER_EXTERNAL_URL": "https://api.example.com/"}
+        with mock.patch.dict("os.environ", env, clear=False):
+            self.assertTrue(chat_delivery.register_telegram_webhook(client=Client()))
+        url, body = posted[0]
+        self.assertEqual(url, "https://api.telegram.org/bot123:abc/setWebhook")
+        self.assertEqual(body["url"], "https://api.example.com/v1/telegram/webhook")
+        self.assertEqual(body["secret_token"], "s" * 32)
+        with mock.patch.dict("os.environ", {**env, "TELEGRAM_BOT_TOKEN": ""}, clear=False):
+            self.assertFalse(chat_delivery.register_telegram_webhook(client=Client()))
+        with mock.patch.dict("os.environ", {**env, "RENDER_EXTERNAL_URL": "http://x", "HSF_PUBLIC_API_URL": ""}, clear=False):
+            self.assertFalse(chat_delivery.register_telegram_webhook(client=Client()))
+        self.assertEqual(len(posted), 1)
+
     def test_alert_goes_to_each_chat_and_gone_destinations_are_removed(self):
         from api import chat_delivery
 
