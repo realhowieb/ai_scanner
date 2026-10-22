@@ -24,6 +24,7 @@ import { PriceChart, type ChartEvent } from "./PriceChart";
 import { ScoreHistory } from "./ScoreHistory";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 import { SmartAlerts } from "./SmartAlerts";
+import { StockFilings, StockNews } from "./StockNews";
 
 type Stock = Schemas["StockDetail"];
 
@@ -336,6 +337,8 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             </Card>
           )}
           {aiNotes && s.in_latest_scan && <Card title="AI note" id="ai"><AINote s={s} /></Card>}
+          <StockNews ticker={s.ticker} />
+          <StockFilings ticker={s.ticker} />
         </div>
 
         <aside className="col-side">

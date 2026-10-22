@@ -212,6 +212,35 @@ def register(app: FastAPI) -> None:
                     "alerts": json_safe(user_data.alerts_for(user, t))})
         return out
 
+    @app.get("/v1/stocks/{ticker}/news", response_model=models.StockNews, responses=_AUTH, summary="Company news")
+    def stock_news(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account),
+                   limit: int = Query(10, ge=1, le=10)) -> Dict[str, Any]:
+        """Recent headlines for the ticker from Alpaca News (Benzinga), newest first, from the
+        last two weeks. Shared for 5 minutes. available=false when news is switched off or the
+        provider can't be reached."""
+        from api import news
+
+        return news.stock_news(ticker, limit)
+
+    @app.get("/v1/news/flags", response_model=models.NewsFlags, responses=_AUTH, summary="Which tickers have news today")
+    def news_flags(account: Dict[str, Any] = Depends(current_account),
+                   symbols: str = Query(..., max_length=2000, description="Comma-separated; the first 50 are checked")
+                   ) -> Dict[str, Any]:
+        """Tickers with a news story in the last 24 hours, for the Scanner's News marker."""
+        from api import news
+
+        return news.news_flags(symbols.split(","))
+
+    @app.get("/v1/stocks/{ticker}/filings", response_model=models.StockFilings, responses=_AUTH,
+             summary="SEC filings: insider trades and 8-K events")
+    def stock_filings(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Open-market insider buys and sales (Form 4) and company events (8-K) from SEC EDGAR
+        in the last 90 days. Shared for 3 hours. available=false when EDGAR can't be reached
+        or filings are switched off."""
+        from api import filings
+
+        return filings.stock_filings(ticker)
+
     # ---- step 6: watchlists ----
     @app.get("/v1/watchlists", response_model=List[models.Watchlist], responses=_AUTH)
     def watchlists(account: Dict[str, Any] = Depends(current_account)) -> List[Dict[str, Any]]:

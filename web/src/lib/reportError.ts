@@ -31,6 +31,7 @@ export function reportError(error: unknown, kind: ErrorKind = "boundary"): void 
         path: window.location.pathname.slice(0, 200),
         digest: text(e?.digest, 64),
         stack: text(e?.stack, 2000),
+        release: text(process.env.NEXT_PUBLIC_HSF_RELEASE, 64),
       }),
     }).catch(() => undefined);
   } catch {

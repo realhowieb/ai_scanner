@@ -18,3 +18,5 @@ stripe==11.1.1  # embedded billing; same SDK as the standalone service
 httpx==0.28.1
 anthropic>=0.69.0,<1  # /v1/ai (Premium); same pin as requirements-extended (lock: 0.116.0)
 cryptography  # browser push encryption and VAPID (api/webpush.py); version from the lock
+# Shared rate limits + lookups in Render Key Value when REDIS_URL is set (api/shared_cache.py).
+redis==7.4.0

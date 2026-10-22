@@ -262,5 +262,12 @@ def notify_user(user_id: str, title: str, body: str, url: str = "/alerts") -> in
 
 
 def alert_fired(user_id: str, message: str) -> None:
-    """Hook for both alert kinds (price alerts and alert rules)."""
+    """Hook for both alert kinds (price alerts and alert rules): browser push, then any
+    linked Telegram / Discord chat (api.chat_delivery)."""
     notify_user(user_id, "HSF alert", message, "/alerts")
+    try:
+        from api import chat_delivery
+
+        chat_delivery.alert_fired(user_id, message)
+    except Exception as e:
+        log.warning(json.dumps({"event": "chat_alert_failed", "error": type(e).__name__}))

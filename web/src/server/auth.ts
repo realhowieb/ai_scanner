@@ -213,15 +213,22 @@ const PUBLIC: Record<string, { path: string; fields: Fields }> = {
   "verify-email": { path: "/v1/auth/verify-email", fields: { token: "string" } },
 };
 
+/** The Cloudflare Turnstile token a form sent, if any (checked by the API when it has Turnstile on). */
+async function turnstileToken(req: Request): Promise<{ turnstile_token?: string }> {
+  const raw = ((await req.clone().json().catch(() => null)) as { turnstile_token?: unknown } | null)?.turnstile_token;
+  return typeof raw === "string" && raw.length > 0 && raw.length <= 2048 ? { turnstile_token: raw } : {};
+}
+
 export async function publicAuth(req: Request, flow: keyof typeof PUBLIC, upstream: Upstream): Promise<Response> {
   const rid = requestIdFor(req);
   if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
   const spec = PUBLIC[flow]!;
+  const token = flow === "password-reset" ? await turnstileToken(req) : {};
   const body = await readFields(req, spec.fields);
   if (!body) return json({ detail: "Fill in every field." }, 400, rid);
   let res: Response;
   try {
-    res = await forward(spec.path, body, rid, upstream);
+    res = await forward(spec.path, { ...body, ...token }, rid, upstream);
   } catch {
     return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid);
   }
@@ -236,13 +243,14 @@ export async function signup(req: Request, upstream: Upstream, allow: Set<string
   const rid = requestIdFor(req);
   if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
   const attribution = cleanAttribution(((await req.clone().json().catch(() => null)) as { attribution?: unknown } | null)?.attribution);
+  const token = await turnstileToken(req);
   const body = await readFields(req, { email: "string", password: "string", username: "string", accept_terms: "boolean" });
   if (!body) return json({ detail: "Fill in every field." }, 400, rid);
   const email = String(body.email).trim().toLowerCase();
   if (allow && !allow.has(email)) return json({ detail: NOT_INVITED, code: "not_invited" }, 403, rid);
   let res: Response;
   try {
-    res = await forward("/v1/auth/signup", { ...body, email, client: "web", ...(attribution ? { attribution } : {}) }, rid, upstream);
+    res = await forward("/v1/auth/signup", { ...body, ...token, email, client: "web", ...(attribution ? { attribution } : {}) }, rid, upstream);
   } catch {
     return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid);
   }
