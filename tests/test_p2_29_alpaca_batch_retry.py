@@ -105,7 +105,7 @@ class BatchSplitTests(unittest.TestCase):
         out, failures, g = self.fetch(get)
         self.assertEqual(set(out), set(self.SYMS))
         self.assertEqual(failures, {})
-        self.assertEqual(g.call_count, 2 + 3)  # batch + its retry, then 3 pieces of 50
+        self.assertEqual(g.call_count, 2 + 6)  # batch + its retry, then 6 pieces of 25
 
     def test_piece_that_still_fails_is_reported_as_timeout(self):
         def get(url, headers, params, timeout):
@@ -115,8 +115,8 @@ class BatchSplitTests(unittest.TestCase):
             return bars_for(params)
 
         out, failures, _ = self.fetch(get)
-        self.assertEqual(len(out), 100)
-        self.assertEqual(len(failures), 50)
+        self.assertEqual(len(out), 125)
+        self.assertEqual(len(failures), 25)
         self.assertIn("S000", failures)
         self.assertTrue(all(r.startswith("alpaca_timeout:") for r in failures.values()))
 
@@ -137,8 +137,56 @@ class BatchSplitTests(unittest.TestCase):
         out, failures, g = self.fetch(get, symbols=syms)
         self.assertEqual(out, {})
         self.assertEqual(len(failures), len(syms))
-        # 10 batches x 2 tries, plus 3 pieces x 2 tries for the first 6 batches only
-        self.assertEqual(g.call_count, 10 * 2 + pa._MAX_SPLIT_BATCHES * 3 * 2)
+        # 10 batches x 2 tries, plus 6 pieces x 2 tries for the first 6 batches only
+        self.assertEqual(g.call_count, 10 * 2 + pa._MAX_SPLIT_BATCHES * 6 * 2)
+
+    def test_pieces_get_a_longer_timeout(self):
+        timeouts = []
+
+        def get(url, headers, params, timeout):
+            n = len(params["symbols"].split(","))
+            timeouts.append((n, timeout))
+            if n == 150:
+                raise requests.Timeout("Read timed out. (read timeout=10.0)")
+            return bars_for(params)
+
+        with (
+            mock.patch.object(pa, "get_alpaca_config", return_value=CFG),
+            mock.patch.object(pa.requests, "get", side_effect=get),
+            mock.patch.object(pa.time, "sleep"),
+        ):
+            pa.download_multi_alpaca(self.SYMS, "60d", "1d", False, 10.0, feed="iex", failures={})
+        self.assertTrue(all(t == 10.0 for n, t in timeouts if n == 150))
+        piece_timeouts = [t for n, t in timeouts if n == 25]
+        self.assertEqual(len(piece_timeouts), 6)
+        self.assertTrue(all(t >= pa._SPLIT_TIMEOUT_S for t in piece_timeouts))
+
+    def test_time_budget_stops_more_pieces(self):
+        clock = [0.0]
+
+        def fake_sleep(s):
+            # each pause between pieces stands in for a slow piece request
+            if s == pa._SPLIT_PAUSE_S:
+                clock[0] += 100.0
+
+        def get(url, headers, params, timeout):
+            if len(params["symbols"].split(",")) == 150:
+                raise requests.Timeout("Read timed out.")
+            return bars_for(params)
+
+        failures = {}
+        with (
+            mock.patch.object(pa, "get_alpaca_config", return_value=CFG),
+            mock.patch.object(pa.requests, "get", side_effect=get),
+            mock.patch.object(pa.time, "sleep", side_effect=fake_sleep),
+            mock.patch.object(pa.time, "monotonic", side_effect=lambda: clock[0]),
+        ):
+            out = pa.download_multi_alpaca(self.SYMS, "60d", "1d", False, 10.0, feed="iex",
+                                           failures=failures)
+        # pieces 1-3 run (clock 100, 200, 300); the 300 s budget then drops pieces 4-6
+        self.assertEqual(len(out), 75)
+        self.assertEqual(len(failures), 75)
+        self.assertTrue(all(r.startswith("alpaca_timeout:") for r in failures.values()))
 
     def test_no_bars_is_not_a_failure(self):
         r = mock.Mock(status_code=200)
