@@ -118,6 +118,8 @@ jobs:
           # (COMBO largely repeats SP500+NASDAQ; default 60s TTL expired between
           # scans and forced a full re-download).
           PRICE_CACHE_TTL_SECONDS: "3600"
+          # No size cap here: one run keeps the whole universe's bars for those scans.
+          PRICE_CACHE_MAX_ENTRIES: "0"
           # Manual "Run workflow" forces a run (bypasses weekend/premarket skip);
           # scheduled runs respect the skip.
           CRON_FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '1' || '0' }}

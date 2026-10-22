@@ -14,6 +14,7 @@ from __future__ import annotations
 import concurrent.futures as _fut
 import datetime as _dt
 import os
+import threading as _threading
 import time as _time
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple
@@ -62,6 +63,36 @@ _PRICE_CACHE_TTL_SECONDS: float = float(os.getenv("PRICE_CACHE_TTL_SECONDS", "60
 _PRICE_CACHE: Dict[str, tuple[_pd.DataFrame, float]] = {}
 _MISSING_PRICE_CACHE_TTL_SECONDS: float = 900.0  # avoid repeated dead-symbol provider calls
 _MISSING_PRICE_CACHE: Dict[str, tuple[str, float]] = {}
+# Both caches used to keep every symbol ever fetched for the life of the process: an
+# entry only left when the same symbol was asked for again. In the API that meant
+# memory crept up all day (stock pages, sparklines, watchlists, Day Trader, alerts).
+# Now each write sweeps out expired entries (at most once per sweep interval) and,
+# past PRICE_CACHE_MAX_ENTRIES (default 2000, 0 = no cap), drops the oldest writes.
+_PRICE_CACHE_MAX_ENTRIES: int = max(0, int(float(os.getenv("PRICE_CACHE_MAX_ENTRIES", "2000") or "0")))
+_SWEEP_EVERY_S: float = 30.0
+_last_sweep: Dict[int, float] = {}
+_cache_lock = _threading.Lock()
+
+
+def _cache_put(cache: Dict[str, tuple], key: str, value: object, ttl_s: float) -> None:
+    """Store (value, now) under key, sweeping expired entries and enforcing the size cap."""
+    now = _time.time()
+    with _cache_lock:
+        cache.pop(key, None)  # re-insert so dict order stays oldest write first
+        cache[key] = (value, now)
+        if now - _last_sweep.get(id(cache), 0.0) >= _SWEEP_EVERY_S:
+            _last_sweep[id(cache)] = now
+            for k in [k for k, (_v, ts) in cache.items() if now - float(ts or 0) > ttl_s]:
+                cache.pop(k, None)
+        cap = _PRICE_CACHE_MAX_ENTRIES
+        if cap and len(cache) > cap:
+            for k in list(cache)[: len(cache) - cap]:
+                cache.pop(k, None)
+
+
+def price_cache_size() -> int:
+    """How many price frames the cache holds now (shown on /readyz)."""
+    return len(_PRICE_CACHE)
 
 def clear_price_cache() -> None:
     """Clear the in-memory price DataFrame cache.
@@ -197,7 +228,7 @@ def _missing_cache_key(sym: str, cfg: PriceFetchConfig) -> str:
 
 
 def _remember_missing(sym: str, cfg: PriceFetchConfig, reason: str) -> None:
-    _MISSING_PRICE_CACHE[_missing_cache_key(sym, cfg)] = (reason, _time.time())
+    _cache_put(_MISSING_PRICE_CACHE, _missing_cache_key(sym, cfg), reason, _MISSING_PRICE_CACHE_TTL_SECONDS)
 
 
 def _recent_missing_reason(sym: str, cfg: PriceFetchConfig) -> str | None:
@@ -747,9 +778,10 @@ def fetch_price_data_parallel(
         for sym, df in deduped_price_data.items():
             key = _cache_key(sym, cfg)
             try:
-                _PRICE_CACHE[key] = (df.copy(deep=True), _time.time())
+                stored = df.copy(deep=True)
             except (AttributeError, TypeError, ValueError):
-                _PRICE_CACHE[key] = (df, _time.time())
+                stored = df
+            _cache_put(_PRICE_CACHE, key, stored, _PRICE_CACHE_TTL_SECONDS)
 
     if summarize_provider_skips is not None:
         try:

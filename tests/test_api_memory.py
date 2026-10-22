@@ -39,5 +39,33 @@ class AllocatorTuningTests(unittest.TestCase):
         self.assertGreater(rss, 1)
 
 
+    def test_container_memory_subtracts_inactive_file_cache(self):
+        files = {"/sys/fs/cgroup/memory.current": "524288000\n",
+                 "/sys/fs/cgroup/memory.stat": "anon 1\ninactive_file 104857600\nactive_file 5\n"}
+
+        def fake_open(path, mode="r"):
+            if path not in files:
+                raise OSError(path)
+            data = files[path]
+            return mock.mock_open(read_data=data.encode() if "b" in mode else data)()
+
+        with mock.patch("builtins.open", side_effect=fake_open):
+            self.assertEqual(memory.container_mb(), 400.0)
+
+    def test_warning_uses_container_peak_when_present(self):
+        with mock.patch.object(memory, "rss_mb", return_value=430.0), \
+             mock.patch.object(memory, "peak_rss_mb", return_value=435.8), \
+             mock.patch.object(memory, "container_mb", return_value=360.0), \
+             mock.patch.object(memory, "peak_container_mb", return_value=380.0):
+            status = memory.memory_status()
+        self.assertFalse(status["memory_warning"])
+        self.assertEqual(status["container_peak_mb"], 380.0)
+        with mock.patch.object(memory, "rss_mb", return_value=430.0), \
+             mock.patch.object(memory, "peak_rss_mb", return_value=435.8), \
+             mock.patch.object(memory, "container_mb", return_value=None), \
+             mock.patch.object(memory, "peak_container_mb", return_value=None):
+            self.assertTrue(memory.memory_status()["memory_warning"])
+
+
 if __name__ == "__main__":
     unittest.main()

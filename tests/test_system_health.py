@@ -223,11 +223,19 @@ class ScenarioTests(unittest.TestCase):
         b["api_ready"] = {"status": 200, "rss_mb": 380.0, "rss_peak_mb": 431.5, "memory_limit_mb": 512.0,
                           "memory_warn_mb": 400.0, "memory_warning": True}
         r = run(b)
-        db = r["subsystems"]["database"]
-        self.assertEqual(db["status"], "DEGRADED")
-        self.assertIn("database:API_MEMORY_HIGH", [i["incident_id"] for i in r["incidents"]])
+        # Listed as an incident, but the Database row stays healthy (the database is fine).
+        self.assertEqual(r["subsystems"]["database"]["status"], "HEALTHY")
+        self.assertIn("api:API_MEMORY_HIGH", [i["incident_id"] for i in r["incidents"]])
         b["api_ready"]["memory_warning"] = False
-        self.assertEqual(run(b)["subsystems"]["database"]["status"], "HEALTHY")
+        self.assertNotIn("api:API_MEMORY_HIGH", [i["incident_id"] for i in run(b)["incidents"]])
+
+    def test_10c_api_memory_prefers_container_peak(self):
+        b = baseline()
+        b["api_ready"] = {"status": 200, "rss_mb": 409.0, "rss_peak_mb": 435.8, "container_mb": 380.0,
+                          "container_peak_mb": 401.2, "memory_limit_mb": 512.0, "memory_warn_mb": 400.0,
+                          "memory_warning": True}
+        inc = [i for i in run(b)["incidents"] if i["incident_id"] == "api:API_MEMORY_HIGH"][0]
+        self.assertIn("401.2 MB of 512.0 MB", inc["summary"])
 
     def test_11_transient_429_recovered(self):
         b = baseline()
