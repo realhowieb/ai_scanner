@@ -47,11 +47,20 @@ def tune_allocator() -> Optional[int]:
 
 
 _peak_mb = 0.0  # highest rss_mb() seen since this process started
+_container_peak_mb = 0.0  # highest container_mb() seen since this process started
+
+# cgroup v2 first, then v1. Render's memory graph and its out-of-memory restart count
+# the container's memory minus reclaimable file cache (the "working set").
+_CGROUP_FILES = (
+    ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory.stat", "inactive_file"),
+    ("/sys/fs/cgroup/memory/memory.usage_in_bytes", "/sys/fs/cgroup/memory/memory.stat", "total_inactive_file"),
+)
 
 
 def rss_mb() -> Optional[float]:
-    """This process's resident memory in MB (Linux), for the request log. Each reading
-    also updates the peak that /readyz reports."""
+    """This process's resident memory in MB (Linux), for the request log. It counts shared
+    library pages too, so it reads 30-50 MB above Render's graph. Each reading also
+    updates the peaks that /readyz reports."""
     global _peak_mb
     try:
         with open("/proc/self/statm", "rb") as f:
@@ -60,11 +69,43 @@ def rss_mb() -> Optional[float]:
         return None
     if mb > _peak_mb:
         _peak_mb = mb
+    container_mb()
     return mb
+
+
+def container_mb() -> Optional[float]:
+    """The container's memory in MB the way Render measures it (cgroup usage minus
+    inactive file cache), or None outside a container. Updates the container peak."""
+    global _container_peak_mb
+    for usage_path, stat_path, inactive_key in _CGROUP_FILES:
+        try:
+            with open(usage_path, "rb") as f:
+                usage = int(f.read().strip())
+        except (OSError, ValueError):
+            continue
+        inactive = 0
+        try:
+            with open(stat_path, "r") as f:
+                for line in f:
+                    k, _, v = line.partition(" ")
+                    if k == inactive_key:
+                        inactive = int(v)
+                        break
+        except (OSError, ValueError):
+            pass
+        mb = round(max(0, usage - inactive) / 1048576, 1)
+        if mb > _container_peak_mb:
+            _container_peak_mb = mb
+        return mb
+    return None
 
 
 def peak_rss_mb() -> Optional[float]:
     return _peak_mb or None
+
+
+def peak_container_mb() -> Optional[float]:
+    return _container_peak_mb or None
 
 
 def _env_mb(name: str, default: float) -> float:
@@ -74,13 +115,28 @@ def _env_mb(name: str, default: float) -> float:
         return default
 
 
+def _price_cache_entries() -> Optional[int]:
+    try:
+        from data.prices import price_cache_size
+
+        return price_cache_size()
+    except Exception:  # informational only
+        return None
+
+
 def memory_status() -> dict:
     """Memory now, the peak since start, the instance limit (HSF_MEMORY_LIMIT_MB, 512 on
     Render Starter) and whether the peak crossed HSF_MEMORY_WARN_MB (default 400), so
     /readyz and the nightly health report warn before Render restarts the API for
-    running out of memory."""
+    running out of memory. The warning uses the container figure (what Render restarts
+    on) when it can be read, else the process figure."""
     now = rss_mb()
     peak = peak_rss_mb()
+    c_now = container_mb()
+    c_peak = peak_container_mb()
+    judged = c_peak if c_peak is not None else peak
     warn = _env_mb("HSF_MEMORY_WARN_MB", 400.0)
-    return {"rss_mb": now, "rss_peak_mb": peak, "memory_limit_mb": _env_mb("HSF_MEMORY_LIMIT_MB", 512.0),
-            "memory_warn_mb": warn, "memory_warning": bool(peak is not None and peak >= warn)}
+    return {"rss_mb": now, "rss_peak_mb": peak, "container_mb": c_now, "container_peak_mb": c_peak,
+            "memory_limit_mb": _env_mb("HSF_MEMORY_LIMIT_MB", 512.0), "memory_warn_mb": warn,
+            "memory_warning": bool(judged is not None and judged >= warn),
+            "price_cache_entries": _price_cache_entries()}
