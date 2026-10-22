@@ -127,8 +127,12 @@ def _find(node: Optional[ET.Element], path: str) -> Optional[str]:
 
 
 def parse_form4(xml_text: str) -> List[Dict[str, Any]]:
-    """Open-market buys and sales in one Form 4 (non-derivative table)."""
-    root = ET.fromstring(xml_text)
+    """Open-market buys and sales in one Form 4 (non-derivative table). Form 4 XML never
+    declares a DOCTYPE, so any document that does is refused before parsing: no entity
+    definitions means no entity-expansion or external-entity tricks."""
+    if len(xml_text) > 2_000_000 or re.search(r"<!(DOCTYPE|ENTITY)", xml_text, re.IGNORECASE):
+        raise ValueError("unexpected Form 4 document")
+    root = ET.fromstring(xml_text)  # nosec B314 - DOCTYPE/ENTITY refused above; source is sec.gov
     owner = root.find("reportingOwner")
     name = _find(owner, "reportingOwnerId/rptOwnerName") or "Insider"
     rel = owner.find("reportingOwnerRelationship") if owner is not None else None

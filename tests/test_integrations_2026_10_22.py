@@ -209,6 +209,12 @@ class FilingsTests(unittest.TestCase):
         self.assertEqual((t["insider"], t["role"], t["type"], t["value"]),
                          ("Cook Timothy D", "Chief Executive Officer", "Buy", 150500.0))
 
+    def test_documents_with_entities_are_refused(self):
+        from api import filings
+
+        with self.assertRaises(ValueError):
+            filings.parse_form4('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "aaaa">]><ownershipDocument/>')
+
     def test_stock_filings_reads_insiders_and_8k_items(self):
         from api import filings
 
