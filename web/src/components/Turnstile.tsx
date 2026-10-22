@@ -38,6 +38,7 @@ export function Turnstile({ action, onToken, resetKey = 0 }: { action: string; o
   const widget = useRef<string | null>(null);
   const callback = useRef(onToken);
   const [failed, setFailed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => { callback.current = onToken; }, [onToken]);
 
   useEffect(() => {
@@ -47,9 +48,12 @@ export function Turnstile({ action, onToken, resetKey = 0 }: { action: string; o
       if (cancelled || !box.current) return;
       widget.current = ts.render(box.current, {
         sitekey: TURNSTILE_SITE_KEY, action, appearance: "interaction-only",
-        callback: (t: string) => callback.current(t),
+        callback: (t: string) => { setError(null); callback.current(t); },
         "expired-callback": () => callback.current(null),
-        "error-callback": () => { callback.current(null); },
+        // With interaction-only the widget stays hidden when it fails (wrong hostname or key,
+        // blocked iframe), so say so instead of leaving a dead submit button.
+        "error-callback": (code?: string | number) => { callback.current(null); setError(String(code ?? "unknown")); },
+        "unsupported-callback": () => { callback.current(null); setError("unsupported browser"); },
       });
     }).catch(() => { if (!cancelled) setFailed(true); });
     return () => {
@@ -70,5 +74,6 @@ export function Turnstile({ action, onToken, resetKey = 0 }: { action: string; o
   return <>
     <div ref={box} className="turnstile" />
     {failed && <p className="form-error" role="alert">The security check couldn&apos;t load. Turn off content blockers for this site, then reload.</p>}
+    {!failed && error && <p className="form-error" role="alert">The security check didn&apos;t work on this page (Cloudflare error {error}). Reload and try again; if it keeps happening, contact support.</p>}
   </>;
 }
