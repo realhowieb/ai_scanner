@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 
 import { Pill, ScoreBadge } from "@/components/ui";
 import { SAMPLE_SETUPS } from "@/lib/sampleResearch";

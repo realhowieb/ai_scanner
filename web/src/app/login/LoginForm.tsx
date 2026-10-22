@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { AuthShell } from "@/features/AuthForms";
 import { PasswordField } from "@/components/PasswordField";
 import { useSearchParams } from "next/navigation";

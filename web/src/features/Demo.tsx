@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { ResearchGlossary } from "@/components/ResearchGlossary";
 import { useState } from "react";
 

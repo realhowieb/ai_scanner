@@ -2,7 +2,7 @@
 
 // Stock Intelligence home: open any ticker's page, or one of the latest scan's top
 // names (GET /v1/scans/latest, the same rows as the Scanner).
-import Link from "next/link";
+import Link from "@/components/Link";
 import { StockSearch } from "@/components/StockSearch";
 
 import { api, unwrap } from "@/api/client";

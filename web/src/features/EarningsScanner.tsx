@@ -2,7 +2,7 @@
 
 // Earnings scanner: the latest scan's setups that report earnings soon, grouped by day.
 // Today is free on every plan; tomorrow and the 7-day window are Pro (can_earnings).
-import Link from "next/link";
+import Link from "@/components/Link";
 import { createContext, useContext } from "react";
 import { createSortedRowModel, createColumnHelper, rowSortingFeature, tableFeatures, useTable } from "@tanstack/react-table";
 

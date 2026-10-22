@@ -2,7 +2,7 @@
 
 // One-tap starters for empty pages: a first watchlist from today's top setups, and
 // ready-made alerts, so a new account has something working without filling in forms.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useState } from "react";
 
 import { api, unwrap } from "@/api/client";

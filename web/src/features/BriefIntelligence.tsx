@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 
 import type { Schemas } from "@/api/client";
 import { Card, Empty, Freshness, Pill, ScoreBadge, TickerLink } from "@/components/ui";

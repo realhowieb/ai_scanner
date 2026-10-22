@@ -2,7 +2,7 @@
 
 // "Set a price alert" for one ticker, prefilled at a given price: shows the plan's alert
 // quota, then the alert form locked to the price type. Used by the stock page and Day Trader.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useState } from "react";
 
 import { alerts } from "@/api/userData";

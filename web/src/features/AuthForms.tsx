@@ -6,7 +6,7 @@ import { captureUsage } from "@/lib/usageAnalytics";
 // app. They post to this site's /api/auth/* routes; tokens from sign-up go straight
 // into HttpOnly cookies on the server. The reset and verify pages live at the same
 // paths the emailed links use (/reset_password?token=, /verify_email?token=).
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import type { FormEvent, ReactNode } from "react";

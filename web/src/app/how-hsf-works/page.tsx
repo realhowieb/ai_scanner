@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { PublicHeader, PublicFooter } from "@/features/Landing";
 
 export const metadata: Metadata = { title: "How HSF works" };
