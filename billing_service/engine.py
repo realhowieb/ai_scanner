@@ -20,8 +20,8 @@ EVENTS = {"checkout.session.completed", "checkout.session.async_payment_succeede
 
 
 def _billing_emails(email, before, after, prior_tier):
-    """Payment-failed / plan-ended emails (services/billing_emails.py, sent in the
-    background). Absent in the standalone billing service; never fails a sync."""
+    """Payment-failed / plan-ended emails (services/billing_emails.py). Absent in the
+    standalone billing service; never fails a sync."""
     try:
         from services.billing_emails import notify_change
     except ImportError:

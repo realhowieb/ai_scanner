@@ -121,8 +121,9 @@ def _send(email: str, kind: str, ref: str, plan: str, grace_ends_at: Optional[st
 
 
 def notify_change(email: str, before: Optional[Mapping[str, Any]], after: Mapping[str, Any],
-                  prior_tier: str = "", *, background: bool = True) -> None:
-    """Send what the change calls for, off the request thread by default. Never raises."""
+                  prior_tier: str = "", *, background: bool = False) -> None:
+    """Send what the change calls for. Never raises. Inline by default: these are rare (a
+    real plan change) and each one claims its row first, so a no-op costs one insert."""
     email = (email or "").strip().lower()
     if not enabled() or "@" not in email:
         return

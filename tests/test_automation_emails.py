@@ -55,7 +55,15 @@ class WaitForDeployTests(unittest.TestCase):
         self.assertEqual(ready("abcdef1234567890", "999999999999", None, lambda a, b: True), (False, False))
 
 
+try:
+    import fastapi  # noqa: F401
+    HAS_FASTAPI = True
+except ImportError:  # the lightweight smoke jobs install no web stack
+    HAS_FASTAPI = False
+
+
 class ReadyzBuildTests(unittest.TestCase):
+    @unittest.skipUnless(HAS_FASTAPI, "needs fastapi")
     def test_readyz_reports_the_commit(self):
         from fastapi.testclient import TestClient
 
@@ -204,6 +212,7 @@ class BillingEmailTests(_Store):
         self.assertIn("/account", inner)
         self.assertIn("until", text)
 
+    @unittest.skipUnless(HAS_FASTAPI, "billing_service needs fastapi")
     def test_engine_calls_the_hook(self):
         from billing_service import engine
 
