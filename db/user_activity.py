@@ -76,10 +76,9 @@ def touch(user_id: str, now: Optional[dt.datetime] = None) -> bool:
         return False
     try:
         cur = conn.cursor()
-        ph = "?" if sq else "%s"
-        cur.execute(f"INSERT INTO hsf_user_activity (user_id, last_active_at) VALUES ({ph}, {ph}) "
-                    "ON CONFLICT (user_id) DO UPDATE SET last_active_at = EXCLUDED.last_active_at",
-                    (u, _iso(now or dt.datetime.now(dt.timezone.utc))))
+        sql = ("INSERT INTO hsf_user_activity (user_id, last_active_at) VALUES (%s, %s) "
+               "ON CONFLICT (user_id) DO UPDATE SET last_active_at = EXCLUDED.last_active_at")
+        cur.execute(sql.replace("%s", "?") if sq else sql, (u, _iso(now or dt.datetime.now(dt.timezone.utc))))
         conn.commit()
         return True
     except Exception:

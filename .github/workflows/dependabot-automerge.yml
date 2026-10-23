@@ -7,8 +7,11 @@ name: Dependabot auto-merge
 #
 # It runs when one of the PR checks finishes and only merges once all check runs on
 # the commit are complete and green, so the last check to finish does the merge.
+#
+# workflow_run is safe here: the job never checks out or runs the PR's code (it checks
+# out the default branch's scripts/ only) and reads the PR title as data.
 
-on:
+on:  # zizmor: ignore[dangerous-triggers]
   workflow_run:
     workflows: ["Smoke Checks", "Web v2", "Security Scan"]
     types: [completed]

@@ -27,8 +27,10 @@ WEB = os.environ.get("WEB_BASE_URL", "https://hsf-web-v1.onrender.com").rstrip("
 
 
 def read_build(url: str) -> Optional[str]:
+    if not url.startswith("https://"):
+        return None
     try:
-        with urllib.request.urlopen(url, timeout=20) as r:
+        with urllib.request.urlopen(url, timeout=20) as r:  # nosec B310 -- https only, checked above
             return (json.loads(r.read().decode() or "{}").get("build") or None)
     except Exception:
         return None
