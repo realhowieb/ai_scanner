@@ -620,6 +620,7 @@ def run_alerts() -> None:
             _capture(e)
             continue
 
+    quotes = None   # price / move / HSF Score per ticker, built once for every email
     for user_id, sections in pending.items():
         try:
             if not (
@@ -629,20 +630,25 @@ def run_alerts() -> None:
                 and _alert_emails_on(user_id)
             ):
                 continue
-            from scheduler.alert_email import compose
+            from scheduler.alert_email import compose, glance, quotes_from_df, title_line
             from ui.email_utils import send_digest_email
 
-            email = compose(sections)
+            if quotes is None:
+                quotes = quotes_from_df(df)
+            watched = _watch_for(user_id)
+            email = compose(sections, quotes=quotes, watched=watched)
             if email is None:
                 continue
             subject, text, html_inner = email
-            # Same branded shell as the morning digest: sections + ticker tables.
+            # Same branded shell as the morning digest: header, glance, cards.
             if send_digest_email(
                 to_address=user_id,
                 subject=subject,
                 html_inner=html_inner,
                 text_inner=text,
                 unsubscribe_url=_alert_unsubscribe_link(user_id),
+                title_line=title_line(sections),
+                glance_html=glance(sections, quotes, watched),
             ):
                 emailed += 1
             else:
