@@ -1,10 +1,12 @@
 """P1-41 — per-account email preferences and unsubscribe links.
 
-Three email types, each on by default:
+Five email types, each on by default:
   digest   morning market digest       (scheduler/morning_digest.py)
   evening  evening market wrap         (scheduler/evening_wrap.py)
   alerts   alert emails                (scheduler/alert_runner.py, intelligence
            alerts, and the billing service's live alerts)
+  weekly   Saturday weekly recap       (services/weekly_recap.py)
+  tips     first-week tips and the come-back email (services/onboarding_emails.py)
 
 Every email carries a link to pages/unsubscribe.py with the account's random
 unsubscribe token. The token is looked up in this table, so no shared secret is
@@ -22,14 +24,17 @@ from typing import Any, Dict, Optional
 
 from .engine import get_neon_conn, schema_once
 
-KINDS = ("digest", "evening", "alerts")
-LABELS = {"digest": "Morning market digest", "evening": "Evening market wrap", "alerts": "Alert emails"}
+KINDS = ("digest", "evening", "alerts", "weekly", "tips")
+LABELS = {"digest": "Morning market digest", "evening": "Evening market wrap", "alerts": "Alert emails",
+          "weekly": "Weekly recap", "tips": "Tips and reminders"}
 TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS hsf_email_prefs (
     user_id TEXT PRIMARY KEY,
     digest BOOLEAN NOT NULL DEFAULT TRUE,
     evening BOOLEAN NOT NULL DEFAULT TRUE,
     alerts BOOLEAN NOT NULL DEFAULT TRUE,
+    weekly BOOLEAN NOT NULL DEFAULT TRUE,
+    tips BOOLEAN NOT NULL DEFAULT TRUE,
     unsub_token TEXT UNIQUE,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )
@@ -45,6 +50,8 @@ def _ensure_table(conn) -> None:
     """Once per process and database (P2-81: it ran on every preference read)."""
     cur = conn.cursor()
     cur.execute(TABLE_SQL)
+    for col in ("weekly", "tips"):  # added 2026-10-23; older tables lack them
+        cur.execute(f"ALTER TABLE hsf_email_prefs ADD COLUMN IF NOT EXISTS {col} BOOLEAN NOT NULL DEFAULT TRUE")
     conn.commit()
     cur.close()
 
@@ -58,7 +65,7 @@ def _conn():
 
 
 def get_prefs(user: Any) -> Dict[str, bool]:
-    """{digest, evening, alerts} for the account; all True when unknown."""
+    """{digest, evening, alerts, weekly, tips} for the account; all True when unknown."""
     prefs = {k: True for k in KINDS}
     u = _norm(user)
     if not u:
@@ -68,7 +75,7 @@ def get_prefs(user: Any) -> Dict[str, bool]:
         if conn is None:
             return prefs
         cur = conn.cursor()
-        cur.execute("SELECT digest, evening, alerts FROM hsf_email_prefs WHERE user_id = %s", (u,))
+        cur.execute(f"SELECT {', '.join(KINDS)} FROM hsf_email_prefs WHERE user_id = %s", (u,))
         row = cur.fetchone()
         cur.close()
         conn.close()
@@ -92,7 +99,7 @@ def wants_email(user: Any, kind: str) -> bool:
 
 
 def set_prefs(user: Any, **changes: bool) -> bool:
-    """Update one or more of digest / evening / alerts. True when saved."""
+    """Update one or more of the KINDS. True when saved."""
     u = _norm(user)
     cols = {k: bool(v) for k, v in changes.items() if k in KINDS}
     if not u or not cols:

@@ -11,9 +11,17 @@ name: Live acceptance
 # Without secrets it still runs the no-account checks and reports the rest as BLOCKED.
 # A FAIL fails the run, and GitHub emails it. GitHub's cron can run late; for a
 # once-a-day check that is fine.
+#
+# It also runs after every push to main (a promote): the deploy job waits until both
+# Render services serve that commit (scripts/wait_for_deploy.py), then the checks run.
+# The API reads finished runs from GitHub and messages the admins on Telegram/Discord
+# (api/ops_watch.py), so a promote ends with a pass or fail note without anyone
+# checking by hand.
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
   schedule:
     - cron: "15 15 * * 1-5"  # weekdays, after the morning scans
 
@@ -29,7 +37,23 @@ env:
   WEB_BASE_URL: ${{ vars.LIVE_WEB_URL || 'https://hsf-web-v1.onrender.com' }}
 
 jobs:
+  deploy:
+    # Only after a promote: wait for Render to finish deploying this commit.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0  # wait_for_deploy diffs web/ between the served build and this commit
+
+      - name: Wait for hsf-api-v1 and hsf-web-v1 to serve this commit
+        run: python3 scripts/wait_for_deploy.py --sha "$GITHUB_SHA" --timeout-min 30
+
   api:
+    needs: deploy
+    if: ${{ !cancelled() && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -68,6 +92,8 @@ jobs:
           retention-days: 14
 
   web:
+    needs: deploy
+    if: ${{ !cancelled() && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:

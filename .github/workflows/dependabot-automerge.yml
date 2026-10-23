@@ -1,0 +1,66 @@
+name: Dependabot auto-merge
+
+# Merges a Dependabot patch or minor update into dev by itself once every check on its
+# commit has passed. Major updates, 0.x minor updates, grouped updates, anything on
+# DEPENDABOT_HOLD and anything not targeting dev wait for a person
+# (scripts/dependabot_merge_check.py). Promoting dev to main stays a person's call.
+#
+# It runs when one of the PR checks finishes and only merges once all check runs on
+# the commit are complete and green, so the last check to finish does the merge.
+
+on:
+  workflow_run:
+    workflows: ["Smoke Checks", "Web v2", "Security Scan"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+env:
+  DEPENDABOT_HOLD: ${{ vars.DEPENDABOT_HOLD || 'typescript,eslint' }}
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+
+      - name: Merge when every check passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          pr=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number,title,baseRefName,author,headRefOid --jq '.[0]')
+          if [ -z "$pr" ] || [ "$pr" = "null" ]; then echo "no open PR for $BRANCH"; exit 0; fi
+          num=$(jq -r .number <<<"$pr"); title=$(jq -r .title <<<"$pr"); base=$(jq -r .baseRefName <<<"$pr")
+          author=$(jq -r .author.login <<<"$pr"); head=$(jq -r .headRefOid <<<"$pr")
+          if [ "$author" != "app/dependabot" ] && [ "$author" != "dependabot[bot]" ]; then echo "not Dependabot ($author)"; exit 0; fi
+          if [ "$head" != "$SHA" ]; then echo "PR moved on to $head; a later run decides"; exit 0; fi
+          verdict=$(python3 scripts/dependabot_merge_check.py "$title" "$base")
+          echo "#$num $title -> $verdict"
+          case "$verdict" in merge) ;; *) exit 0 ;; esac
+          runs=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --jq '.check_runs | map({name, status, conclusion})')
+          total=$(jq length <<<"$runs")
+          pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")
+          bad=$(jq '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped","neutral") | not))] | length' <<<"$runs")
+          echo "check runs: $total total, $pending still running, $bad not green"
+          if [ "$total" -eq 0 ] || [ "$pending" -gt 0 ]; then echo "waiting for the other checks"; exit 0; fi
+          if [ "$bad" -gt 0 ]; then echo "::warning::#$num has a failing check; leaving it for a person"; exit 0; fi
+          gh pr merge -R "$REPO" "$num" --squash --delete-branch

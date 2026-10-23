@@ -19,6 +19,19 @@ EVENTS = {"checkout.session.completed", "checkout.session.async_payment_succeede
           "invoice.paid", "invoice.payment_failed"}
 
 
+def _billing_emails(email, before, after, prior_tier):
+    """Payment-failed / plan-ended emails (services/billing_emails.py, sent in the
+    background). Absent in the standalone billing service; never fails a sync."""
+    try:
+        from services.billing_emails import notify_change
+    except ImportError:
+        return
+    try:
+        notify_change(email, before, after, prior_tier)
+    except Exception:
+        pass
+
+
 class Engine:
     def __init__(self, billing, store):
         self.b, self.store = billing, store
@@ -57,7 +70,9 @@ class Engine:
             raise RuntimeError("BILLING_PAST_DUE_GRACE_DAYS must be between 0 and 30")
         state = snapshot(self.b, user, sub, tx.snapshot, grace_days=grace)
         price = (((sub or {}).get("items") or {}).get("data") or [{}])[0].get("price") or {}
+        before = dict(tx.snapshot or {})
         tx.save_snapshot(state, customer_id, (sub or {}).get("id"), price.get("id"))
+        _billing_emails(user.get("username"), before, state, str(tx.user.get("tier") or ""))
         if state["plan"] in {"pro", "premium"} and tx.intent:
             tx.save_intent({})
         return state

@@ -1,9 +1,11 @@
-"""Lifecycle emails: a welcome note when an account verifies its email, and a heads-up
-a few days before a free Pro trial (from an invite) runs out.
+"""Lifecycle emails: a welcome note when an account verifies its email, a heads-up
+a few days before a free Pro trial (from an invite) runs out, and a note when it has.
 
     welcome        sent once per account, right after its first email verification
     trial_ending   sent once per trial end, when free Pro ends within REMINDER_DAYS;
                    skipped for accounts that now pay (or are admins) and inactive ones
+    trial_ended    sent once per trial end, within 3 days after it ended (api/ops_jobs.py
+                   runs it daily); same skips as trial_ending
 
 Each email is claimed in db.referrals' hsf_lifecycle_emails table before it is sent and
 the claim is released if the send fails, so a job that runs every scan slot sends each
@@ -28,6 +30,7 @@ log = logging.getLogger("hsf.lifecycle_emails")
 
 WELCOME = "welcome"
 TRIAL_ENDING = "trial_ending"
+TRIAL_ENDED = "trial_ended"
 MAX_PER_RUN = 200
 # Pro-only features (domain/plans.py FEATURE_MIN_TIER and ALERT_LIMIT_BY_TIER).
 PRO_PERKS = ("the Day Trader page", "pre-market and Nasdaq scans", "the 7-day earnings calendar",
@@ -196,4 +199,59 @@ def run_trial_reminders(now: Optional[dt.datetime] = None, users_lookup=None) ->
         except Exception as e:
             counts["failed"] += 1
             log.warning(json.dumps({"event": "trial_reminder_failed", "error": type(e).__name__}))
+    return counts
+
+
+# ---- trial ended --------------------------------------------------------------------------------
+def trial_ended_content() -> tuple:
+    """(subject, text, html inner) for the 'free Pro has ended' email."""
+    pricing = f"{_base_url()}/pricing"
+    perks = ", ".join(PRO_PERKS[:-1]) + f" and {PRO_PERKS[-1]}"
+    subject = "Your free Pro has ended"
+    text = ("Your free Pro from an invite has ended, so your account is on Starter now. Nothing was charged.\n\n"
+            "You keep Today, the Scanner, your watchlists, 1 alert and your journal.\n"
+            f"Paused until you upgrade: {perks}.\n\n"
+            f"To get Pro back: {pricing}\n")
+    inner = ("<h2 style='font-size:20px;margin:16px 0 8px'>Your free Pro has ended</h2>"
+             "<p>Your account is on Starter now. Nothing was charged.</p>"
+             "<p><strong>You keep</strong> Today, the Scanner, your watchlists, 1 alert and your journal.</p>"
+             f"<p><strong>Paused until you upgrade:</strong> {html.escape(perks)}.</p>"
+             + _button(pricing, "Get Pro back"))
+    return subject, text, inner
+
+
+def run_trial_ended(now: Optional[dt.datetime] = None, users_lookup=None) -> Dict[str, Any]:
+    """Email accounts whose free Pro ended in the last 3 days and that didn't upgrade.
+    Each trial end is emailed once."""
+    counts: Dict[str, Any] = {"sent": 0, "skipped": 0, "failed": 0}
+    if not enabled():
+        counts["disabled"] = True
+        return counts
+    try:
+        from db import referrals as store
+        from ui.email_utils import send_digest_email
+
+        if users_lookup is None:
+            from db.users import get_user_by_username as users_lookup
+        ended = store.grants_ended(dt.timedelta(days=3))
+    except Exception as e:
+        log.warning(json.dumps({"event": "trial_ended_failed", "error": type(e).__name__}))
+        counts["error"] = type(e).__name__
+        return counts
+    subject, text, inner = trial_ended_content()
+    for user_id, until_text in ended[:MAX_PER_RUN]:
+        if "@" not in user_id or not _still_on_trial(user_id, users_lookup):
+            counts["skipped"] += 1
+            continue
+        try:
+            if not store.claim_email(user_id, TRIAL_ENDED, until_text):
+                continue
+            if send_digest_email(user_id, subject, inner, text):
+                counts["sent"] += 1
+            else:
+                store.release_email(user_id, TRIAL_ENDED, until_text)
+                counts["failed"] += 1
+        except Exception as e:
+            counts["failed"] += 1
+            log.warning(json.dumps({"event": "trial_ended_email_failed", "error": type(e).__name__}))
     return counts

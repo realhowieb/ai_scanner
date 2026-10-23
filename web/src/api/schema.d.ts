@@ -3585,6 +3585,19 @@ export interface components {
             /** Volume */
             volume?: number | null;
         };
+        /** BillingAttention */
+        BillingAttention: {
+            /**
+             * Grace Ends At
+             * @description Paid access ends then unless the card is updated (ISO)
+             */
+            grace_ends_at?: string | null;
+            /**
+             * State
+             * @constant
+             */
+            state: "past_due";
+        };
         /** BillingFailure */
         BillingFailure: {
             /** At */
@@ -4388,6 +4401,16 @@ export interface components {
              * @description Evening market wrap
              */
             evening: boolean;
+            /**
+             * Tips
+             * @description First-week tips and the come-back email
+             */
+            tips: boolean;
+            /**
+             * Weekly
+             * @description Saturday weekly recap
+             */
+            weekly: boolean;
         };
         /** EmailPrefsUpdate */
         EmailPrefsUpdate: {
@@ -4397,6 +4420,10 @@ export interface components {
             digest?: boolean | null;
             /** Evening */
             evening?: boolean | null;
+            /** Tips */
+            tips?: boolean | null;
+            /** Weekly */
+            weekly?: boolean | null;
         };
         /** FilingEvent */
         FilingEvent: {
@@ -4858,6 +4885,8 @@ export interface components {
         Me: {
             /** Alert Limit */
             alert_limit: number;
+            /** @description Set while the last charge for a paid plan failed (the app shows an 'update your card' banner) */
+            billing_attention?: components["schemas"]["BillingAttention"] | null;
             /** Email */
             email: string;
             /**
@@ -6262,6 +6291,11 @@ export interface components {
         /** Ready */
         Ready: {
             /**
+             * Build
+             * @description Git commit this API was deployed from (Render's RENDER_GIT_COMMIT, first 12 characters); the post-promote live check waits for it to match
+             */
+            build?: string | null;
+            /**
              * Container Mb
              * @description Container memory now, as Render measures it (MB); rss_mb also counts shared libraries
              */
@@ -7571,7 +7605,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "digest" | "evening" | "alerts" | "all";
+            kind: "digest" | "evening" | "alerts" | "weekly" | "tips" | "all";
             /** Token */
             token: string;
         };

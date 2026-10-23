@@ -65,16 +65,18 @@ class PrefsStoreTests(unittest.TestCase):
         from db.email_prefs import get_prefs, wants_email
 
         with with_db(Conn()):
-            self.assertEqual(get_prefs("a@example.com"), {"digest": True, "evening": True, "alerts": True})
+            self.assertEqual(get_prefs("a@example.com"),
+                             {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True})
         with mock.patch("db.email_prefs.get_neon_conn", return_value=None):
             self.assertTrue(wants_email("a@example.com", "digest"))
 
     def test_stored_switches_are_read(self):
         from db.email_prefs import get_prefs
 
-        db = Conn({"a@example.com": {"prefs": (False, True, False)}})
+        db = Conn({"a@example.com": {"prefs": (False, True, False, True, False)}})
         with with_db(db):
-            self.assertEqual(get_prefs("A@Example.com"), {"digest": False, "evening": True, "alerts": False})
+            self.assertEqual(get_prefs("A@Example.com"),
+                             {"digest": False, "evening": True, "alerts": False, "weekly": True, "tips": False})
 
     def test_set_prefs_upserts_only_known_kinds(self):
         from db.email_prefs import set_prefs

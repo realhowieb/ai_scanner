@@ -62,7 +62,18 @@ def current_account(request: Request,
         raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
     from api import referrals
 
+    _note_activity(username)
     return referrals.apply_to_account({k: v for k, v in account.items() if k != "password"})
+
+
+def _note_activity(username: str) -> None:
+    """Last-active time for the come-back email (db/user_activity.py: one write an hour at most)."""
+    try:
+        from db.user_activity import touch
+
+        touch(username)
+    except Exception:
+        pass
 
 
 # Compatibility cache for non-authorizing callers; current_account bypasses it.
@@ -158,7 +169,8 @@ def _me_out(account: Dict[str, Any]) -> Dict[str, Any]:
             "is_admin": ent["is_admin"], "alert_limit": ent["alert_limit"],
             "email_verified": acct.is_verified(str(account["username"]).strip().lower()),
             "entitlements": ent["entitlements"],
-            "pro_trial_until": account.get("pro_trial_until")}
+            "pro_trial_until": account.get("pro_trial_until"),
+            "billing_attention": acct.billing_attention(str(account["username"]), ent["tier"])}
 
 
 def _user(account: Dict[str, Any]) -> str:
