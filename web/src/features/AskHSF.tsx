@@ -10,6 +10,7 @@ import { api, unwrap } from "@/api/client";
 import { AIText } from "@/components/AIText";
 import { Card, ErrorLine, Locked, ResearchNotice } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
+import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -49,6 +50,7 @@ export function AskHSFView() {
     setQ("");
     const ok = await act.run(async () => {
       const out = await unwrap(api.POST("/v1/ai/ask", { body: { messages: next } }));
+      captureUsage("ask_hsf_asked");
       setTurns([...next, { role: "assistant", content: out.answer || "I couldn't find anything in HSF's data to answer that." }]);
       return true;
     });

@@ -8,6 +8,7 @@ import type { Schemas } from "@/api/client";
 import { Card, Empty, Freshness, Locked, Pill, RANKED_MIN, ResearchNotice, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
 import { etTime, greeting, localDate, pct, price, setupLabel } from "@/lib/format";
 
+import { GettingStarted } from "./GettingStarted";
 import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
 import { ScoreMoversCard } from "./ScoreMovers";
 import { StarterWatchlistButton } from "./Starters";
@@ -252,6 +253,8 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
           Scores and prices below are from that scan and may be out of date.
         </p>
       )}
+
+      <GettingStarted />
 
       {failed.has("snapshot") ? <SectionFailed name="Market snapshot" /> : data.snapshot && (
         <Card title="Market snapshot" id="snap" aside="Top gainer and most active are among the latest scan's ranked setups, not the whole market">

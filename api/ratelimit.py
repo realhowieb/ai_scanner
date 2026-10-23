@@ -42,7 +42,9 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "client_errors": (30, 600),  # per IP: crash reports from the web app
     "export": (10, 3600),        # per account: "Download my data"
     "chat_alerts": (20, 3600),   # per account: connect / test Telegram and Discord
-    "telegram_webhook": (600, 60),  # per IP: updates from Telegram (also checked by secret)
+    "telegram_webhook": (600, 60),
+    "feedback": (10, 3600),      # per account: "Send feedback" messages
+    "share": (240, 600),         # per IP: signed-out shared stock pages and their preview images  # per IP: updates from Telegram (also checked by secret)
 }
 _MAX_KEYS = 50_000  # bound memory if someone sprays many addresses
 

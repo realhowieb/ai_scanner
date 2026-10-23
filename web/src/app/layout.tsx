@@ -40,6 +40,13 @@ export const metadata: Metadata = {
   title: { default: "HSFinest.AI", template: "%s · HSFinest.AI" },
   description: "HSF AI stock scanner: ranked setups, custom scans and stock intelligence.",
   robots: { index: false, follow: false },
+  // Link previews (iMessage, Telegram, X, Slack). Pages without their own image use app/opengraph-image.tsx.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://app.hsfinest.com"),
+  openGraph: {
+    type: "website", siteName: "HSFinest.AI", title: "HSF AI Stock Scanner",
+    description: "Ranked stock setups from scans of the whole U.S. market, with the reasons and risks behind each score.",
+  },
+  twitter: { card: "summary_large_image" },
   // Opened from the iPhone Home Screen: full screen, named "HSF", dark status bar.
   appleWebApp: { capable: true, title: "HSF", statusBarStyle: "black" },
 };

@@ -195,7 +195,28 @@ function UsersTab({ self }: { self: string }) {
             </div>
           )}
       </Card>
+      <FeedbackCard />
     </div>
+  );
+}
+
+/** "Send feedback" messages from the app, newest first. */
+function FeedbackCard() {
+  const fb = useApi("admin-feedback", (signal) => unwrap(api.GET("/v1/admin/feedback", { signal })));
+  return (
+    <Card title="Feedback from users" id="feedback" aside={fb.data ? `${fb.data.length} recent` : undefined}>
+      {fb.error && !fb.data ? <ErrorState error={fb.error} onRetry={fb.reload} what="feedback" />
+        : !fb.data ? <Skeleton rows={2} label="Loading feedback" />
+        : fb.data.length === 0 ? <Empty title="No feedback yet." />
+        : (
+          <ul className="feedback-list">{fb.data.map((f) => (
+            <li key={f.id}>
+              <p className="cap">{etTime(f.created_at)} · {f.user_id} ({f.plan ?? "?"}) · {f.kind}{f.path ? ` · ${f.path}` : ""}</p>
+              <p className="body-sm">{f.message}</p>
+            </li>
+          ))}</ul>
+        )}
+    </Card>
   );
 }
 

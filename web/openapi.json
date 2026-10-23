@@ -5797,6 +5797,125 @@
     "title": "EmailPrefsUpdate",
     "type": "object"
    },
+   "FeedbackBody": {
+    "properties": {
+     "build": {
+      "anyOf": [
+       {
+        "maxLength": 64,
+        "pattern": "^[\\w.\\-]*$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The web build's commit",
+      "title": "Build"
+     },
+     "kind": {
+      "default": "other",
+      "enum": [
+       "problem",
+       "idea",
+       "praise",
+       "other"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "message": {
+      "maxLength": 2000,
+      "minLength": 3,
+      "title": "Message",
+      "type": "string"
+     },
+     "path": {
+      "anyOf": [
+       {
+        "maxLength": 200,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The page it was sent from, no query string",
+      "title": "Path"
+     }
+    },
+    "required": [
+     "message"
+    ],
+    "title": "FeedbackBody",
+    "type": "object"
+   },
+   "FeedbackItem": {
+    "properties": {
+     "build": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Build"
+     },
+     "created_at": {
+      "title": "Created At",
+      "type": "string"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "path": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Path"
+     },
+     "plan": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Plan"
+     },
+     "user_id": {
+      "title": "User Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "user_id",
+     "kind",
+     "message",
+     "created_at"
+    ],
+    "title": "FeedbackItem",
+    "type": "object"
+   },
    "FilingEvent": {
     "properties": {
      "date": {
@@ -5876,6 +5995,83 @@
      "event"
     ],
     "title": "FunnelEvent",
+    "type": "object"
+   },
+   "GettingStarted": {
+    "properties": {
+     "dismissed": {
+      "title": "Dismissed",
+      "type": "boolean"
+     },
+     "done": {
+      "title": "Done",
+      "type": "integer"
+     },
+     "show": {
+      "description": "False once every step is done or the card was closed",
+      "title": "Show",
+      "type": "boolean"
+     },
+     "steps": {
+      "items": {
+       "$ref": "#/components/schemas/GettingStartedStep"
+      },
+      "title": "Steps",
+      "type": "array"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "show",
+     "dismissed",
+     "done",
+     "total",
+     "steps"
+    ],
+    "title": "GettingStarted",
+    "type": "object"
+   },
+   "GettingStartedStep": {
+    "properties": {
+     "detail": {
+      "title": "Detail",
+      "type": "string"
+     },
+     "done": {
+      "title": "Done",
+      "type": "boolean"
+     },
+     "href": {
+      "description": "Where the step is done in the web app",
+      "title": "Href",
+      "type": "string"
+     },
+     "id": {
+      "enum": [
+       "watchlist",
+       "alert",
+       "delivery",
+       "guide"
+      ],
+      "title": "Id",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "detail",
+     "href",
+     "done"
+    ],
+    "title": "GettingStartedStep",
     "type": "object"
    },
    "Health": {
@@ -10473,6 +10669,109 @@
     "title": "ProviderDiagnostic",
     "type": "object"
    },
+   "PublicStock": {
+    "properties": {
+     "change_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Change Pct"
+     },
+     "hidden_insights": {
+      "description": "Other reasons, signals and risks shown after signing up",
+      "title": "Hidden Insights",
+      "type": "integer"
+     },
+     "hsf_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hsf Score"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price"
+     },
+     "ranked": {
+      "description": "In the latest scan's ranked setups (HSF Score 40 or more)",
+      "title": "Ranked",
+      "type": "boolean"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The first reason only; the rest needs an account",
+      "title": "Reason"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan At"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "ranked",
+     "hidden_insights"
+    ],
+    "title": "PublicStock",
+    "type": "object"
+   },
    "QueueCount": {
     "properties": {
      "count": {
@@ -13651,6 +13950,31 @@
     "title": "TradePlan",
     "type": "object"
    },
+   "UnreadAlerts": {
+    "properties": {
+     "count": {
+      "description": "Alerts fired since the Alerts page was last opened (at most 99)",
+      "title": "Count",
+      "type": "integer"
+     },
+     "seen_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Seen At"
+     }
+    },
+    "required": [
+     "count"
+    ],
+    "title": "UnreadAlerts",
+    "type": "object"
+   },
    "UnsubscribeBody": {
     "properties": {
      "kind": {
@@ -15709,6 +16033,53 @@
      }
     ],
     "summary": "Research evidence: funnel, cohort coverage, readiness",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/feedback": {
+   "get": {
+    "operationId": "admin_feedback_v1_admin_feedback_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/FeedbackItem"
+         },
+         "title": "Response Admin Feedback V1 Admin Feedback Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Recent feedback from the app",
     "tags": [
      "admin (admins only)"
     ],
@@ -19084,6 +19455,79 @@
     "summary": "Me"
    }
   },
+  "/v1/me/alerts/seen": {
+   "post": {
+    "operationId": "alerts_seen_v1_me_alerts_seen_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UnreadAlerts"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mark fired alerts as seen"
+   }
+  },
+  "/v1/me/alerts/unread": {
+   "get": {
+    "description": "The count behind the badge on the Alerts tab. With no visit on record, the last 7 days.",
+    "operationId": "alerts_unread_v1_me_alerts_unread_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UnreadAlerts"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Alerts fired since you last opened Alerts"
+   }
+  },
   "/v1/me/capabilities": {
    "get": {
     "operationId": "my_capabilities_v1_me_capabilities_get",
@@ -19583,6 +20027,165 @@
      }
     ],
     "summary": "Download your data"
+   }
+  },
+  "/v1/me/feedback": {
+   "post": {
+    "description": "Stored, then sent to the admins' Telegram/Discord, or emailed when none is linked.",
+    "operationId": "feedback_v1_me_feedback_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FeedbackBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many messages"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Send feedback to the HSF team"
+   }
+  },
+  "/v1/me/getting-started": {
+   "get": {
+    "description": "Four first steps for a new account (save stocks, set an alert, choose where alerts go,\nread how the score works), each ticked from what the account has already done.",
+    "operationId": "getting_started_v1_me_getting_started_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GettingStarted"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Getting started checklist"
+   }
+  },
+  "/v1/me/getting-started/dismiss": {
+   "post": {
+    "operationId": "getting_started_dismiss_v1_me_getting_started_dismiss_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GettingStarted"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Close the Getting started card"
+   }
+  },
+  "/v1/me/getting-started/guide": {
+   "post": {
+    "operationId": "getting_started_guide_v1_me_getting_started_guide_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GettingStarted"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Tick the 'how the HSF Score works' step"
    }
   },
   "/v1/me/password": {
@@ -22168,6 +22771,55 @@
      }
     ],
     "summary": "Pre-market gappers (Pro)"
+   }
+  },
+  "/v1/public/stocks/{ticker}": {
+   "get": {
+    "description": "Name, price and day change; HSF Score, setup and the first reason only when the stock\nis in the latest scan's ranked setups. The rest of the stock page needs an account.",
+    "operationId": "public_stock_v1_public_stocks__ticker__get",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PublicStock"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "404": {
+      "description": "Not a listed US stock"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many requests"
+     }
+    },
+    "summary": "A stock's public snapshot for shared links (signed out)"
    }
   },
   "/v1/quotes": {

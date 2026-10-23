@@ -106,7 +106,7 @@ def _earnings_section(earn, tickers: List[str]) -> tuple:
         return ee.compose_section(
             rows, title=f"Earnings tonight & {word} morning",
             order=[(today, "amc", "🌙 Tonight after the close"),
-                   (nxt, "bmo", f"☀️ {day} before the open ({nxt:%a})"),
+                   (nxt, "bmo", f"☀️ {day} before the open" + (f" ({nxt:%a})" if day == "Tomorrow" else "")),
                    (nxt, None, f"🕒 {day}, time not announced")],
             price_label="Close", pct_label="Today %",
             link=ee.scanner_link("tomorrow" if day == "Tomorrow" else "week"),
@@ -272,7 +272,7 @@ def _compose_wrap(
             text += [f"Fresh golden crosses: {names}"]
         if top_setups:
             text += ["Top breakout scores: " + ", ".join(f"{t} ({s:g})" for t, s in top_setups)]
-        html.append(k.card("🎯 Tomorrow's setups", body
+        html.append(k.card(f"🎯 {_next_session_day()}'s setups", body
                            + k.note("Educational only, not financial advice. Confirm setups yourself at the open.")
                            + k.button(_app_url("/today"), "Open Today in HSF →")))
         text += [""]
@@ -292,6 +292,19 @@ def _compose_wrap(
         text += ["Earnings tomorrow (your watchlist):", f"  {names}", ""]
 
     return "".join(html), "\n".join(text)
+
+
+def _next_session_day() -> str:
+    """'Tomorrow', or the weekday name when the next session isn't tomorrow (Friday -> 'Monday')."""
+    try:
+        from scheduler import earnings_email as ee
+        from scheduler.morning_digest import et_now
+
+        today = et_now().date()
+        nxt = ee.next_trading_day(today)
+        return "Tomorrow" if nxt == today + timedelta(days=1) else nxt.strftime("%A")
+    except Exception:
+        return "Tomorrow"
 
 
 def wrap_glance(watch_rows: List[Dict[str, Any]], *, market_close: List[tuple] | None = None,
@@ -317,7 +330,7 @@ def wrap_glance(watch_rows: List[Dict[str, Any]], *, market_close: List[tuple] |
         up = sum(1 for r in movers if r["chg_pct"] >= 0)
         name = k.esc(k.split_flag(big["ticker"])[0])
         parts.append(f"Your watchlist: {up} up, {len(movers) - up} down; biggest move "
-                     f"<b style='color:#fff'>{name}</b> {float(big['chg_pct']):+.1f}%.")
+                     f"<b style='color:#fff'>{name}</b> {float(big['chg_pct']):+.2f}%.")
     if fired_count:
         parts.append(f"{fired_count} alert{'s' if fired_count != 1 else ''} fired today.")
     if earnings_count:
@@ -325,7 +338,9 @@ def wrap_glance(watch_rows: List[Dict[str, Any]], *, market_close: List[tuple] |
                      "report tonight or before the next open.")
     if top_setups:
         t, sc = top_setups[0]
-        parts.append(f"Top setup for tomorrow: <b style='color:#fff'>{k.esc(t)}</b> (score {sc:g}).")
+        nxt = _next_session_day()
+        nxt = "tomorrow" if nxt == "Tomorrow" else nxt
+        parts.append(f"Top setup for {nxt}: <b style='color:#fff'>{k.esc(t)}</b> (score {sc:g}).")
     return k.glance_text(parts)
 
 

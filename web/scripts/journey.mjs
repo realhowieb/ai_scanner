@@ -145,7 +145,7 @@ await step("watchlist: ticker listed, note saved, invalid and duplicate tickers 
 });
 
 await step("alerts page: capacity, turn off", async () => {
-  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Alerts", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Alerts(, \d+ new)?$/ }).click();
   await page.waitForURL(/\/alerts/);
   await rulesTab(page);
   await page.getByText(`${ticker} price rises above $${SHOWN}`).waitFor();
