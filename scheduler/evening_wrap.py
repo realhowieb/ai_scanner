@@ -112,8 +112,8 @@ def _earnings_section(earn, tickers: List[str]) -> tuple:
             link=ee.scanner_link("tomorrow" if day == "Tomorrow" else "week"),
             link_label=f"See {word} in the Earnings scanner" if day == "Tomorrow" else "See the week in the Earnings scanner",
             watched=tickers, watchlist_line=ee.watchlist_line(tickers, week, today),
-            footnote="⭐ on your watchlist. Bold names ranked in today's market scan. "
-                     "Educational only, not financial advice.",
+            footnote="Scores from today's scan of every reporter. Educational only, not financial advice.",
+            sub_suffix="scored after the close",
         )
     except Exception:
         return "", ""
@@ -153,7 +153,7 @@ def _watchlist_summary(watch_rows: List[Dict[str, Any]]) -> str | None:
         for r in watch_rows
         if r.get("chg_pct") is not None
     ]
-    if not pairs:
+    if len(pairs) < 2:   # one mover is both "best" and "worst"
         return None
     ranked = sorted(pairs, key=lambda x: x[1], reverse=True)
     best, worst = ranked[0], ranked[-1]
@@ -221,28 +221,29 @@ def _compose_wrap(
     top_setups: List[tuple] | None = None,
     earnings_section: tuple | None = None,
 ) -> tuple:
-    from scheduler.morning_digest import _movers_table, _movers_text, et_now
+    """(html_inner, text_inner): email_kit cards; the shell adds header + At a glance."""
+    import html as _html
+
+    from scheduler.morning_digest import WATCHLIST_ROWS, _app_url, _movers_table, _movers_text, et_now
+    from ui import email_kit as k
 
     date_s = et_now().strftime("%A, %b %d")
-    html = [f"<p style='color:#666;margin:0 0 12px'>Evening wrap · {date_s}</p>"]
+    html: List[str] = []
     text = [f"Evening wrap · {date_s}", ""]
 
     # 🏦 Market close — the day's backdrop
     if market_close:
-        parts_html = [f"{label} {last:,.2f} {_pct_html(chg)}" for label, last, chg in market_close]
         parts_text = [f"{label} {last:,.2f} {chg:+.2f}%" for label, last, chg in market_close]
-        html.append(
-            "<h3 style='margin:16px 0 6px'>🏦 Market close</h3>"
-            f"<p>{' &nbsp;·&nbsp; '.join(parts_html)}</p>"
-        )
+        rows = [[f"<strong>{_html.escape(label)}</strong>", k.num(last), _pct_html(chg)]
+                for label, last, chg in market_close]
+        html.append(k.card("🏦 Market close", k.table(["Index", "Close", "Day %"], rows)))
         text += ["Market close:", "  " + " · ".join(parts_text), ""]
 
     # 📋 Your watchlist today (+ one-line summary)
-    html.append("<h3 style='margin:16px 0 6px'>📋 Your watchlist today</h3>")
-    html.append(_movers_table(watch_rows, show_gap=False))
     summary = _watchlist_summary(watch_rows)
-    if summary:
-        html.append(f"<p style='color:#666;margin:4px 0 0'>📌 {summary}</p>")
+    html.append(k.card("📋 Your watchlist today",
+                       _movers_table(watch_rows, show_gap=False, limit=WATCHLIST_ROWS)
+                       + (k.note(f"📌 {_html.escape(summary)}") if summary else "")))
     text += ["Your watchlist today:", _movers_text(watch_rows)]
     if summary:
         text += [f"📌 {summary}"]
@@ -250,41 +251,36 @@ def _compose_wrap(
 
     # 📊 Today's market movers (beyond the watchlist)
     if day_gainers or day_losers:
-        html.append("<h3 style='margin:16px 0 6px'>📊 Today's market movers</h3>")
+        body = ""
         if day_gainers:
-            g = ", ".join(f"{t} {_pct_html(c)}" for t, c in day_gainers)
-            html.append(f"<p><b>Gainers:</b> {g}</p>")
+            body += k.group("Gainers") + k.chips((t, _pct_html(c)) for t, c in day_gainers)
             text += ["Top gainers: " + ", ".join(f"{t} {c:+.1f}%" for t, c in day_gainers)]
         if day_losers:
-            lo = ", ".join(f"{t} {_pct_html(c)}" for t, c in day_losers)
-            html.append(f"<p><b>Losers:</b> {lo}</p>")
+            body += k.group("Losers") + k.chips((t, _pct_html(c)) for t, c in day_losers)
             text += ["Top losers: " + ", ".join(f"{t} {c:+.1f}%" for t, c in day_losers)]
+        html.append(k.card("📊 Today's market movers", body, sub="Biggest moves in today's market scan"))
         text += [""]
 
     # 🎯 Tomorrow's setups — forward-looking watchlist for the open
     if golden_crosses or top_setups:
-        html.append("<h3 style='margin:16px 0 6px'>🎯 Tomorrow's setups</h3>")
+        body = ""
+        if top_setups:
+            body += k.group("🚀 Top breakout scores") + k.chips((t, k.chip_score(s)) for t, s in top_setups)
         if golden_crosses:
             names = ", ".join(golden_crosses)
-            html.append(f"<p><b>📈 Fresh EMA 9/21 golden crosses:</b> {names}</p>")
+            body += k.group("📈 Fresh EMA 9/21 golden crosses") + k.chips((g, None) for g in golden_crosses)
             text += [f"Fresh golden crosses: {names}"]
         if top_setups:
-            ts = ", ".join(f"{t} ({s:g})" for t, s in top_setups)
-            html.append(f"<p><b>🚀 Top breakout scores:</b> {ts}</p>")
             text += ["Top breakout scores: " + ", ".join(f"{t} ({s:g})" for t, s in top_setups)]
-        html.append(
-            "<p style='color:#888;font-size:12px'>Educational only — not financial advice; "
-            "confirm setups yourself at the open.</p>"
-        )
+        html.append(k.card("🎯 Tomorrow's setups", body
+                           + k.note("Educational only, not financial advice. Confirm setups yourself at the open.")
+                           + k.button(_app_url("/today"), "Open Today in HSF →")))
         text += [""]
 
     if fired_today:
-        import html as _html
-
-        items = "".join(f"<li>{_html.escape(m)}</li>" for m in fired_today)
-        html.append(
-            f"<h3 style='margin:16px 0 6px'>🔔 Alerts that fired today</h3><ul>{items}</ul>"
-        )
+        items = "".join(f"<li style='margin:3px 0'>{_html.escape(m)}</li>" for m in fired_today)
+        html.append(k.card("🔔 Alerts that fired today",
+                           f"<ul style='margin:0;padding-left:18px;font-size:14px'>{items}</ul>"))
         text += ["Alerts that fired today:"] + [f"  - {m}" for m in fired_today] + [""]
 
     if earnings_section and earnings_section[0]:
@@ -292,13 +288,45 @@ def _compose_wrap(
         text.append(earnings_section[1])
     elif earnings_tomorrow:
         names = ", ".join(earnings_tomorrow)
-        html.append(
-            "<h3 style='margin:16px 0 6px'>📅 Earnings tomorrow (your watchlist)</h3>"
-            f"<p>{names} ⚠️</p>"
-        )
+        html.append(k.card("📅 Earnings tomorrow (your watchlist)", f"<p style='margin:0'>{_html.escape(names)} ⚠️</p>"))
         text += ["Earnings tomorrow (your watchlist):", f"  {names}", ""]
 
     return "".join(html), "\n".join(text)
+
+
+def wrap_glance(watch_rows: List[Dict[str, Any]], *, market_close: List[tuple] | None = None,
+                fired_count: int = 0, earnings_count: int = 0,
+                top_setups: List[tuple] | None = None) -> str:
+    """'At a glance' for the evening wrap: the market, your watchlist, alerts, earnings tonight."""
+    from ui import email_kit as k
+
+    parts: List[str] = []
+    if market_close:
+        bits = []
+        for label, _last, chg in market_close:
+            short = label.split(" (")[0]
+            try:
+                bits.append(f"{k.esc(short)} {float(chg):+.1f}%")
+            except (TypeError, ValueError):
+                continue
+        if bits:
+            parts.append("Market: " + ", ".join(bits) + ".")
+    movers = [r for r in watch_rows if r.get("chg_pct") is not None]
+    if movers:
+        big = max(movers, key=lambda r: abs(r["chg_pct"]))
+        up = sum(1 for r in movers if r["chg_pct"] >= 0)
+        name = k.esc(k.split_flag(big["ticker"])[0])
+        parts.append(f"Your watchlist: {up} up, {len(movers) - up} down; biggest move "
+                     f"<b style='color:#fff'>{name}</b> {float(big['chg_pct']):+.1f}%.")
+    if fired_count:
+        parts.append(f"{fired_count} alert{'s' if fired_count != 1 else ''} fired today.")
+    if earnings_count:
+        parts.append(f"<b style='color:#fff'>{earnings_count} compan{'y' if earnings_count == 1 else 'ies'}</b> "
+                     "report tonight or before tomorrow's open.")
+    if top_setups:
+        t, sc = top_setups[0]
+        parts.append(f"Top setup for tomorrow: <b style='color:#fff'>{k.esc(t)}</b> (score {sc:g}).")
+    return k.glance_text(parts)
 
 
 def run_evening_wrap(force: bool = False) -> None:
@@ -396,8 +424,9 @@ def run_evening_wrap(force: bool = False) -> None:
                 continue
 
             watch_rows = build_day_trader_metrics(tickers, with_rvol=False)
+            fired = _todays_events(email)
             html_inner, text_inner = _compose_wrap(
-                watch_rows, _todays_events(email), _tomorrows_earnings(tickers),
+                watch_rows, fired, _tomorrows_earnings(tickers),
                 market_close=market_close,
                 day_gainers=day_gainers, day_losers=day_losers,
                 golden_crosses=golden_crosses, top_setups=top_setups,
@@ -409,6 +438,9 @@ def run_evening_wrap(force: bool = False) -> None:
                 html_inner=html_inner,
                 text_inner=text_inner,
                 unsubscribe_url=unsubscribe_link(email, "evening"),
+                title_line=f"Evening wrap · {et_now():%A, %b %-d} · after the close",
+                glance_html=wrap_glance(watch_rows, market_close=market_close, fired_count=len(fired),
+                                        earnings_count=len(earn[3]) if earn else 0, top_setups=top_setups),
             ):
                 sent += 1
             else:

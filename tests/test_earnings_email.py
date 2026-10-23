@@ -77,9 +77,9 @@ def test_compose_section_groups_caps_and_links():
         price_label="Last", pct_label="Chg %", link="https://x/scanner?signal=earnings&when=today&all=1",
         link_label="See them all", watched=["SSNC"])
     assert "Earnings today" in html and "Before" in html and "After" in html and "TBA" not in html
-    assert html.count("<tr>") == 6 + 1 + 2   # 6 bmo shown (cap) + 1 amc, plus 2 header rows
-    assert "+ 3 more" in html and "when=today" in html
-    assert "SSNC ⭐" in html
+    assert html.count("<tr>") == 6 + 1 + 2 + 1   # 6 bmo shown (cap) + 1 amc, 2 header rows, the card
+    assert "+ 3 more" in html and "3 more" in html and "10 companies report" in html and "when=today" in html
+    assert "<strong>SSNC</strong> <span" in html and ">Watchlist</span>" in html
     assert "+1.50%" in html and "90" in html
     assert "SSNC *" in text and "See them all: https://x/" in text
 
@@ -145,7 +145,7 @@ def test_evening_window_is_tonight_amc_and_next_morning():
     html, text = ew._earnings_section(earn, ["AXP"])
     assert "Earnings tonight &amp; tomorrow morning" in html or "Earnings tonight & tomorrow morning" in html
     assert "Tonight after the close" in html and "Tomorrow before the open (Fri)" in html
-    assert "AXP ⭐" in html and "when=tomorrow" in html
+    assert "<strong>AXP</strong> <span" in html and "when=tomorrow" in html
 
 
 def test_evening_friday_points_at_monday_and_week():
@@ -189,3 +189,14 @@ def test_duplicates_dropped():
     rows = ee.build_rows(cal, scorer=lambda t, premarket=False: {}, quotes=False)
     assert [r["ticker"] for r in rows].count("POOL") == 1
     assert ee.watchlist_line(["POOL"], cal, TODAY).count("POOL") == 1
+
+
+def test_preopen_zero_move_shows_dash():
+    rows = ee.build_rows([{"ticker": "RCBC", "date": TODAY, "time": "amc"}],
+                         scorer=_scorer({"RCBC": {"score": 6, "last": 55.62, "chg_pct": 0.0}}), quotes=False)
+    html, text = ee.compose_section(rows, title="E", order=[(TODAY, "amc", "After")], price_label="Last",
+                                    pct_label="Pre-mkt %", link="l", link_label="ll", zero_is_missing=True)
+    assert "+0.00%" not in html and "+0.00%" not in text
+    html, _ = ee.compose_section(rows, title="E", order=[(TODAY, "amc", "After")], price_label="Last",
+                                 pct_label="Chg %", link="l", link_label="ll")
+    assert "+0.00%" in html
