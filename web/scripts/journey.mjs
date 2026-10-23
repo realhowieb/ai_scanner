@@ -91,7 +91,7 @@ await step("find a setup and save it to a new watchlist from the Scanner", async
 await step("Stock Intelligence shows the watchlist; saving again reports already present", async () => {
   await page.locator("table").getByRole("link", { name: ticker, exact: true }).first().click();
   await page.waitForURL(new RegExp(`/stocks/${ticker}`));
-  await page.getByRole("heading", { name: "HSF Score" }).waitFor();
+  await page.getByRole("heading", { name: "HSF Score", exact: true }).waitFor();
   await page.getByRole("link", { name: RUN }).waitFor();
   await page.getByRole("button", { name: SAVE_BTN }).click();
   const dlg = page.getByRole("dialog");
