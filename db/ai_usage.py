@@ -32,8 +32,13 @@ def _ensure_schema(conn) -> None:
     cur.close()
 
 
-def ai_calls_today(username: str) -> int:
-    """Count this user's AI calls in the last 24h. Returns 0 on any failure."""
+# Features with their own cap that don't spend the account's AI_DAILY_LIMIT.
+SEPARATE_CAP_FEATURES = ("alert_why",)
+
+
+def ai_calls_today(username: str, feature: str | None = None) -> int:
+    """Count this user's AI calls in the last 24h: one feature's, or (feature=None) every
+    feature that counts toward AI_DAILY_LIMIT. Returns 0 on any failure."""
     user = (username or "").strip().lower()
     if get_neon_conn is None or not user:
         return 0
@@ -43,10 +48,18 @@ def ai_calls_today(username: str) -> int:
             return 0
         _ensure_schema(conn)
         cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM ai_usage WHERE username = %s AND called_at > NOW() - INTERVAL '24 hours'",
-            (user,),
-        )
+        if feature:
+            cur.execute(
+                "SELECT COUNT(*) FROM ai_usage WHERE username = %s AND feature = %s "
+                "AND called_at > NOW() - INTERVAL '24 hours'",
+                (user, feature),
+            )
+        else:
+            cur.execute(
+                "SELECT COUNT(*) FROM ai_usage WHERE username = %s AND called_at > NOW() - INTERVAL '24 hours' "
+                "AND COALESCE(feature, '') <> ALL(%s)",
+                (user, list(SEPARATE_CAP_FEATURES)),
+            )
         row = cur.fetchone()
         cur.close()
         conn.close()

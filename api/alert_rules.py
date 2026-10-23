@@ -663,7 +663,7 @@ def _evaluate_market_rule(r: Dict[str, Any], obs: Dict[str, Any], st: Optional[D
         "market_data_as_of": watchlist_intel._iso(obs["scan_at"]), "triggered_at": now_s,
         "delivery": {c: "pending" if c != "in_app" else "delivered" for c in r["delivery_channels"]},
         "_channels": r["delivery_channels"], "_tier": r["_tier"],
-        "_email_verified": r.get("owner_email_verified"),
+        "_email_verified": r.get("owner_email_verified"), "_view": top,
     }
     return state, event
 
@@ -760,10 +760,17 @@ def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Di
                     "market_data_as_of": watchlist_intel._iso(obs["scan_at"]), "triggered_at": now_s,
                     "delivery": {c: "pending" if c != "in_app" else "delivered" for c in r["delivery_channels"]},
                     "_channels": r["delivery_channels"], "_tier": r["_tier"],
-                    "_email_verified": r.get("owner_email_verified"),
+                    "_email_verified": r.get("owner_email_verified"), "_view": view,
                 })
             new_states.append({"rule_id": r["id"], "ticker": t, **new, "observation_id": obs_id,
                                "last_triggered_at": last_trig})
+    if deliver and events:
+        try:  # Premium: one AI "Why:" line on the message (own daily cap; never blocks the pass)
+            from api.ai_premium import annotate_alerts
+
+            result["ai_why"] = annotate_alerts(events, obs)
+        except Exception as e:
+            log.warning(json.dumps({"event": "alert_ai_why_failed", "error": type(e).__name__}))
     inserted = store.save_evaluation(states=new_states, events=events, evaluated_rule_ids=sorted(evaluated),
                                      triggered_rule_ids=sorted(triggered), now=now_s)
     result["triggered"] = len(inserted)

@@ -372,6 +372,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ai/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask HSF (Premium)
+         * @description Questions about your watchlists, the latest market scan, earnings, news headlines and
+         *     HSF's track record, answered from HSF's data only. Send the conversation so far; the last
+         *     message must be the user's question. Up to 8 prior turns are used.
+         */
+        post: operations["ai_ask_v1_ai_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ai/brief-narrative": {
         parameters: {
             query?: never;
@@ -413,6 +435,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ai/journal-coach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * AI journal coach (Premium)
+         * @description A short note on patterns in your closed trades (by HSF Score when taken, holding time,
+         *     source; win and loss sizes). text is null below min_trades. Cached per journal state.
+         */
+        post: operations["ai_journal_coach_v1_ai_journal_coach_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ai/notes/{ticker}": {
         parameters: {
             query?: never;
@@ -428,6 +471,27 @@ export interface paths {
          *     isn't in it.
          */
         post: operations["ai_note_v1_ai_notes__ticker__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ai/scan-builder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Describe a scan in plain English (Premium)
+         * @description Turns a plain-English request into Custom scan settings (the saved-view shape). Nothing
+         *     runs; plan rules still apply when you start the scan.
+         */
+        post: operations["ai_scan_builder_v1_ai_scan_builder_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2488,6 +2552,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AIAskBody */
+        AIAskBody: {
+            /**
+             * Messages
+             * @description The conversation so far, oldest first, ending with the new question
+             */
+            messages: components["schemas"]["ChatTurn"][];
+        };
         /** AIChatAnswer */
         AIChatAnswer: {
             /** Answer */
@@ -2507,6 +2579,101 @@ export interface components {
              * @description One of your saved scans (GET /v1/runs); default: the latest market scan
              */
             run_id?: number | null;
+        };
+        /** AIJournalCoach */
+        AIJournalCoach: {
+            /**
+             * Closed
+             * @description Closed trades in the journal
+             */
+            closed: number;
+            /**
+             * Min Trades
+             * @description Closed trades needed before coaching
+             */
+            min_trades: number;
+            /**
+             * Text
+             * @description Markdown bullets; null below min_trades
+             */
+            text?: string | null;
+        };
+        /** AIScanBuilder */
+        AIScanBuilder: {
+            /** Explanation */
+            explanation?: string | null;
+            /** @description Custom scan settings in the saved-view shape (nothing runs) */
+            view: components["schemas"]["AIScanView"];
+        };
+        /** AIScanBuilderBody */
+        AIScanBuilderBody: {
+            /**
+             * Text
+             * @description The scan you want, in plain English
+             */
+            text: string;
+        };
+        /** AIScanView */
+        AIScanView: {
+            /**
+             * Earnings Window
+             * @default today
+             * @enum {string}
+             */
+            earnings_window: "today" | "tomorrow" | "week";
+            /**
+             * Gap
+             * @default false
+             */
+            gap: boolean;
+            /** Max Price */
+            max_price?: number | null;
+            /** Min Dollar Vol */
+            min_dollar_vol?: number | null;
+            /** Min Gap */
+            min_gap?: number | null;
+            /** Min Price */
+            min_price?: number | null;
+            /**
+             * Name
+             * @default AI scan
+             */
+            name: string;
+            /**
+             * Score All
+             * @default false
+             */
+            score_all: boolean;
+            /**
+             * Session
+             * @default regular
+             * @enum {string}
+             */
+            session: "regular" | "premarket" | "afterhours";
+            /**
+             * Ticker
+             * @default
+             */
+            ticker: string;
+            /**
+             * Top N
+             * @default 25
+             * @enum {integer}
+             */
+            top_n: 10 | 25 | 50 | 100 | 200;
+            /**
+             * Universe
+             * @default sp500
+             * @enum {string}
+             */
+            universe: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker" | "earnings";
+            /**
+             * Unusual
+             * @default false
+             */
+            unusual: boolean;
+            /** Watchlist Id */
+            watchlist_id?: number | null;
         };
         /** AISummaryBody */
         AISummaryBody: {
@@ -9171,6 +9338,81 @@ export interface operations {
             };
         };
     };
+    ai_ask_v1_ai_ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIAskBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatAnswer"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scan not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Daily AI limit or hourly request limit reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI call failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     ai_brief_narrative_v1_ai_brief_narrative_get: {
         parameters: {
             query?: never;
@@ -9317,6 +9559,77 @@ export interface operations {
             };
         };
     };
+    ai_journal_coach_v1_ai_journal_coach_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIJournalCoach"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scan not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Daily AI limit or hourly request limit reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI call failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     ai_note_v1_ai_notes__ticker__post: {
         parameters: {
             query?: never;
@@ -9336,6 +9649,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AIText"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scan not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Daily AI limit or hourly request limit reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI call failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ai_scan_builder_v1_ai_scan_builder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIScanBuilderBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIScanBuilder"];
                 };
             };
             /** @description Not signed in */

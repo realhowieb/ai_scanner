@@ -1,6 +1,25 @@
 {
  "components": {
   "schemas": {
+   "AIAskBody": {
+    "properties": {
+     "messages": {
+      "description": "The conversation so far, oldest first, ending with the new question",
+      "items": {
+       "$ref": "#/components/schemas/ChatTurn"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Messages",
+      "type": "array"
+     }
+    },
+    "required": [
+     "messages"
+    ],
+    "title": "AIAskBody",
+    "type": "object"
+   },
    "AIChatAnswer": {
     "properties": {
      "answer": {
@@ -59,6 +78,210 @@
      "messages"
     ],
     "title": "AIChatBody",
+    "type": "object"
+   },
+   "AIJournalCoach": {
+    "properties": {
+     "closed": {
+      "description": "Closed trades in the journal",
+      "title": "Closed",
+      "type": "integer"
+     },
+     "min_trades": {
+      "description": "Closed trades needed before coaching",
+      "title": "Min Trades",
+      "type": "integer"
+     },
+     "text": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Markdown bullets; null below min_trades",
+      "title": "Text"
+     }
+    },
+    "required": [
+     "closed",
+     "min_trades"
+    ],
+    "title": "AIJournalCoach",
+    "type": "object"
+   },
+   "AIScanBuilder": {
+    "properties": {
+     "explanation": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Explanation"
+     },
+     "view": {
+      "$ref": "#/components/schemas/AIScanView",
+      "description": "Custom scan settings in the saved-view shape (nothing runs)"
+     }
+    },
+    "required": [
+     "view"
+    ],
+    "title": "AIScanBuilder",
+    "type": "object"
+   },
+   "AIScanBuilderBody": {
+    "properties": {
+     "text": {
+      "description": "The scan you want, in plain English",
+      "maxLength": 500,
+      "minLength": 3,
+      "title": "Text",
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "title": "AIScanBuilderBody",
+    "type": "object"
+   },
+   "AIScanView": {
+    "properties": {
+     "earnings_window": {
+      "default": "today",
+      "enum": [
+       "today",
+       "tomorrow",
+       "week"
+      ],
+      "title": "Earnings Window",
+      "type": "string"
+     },
+     "gap": {
+      "default": false,
+      "title": "Gap",
+      "type": "boolean"
+     },
+     "max_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Price"
+     },
+     "min_dollar_vol": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Dollar Vol"
+     },
+     "min_gap": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Gap"
+     },
+     "min_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Price"
+     },
+     "name": {
+      "default": "AI scan",
+      "title": "Name",
+      "type": "string"
+     },
+     "score_all": {
+      "default": false,
+      "title": "Score All",
+      "type": "boolean"
+     },
+     "session": {
+      "default": "regular",
+      "enum": [
+       "regular",
+       "premarket",
+       "afterhours"
+      ],
+      "title": "Session",
+      "type": "string"
+     },
+     "ticker": {
+      "default": "",
+      "title": "Ticker",
+      "type": "string"
+     },
+     "top_n": {
+      "default": 25,
+      "enum": [
+       10,
+       25,
+       50,
+       100,
+       200
+      ],
+      "title": "Top N",
+      "type": "integer"
+     },
+     "universe": {
+      "default": "sp500",
+      "enum": [
+       "sp500",
+       "nasdaq",
+       "combo",
+       "us_market",
+       "watchlist",
+       "ticker",
+       "earnings"
+      ],
+      "title": "Universe",
+      "type": "string"
+     },
+     "unusual": {
+      "default": false,
+      "title": "Unusual",
+      "type": "boolean"
+     },
+     "watchlist_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Watchlist Id"
+     }
+    },
+    "title": "AIScanView",
     "type": "object"
    },
    "AISummaryBody": {
@@ -16162,6 +16385,68 @@
     "x-internal": true
    }
   },
+  "/v1/ai/ask": {
+   "post": {
+    "description": "Questions about your watchlists, the latest market scan, earnings, news headlines and\nHSF's track record, answered from HSF's data only. Send the conversation so far; the last\nmessage must be the user's question. Up to 8 prior turns are used.",
+    "operationId": "ai_ask_v1_ai_ask_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AIAskBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIChatAnswer"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Ask HSF (Premium)"
+   }
+  },
   "/v1/ai/brief-narrative": {
    "get": {
     "description": "A 2-3 sentence brief written from the Market Brief's facts only.",
@@ -16276,6 +16561,58 @@
     "summary": "Ask about a scan (Premium)"
    }
   },
+  "/v1/ai/journal-coach": {
+   "post": {
+    "description": "A short note on patterns in your closed trades (by HSF Score when taken, holding time,\nsource; win and loss sizes). text is null below min_trades. Cached per journal state.",
+    "operationId": "ai_journal_coach_v1_ai_journal_coach_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIJournalCoach"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "AI journal coach (Premium)"
+   }
+  },
   "/v1/ai/notes/{ticker}": {
    "post": {
     "description": "Claude's note on one result of the latest market scan; text is null when the ticker\nisn't in it.",
@@ -16340,6 +16677,68 @@
      }
     ],
     "summary": "AI setup note for a ticker (Premium)"
+   }
+  },
+  "/v1/ai/scan-builder": {
+   "post": {
+    "description": "Turns a plain-English request into Custom scan settings (the saved-view shape). Nothing\nruns; plan rules still apply when you start the scan.",
+    "operationId": "ai_scan_builder_v1_ai_scan_builder_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AIScanBuilderBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIScanBuilder"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Describe a scan in plain English (Premium)"
    }
   },
   "/v1/ai/summary": {
