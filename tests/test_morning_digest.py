@@ -338,3 +338,46 @@ class LatestSnapshotDfTests(unittest.TestCase):
         self.assertIsNotNone(df)
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["Ticker"], "AAA")
+
+
+class RedesignTests(unittest.TestCase):
+    def test_watchlist_cap_keeps_earnings_and_traded_names(self):
+        from scheduler import morning_digest as md
+
+        rows = [{"ticker": f"T{i}", "last": 10.0, "chg_pct": None, "prior_session_chg_pct": -10.0 - i,
+                 "session": "premarket"} for i in range(8)]
+        rows += [{"ticker": "NVDA", "last": 212.5, "chg_pct": 0.11, "prior_session_chg_pct": -4.3, "session": "premarket"},
+                 {"ticker": "AMT ⚠️E4d", "last": 181.4, "chg_pct": None, "prior_session_chg_pct": 2.1, "session": "premarket"}]
+        shown, more = md._cap(rows, 6)
+        names = [r["ticker"] for r in shown]
+        self.assertEqual(names[:2], ["AMT ⚠️E4d", "NVDA"])
+        self.assertEqual(more, 4)
+        html = md._preopen_table(rows, show_prior=True, limit=6)
+        self.assertIn("Earnings ", html)     # the ⚠️E4d flag renders as a tag
+        self.assertNotIn("⚠️E4d", html)
+        self.assertIn("+ 4 more", html)
+
+    def test_single_mover_has_no_best_worst_note(self):
+        from scheduler import morning_digest as md
+
+        self.assertEqual(md._watchlist_notes([{"ticker": "NVDA", "chg_pct": 0.1}, {"ticker": "X", "chg_pct": None}], {}), [])
+
+    def test_glance_summarizes(self):
+        from scheduler import morning_digest as md
+
+        g = md.digest_glance([{"ticker": "NVDA", "chg_pct": 0.11}], [{"ticker": "MRNA", "chg_pct": -4.16}],
+                             preopen=True, earnings_count=7, week_earnings={"AMT": 4, "GNRC": 5},
+                             top_setups=[("SOXS", 82.8)])
+        for frag in ("At a glance", "quiet before the open", "MRNA", "only big gapper", "7 companies",
+                     "AMT", "GNRC", "report this week", "SOXS"):
+            self.assertIn(frag, g)
+        self.assertEqual(md.digest_glance([], []), "")
+
+    def test_shell_wraps_plain_fragments_in_a_card(self):
+        from ui.email_kit import is_kit, shell
+
+        out = shell("<p>hello</p>", title_line="Welcome", footer_html="f")
+        self.assertIn("HSFinest.AI", out)
+        self.assertIn("Welcome", out)
+        self.assertTrue(is_kit(out))
+        self.assertNotIn("At a glance", out)
