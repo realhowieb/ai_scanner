@@ -142,27 +142,26 @@ def _fmt_pct(v: Any) -> Tuple[str, str]:
         f = float(v)
     except (TypeError, ValueError):
         return "—", "#888"
-    return ("%+.2f%%" % f).replace("-", "−"), ("#16a34a" if f >= 0 else "#dc2626")
+    return "%+.2f%%" % f, ("#16a34a" if f >= 0 else "#dc2626")
 
 
-def _table(rows: List[Dict[str, Any]], *, price_label: str, pct_label: str, watched: set) -> Tuple[str, List[str]]:
-    head = ("<tr><th align='left'>Ticker</th><th align='right'>HSF Score</th>"
-            f"<th align='right'>{price_label}</th><th align='right'>{pct_label}</th></tr>")
-    body, text = "", []
+def _table(rows: List[Dict[str, Any]], *, price_label: str, pct_label: str, watched: set,
+           zero_is_missing: bool = False) -> Tuple[str, List[str]]:
+    from ui import email_kit as k
+
+    body, text = [], []
     for r in rows:
-        t = _html.escape(r["ticker"])
-        star = " ⭐" if _key(r["ticker"]) in watched else ""
-        name = f"<b>{t}</b>{star}" if r.get("ranked") else f"{t}{star}"
+        mine = _key(r["ticker"]) in watched
         score = r.get("score")
-        score_html = (f"{score:g}" if isinstance(score, (int, float)) else "<span style='color:#888'>—</span>")
-        pct, color = _fmt_pct(r.get("chg_pct"))
-        body += (f"<tr><td>{name}</td><td align='right'>{score_html}</td>"
-                 f"<td align='right'>{_fmt_price(r.get('last'))}</td>"
-                 f"<td align='right' style='color:{color}'>{pct}</td></tr>")
-        text.append(f"  {r['ticker']}{' *' if star else ''}"
+        body.append([k.ticker(r["ticker"], extra=k.tag("Watchlist", "watch") if mine else ""),
+                     k.num(r.get("last")), k.pct(r.get("chg_pct"), zero_is_missing=zero_is_missing),
+                     k.score_badge(score)])
+        pct, _ = _fmt_pct(r.get("chg_pct"))
+        if zero_is_missing and r.get("chg_pct") == 0:
+            pct = "—"
+        text.append(f"  {r['ticker']}{' *' if mine else ''}"
                     f"  score {score if score is not None else '—'}  {_fmt_price(r.get('last'))}  {pct}")
-    return ("<table style='border-collapse:collapse;width:100%;font-size:13px' cellpadding='4'>"
-            + head + body + "</table>"), text
+    return k.table(["Ticker", price_label, pct_label, "HSF Score"], body), text
 
 
 def _groups(rows: List[Dict[str, Any]], order: List[Tuple[dt.date, Optional[str], str]]):
@@ -195,37 +194,46 @@ def compose_section(
     watched: Iterable[str] = (),
     watchlist_line: str = "",
     footnote: str = "",
+    sub_suffix: str = "",
+    zero_is_missing: bool = False,
 ) -> Tuple[str, str]:
-    """(html, text) for one earnings section, or ('', '') when nobody reports."""
+    """(html, text) for one earnings section as an email_kit card, or ('', '') when
+    nobody reports. zero_is_missing: a 0.00% move means no trade yet (pre-market)."""
+    from ui import email_kit as k
+
     watched_keys = {_key(t) for t in watched}
     groups = list(_groups(rows, order))
     if not any(g[1] for g in groups) and not watchlist_line:
         return "", ""
-    html = [f"<h3 style='margin:16px 0 6px'>📅 {title}</h3>"]
+    html: List[str] = []
     text = [f"{title}:"]
     shown = total = 0
     for label, group, n in groups:
         total += n
         if not group:
             continue
-        table, lines = _table(group, price_label=price_label, pct_label=pct_label, watched=watched_keys)
-        html.append(f"<p style='margin:10px 0 2px;font-weight:600'>{label}</p>{table}")
+        table, lines = _table(group, price_label=price_label, pct_label=pct_label, watched=watched_keys,
+                              zero_is_missing=zero_is_missing)
+        html.append(k.group(label) + table)
         text += [f" {label}:"] + lines
         shown += len(group)
     if shown:
         more = total - shown
         lead = f"+ {more} more · " if more > 0 else ""
-        html.append(f"<p style='color:#555;margin:6px 0 0'>{lead}"
-                    f"<a href='{_html.escape(link)}' style='color:#2563eb'>{link_label} →</a></p>")
+        if more > 0:
+            html.append(k.note(f"+ {more} more"))
+        html.append(k.button(link, f"{link_label} →"))
         text.append(f" {lead}{link_label}: {link}")
     if watchlist_line:
-        html.append(f"<p style='margin:12px 0 2px;font-weight:600'>📋 Your watchlist</p>"
-                    f"<p style='margin:2px 0'>{watchlist_line}</p>")
+        html.append(k.group("📋 Your watchlist") + f"<p style='margin:2px 0 0;font-size:14px'>{watchlist_line}</p>")
         text.append(f" Your watchlist: {_strip_tags(watchlist_line)}")
     if footnote:
-        html.append(f"<p style='color:#888;font-size:12px;margin:8px 0 0'>{footnote}</p>")
+        html.append(k.note(footnote))
     text.append("")
-    return "".join(html), "\n".join(text)
+    sub = ""
+    if total:
+        sub = f"{total} compan{'y' if total == 1 else 'ies'} report" + (f" · {sub_suffix}" if sub_suffix else "")
+    return k.card(f"📅 {_html.escape(title)}", "".join(html), sub=sub), "\n".join(text)
 
 
 def _strip_tags(s: str) -> str:

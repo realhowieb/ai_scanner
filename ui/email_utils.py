@@ -185,32 +185,32 @@ def _unsubscribe_parts(unsubscribe_url: str | None) -> tuple[str, str, dict]:
 
 
 def send_digest_email(to_address: str, subject: str, html_inner: str, text_inner: str,
-                      unsubscribe_url: str | None = None) -> bool:
+                      unsubscribe_url: str | None = None, *, title_line: str = "",
+                      glance_html: str = "") -> bool:
     """Send a branded rich-HTML digest (e.g. the pre-open morning digest).
 
-    `html_inner` is an HTML fragment (tables/headings) placed inside the branded
-    shell; `text_inner` is the plain-text fallback for non-HTML clients.
+    `html_inner` is an HTML fragment placed inside the branded shell (ui.email_kit):
+    a dark header with `title_line`, an optional "At a glance" band, then the body.
+    A fragment built from email_kit cards is placed as is; anything else is wrapped
+    in one white card. `text_inner` is the plain-text fallback for non-HTML clients.
     """
+    from ui.email_kit import FAINT, shell
+
     disclaimer = (
         "Informational and educational purposes only — not financial, investment, "
         "or trading advice. Trading involves risk of loss; do your own research."
     )
     unsub_text, unsub_html, headers = _unsubscribe_parts(unsubscribe_url)
+    footer = ("Know what matters in the market right now.<br>"
+              f"{disclaimer}"
+              + (f"<br>Don't want these emails? <a href='{unsubscribe_url}' style='color:{FAINT}'>Unsubscribe</a> "
+                 "or change your email settings in HSF Settings." if unsubscribe_url else ""))
     return _send_smtp(
         to_address=to_address,
         subject=f"HSFinest.AI — {subject}",
         body_text=(f"HSFinest.AI\n\n{text_inner}\n\n— Know what matters in the market right now.\n\n{disclaimer}"
                    f"{unsub_text}"),
-        body_html=(
-            "<div style='font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
-            "max-width:640px;margin:0 auto;color:#111'>"
-            "<p style='font-size:18px;margin:0 0 4px'><strong>⚡ HSFinest.AI</strong></p>"
-            f"{html_inner}"
-            "<p style='color:#888;margin-top:20px'>— Know what matters in the market right now.</p>"
-            f"<p style='color:#aaa;font-size:11px'>{disclaimer}</p>"
-            f"{unsub_html}"
-            "</div>"
-        ),
+        body_html=shell(html_inner, title_line=title_line, glance=glance_html, footer_html=footer),
         headers=headers,
     )
 
