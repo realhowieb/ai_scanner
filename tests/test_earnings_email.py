@@ -160,7 +160,7 @@ def test_evening_friday_points_at_monday_and_week():
             mock.patch.object(ee, "_fill_quotes"):
         earn = ew._earnings_calendar_rows(None)
     html, _ = ew._earnings_section(earn, [])
-    assert "Monday before the open (Mon)" in html and "Monday morning" in html
+    assert "Monday before the open<" in html and "(Mon)" not in html and "Monday morning" in html
     assert "when=week" in html
 
 
@@ -200,3 +200,17 @@ def test_preopen_zero_move_shows_dash():
     html, _ = ee.compose_section(rows, title="E", order=[(TODAY, "amc", "After")], price_label="Last",
                                  pct_label="Chg %", link="l", link_label="ll")
     assert "+0.00%" in html
+
+
+def test_friday_wrap_says_monday_and_small_moves_keep_two_decimals():
+    from scheduler import evening_wrap as ew
+
+    fri = dt.datetime(2026, 10, 23, 17, 0)
+    with mock.patch("scheduler.morning_digest.et_now", return_value=fri):
+        g = ew.wrap_glance([{"ticker": "BRZE", "chg_pct": -0.02}], top_setups=[("BRZE", 57)])
+        html, _ = ew._compose_wrap([], [], [], top_setups=[("BRZE", 57.0)])
+    assert "-0.02%" in g and "-0.0%" not in g
+    assert "Top setup for Monday" in g
+    assert "Monday's setups" in html and "Tomorrow's setups" not in html
+    with mock.patch("scheduler.morning_digest.et_now", return_value=dt.datetime(2026, 10, 22, 17, 0)):
+        assert "Top setup for tomorrow" in ew.wrap_glance([], top_setups=[("X", 1)])
