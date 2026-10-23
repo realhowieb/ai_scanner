@@ -6,6 +6,8 @@ import { DropdownMenu } from "radix-ui";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
+import { AlertsBadge, useUnreadAlerts } from "@/components/AlertsBadge";
+import { FeedbackDialog } from "@/components/FeedbackDialog";
 import { StockSearch } from "@/components/StockSearch";
 import { BillingBanner } from "@/components/BillingBanner";
 import { InstallHint } from "@/components/InstallHint";
@@ -98,7 +100,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [menu, setMenu] = useState(false);
   const closeMenu = useCallback(() => setMenu(false), []);
   useCloseOnNavigate(closeMenu, path);
-
+  const unread = useUnreadAlerts(path, !!me);
+  const [feedback, setFeedback] = useState(false);
 
   return (
     <div className="shell">
@@ -108,7 +111,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/today" className="brand">HSFinest<span>.AI</span></Link>
           <nav aria-label="Main" className="nav">
             {NAV.filter((n) => n.top).map((n) => (
-              <Link key={n.href} href={n.href} className={`navlink${n.mid ? " nav-mid" : ""}`} aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}</Link>
+              <Link key={n.href} href={n.href} className={`navlink${n.mid ? " nav-mid" : ""}`} aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}{n.href === "/alerts" && <AlertsBadge count={unread} />}</Link>
             ))}
             <MoreMenu items={[...NAV.filter((n) => n.mid), ...NAV.filter((n) => !n.top)]} path={path} id="more-desk" className="" />
           </nav>
@@ -125,6 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DropdownMenu.Item asChild><Link href="/account#invite-h" className="menu-item">Invite a friend</Link></DropdownMenu.Item>
                 <DropdownMenu.Item asChild><Link href="/paper" className="menu-item">Paper trading</Link></DropdownMenu.Item>
                 <DropdownMenu.Item asChild><Link href="/pricing" className="menu-item">Plans and pricing</Link></DropdownMenu.Item>
+                <DropdownMenu.Item className="menu-item" onSelect={() => setFeedback(true)}>Send feedback</DropdownMenu.Item>
                 {me?.is_admin && <DropdownMenu.Item asChild><Link href="/admin" className="menu-item">Admin</Link></DropdownMenu.Item>}
                 <DropdownMenu.Item className="menu-item" onSelect={() => void signOut()}>Sign out</DropdownMenu.Item>
               </DropdownMenu.Content>
@@ -134,16 +138,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <nav aria-label="Sections" className="tabbar">
         {NAV.filter((n) => n.tab).map((n) => (
-          <Link key={n.href} href={n.href} className="tab" aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}</Link>
+          <Link key={n.href} href={n.href} className="tab" aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}{n.href === "/alerts" && <AlertsBadge count={unread} />}</Link>
         ))}
         <MoreMenu items={NAV.filter((n) => !n.tab).map(({ href, label }) => ({ href, label }))} path={path} id="more-tab" className="tab-more" side="top" />
       </nav>
       <BillingBanner />
       <InstallHint />
       <WhatsNew />
+      <FeedbackDialog open={feedback} onClose={() => setFeedback(false)} />
       <main id="main" className="main"><PreviousPage.Provider value={trail.prev}>{children}</PreviousPage.Provider></main>
       <footer className="foot">
-        <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link></p>
+        <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link> · <button type="button" className="link-btn cap" onClick={() => setFeedback(true)}>Send feedback</button></p>
         <p className="cap">Data: scheduled HSF scans · Alpaca. Setup prices come from the latest scan; SPY, QQQ and the price strip are quotes refreshed every few minutes.</p>
       </footer>
     </div>

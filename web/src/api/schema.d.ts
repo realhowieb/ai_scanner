@@ -167,6 +167,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent feedback from the app */
+        get: operations["admin_feedback_v1_admin_feedback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/health": {
         parameters: {
             query?: never;
@@ -1254,6 +1271,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/alerts/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark fired alerts as seen */
+        post: operations["alerts_seen_v1_me_alerts_seen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/alerts/unread": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Alerts fired since you last opened Alerts
+         * @description The count behind the badge on the Alerts tab. With no visit on record, the last 7 days.
+         */
+        get: operations["alerts_unread_v1_me_alerts_unread_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/capabilities": {
         parameters: {
             query?: never;
@@ -1434,6 +1488,81 @@ export interface paths {
         get: operations["export_me_v1_me_export_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send feedback to the HSF team
+         * @description Stored, then sent to the admins' Telegram/Discord, or emailed when none is linked.
+         */
+        post: operations["feedback_v1_me_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/getting-started": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Getting started checklist
+         * @description Four first steps for a new account (save stocks, set an alert, choose where alerts go,
+         *     read how the score works), each ticked from what the account has already done.
+         */
+        get: operations["getting_started_v1_me_getting_started_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/getting-started/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close the Getting started card */
+        post: operations["getting_started_dismiss_v1_me_getting_started_dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/getting-started/guide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tick the 'how the HSF Score works' step */
+        post: operations["getting_started_guide_v1_me_getting_started_guide_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1842,6 +1971,27 @@ export interface paths {
          *     yesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min.
          */
         get: operations["premarket_gappers_v1_premarket_gappers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/stocks/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A stock's public snapshot for shared links (signed out)
+         * @description Name, price and day change; HSF Score, setup and the first reason only when the stock
+         *     is in the latest scan's ranked setups. The rest of the stock page needs an account.
+         */
+        get: operations["public_stock_v1_public_stocks__ticker__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4592,6 +4742,46 @@ export interface components {
             /** Weekly */
             weekly?: boolean | null;
         };
+        /** FeedbackBody */
+        FeedbackBody: {
+            /**
+             * Build
+             * @description The web build's commit
+             */
+            build?: string | null;
+            /**
+             * Kind
+             * @default other
+             * @enum {string}
+             */
+            kind: "problem" | "idea" | "praise" | "other";
+            /** Message */
+            message: string;
+            /**
+             * Path
+             * @description The page it was sent from, no query string
+             */
+            path?: string | null;
+        };
+        /** FeedbackItem */
+        FeedbackItem: {
+            /** Build */
+            build?: string | null;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+            /** Path */
+            path?: string | null;
+            /** Plan */
+            plan?: string | null;
+            /** User Id */
+            user_id: string;
+        };
         /** FilingEvent */
         FilingEvent: {
             /** Date */
@@ -4635,6 +4825,41 @@ export interface components {
              * @description Which button or page
              */
             surface?: string | null;
+        };
+        /** GettingStarted */
+        GettingStarted: {
+            /** Dismissed */
+            dismissed: boolean;
+            /** Done */
+            done: number;
+            /**
+             * Show
+             * @description False once every step is done or the card was closed
+             */
+            show: boolean;
+            /** Steps */
+            steps: components["schemas"]["GettingStartedStep"][];
+            /** Total */
+            total: number;
+        };
+        /** GettingStartedStep */
+        GettingStartedStep: {
+            /** Detail */
+            detail: string;
+            /** Done */
+            done: boolean;
+            /**
+             * Href
+             * @description Where the step is done in the web app
+             */
+            href: string;
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "watchlist" | "alert" | "delivery" | "guide";
+            /** Title */
+            title: string;
         };
         /** Health */
         Health: {
@@ -6425,6 +6650,38 @@ export interface components {
             /** Ok */
             ok: boolean;
         };
+        /** PublicStock */
+        PublicStock: {
+            /** Change Pct */
+            change_pct?: number | null;
+            /**
+             * Hidden Insights
+             * @description Other reasons, signals and risks shown after signing up
+             */
+            hidden_insights: number;
+            /** Hsf Score */
+            hsf_score?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Price */
+            price?: number | null;
+            /**
+             * Ranked
+             * @description In the latest scan's ranked setups (HSF Score 40 or more)
+             */
+            ranked: boolean;
+            /**
+             * Reason
+             * @description The first reason only; the rest needs an account
+             */
+            reason?: string | null;
+            /** Scan At */
+            scan_at?: string | null;
+            /** Setup */
+            setup?: string | null;
+            /** Ticker */
+            ticker: string;
+        };
         /** QueueCount */
         QueueCount: {
             /** Count */
@@ -7766,6 +8023,16 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** UnreadAlerts */
+        UnreadAlerts: {
+            /**
+             * Count
+             * @description Alerts fired since the Alerts page was last opened (at most 99)
+             */
+            count: number;
+            /** Seen At */
+            seen_at?: string | null;
+        };
         /** UnsubscribeBody */
         UnsubscribeBody: {
             /**
@@ -8761,6 +9028,49 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    admin_feedback_v1_admin_feedback_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackItem"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };
@@ -11872,6 +12182,78 @@ export interface operations {
             };
         };
     };
+    alerts_seen_v1_me_alerts_seen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadAlerts"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    alerts_unread_v1_me_alerts_unread_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadAlerts"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     my_capabilities_v1_me_capabilities_get: {
         parameters: {
             query?: never;
@@ -12369,6 +12751,161 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    feedback_v1_me_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Too many messages */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getting_started_v1_me_getting_started_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GettingStarted"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    getting_started_dismiss_v1_me_getting_started_dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GettingStarted"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    getting_started_guide_v1_me_getting_started_guide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GettingStarted"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };
@@ -13692,6 +14229,52 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
+            };
+        };
+    };
+    public_stock_v1_public_stocks__ticker__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ticker symbol, e.g. AAPL or BRK.B */
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicStock"];
+                };
+            };
+            /** @description Not a listed US stock */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

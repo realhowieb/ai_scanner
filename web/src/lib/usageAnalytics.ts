@@ -5,8 +5,8 @@ import { posthogHost } from "./posthogConfig";
 
 export const USAGE_PREFERENCE_EVENT = "hsf-usage-preference";
 const PREFERENCE = "hsf-usage-disabled";
-const EVENTS = new Set(["page_viewed", "scanner_viewed", "stock_viewed", "watchlist_created", "watchlist_stock_added", "watchlist_deleted", "watchlist_stock_removed", "alert_created", "alert_enabled_changed", "alert_deleted", "custom_scan_started", "journal_trade_logged", "journal_trade_closed", "checkout_started", "signup_completed"]);
-export type UsageEvent = "page_viewed" | "scanner_viewed" | "stock_viewed" | "watchlist_created" | "watchlist_stock_added" | "watchlist_deleted" | "watchlist_stock_removed" | "alert_created" | "alert_enabled_changed" | "alert_deleted" | "custom_scan_started" | "journal_trade_logged" | "journal_trade_closed" | "checkout_started" | "signup_completed";
+const EVENTS = new Set(["page_viewed", "scanner_viewed", "stock_viewed", "watchlist_created", "watchlist_stock_added", "watchlist_deleted", "watchlist_stock_removed", "alert_created", "alert_enabled_changed", "alert_deleted", "custom_scan_started", "journal_trade_logged", "journal_trade_closed", "checkout_started", "signup_completed", "getting_started_step_opened", "getting_started_dismissed", "feedback_sent", "stock_shared", "checkout_completed", "ask_hsf_asked"]);
+export type UsageEvent = "page_viewed" | "scanner_viewed" | "stock_viewed" | "watchlist_created" | "watchlist_stock_added" | "watchlist_deleted" | "watchlist_stock_removed" | "alert_created" | "alert_enabled_changed" | "alert_deleted" | "custom_scan_started" | "journal_trade_logged" | "journal_trade_closed" | "checkout_started" | "signup_completed" | "getting_started_step_opened" | "getting_started_dismissed" | "feedback_sent" | "stock_shared" | "checkout_completed" | "ask_hsf_asked";
 type UsageProperties = {
   route?: string;
   kind?: "price" | "technical" | "hsf" | "scan";
@@ -15,8 +15,11 @@ type UsageProperties = {
   interval?: "month" | "year";
   universe?: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker" | "earnings";
   session?: "regular" | "premarket" | "afterhours";
+  step?: "watchlist" | "alert" | "delivery" | "guide";
+  done?: number;
+  method?: "native" | "copy";
 };
-const ROUTES = new Set(["/", "/demo", "/methodology", "/pricing", "/signup", "/today", "/brief", "/scanner", "/scanner/custom", "/scanner/history", "/compare", "/watchlists", "/alerts", "/track-record", "/day-trader", "/journal", "/ask", "/paper-trading", "/account"]);
+const ROUTES = new Set(["/", "/demo", "/methodology", "/pricing", "/signup", "/today", "/brief", "/scanner", "/scanner/custom", "/scanner/history", "/compare", "/watchlists", "/alerts", "/track-record", "/day-trader", "/journal", "/ask", "/paper-trading", "/account", "/share/:ticker", "/how-hsf-works"]);
 let sdk: PostHog | null = null;
 let clientPromise: Promise<PostHog | null> | null = null;
 let identityGeneration = 0;
@@ -29,6 +32,7 @@ export function analyticsConfigured(): boolean {
 export function usageRoute(pathname: string): string | null {
   const path = pathname.split(/[?#]/, 1)[0]!;
   if (/^\/stocks\/[^/]+$/.test(path)) return "/stocks/:ticker";
+  if (/^\/share\/[^/]+$/.test(path)) return "/share/:ticker";
   return ROUTES.has(path) ? path : null;
 }
 
@@ -62,6 +66,12 @@ export function sanitizeUsage(event: CaptureResult | null): CaptureResult | null
   if (typeof universe === "string" && ["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"].includes(universe)) safe.universe = universe;
   const session = event.properties.session;
   if (typeof session === "string" && ["regular", "premarket", "afterhours"].includes(session)) safe.session = session;
+  const step = event.properties.step;
+  if (typeof step === "string" && ["watchlist", "alert", "delivery", "guide"].includes(step)) safe.step = step;
+  const done = event.properties.done;
+  if (typeof done === "number" && Number.isInteger(done) && done >= 0 && done <= 10) safe.done = done;
+  const method = event.properties.method;
+  if (method === "native" || method === "copy") safe.method = method;
   safe.$process_person_profile = false;
   return { uuid: event.uuid, event: event.event, properties: safe, ...(event.timestamp ? { timestamp: event.timestamp } : {}) };
 }

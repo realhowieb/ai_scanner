@@ -13,7 +13,7 @@ import { useApi } from "@/hooks/useApi";
 import { disablePush } from "@/lib/webPush";
 import { BILLING_STARTED, beginBilling, finishBilling, pendingBilling } from "@/lib/billingReturn";
 
-import { resetUsageIdentity } from "@/lib/usageAnalytics";
+import { captureUsage, resetUsageIdentity } from "@/lib/usageAnalytics";
 
 import { clearCachedMe, readCachedMe, subscribeCachedMe, writeCachedMe } from "./meCache";
 
@@ -102,6 +102,8 @@ export function SessionProvider({ children, initialMe = null }: { children: Reac
     if (state.data && pending && (pending.expected ? state.data.plan === pending.expected
       : pending.previous !== null && state.data.plan !== pending.previous)) {
       finishBilling();
+      const plan = state.data.plan;
+      if (plan === "pro" || plan === "premium") captureUsage("checkout_completed", { plan });
     }
   }, [state.data]);
   useEffect(() => {
