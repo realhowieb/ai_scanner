@@ -41,6 +41,11 @@ permissions:
 jobs:
   run-scans:
     runs-on: ubuntu-24.04
+    # Normal runs take 3-19 min (longest: pre-market 12:35 slot, or Alpaca
+    # timeouts re-requested in pieces). Without a cap a stuck run holds the
+    # scheduled-scans concurrency group for GitHub's 6 h default and the later
+    # slots queue behind it; 45 min frees the group well before the next slot.
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repo
