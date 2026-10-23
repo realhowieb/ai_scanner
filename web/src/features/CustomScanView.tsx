@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { ComponentProps, FormEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { TICKER_RE } from "@/components/AppShell";
@@ -14,6 +14,7 @@ import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
 
 import { SavedResearchViews } from "./SavedResearchViews";
+import { ScanBuilder } from "./ScanBuilder";
 import { SetupTable } from "./SetupTable";
 
 type Universe = ScanCreate["universe"];
@@ -208,6 +209,24 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A saved view, or the settings the AI scan builder wrote, fills the form (nothing runs).
+  const applyView: ComponentProps<typeof SavedResearchViews>["onApply"] = (v) => {
+    if (!("universe" in v)) return;
+    const allowed = UNIVERSES.find((u) => u.id === v.universe);
+    if ((allowed?.feature && !can(allowed.feature)) || (v.unusual && !can("can_unusual_volume")) || (v.gap && !can("can_scan_nasdaq")) || (v.session === "premarket" && !can("can_premarket")) || (v.session === "afterhours" && !can("can_afterhours"))) {
+      setFormErr("This saved view uses settings outside your current plan. Choose another view or upgrade."); return;
+    }
+    setUniverse(v.universe ?? "sp500"); setTicker(v.ticker ?? ""); setWatchlistId(v.watchlist_id ? String(v.watchlist_id) : "");
+    if (v.universe === "earnings" && earnLocked(v.earnings_window ?? "today")) {
+      setFormErr("This saved view uses settings outside your current plan. Choose another view or upgrade."); return;
+    }
+    setEarnWindow(v.earnings_window ?? "today");
+    setSession(v.session ?? "regular"); setTopN(v.top_n ?? 25); setMinPrice(v.min_price == null ? "" : String(v.min_price));
+    setMaxPrice(v.max_price == null ? "" : String(v.max_price)); setMinDollarVol(v.min_dollar_vol == null ? "" : String(v.min_dollar_vol));
+    setUnusual(v.unusual ?? false); setGap(v.gap ?? false); setMinGap(v.min_gap == null ? "" : String(v.min_gap)); setScoreAll(v.score_all ?? false);
+    setFormErr(null);
+  };
+
   const err = scan.error;
   const planErr = err?.status === 403;
 
@@ -224,22 +243,8 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
         current={{ name: "", universe, ticker, watchlist_id: watchlistId ? Number(watchlistId) : null, session, earnings_window: earnWindow,
           top_n: topN as 10 | 25 | 50 | 100 | 200, min_price: optNum(minPrice), max_price: optNum(maxPrice),
           min_dollar_vol: optNum(minDollarVol), unusual, gap, min_gap: optNum(minGap), score_all: scoreAll }}
-        onApply={(v) => {
-          if (!("universe" in v)) return;
-          const allowed = UNIVERSES.find((u) => u.id === v.universe);
-          if ((allowed?.feature && !can(allowed.feature)) || (v.unusual && !can("can_unusual_volume")) || (v.gap && !can("can_scan_nasdaq")) || (v.session === "premarket" && !can("can_premarket")) || (v.session === "afterhours" && !can("can_afterhours"))) {
-            setFormErr("This saved view uses settings outside your current plan. Choose another view or upgrade."); return;
-          }
-          setUniverse(v.universe ?? "sp500"); setTicker(v.ticker ?? ""); setWatchlistId(v.watchlist_id ? String(v.watchlist_id) : "");
-          if (v.universe === "earnings" && earnLocked(v.earnings_window ?? "today")) {
-            setFormErr("This saved view uses settings outside your current plan. Choose another view or upgrade."); return;
-          }
-          setEarnWindow(v.earnings_window ?? "today");
-          setSession(v.session ?? "regular"); setTopN(v.top_n ?? 25); setMinPrice(v.min_price == null ? "" : String(v.min_price));
-          setMaxPrice(v.max_price == null ? "" : String(v.max_price)); setMinDollarVol(v.min_dollar_vol == null ? "" : String(v.min_dollar_vol));
-          setUnusual(v.unusual ?? false); setGap(v.gap ?? false); setMinGap(v.min_gap == null ? "" : String(v.min_gap)); setScoreAll(v.score_all ?? false);
-          setFormErr(null);
-        }} />
+        onApply={applyView} />
+      <ScanBuilder disabled={active || scan.starting} onApply={applyView} />
       <div className="split custom-scan-layout">
         <form className="card col-side form" onSubmit={submit} aria-label="Scan settings">
           <fieldset disabled={active || scan.starting}>

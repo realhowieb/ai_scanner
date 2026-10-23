@@ -23,6 +23,7 @@ const NAV = [
   { href: "/watchlists", label: "Watchlists", top: true, tab: true },
   { href: "/alerts", label: "Alerts", top: true, tab: true },
   { href: "/track-record", label: "Track record", top: false, tab: false },
+  { href: "/ask", label: "Ask HSF", top: false, tab: false },
 ];
 
 const isActive = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
@@ -71,7 +72,7 @@ export const usePreviousPage = () => useContext(PreviousPage);
 const SECTIONS: [string, string][] = [
   ["/today", "Today"], ["/scanner/custom", "Custom scan"], ["/scanner/history", "Scan history"], ["/scanner", "Scanner"],
   ["/watchlists", "Watchlists"], ["/alerts", "Alerts"], ["/track-record", "Track record"], ["/brief", "Market Brief"],
-  ["/account", "Account"], ["/journal", "Journal"], ["/day-trader", "Day Trader"], ["/stocks", "Stock Intelligence"], ["/paper", "Paper trading"], ["/admin", "Admin"],
+  ["/account", "Account"], ["/ask", "Ask HSF"], ["/journal", "Journal"], ["/day-trader", "Day Trader"], ["/stocks", "Stock Intelligence"], ["/paper", "Paper trading"], ["/admin", "Admin"],
 ];
 
 /** "Back to Watchlists" for /watchlists?id=3; null when there is no previous page here. */

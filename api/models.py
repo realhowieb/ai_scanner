@@ -1131,6 +1131,34 @@ class AIChatAnswer(BaseModel):
     answer: Optional[str] = None
 
 
+class AIJournalCoach(BaseModel):
+    closed: int = Field(description="Closed trades in the journal")
+    min_trades: int = Field(description="Closed trades needed before coaching")
+    text: Optional[str] = Field(default=None, description="Markdown bullets; null below min_trades")
+
+
+class AIScanView(BaseModel):
+    name: str = "AI scan"
+    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"] = "sp500"
+    ticker: str = ""
+    watchlist_id: Optional[int] = None
+    earnings_window: Literal["today", "tomorrow", "week"] = "today"
+    session: Literal["regular", "premarket", "afterhours"] = "regular"
+    top_n: Literal[10, 25, 50, 100, 200] = 25
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    min_dollar_vol: Optional[float] = None
+    unusual: bool = False
+    gap: bool = False
+    min_gap: Optional[float] = None
+    score_all: bool = False
+
+
+class AIScanBuilder(BaseModel):
+    view: AIScanView = Field(description="Custom scan settings in the saved-view shape (nothing runs)")
+    explanation: Optional[str] = None
+
+
 class JournalTrade(BaseModel):
     id: int
     ticker: str

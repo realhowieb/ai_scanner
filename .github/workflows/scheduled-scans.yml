@@ -107,6 +107,8 @@ jobs:
           # Earnings calendar sources (FMP primary, Finnhub fallback).
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          # Premium AI rundown in the morning digest (skipped when unset)
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # Pre-open morning digest (Pro+). Off unless set to "1".
           # Sent once/day on the first scan run; a forced manual run re-sends.
           # P2-55: on/off flags are repository Variables, not Secrets. A secret

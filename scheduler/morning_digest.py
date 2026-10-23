@@ -1,9 +1,10 @@
-"""Pre-open morning digest email (Pro+, structured, no AI dependency).
+"""Pre-open morning digest email (Pro+, structured; Premium adds an optional AI rundown).
 
 For each verified Pro+ user with a watchlist, assemble and send a compact
 pre-open email: their watchlist's overnight move, the day's top market gappers,
 any of their names reporting earnings today, and one PreBreakout pick from the
-latest snapshot. Deterministic (no Claude call) so it can't fail on an AI quota.
+latest snapshot. The sections are deterministic; Premium's AI rundown is optional and
+skipped on any AI failure or quota, so the email never depends on Claude.
 
 Runs headless from the reliable cron (scheduler.cron_runner), throttled to once
 per day. Best-effort throughout — it never raises into the caller.
@@ -560,6 +561,7 @@ def _compose(
     premarket: Optional[List[Dict[str, Any]]] = None,
     preopen_gappers: bool = False,
     earnings_section: Optional[tuple] = None,
+    ai_rundown: Optional[str] = None,
 ) -> tuple[str, str]:
     """Return (html_inner, text_inner) for one user's digest: email_kit cards
     (the shell adds the header and the At a glance band)."""
@@ -587,6 +589,14 @@ def _compose(
         text += ["Your watchlist:", _movers_text(watch_rows), ""]
     if notes:
         text += [f"Notes: {' · '.join(notes)}", ""]
+
+    if ai_rundown:   # Premium: Claude's rundown of the default watchlist (api.ai.watchlist_note)
+        html.append(k.card("🤖 AI rundown", "<p style='margin:0;line-height:1.5'>"
+                           + k.esc(ai_rundown).replace("\n", "<br>") + "</p>"
+                           + k.note("Written by Claude from HSF's scan data only. AI can be wrong; "
+                                    "research only, not investment advice."),
+                           sub="What changed on your watchlist since the previous scan"))
+        text += ["AI rundown (Premium):", ai_rundown, ""]
 
     if preopen_gappers:
         body = (_preopen_table(gappers, show_prior=False) if gappers else
@@ -779,6 +789,19 @@ def _email_tier_key(email: str, record: Optional[Dict[str, Any]], users: Dict[st
     return key
 
 
+def _premium_rundown(email: str, tier_key: str, has_min_tier) -> Optional[str]:
+    """Premium (and admin): the default watchlist's AI rundown (api.ai_premium.digest_rundown),
+    or None. The digest never waits on or fails because of it."""
+    try:
+        if not has_min_tier(tier_key, "premium"):
+            return None
+        from api.ai_premium import digest_rundown
+
+        return digest_rundown(email)
+    except Exception:
+        return None
+
+
 def run_morning_digest(force: bool = False) -> None:
     """Assemble and email the pre-open digest to eligible Pro+ users."""
     try:
@@ -898,10 +921,11 @@ def run_morning_digest(force: bool = False) -> None:
                 user_picks = picks if has_min_tier(tier_key, "premium") else []
             except Exception:
                 user_picks = []
+            ai_rundown = _premium_rundown(email, tier_key, has_min_tier)
             html_inner, text_inner = _compose(
                 email, watch_rows, gappers, earnings_hits, user_picks, notes=notes,
                 golden=golden, top_setups=top_setups, premarket=premarket,
-                preopen_gappers=preopen_gappers, earnings_section=section,
+                preopen_gappers=preopen_gappers, earnings_section=section, ai_rundown=ai_rundown,
             )
             # Count only sends the mail service accepted.
             glance = digest_glance(

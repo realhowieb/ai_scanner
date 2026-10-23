@@ -25,6 +25,15 @@ class AIChatBody(AISummaryBody):
                                      description="The conversation so far, oldest first, ending with the new question")
 
 
+class AIAskBody(BaseModel):
+    messages: List[ChatTurn] = Field(min_length=1, max_length=16,
+                                     description="The conversation so far, oldest first, ending with the new question")
+
+
+class AIScanBuilderBody(BaseModel):
+    text: str = Field(min_length=3, max_length=500, description="The scan you want, in plain English")
+
+
 def register(app: FastAPI) -> None:
     from api import ai
 
@@ -85,3 +94,35 @@ def register(app: FastAPI) -> None:
         """A 2-3 sentence brief written from the Market Brief's facts only."""
         user = _premium(account)
         return json_safe(ai.brief_narrative(user))
+
+    @app.post("/v1/ai/ask", response_model=models.AIChatAnswer, responses=_AI, summary="Ask HSF (Premium)")
+    def ai_ask(body: AIAskBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Questions about your watchlists, the latest market scan, earnings, news headlines and
+        HSF's track record, answered from HSF's data only. Send the conversation so far; the last
+        message must be the user's question. Up to 8 prior turns are used."""
+        from api import ai_premium
+
+        user = _premium(account)
+        if body.messages[-1].role != "user":
+            raise HTTPException(422, "The last message must be the user's question.")
+        return ai_premium.ask(user, entitlements_for(account)["entitlements"], [m.model_dump() for m in body.messages])
+
+    @app.post("/v1/ai/journal-coach", response_model=models.AIJournalCoach, responses=_AI,
+              summary="AI journal coach (Premium)")
+    def ai_journal_coach(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """A short note on patterns in your closed trades (by HSF Score when taken, holding time,
+        source; win and loss sizes). text is null below min_trades. Cached per journal state."""
+        from api import ai_premium
+
+        user = _premium(account)
+        return json_safe(ai_premium.journal_coach(user))
+
+    @app.post("/v1/ai/scan-builder", response_model=models.AIScanBuilder, responses=_AI,
+              summary="Describe a scan in plain English (Premium)")
+    def ai_scan_builder(body: AIScanBuilderBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Turns a plain-English request into Custom scan settings (the saved-view shape). Nothing
+        runs; plan rules still apply when you start the scan."""
+        from api import ai_premium
+
+        user = _premium(account)
+        return ai_premium.scan_builder(user, body.text)

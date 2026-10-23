@@ -16,6 +16,7 @@ import { etTime, pct, price } from "@/lib/format";
 import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
 
+import { JournalCoach } from "./JournalCoach";
 import { JournalInsightsCard } from "./JournalInsights";
 
 type Trade = Schemas["JournalTrade"];
@@ -132,6 +133,7 @@ export function JournalView() {
           </Card>
         )}
       <JournalInsightsCard pro={pro} version={j.updatedAt ?? 0} />
+      <JournalCoach />
       {(page > 0 || j.data?.has_more) && <nav className="pager" aria-label="Journal pages">
         <button type="button" className="btn" disabled={page === 0 || j.loading || j.refreshing} onClick={() => setPage((p) => p - 1)}>Previous page</button>
         <span className="cap">Page {page + 1}</span>
