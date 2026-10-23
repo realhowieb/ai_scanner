@@ -84,6 +84,11 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
 .install-hint p { margin: 0; flex: 1 1 auto; }
 .install-hint .btn { flex: 0 0 auto; min-height: 36px; }
+.billing-banner { border-color: #8a5a12; background: #2a1f0c; }
+.whats-new { align-items: flex-start; }
+.whats-new > div { flex: 1 1 auto; }
+.whats-new ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+.whats-new li { margin: 2px 0; }
 .share-glyph { display: inline-flex; vertical-align: -2px; color: var(--accent); }
 @media (max-width: 900px) { .install-hint { margin: 12px 16px 0; } }
 .navlink { color: var(--muted); font-size: 14px; font-weight: 500; padding: 10px 12px; border-radius: 8px; white-space: nowrap; }

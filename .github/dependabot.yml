@@ -1,16 +1,20 @@
 version: 2
+# PRs go to dev; small ones merge themselves when green (.github/workflows/dependabot-automerge.yml).
 updates:
   - package-ecosystem: pip
     directory: "/"
+    target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
   - package-ecosystem: github-actions
     directory: "/"
+    target-branch: dev
     schedule:
       interval: weekly
   - package-ecosystem: npm
     directory: "/web"
+    target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

@@ -3429,6 +3429,32 @@
     "title": "Bar",
     "type": "object"
    },
+   "BillingAttention": {
+    "properties": {
+     "grace_ends_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Paid access ends then unless the card is updated (ISO)",
+      "title": "Grace Ends At"
+     },
+     "state": {
+      "const": "past_due",
+      "title": "State",
+      "type": "string"
+     }
+    },
+    "required": [
+     "state"
+    ],
+    "title": "BillingAttention",
+    "type": "object"
+   },
    "BillingFailure": {
     "properties": {
      "at": {
@@ -5465,12 +5491,24 @@
       "description": "Evening market wrap",
       "title": "Evening",
       "type": "boolean"
+     },
+     "tips": {
+      "description": "First-week tips and the come-back email",
+      "title": "Tips",
+      "type": "boolean"
+     },
+     "weekly": {
+      "description": "Saturday weekly recap",
+      "title": "Weekly",
+      "type": "boolean"
      }
     },
     "required": [
      "digest",
      "evening",
-     "alerts"
+     "alerts",
+     "weekly",
+     "tips"
     ],
     "title": "EmailPrefs",
     "type": "object"
@@ -5509,6 +5547,28 @@
        }
       ],
       "title": "Evening"
+     },
+     "tips": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tips"
+     },
+     "weekly": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Weekly"
      }
     },
     "title": "EmailPrefsUpdate",
@@ -6658,6 +6718,17 @@
      "alert_limit": {
       "title": "Alert Limit",
       "type": "integer"
+     },
+     "billing_attention": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BillingAttention"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Set while the last charge for a paid plan failed (the app shows an 'update your card' banner)"
      },
      "email": {
       "title": "Email",
@@ -10229,6 +10300,18 @@
    },
    "Ready": {
     "properties": {
+     "build": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Git commit this API was deployed from (Render's RENDER_GIT_COMMIT, first 12 characters); the post-promote live check waits for it to match",
+      "title": "Build"
+     },
      "container_mb": {
       "anyOf": [
        {
@@ -13352,6 +13435,8 @@
        "digest",
        "evening",
        "alerts",
+       "weekly",
+       "tips",
        "all"
       ],
       "title": "Kind",

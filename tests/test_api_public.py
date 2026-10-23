@@ -55,13 +55,14 @@ class PublicApiTests(AccountApiTestCase):
         with mock.patch("db.email_prefs.user_for_token", side_effect=lambda t: "pro@example.com" if t == "linktoken1234" else None):
             r = self.client.get("/v1/email-preferences/unsubscribe", params={"t": "linktoken1234"})
             self.assertEqual(r.status_code, 200, r.text)
-            self.assertEqual(r.json()["prefs"], {"digest": True, "evening": True, "alerts": True})
+            self.assertEqual(r.json()["prefs"],
+                             {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True})
             self.assertNotIn("pro@example.com", r.text)
             self.assertEqual(self.prefs, {})
             r = self.client.post("/v1/email-preferences/unsubscribe", json={"token": "linktoken1234", "kind": "alerts"})
-            self.assertEqual(r.json()["prefs"], {"digest": True, "evening": True, "alerts": False})
+            self.assertEqual(r.json()["prefs"], {"digest": True, "evening": True, "alerts": False, "weekly": True, "tips": True})
             r = self.client.post("/v1/email-preferences/unsubscribe", json={"token": "linktoken1234", "kind": "all"})
-            self.assertEqual(r.json()["prefs"], {"digest": False, "evening": False, "alerts": False})
+            self.assertEqual(r.json()["prefs"], {"digest": False, "evening": False, "alerts": False, "weekly": False, "tips": False})
             bad = self.client.get("/v1/email-preferences/unsubscribe", params={"t": "wrongtoken99"})
             self.assertEqual(bad.status_code, 400)
             self.assertIn("isn't valid", bad.json()["detail"])

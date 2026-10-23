@@ -305,3 +305,37 @@ def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
     if not url:
         raise BillingUnavailable("no portal_url")
     return {"url": url, "mode": "portal"}
+
+
+def billing_attention(username: str, tier: str) -> Optional[Dict[str, Any]]:
+    """{"state": "past_due", "grace_ends_at": ...} while a paid plan's last charge failed,
+    for the web app's banner; None otherwise. Only paid accounts are looked up, and a
+    failed lookup is None (the banner is a nudge, never a gate)."""
+    if str(tier or "").lower() not in ("pro", "premium"):
+        return None
+    try:
+        import json as _json
+
+        from api.store import _conn
+
+        conn = _conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT snapshot FROM hsf_billing_state WHERE username = %s",
+                            (str(username).strip().lower(),))
+                row = cur.fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return None
+    if not row:
+        return None
+    snap = list(row.values())[0] if isinstance(row, dict) else row[0]
+    if isinstance(snap, str):
+        try:
+            snap = _json.loads(snap)
+        except ValueError:
+            return None
+    if not isinstance(snap, dict) or snap.get("status") != "past_due" or not snap.get("past_due_since"):
+        return None
+    return {"state": "past_due", "grace_ends_at": snap.get("grace_ends_at")}

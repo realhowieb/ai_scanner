@@ -86,6 +86,9 @@ class Ready(BaseModel):
     key_value: Optional["KeyValueStatus"] = Field(default=None, description=(
         "Render Key Value (shared rate limits and lookups). Informational: without it each "
         "instance counts in memory"))
+    build: Optional[str] = Field(default=None, description=(
+        "Git commit this API was deployed from (Render's RENDER_GIT_COMMIT, first 12 characters); "
+        "the post-promote live check waits for it to match"))
 
 
 class TokenPair(BaseModel):
@@ -93,6 +96,11 @@ class TokenPair(BaseModel):
     token_type: Literal["bearer"] = "bearer"
     expires_in: int = Field(description="Access token lifetime in seconds")
     refresh_token: str = Field(description="Single use; POST /v1/auth/refresh returns a new one")
+
+
+class BillingAttention(BaseModel):
+    state: Literal["past_due"]
+    grace_ends_at: Optional[str] = Field(default=None, description="Paid access ends then unless the card is updated (ISO)")
 
 
 class Me(BaseModel):
@@ -105,6 +113,8 @@ class Me(BaseModel):
     email_verified: bool = Field(default=True, description="False until the emailed link is used; needed to upgrade and for email alerts")
     entitlements: Dict[str, bool] = Field(description="Feature flags, e.g. can_day_trader, can_ai_notes")
     pro_trial_until: Optional[str] = Field(default=None, description="Set while a free Pro month from an invite is running")
+    billing_attention: Optional[BillingAttention] = Field(default=None, description=(
+        "Set while the last charge for a paid plan failed (the app shows an 'update your card' banner)"))
 
 
 class Referrals(BaseModel):
@@ -734,6 +744,8 @@ class EmailPrefs(BaseModel):
     digest: bool = Field(description="Morning market digest")
     evening: bool = Field(description="Evening market wrap")
     alerts: bool = Field(description="Alert emails")
+    weekly: bool = Field(description="Saturday weekly recap")
+    tips: bool = Field(description="First-week tips and the come-back email")
 
 
 class BillingLink(BaseModel):

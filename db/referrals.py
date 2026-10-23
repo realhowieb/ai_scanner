@@ -339,3 +339,22 @@ def grants_ending(within: dt.timedelta) -> list:
         vals = tuple(row.values()) if isinstance(row, dict) else tuple(row)
         out.append((str(vals[0]), str(vals[1])))
     return out
+
+
+def grants_ended(within: dt.timedelta) -> list:
+    """[(user_id, until_at text)] for free Pro that ended in the last `within`."""
+    now = _now()
+    conn, sq = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(_sql("SELECT user_id, until_at FROM hsf_plan_grants WHERE tier = 'pro' "
+                         "AND until_at <= %s AND until_at > %s ORDER BY until_at", sq),
+                    (_iso(now), _iso(now - within)))
+        rows = cur.fetchall() or []
+    finally:
+        _close(conn, sq)
+    out = []
+    for row in rows:
+        vals = tuple(row.values()) if isinstance(row, dict) else tuple(row)
+        out.append((str(vals[0]), str(vals[1])))
+    return out

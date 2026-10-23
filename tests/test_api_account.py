@@ -42,7 +42,7 @@ class AccountApiTestCase(ApiTestCase):
             ("db.password_reset.consume_reset_token", lambda t: self.reset_tokens.pop(t, None)),
             ("ui.auth_sessions.revoke_user_sessions", lambda u: self.web_signouts.append(u) or 1),
             ("api.store.revoke_all_refresh_tokens", self._revoke_all),
-            ("db.email_prefs.get_prefs", lambda u: {"digest": True, "evening": True, "alerts": True, **self.prefs}),
+            ("db.email_prefs.get_prefs", lambda u: {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True, **self.prefs}),
             ("db.email_prefs.set_prefs", lambda u, **ch: self.prefs.update(ch) or True),
         ):
             p(target, side_effect=fn).start()
@@ -249,9 +249,9 @@ class PrefsAndBillingTests(AccountApiTestCase):
 
     def test_email_preferences(self):
         self.assertEqual(self.client.get("/v1/me/email-preferences", headers=self.h).json(),
-                         {"digest": True, "evening": True, "alerts": True})
+                         {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True})
         r = self.client.patch("/v1/me/email-preferences", headers=self.h, json={"evening": False})
-        self.assertEqual(r.json(), {"digest": True, "evening": False, "alerts": True})
+        self.assertEqual(r.json(), {"digest": True, "evening": False, "alerts": True, "weekly": True, "tips": True})
 
     def test_checkout_needs_a_verified_email(self):
         r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
