@@ -18,7 +18,8 @@ from contextlib import contextmanager
 from typing import Any
 
 _HOSTS = {"https://us.i.posthog.com", "https://eu.i.posthog.com"}
-_FEATURES = {"scan_summary", "ticker_deepdive", "results_chat", "market_brief_narrative", "watchlist_note", "nl_screener"}
+_FEATURES = {"scan_summary", "ticker_deepdive", "results_chat", "market_brief_narrative", "watchlist_note", "nl_screener",
+             "ask_hsf", "journal_coach", "scan_builder", "alert_why"}
 _queue: queue.Queue = queue.Queue(maxsize=64)
 _lock = threading.Lock()
 _worker: threading.Thread | None = None

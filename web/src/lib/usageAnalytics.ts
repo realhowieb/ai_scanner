@@ -16,7 +16,7 @@ type UsageProperties = {
   universe?: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker" | "earnings";
   session?: "regular" | "premarket" | "afterhours";
 };
-const ROUTES = new Set(["/", "/demo", "/methodology", "/pricing", "/signup", "/today", "/brief", "/scanner", "/scanner/custom", "/scanner/history", "/compare", "/watchlists", "/alerts", "/track-record", "/day-trader", "/journal", "/paper-trading", "/account"]);
+const ROUTES = new Set(["/", "/demo", "/methodology", "/pricing", "/signup", "/today", "/brief", "/scanner", "/scanner/custom", "/scanner/history", "/compare", "/watchlists", "/alerts", "/track-record", "/day-trader", "/journal", "/ask", "/paper-trading", "/account"]);
 let sdk: PostHog | null = null;
 let clientPromise: Promise<PostHog | null> | null = null;
 let identityGeneration = 0;
