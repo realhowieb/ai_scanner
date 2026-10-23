@@ -171,6 +171,13 @@ export function AlertsView() {
   const [created, setCreated] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
   const reload = () => { list.reload(); rules.reload(); events.reload(); };
+  // Links from the Getting started card: /alerts?new=1 opens New alert, /alerts#delivery the Delivery tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- applies the link's target once on arrival
+    if (window.location.hash === "#delivery") setView("delivery");
+    if (new URLSearchParams(window.location.search).get("new") === "1") setNewOpen(true);
+  }, []);
   const data = list.data;
   const full = !!data && data.used >= data.limit;
   const smart = rules.data?.rules ?? [];

@@ -16,6 +16,7 @@ import { TURNSTILE_SITE_KEY, Turnstile } from "@/components/Turnstile";
 import { messageFrom, newRequestId } from "@/api/client";
 import { WAKING_UP, useSlow } from "@/components/ui";
 import { captureAttribution, track } from "@/lib/funnel";
+import { safeNext } from "@/lib/nextPath";
 
 type Outcome = { ok: boolean; status: number; body: Record<string, unknown> | null; requestId: string | null };
 
@@ -48,6 +49,15 @@ export function AuthShell({ title, children }: { title: string; children: ReactN
 
 const noSubscribe = () => () => {};
 
+/** A shared stock link sends people to that stock after sign-up (?next=/stocks/X). */
+function nextAfterSignup(): string {
+  try {
+    return safeNext(new URLSearchParams(window.location.search).get("next"));
+  } catch {
+    return "/today";
+  }
+}
+
 export function SignupForm() {
   const fieldId = useId();
   const [showPasswords, setShowPasswords] = useState(false);
@@ -75,8 +85,7 @@ export function SignupForm() {
     if (o.ok) {
       captureUsage("signup_completed");
       // A full page load: the new session's cookies are already set.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.assign("/today");
+      window.location.assign(nextAfterSignup());
       return;
     }
     setError(errorOf(o));

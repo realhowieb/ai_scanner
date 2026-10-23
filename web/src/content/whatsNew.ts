@@ -8,6 +8,15 @@ export type WhatsNewEntry = { id: string; title: string; items: string[] };
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    id: "2026-10-23c",
+    title: "What's new",
+    items: [
+      "A red count on Alerts shows how many alerts fired since you last looked.",
+      "Share a stock: the new Share button on any stock page makes a link with a preview card.",
+      "Send feedback from the account menu or the page footer. It comes straight to us.",
+    ],
+  },
+  {
     id: "2026-10-23b",
     title: "New for Premium: AI tools",
     items: [

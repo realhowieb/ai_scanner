@@ -23,6 +23,7 @@ import { PriceAlertButton } from "./PriceAlert";
 import { PriceChart, type ChartEvent } from "./PriceChart";
 import { ScoreHistory } from "./ScoreHistory";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
+import { ShareStockButton } from "./ShareStock";
 import { SmartAlerts } from "./SmartAlerts";
 import { StockFilings, StockNews } from "./StockNews";
 
@@ -310,6 +311,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             label={s.watchlists.length ? `Watch ${s.ticker} elsewhere` : `Watch ${s.ticker}`} />
           <PriceAlertButton ticker={s.ticker} at={s.price} label={s.price != null ? `Alert near ${price(s.price)}` : "Set price alert"}
             note={s.price != null ? `Last scan price ${price(s.price)}${s.scan_at ? ` at ${etTime(s.scan_at)}` : ""}, not a live quote.` : undefined} onCreated={onChanged} />
+          <ShareStockButton ticker={s.ticker} />
         </div>
       </section>
 

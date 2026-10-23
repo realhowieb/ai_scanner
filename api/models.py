@@ -1890,3 +1890,49 @@ class AdminMlReadiness(BaseModel):
     gates: List[AdminMlGate]
     blocking_reasons: List[str]
     estimate_trading_days: Optional[int] = None
+
+
+# ---- getting started, unread alerts, feedback, shared stock links (api.web_state, api.share) ----
+class GettingStartedStep(BaseModel):
+    id: Literal["watchlist", "alert", "delivery", "guide"]
+    title: str
+    detail: str
+    href: str = Field(description="Where the step is done in the web app")
+    done: bool
+
+
+class GettingStarted(BaseModel):
+    show: bool = Field(description="False once every step is done or the card was closed")
+    dismissed: bool
+    done: int
+    total: int
+    steps: List[GettingStartedStep]
+
+
+class UnreadAlerts(BaseModel):
+    count: int = Field(description="Alerts fired since the Alerts page was last opened (at most 99)")
+    seen_at: Optional[str] = None
+
+
+class FeedbackItem(BaseModel):
+    id: int
+    user_id: str
+    kind: str
+    message: str
+    path: Optional[str] = None
+    plan: Optional[str] = None
+    build: Optional[str] = None
+    created_at: str
+
+
+class PublicStock(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    price: Optional[float] = None
+    change_pct: Optional[float] = None
+    scan_at: Optional[str] = None
+    ranked: bool = Field(description="In the latest scan's ranked setups (HSF Score 40 or more)")
+    hsf_score: Optional[int] = None
+    setup: Optional[str] = None
+    reason: Optional[str] = Field(default=None, description="The first reason only; the rest needs an account")
+    hidden_insights: int = Field(description="Other reasons, signals and risks shown after signing up")
