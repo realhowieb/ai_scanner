@@ -310,6 +310,47 @@ def _earnings_today() -> set:
         return set()
 
 
+def _earnings_calendar_rows(df, *, preopen: bool) -> tuple:
+    """(today, week calendar, today's reporters scored) shared by every recipient.
+    Every reporter today is scored once (screens off, like the Earnings tab's
+    "Score all"); names in the latest market scan are marked ranked."""
+    from datetime import timedelta
+
+    from scheduler import earnings_email as ee
+
+    today = et_now().date()
+    week = ee.reporters(today, today + timedelta(days=7))
+    ranked: List[str] = []
+    try:
+        col = _symbol_column(df) if df is not None else None
+        if col:
+            ranked = [str(t) for t in df[col].tolist()]
+    except Exception:
+        ranked = []
+    rows = ee.build_rows([r for r in week if r["date"] == today], premarket=preopen, ranked=ranked)
+    return today, week, rows
+
+
+def _earnings_section(rows, week, today, tickers, *, preopen: bool) -> tuple:
+    """(html, text) "Earnings today" section for one recipient; ('', '') on any error."""
+    try:
+        from scheduler import earnings_email as ee
+
+        return ee.compose_section(
+            rows, title="Earnings today",
+            order=[(today, "bmo", "☀️ Reported before the open"),
+                   (today, "amc", "🌙 Reports after the close"),
+                   (today, None, "🕒 Time not announced")],
+            price_label="Last", pct_label="Pre-mkt %" if preopen else "Chg %",
+            link=ee.scanner_link("today"), link_label="See them all in the Earnings scanner",
+            watched=tickers, watchlist_line=ee.watchlist_line(tickers, week, today),
+            footnote="⭐ on your watchlist. Bold names ranked in the latest market scan. "
+                     "Results can move a stock sharply both ways. Educational only, not financial advice.",
+        )
+    except Exception:
+        return "", ""
+
+
 def _premarket_movers(now=None, limit: int = 5) -> List[Dict[str, Any]]:
     """P2-74: biggest pre-market moves from this morning's premarket scan
     ({ticker, pct, last, score}), the same list as Today's Before the open card.
@@ -523,6 +564,7 @@ def _compose(
     top_setups: Optional[List[tuple]] = None,
     premarket: Optional[List[Dict[str, Any]]] = None,
     preopen_gappers: bool = False,
+    earnings_section: Optional[tuple] = None,
 ) -> tuple[str, str]:
     """Return (html_inner, text_inner) for one user's digest."""
     date_s = et_now().strftime("%A, %b %d")
@@ -570,7 +612,10 @@ def _compose(
         html.append(pm_html)
         text.append(pm_text)
 
-    if earnings_hits:
+    if earnings_section and earnings_section[0]:
+        html.append(earnings_section[0])
+        text.append(earnings_section[1])
+    elif earnings_hits:
         names = ", ".join(sorted(earnings_hits))
         html.append(
             "<h3 style='margin:16px 0 6px'>📅 Earnings today (your watchlist)</h3>"
@@ -726,6 +771,11 @@ def run_morning_digest(force: bool = False) -> None:
     picks = _prebreakout_picks(df) if df is not None else []
     golden, top_setups = _todays_setups(df) if df is not None else ([], [])
     earnings_today = _earnings_today()
+    try:
+        earn_today, earn_week, earn_rows = _earnings_calendar_rows(df, preopen=preopen_gappers)
+    except Exception as e:
+        print(f"[morning_digest] earnings section unavailable: {type(e).__name__}")
+        earn_today, earn_week, earn_rows = et_now().date(), [], []
 
     # Earnings safety rail (shared across all users): flag gappers and the picks
     # when they report within days, so nobody trades the digest blind to it.
@@ -795,7 +845,9 @@ def run_morning_digest(force: bool = False) -> None:
             week_earnings = _earnings_days_map(tickers, flag_days=7)
             _flag_earnings_rows(watch_rows, {k: v for k, v in week_earnings.items() if v <= 5})
             earnings_hits = [t for t in tickers if t in earnings_today]
-            notes = _watchlist_notes(watch_rows, week_earnings)
+            section = _earnings_section(earn_rows, earn_week, earn_today, tickers, preopen=preopen_gappers)
+            # the section's watchlist line names this week's reporters; keep notes to the recap then
+            notes = _watchlist_notes(watch_rows, {} if section[0] and earn_week else week_earnings)
 
             # Run 85D: PreBreakout candidates are a Premium feature (Pro gets the rest).
             try:
@@ -805,7 +857,7 @@ def run_morning_digest(force: bool = False) -> None:
             html_inner, text_inner = _compose(
                 email, watch_rows, gappers, earnings_hits, user_picks, notes=notes,
                 golden=golden, top_setups=top_setups, premarket=premarket,
-                preopen_gappers=preopen_gappers,
+                preopen_gappers=preopen_gappers, earnings_section=section,
             )
             # Count only sends the mail service accepted.
             if send_digest_email(

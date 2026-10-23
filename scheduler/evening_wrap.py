@@ -72,6 +72,53 @@ def _tomorrows_earnings(tickers: List[str]) -> List[str]:
         return []
 
 
+def _earnings_calendar_rows(snap_df) -> tuple:
+    """(today, next trading day, week calendar, scored rows) for tonight's and the next
+    morning's reporters, shared by every recipient. Each reporter is scored once."""
+    from scheduler import earnings_email as ee
+    from scheduler.morning_digest import _symbol_column, et_now
+
+    today = et_now().date()
+    nxt = ee.next_trading_day(today)
+    week = ee.reporters(today, today + timedelta(days=7))
+    window = [r for r in week
+              if (r["date"] == today and r["time"] == "amc") or (r["date"] == nxt and r["time"] != "amc")]
+    ranked: List[str] = []
+    try:
+        col = _symbol_column(snap_df) if snap_df is not None else None
+        if col:
+            ranked = [str(t) for t in snap_df[col].tolist()]
+    except Exception:
+        ranked = []
+    return today, nxt, week, ee.build_rows(window, ranked=ranked)
+
+
+def _earnings_section(earn, tickers: List[str]) -> tuple:
+    """(html, text) "Earnings tonight & tomorrow morning" for one recipient; ('', '') on error."""
+    if not earn:
+        return "", ""
+    try:
+        from scheduler import earnings_email as ee
+
+        today, nxt, week, rows = earn
+        day = "Tomorrow" if nxt == today + timedelta(days=1) else nxt.strftime("%A")
+        word = "tomorrow" if day == "Tomorrow" else day
+        return ee.compose_section(
+            rows, title=f"Earnings tonight & {word} morning",
+            order=[(today, "amc", "🌙 Tonight after the close"),
+                   (nxt, "bmo", f"☀️ {day} before the open ({nxt:%a})"),
+                   (nxt, None, f"🕒 {day}, time not announced")],
+            price_label="Close", pct_label="Today %",
+            link=ee.scanner_link("tomorrow" if day == "Tomorrow" else "week"),
+            link_label=f"See {word} in the Earnings scanner" if day == "Tomorrow" else "See the week in the Earnings scanner",
+            watched=tickers, watchlist_line=ee.watchlist_line(tickers, week, today),
+            footnote="⭐ on your watchlist. Bold names ranked in today's market scan. "
+                     "Educational only, not financial advice.",
+        )
+    except Exception:
+        return "", ""
+
+
 def _pct_html(chg) -> str:
     """Colored signed percent for email HTML."""
     try:
@@ -172,6 +219,7 @@ def _compose_wrap(
     day_losers: List[tuple] | None = None,
     golden_crosses: List[str] | None = None,
     top_setups: List[tuple] | None = None,
+    earnings_section: tuple | None = None,
 ) -> tuple:
     from scheduler.morning_digest import _movers_table, _movers_text, et_now
 
@@ -239,7 +287,10 @@ def _compose_wrap(
         )
         text += ["Alerts that fired today:"] + [f"  - {m}" for m in fired_today] + [""]
 
-    if earnings_tomorrow:
+    if earnings_section and earnings_section[0]:
+        html.append(earnings_section[0])
+        text.append(earnings_section[1])
+    elif earnings_tomorrow:
         names = ", ".join(earnings_tomorrow)
         html.append(
             "<h3 style='margin:16px 0 6px'>📅 Earnings tomorrow (your watchlist)</h3>"
@@ -297,6 +348,11 @@ def run_evening_wrap(force: bool = False) -> None:
         snap_df = None
     day_gainers, day_losers = _day_movers(snap_df)
     golden_crosses, top_setups = _tomorrow_setups(snap_df)
+    try:
+        earn = _earnings_calendar_rows(snap_df)
+    except Exception as e:
+        print(f"[evening_wrap] earnings section unavailable: {type(e).__name__}")
+        earn = None
 
     from scheduler.morning_digest import (
         _email_tier_key,
@@ -345,6 +401,7 @@ def run_evening_wrap(force: bool = False) -> None:
                 market_close=market_close,
                 day_gainers=day_gainers, day_losers=day_losers,
                 golden_crosses=golden_crosses, top_setups=top_setups,
+                earnings_section=_earnings_section(earn, tickers),
             )
             if send_digest_email(
                 to_address=email,
