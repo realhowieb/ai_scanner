@@ -258,8 +258,41 @@ def _unsubscribe_url(token: Optional[str]) -> Optional[str]:
     return f"{base}/unsubscribe?t={token}&k=alerts"
 
 
+def _live_alert_html(body: str, snap: Optional[Dict[str, Any]], ticker: Optional[str],
+                     disclaimer: str, unsubscribe_url: Optional[str]) -> Optional[str]:
+    """The live alert in the shared email design (ui.email_kit): a card with the
+    alert line, a Ticker / Price / Day % row and an "Open X in HSF" button.
+    None when the kit isn't importable (standalone billing root)."""
+    try:
+        from ui import email_kit as k
+    except ImportError:
+        return None
+    label, sep, rest = str(body or "").partition(": ")
+    if not sep:
+        label, rest = "Live alert", str(body or "")
+    tk = str(ticker or "").upper()
+    if tk and rest.startswith(tk + " "):
+        rest = rest[len(tk) + 1:]
+    snap = snap or {}
+    last, prev = snap.get("last"), snap.get("prev_close")
+    try:
+        day = (float(last) / float(prev) - 1.0) * 100.0 if last is not None and prev else None
+    except (TypeError, ValueError, ZeroDivisionError):
+        day = None
+    inner = f"<p style='margin:0 0 8px;font-size:14px'>{k.esc(rest)}</p>"
+    if tk:
+        inner += k.table(["Ticker", "Price", "Day %"], [[k.ticker(tk), k.num(last), k.pct(day)]])
+        base = (os.getenv("APP_BASE_URL", "").strip() or "https://hsf-web-v1.onrender.com").rstrip("/")
+        inner += k.button(f"{base}/stocks/{tk}", f"Open {k.esc(tk)} in HSF →")
+    title = f"{k.esc(label)} · {k.esc(tk)}" if tk else k.esc(label)
+    footer = disclaimer + (f"<br>Don't want these emails? <a href='{k.esc(unsubscribe_url)}' "
+                           f"style='color:{k.FAINT}'>Unsubscribe</a>" if unsubscribe_url else "")
+    return k.shell(k.card(title, inner), title_line="Live alert", footer_html=footer)
+
+
 def _send_email(to_address: str, subject: str, body: str,
-                unsubscribe_url: Optional[str] = None) -> bool:
+                unsubscribe_url: Optional[str] = None, *, ticker: Optional[str] = None,
+                snap: Optional[Dict[str, Any]] = None) -> bool:
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -290,13 +323,10 @@ def _send_email(to_address: str, subject: str, body: str,
         unsub_html = (f"<p style='color:#aaa;font-size:11px'>Don't want these emails? "
                       f"<a href='{unsubscribe_url}' style='color:#888'>Unsubscribe</a></p>")
     msg.attach(MIMEText(f"HSFinest.AI alert\n\n{body}\n\n{disclaimer}{unsub_text}", "plain"))
-    msg.attach(
-        MIMEText(
-            f"<p><strong>⚡ HSFinest.AI</strong></p><pre>{body}</pre>"
-            f"<p style='color:#aaa;font-size:11px'>{disclaimer}</p>{unsub_html}",
-            "html",
-        )
-    )
+    html = _live_alert_html(body, snap, ticker, disclaimer, unsubscribe_url) or (
+        f"<p><strong>⚡ HSFinest.AI</strong></p><pre>{body}</pre>"
+        f"<p style='color:#aaa;font-size:11px'>{disclaimer}</p>{unsub_html}")
+    msg.attach(MIMEText(html, "html"))
     try:
         with smtplib.SMTP(host, port, timeout=10) as server:
             server.ehlo()
@@ -474,7 +504,8 @@ def check_once() -> int:
                 and alert["user_id"] not in quiet
             ):
                 _send_email(alert["user_id"], "⚡ Live alert triggered", message,
-                            unsubscribe_url=_unsubscribe_url(alert.get("unsub_token")))
+                            unsubscribe_url=_unsubscribe_url(alert.get("unsub_token")),
+                            ticker=alert.get("ticker"), snap=snap)
         if fired:
             _log(f"fired {fired} live alert(s)")
         return fired
