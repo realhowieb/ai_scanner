@@ -322,7 +322,7 @@ def wrap_glance(watch_rows: List[Dict[str, Any]], *, market_close: List[tuple] |
         parts.append(f"{fired_count} alert{'s' if fired_count != 1 else ''} fired today.")
     if earnings_count:
         parts.append(f"<b style='color:#fff'>{earnings_count} compan{'y' if earnings_count == 1 else 'ies'}</b> "
-                     "report tonight or before tomorrow's open.")
+                     "report tonight or before the next open.")
     if top_setups:
         t, sc = top_setups[0]
         parts.append(f"Top setup for tomorrow: <b style='color:#fff'>{k.esc(t)}</b> (score {sc:g}).")
