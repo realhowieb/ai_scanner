@@ -300,6 +300,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         kv = shared_cache.status()  # informational: the API works without Key Value
         body["key_value"] = {"configured": kv["configured"], "ok": kv["ok"], "ping_ms": kv["ping_ms"]}
+        body["build"] = (os.environ.get("RENDER_GIT_COMMIT") or "").strip()[:12] or None
         if strict and fresh["stale"]:
             return JSONResponse({**body, "ok": False}, status_code=503)
         return body
@@ -443,6 +444,16 @@ def _start_scan_watchdog() -> None:
         log.warning("scan watchdog failed to start: %s", type(e).__name__)
 
 
+def _start_ops_jobs() -> None:
+    """Live check notices, nightly ops note, weekly recap/business emails, daily account mail (api/ops_jobs.py)."""
+    try:
+        from api.ops_jobs import start
+
+        start()
+    except Exception as e:  # best effort; nothing user-facing depends on it
+        log.warning("ops jobs failed to start: %s", type(e).__name__)
+
+
 def _module_app():
     """Module-level app for `uvicorn api.main:app` (settings from the environment).
     Importing never raises, so tests can import create_app without the secret."""
@@ -460,6 +471,7 @@ def _module_app():
     _start_realtime_alerts()
     _register_telegram_webhook()
     _start_scan_watchdog()
+    _start_ops_jobs()
     _start_day_trader_keep_warm()
     if os.getenv("BILLING_MODE", "external").strip().lower() == "embedded":
         from billing_service.main import start_reconciliation_worker

@@ -7,7 +7,9 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import type { ReactNode } from "react";
 
 import { StockSearch } from "@/components/StockSearch";
+import { BillingBanner } from "@/components/BillingBanner";
 import { InstallHint } from "@/components/InstallHint";
+import { WhatsNew } from "@/components/WhatsNew";
 import { useSession } from "@/session/SessionProvider";
 
 /** `top`: in the desktop bar (else under More); `mid`: moves under More on narrow desktops.
@@ -135,7 +137,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         ))}
         <MoreMenu items={NAV.filter((n) => !n.tab).map(({ href, label }) => ({ href, label }))} path={path} id="more-tab" className="tab-more" side="top" />
       </nav>
+      <BillingBanner />
       <InstallHint />
+      <WhatsNew />
       <main id="main" className="main"><PreviousPage.Provider value={trail.prev}>{children}</PreviousPage.Provider></main>
       <footer className="foot">
         <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link></p>

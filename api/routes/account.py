@@ -63,6 +63,8 @@ class EmailPrefsUpdate(BaseModel):
     digest: Optional[bool] = None
     evening: Optional[bool] = None
     alerts: Optional[bool] = None
+    weekly: Optional[bool] = None
+    tips: Optional[bool] = None
 
 
 class CheckoutBody(BaseModel):
