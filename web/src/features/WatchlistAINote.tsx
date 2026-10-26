@@ -19,7 +19,7 @@ export function WatchlistAINote({ id, name, empty }: { id: number; name: string;
   const mine = note && note.id === id ? note.v : null;
   if (!can("can_ai_notes")) {
     return (
-      <Card title="AI rundown" id="wl-ai">
+      <Card title="AI rundown" id="wl-ai" source="ai">
         <Locked title="AI watchlist rundowns are part of Premium" plan="premium">
           A short plain-English summary of what changed on your list since the last scan: score and rank moves, new setups, volume and earnings this week.
         </Locked>
@@ -33,7 +33,7 @@ export function WatchlistAINote({ id, name, empty }: { id: number; name: string;
     return true;
   });
   return (
-    <Card title="AI rundown" id="wl-ai" aside={mine?.snapshot_time ? `Scan ${etTime(mine.snapshot_time)}` : "Premium"}>
+    <Card title="AI rundown" id="wl-ai" source="ai" aside={mine?.snapshot_time ? `Scan ${etTime(mine.snapshot_time)}` : "Premium"}>
       {mine ? (mine.text ? <AIText text={mine.text} /> : <p className="cap">Nothing to sum up yet: no market scan covers {name}.</p>)
         : <p className="cap">What changed on {name} since the previous scan, written by Claude from HSF&apos;s scan data only.</p>}
       <ErrorLine error={act.error} />

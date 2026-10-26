@@ -35,7 +35,7 @@ export function ScoreMoversCard() {
   const d = movers.data;
   if (movers.error || !d || !Array.isArray(d.rising) || !Array.isArray(d.falling) || !d.previous_scan_at || (!d.rising.length && !d.falling.length)) return null;
   return (
-    <Card title="Score movers" id="movers" aside={d.scan_at ? <Freshness at={d.scan_at} label="Full-market scan" /> : undefined}>
+    <Card title="Score movers" id="movers" source="ranking" aside={d.scan_at ? <Freshness at={d.scan_at} label="Full-market scan" /> : undefined}>
       <div className="grid2">
         <div className="stack-sm"><h3 className="h3">Rising</h3><MoverList rows={d.rising} dir="up" /></div>
         <div className="stack-sm"><h3 className="h3">Falling</h3><MoverList rows={d.falling} dir="down" /></div>

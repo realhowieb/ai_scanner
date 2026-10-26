@@ -82,7 +82,7 @@ function DailyChart({ days, runningSum = false }: { days: Day[]; runningSum?: bo
 
 function SummaryTable({ rows, minSample }: { rows: TrackRecordSummary[]; minSample: number }) {
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Ranking study table; scroll sideways for more columns">
       <table className="table">
         <thead>
           <tr>
@@ -196,6 +196,21 @@ function Research() {
   );
 }
 
+/** Plain-language method notes: what is counted, when, and what the numbers do not mean. */
+function HowMeasured() {
+  return (
+    <details className="method">
+      <summary>How these results are measured</summary>
+      <dl className="method-body">
+        <div><dt>What counts as a signal</dt><dd>A ticker that appeared in an HSF scan, counted once per ticker per day, with the score and setup it had then. Records are saved at scan time and never revised.</dd></div>
+        <div><dt>When an outcome is measured</dt><dd>Close-to-close return over the holding period (1, 3 or 5 trading days), compared with SPY over the same days. Signals whose period hasn&apos;t ended are pending: they are not wins or losses.</dd></div>
+        <div><dt>What the HSF Score is</dt><dd>An opportunity ranking from 0 to 100. It is not a probability of profit, and these tables are not a model&apos;s training accuracy.</dd></div>
+        <div><dt>What this can&apos;t tell you</dt><dd>No costs, slippage or position sizing are included, and samples are small. Past results describe what happened; they don&apos;t predict future results.</dd></div>
+      </dl>
+    </details>
+  );
+}
+
 export function TrackRecordView() {
   const { can } = useSession();
   return (
@@ -208,7 +223,7 @@ export function TrackRecordView() {
       </section>
       {can("can_track_record") ? (
         <>
-          <nav className="chips" aria-label="Research sections"><a className="chip" href="#overall-record">Overall record</a><a className="chip" href="#ranking-study">Ranking study</a></nav><div id="overall-record"><OutcomeEvidence /></div>
+          <nav className="chips" aria-label="Research sections"><a className="chip" href="#overall-record">Overall record</a><a className="chip" href="#ranking-study">Ranking study</a></nav><HowMeasured /><div id="overall-record" className="stack"><OutcomeEvidence /></div>
           <section id="ranking-study" className="stack" aria-label="Ranking study">
             <h2 className="h2">Ranking study</h2>
             <p className="cap">A separate, narrower study: only each saved scan&apos;s top names under one ranking. It is not the full HSF record above.</p>

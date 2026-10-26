@@ -18,6 +18,8 @@ const PAGES = [
   ["watchlists", "/watchlists", (p) => p.getByRole("heading", { level: 1 }).first().waitFor()],
   ["alerts", "/alerts", (p) => p.getByRole("tab", { name: "Rules" }).waitFor()],
   ["day-trader", "/day-trader", (p) => p.getByRole("heading", { level: 1 }).first().waitFor()],
+  ["brief", "/brief", (p) => p.getByRole("heading", { name: "Market Pulse" }).waitFor()],
+  ["track-record", "/track-record", (p) => p.getByRole("heading", { level: 1 }).first().waitFor()],
   ["account", "/account", (p) => p.getByRole("heading", { level: 1 }).first().waitFor()],
 ];
 

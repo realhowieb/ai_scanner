@@ -73,7 +73,7 @@ export function SectionFailed({ name }: { name: string }) {
 
 function Movers({ card, title, caption, id }: { card: SessionCard; title: string; caption: string; id: string }) {
   return (
-    <Card title={title} id={id} aside={card.scan_at ? <Freshness at={card.scan_at} label="Scan" staleCheck={false} /> : undefined}>
+    <Card title={title} id={id} source="data" aside={card.scan_at ? <Freshness at={card.scan_at} label="Scan" staleCheck={false} /> : undefined}>
       {card.locked ? (
         <Locked title={`${title} movers are part of Pro`} plan="pro">See which names are moving outside regular hours, with their HSF Score.</Locked>
       ) : card.movers.length === 0 ? (
@@ -158,6 +158,7 @@ function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
       <td><ScoreBar score={s.score} /></td>
       <td className="num mono hide-narrow">{price(s.last)}</td>
       <td className={`num mono ${s.chg_pct && s.chg_pct > 0 ? "up" : s.chg_pct && s.chg_pct < 0 ? "down" : ""}`}>{pct(s.chg_pct)}</td>
+      <td className="num mono hide-narrow">{s.rvol == null ? "--" : `${s.rvol.toFixed(1)}x`}</td>
     </tr>
   );
 }
@@ -254,10 +255,8 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
         </p>
       )}
 
-      <GettingStarted />
-
       {failed.has("snapshot") ? <SectionFailed name="Market snapshot" /> : data.snapshot && (
-        <Card title="Market snapshot" id="snap" aside="Top gainer and most active are among the latest scan's ranked setups, not the whole market">
+        <Card title="Market snapshot" id="snap" source="data" aside="Top gainer and most active are among the latest scan's ranked setups, not the whole market">
           <SnapshotTiles snapshot={data.snapshot} />
         </Card>
       )}
@@ -269,7 +268,7 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
             <Movers card={data.before_open} id="bto" title="Before the open" caption="Pre-market scan vs the previous close. Pre-market prices keep moving." />
           )}
 
-          <Card title="Top setups" id="top" aside={top?.scan_at ? <Freshness at={top.scan_at} label="Full-market scan" stale={data.market.stale} /> : "Ranked by HSF Score"}>
+          <Card title="Top setups" id="top" source="ranking" aside={top?.scan_at ? <Freshness at={top.scan_at} label="Full-market scan" stale={data.market.stale} /> : "Ranked by HSF Score"}>
             {failed.has("top_setups") || !top ? (
               <SectionFailed name="Top setups" />
             ) : top.state === "empty_scan" ? (
@@ -283,7 +282,7 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
                 <div className="table-wrap">
                   <table className="table">
                     <thead>
-                      <tr><th scope="col">Ticker</th><th scope="col" className="hide-narrow">Setup</th><th scope="col" className="w40">HSF Score</th><th scope="col" className="num hide-narrow">Last</th><th scope="col" className="num">Chg</th></tr>
+                      <tr><th scope="col">Ticker</th><th scope="col" className="hide-narrow">Setup</th><th scope="col" className="w40">HSF Score</th><th scope="col" className="num hide-narrow">Last</th><th scope="col" className="num">Chg</th><th scope="col" className="num hide-narrow"><abbr title="Relative volume: today's volume vs its usual pace">RVOL</abbr></th></tr>
                     </thead>
                     {top.setups.length > 0 && (
                       <tbody>
@@ -292,7 +291,7 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
                     )}
                     {also.length > 0 && (
                       <tbody className="also">
-                        {top.setups.length > 0 && <tr className="sub-head"><th scope="rowgroup" colSpan={5}>Also ranked</th></tr>}
+                        {top.setups.length > 0 && <tr className="sub-head"><th scope="rowgroup" colSpan={6}>Also ranked</th></tr>}
                         {also.map((s) => <SetupRow key={s.ticker} s={s} muted />)}
                       </tbody>
                     )}
@@ -315,6 +314,7 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
         </div>
 
         <aside className="col-side">
+          <GettingStarted />
           {personalFirst && personal}
           {failed.has("after_close") ? <SectionFailed name="After the close" /> : data.after_close && (
             <Movers card={data.after_close} id="atc" title="After the close" caption="After-hours scan vs today's close. After-hours prices keep moving." />

@@ -26,7 +26,7 @@ export function MarketPulse({ b }: { b: Brief }) {
   const scores = b.opportunities.map((o) => o.score).filter(finite);
   const topScore = scores.length ? Math.max(...scores) : null;
   const validBreadth = finite(adv) && finite(dec) && adv >= 0 && dec >= 0 && adv + dec > 0;
-  return <Card title="Market Pulse" id="pulse" className="brief-pulse">
+  return <Card title="Market Pulse" id="pulse" className="brief-pulse" source="data">
     <Freshness at={b.snapshot_time} label="Snapshot" stale={b.freshness?.state === "stale" ? true : b.freshness?.state === "fresh" ? false : undefined} />
     <div className="brief-indexes">
       {b.market.map((m) => <div className="index-tile" key={m.label}>
@@ -55,7 +55,7 @@ export function MarketPulse({ b }: { b: Brief }) {
 
 export function OpportunityRadar({ b }: { b: Brief }) {
   const opportunities = (b.opportunities as Opportunity[]).filter((o) => o.ticker);
-  return <Card title="HSF Opportunity Radar" id="opps">
+  return <Card title="HSF Opportunity Radar" id="opps" source="ranking">
     <p className="cap">Top names by HSF Score, the same scores as the Scanner. Snapshot {etTime(b.snapshot_time)}.</p>
     {!opportunities.length ? <Empty title="No ranked opportunities in this snapshot." /> : <ol className="brief-radar">
       {opportunities.map((o, i) => <li key={o.ticker}>
