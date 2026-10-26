@@ -52,8 +52,8 @@ def _base_url() -> str:
     try:
         from config import APP_BASE_URL
     except Exception:
-        APP_BASE_URL = "https://hsf-web-v1.onrender.com"
-    return (APP_BASE_URL or "https://hsf-web-v1.onrender.com").rstrip("/")
+        APP_BASE_URL = "https://app.hsfinest.com"
+    return (APP_BASE_URL or "https://app.hsfinest.com").rstrip("/")
 
 
 def _day(t: dt.datetime) -> str:

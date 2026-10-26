@@ -163,7 +163,7 @@ SMTP_FROM_NAME: str = _get("SMTP_FROM_NAME", "HSF Alerts")
 # P1-51: links default to the PRODUCTION web app. Scheduled emails are built by
 # the GitHub job, which sets no APP_BASE_URL, so this default is what they use.
 # A Streamlit deployment that still needs its own links sets APP_BASE_URL.
-APP_BASE_URL: str = _get("APP_BASE_URL", "https://hsf-web-v1.onrender.com")
+APP_BASE_URL: str = _get("APP_BASE_URL", "https://app.hsfinest.com")
 
 # ---------- Stripe Billing Configuration ----------
 STRIPE_MONTHLY_LINKS = {

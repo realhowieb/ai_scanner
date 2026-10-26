@@ -183,6 +183,6 @@ def unsubscribe_url(user: Any, kind: str) -> Optional[str]:
     try:
         from config import APP_BASE_URL
     except Exception:
-        APP_BASE_URL = "https://hsf-web-v1.onrender.com"
+        APP_BASE_URL = "https://app.hsfinest.com"
     k = kind if kind in KINDS else "all"
     return f"{APP_BASE_URL.rstrip('/')}/unsubscribe?t={token}&k={k}"
