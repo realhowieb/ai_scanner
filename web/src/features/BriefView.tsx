@@ -11,7 +11,7 @@ import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { AIText } from "@/components/AIText";
 import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
-import { MarketPulse, OpportunityRadar } from "@/features/BriefIntelligence";
+import { BriefGlance, MarketPulse, OpportunityRadar } from "@/features/BriefIntelligence";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, shortDate } from "@/lib/format";
@@ -131,6 +131,7 @@ function BriefBody({ b }: { b: Brief }) {
   const { can } = useSession();
   return (
     <>
+      <BriefGlance b={b} />
       <div className="brief-dashboard">
         <div className="brief-center">
           <MarketPulse b={b} />

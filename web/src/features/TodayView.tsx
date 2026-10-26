@@ -5,7 +5,7 @@ import { useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 
 import type { Schemas } from "@/api/client";
-import { Card, Empty, Freshness, Locked, Pill, RANKED_MIN, ResearchNotice, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
+import { Card, Empty, Freshness, Locked, Pill, RANKED_MIN, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
 import { etTime, greeting, localDate, pct, price, setupLabel } from "@/lib/format";
 
 import { GettingStarted } from "./GettingStarted";
@@ -301,7 +301,6 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
               </>
             )}
             <div className="card-foot">
-              <ResearchNotice compact />
               <Link href="/scanner">Open the Scanner →</Link>
             </div>
           </Card>

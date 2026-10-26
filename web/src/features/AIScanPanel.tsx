@@ -8,7 +8,7 @@ import type { FormEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { AIText } from "@/components/AIText";
-import { Card, ErrorLine, Locked, ResearchNotice } from "@/components/ui";
+import { Card, ErrorLine, Locked } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useSession } from "@/session/SessionProvider";
 
@@ -105,7 +105,6 @@ export function AIScanPanel({ runId }: { runId?: number }) {
   }
   return (
     <Card title="AI research" id="ai" source="ai" aside="Premium">
-      <ResearchNotice compact />
       <p className="cap">Claude uses only this scan&apos;s data. HSF Score controls ranking; AI commentary does not recommend trades.</p>
       <Summary runId={runId} />
       <div className="divider" role="separator" />

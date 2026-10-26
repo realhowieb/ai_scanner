@@ -191,7 +191,7 @@ function Research() {
           </Card>
         </>
       )}
-      <p className="cap">Picks are scan results, not trades: no costs, slippage or position sizing. HSF Score is an opportunity ranking, not a probability of profit.</p>
+      <p className="cap">Picks are scan results, not trades: no costs, slippage or position sizing.</p>
     </>
   );
 }

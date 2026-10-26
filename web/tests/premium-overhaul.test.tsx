@@ -64,3 +64,44 @@ describe("shared pieces", () => {
     expect(within(nav).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")])).toEqual([["Chart", "#price"], ["News", "#news"]]);
   });
 });
+
+describe("RSI 14", () => {
+  it("uses Wilder smoothing and stays empty until 14 changes exist", async () => {
+    const { rsi } = await import("@/lib/chartBars");
+    const up = Array.from({ length: 20 }, (_, i) => 100 + i);
+    const out = rsi(up);
+    expect(out.slice(0, 14).every((v) => v == null)).toBe(true);
+    expect(out[14]).toBe(100); // no losses
+    expect(rsi(Array(20).fill(50))[19]).toBe(50); // no moves
+    const zig = Array.from({ length: 40 }, (_, i) => 100 + (i % 2 ? 1 : -1));
+    const v = rsi(zig).at(-1)!;
+    expect(v).toBeGreaterThan(40);
+    expect(v).toBeLessThan(60);
+    expect(rsi([1, 2, 3])).toEqual([null, null, null]);
+  });
+});
+
+describe("Brief at a glance", () => {
+  it("leads with indexes, breadth, sector leaders and the top-ranked name from the snapshot", async () => {
+    const { BriefGlance } = await import("@/features/BriefIntelligence");
+    const b = {
+      market: [{ label: "S&P 500", last: 6120.5, chg_pct: 0.42 }, { label: "Nasdaq 100", last: 21900, chg_pct: -0.3 }],
+      breadth: { advancers: 300, decliners: 100 },
+      sectors: [{ sector: "Energy", chg_pct: 1.8 }, { sector: "Utilities", chg_pct: -0.9 }],
+      opportunities: [{ ticker: "NVDA", score: 88, primary_setup: "Breakout" }],
+    } as unknown as Parameters<typeof BriefGlance>[0]["b"];
+    render(<BriefGlance b={b} />);
+    const glance = screen.getByRole("region", { name: "At a glance" });
+    expect(glance).toHaveTextContent("S&P 500+0.42%");
+    expect(glance).toHaveTextContent("Advancing75%");
+    expect(glance).toHaveTextContent("Strongest sector+1.80%Energy");
+    expect(glance).toHaveTextContent("Weakest sector-0.90%Utilities");
+    expect(within(glance).getByRole("link", { name: "NVDA" })).toHaveAttribute("href", "/stocks/NVDA");
+  });
+
+  it("renders nothing when the snapshot has none of it", async () => {
+    const { BriefGlance } = await import("@/features/BriefIntelligence");
+    const { container } = render(<BriefGlance b={{ market: [], sectors: [], opportunities: [] } as unknown as Parameters<typeof BriefGlance>[0]["b"]} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});

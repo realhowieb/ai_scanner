@@ -584,10 +584,12 @@ a.pill:hover { color: var(--text); border-color: var(--line-strong); }
   .stock-inline-search { align-items: stretch; flex-direction: column; }
   .filters .chips, .scanner-chips, .dt-cards > .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; width: 100%; scrollbar-width: none; }
   .scanner-chips .chip { flex: 0 0 auto; white-space: nowrap; }
-  .page-head .scanner-actions .btn { flex: 1 1 0; }
+  .page-head .scanner-actions { flex-wrap: nowrap; }
+  .page-head .scanner-actions .btn { flex: 1 1 auto; padding-inline: 10px; white-space: nowrap; }
   .priority-panel { align-items: stretch; flex-direction: column; }
   .priority-steps { justify-content: flex-start; }
   .priority-steps .btn, .workflow-item .btn, .row-actions .btn-primary { flex: 1 1 100%; }
+  .page-head .scanner-actions .btn-primary { flex: 1 1 auto; }
   .workflow-grid { grid-template-columns: minmax(0, 1fr); }
   .workflow-item { padding: 12px; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -993,9 +995,9 @@ summary:focus-visible, .table-wrap:focus-visible { outline: 2px solid var(--acce
 .metric-strip .dt-candidate { display: block; padding: 5px 10px; }
 
 .interactive-price { height: 0; overflow: hidden; border-radius: var(--radius-lg); }
-.interactive-price.is-ready { height: 330px; }
+.interactive-price.is-ready { height: auto; }
 .interactive-price:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.lightweight-chart { width: 100%; height: 330px; }
+.lightweight-chart { width: 100%; min-height: 330px; }
 .lightweight-chart table { margin: 0; }
 .chart-help { display: block; margin-bottom: 4px; }
 
@@ -1112,3 +1114,15 @@ fieldset.chips { border: 0; margin: 0; padding: 0; }
   .table td .pill { padding: 1px 8px; }
 }
 a.chip { display: inline-flex; align-items: center; }
+
+/* RSI pane (SVG fallback) and readout */
+.rsi-panel { display: block; width: 100%; height: auto; margin-top: 4px; background: var(--bg-2); border-radius: var(--radius-sm); }
+.rsi-panel .rsi-guide { stroke: var(--line-strong); stroke-dasharray: 3 3; stroke-width: 1; }
+.rsi-panel .rsi-line { fill: none; stroke: var(--sma20); stroke-width: 1.4; }
+.rsi-panel .crosshair-v { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; }
+.rd-rsi { color: var(--sma20); }
+.chart-tools .sw.rsi { background: var(--sma20); }
+
+/* Brief: the 60-second read above the dashboard */
+.brief-glance { display: flex; flex-direction: column; gap: var(--sp-2); }
+.brief-glance .stat-value a { color: inherit; }

@@ -31,3 +31,25 @@ export function emaCrosses(bars: Bar[]): Cross[] {
   }
   return out;
 }
+
+/** Wilder's RSI over closing prices: null until `period` changes have been seen.
+ * Computed from the full history so the first visible values are already settled. */
+export function rsi(closes: number[], period = 14): (number | null)[] {
+  const out: (number | null)[] = closes.map(() => null);
+  if (closes.length <= period) return out;
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const ch = closes[i]! - closes[i - 1]!;
+    if (ch >= 0) gain += ch; else loss -= ch;
+  }
+  gain /= period; loss /= period;
+  const value = () => (loss === 0 ? (gain === 0 ? 50 : 100) : 100 - 100 / (1 + gain / loss));
+  out[period] = value();
+  for (let i = period + 1; i < closes.length; i++) {
+    const ch = closes[i]! - closes[i - 1]!;
+    gain = (gain * (period - 1) + Math.max(0, ch)) / period;
+    loss = (loss * (period - 1) + Math.max(0, -ch)) / period;
+    out[i] = value();
+  }
+  return out;
+}

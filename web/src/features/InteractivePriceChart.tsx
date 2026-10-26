@@ -10,7 +10,9 @@ type Bar = Schemas["Bar"];
 type Props = {
   bars: Bar[];
   events: ChartEvent[];
-  overlays: { ema: boolean; sma20: boolean; sma50: boolean };
+  overlays: { ema: boolean; sma20: boolean; sma50: boolean; rsi: boolean };
+  /** RSI(14) per bar, aligned with `bars` (null while it warms up). */
+  rsi?: (number | null)[];
   earningsDate?: string | null;
   onReady: (ready: boolean) => void;
   onHover: (date: string | null) => void;
@@ -22,10 +24,14 @@ type Drawing = {
   volume: ISeriesApi<"Histogram">;
   lines: Record<"ema9" | "ema21" | "sma20" | "sma50", ISeriesApi<"Line">>;
   markers: ISeriesMarkersPluginApi<Time>;
+  rsi: ISeriesApi<"Line">;
 };
 
+const BASE_H = 330;
+const RSI_H = 96;
+
 /** Browser-only enhancement. The SVG stays available if Canvas or loading fails. */
-export function InteractivePriceChart({ bars, events, overlays, earningsDate, onReady, onHover, selectedDate }: Props) {
+export function InteractivePriceChart({ bars, events, overlays, rsi, earningsDate, onReady, onHover, selectedDate }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const drawing = useRef<Drawing | null>(null);
   const earningsLabel = useRef<HTMLDivElement>(null);
@@ -46,7 +52,7 @@ export function InteractivePriceChart({ bars, events, overlays, earningsDate, on
       const color = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
       const up = color("--up", "#4ade80"), down = color("--down", "#f87171");
       chart = lc.createChart(el, {
-        width: el.clientWidth || 720, height: 330,
+        width: el.clientWidth || 720, height: BASE_H,
         layout: { background: { type: lc.ColorType.Solid, color: color("--bg-2", "#111822") },
           textColor: color("--text-2", "#aab6c5"), fontFamily: css.getPropertyValue("--font-sans").trim() || "sans-serif", attributionLogo: true },
         grid: { vertLines: { color: color("--line-soft", "#202a35") }, horzLines: { color: color("--line-soft", "#202a35") } },
@@ -69,6 +75,11 @@ export function InteractivePriceChart({ bars, events, overlays, earningsDate, on
       const lines = { ema9: line(color("--accent", "#72d5ee")), ema21: line(color("--amber", "#e9b872")),
         sma20: line("#a995e7"), sma50: line("#ed9eaf") };
       const markers = lc.createSeriesMarkers(candles, []);
+      // RSI(14) in its own pane under the candles, with the usual 70 / 30 guides.
+      const rsiLine = chart.addSeries(lc.LineSeries, { color: color("--sma20", "#c792ea"), lineWidth: 1, priceLineVisible: false,
+        lastValueVisible: true, crosshairMarkerVisible: false, autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) }, 1);
+      rsiLine.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+      for (const level of [70, 30]) rsiLine.createPriceLine({ price: level, color: color("--line-strong", "#34465f"), lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "" });
       chart.subscribeCrosshairMove((p) => {
         if (!p.time || !p.point || p.point.x < 0 || p.point.y < 0) { callbacks.current.onHover(null); return; }
         const t = p.time;
@@ -76,7 +87,7 @@ export function InteractivePriceChart({ bars, events, overlays, earningsDate, on
           ? `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}` : null;
         callbacks.current.onHover(date);
       });
-      drawing.current = { chart, candles, volume, lines, markers };
+      drawing.current = { chart, candles, volume, lines, markers, rsi: rsiLine };
       observer = new ResizeObserver(([entry]) => {
         if (!disposed && entry && entry.contentRect.width > 0) chart?.applyOptions({ width: Math.floor(entry.contentRect.width) });
       });
@@ -121,6 +132,25 @@ export function InteractivePriceChart({ bars, events, overlays, earningsDate, on
       }
       if (earningsDate && dates.has(earningsDate)) marks.push({ time: earningsDate, position: "aboveBar", color: "#e9b872", shape: "square", text: "Earnings" });
       d.markers.setMarkers(marks.sort((a, b) => String(a.time).localeCompare(String(b.time))));
+      const showRsi = overlays.rsi && !!rsi?.some((v) => v != null);
+      d.rsi.setData(bars.map((b, i) => { const v = rsi?.[i]; return v != null && Number.isFinite(v) ? { time: b.date, value: v } : { time: b.date }; }));
+      d.rsi.applyOptions({ visible: showRsi });
+      // Hidden RSI moves back to the price pane so its own pane goes away instead of leaving an empty strip.
+      if (typeof d.rsi.moveToPane === "function" && typeof d.chart.panes === "function") {
+        const panes = d.chart.panes();
+        if (showRsi && panes.length < 2) {
+          d.rsi.moveToPane(1);
+          d.rsi.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+        } else if (!showRsi && panes.length > 1) {
+          d.rsi.moveToPane(0);
+          if (d.chart.panes().length > 1 && typeof d.chart.removePane === "function") d.chart.removePane(1);
+        }
+      }
+      d.chart.applyOptions({ height: BASE_H + (showRsi ? RSI_H : 0) });
+      if (showRsi) d.chart.panes?.()[1]?.setHeight(RSI_H);
+      // The chart is aria-hidden (the table and readout carry the data), so its attribution
+      // link stays visible but leaves the tab order.
+      host.current?.querySelectorAll("a").forEach((a) => { a.tabIndex = -1; });
       // Keep the user's zoom when toggling an overlay; a new date range fits its data.
       if (oldRange && previousDates.current === datesKey) d.chart.timeScale().setVisibleLogicalRange(oldRange);
       else d.chart.timeScale().fitContent();
@@ -145,7 +175,7 @@ export function InteractivePriceChart({ bars, events, overlays, earningsDate, on
     } catch {
       callbacks.current.onReady(false);
     }
-  }, [ready, bars, events, overlays, earningsDate]);
+  }, [ready, bars, events, overlays, rsi, earningsDate]);
 
   useEffect(() => {
     const d = drawing.current;

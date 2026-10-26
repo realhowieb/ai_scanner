@@ -132,7 +132,7 @@ describe("Market Brief", () => {
       gainers: Array.from({ length: 6 }, (_, i) => ({ ticker: `GAIN${i}`, chg_pct: i + 1 })),
     })), "/v1/earnings": () => jsonResponse([]) });
     const view = wrap(<BriefView />, "premium");
-    await screen.findByText("TEST0");
+    await screen.findAllByText("TEST0");
     await screen.findByText("No earnings on file for the next 7 days.");
     expect(view.container.querySelector(".brief-dashboard")?.firstElementChild).toHaveClass("brief-center");
     // Opt-in HTML export for browser layout QA. Fixtures are never shipped by the app.

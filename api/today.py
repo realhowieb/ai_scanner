@@ -315,7 +315,7 @@ def after_close(now: dt.datetime, entitled: bool) -> Optional[Dict[str, Any]]:
     return out
 
 
-TOP_N = 5
+TOP_N = 10
 _SETUP_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
 _SETUP_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "prob")
 
