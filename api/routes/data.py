@@ -108,9 +108,13 @@ def register(app: FastAPI) -> None:
     @app.get("/v1/market/tape", response_model=models.Tape, responses=_AUTH, summary="Price strip")
     def market_tape(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """SPY, QQQ, IWM, DIA, AAPL, MSFT, NVDA and TSLA: last price and change vs the previous close."""
-        from api.today import tape_quotes
+        from api.today import market_phase, tape_quotes
 
-        return {"quotes": tape_quotes()}
+        try:
+            phase = market_phase(dt.datetime.now(dt.timezone.utc))
+        except Exception:
+            phase = None
+        return {"quotes": tape_quotes(), "phase": phase}
 
     @app.get("/v1/scans/latest", response_model=models.LatestScan, responses=_AUTH)
     def scans_latest(account: Dict[str, Any] = Depends(current_account),

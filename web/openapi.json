@@ -13381,6 +13381,24 @@
    "Tape": {
     "description": "The scrolling price strip: market ETFs and a few large caps.",
     "properties": {
+     "phase": {
+      "anyOf": [
+       {
+        "enum": [
+         "premarket",
+         "open",
+         "afterhours",
+         "closed"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "U.S. equity session right now (ET, holiday-aware); null when unknown",
+      "title": "Phase"
+     },
      "quotes": {
       "default": [],
       "description": "In display order; empty when no quote is available",
