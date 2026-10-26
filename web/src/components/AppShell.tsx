@@ -11,22 +11,27 @@ import { FeedbackDialog } from "@/components/FeedbackDialog";
 import { StockSearch } from "@/components/StockSearch";
 import { BillingBanner } from "@/components/BillingBanner";
 import { InstallHint } from "@/components/InstallHint";
+import { MarketStatus } from "@/components/MarketStatus";
+import { NavIcon } from "@/components/NavIcon";
 import { WhatsNew } from "@/components/WhatsNew";
 import { useSession } from "@/session/SessionProvider";
 
-/** `top`: in the desktop bar (else under More); `mid`: moves under More on narrow desktops.
- * `tab`: in the phone tab bar (else under its More). */
+/** Desktop sidebar groups (every section, always visible). `tab`: in the phone tab bar
+ * (the rest sit under the tab bar's More). */
 const NAV = [
-  { href: "/today", label: "Today", top: true, tab: true },
-  { href: "/brief", label: "Brief", top: true, mid: true, tab: false },
-  { href: "/scanner", label: "Scanner", top: true, tab: true },
-  { href: "/stocks", label: "Stocks", top: true, tab: false },
-  { href: "/day-trader", label: "Day Trader", top: true, mid: true, tab: false },
-  { href: "/watchlists", label: "Watchlists", top: true, tab: true },
-  { href: "/alerts", label: "Alerts", top: true, tab: true },
-  { href: "/track-record", label: "Track record", top: false, tab: false },
-  { href: "/ask", label: "Ask HSF", top: false, tab: false },
+  { href: "/today", label: "Today", icon: "today", group: "Markets", tab: true },
+  { href: "/brief", label: "Brief", icon: "brief", group: "Markets", tab: false },
+  { href: "/scanner", label: "Scanner", icon: "scanner", group: "Markets", tab: true },
+  { href: "/day-trader", label: "Day Trader", icon: "daytrader", group: "Markets", tab: false },
+  { href: "/stocks", label: "Stocks", icon: "stocks", group: "Research", tab: false },
+  { href: "/watchlists", label: "Watchlists", icon: "watchlists", group: "Research", tab: true },
+  { href: "/alerts", label: "Alerts", icon: "alerts", group: "Research", tab: true },
+  { href: "/track-record", label: "Track record", icon: "track", group: "Research", tab: false },
+  { href: "/ask", label: "Ask HSF", icon: "ask", group: "Tools", tab: false },
+  { href: "/journal", label: "Journal", icon: "journal", group: "Tools", tab: false },
+  { href: "/paper", label: "Paper trading", icon: "paper", group: "Tools", tab: false },
 ];
+const GROUPS = ["Markets", "Research", "Tools"];
 
 const isActive = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
 
@@ -36,7 +41,7 @@ function useCloseOnNavigate(close: () => void, path: string) {
   useEffect(() => close(), [path]);
 }
 
-type NavItem = { href: string; label: string; mid?: boolean };
+type NavItem = { href: string; label: string; icon?: string };
 
 // Menus use Radix DropdownMenu: arrow keys, Home/End and type-ahead move between items,
 // Escape closes and returns focus to the button. Rendered in place (no portal) so the
@@ -45,19 +50,17 @@ function MoreMenu({ items, path, id, className, side = "bottom" }: { items: NavI
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   useCloseOnNavigate(close, path);
-  // A `mid` item is in the bar on wide screens, so it only marks More where it has moved under it.
-  const active = items.some((n) => !n.mid && isActive(path, n.href));
-  const activeMid = items.some((n) => n.mid && isActive(path, n.href));
+  const active = items.some((n) => isActive(path, n.href));
   return (
     <div className={`more ${className}`}>
       <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
-        <DropdownMenu.Trigger className="navlink more-btn" data-active={active || undefined} data-active-mid={activeMid || undefined}>
-          More<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        <DropdownMenu.Trigger className="navlink more-btn" data-active={active || undefined}>
+          <NavIcon name="more" /><span className="tab-label">More</span>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content className="menu more-menu" id={id} side={side} align={side === "top" ? "end" : "start"} sideOffset={6} collisionPadding={8}>
           {items.map((n) => (
             <DropdownMenu.Item key={n.href} asChild>
-              <Link href={n.href} className={`menu-item${n.mid ? " more-mid" : ""}`} aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}</Link>
+              <Link href={n.href} className="menu-item" aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}</Link>
             </DropdownMenu.Item>
           ))}
         </DropdownMenu.Content>
@@ -103,30 +106,55 @@ export function AppShell({ children }: { children: ReactNode }) {
   const unread = useUnreadAlerts(path, !!me);
   const [feedback, setFeedback] = useState(false);
 
+  const plan = me?.plan;
   return (
     <div className="shell">
       <a href="#main" className="skip">Skip to content</a>
+      <aside className="sidebar">
+        <Link href="/today" className="brand side-brand">HSFinest<span>.AI</span></Link>
+        <nav aria-label="Main" className="side-nav">
+          {GROUPS.map((g) => (
+            <div key={g} className="side-group">
+              <p className="side-group-label" aria-hidden="true">{g}</p>
+              <ul>
+                {NAV.filter((n) => n.group === g).map((n) => (
+                  <li key={n.href}>
+                    <Link href={n.href} className="side-link" aria-current={isActive(path, n.href) ? "page" : undefined} title={n.label}>
+                      <NavIcon name={n.icon} /><span className="side-label">{n.label}</span>{n.href === "/alerts" && <AlertsBadge count={unread} />}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+        <div className="side-foot">
+          {plan && plan !== "premium" && plan !== "admin" && (
+            <Link href="/pricing" className="side-upgrade">
+              <span className="strong">{plan === "pro" ? "Go Premium" : "Upgrade"}</span>
+              <span className="cap">{plan === "pro" ? "AI research tools, PreBreakout" : "Pro from $25/mo"}</span>
+            </Link>
+          )}
+          <Link href="/how-hsf-works" className="side-help cap">How HSF works</Link>
+        </div>
+      </aside>
+      <div className="frame">
       <header className="topbar">
         <div className="topbar-in">
-          <Link href="/today" className="brand">HSFinest<span>.AI</span></Link>
-          <nav aria-label="Main" className="nav">
-            {NAV.filter((n) => n.top).map((n) => (
-              <Link key={n.href} href={n.href} className={`navlink${n.mid ? " nav-mid" : ""}`} aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}{n.href === "/alerts" && <AlertsBadge count={unread} />}</Link>
-            ))}
-            <MoreMenu items={[...NAV.filter((n) => n.mid), ...NAV.filter((n) => !n.top)]} path={path} id="more-desk" className="" />
-          </nav>
+          <Link href="/today" className="brand top-brand">HSFinest<span>.AI</span></Link>
           <StockSearch compact />
+          <MarketStatus />
+          {me && <span className={`plan-badge plan-${me.plan}`} aria-hidden="true">{me.plan_label}</span>}
           <div className="account">
             <DropdownMenu.Root open={menu} onOpenChange={setMenu} modal={false}>
-              <DropdownMenu.Trigger className="btn" aria-label={me ? `${me.plan_label} · Account` : undefined}>
-                {me ? <>{me.plan_label}<span className="hide-narrow">&nbsp;· Account</span></> : "Account"}
+              <DropdownMenu.Trigger className="btn account-btn" aria-label={me ? `${me.plan_label} · Account` : undefined}>
+                <span className="avatar" aria-hidden="true">{(me?.name || me?.email || "?").trim().charAt(0).toUpperCase()}</span>
+                <span className="account-word">Account</span>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content className="menu" align="end" sideOffset={6} collisionPadding={8}>
-                {me && <DropdownMenu.Label className="cap menu-email">{me.email}</DropdownMenu.Label>}
+                {me && <DropdownMenu.Label className="cap menu-email">{me.email}<br /><span className="menu-plan">{me.plan_label} plan</span></DropdownMenu.Label>}
                 <DropdownMenu.Item asChild><Link href="/account" className="menu-item">Account &amp; billing</Link></DropdownMenu.Item>
-                <DropdownMenu.Item asChild><Link href="/journal" className="menu-item">Journal</Link></DropdownMenu.Item>
                 <DropdownMenu.Item asChild><Link href="/account#invite-h" className="menu-item">Invite a friend</Link></DropdownMenu.Item>
-                <DropdownMenu.Item asChild><Link href="/paper" className="menu-item">Paper trading</Link></DropdownMenu.Item>
                 <DropdownMenu.Item asChild><Link href="/pricing" className="menu-item">Plans and pricing</Link></DropdownMenu.Item>
                 <DropdownMenu.Item className="menu-item" onSelect={() => setFeedback(true)}>Send feedback</DropdownMenu.Item>
                 {me?.is_admin && <DropdownMenu.Item asChild><Link href="/admin" className="menu-item">Admin</Link></DropdownMenu.Item>}
@@ -138,9 +166,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <nav aria-label="Sections" className="tabbar">
         {NAV.filter((n) => n.tab).map((n) => (
-          <Link key={n.href} href={n.href} className="tab" aria-current={isActive(path, n.href) ? "page" : undefined}>{n.label}{n.href === "/alerts" && <AlertsBadge count={unread} />}</Link>
+          <Link key={n.href} href={n.href} className="tab" aria-current={isActive(path, n.href) ? "page" : undefined}><NavIcon name={n.icon} /><span className="tab-label">{n.label}</span>{n.href === "/alerts" && <AlertsBadge count={unread} />}</Link>
         ))}
-        <MoreMenu items={NAV.filter((n) => !n.tab).map(({ href, label }) => ({ href, label }))} path={path} id="more-tab" className="tab-more" side="top" />
+        <MoreMenu items={NAV.filter((n) => !n.tab)} path={path} id="more-tab" className="tab-more" side="top" />
       </nav>
       <BillingBanner />
       <InstallHint />
@@ -151,6 +179,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link> · <button type="button" className="link-btn cap" onClick={() => setFeedback(true)}>Send feedback</button></p>
         <p className="cap">Data: scheduled HSF scans · Alpaca. Setup prices come from the latest scan; SPY, QQQ and the price strip are quotes refreshed every few minutes.</p>
       </footer>
+      </div>
     </div>
   );
 }

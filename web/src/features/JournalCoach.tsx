@@ -18,7 +18,7 @@ export function JournalCoach() {
   const [out, setOut] = useState<Schemas["AIJournalCoach"] | null>(null);
   if (!can("can_ai_notes")) {
     return (
-      <Card title="AI journal coach" id="coach">
+      <Card title="AI journal coach" id="coach" source="ai">
         <Locked title="The AI journal coach is part of Premium" plan="premium">
           A short note on patterns in your closed trades: how you do by HSF Score, holding time and source, and whether your wins outweigh your losses.
         </Locked>
@@ -30,7 +30,7 @@ export function JournalCoach() {
     return true;
   });
   return (
-    <Card title="AI journal coach" id="coach" aside="Premium">
+    <Card title="AI journal coach" id="coach" source="ai" aside="Premium">
       {out?.text ? <AIText text={out.text} />
         : out ? <p className="cap">Close at least {out.min_trades} trades for coaching (you have {out.closed}).</p>
         : <p className="cap">Claude reads your closed trades and points out patterns worth reviewing, from your journal&apos;s numbers only.</p>}

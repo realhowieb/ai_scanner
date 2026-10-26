@@ -13,13 +13,31 @@ import { captureUsage } from "@/lib/usageAnalytics";
 import { readCachedMe } from "@/session/meCache";
 import { checkout } from "@/lib/checkout";
 
-export function Card({ title, aside, children, id, className = "" }: { title?: ReactNode; aside?: ReactNode; children: ReactNode; id?: string; className?: string }) {
+/** Where a section's content comes from, so observed data, HSF's ranking, model estimates
+ * and AI-written text never read as the same kind of fact. */
+export type Source = "data" | "ranking" | "model" | "ai";
+const SOURCE: Record<Source, [string, string]> = {
+  data: ["Market data", "Prices, volume and counts observed in HSF scans or quotes, not predictions."],
+  ranking: ["HSF ranking", "HSF Score: a rules-based ranking of setups from 0 to 100, not a probability of profit."],
+  model: ["Model estimate", "A machine-learning probability. It can be wrong and is not the HSF Score."],
+  ai: ["AI-written", "Text written by Claude from the data on this page. It can be wrong; check the figures it cites."],
+};
+
+export function SourceTag({ source }: { source: Source }) {
+  const [text, title] = SOURCE[source];
+  return <span className={`source-tag source-${source}`} title={title}>{text}</span>;
+}
+
+export function Card({ title, aside, children, id, className = "", source }: { title?: ReactNode; aside?: ReactNode; children: ReactNode; id?: string; className?: string; source?: Source }) {
   const hid = id ? `${id}-h` : undefined;
   return (
     <section id={id} className={`card ${className}`} aria-labelledby={hid}>
       {(title || aside) && (
         <div className="card-head">
-          {title && <h2 className="h2" id={hid}>{title}</h2>}
+          {title && <div className="card-title">
+            <h2 className="h2" id={hid}>{title}</h2>
+            {source && <SourceTag source={source} />}
+          </div>}
           {aside && <div className="cap">{aside}</div>}
         </div>
       )}
@@ -38,8 +56,10 @@ export function ScoreBadge({ score }: { score: number | null | undefined }) {
 
 export function ScoreBar({ score }: { score: number | null | undefined }) {
   const s = Math.max(0, Math.min(100, score ?? 0));
+  // Strong setups (75+) get the full accent; ranked names a softer one; below the ranked floor, grey.
+  const tier = score == null || score < RANKED_MIN ? "weak" : score >= 75 ? "strong" : "ranked";
   return (
-    <div className="scorebar">
+    <div className="scorebar" data-tier={tier}>
       <div className="track" aria-hidden="true"><div className="fill" style={{ width: `${s}%` }} /></div>
       <span className="mono strong">{score ?? "--"}</span>
     </div>
@@ -205,4 +225,34 @@ export function RefreshStatus({ updatedAt, refreshing, error, onRetry, sourceNot
       <RetryButton key={error.receivedAt} error={error} onRetry={onRetry} />
     </div>}
   </div>;
+}
+
+/** One KPI: a short label, a figure, and an optional note under it (sample size, timestamp).
+ * `tone` colors the figure; callers keep a sign or word in the value so color is never the only cue. */
+export function Stat({ label, value, note, tone }: { label: ReactNode; value: ReactNode; note?: ReactNode; tone?: "up" | "down" | "warn" }) {
+  return (
+    <div className="stat">
+      <dt className="stat-label">{label}</dt>
+      <dd className={`stat-value mono${tone ? ` ${tone === "warn" ? "warn-text" : tone}` : ""}`}>{value}</dd>
+      {note != null && <dd className="stat-note">{note}</dd>}
+    </div>
+  );
+}
+
+/** A row of KPIs that wraps to two columns on phones. */
+export function StatGrid({ children, label }: { children: ReactNode; label?: string }) {
+  return <dl className="stat-grid" aria-label={label}>{children}</dl>;
+}
+
+/** A section title with an optional one-line description and actions on the right. */
+export function SectionHeader({ title, description, actions, id }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; id?: string }) {
+  return (
+    <div className="section-header">
+      <div className="stack-xs">
+        <h2 className="h2" id={id}>{title}</h2>
+        {description && <p className="cap">{description}</p>}
+      </div>
+      {actions && <div className="row-actions">{actions}</div>}
+    </div>
+  );
 }

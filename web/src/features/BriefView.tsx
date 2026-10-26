@@ -11,7 +11,7 @@ import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { AIText } from "@/components/AIText";
 import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
-import { MarketPulse, OpportunityRadar } from "@/features/BriefIntelligence";
+import { BriefGlance, MarketPulse, OpportunityRadar } from "@/features/BriefIntelligence";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, shortDate } from "@/lib/format";
@@ -67,7 +67,7 @@ function SectorHeat({ sectors }: { sectors: { sector?: unknown; chg_pct?: unknow
   return (
     <ul className="sector-heat">
       {rows.map((s) => {
-        const a = 0.12 + 0.6 * Math.min(1, Math.abs(s.chg_pct) / lim);
+        const a = 0.1 + 0.35 * Math.min(1, Math.abs(s.chg_pct) / lim); // capped so the label keeps 4.5:1 contrast
         return (
           <li key={String(s.sector)} className={s.chg_pct >= 0 ? "up" : "down"} style={{ ["--heat" as string]: a.toFixed(2) }}>
             <span>{String(s.sector ?? "")}</span>
@@ -112,7 +112,7 @@ function Narrative() {
   const act = useAction();
   const [text, setText] = useState<Schemas["AIText"] | null>(null);
   return (
-    <Card title="AI market narrative" id="ai">
+    <Card title="AI market narrative" id="ai" source="ai">
       {text?.text ? <AIText text={text.text} /> : text ? <p className="cap">Nothing to summarize yet today.</p>
         : <p className="cap">A short read of today&apos;s brief, written by Claude from the data on this page.</p>}
       <ErrorLine error={act.error} />
@@ -131,6 +131,7 @@ function BriefBody({ b }: { b: Brief }) {
   const { can } = useSession();
   return (
     <>
+      <BriefGlance b={b} />
       <div className="brief-dashboard">
         <div className="brief-center">
           <MarketPulse b={b} />
@@ -138,11 +139,11 @@ function BriefBody({ b }: { b: Brief }) {
           {can("can_ai_notes") && <Narrative />}
         </div>
         <div className="brief-left">
-            <Card title="Top movers" id="gainers"><MoverBars gainers={b.gainers} losers={b.losers} /></Card>
-            <Card title="Gappers" id="gap">
+            <Card title="Top movers" id="gainers" source="data"><MoverBars gainers={b.gainers} losers={b.losers} /></Card>
+            <Card title="Gappers" id="gap" source="data">
               <MoverList rows={b.gappers.map((g) => ({ ticker: g.ticker, chg_pct: g.gap_pct, extra: `${price(g.last)}${g.earnings_days != null ? ` · earnings in ${g.earnings_days}d` : ""}` }))} empty="No gappers in this snapshot." />
             </Card>
-            <Card title="Sectors" id="sectors">
+            <Card title="Sectors" id="sectors" source="data">
               <SectorHeat sectors={b.sectors} />
             </Card>
         </div>
@@ -152,12 +153,12 @@ function BriefBody({ b }: { b: Brief }) {
             {b.golden_crosses.length ? <div className="chips">{b.golden_crosses.map((t) => <TickerLink key={t} ticker={t} />)}</div> : <p className="cap">None today.</p>}
           </Card>
           <details><summary>Model details</summary>
-          <Card title="Breakout scores" id="bo">
+          <Card title="Breakout scores" id="bo" source="ranking">
             {b.top_breakout_scores.length ? (
               <ul className="rows">{b.top_breakout_scores.map((t) => <li key={String(t.ticker)} className="row"><TickerLink ticker={String(t.ticker)} /><span className="grow" /><span className="mono">{String(t.score ?? "—")}</span></li>)}</ul>
             ) : <p className="cap">None in this snapshot.</p>}
           </Card>
-          <Card title="PreBreakout picks" id="pb">
+          <Card title="PreBreakout picks" id="pb" source="model">
             {b.prebreakout_locked ? <Locked title="PreBreakout is part of Premium" plan="premium">The model&apos;s top candidates before they break out.</Locked>
               : b.prebreakout_picks.length ? (
                 <ul className="rows">{b.prebreakout_picks.map((p) => <li key={p.ticker} className="row"><TickerLink ticker={p.ticker} /><span className="grow" /><span className="mono">{probPct(p.prob)}</span></li>)}</ul>

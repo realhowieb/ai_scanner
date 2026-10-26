@@ -9,7 +9,7 @@ const lc = vi.hoisted(() => {
   const scale = { fitContent: vi.fn(), getVisibleLogicalRange: vi.fn(() => null), setVisibleLogicalRange: vi.fn(), timeToCoordinate: vi.fn(() => null), subscribeVisibleLogicalRangeChange: vi.fn(), unsubscribeVisibleLogicalRangeChange: vi.fn(), subscribeSizeChange: vi.fn(), unsubscribeSizeChange: vi.fn() };
   const series: { setData: ReturnType<typeof vi.fn>; applyOptions: ReturnType<typeof vi.fn> }[] = [];
   const chart = { setCrosshairPosition: vi.fn(), clearCrosshairPosition: vi.fn(), remove: vi.fn(), applyOptions: vi.fn(), subscribeCrosshairMove: vi.fn((callback: (point: { time: string | null; point?: { x: number; y: number } }) => void) => { void callback; }), timeScale: () => scale,
-    addSeries: vi.fn(() => { const s = { setData: vi.fn(), applyOptions: vi.fn(), priceScale: () => ({ applyOptions: vi.fn() }) }; series.push(s); return s; }) };
+    addSeries: vi.fn(() => { const s = { setData: vi.fn(), applyOptions: vi.fn(), createPriceLine: vi.fn(), priceScale: () => ({ applyOptions: vi.fn() }) }; series.push(s); return s; }) };
   return { chart, series, scale, createChart: vi.fn((container: unknown, options: unknown) => { void container; void options; return chart; }), markers: { setMarkers: vi.fn() } };
 });
 vi.mock("lightweight-charts", () => ({ createChart: lc.createChart, createSeriesMarkers: () => lc.markers,

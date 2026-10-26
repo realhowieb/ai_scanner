@@ -8,7 +8,7 @@ import type { FormEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { AIText } from "@/components/AIText";
-import { Card, ErrorLine, Locked, ResearchNotice } from "@/components/ui";
+import { Card, ErrorLine, Locked } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
@@ -73,7 +73,6 @@ export function AskHSFView() {
         </div>
       </section>
       <Card title="Conversation" aside="Premium">
-        <ResearchNotice compact />
         {turns.length === 0 ? (
           <div className="chips" role="group" aria-label="Example questions">
             {ASK_SUGGESTIONS.map((s) => <button key={s} type="button" className="chip" disabled={act.busy} onClick={() => void ask(s)}>{s}</button>)}
