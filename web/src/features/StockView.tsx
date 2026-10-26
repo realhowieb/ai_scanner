@@ -9,6 +9,7 @@ import { alertRules } from "@/api/userData";
 import type { Schemas } from "@/api/client";
 import { backLabel, usePreviousPage } from "@/components/AppShell";
 import { AIText } from "@/components/AIText";
+import { SectionNav } from "@/components/SectionNav";
 import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
@@ -315,11 +316,14 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
         </div>
       </section>
 
+      <SectionNav label={`${s.ticker} sections`} items={[["snapshot", "Overview"], ["price", "Chart"], ["score", "HSF Score"], ["signals", "Signals"],
+        ["risks", "Risks"], ["hist", "History"], ["plan", "Trade plan"], ["ai", "AI note"], ["news", "News"], ["filings", "Filings"]]} />
+
       {ranked ? <DecisionSnapshot s={s} /> : <UnrankedSnapshot s={s} onAlert={alertAdded} />}
 
       <div className="split stock-split">
         <div className="col-main">
-          <Card title="Price" id="price" className="price-card" aside={s.bars_as_of ? `Daily bars through ${shortDate(s.bars_as_of)}` : undefined}>
+          <Card title="Price" id="price" source="data" className="price-card" aside={s.bars_as_of ? `Daily bars through ${shortDate(s.bars_as_of)}` : undefined}>
             {s.bars.length >= 2 ? <PriceChart bars={s.bars} events={signalEvents(s)} earningsDate={earningsDate(s.earnings_days)} volumeFeed={s.volume_feed} /> : <Empty title="No price history cached for this ticker.">Charts appear once daily bars are available for this ticker.</Empty>}
           </Card>
           {/* The first reason is already the snapshot's "Main reason". */}
@@ -338,13 +342,13 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
               {pro ? <TradePlan s={s} /> : <Locked title="Trade plans are part of Pro" plan="pro">Entry, stop, targets and position size from your account size and risk.</Locked>}
             </Card>
           )}
-          {aiNotes && s.in_latest_scan && <Card title="AI note" id="ai"><AINote s={s} /></Card>}
+          {aiNotes && s.in_latest_scan && <Card title="AI note" id="ai" source="ai"><AINote s={s} /></Card>}
           <StockNews ticker={s.ticker} />
           <StockFilings ticker={s.ticker} />
         </div>
 
         <aside className="col-side">
-          <Card title="HSF Score" id="score" className="score-card" aside={s.scan_at ? <SnapshotTime at={s.scan_at} archived={s.from_history} /> : undefined}>
+          <Card title="HSF Score" id="score" source="ranking" className="score-card" aside={s.scan_at ? <SnapshotTime at={s.scan_at} archived={s.from_history} /> : undefined}>
             {noScore ? <Empty title="No HSF Score">It needs to appear in a scan first.</Empty> : (
               <>
                 <div className="score-ring" style={{ ["--p" as string]: `${s.hsf_score}%` }}>
@@ -362,7 +366,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
           <ScoreHistory ticker={s.ticker} />
 
           {comps.length > 0 && (
-            <Card title="Score components" id="comps">
+            <Card title="Score components" id="comps" source="ranking">
               <ul className="comps">
                 {comps.map(([k, v]) => (
                   <li key={k}><span className="cap">{label(k)}</span>
@@ -377,7 +381,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             {s.signals.length ? <div className="chips">{s.signals.map((g) => <Pill key={g}>{setupLabel(g)}</Pill>)}</div> : <p className="cap">No active signals.</p>}
             <dl className="kv">
               <div><dt>Breakout score</dt><dd className="mono">{s.breakout_score != null && Number.isFinite(s.breakout_score) ? s.breakout_score.toFixed(1) : "—"}</dd></div>
-              <div><dt>PreBreakout</dt><dd className="mono">{premium ? probPct(s.prob) : <Pill tone="gold">Premium</Pill>}</dd></div>
+              <div><dt>PreBreakout <span className="cap">(model probability)</span></dt><dd className="mono">{premium ? probPct(s.prob) : <Pill tone="gold">Premium</Pill>}</dd></div>
               <div><dt>Earnings</dt><dd className="mono">{s.earnings_days === null || s.earnings_days === undefined ? "—" : s.earnings_days === 0 ? "Today" : `in ${s.earnings_days}d`}</dd></div>
             </dl>
           </Card>}

@@ -33,7 +33,7 @@ describe("cached session", () => {
     fetchMock.mockImplementation(() => new Promise<Response>((resolve) => { answer = resolve; }));
     render(<Protected><Plan /></Protected>);
     expect(await screen.findByText("plan basic")).toBeInTheDocument();
-    expect(String(fetchMock.mock.calls[0]?.[0]?.url ?? fetchMock.mock.calls[0]?.[0])).toContain("/v1/me");
+    expect(fetchMock.mock.calls.some((c) => String(c[0]?.url ?? c[0]).includes("/v1/me"))).toBe(true);
     answer(jsonResponse(me("pro")));
     expect(await screen.findByText("plan pro")).toBeInTheDocument();
     expect(readCachedMe()?.plan).toBe("pro");

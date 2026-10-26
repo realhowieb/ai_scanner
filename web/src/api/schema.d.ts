@@ -7800,6 +7800,11 @@ export interface components {
          */
         Tape: {
             /**
+             * Phase
+             * @description U.S. equity session right now (ET, holiday-aware); null when unknown
+             */
+            phase?: ("premarket" | "open" | "afterhours" | "closed") | null;
+            /**
              * Quotes
              * @description In display order; empty when no quote is available
              * @default []

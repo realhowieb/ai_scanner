@@ -124,7 +124,8 @@ class TodayBuilderTests(unittest.TestCase):
         top = out["top_setups"]
         self.assertEqual(top["scan_at"], "2026-09-28T19:35:00+00:00")
         self.assertIn(top["state"], ("qualifying", "no_qualifying"))
-        self.assertLessEqual(len(top["setups"]) + len(top["also_ranked"]), 5)
+        self.assertLessEqual(len(top["setups"]) + len(top["also_ranked"]), self.today.TOP_N)
+        self.assertEqual(self.today.TOP_N, 10)
         if top["also_ranked"]:
             self.assertEqual(top["ranked_floor"], 40)
         strong = {s["ticker"] for s in top["setups"]}

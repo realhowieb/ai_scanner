@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { api, unwrap } from "@/api/client";
@@ -19,6 +19,20 @@ export function StockSearch({ compact = false }: { compact?: boolean }) {
   const [recent, setRecent] = useState<string[]>([]);
   const [index, setIndex] = useState(-1);
   const text = q.trim();
+  const inputRef = useRef<HTMLInputElement>(null);
+  // "/" jumps to the header search from anywhere that isn't already a text field.
+  useEffect(() => {
+    if (!compact) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [compact]);
   // Debounce at the request boundary, with AbortSignal to drop superseded queries.
   const suggestions = useApi(focused && text ? `symbols:${text}` : null, async (signal) => {
     await new Promise<void>((resolve, reject) => {
@@ -45,7 +59,8 @@ export function StockSearch({ compact = false }: { compact?: boolean }) {
     setBad(true); setFocused(true);
   }}>
     <label className="sr-only" htmlFor={id}>Search ticker or company</label>
-    <span className={compact ? "search-input" : "field grow"}><input id={id} type="search" placeholder="Ticker or company" maxLength={80} value={q} autoComplete="off"
+    {compact && <svg className="search-glyph" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></svg>}
+    <span className={compact ? "search-input" : "field grow"}><input ref={inputRef} id={id} type="search" aria-keyshortcuts={compact ? "/" : undefined} placeholder="Ticker or company" maxLength={80} value={q} autoComplete="off"
       role="combobox" aria-expanded={focused && options.length > 0} aria-controls={`${id}-options`}
       aria-autocomplete="list" aria-activedescendant={index >= 0 && options[index] ? `${id}-${index}` : undefined}
       aria-invalid={bad || undefined} aria-describedby={bad ? `${id}-error` : undefined}
@@ -65,6 +80,7 @@ export function StockSearch({ compact = false }: { compact?: boolean }) {
           setIndex((i) => !options.length ? -1 : i < 0 ? e.key === "ArrowDown" ? 0 : options.length - 1 : (i + (e.key === "ArrowDown" ? 1 : -1) + options.length) % options.length);
         }
       }} /></span>
+    {compact && !q && <kbd className="search-key" aria-hidden="true" title="Press / to search">/</kbd>}
     {!compact && <button className="btn btn-primary" type="submit">Open</button>}
     {focused && options.length > 0 && <ul id={`${id}-options`} className="stock-suggestions" role="listbox">
       {options.map((o, i) => <li key={o.ticker} id={`${id}-${i}`} role="option" aria-selected={i === index}>

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Schemas } from "@/api/client";
-import { MarketPulse, OpportunityRadar, RankMovement } from "@/features/BriefIntelligence";
+import { BriefGlance, MarketPulse, OpportunityRadar, RankMovement } from "@/features/BriefIntelligence";
 
 const brief: Schemas["Brief"] = {
   available: true, snapshot_time: "2026-10-07T14:00:00Z", phase: "regular", has_previous_snapshot: true,
@@ -14,18 +14,22 @@ const brief: Schemas["Brief"] = {
 
 describe("Brief intelligence", () => {
   it("renders actual indexes, scoped counts, breadth and sector extremes", () => {
-    render(<MarketPulse b={brief} />);
+    const glance = render(<BriefGlance b={brief} />);
     expect(screen.getByText("-1.00%")).toBeInTheDocument();
     expect(screen.getByText("+2.00%")).toBeInTheDocument();
+    expect(screen.getByText("Energy")).toBeInTheDocument(); // strongest
+    expect(screen.getByText("Tech")).toBeInTheDocument(); // weakest
+    glance.unmount();
+    render(<MarketPulse b={brief} />);
     expect(screen.getByText(/75% advancing/)).toBeInTheDocument();
     expect(screen.getByText("Top HSF Score").nextSibling).toHaveTextContent("81");
     expect(screen.queryByText("PreBreakout picks shown")).not.toBeInTheDocument();
-    expect(screen.getByText("Energy")).toBeInTheDocument();
     expect(screen.getByText(/Snapshot Oct 7/)).toBeInTheDocument();
   });
   it("omits unavailable breadth without hiding indexes", () => {
-    render(<MarketPulse b={{ ...brief, breadth: null }} />);
+    render(<><BriefGlance b={{ ...brief, breadth: null }} /><MarketPulse b={{ ...brief, breadth: null }} /></>);
     expect(screen.queryByRole("region", { name: "HSF snapshot breadth" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Advancing")).not.toBeInTheDocument();
     expect(screen.getByText("SPY")).toBeInTheDocument();
   });
   it("retains API ordering, score movement and stock navigation", () => {

@@ -71,7 +71,7 @@ const COLUMNS = col.columns([
   col.display({ id: "prob", header: "PreBreakout", cell: (c) => <PreBreakoutMeter prob={c.row.original.prob} rank={c.row.original.prob_rank} /> }),
   col.display({ id: "save", header: () => <span className="sr-only">Save</span>, cell: (c) => <SaveToWatchlistButton ticker={c.row.original.ticker} compact /> }),
 ]);
-const TH_CLASS: Record<string, string> = { score: "w30", last: "num", change: "num", gap: "num" };
+const TH_CLASS: Record<string, string> = { score: "w-score", last: "num", change: "num", gap: "num" };
 
 /** Ranked rows, as a table on wide screens and as cards on phones. Rows come ranked from the API. */
 /** `numbered` = rows are in HSF rank order, so the position is the rank; off for other sort orders. */
@@ -168,7 +168,6 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               {r.fading && <Pill tone="warn">Fading</Pill>}
               <NewsMark ticker={r.ticker} flag={news[r.ticker]} />
               <span className="grow" />
-              {sparks && visible("spark") && <DailySpark points={series[r.ticker]} ticker={r.ticker} width={72} height={22} />}
               <SaveToWatchlistButton ticker={r.ticker} compact />
             </div>
             <dl className="sc-facts">
@@ -178,6 +177,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               <div hidden={!visible("gap")}><dt>Gap</dt><dd className="mono">{pct(r.gap_pct)}</dd></div>
               <div hidden={!visible("rvol")}><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>
               {premium && <div hidden={!visible("prob")}><dt>PreBreakout</dt><dd><PreBreakoutMeter prob={r.prob} rank={r.prob_rank} /></dd></div>}
+              {sparks && visible("spark") && <div className="sc-spark"><dt className="sr-only">20 sessions</dt><dd><DailySpark points={series[r.ticker]} ticker={r.ticker} width={72} height={22} /></dd></div>}
             </dl>
           </li>
         ))}

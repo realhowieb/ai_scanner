@@ -237,6 +237,8 @@ class TapeQuote(BaseModel):
 class Tape(BaseModel):
     """The scrolling price strip: market ETFs and a few large caps."""
     quotes: List[TapeQuote] = Field(default=[], description="In display order; empty when no quote is available")
+    phase: Optional[Literal["premarket", "open", "afterhours", "closed"]] = Field(
+        default=None, description="U.S. equity session right now (ET, holiday-aware); null when unknown")
 
 
 class Snapshot(BaseModel):

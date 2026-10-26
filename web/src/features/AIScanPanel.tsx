@@ -8,7 +8,7 @@ import type { FormEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { AIText } from "@/components/AIText";
-import { Card, ErrorLine, Locked, ResearchNotice } from "@/components/ui";
+import { Card, ErrorLine, Locked } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useSession } from "@/session/SessionProvider";
 
@@ -98,14 +98,13 @@ export function AIScanPanel({ runId }: { runId?: number }) {
   const { can } = useSession();
   if (!can("can_ai_notes")) {
     return (
-      <Card title="AI research" id="ai">
+      <Card title="AI research" id="ai" source="ai">
         <Locked title="AI scan summaries and chat are part of Premium" plan="premium">Claude summarizes the evidence behind top results and answers research questions about this scan.</Locked>
       </Card>
     );
   }
   return (
-    <Card title="AI research" id="ai" aside="Premium">
-      <ResearchNotice compact />
+    <Card title="AI research" id="ai" source="ai" aside="Premium">
       <p className="cap">Claude uses only this scan&apos;s data. HSF Score controls ranking; AI commentary does not recommend trades.</p>
       <Summary runId={runId} />
       <div className="divider" role="separator" />

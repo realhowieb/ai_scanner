@@ -438,10 +438,11 @@ class TodayEndpointTests(ApiTestCase):
     def test_market_tape(self):
         token = self.login().json()["access_token"]
         quotes = [{"symbol": "SPY", "last": 777.3, "chg_pct": -0.23}, {"symbol": "DIA", "last": 511.0, "chg_pct": None}]
-        with mock.patch("api.today.tape_quotes", return_value=quotes):
+        with mock.patch("api.today.tape_quotes", return_value=quotes), \
+                mock.patch("api.today.market_phase", return_value="afterhours"):
             r = self.client.get("/v1/market/tape", headers=self.auth(token))
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"quotes": quotes})
+        self.assertEqual(r.json(), {"quotes": quotes, "phase": "afterhours"})
         self.assertEqual(self.client.get("/v1/market/tape").status_code, 401)
 
     def test_today_personal_passes_the_user_and_marker(self):

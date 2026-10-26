@@ -5,7 +5,7 @@
 // included), and nothing is picked as "best". Returns are fractions from the API.
 import { outcomes } from "@/api/account";
 import type { OutcomeGroups, OutcomeHorizons, OutcomeMetrics, OutcomeScores, OutcomeSummary, OutcomeSymbol } from "@/api/account";
-import { Card, Empty, ErrorState, Pill, Skeleton } from "@/components/ui";
+import { Card, Empty, ErrorState, Pill, Skeleton, Stat, StatGrid } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { etDate } from "@/lib/format";
 
@@ -61,6 +61,12 @@ function MetricHead({ first }: { first: string }) {
   );
 }
 
+/** "1.0" or "1.0, 1.1" from {version: count}. */
+function versions(v: Record<string, number> | undefined): string {
+  const keys = Object.keys(v ?? {});
+  return keys.length ? keys.sort().join(", ") : "—";
+}
+
 function SummaryCard({ s }: { s: OutcomeSummary }) {
   const m = s.metrics;
   return (
@@ -71,6 +77,12 @@ function SummaryCard({ s }: { s: OutcomeSummary }) {
         {" "}{s.matured_observations} have a {s.horizon}-trading-day outcome, {s.pending_observations} are still pending
         {s.unavailable_observations ? ` and ${s.unavailable_observations} had no price data` : ""}. No filters applied.
       </p>
+      <StatGrid label="Signal counts">
+        <Stat label="Signals observed" value={s.total_observations.toLocaleString("en-US")} note={range(s.date_range)} />
+        <Stat label="Outcome measured" value={s.matured_observations.toLocaleString("en-US")} note={`after ${s.horizon} trading days`} />
+        <Stat label="Still pending" value={s.pending_observations.toLocaleString("en-US")} note="not counted as wins or losses" />
+        <Stat label="Score version" value={versions(s.score_versions)} note={Object.keys(s.score_versions ?? {}).length > 1 ? "mixed: compare with care" : "one scoring method"} />
+      </StatGrid>
       <p className="cap">Sample coverage describes the number of observations, not performance or predictive reliability. Best / worst move (MFE / MAE) measures the largest rise and drawdown during the holding period, not a realized trade result.</p>
       <dl className="kv">
         <div><dt>Median return</dt><dd className={`mono ${tone(m.median_return)}`}>{signed(m.median_return)}</dd></div>
@@ -130,7 +142,7 @@ function ScoresCard({ d }: { d: OutcomeScores }) {
     <Card title="By HSF score" id="scores">
       <p className="cap">Every score range, including weak ones, over {d.horizon} trading days. Ranges with fewer than {d.evidence_thresholds["LIMITED"]} matured signals are greyed: read them as anecdotes.</p>
       <ScoreLadder buckets={d.buckets} />
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Results by HSF score table; scroll sideways for more columns">
         <table className="table">
           <MetricHead first="HSF score" />
           <tbody>
@@ -153,7 +165,7 @@ function ScoresCard({ d }: { d: OutcomeScores }) {
 function HorizonsCard({ d }: { d: OutcomeHorizons }) {
   return (
     <Card title="By holding period" id="horizons">
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Results by holding period table; scroll sideways for more columns">
         <table className="table">
           <MetricHead first="Held for" />
           <tbody>
@@ -174,7 +186,7 @@ function HorizonsCard({ d }: { d: OutcomeHorizons }) {
 function SetupsCard({ d }: { d: OutcomeGroups }) {
   return (
     <Card title="By setup" id="setups">
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Results by setup table; scroll sideways for more columns">
         <table className="table">
           <MetricHead first="Setup" />
           <tbody>
@@ -239,7 +251,7 @@ export function SimilarTable({ d, what }: { d: OutcomeHorizons; what: string }) 
   return (
     <div className="stack-sm similar-setups">
       <p className="body-sm"><strong>Similar past setups:</strong> how earlier {what} moved afterwards.</p>
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Similar past setups table; scroll sideways for more columns">
         <table className="table">
           <thead><tr>
             <th scope="col">Held for</th><th scope="col" className="num">Matured</th><th scope="col" className="num">Median return</th>

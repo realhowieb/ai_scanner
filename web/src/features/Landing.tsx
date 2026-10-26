@@ -38,11 +38,11 @@ const TRUST: [string, string][] = [
 ];
 const VIEWS = [
   { id: "scanner", tab: "Scanner", title: "Ranked opportunities", text: "Thousands of symbols. One focused shortlist.",
-    src: "/landing/scanner-current.jpg", w: 1425, h: 1715, alt: "HSF Scanner showing ranked opportunities, HSF Scores, statuses, and why the leading setup ranked" },
+    src: "/landing/scanner-current.jpg", w: 1425, h: 1451, alt: "HSF Scanner with sample data showing ranked opportunities, HSF Scores, statuses, and why the leading setup ranked" },
   { id: "day", tab: "Day Trader", title: "Day Trader", text: "Review intraday candidates, scores and market context.",
-    src: "/landing/day-current.jpg", w: 1425, h: 1456, alt: "Current HSF Day Trader interface with sample intraday candidates and scores" },
+    src: "/landing/day-current.jpg", w: 1425, h: 1384, alt: "Current HSF Day Trader interface with sample intraday candidates and scores" },
   { id: "brief", tab: "Market Brief", title: "Market Brief", text: "Know the market environment before evaluating the setup.",
-    src: "/landing/brief-current.jpg", w: 1425, h: 1516, alt: "Current HSF Market Brief with sample indexes, breadth, sectors and earnings" },
+    src: "/landing/brief-current.jpg", w: 1425, h: 1844, alt: "Current HSF Market Brief with sample indexes, breadth, sectors and earnings" },
 ] as const;
 
 const VISIT_KEY = "hsf-landing-visit";

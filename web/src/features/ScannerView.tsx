@@ -122,7 +122,7 @@ export function ScannerView() {
           </p>
         </div>
         <div className="row-actions scanner-actions">
-          <button type="button" className="btn" onClick={() => { reload(); if (earnings) earn.reload(); }} disabled={lockedSignal || loading || refreshing}>Refresh results</button>
+          <button type="button" className="btn" onClick={() => { reload(); if (earnings) earn.reload(); }} disabled={lockedSignal || loading || refreshing}>Refresh<span className="hide-narrow">&nbsp;results</span></button>
           <Link href="/scanner/history" className="btn">Scan history</Link>
           <Link href="/scanner/custom" className="btn btn-primary">Custom scan</Link>
         </div>
