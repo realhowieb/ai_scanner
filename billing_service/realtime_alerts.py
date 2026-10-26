@@ -254,7 +254,7 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
 def _unsubscribe_url(token: Optional[str]) -> Optional[str]:
     if not token:
         return None
-    base = (os.getenv("APP_BASE_URL", "") or "https://hsf-web-v1.onrender.com").rstrip("/")
+    base = (os.getenv("APP_BASE_URL", "") or "https://app.hsfinest.com").rstrip("/")
     return f"{base}/unsubscribe?t={token}&k=alerts"
 
 
@@ -282,7 +282,7 @@ def _live_alert_html(body: str, snap: Optional[Dict[str, Any]], ticker: Optional
     inner = f"<p style='margin:0 0 8px;font-size:14px'>{k.esc(rest)}</p>"
     if tk:
         inner += k.table(["Ticker", "Price", "Day %"], [[k.ticker(tk), k.num(last), k.pct(day)]])
-        base = (os.getenv("APP_BASE_URL", "").strip() or "https://hsf-web-v1.onrender.com").rstrip("/")
+        base = (os.getenv("APP_BASE_URL", "").strip() or "https://app.hsfinest.com").rstrip("/")
         inner += k.button(f"{base}/stocks/{tk}", f"Open {k.esc(tk)} in HSF →")
     title = f"{k.esc(label)} · {k.esc(tk)}" if tk else k.esc(label)
     footer = disclaimer + (f"<br>Don't want these emails? <a href='{k.esc(unsubscribe_url)}' "

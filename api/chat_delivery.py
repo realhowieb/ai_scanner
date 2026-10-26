@@ -240,7 +240,7 @@ def send_discord(url: str, text: str, *, client=None) -> tuple:
 
 
 def _app_url() -> str:
-    return (os.environ.get("APP_BASE_URL", "").strip() or "https://hsf-web-v1.onrender.com").rstrip("/")
+    return (os.environ.get("APP_BASE_URL", "").strip() or "https://app.hsfinest.com").rstrip("/")
 
 
 def send_all(user: str, text: str) -> int:

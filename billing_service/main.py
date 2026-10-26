@@ -82,7 +82,7 @@ APP_PORTAL_RETURN_URL = os.getenv("APP_PORTAL_RETURN_URL", "").strip()  # e.g. h
 # APP_SUCCESS_URL (Streamlit) is always allowed.
 APP_RETURN_HOSTS = frozenset(
     h.strip().lower()
-    for h in os.getenv("APP_RETURN_HOSTS", "hsf-web-v1.onrender.com").split(",")
+    for h in os.getenv("APP_RETURN_HOSTS", "app.hsfinest.com,hsf-web-v1.onrender.com").split(",")
     if h.strip()
 )
 

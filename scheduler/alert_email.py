@@ -132,7 +132,7 @@ def _app_url(path: str) -> str:
 
         return _base_url() + path
     except Exception:
-        return "https://hsf-web-v1.onrender.com" + path
+        return "https://app.hsfinest.com" + path
 
 
 def _row_cells(tk: str, detail: str, quote: Dict[str, Any], watched: set) -> List[str]:
