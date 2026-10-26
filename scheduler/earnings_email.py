@@ -126,7 +126,7 @@ def scanner_link(when: str) -> str:
 
         base = _base_url()
     except Exception:
-        base = "https://hsf-web-v1.onrender.com"
+        base = "https://app.hsfinest.com"
     return f"{base}/scanner?signal=earnings&when={when}&all=1"
 
 

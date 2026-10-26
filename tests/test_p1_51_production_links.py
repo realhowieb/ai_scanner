@@ -1,4 +1,4 @@
-"""P1-51: links default to the production web app (hsf-web-v1), not Streamlit.
+"""P1-51: links default to the production web app (app.hsfinest.com), not Streamlit.
 
 The scheduled digest/wrap/alert emails are built by the GitHub job, which sets
 no APP_BASE_URL, so the code default is what their links use.
@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-PROD = "https://hsf-web-v1.onrender.com"
+PROD = "https://app.hsfinest.com"
 
 
 class ProductionLinkTests(unittest.TestCase):

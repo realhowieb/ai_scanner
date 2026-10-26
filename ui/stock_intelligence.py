@@ -527,7 +527,7 @@ def share_url(ticker: str) -> str:
     try:
         from config import APP_BASE_URL
     except Exception:
-        APP_BASE_URL = "https://hsf-web-v1.onrender.com"
+        APP_BASE_URL = "https://app.hsfinest.com"
     base = str(APP_BASE_URL).rstrip('/')
     t = str(ticker).strip().upper()
     # The Streamlit app's page is /stock?ticker=; the web app's is /stocks/<T>.
