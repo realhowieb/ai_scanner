@@ -142,6 +142,35 @@ describe("Earnings scanner", () => {
     expect(screen.getByText(/scored by your earnings scan at 3:30 PM ET/)).toBeInTheDocument();
   });
 
+  it("shows Premium every reporter auto-scored, with no per-row Score it", async () => {
+    search = new URLSearchParams("signal=earnings&all=1");
+    earnings = () => jsonResponse(scan([
+      row("IBM", "2026-10-21", 0, { score: 50 }),
+      row("ACGL", "2026-10-21", 0, { ranked: false, rank: null, score: 47, primary_setup: "gapper", rvol: 1.3, score_source: "auto", last: 100.14 }),
+      row("AMRN", "2026-10-21", 0, { ranked: false, rank: null, score: 31, primary_setup: "momentum", score_source: "auto", last: 12.05 }),
+    ], { window: "today", unranked_total: 2, auto_scored_at: "2026-10-21T14:35:00Z" }));
+    wrap("premium");
+    const table = await screen.findByRole("table");
+    const acgl = within(table).getByText("ACGL").closest("tr")!;
+    expect(within(acgl).getByText("Auto")).toBeInTheDocument();
+    expect(within(acgl).getByText("47")).toBeInTheDocument();
+    expect(within(table).queryByRole("link", { name: "Score it" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Score every reporter" })).not.toBeInTheDocument();
+    expect(screen.getByText(/scored automatically at 10:35 AM ET/)).toBeInTheDocument();
+    expect(screen.queryByText(/Premium scores every reporter automatically/)).not.toBeInTheDocument();
+  });
+
+  it("tells Pro that Premium scores every reporter automatically", async () => {
+    search = new URLSearchParams("signal=earnings&all=1");
+    earnings = () => jsonResponse(scan([
+      row("BKR", "2026-10-21", 0, { ranked: false, rank: null, score: null, primary_setup: null, score_source: null }),
+    ], { window: "today", unranked_total: 1 }));
+    wrap("pro");
+    expect(await screen.findByText(/Premium scores every reporter automatically/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See Premium" })).toHaveAttribute("href", "/pricing");
+    expect(screen.getByRole("link", { name: "Score every reporter" })).toBeInTheDocument();
+  });
+
   it("describes earnings scan alerts", () => {
     expect(describeScanAlert(0, '{"earnings":"today"}')).toBe("HSF 0+, reporting today");
   });

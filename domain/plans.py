@@ -23,6 +23,7 @@ FEATURE_MIN_TIER: dict[str, str] = {
     "can_day_trader": "pro",  # live intraday monitor (pages/day_trader.py)
     "can_scan_alerts": "pro",  # saved scanner filters that alert on new matches (SCAN_MATCH rules)
     "can_insider_alerts": "pro",  # SEC Form 4 insider-buy alerts (INSIDER_BUY rules)
+    "can_earnings_autoscore": "premium",  # Earnings tab scores every reporter on load (db.earnings_autoscore)
     "can_diagnostics": "admin",
     "can_admin_panel": "admin",
 }

@@ -56,22 +56,12 @@ def score_tickers(tickers: List[str], *, premarket: bool = False) -> Dict[str, D
     if not tickers:
         return {}
     try:
-        from api.scans import _scan_row
-        from scan.engine import run_breakout_scan
-        from scan.execution import run_manual_scan_execution
-        from ui.market_scans import top_setups
-        from ui.scan_providers import apply_alpaca_extended_prices, sanitize_universe_symbols
+        from scheduler.earnings_autoscore import fresh_scores, scan_setups
 
-        tickers = sanitize_universe_symbols(tickers)
-        df = run_manual_scan_execution(
-            runner=run_breakout_scan, tickers=tickers, premarket=premarket, afterhours=False,
-            unusual_volume=False, min_gap=0.0, min_price=0.0, max_price=1_000_000.0,
-            top_n=len(tickers), profile="regular", apply_gap_filter=False, diagnostics=False,
-            extended_price_transform=apply_alpaca_extended_prices, min_dollar_vol=0.0,
-        )
+        # This slot's Premium auto-score pass already scored the week's reporters.
+        rows = list((fresh_scores(premarket=premarket) or {}).values()) or scan_setups(tickers, premarket=premarket)
         out: Dict[str, Dict[str, Any]] = {}
-        for o in top_setups(df, n=100_000):
-            row = _scan_row(o)
+        for row in rows:
             k = _key(row.get("ticker"))
             if k and k not in out:
                 out[k] = {"score": row.get("score"), "last": row.get("last"), "chg_pct": row.get("chg_pct")}

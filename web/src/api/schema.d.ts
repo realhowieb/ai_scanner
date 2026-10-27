@@ -4578,6 +4578,11 @@ export interface components {
         /** EarningsScan */
         EarningsScan: {
             /**
+             * Auto Scored At
+             * @description Premium: when the scheduled scan last scored every reporter (ISO); null when not on the plan or no pass yet
+             */
+            auto_scored_at?: string | null;
+            /**
              * Custom Scan At
              * @description When that scan finished (ISO)
              */
@@ -4683,9 +4688,9 @@ export interface components {
             score?: number | null;
             /**
              * Score Source
-             * @description scan: the latest market scan ranked it; custom: scored by your recent earnings scan (custom_scan_at); null: not scored (last/chg_pct/gap_pct are live quotes)
+             * @description scan: the latest market scan ranked it; custom: scored by your recent earnings scan (custom_scan_at); auto: Premium, scored by the scheduled pass over every reporter (auto_scored_at); null: not scored (last/chg_pct/gap_pct are live quotes)
              */
-            score_source?: ("scan" | "custom") | null;
+            score_source?: ("scan" | "custom" | "auto") | null;
             /**
              * Signals
              * @default []

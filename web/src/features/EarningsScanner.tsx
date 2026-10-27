@@ -97,11 +97,12 @@ function Tags({ r }: { r: Row }) {
 }
 
 const scoreHref = (f: EarningsFilters) => `/scanner/custom?universe=earnings&when=${f.when}&start=1`;
-/** Scored by the market scan or by the user's own earnings scan. */
+/** Scored by the market scan, the user's own earnings scan or (Premium) the scheduled auto-score. */
 const hasScore = (r: Row) => r.score !== null && r.score !== undefined;
 
 function SetupCell({ r, f }: { r: Row; f: EarningsFilters }) {
   if (r.ranked) return <Pill>{setupLabel(r.primary_setup)}</Pill>;
+  if (hasScore(r) && r.score_source === "auto") return <><Pill>{setupLabel(r.primary_setup)}</Pill> <span className="pill earn-yours" title="Scored automatically by the scheduled scan (Premium)">Auto</span></>;
   if (hasScore(r)) return <><Pill>{setupLabel(r.primary_setup)}</Pill> <span className="pill earn-yours" title="Scored by your earnings scan">Your scan</span></>;
   return <><span className="cap">Not ranked</span> <Link className="earn-score-link" href={scoreHref(f)}>Score it</Link></>;
 }
@@ -158,7 +159,7 @@ const EARN_COLUMNS = ecol.columns([
 ]);
 const EARN_TH: Record<string, string> = { score: "w30", last: "num", change: "num", gap: "num" };
 const EARN_HINTS: Record<string, [string, string]> = {
-  score: ["HSF Score", "An opportunity ranking from 0 to 100 from the latest scan. Rows marked Your scan were scored by your own earnings scan."],
+  score: ["HSF Score", "An opportunity ranking from 0 to 100 from the latest scan. Rows marked Your scan were scored by your own earnings scan; rows marked Auto were scored automatically (Premium)."],
   rvol: ["Relative volume", "Today's volume compared with the stock's recent average. 2.0 means twice as much trading as usual."],
 };
 
@@ -208,8 +209,8 @@ function EarningsTable({ rows, days, f }: { rows: Row[]; days: { date: string; l
   );
 }
 
-export function EarningsResults({ f, pro, res, onClear }: {
-  f: EarningsFilters; pro: boolean;
+export function EarningsResults({ f, pro, autoScore = false, res, onClear }: {
+  f: EarningsFilters; pro: boolean; autoScore?: boolean;
   res: ReturnType<typeof useEarningsScan>; onClear: () => void;
 }) {
   if (earningsLocked(f, pro)) {
@@ -235,6 +236,8 @@ export function EarningsResults({ f, pro, res, onClear }: {
     );
   }
   const days = groups(data.setups);
+  // Premium: the scheduled scan already scored every reporter, so only offer a scan for any it missed.
+  const unscored = data.auto_scored_at ? data.setups.filter((r) => !r.ranked && !hasScore(r)).length : data.unranked_total;
   return (
     <>
       <section className={`card flush${refreshing ? " dim" : ""}`} aria-busy={refreshing}>
@@ -263,7 +266,7 @@ export function EarningsResults({ f, pro, res, onClear }: {
                       {hasScore(r) && <div><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>}
                     </dl>
                     {!r.ranked && (hasScore(r)
-                      ? <p className="cap">Scored by your earnings scan.</p>
+                      ? <p className="cap">{r.score_source === "auto" ? "Scored automatically (Premium)." : "Scored by your earnings scan."}</p>
                       : <p className="cap">Reports, but didn&apos;t rank in the latest scan. <Link href={scoreHref(f)}>Score it</Link></p>)}
                   </li>
                 ))}
@@ -275,9 +278,13 @@ export function EarningsResults({ f, pro, res, onClear }: {
       <p className="cap">
         Ranked setups are stocks in the latest scan that report {f.when === "week" ? "in the next 7 days" : window}, soonest first, then by HSF Score.
         {f.all ? " All reporters adds stocks that report but didn't rank, with live prices." : ""}
-        {f.all && data.custom_scan_at ? ` Rows marked Your scan were scored by your earnings scan at ${timeOf(data.custom_scan_at)}.` : ""} Dates and times come from the earnings calendar and can move.
+        {f.all && data.custom_scan_at ? ` Rows marked Your scan were scored by your earnings scan at ${timeOf(data.custom_scan_at)}.` : ""}
+        {f.all && data.auto_scored_at ? ` Rows marked Auto were scored automatically at ${timeOf(data.auto_scored_at)} and refresh with each scheduled scan.` : ""} Dates and times come from the earnings calendar and can move.
       </p>
-      <ScoreReporters f={f} count={data.unranked_total} />
+      <ScoreReporters f={f} count={unscored} />
+      {f.all && !autoScore && data.unranked_total > 0 && (
+        <p className="cap">Premium scores every reporter automatically, so each row shows an HSF Score as the page loads. <Link href="/pricing">See Premium</Link></p>
+      )}
       {data.limited && (
         <div className="cap-note" role="note">
           <p>Your plan shows the top <b>{data.max_results}</b> of <b>{data.total}</b> ranked setups that report in this window.</p>

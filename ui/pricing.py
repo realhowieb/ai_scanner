@@ -43,6 +43,7 @@ ROWS: List[Tuple[str, Optional[str]]] = [
     ("Premarket, after-hours and unusual-volume filters", "can_premarket"),
     ("Live Day Trader monitor: intraday movers, VWAP, relative volume and stair-steppers", "can_day_trader"),
     ("Earnings calendar & filters", "can_earnings"),
+    ("Every earnings reporter scored automatically on the Earnings tab", "can_earnings_autoscore"),
     ("Scan history & historical research", "can_scan_history"),
     ("AI scan summaries and results chat, setup notes on each result and watchlist rundowns", "can_ai_notes"),
     ("Early Breakout candidate research", "can_early_breakout"),
